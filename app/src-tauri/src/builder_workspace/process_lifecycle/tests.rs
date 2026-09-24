@@ -665,6 +665,297 @@ fn p0_002c4b_launch_failure_and_panic_clear_only_their_generation() {
     );
 }
 
+// ── Identity revalidation around launch ───────────────────────────────────
+
+// Mutations applied after a valid DevServerTarget was captured. Registration
+// cases change storage/project identity (C3 tombstone); React cases do not.
+fn mutate_identity(f: &Fixture, root: &Path, case: &str) {
+    let react = root.join("react");
+    match case {
+        "project-removed" => std::fs::remove_dir_all(root).unwrap(),
+        "project-replaced" => {
+            std::fs::rename(root, root.with_extension("original")).unwrap();
+            std::fs::create_dir_all(&react).unwrap();
+        }
+        "storage-replaced" => {
+            // Move the observed project first (Windows share-delete rule).
+            let detached = f.path.with_extension("project");
+            std::fs::rename(root, &detached).unwrap();
+            std::fs::rename(&f.path, f.path.with_extension("old")).unwrap();
+            std::fs::create_dir(&f.path).unwrap();
+            std::fs::rename(&detached, root).unwrap();
+        }
+        "react-removed" => std::fs::remove_dir(&react).unwrap(),
+        "react-replaced" => {
+            std::fs::rename(&react, react.with_extension("old")).unwrap();
+            std::fs::create_dir(&react).unwrap();
+        }
+        _ => unreachable!("{case}"),
+    }
+}
+
+fn cleanup_mutation(f: &Fixture) {
+    let _ = std::fs::remove_dir_all(f.path.with_extension("old"));
+}
+
+fn event_with(f: &Fixture, operation: &str, outcome: &str, reason: &str) -> bool {
+    let operation = format!("builder.devserver.lifecycle.{operation}");
+    lifecycle_events(f).iter().any(|event| {
+        event["operation"] == operation.as_str()
+            && event["outcome"] == outcome
+            && event["reason"] == reason
+    })
+}
+
+fn registration_invalidated(f: &Fixture) -> bool {
+    f.events
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|event| event["operation"] == "builder.registration.invalidate")
+}
+
+#[test]
+fn p0_002c4b_stale_registration_identity_cannot_reach_launcher() {
+    for case in ["project-removed", "project-replaced", "storage-replaced"] {
+        let f = Fixture::new();
+        let (id, root) = registered(&f);
+        let (r, p) = (registry(&f), uuid(&id));
+        // Captured while valid; the Arc stays current in the catalog.
+        let stale = target(&f, &id);
+        mutate_identity(&f, &root, case);
+        assert!(f.authority.catalog.active(&stale.project).is_ok(), "{case}");
+        let launched = Arc::new(AtomicUsize::new(0));
+        let control = Arc::new(FakeControl::default());
+        assert_eq!(
+            r.start(stale, f.audit(), counted(&launched, &control)),
+            Err(LifecycleError::IdentityDenied),
+            "{case}"
+        );
+        assert_eq!(launched.load(Ordering::SeqCst), 0, "{case}: launcher ran");
+        assert_eq!(r.status(p), LifecycleStatus::Stopped);
+        assert!(
+            event_with(&f, "invalidated", "denied", "registration"),
+            "{case}"
+        );
+        // Existing C3 semantics: storage/project Changed permanently tombstones.
+        assert!(registration_invalidated(&f), "{case}");
+        assert!(f.authority.catalog.lookup(p).is_err(), "{case}");
+        cleanup_mutation(&f);
+    }
+}
+
+#[test]
+fn p0_002c4b_stale_react_identity_cannot_reach_launcher() {
+    for case in ["react-removed", "react-replaced"] {
+        let f = Fixture::new();
+        let (id, root) = registered(&f);
+        let (r, p) = (registry(&f), uuid(&id));
+        let stale = target(&f, &id);
+        mutate_identity(&f, &root, case);
+        let launched = Arc::new(AtomicUsize::new(0));
+        let control = Arc::new(FakeControl::default());
+        assert_eq!(
+            r.start(stale, f.audit(), counted(&launched, &control)),
+            Err(LifecycleError::IdentityDenied),
+            "{case}"
+        );
+        assert_eq!(launched.load(Ordering::SeqCst), 0, "{case}: launcher ran");
+        assert_eq!(r.status(p), LifecycleStatus::Stopped);
+        assert!(event_with(&f, "invalidated", "denied", "react"), "{case}");
+        // React changes never tombstone the registration by themselves.
+        assert!(!registration_invalidated(&f), "{case}");
+        assert!(f.authority.catalog.lookup(p).is_ok(), "{case}");
+        if case == "react-removed" {
+            std::fs::create_dir(root.join("react")).unwrap();
+        }
+        // A freshly captured target for the current React may start.
+        r.start(target(&f, &id), f.audit(), counted(&launched, &control))
+            .unwrap();
+        assert_eq!(launched.load(Ordering::SeqCst), 1);
+        assert_eq!(r.stop(p, soon(), &f.audit()), Ok(Finalized::Stopped));
+    }
+}
+
+#[test]
+fn p0_002c4b_identity_change_during_launch_is_finalized_and_never_running() {
+    for (case, reason, cleanup_fails) in [
+        ("react-replaced", "react", false),
+        ("project-replaced", "registration", false),
+        ("storage-replaced", "registration", false),
+        ("react-replaced", "react", true),
+    ] {
+        let f = Fixture::new();
+        let (id, root) = registered(&f);
+        let (r, p) = (registry(&f), uuid(&id));
+        let control = Arc::new(FakeControl::default());
+        if cleanup_fails {
+            *control.permanent.lock().unwrap() = Some(Fail::Termination);
+        }
+        let launch = {
+            let (tree, f, root) = (fake(&control), &f, root.clone());
+            move || {
+                // Identity changes while the process is being created.
+                mutate_identity(f, &root, case);
+                tree()
+            }
+        };
+        let expected = if cleanup_fails {
+            LifecycleError::CleanupFailed
+        } else {
+            LifecycleError::IdentityDenied
+        };
+        assert_eq!(
+            r.start(target(&f, &id), f.audit(), launch),
+            Err(expected),
+            "{case}"
+        );
+        // Never published Running; the tree was explicitly finalized.
+        assert!(!lifecycle_events(&f)
+            .iter()
+            .any(|event| event["operation"] == "builder.devserver.lifecycle.started"));
+        assert!(control.terminations.load(Ordering::SeqCst) >= 1, "{case}");
+        if cleanup_fails {
+            // Retained truthfully; ownership is not lost; retry succeeds.
+            assert_eq!(r.status(p), LifecycleStatus::CleanupFailed);
+            assert!(
+                !control.dropped.load(Ordering::SeqCst),
+                "tree ownership lost"
+            );
+            assert!(event_with(
+                &f,
+                "cleanup_failed",
+                "failed",
+                "termination_failed"
+            ));
+            *control.permanent.lock().unwrap() = None;
+            assert_eq!(r.stop(p, soon(), &f.audit()), Ok(Finalized::Stopped));
+        } else {
+            assert!(event_with(&f, "invalidated", "succeeded", reason), "{case}");
+        }
+        assert!(control.finalized.load(Ordering::SeqCst), "{case}");
+        assert_eq!(r.status(p), LifecycleStatus::Stopped);
+        assert_eq!(
+            f.authority.catalog.lookup(p).is_err(),
+            reason == "registration",
+            "{case}"
+        );
+        cleanup_mutation(&f);
+    }
+}
+
+#[test]
+fn p0_002c4b_invalidation_reentry_around_launch_cannot_deadlock_or_launch() {
+    within(|| {
+        // (re-entry, identity change during launch instead of before start)
+        for (reenter, during_launch) in [
+            ("stop", false),
+            ("shutdown", false),
+            ("stop", true),
+            ("shutdown", true),
+        ] {
+            let f = Fixture::new();
+            let (id, root) = registered(&f);
+            let p = uuid(&id);
+            let r = Arc::new(registry(&f));
+            let reentry = Arc::new(Mutex::new(Vec::new()));
+            // The C3 catalog audits invalidation synchronously on this thread.
+            let audit: Audit = {
+                let (weak, reentry, events) = (
+                    Arc::downgrade(&r),
+                    Arc::clone(&reentry),
+                    Arc::clone(&f.events),
+                );
+                Arc::new(move |event: Value| {
+                    let invalidated = event["operation"] == "builder.registration.invalidate";
+                    events.lock().unwrap().push(event);
+                    if invalidated {
+                        let r = weak.upgrade().unwrap();
+                        let result = if reenter == "shutdown" {
+                            r.shutdown_all(soon(), &quiet())
+                                .map(|()| Finalized::Stopped)
+                        } else {
+                            r.stop(p, soon(), &quiet())
+                        };
+                        reentry.lock().unwrap().push(result);
+                    }
+                })
+            };
+            let control = Arc::new(FakeControl::default());
+            let launched = Arc::new(AtomicUsize::new(0));
+            let start = target(&f, &id);
+            let result = if during_launch {
+                let launch = {
+                    let (tree, launched, f, root) =
+                        (fake(&control), Arc::clone(&launched), &f, root.clone());
+                    move || {
+                        launched.fetch_add(1, Ordering::SeqCst);
+                        mutate_identity(f, &root, "project-replaced");
+                        tree()
+                    }
+                };
+                r.start(start, audit, launch)
+            } else {
+                mutate_identity(&f, &root, "project-replaced");
+                r.start(start, audit, counted(&launched, &control))
+            };
+            assert_eq!(result, Err(LifecycleError::IdentityDenied));
+            // The reserving thread re-entered: never blocked on itself.
+            let expected = if reenter == "shutdown" {
+                Err(LifecycleError::NotConfirmed)
+            } else {
+                Err(LifecycleError::StopPending)
+            };
+            assert_eq!(*reentry.lock().unwrap(), vec![expected]);
+            assert_eq!(launched.load(Ordering::SeqCst), usize::from(during_launch));
+            if during_launch {
+                assert!(control.finalized.load(Ordering::SeqCst));
+            }
+            assert_eq!(r.status(p), LifecycleStatus::Stopped);
+            if reenter == "shutdown" {
+                assert!(!r.shared.state().accepting);
+                assert_eq!(r.shutdown_all(soon(), &f.audit()), Ok(()));
+            }
+        }
+    });
+}
+
+#[test]
+fn p0_002c4b_audit_panic_during_launch_revalidation_cannot_strand_reservation() {
+    within(|| {
+        for during_launch in [false, true] {
+            let f = Fixture::new();
+            let (id, root) = registered(&f);
+            let (r, p) = (registry(&f), uuid(&id));
+            let panicking: Audit = Arc::new(|_| panic!("injected audit panic"));
+            let control = Arc::new(FakeControl::default());
+            let launched = Arc::new(AtomicUsize::new(0));
+            let start = target(&f, &id);
+            let result = if during_launch {
+                let launch = {
+                    let (tree, launched, f, root) =
+                        (fake(&control), Arc::clone(&launched), &f, root.clone());
+                    move || {
+                        launched.fetch_add(1, Ordering::SeqCst);
+                        mutate_identity(f, &root, "project-replaced");
+                        tree()
+                    }
+                };
+                r.start(start, panicking, launch)
+            } else {
+                mutate_identity(&f, &root, "project-removed");
+                r.start(start, panicking, counted(&launched, &control))
+            };
+            assert_eq!(result, Err(LifecycleError::IdentityDenied));
+            assert_eq!(launched.load(Ordering::SeqCst), usize::from(during_launch));
+            assert_eq!(control.finalized.load(Ordering::SeqCst), during_launch);
+            // Not stranded in Starting; the C3 tombstone still applied.
+            assert_eq!(r.status(p), LifecycleStatus::Stopped);
+            assert!(f.authority.catalog.lookup(p).is_err());
+        }
+    });
+}
+
 // ── Audit re-entry / locking ──────────────────────────────────────────────
 
 fn terminal(event: &Value) -> bool {

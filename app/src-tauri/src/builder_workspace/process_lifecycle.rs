@@ -81,6 +81,10 @@ pub(super) enum LifecycleError {
     StopPending,
     OwnerUnavailable,
     LaunchFailed,
+    /// The retained registration or React identity no longer validated
+    /// before or during launch. The launcher was not run, or its tree was
+    /// finalized without ever being published as Running.
+    IdentityDenied,
     CleanupFailed,
     /// The deadline passed before finalization was confirmed. Never success.
     NotConfirmed,
@@ -97,6 +101,7 @@ impl LifecycleError {
             Self::StopRequested | Self::StopPending => "stop_requested",
             Self::OwnerUnavailable => "owner_unavailable",
             Self::LaunchFailed => "launch_failed",
+            Self::IdentityDenied => "identity_denied",
             Self::CleanupFailed => "cleanup_failed",
             Self::NotConfirmed => "not_confirmed",
         }
@@ -241,6 +246,14 @@ enum Action {
     Retry(ServerExecutionId, Box<dyn OwnedTree>, Arc<Completion>),
 }
 
+enum Abandon {
+    /// Stop or shutdown won before the launcher ran.
+    Cancelled,
+    Failed(LifecycleError),
+    /// Pre-launch identity revalidation failed (bounded reason).
+    Identity(&'static str),
+}
+
 enum Published {
     Running,
     Stop(SyncSender<StopReason>, StopReason),
@@ -298,14 +311,18 @@ impl LifecycleRegistry {
         lifecycle_event(&audit, Some(project), "reserve", "succeeded", "reserved");
         // Reservation callbacks may have requested stop or shutdown.
         if !self.confirm_launch(project, execution) {
-            return self.abandon(project, execution, &done, &audit, None);
+            return self.abandon(project, execution, &done, &audit, Abandon::Cancelled);
         }
-        let (tree_sender, tree_receiver) = sync_channel::<Box<dyn OwnedTree>>(1);
+        // Revalidate the retained target before any process can exist. Catalog
+        // invalidation audits (and may re-enter) with no registry lock held.
+        if let Err(reason) = validate_target(&self.shared.catalog, &target, &audit) {
+            return self.abandon(project, execution, &done, &audit, Abandon::Identity(reason));
+        }
+        let (adopt, adoption) = sync_channel::<(Box<dyn OwnedTree>, DevServerTarget)>(1);
         let (control, control_receiver) = sync_channel::<StopReason>(1);
         let owner = Owner {
             registry: Arc::downgrade(&self.shared),
             catalog: Arc::clone(&self.shared.catalog),
-            target,
             project,
             execution,
             control: control_receiver,
@@ -315,29 +332,40 @@ impl LifecycleRegistry {
         // Created before the launcher so a failure here launches nothing.
         let spawned = thread::Builder::new()
             .name("nexus-builder-lifecycle".into())
-            .spawn(move || owner.run(tree_receiver));
+            .spawn(move || owner.run(adoption));
         if spawned.is_err() {
-            let error = Some(LifecycleError::OwnerUnavailable);
+            let error = Abandon::Failed(LifecycleError::OwnerUnavailable);
             return self.abandon(project, execution, &done, &audit, error);
+        }
+        // Last lifecycle check: validation callbacks may have re-entered stop
+        // or shutdown. Nothing runs between this check and the launcher.
+        if !self.confirm_launch(project, execution) {
+            drop(adopt);
+            return self.abandon(project, execution, &done, &audit, Abandon::Cancelled);
         }
         // No lock is held. A panicking launcher is a launch failure.
         let tree = match catch_unwind(AssertUnwindSafe(launch)) {
             Ok(Ok(tree)) => tree,
             _ => {
-                drop(tree_sender);
-                let error = Some(LifecycleError::LaunchFailed);
+                drop(adopt);
+                let error = Abandon::Failed(LifecycleError::LaunchFailed);
                 return self.abandon(project, execution, &done, &audit, error);
             }
         };
-        if let Err(returned) = tree_sender.send(tree) {
+        // Close identity changes during process creation. This thread is still
+        // the tree's only owner: it finalizes the tree, never publishes Running.
+        if let Err(reason) = validate_target(&self.shared.catalog, &target, &audit) {
+            drop(adopt);
+            let ending = Ending::Invalidated(reason);
+            let result = self.conclude(project, execution, tree, ending, &done, &audit);
+            return Err(result.err().unwrap_or(LifecycleError::IdentityDenied));
+        }
+        if let Err(returned) = adopt.send((tree, target)) {
             // The owner vanished before adoption: finalize here, never drop.
-            let mut tree = returned.0;
-            let cleanup = finalize(tree.as_mut(), Instant::now() + CLEANUP_BUDGET);
-            settle(&self.shared, project, execution, cleanup.is_ok(), tree);
-            let (result, event) = conclusion(Ending::Stop(StopReason::Released), cleanup);
-            done.publish(result);
-            lifecycle_event(&audit, Some(project), event.0, event.1, event.2);
-            return Err(LifecycleError::OwnerUnavailable);
+            let (tree, _) = returned.0;
+            let ending = Ending::Stop(StopReason::Released);
+            let result = self.conclude(project, execution, tree, ending, &done, &audit);
+            return Err(result.err().unwrap_or(LifecycleError::OwnerUnavailable));
         }
         match self.publish(project, execution, control) {
             Published::Running => {
@@ -415,29 +443,50 @@ impl LifecycleRegistry {
         execution: ServerExecutionId,
         done: &Completion,
         audit: &Audit,
-        failure: Option<LifecycleError>,
+        outcome: Abandon,
     ) -> Result<(), LifecycleError> {
-        // `None`: stop or shutdown won before launch. Nothing was launched.
+        // Nothing was launched for this generation.
+        let (finalized, event, error) = match outcome {
+            Abandon::Cancelled => (
+                Finalized::Cancelled,
+                ("stopped", "succeeded", "launch_cancelled"),
+                LifecycleError::StopRequested,
+            ),
+            Abandon::Failed(error) => (
+                Finalized::NotLaunched,
+                ("started", "failed", error.reason()),
+                error,
+            ),
+            Abandon::Identity(reason) => (
+                Finalized::NotLaunched,
+                ("invalidated", "denied", reason),
+                LifecycleError::IdentityDenied,
+            ),
+        };
         self.cancel(project, execution);
-        let finalized = match failure {
-            None => Finalized::Cancelled,
-            Some(_) => Finalized::NotLaunched,
-        };
         done.publish(Ok(finalized));
-        let error = if let Some(error) = failure {
-            lifecycle_event(audit, Some(project), "started", "failed", error.reason());
-            error
-        } else {
-            lifecycle_event(
-                audit,
-                Some(project),
-                "stopped",
-                "succeeded",
-                "launch_cancelled",
-            );
-            LifecycleError::StopRequested
-        };
+        lifecycle_event(audit, Some(project), event.0, event.1, event.2);
         Err(error)
+    }
+
+    /// Finalize a tree the calling thread still solely owns (never adopted by
+    /// an owner thread): bounded cleanup, generation-checked transition,
+    /// completion, then audit. A failure parks the tree as CleanupFailed.
+    fn conclude(
+        &self,
+        project: Uuid,
+        execution: ServerExecutionId,
+        mut tree: Box<dyn OwnedTree>,
+        ending: Ending,
+        done: &Completion,
+        audit: &Audit,
+    ) -> Terminal {
+        let cleanup = finalize(tree.as_mut(), Instant::now() + CLEANUP_BUDGET);
+        settle(&self.shared, project, execution, cleanup.is_ok(), tree);
+        let (result, event) = conclusion(ending, cleanup);
+        done.publish(result);
+        lifecycle_event(audit, Some(project), event.0, event.1, event.2);
+        result
     }
 
     fn publish(
@@ -727,7 +776,6 @@ fn conclusion(ending: Ending, cleanup: Result<(), CleanupFailure>) -> (Terminal,
 struct Owner {
     registry: Weak<Shared>,
     catalog: Arc<ProjectCatalog>,
-    target: DevServerTarget,
     project: Uuid,
     execution: ServerExecutionId,
     control: Receiver<StopReason>,
@@ -736,9 +784,10 @@ struct Owner {
 }
 
 impl Owner {
-    fn run(self, tree: Receiver<Box<dyn OwnedTree>>) {
-        // No tree: the launcher failed or never ran, and start published.
-        let Ok(mut tree) = tree.recv() else {
+    fn run(self, adoption: Receiver<(Box<dyn OwnedTree>, DevServerTarget)>) {
+        // No tree: the launcher failed or never ran, or start finalized the
+        // tree after failed revalidation; start published the outcome.
+        let Ok((mut tree, target)) = adoption.recv() else {
             return;
         };
         // Catalog events raised while monitoring are deferred until after the
@@ -754,8 +803,10 @@ impl Owner {
             })
         };
         // The tree stays outside the unwind boundary: a panic cannot lose it.
-        let ending = catch_unwind(AssertUnwindSafe(|| self.monitor(tree.as_mut(), &buffer)))
-            .unwrap_or(Ending::MonitorFailure);
+        let ending = catch_unwind(AssertUnwindSafe(|| {
+            self.monitor(tree.as_mut(), &target, &buffer)
+        }))
+        .unwrap_or(Ending::MonitorFailure);
         // Natural exit is not cleanup: always terminate and finalize explicitly.
         let cleanup = finalize(tree.as_mut(), Instant::now() + CLEANUP_BUDGET);
         let (result, event) = conclusion(ending, cleanup);
@@ -773,7 +824,7 @@ impl Owner {
         lifecycle_event(&self.audit, Some(self.project), event.0, event.1, event.2);
     }
 
-    fn monitor(&self, tree: &mut dyn OwnedTree, audit: &Audit) -> Ending {
+    fn monitor(&self, tree: &mut dyn OwnedTree, target: &DevServerTarget, audit: &Audit) -> Ending {
         loop {
             if let Some(reason) = self.pending() {
                 return Ending::Stop(reason);
@@ -791,11 +842,8 @@ impl Owner {
             if let Some(reason) = self.pending() {
                 return Ending::Stop(reason);
             }
-            if self.catalog.validate(&self.target.project, audit).is_err() {
-                return Ending::Invalidated("registration");
-            }
-            if self.target.validate_react().is_err() {
-                return Ending::Invalidated("react");
+            if let Err(reason) = validate_target(&self.catalog, target, audit) {
+                return Ending::Invalidated(reason);
             }
             match self.control.recv_timeout(MONITOR_INTERVAL) {
                 Ok(reason) => return Ending::Stop(reason),
@@ -812,6 +860,27 @@ impl Owner {
             Err(TryRecvError::Disconnected) => Some(StopReason::Released),
         }
     }
+}
+
+/// Point-in-time revalidation of the retained target: the current registration
+/// with storage/project identity (C3 tombstones on Changed), then the retained
+/// React identity (never tombstones). Pathname identity, not containment.
+/// A panicking invalidation audit cannot unwind out and strand a reservation.
+fn validate_target(
+    catalog: &ProjectCatalog,
+    target: &DevServerTarget,
+    audit: &Audit,
+) -> Result<(), &'static str> {
+    let guarded: Audit = {
+        let audit = Arc::clone(audit);
+        Arc::new(move |event| {
+            let _ = catch_unwind(AssertUnwindSafe(|| audit(event)));
+        })
+    };
+    catalog
+        .validate(&target.project, &guarded)
+        .map_err(|_| "registration")?;
+    target.validate_react().map_err(|_| "react")
 }
 
 // Bounded categories only: never generations, identifiers, paths, handles,
