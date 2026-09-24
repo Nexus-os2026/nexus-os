@@ -904,22 +904,44 @@ fn p0_002c3_project_removal_and_same_path_replacement_permanently_invalidate() {
 
 #[test]
 fn p0_002c3_missing_and_replaced_storage_deny_without_recreation() {
-    let f = Fixture::new();
-    let (id, root) = registered(&f);
-    let old = f.path.with_extension("old");
-    std::fs::rename(&f.path, &old).unwrap();
-    assert!(f
-        .authority
-        .write_file(&id, "file", b"denied", f.audit())
-        .is_err());
-    assert!(!f.path.exists());
-    std::fs::create_dir(&f.path).unwrap();
-    std::fs::rename(old.join(&id), &root).unwrap(); // original project, replaced storage
-    assert!(f
-        .authority
-        .write_file(&id, "file", b"denied", f.audit())
-        .is_err());
-    std::fs::remove_dir(old).unwrap();
+    for replacement in [false, true] {
+        let f = Fixture::new();
+        let (id, root) = registered(&f);
+        let old = f.path.with_extension("old");
+        let detached_project = f.path.with_extension("project");
+        // Windows permits moving the observed directory itself with share-delete,
+        // but not an ancestor containing an open descendant directory. Move the
+        // still-observed project first; keep its identity intact for this test.
+        std::fs::rename(&root, &detached_project).unwrap();
+        std::fs::rename(&f.path, &old).unwrap();
+        if replacement {
+            std::fs::create_dir(&f.path).unwrap();
+            std::fs::rename(&detached_project, &root).unwrap();
+            // The project still matches: denial must detect the replaced storage.
+            f.authority
+                .catalog
+                .lookup(Uuid::parse_str(&id).unwrap())
+                .unwrap()
+                .identity
+                .validate(&root)
+                .unwrap();
+        }
+        assert!(f
+            .authority
+            .write_file(&id, "file", b"denied", f.audit())
+            .is_err());
+        assert!(f
+            .authority
+            .catalog
+            .lookup(Uuid::parse_str(&id).unwrap())
+            .is_err());
+        assert!(!root.join("react/file").exists());
+        if !replacement {
+            assert!(!f.path.exists());
+            std::fs::remove_dir_all(&detached_project).unwrap();
+        }
+        std::fs::remove_dir(old).unwrap();
+    }
 }
 
 #[test]
@@ -1125,9 +1147,15 @@ fn p0_002c3_audit_reentry_and_final_checks_close_callback_mutation_window() {
                 match case {
                     "grant" => registry.revoke(grant, binding).unwrap(),
                     "project" => {
+                        // Keep the same React directory/witness, while replacing
+                        // only its project ancestor. Moving the observed child
+                        // first also permits this namespace change on Windows.
+                        let detached_react = callback_root.with_extension("react");
+                        std::fs::rename(&react, &detached_react).unwrap();
                         std::fs::rename(&callback_root, callback_root.with_extension("old"))
                             .unwrap();
-                        std::fs::create_dir_all(callback_root.join("react/nested")).unwrap();
+                        std::fs::create_dir(&callback_root).unwrap();
+                        std::fs::rename(&detached_react, &react).unwrap();
                     }
                     "react" => {
                         std::fs::rename(&react, callback_root.join("old-react")).unwrap();
