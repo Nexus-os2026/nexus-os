@@ -6300,61 +6300,14 @@ pub mod runtime {
         Ok(serde_json::json!(sites))
     }
 
-    /// Build static assets for deploy: for React projects runs npm run build,
-    /// for HTML projects returns the output path directly.
+    /// Builder static build (P0-002C4D0): closed. The legacy body derived a
+    /// directory from HOME and the caller's `project_id` and ran PATH-resolved
+    /// `npm install` / `npm run build`. No trusted static-build design is
+    /// approved, so this always fails closed: `project_id` is not inspected and
+    /// no filesystem access or process launch occurs.
     #[tauri::command]
-    fn builder_build_static(project_id: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let react_dir = project_dir.join("react");
-        if react_dir.exists() && react_dir.join("package.json").exists() {
-            // React project: ensure node_modules, then npm run build
-            if !react_dir.join("node_modules").exists() {
-                let install = std::process::Command::new("npm")
-                    .arg("install")
-                    .current_dir(&react_dir)
-                    .output()
-                    .map_err(|e| format!("npm install: {e}"))?;
-                if !install.status.success() {
-                    return Err(format!(
-                        "npm install failed: {}",
-                        String::from_utf8_lossy(&install.stderr)
-                    ));
-                }
-            }
-
-            let build = std::process::Command::new("npm")
-                .args(["run", "build"])
-                .current_dir(&react_dir)
-                .output()
-                .map_err(|e| format!("npm run build: {e}"))?;
-            if !build.status.success() {
-                return Err(format!(
-                    "npm run build failed: {}",
-                    String::from_utf8_lossy(&build.stderr)
-                ));
-            }
-
-            let dist = react_dir.join("dist");
-            if !dist.exists() {
-                return Err("dist/ not found after build".into());
-            }
-            return Ok(dist.to_string_lossy().to_string());
-        }
-
-        // HTML project: return the current output directory
-        if project_dir.join("current").join("index.html").exists() {
-            return Ok(project_dir.join("current").to_string_lossy().to_string());
-        }
-        if project_dir.join("index.html").exists() {
-            return Ok(project_dir.to_string_lossy().to_string());
-        }
-
-        Err("No build output found".into())
+    fn builder_build_static(_project_id: String) -> Result<String, String> {
+        Err("Builder static build: build unavailable".into())
     }
 
     // ── Builder Quality Critic (Phase 9A) ─────────────────────────────
