@@ -42,63 +42,40 @@ impl Child {
             })
             .stdout(output(spec.stdout))
             .stderr(output(spec.stderr));
-
-        // A close-on-exec pipe distinguishes pre-exec containment/limit errors
-        // from executable errors. Only a one-byte write occurs after fork.
-        let (mut setup_reader, setup_writer) =
-            io::pipe().map_err(ResourceLimitError::SpawnFailed)?;
+        // Legacy short-lived limits: Linux applies all four; macOS none.
         #[cfg(target_os = "linux")]
-        let limits = limits.clone();
+        let rlimits = vec![
+            (Rlimit::AddressSpace, limits.max_memory_bytes),
+            (Rlimit::Cpu, limits.max_cpu_seconds),
+            (Rlimit::Processes, u64::from(limits.max_processes)),
+            (Rlimit::FileSize, limits.max_file_size_bytes),
+        ];
         #[cfg(target_os = "macos")]
-        let _ = limits;
-        // SAFETY: after fork this calls only setpgid/setrlimit/write and uses
-        // from_raw_os_error (no allocation), never Error::other(errno).
-        unsafe {
-            command.pre_exec(move || {
-                let fail = |stage: u8, errno: Errno| {
-                    libc::write(setup_writer.as_raw_fd(), (&stage as *const u8).cast(), 1);
-                    io::Error::from_raw_os_error(errno as i32)
-                };
-                setpgid(Pid::from_raw(0), Pid::from_raw(0)).map_err(|e| fail(1, e))?;
-                #[cfg(target_os = "linux")]
-                {
-                    use nix::sys::resource::{setrlimit, Resource};
-                    for (resource, value) in [
-                        (Resource::RLIMIT_AS, limits.max_memory_bytes),
-                        (Resource::RLIMIT_CPU, limits.max_cpu_seconds),
-                        (Resource::RLIMIT_NPROC, u64::from(limits.max_processes)),
-                        (Resource::RLIMIT_FSIZE, limits.max_file_size_bytes),
-                    ] {
-                        setrlimit(resource, value, value).map_err(|e| fail(2, e))?;
-                    }
-                }
-                Ok(())
-            });
-        }
-        let spawned = command.spawn();
-        drop(command); // closes the parent's copy of setup_writer on all paths
-        match spawned {
-            Ok(process) => Ok(Self {
-                process,
-                identity_valid: true,
-                termination_requested: false,
-            }),
-            Err(error) => {
-                let mut stage = [0];
-                match setup_reader.read_exact(&mut stage) {
-                    Ok(()) => {}
-                    Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {}
-                    Err(error) => return Err(ResourceLimitError::SpawnFailed(error)),
-                }
-                Err(match stage[0] {
-                    1 => ResourceLimitError::ContainmentSetupFailed(error),
-                    2 => ResourceLimitError::SetLimitFailed(error),
-                    _ => ResourceLimitError::SpawnFailed(error),
-                })
-            }
-        }
+        let rlimits = {
+            let _ = limits;
+            Vec::new()
+        };
+        spawn_contained(command, rlimits)
     }
 
+    /// Sealed long-lived spawn: the parent environment is cleared before the
+    /// validated sealed entries are applied, the absolute program is never
+    /// PATH-resolved, and the fixed long-lived rlimits are installed (with the
+    /// process group) before exec. Any setup failure prevents execution.
+    pub(super) fn spawn_sealed(spec: &SealedSpawnSpec) -> Result<Self, ResourceLimitError> {
+        let mut command = Command::new(&spec.program);
+        command
+            .args(&spec.args)
+            .env_clear()
+            .env("HOME", spec.environment.home())
+            .env("TMPDIR", spec.environment.temp())
+            .envs(spec.environment.variables())
+            .current_dir(&spec.current_dir)
+            .stdin(Stdio::null())
+            .stdout(output(spec.stdout))
+            .stderr(output(spec.stderr));
+        spawn_contained(command, sealed_rlimits())
+    }
     pub(super) fn id(&self) -> u32 {
         self.process.id()
     }
@@ -217,6 +194,113 @@ impl Child {
                 }
                 Err(ResourceLimitError::TerminationFailed(error))
             }
+        }
+    }
+}
+
+/// The fixed P0-002C4C2 long-lived policy: per-process committed private
+/// memory (Linux RLIMIT_DATA) and file size. Deliberately no RLIMIT_AS (V8
+/// reserves far more address space than it commits), no RLIMIT_CPU and no new
+/// RLIMIT_NPROC. macOS: file size only; no memory bound is claimed there.
+pub(super) fn sealed_rlimits() -> Vec<(Rlimit, u64)> {
+    const FILE_SIZE_BYTES: u64 = 100 * 1024 * 1024;
+    #[cfg(target_os = "linux")]
+    {
+        const DATA_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+        vec![
+            (Rlimit::Data, DATA_BYTES),
+            (Rlimit::FileSize, FILE_SIZE_BYTES),
+        ]
+    }
+    #[cfg(target_os = "macos")]
+    {
+        vec![(Rlimit::FileSize, FILE_SIZE_BYTES)]
+    }
+}
+
+/// A resource the limiter bounds. The legacy-only resources exist only where
+/// the legacy policy applies them (Linux).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Rlimit {
+    #[cfg(target_os = "linux")]
+    AddressSpace,
+    #[cfg(target_os = "linux")]
+    Cpu,
+    #[cfg(target_os = "linux")]
+    Processes,
+    #[cfg(target_os = "linux")]
+    Data,
+    FileSize,
+}
+
+/// Installs `value` as both the soft and hard limit. Uses nix's libc re-export
+/// because nix's `resource` feature is enabled only on Linux. Async-signal-safe:
+/// one setrlimit call and an errno read, no allocation.
+fn set_hard_limit(limit: Rlimit, value: u64) -> Result<(), Errno> {
+    let resource = match limit {
+        #[cfg(target_os = "linux")]
+        Rlimit::AddressSpace => libc::RLIMIT_AS,
+        #[cfg(target_os = "linux")]
+        Rlimit::Cpu => libc::RLIMIT_CPU,
+        #[cfg(target_os = "linux")]
+        Rlimit::Processes => libc::RLIMIT_NPROC,
+        #[cfg(target_os = "linux")]
+        Rlimit::Data => libc::RLIMIT_DATA,
+        Rlimit::FileSize => libc::RLIMIT_FSIZE,
+    };
+    let bound = libc::rlimit {
+        rlim_cur: value,
+        rlim_max: value,
+    };
+    // SAFETY: setrlimit only reads the initialized `bound`.
+    Errno::result(unsafe { libc::setrlimit(resource, &bound) }).map(drop)
+}
+
+/// Fork/exec with the owned process group and the given hard=soft rlimits
+/// installed in the child before exec. Shared by legacy and sealed spawns.
+fn spawn_contained(
+    mut command: Command,
+    rlimits: Vec<(Rlimit, u64)>,
+) -> Result<Child, ResourceLimitError> {
+    // A close-on-exec pipe distinguishes pre-exec containment/limit errors
+    // from executable errors. Only a one-byte write occurs after fork.
+    let (mut setup_reader, setup_writer) = io::pipe().map_err(ResourceLimitError::SpawnFailed)?;
+    // SAFETY: after fork this calls only setpgid/setrlimit/write, iterates an
+    // already-allocated vector and uses from_raw_os_error (no allocation),
+    // never Error::other(errno).
+    unsafe {
+        command.pre_exec(move || {
+            let fail = |stage: u8, errno: Errno| {
+                libc::write(setup_writer.as_raw_fd(), (&stage as *const u8).cast(), 1);
+                io::Error::from_raw_os_error(errno as i32)
+            };
+            setpgid(Pid::from_raw(0), Pid::from_raw(0)).map_err(|e| fail(1, e))?;
+            for &(resource, value) in &rlimits {
+                set_hard_limit(resource, value).map_err(|e| fail(2, e))?;
+            }
+            Ok(())
+        });
+    }
+    let spawned = command.spawn();
+    drop(command); // closes the parent's copy of setup_writer on all paths
+    match spawned {
+        Ok(process) => Ok(Child {
+            process,
+            identity_valid: true,
+            termination_requested: false,
+        }),
+        Err(error) => {
+            let mut stage = [0];
+            match setup_reader.read_exact(&mut stage) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {}
+                Err(error) => return Err(ResourceLimitError::SpawnFailed(error)),
+            }
+            Err(match stage[0] {
+                1 => ResourceLimitError::ContainmentSetupFailed(error),
+                2 => ResourceLimitError::SetLimitFailed(error),
+                _ => ResourceLimitError::SpawnFailed(error),
+            })
         }
     }
 }

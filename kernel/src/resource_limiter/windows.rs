@@ -16,9 +16,10 @@ use windows_sys::Win32::System::JobObjects::{
     CreateJobObjectW, JobObjectBasicAccountingInformation, JobObjectExtendedLimitInformation,
     QueryInformationJobObject, SetInformationJobObject, TerminateJobObject,
     JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_ACTIVE_PROCESS, JOB_OBJECT_LIMIT_JOB_MEMORY,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
-use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
+use windows_sys::Win32::System::SystemInformation::{GetSystemDirectoryW, GetWindowsDirectoryW};
 use windows_sys::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, GetCurrentProcess, GetExitCodeProcess,
     InitializeProcThreadAttributeList, UpdateProcThreadAttribute, WaitForSingleObject,
@@ -65,6 +66,65 @@ impl Child {
         spec: &ResourceSpawnSpec,
         environment: Option<&[u16]>,
     ) -> Result<Self, ResourceLimitError> {
+        // Legacy spawn and actuator Job policy: unchanged (kill-on-close only).
+        Self::create(spec, environment, &legacy_job_limits())
+    }
+
+    /// Sealed long-lived spawn: an explicit environment block built only from
+    /// the sealed entries plus Windows-API-derived SystemRoot/windir (never
+    /// the parent environment, never a null block), Win32 spellings of the
+    /// canonical directories, and the fixed sealed Job policy installed
+    /// before the workload is created inside the Job.
+    pub(super) fn spawn_sealed(spec: &SealedSpawnSpec) -> Result<Self, ResourceLimitError> {
+        let spelling = |dir: &std::path::Path| actuator_working_directory(dir);
+        let cwd = spelling(&spec.current_dir).map_err(|_| {
+            ResourceLimitError::InvalidSealedSpawn("working directory has no Win32 spelling")
+        })?;
+        let directory = |dir: &std::path::Path| {
+            spelling(dir).map(PathBuf::into_os_string).map_err(|_| {
+                ResourceLimitError::InvalidSealedEnvironment(
+                    SealedEnvironmentError::InvalidDirectory,
+                )
+            })
+        };
+        let (home, temp) = (
+            directory(spec.environment.home())?,
+            directory(spec.environment.temp())?,
+        );
+        let windows = windows_directory().map_err(ResourceLimitError::ContainmentSetupFailed)?;
+        let mut entries: Vec<(String, OsString)> = vec![
+            ("USERPROFILE".into(), home),
+            ("TEMP".into(), temp.clone()),
+            ("TMP".into(), temp),
+            ("SystemRoot".into(), windows.clone()),
+            ("windir".into(), windows),
+        ];
+        entries.extend(
+            spec.environment
+                .variables()
+                .map(|(name, value)| (name.to_owned(), value.to_owned())),
+        );
+        let block = sealed_environment_block(entries).map_err(|_| {
+            ResourceLimitError::InvalidSealedEnvironment(SealedEnvironmentError::InvalidValue)
+        })?;
+        let process_spec = ResourceSpawnSpec {
+            program: ResourceProgram::Executable {
+                program: spec.program.clone().into_os_string(),
+                args: spec.args.clone(),
+            },
+            current_dir: cwd,
+            stdin: ResourceStdin::Null,
+            stdout: spec.stdout,
+            stderr: spec.stderr,
+        };
+        Self::create(&process_spec, Some(&block), &sealed_job_limits())
+    }
+
+    fn create(
+        spec: &ResourceSpawnSpec,
+        environment: Option<&[u16]>,
+        job_limits: &JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    ) -> Result<Self, ResourceLimitError> {
         let (application, mut command_line) =
             command_line(spec).map_err(ResourceLimitError::SpawnFailed)?;
         let cwd =
@@ -78,14 +138,13 @@ impl Child {
         }
         // SAFETY: uniquely owned valid handle returned by CreateJobObjectW.
         let job = unsafe { OwnedHandle::from_raw_handle(raw_job) };
-        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         // SAFETY: correctly sized initialized structure, valid live job handle.
+        // All requested limits are installed atomically or the spawn fails.
         if unsafe {
             SetInformationJobObject(
                 job.as_raw_handle(),
                 JobObjectExtendedLimitInformation,
-                (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                (job_limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
                 size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
             )
         } == 0
@@ -235,6 +294,83 @@ impl Child {
         }
         Ok((accounting.ActiveProcesses == 0).then_some(status))
     }
+}
+
+fn legacy_job_limits() -> JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+    let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    limits
+}
+
+/// The fixed P0-002C4C2 long-lived Job policy: kill-on-close ownership, a
+/// Job-wide committed-memory limit of 2 GiB and at most 32 active processes.
+/// No breakaway is permitted.
+pub(super) fn sealed_job_limits() -> JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+    const JOB_MEMORY_BYTES: usize = 2 * 1024 * 1024 * 1024;
+    const ACTIVE_PROCESSES: u32 = 32;
+    let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        | JOB_OBJECT_LIMIT_JOB_MEMORY
+        | JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+    limits.BasicLimitInformation.ActiveProcessLimit = ACTIVE_PROCESSES;
+    limits.JobMemoryLimit = JOB_MEMORY_BYTES;
+    limits
+}
+
+/// The Windows directory from the OS (SystemRoot/windir), never from the
+/// parent environment.
+fn windows_directory() -> io::Result<OsString> {
+    let mut path = vec![0u16; 260];
+    loop {
+        // SAFETY: writable buffer of path.len() UTF-16 units.
+        let len = unsafe { GetWindowsDirectoryW(path.as_mut_ptr(), path.len() as u32) } as usize;
+        if len == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if len < path.len() {
+            path.truncate(len);
+            return Ok(OsString::from_wide(&path));
+        }
+        path.resize(len + 1, 0);
+    }
+}
+
+/// Explicit sealed environment block: only the given entries, sorted by the
+/// ASCII-uppercase name (equal to Windows' ordinal case-insensitive order for
+/// the accepted `[A-Za-z_][A-Za-z0-9_]*` names). Duplicates (case-insensitive)
+/// and NUL are rejected. Never built from the parent environment.
+pub(super) fn sealed_environment_block(
+    mut entries: Vec<(String, OsString)>,
+) -> io::Result<Vec<u16>> {
+    let invalid = || io::Error::new(io::ErrorKind::InvalidInput, "invalid sealed environment");
+    entries.sort_by_cached_key(|(name, _)| name.to_ascii_uppercase());
+    if entries.is_empty()
+        || entries
+            .windows(2)
+            .any(|pair| pair[0].0.eq_ignore_ascii_case(&pair[1].0))
+    {
+        return Err(invalid());
+    }
+    let mut block = Vec::new();
+    for (name, value) in entries {
+        let valid = name
+            .bytes()
+            .next()
+            .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_');
+        let value: Vec<u16> = value.encode_wide().collect();
+        if !valid || value.contains(&0) {
+            return Err(invalid());
+        }
+        block.extend(name.encode_utf16());
+        block.push(b'=' as u16);
+        block.extend(value);
+        block.push(0);
+    }
+    block.push(0);
+    Ok(block)
 }
 
 fn ordinary_component(name: &OsStr) -> bool {
@@ -762,6 +898,88 @@ mod tests {
             }
         )
         .is_err());
+    }
+
+    #[test]
+    fn sealed_job_policy_is_fixed_and_legacy_policy_is_unchanged() {
+        use windows_sys::Win32::System::JobObjects::{
+            JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
+        };
+        let sealed = sealed_job_limits();
+        assert_eq!(
+            sealed.BasicLimitInformation.LimitFlags,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+                | JOB_OBJECT_LIMIT_JOB_MEMORY
+                | JOB_OBJECT_LIMIT_ACTIVE_PROCESS
+        );
+        assert_eq!(sealed.JobMemoryLimit, 2 * 1024 * 1024 * 1024);
+        assert_eq!(sealed.BasicLimitInformation.ActiveProcessLimit, 32);
+        for flags in [
+            sealed.BasicLimitInformation.LimitFlags,
+            legacy_job_limits().BasicLimitInformation.LimitFlags,
+        ] {
+            assert_eq!(flags & JOB_OBJECT_LIMIT_BREAKAWAY_OK, 0);
+            assert_eq!(flags & JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, 0);
+        }
+        let legacy = legacy_job_limits();
+        assert_eq!(
+            legacy.BasicLimitInformation.LimitFlags,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        );
+        assert_eq!(legacy.JobMemoryLimit, 0);
+        assert_eq!(legacy.BasicLimitInformation.ActiveProcessLimit, 0);
+    }
+
+    fn sealed_pairs(values: &[(&str, &str)]) -> Vec<(String, OsString)> {
+        values
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).into()))
+            .collect()
+    }
+
+    #[test]
+    fn sealed_environment_block_is_explicit_sorted_and_strict() {
+        let entries = sealed_pairs(&[
+            ("windir", "C:\\Windows"),
+            ("TEMP", "C:\\t"),
+            ("_last", "x"),
+            ("Alpha", "a"),
+            ("SystemRoot", "C:\\Windows"),
+        ]);
+        let block = sealed_environment_block(entries).unwrap();
+        let text = String::from_utf16(&block).unwrap();
+        assert_eq!(
+            text,
+            "Alpha=a\0SystemRoot=C:\\Windows\0TEMP=C:\\t\0windir=C:\\Windows\0_last=x\0\0"
+        );
+        // Uppercase ordering matches Windows' ordinal case-insensitive order.
+        let names: Vec<Vec<u16>> = text
+            .split('\0')
+            .filter(|entry| !entry.is_empty())
+            .map(|entry| entry.split('=').next().unwrap().encode_utf16().collect())
+            .collect();
+        for pair in names.windows(2) {
+            assert_eq!(
+                compare_names(&pair[0], &pair[1]).unwrap(),
+                std::cmp::Ordering::Less
+            );
+        }
+        for invalid in [
+            sealed_pairs(&[("Path", "a"), ("PATH", "b")]),
+            sealed_pairs(&[("A", "bad\0value")]),
+            sealed_pairs(&[("=C:", "x")]),
+            sealed_pairs(&[("A B", "x")]),
+            Vec::new(),
+        ] {
+            assert!(sealed_environment_block(invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn windows_directory_comes_from_the_operating_system() {
+        let directory = windows_directory().unwrap();
+        assert!(std::path::Path::new(&directory).is_dir());
+        assert!(std::path::Path::new(&directory).join("System32").is_dir());
     }
 
     #[test]
