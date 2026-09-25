@@ -2,7 +2,8 @@
 //! entries invoked only by exact name through the current (absolute) test
 //! executable. Synthetic sentinels only: no real credential is ever used, the
 //! test process's own environment is never mutated, and values of unexpected
-//! variables are never printed.
+//! variables are never printed (the only extra value printed is the synthetic
+//! or runtime-generated macOS `__CF_USER_TEXT_ENCODING`, never a credential).
 #![cfg(any(target_os = "linux", target_os = "macos", windows))]
 
 use nexus_kernel::resource_limiter::{
@@ -38,6 +39,13 @@ const SENTINELS: &[(&str, &str)] = &[
     ("NEXUS_FAKE_SECRET", "c4c2-sentinel"),
     ("C4C2_ARBITRARY_PARENT", "c4c2-sentinel"),
 ];
+
+// macOS CoreFoundation may synthesize this in a process after exec. The
+// middle helper is given a synthetic parent value; the sealed child may lack
+// the variable or hold a runtime-created value, but never the parent's.
+const CF_ENCODING: &str = "__CF_USER_TEXT_ENCODING";
+#[cfg(target_os = "macos")]
+const CF_PARENT_SENTINEL: &str = "C4C2_PARENT_CF_SENTINEL";
 
 fn helper_args(name: &str) -> Vec<OsString> {
     [
@@ -117,6 +125,8 @@ fn run_middle(mode: &str, dirs: &Dirs) -> Vec<String> {
     for (name, value) in SENTINELS {
         command.env(name, value);
     }
+    #[cfg(target_os = "macos")]
+    command.env(CF_ENCODING, CF_PARENT_SENTINEL);
     let mut child = command.spawn().unwrap();
     let mut stdout = child.stdout.take().unwrap();
     let mut stderr = child.stderr.take().unwrap();
@@ -212,8 +222,30 @@ fn sealed_child_receives_only_the_sealed_environment_and_fixed_policy() {
         "windir",
     ];
     let expected: BTreeSet<String> = expected.iter().map(|name| (*name).to_owned()).collect();
+    let names = report.names.clone();
+    #[cfg(target_os = "macos")]
+    let names = {
+        let mut names = names;
+        // The middle helper (the sealed spawner) saw the synthetic parent value.
+        assert_eq!(
+            report
+                .other
+                .iter()
+                .find_map(|line| line.strip_prefix("PARENT_CF|")),
+            Some(CF_PARENT_SENTINEL)
+        );
+        // Only this one evidenced runtime-created name is tolerated, and only
+        // with a value that is not the parent's.
+        if names.remove(CF_ENCODING) {
+            assert_ne!(
+                report.values[CF_ENCODING], CF_PARENT_SENTINEL,
+                "{CF_ENCODING} inherited from the parent"
+            );
+        }
+        names
+    };
     // Exactly the sealed entries: no PATH, no sentinel, no parent variable.
-    assert_eq!(report.names, expected);
+    assert_eq!(names, expected);
     for (name, _) in SENTINELS {
         assert!(!report.names.contains(*name), "{name} leaked");
     }
@@ -428,6 +460,12 @@ fn sealed_middle() {
         path("C4C2_TEST_CWD"),
     );
     let program = std::env::current_exe().unwrap();
+    // Before spawning: report the synthetic parent value this process holds.
+    #[cfg(target_os = "macos")]
+    if mode == "sealed" {
+        let seen = std::env::var_os(CF_ENCODING).unwrap_or_default();
+        println!("C4C2|PARENT_CF|{}", seen.to_string_lossy());
+    }
     let mut child = if mode == "sealed" {
         let mut spec = sealed_spec(program, &cwd, sealed_environment(&home, &temp, "report"));
         spec.args = helper_args("sealed_report");
@@ -493,7 +531,8 @@ fn sealed_report() {
     for (name, value) in std::env::vars_os() {
         let name = name.to_string_lossy().into_owned();
         println!("C4C2|NAME|{name}");
-        if PRINTABLE.contains(&name.as_str()) {
+        let runtime_created = cfg!(target_os = "macos") && name == CF_ENCODING;
+        if PRINTABLE.contains(&name.as_str()) || runtime_created {
             println!("C4C2|VALUE|{name}|{}", value.to_string_lossy());
         }
     }

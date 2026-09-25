@@ -6,9 +6,14 @@
 //! Unix groups contain descendants that remain in the group; this is not a
 //! sandbox against a workload deliberately calling setsid/setpgid.
 //!
-//! P0-002C4C2 adds a separate, opt-in sealed long-lived spawn: the child starts
-//! from an empty environment (never the parent's), runs an explicit absolute
-//! executable from a canonical directory, and receives one fixed kernel-owned
+//! P0-002C4C2 adds a separate, opt-in sealed long-lived spawn. Nexus constructs
+//! and passes a cleared launch environment containing only the explicit sealed
+//! variables and Nexus/OS-derived variables; no parent environment entry is
+//! inherited. After exec, the OS or libraries loaded by the workload may
+//! synthesize or change variables in the child's own environment (for example
+//! macOS CoreFoundation's `__CF_USER_TEXT_ENCODING`); such post-exec mutation
+//! is outside the non-inheritance guarantee. The child runs an explicit
+//! absolute executable from a canonical directory under one fixed kernel-owned
 //! long-lived resource policy. It is not a filesystem, network or credential
 //! sandbox. Legacy `spawn`/`spawn_actuator` behaviour is unchanged.
 
@@ -178,8 +183,9 @@ fn canonical_directory(dir: &Path) -> bool {
     dir.is_absolute() && dir.is_dir() && dir.canonicalize().ok().as_deref() == Some(dir)
 }
 
-/// Explicit child environment for the sealed spawn. It begins empty; there is
-/// no `Default`, and nothing is ever copied from the parent process.
+/// Explicit launch environment for the sealed spawn. It begins empty; there is
+/// no `Default`, and nothing is ever copied from the parent process. It fixes
+/// what Nexus passes at exec, not what the workload's runtime adds afterwards.
 pub struct SealedEnvironment {
     home: PathBuf,
     temp: PathBuf,
@@ -384,10 +390,12 @@ impl ResourceLimiter {
         })
     }
 
-    /// Sealed long-lived spawn (P0-002C4C2): empty environment plus only the
-    /// sealed entries and mandatory OS-derived variables, explicit absolute
-    /// executable, canonical cwd, and the fixed long-lived policy installed
-    /// before the workload runs. Never uses this limiter's `ResourceLimits`.
+    /// Sealed long-lived spawn (P0-002C4C2): a cleared launch environment with
+    /// only the sealed entries and mandatory Nexus/OS-derived variables (no
+    /// parent inheritance; post-exec changes by the workload's own runtime are
+    /// out of scope), explicit absolute executable, canonical cwd, and the
+    /// fixed long-lived policy installed before the workload runs. Never uses
+    /// this limiter's `ResourceLimits`.
     pub fn spawn_sealed(
         &self,
         spec: &SealedSpawnSpec,
@@ -881,7 +889,9 @@ mod tests {
     }
 
     // Focused guards on the sealed functions only (comments stripped).
+    // Checkouts may use CRLF (Windows CI), so parse normalized LF text.
     fn function(source: &str, signature: &str) -> String {
+        let source = source.replace("\r\n", "\n");
         let start = source.find(signature).unwrap();
         let body = &source[start..];
         // Methods (indented) end at their own closing brace, never the impl's.
@@ -896,6 +906,24 @@ mod tests {
             .map(|line| line.split("//").next().unwrap_or(""))
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn source_guard_extraction_is_line_ending_agnostic() {
+        let lf = "fn before() {}\n\nimpl X {\n    pub(super) fn target(&self) {\n        \
+                  body(); // note\n    }\n    fn after() {}\n}\n\npub(super) fn top() {\n    \
+                  inner();\n}\nfn tail() {}\n";
+        let crlf = lf.replace('\n', "\r\n");
+        assert!(crlf.contains("\r\n    }\r\n") && !lf.contains('\r'));
+        let method = function(lf, "    pub(super) fn target(");
+        assert_eq!(
+            method,
+            "    pub(super) fn target(&self) {\n        body(); "
+        );
+        assert_eq!(function(&crlf, "    pub(super) fn target("), method);
+        let top = function(lf, "pub(super) fn top(");
+        assert_eq!(top, "pub(super) fn top() {\n    inner();");
+        assert_eq!(function(&crlf, "pub(super) fn top("), top);
     }
 
     #[test]
