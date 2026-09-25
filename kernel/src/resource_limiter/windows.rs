@@ -139,7 +139,8 @@ impl Child {
         // SAFETY: uniquely owned valid handle returned by CreateJobObjectW.
         let job = unsafe { OwnedHandle::from_raw_handle(raw_job) };
         // SAFETY: correctly sized initialized structure, valid live job handle.
-        // All requested limits are installed atomically or the spawn fails.
+        // This single call must succeed before any workload exists; on failure
+        // this returns ContainmentSetupFailed and CreateProcessW is not reached.
         if unsafe {
             SetInformationJobObject(
                 job.as_raw_handle(),

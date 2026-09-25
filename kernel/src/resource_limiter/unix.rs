@@ -198,10 +198,15 @@ impl Child {
     }
 }
 
-/// The fixed P0-002C4C2 long-lived policy: per-process committed private
-/// memory (Linux RLIMIT_DATA) and file size. Deliberately no RLIMIT_AS (V8
-/// reserves far more address space than it commits), no RLIMIT_CPU and no new
-/// RLIMIT_NPROC. macOS: file size only; no memory bound is claimed there.
+/// The fixed P0-002C4C2 long-lived policy. Linux: a 2 GiB per-process
+/// RLIMIT_DATA, which bounds data-segment growth and the allocations the
+/// kernel charges to that limit (brk/sbrk and, on modern Linux, private
+/// writable mmap). It is not an RSS limit, not a general committed-memory
+/// guarantee and not a tree-wide bound: descendants inherit the rlimit, but
+/// each process is limited separately. Plus a 100 MiB RLIMIT_FSIZE.
+/// Deliberately no RLIMIT_AS (V8 reserves far more address space than it
+/// uses), no RLIMIT_CPU and no new RLIMIT_NPROC. macOS: file size only; no
+/// memory bound is claimed there.
 pub(super) fn sealed_rlimits() -> Vec<(Rlimit, u64)> {
     const FILE_SIZE_BYTES: u64 = 100 * 1024 * 1024;
     #[cfg(target_os = "linux")]
