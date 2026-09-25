@@ -2,8 +2,7 @@
 //! entries invoked only by exact name through the current (absolute) test
 //! executable. Synthetic sentinels only: no real credential is ever used, the
 //! test process's own environment is never mutated, and values of unexpected
-//! variables are never printed (the only extra value printed is the synthetic
-//! or runtime-generated macOS `__CF_USER_TEXT_ENCODING`, never a credential).
+//! variables are never printed.
 #![cfg(any(target_os = "linux", target_os = "macos", windows))]
 
 use nexus_kernel::resource_limiter::{
@@ -40,12 +39,14 @@ const SENTINELS: &[(&str, &str)] = &[
     ("C4C2_ARBITRARY_PARENT", "c4c2-sentinel"),
 ];
 
-// macOS CoreFoundation may synthesize this in a process after exec. The
-// middle helper is given a synthetic parent value; the sealed child may lack
-// the variable or hold a runtime-created value, but never the parent's.
-const CF_ENCODING: &str = "__CF_USER_TEXT_ENCODING";
+// macOS CoreFoundation may synthesize this inside a process after exec, so a
+// Rust child can hold it even though Nexus never passed it at launch.
 #[cfg(target_os = "macos")]
-const CF_PARENT_SENTINEL: &str = "C4C2_PARENT_CF_SENTINEL";
+const CF_ENCODING: &str = "__CF_USER_TEXT_ENCODING";
+// A plain system utility (no CoreFoundation) that prints exactly the
+// environment it was launched with. Absolute: never PATH-resolved.
+#[cfg(target_os = "macos")]
+const ENV_PROBE: &str = "/usr/bin/env";
 
 fn helper_args(name: &str) -> Vec<OsString> {
     [
@@ -125,8 +126,6 @@ fn run_middle(mode: &str, dirs: &Dirs) -> Vec<String> {
     for (name, value) in SENTINELS {
         command.env(name, value);
     }
-    #[cfg(target_os = "macos")]
-    command.env(CF_ENCODING, CF_PARENT_SENTINEL);
     let mut child = command.spawn().unwrap();
     let mut stdout = child.stdout.take().unwrap();
     let mut stderr = child.stderr.take().unwrap();
@@ -225,23 +224,10 @@ fn sealed_child_receives_only_the_sealed_environment_and_fixed_policy() {
     let names = report.names.clone();
     #[cfg(target_os = "macos")]
     let names = {
+        // This Rust child's runtime may create this one name after exec; the
+        // launch environment itself is proven exact by the /usr/bin/env probe.
         let mut names = names;
-        // The middle helper (the sealed spawner) saw the synthetic parent value.
-        assert_eq!(
-            report
-                .other
-                .iter()
-                .find_map(|line| line.strip_prefix("PARENT_CF|")),
-            Some(CF_PARENT_SENTINEL)
-        );
-        // Only this one evidenced runtime-created name is tolerated, and only
-        // with a value that is not the parent's.
-        if names.remove(CF_ENCODING) {
-            assert_ne!(
-                report.values[CF_ENCODING], CF_PARENT_SENTINEL,
-                "{CF_ENCODING} inherited from the parent"
-            );
-        }
+        names.remove(CF_ENCODING);
         names
     };
     // Exactly the sealed entries: no PATH, no sentinel, no parent variable.
@@ -328,6 +314,47 @@ fn legacy_spawn_still_inherits_the_parent_environment() {
     for (name, _) in SENTINELS {
         assert!(lines.contains(&format!("HAS|{name}")), "{name}: {lines:?}");
     }
+}
+
+// The launch environment Nexus passes at exec, observed by /usr/bin/env rather
+// than a Rust/CoreFoundation process that may add variables after exec.
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_sealed_launch_environment_is_exact_before_runtime_mutation() {
+    assert!(Path::new(ENV_PROBE).is_absolute() && Path::new(ENV_PROBE).is_file());
+    let dirs = dirs();
+    let lines = run_middle("launch", &dirs);
+    // The sealed spawner itself held every synthetic sentinel and PATH.
+    for (name, _) in SENTINELS {
+        assert!(
+            lines.contains(&format!("PARENT_HAS|{name}")),
+            "{name}: {lines:?}"
+        );
+    }
+    assert!(lines.contains(&"PARENT_HAS|PATH".to_owned()), "{lines:?}");
+    assert!(lines.contains(&"LAUNCH_DONE".to_owned()), "{lines:?}");
+    let names: BTreeSet<&str> = lines
+        .iter()
+        .filter_map(|line| line.strip_prefix("ENV_NAME|"))
+        .collect();
+    assert_eq!(names, BTreeSet::from(["HOME", "TMPDIR", VISIBLE]));
+    for (name, _) in SENTINELS {
+        assert!(!names.contains(name), "{name} leaked");
+    }
+    for name in ["PATH", CF_ENCODING] {
+        assert!(!names.contains(name), "{name} present at launch");
+    }
+    let value = |name: &str| {
+        let prefix = format!("ENV_VALUE|{name}|");
+        lines
+            .iter()
+            .find_map(|line| line.strip_prefix(prefix.as_str()))
+            .unwrap_or_else(|| panic!("{name} value: {lines:?}"))
+            .to_owned()
+    };
+    assert_eq!(PathBuf::from(value("HOME")), dirs.home);
+    assert_eq!(PathBuf::from(value("TMPDIR")), dirs.temp);
+    assert_eq!(value(VISIBLE), "launch");
 }
 
 #[test]
@@ -460,11 +487,10 @@ fn sealed_middle() {
         path("C4C2_TEST_CWD"),
     );
     let program = std::env::current_exe().unwrap();
-    // Before spawning: report the synthetic parent value this process holds.
     #[cfg(target_os = "macos")]
-    if mode == "sealed" {
-        let seen = std::env::var_os(CF_ENCODING).unwrap_or_default();
-        println!("C4C2|PARENT_CF|{}", seen.to_string_lossy());
+    if mode == "launch" {
+        launch_probe(&home, &temp, &cwd);
+        return;
     }
     let mut child = if mode == "sealed" {
         let mut spec = sealed_spec(program, &cwd, sealed_environment(&home, &temp, "report"));
@@ -500,6 +526,42 @@ fn sealed_middle() {
     }
 }
 
+// Middle-helper side of the macOS launch probe: prove this (sealed spawner)
+// process holds the synthetic sentinels and PATH, then report the names (and
+// only the expected sealed values) /usr/bin/env received at exec.
+#[cfg(target_os = "macos")]
+fn launch_probe(home: &Path, temp: &Path, cwd: &Path) {
+    for (name, value) in SENTINELS {
+        if std::env::var(name).as_deref() == Ok(*value) {
+            println!("C4C2|PARENT_HAS|{name}");
+        }
+    }
+    if std::env::var_os("PATH").is_some() {
+        println!("C4C2|PARENT_HAS|PATH");
+    }
+    let spec = sealed_spec(
+        PathBuf::from(ENV_PROBE),
+        cwd,
+        sealed_environment(home, temp, "launch"),
+    );
+    let mut child = ResourceLimiter::default().spawn_sealed(&spec).unwrap();
+    let mut output = String::new();
+    child
+        .take_stdout()
+        .unwrap()
+        .read_to_string(&mut output)
+        .unwrap();
+    child.terminate_and_reap(Instant::now() + CLEANUP).unwrap();
+    for line in output.lines() {
+        let (name, value) = line.split_once('=').expect("NAME=VALUE line");
+        println!("C4C2|ENV_NAME|{name}");
+        if ["HOME", "TMPDIR", VISIBLE].contains(&name) {
+            println!("C4C2|ENV_VALUE|{name}|{value}");
+        }
+    }
+    println!("C4C2|LAUNCH_DONE");
+}
+
 #[test]
 #[ignore]
 fn sealed_report() {
@@ -531,8 +593,7 @@ fn sealed_report() {
     for (name, value) in std::env::vars_os() {
         let name = name.to_string_lossy().into_owned();
         println!("C4C2|NAME|{name}");
-        let runtime_created = cfg!(target_os = "macos") && name == CF_ENCODING;
-        if PRINTABLE.contains(&name.as_str()) || runtime_created {
+        if PRINTABLE.contains(&name.as_str()) {
             println!("C4C2|VALUE|{name}|{}", value.to_string_lossy());
         }
     }
