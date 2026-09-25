@@ -694,6 +694,22 @@ fn mutate_identity(f: &Fixture, root: &Path, case: &str) {
     }
 }
 
+// Registration-level (storage/project) mutations the OS permits while a live
+// DevServerTarget retains the React directory handle. Native Windows denies
+// renaming an ancestor of that open handle (ERROR_ACCESS_DENIED), asserted by
+// p0_002c4b_windows_retained_react_identity_blocks_project_ancestor_rename;
+// there only removal can occur. Unix/macOS also replace by rename.
+#[cfg(unix)]
+const REGISTRATION_MUTATIONS: &[&str] =
+    &["project-removed", "project-replaced", "storage-replaced"];
+#[cfg(windows)]
+const REGISTRATION_MUTATIONS: &[&str] = &["project-removed"];
+// The registration-level change used by the re-entry and audit-panic tests.
+#[cfg(unix)]
+const REGISTRATION_CHANGE: &str = "project-replaced";
+#[cfg(windows)]
+const REGISTRATION_CHANGE: &str = "project-removed";
+
 fn cleanup_mutation(f: &Fixture) {
     let _ = std::fs::remove_dir_all(f.path.with_extension("old"));
 }
@@ -717,7 +733,7 @@ fn registration_invalidated(f: &Fixture) -> bool {
 
 #[test]
 fn p0_002c4b_stale_registration_identity_cannot_reach_launcher() {
-    for case in ["project-removed", "project-replaced", "storage-replaced"] {
+    for &case in REGISTRATION_MUTATIONS {
         let f = Fixture::new();
         let (id, root) = registered(&f);
         let (r, p) = (registry(&f), uuid(&id));
@@ -779,12 +795,16 @@ fn p0_002c4b_stale_react_identity_cannot_reach_launcher() {
 
 #[test]
 fn p0_002c4b_identity_change_during_launch_is_finalized_and_never_running() {
-    for (case, reason, cleanup_fails) in [
+    let mut cases = vec![
         ("react-replaced", "react", false),
-        ("project-replaced", "registration", false),
-        ("storage-replaced", "registration", false),
         ("react-replaced", "react", true),
-    ] {
+    ];
+    cases.extend(
+        REGISTRATION_MUTATIONS
+            .iter()
+            .map(|&case| (case, "registration", false)),
+    );
+    for (case, reason, cleanup_fails) in cases {
         let f = Fixture::new();
         let (id, root) = registered(&f);
         let (r, p) = (registry(&f), uuid(&id));
@@ -890,13 +910,13 @@ fn p0_002c4b_invalidation_reentry_around_launch_cannot_deadlock_or_launch() {
                         (fake(&control), Arc::clone(&launched), &f, root.clone());
                     move || {
                         launched.fetch_add(1, Ordering::SeqCst);
-                        mutate_identity(f, &root, "project-replaced");
+                        mutate_identity(f, &root, REGISTRATION_CHANGE);
                         tree()
                     }
                 };
                 r.start(start, audit, launch)
             } else {
-                mutate_identity(&f, &root, "project-replaced");
+                mutate_identity(&f, &root, REGISTRATION_CHANGE);
                 r.start(start, audit, counted(&launched, &control))
             };
             assert_eq!(result, Err(LifecycleError::IdentityDenied));
@@ -937,7 +957,7 @@ fn p0_002c4b_audit_panic_during_launch_revalidation_cannot_strand_reservation() 
                         (fake(&control), Arc::clone(&launched), &f, root.clone());
                     move || {
                         launched.fetch_add(1, Ordering::SeqCst);
-                        mutate_identity(f, &root, "project-replaced");
+                        mutate_identity(f, &root, REGISTRATION_CHANGE);
                         tree()
                     }
                 };
@@ -1531,14 +1551,20 @@ fn p0_002c4b_delayed_root_exit_without_descendant_finalizes_and_races_stop() {
 
 #[test]
 fn p0_002c4b_identity_invalidation_terminates_real_tree() {
-    for case in [
+    // Windows runs every mutation the OS permits while the owner retains the
+    // React identity; ancestor rename denial is asserted separately.
+    #[cfg(unix)]
+    let cases = [
         "storage-removed",
         "storage-replaced",
         "project-removed",
         "project-replaced",
         "react-removed",
         "react-replaced",
-    ] {
+    ];
+    #[cfg(windows)]
+    let cases = ["project-removed", "react-removed", "react-replaced"];
+    for case in cases {
         let f = Fixture::new();
         let (id, root) = registered(&f);
         let (r, p) = (registry(&f), uuid(&id));
@@ -1635,33 +1661,75 @@ fn p0_002c4b_unix_symlink_redirects_terminate_real_tree() {
 #[cfg(windows)]
 #[test]
 fn p0_002c4b_windows_reparse_redirects_terminate_real_tree() {
+    // A real React reparse redirect, which Windows permits while the owner
+    // retains React identity. (Redirecting the project would require renaming
+    // an ancestor of that open handle; the OS denies it, asserted below.)
     use std::os::windows::fs::symlink_dir;
-    for project_redirect in [false, true] {
-        let f = Fixture::new();
-        let (id, root) = registered(&f);
-        let (r, p) = (registry(&f), uuid(&id));
-        let control = Control::new();
-        let run = launch(&r, &f, &id, &control, "c4b_fixture_hold");
-        let redirected = if project_redirect {
-            root.clone()
-        } else {
-            root.join("react")
-        };
-        let old = redirected.with_extension("old");
-        std::fs::rename(&redirected, &old).unwrap();
-        symlink_dir(&old, &redirected)
-            .expect("native Windows test requires symlink creation privilege");
-        assert!(wait_until(soon(), || r.status(p) == LifecycleStatus::Stopped));
-        assert_tree_gone(&run, "windows reparse redirect");
-        assert!(wait_event(
-            &f,
-            "invalidated",
-            if project_redirect {
-                "registration"
-            } else {
-                "react"
-            }
-        ));
-        assert_eq!(f.authority.catalog.lookup(p).is_err(), project_redirect);
-    }
+    let f = Fixture::new();
+    let (id, root) = registered(&f);
+    let (r, p) = (registry(&f), uuid(&id));
+    let control = Control::new();
+    let run = launch(&r, &f, &id, &control, "c4b_fixture_hold");
+    let react = root.join("react");
+    let old = react.with_extension("old");
+    std::fs::rename(&react, &old).unwrap();
+    symlink_dir(&old, &react).expect("native Windows test requires symlink creation privilege");
+    assert!(wait_until(soon(), || r.status(p) == LifecycleStatus::Stopped));
+    assert_tree_gone(&run, "windows reparse redirect");
+    assert!(wait_event(&f, "invalidated", "react"));
+    // A React change alone never tombstones the registration.
+    assert!(!registration_invalidated(&f));
+    assert!(f.authority.catalog.lookup(p).is_ok());
+}
+
+// Windows platform invariant (security evidence, not a workaround): while an
+// execution retains the React directory identity, the OS refuses to rename the
+// project ancestor, so rename-based replacement cannot occur underneath it.
+// This is not filesystem containment; removal is still possible and is
+// detected (see p0_002c4b_identity_invalidation_terminates_real_tree).
+#[cfg(windows)]
+#[test]
+fn p0_002c4b_windows_retained_react_identity_blocks_project_ancestor_rename() {
+    const ERROR_ACCESS_DENIED: i32 = 5;
+    let f = Fixture::new();
+    let (id, root) = registered(&f);
+    let (r, p) = (registry(&f), uuid(&id));
+    let control = Control::new();
+    let run = launch(&r, &f, &id, &control, "c4b_fixture_hold");
+    let port = run.port.expect("descendant port");
+    assert_eq!(r.status(p), LifecycleStatus::Running);
+    let execution = execution_of(&r, p);
+    let moved = root.with_extension("old");
+    let error = std::fs::rename(&root, &moved)
+        .expect_err("project ancestor rename must be denied while React identity is retained");
+    assert_eq!(error.raw_os_error(), Some(ERROR_ACCESS_DENIED), "{error:?}");
+    assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+    // Nothing moved: the registration and a fresh identity capture still
+    // validate, and the same execution keeps running with a live descendant.
+    assert!(root.join("react").is_dir());
+    assert!(!moved.exists());
+    assert!(f.authority.catalog.lookup(p).is_ok());
+    assert!(f.authority.dev_server_target(&id, &f.audit()).is_ok());
+    // Let several monitor cycles observe the unchanged identity.
+    thread::sleep(MONITOR_INTERVAL * 4);
+    assert_eq!(r.status(p), LifecycleStatus::Running);
+    assert_eq!(execution_of(&r, p), execution);
+    assert!(port_held(port), "descendant must still be alive");
+    // No false invalidation from the denied operation.
+    assert!(!registration_invalidated(&f));
+    assert!(!lifecycle_events(&f)
+        .iter()
+        .any(|event| event["operation"] == "builder.devserver.lifecycle.invalidated"));
+    // Explicit stop still finalizes the owned tree.
+    assert_eq!(r.stop(p, soon(), &f.audit()), Ok(Finalized::Stopped));
+    assert_eq!(r.status(p), LifecycleStatus::Stopped);
+    assert_tree_gone(&run, "stop after denied ancestor rename");
+    // Once the owner has released the retained React identity, the existing
+    // C3 semantics apply again: the rename proceeds (bounded wait for the
+    // owner thread to finish) and is restored.
+    assert!(
+        wait_until(soon(), || std::fs::rename(&root, &moved).is_ok()),
+        "project rename still denied after the execution released React identity"
+    );
+    std::fs::rename(&moved, &root).unwrap();
 }

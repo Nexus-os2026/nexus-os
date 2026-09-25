@@ -2279,17 +2279,33 @@ fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
         }
     }
     // The module is declared once and constructed by no production source.
+    // Structure is checked per line so LF and CRLF checkouts are equivalent.
     assert_eq!(adapter.matches("process_lifecycle").count(), 1);
-    assert!(adapter.contains("\nmod process_lifecycle;\n"));
+    assert_eq!(
+        adapter
+            .lines()
+            .filter(|line| line.trim_end() == "mod process_lifecycle;")
+            .count(),
+        1
+    );
     for source in [lib, adapter] {
         assert!(!source.contains("LifecycleRegistry"));
     }
     assert!(!lib.contains("process_lifecycle"));
     // Non-test lifecycle code wraps an already-owned tree; it cannot create one.
-    // All #[cfg(test)] fixtures and the real launcher live in its tests module.
+    // All #[cfg(test)] fixtures and the real launcher live in its tests module:
+    // the only #[cfg(test)] item is the final `mod tests;` declaration.
     let lifecycle = include_str!("process_lifecycle.rs");
     assert_eq!(lifecycle.matches("#[cfg(test)]").count(), 1);
-    assert!(lifecycle.trim_end().ends_with("#[cfg(test)]\nmod tests;"));
+    let meaningful: Vec<&str> = lifecycle
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert_eq!(
+        meaningful[meaningful.len() - 2..],
+        ["#[cfg(test)]", "mod tests;"]
+    );
     let production = code_only(lifecycle);
     for forbidden in [
         "ResourceLimiter",
