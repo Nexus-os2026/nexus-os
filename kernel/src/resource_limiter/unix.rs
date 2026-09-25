@@ -154,21 +154,13 @@ impl Child {
             Ok(()) => {}
             Err(Errno::ESRCH) if root_exited => {}
             #[cfg(target_os = "macos")]
-            Err(Errno::EPERM) if root_exited => {
-                // Keep the leader unreaped while inspecting every group member.
-                // Root-only ESRCH cannot rule out a live, unsignalable descendant.
-                darwin_group::confirm_terminal(self.id() as i32).map_err(|error| {
-                    ResourceLimitError::TerminationFailed(io::Error::from_raw_os_error(
-                        error as i32,
-                    ))
-                })?;
-                // Detect an external reaper before accepting the observation.
-                // poll_exit invalidates ownership on ECHILD; never signal again.
-                if self.poll_exit()?.is_none() {
-                    return Err(ResourceLimitError::ObservationFailed(io::Error::other(
-                        "owned root exit changed during group observation",
-                    )));
-                }
+            Err(Errno::EPERM) => {
+                let pgid = self.id() as i32;
+                darwin_eperm_after_signal(
+                    root_exited,
+                    || Ok(self.poll_exit()?.is_some()),
+                    || darwin_group::confirm_terminal(pgid),
+                )?;
             }
             Err(error) => {
                 return Err(ResourceLimitError::TerminationFailed(
@@ -196,6 +188,38 @@ impl Child {
             }
         }
     }
+}
+
+/// Darwin killpg EPERM: an exited (zombie) group member cannot be signalled,
+/// but neither can a live foreign-credential one. The retained, unreaped root
+/// must be observed exited, either by the pre-signal poll or, if it exited
+/// between that poll and killpg, by exactly one re-poll; otherwise the original
+/// EPERM stands. Only then does the terminal-group proof decide, followed by
+/// the existing ownership re-check (ECHILD/ownership loss stays a failure).
+#[cfg(any(target_os = "macos", test))]
+fn darwin_eperm_after_signal(
+    root_exited: bool,
+    mut root_exited_now: impl FnMut() -> Result<bool, ResourceLimitError>,
+    confirm_terminal: impl FnOnce() -> Result<(), Errno>,
+) -> Result<(), ResourceLimitError> {
+    if !root_exited && !root_exited_now()? {
+        return Err(ResourceLimitError::TerminationFailed(
+            io::Error::from_raw_os_error(Errno::EPERM as i32),
+        ));
+    }
+    // Keep the leader unreaped while inspecting every group member.
+    // Root-only ESRCH cannot rule out a live, unsignalable descendant.
+    confirm_terminal().map_err(|error| {
+        ResourceLimitError::TerminationFailed(io::Error::from_raw_os_error(error as i32))
+    })?;
+    // Detect an external reaper before accepting the observation.
+    // poll_exit invalidates ownership on ECHILD; never signal again.
+    if !root_exited_now()? {
+        return Err(ResourceLimitError::ObservationFailed(io::Error::other(
+            "owned root exit changed during group observation",
+        )));
+    }
+    Ok(())
 }
 
 /// The fixed P0-002C4C2 long-lived policy. Linux: a 2 GiB per-process
@@ -315,5 +339,106 @@ fn output(mode: ResourceOutput) -> Stdio {
         ResourceOutput::Inherit => Stdio::inherit(),
         ResourceOutput::Null => Stdio::null(),
         ResourceOutput::Piped => Stdio::piped(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    // Runs the Darwin EPERM decision with scripted root observations and a
+    // scripted terminal-group verdict; returns the result and call counts.
+    fn decide(
+        root_exited: bool,
+        observations: &[Result<bool, i32>],
+        verdict: Result<(), Errno>,
+    ) -> (Result<(), ResourceLimitError>, usize, bool) {
+        let polls = Cell::new(0);
+        let confirmed = Cell::new(false);
+        let result = darwin_eperm_after_signal(
+            root_exited,
+            || {
+                let next = observations[polls.get()];
+                polls.set(polls.get() + 1);
+                next.map_err(|errno| {
+                    ResourceLimitError::ObservationFailed(io::Error::from_raw_os_error(errno))
+                })
+            },
+            || {
+                confirmed.set(true);
+                verdict
+            },
+        );
+        (result, polls.get(), confirmed.get())
+    }
+
+    fn termination_errno(result: &Result<(), ResourceLimitError>) -> Option<i32> {
+        match result {
+            Err(ResourceLimitError::TerminationFailed(error)) => error.raw_os_error(),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn eperm_with_root_still_live_after_one_repoll_fails_without_group_acceptance() {
+        // Case A: live, then EPERM, then still live.
+        let (result, polls, confirmed) = decide(false, &[Ok(false)], Ok(()));
+        assert_eq!(termination_errno(&result), Some(libc::EPERM));
+        assert_eq!(polls, 1, "exactly one re-poll");
+        assert!(!confirmed, "no terminal-group acceptance");
+    }
+
+    #[test]
+    fn eperm_race_with_root_exit_is_accepted_only_through_terminal_group_proof() {
+        // Case B: live, then EPERM, then exited; group proven terminal.
+        let (result, polls, confirmed) = decide(false, &[Ok(true), Ok(true)], Ok(()));
+        assert!(result.is_ok(), "{result:?}");
+        assert!(confirmed);
+        assert_eq!(polls, 2, "re-poll plus the existing ownership re-check");
+    }
+
+    #[test]
+    fn eperm_race_with_live_group_member_keeps_eperm() {
+        // Case C: live, then EPERM, then exited; a live member remains.
+        let (result, polls, confirmed) = decide(false, &[Ok(true)], Err(Errno::EPERM));
+        assert_eq!(termination_errno(&result), Some(libc::EPERM));
+        assert!(confirmed);
+        assert_eq!(polls, 1);
+    }
+
+    #[test]
+    fn eperm_after_observed_root_exit_keeps_the_existing_darwin_path() {
+        // Case D: exited before the signal: no re-poll, group proof, re-check.
+        let (result, polls, confirmed) = decide(true, &[Ok(true)], Ok(()));
+        assert!(result.is_ok(), "{result:?}");
+        assert!(confirmed);
+        assert_eq!(polls, 1, "only the existing post-proof ownership re-check");
+        let (result, polls, _) = decide(true, &[], Err(Errno::EPERM));
+        assert_eq!(termination_errno(&result), Some(libc::EPERM));
+        assert_eq!(polls, 0);
+        let (result, _, _) = decide(true, &[Ok(false)], Ok(()));
+        assert!(matches!(
+            result,
+            Err(ResourceLimitError::ObservationFailed(_))
+        ));
+    }
+
+    #[test]
+    fn eperm_with_lost_root_ownership_never_succeeds() {
+        // ECHILD on the re-poll, or on the post-proof re-check, is a failure.
+        for (root_exited, observations) in [
+            (false, &[Err(libc::ECHILD)][..]),
+            (false, &[Ok(true), Err(libc::ECHILD)][..]),
+            (true, &[Err(libc::ECHILD)][..]),
+        ] {
+            let (result, _, _) = decide(root_exited, observations, Ok(()));
+            match result {
+                Err(ResourceLimitError::ObservationFailed(error)) => {
+                    assert_eq!(error.raw_os_error(), Some(libc::ECHILD));
+                }
+                other => panic!("{other:?}"),
+            }
+        }
     }
 }
