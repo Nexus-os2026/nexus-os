@@ -687,7 +687,7 @@ impl LocalCodingIo {
 
     fn resolve_relative_path(&self, relative_path: &str) -> Result<PathBuf, AgentError> {
         let relative = sanitize_relative_path(relative_path)?;
-        Ok(self.repo_root.join(relative))
+        nexus_sdk::workspace::resolve_path(&self.repo_root, &relative)
     }
 }
 

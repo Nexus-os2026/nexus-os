@@ -34,22 +34,30 @@ jobs:
             glib-2.0 \
             pkg-config
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust 1.94.0
+        uses: dtolnay/rust-toolchain@1.94.0
         with:
           components: rustfmt, clippy
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
+      # Privacy regressions exercise both real search backends.
+      - name: Install ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+          grep --version
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
   test-frontend:
     runs-on: ubuntu-latest
@@ -68,6 +76,9 @@ jobs:
       - name: TypeScript check
         run: cd app && npx tsc --noEmit
 
+      - name: Run frontend tests
+        run: cd app && npm test
+
       - name: Build frontend
         run: cd app && npx vite build
 
@@ -77,14 +88,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust 1.94.0
+        uses: dtolnay/rust-toolchain@1.94.0
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Install ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+          grep --version
+
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
   test-windows:
     runs-on: windows-latest
@@ -92,14 +110,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust 1.94.0
+        uses: dtolnay/rust-toolchain@1.94.0
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Install ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+          grep --version
+          # Expose Git for Windows grep/which to the native Cargo test process.
+          cygpath -w /usr/bin >> "$GITHUB_PATH"
+
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
   test-python:
     runs-on: ubuntu-latest

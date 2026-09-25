@@ -1,11 +1,11 @@
 //! Phase 1.4 Deliverable 4 — vision_judge tests.
 //!
-//! Codex CLI calls are exercised via mock bash scripts in
-//! `tests/fixtures/mock_codex*.sh`. The Anthropic escalation path is
+//! Codex CLI calls are exercised via a native Rust fixture in
+//! `tests/fixtures/mock_codex.rs`. The Anthropic escalation path is
 //! exercised via a `MockAnthropicClient` injected into `VisionJudge`.
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use async_trait::async_trait;
 use nexus_ui_repair::governance::audit::AuditLog;
@@ -16,14 +16,49 @@ use nexus_ui_repair::specialists::vision_judge::{
 use tempfile::tempdir;
 
 fn fixture_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join(name)
+    const MODES: &[&str] = &[
+        "mock_codex",
+        "mock_codex_fail",
+        "mock_codex_no_output",
+        "mock_codex_garbage",
+    ];
+    assert!(MODES.contains(&name));
+    static FIXTURE: OnceLock<tempfile::TempDir> = OnceLock::new();
+    let directory = FIXTURE.get_or_init(|| {
+        let directory = tempdir().expect("native fixture directory");
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mock_codex.rs");
+        let executable = directory
+            .path()
+            .join(format!("mock_codex{}", std::env::consts::EXE_SUFFIX));
+        let compiler = std::process::Command::new("rustc")
+            .arg(source)
+            .arg("-o")
+            .arg(&executable)
+            .output()
+            .expect("compile native fixture");
+        assert!(
+            compiler.status.success(),
+            "{}",
+            String::from_utf8_lossy(&compiler.stderr)
+        );
+        for mode in &MODES[1..] {
+            std::fs::copy(
+                &executable,
+                directory
+                    .path()
+                    .join(format!("{mode}{}", std::env::consts::EXE_SUFFIX)),
+            )
+            .unwrap();
+        }
+        directory
+    });
+    directory
+        .path()
+        .join(format!("{name}{}", std::env::consts::EXE_SUFFIX))
 }
 
 fn build_judge(
-    codex_script: &str,
+    codex_fixture: &str,
     anthropic_client: Option<Arc<dyn AnthropicClient>>,
 ) -> (
     VisionJudge,
@@ -39,7 +74,7 @@ fn build_judge(
         CostCeiling::load_from_disk(spend_path, 10.0).expect("load"),
     ));
     let audit = Arc::new(Mutex::new(AuditLog::new(audit_path)));
-    let codex_path = fixture_path(codex_script);
+    let codex_path = fixture_path(codex_fixture);
     let judge = if let Some(client) = anthropic_client {
         VisionJudge::with_anthropic_client(
             codex_path,
@@ -65,14 +100,14 @@ fn dummy_screenshot(dir: &std::path::Path) -> PathBuf {
     let p = dir.join("shot.png");
     // Minimal PNG header bytes — vision_judge only reads them for the
     // anthropic path; for the codex path the path is just passed to
-    // the mock script.
+    // the native fixture.
     std::fs::write(&p, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).unwrap();
     p
 }
 
 #[tokio::test]
 async fn codex_path_parses_verdict_successfully() {
-    let (judge, dir, _cost, _audit) = build_judge("mock_codex.sh", None);
+    let (judge, dir, _cost, _audit) = build_judge("mock_codex", None);
     let shot = dummy_screenshot(dir.path());
     let verdict = judge
         .judge(&shot, "did anything change?")
@@ -84,7 +119,7 @@ async fn codex_path_parses_verdict_successfully() {
 
 #[tokio::test]
 async fn codex_non_zero_exit_returns_codex_exited_non_zero() {
-    let (judge, dir, _c, _a) = build_judge("mock_codex_fail.sh", None);
+    let (judge, dir, _c, _a) = build_judge("mock_codex_fail", None);
     let shot = dummy_screenshot(dir.path());
     let err = judge.judge(&shot, "x").await.unwrap_err();
     match err {
@@ -98,7 +133,7 @@ async fn codex_non_zero_exit_returns_codex_exited_non_zero() {
 
 #[tokio::test]
 async fn codex_missing_output_returns_output_file_missing() {
-    let (judge, dir, _c, _a) = build_judge("mock_codex_no_output.sh", None);
+    let (judge, dir, _c, _a) = build_judge("mock_codex_no_output", None);
     let shot = dummy_screenshot(dir.path());
     let err = judge.judge(&shot, "x").await.unwrap_err();
     assert!(matches!(err, VisionJudgeError::OutputFileMissing));
@@ -106,7 +141,7 @@ async fn codex_missing_output_returns_output_file_missing() {
 
 #[tokio::test]
 async fn codex_garbage_output_returns_parse_failed() {
-    let (judge, dir, _c, _a) = build_judge("mock_codex_garbage.sh", None);
+    let (judge, dir, _c, _a) = build_judge("mock_codex_garbage", None);
     let shot = dummy_screenshot(dir.path());
     let err = judge.judge(&shot, "x").await.unwrap_err();
     assert!(matches!(err, VisionJudgeError::OutputParseFailed(_)));
@@ -114,7 +149,7 @@ async fn codex_garbage_output_returns_parse_failed() {
 
 #[tokio::test]
 async fn codex_path_records_zero_cost_specialist_call() {
-    let (judge, dir, cost, audit) = build_judge("mock_codex.sh", None);
+    let (judge, dir, cost, audit) = build_judge("mock_codex", None);
     let shot = dummy_screenshot(dir.path());
     judge.judge(&shot, "x").await.expect("judge");
     assert_eq!(cost.lock().unwrap().spent_usd(), 0.0);
@@ -169,7 +204,7 @@ async fn anthropic_escalation_parses_verdict_and_records_real_cost() {
         input_tokens: 1000,
         output_tokens: 500,
     });
-    let (judge, dir, cost, audit) = build_judge("mock_codex.sh", Some(mock));
+    let (judge, dir, cost, audit) = build_judge("mock_codex", Some(mock));
     let shot = dummy_screenshot(dir.path());
     let verdict = judge
         .judge_with_anthropic_escalation(&shot, "x")
@@ -185,7 +220,7 @@ async fn anthropic_escalation_parses_verdict_and_records_real_cost() {
 #[tokio::test]
 async fn anthropic_escalation_http_error_propagates() {
     let mock = Arc::new(MockAnthropicError);
-    let (judge, dir, _c, _a) = build_judge("mock_codex.sh", Some(mock));
+    let (judge, dir, _c, _a) = build_judge("mock_codex", Some(mock));
     let shot = dummy_screenshot(dir.path());
     let err = judge
         .judge_with_anthropic_escalation(&shot, "x")
@@ -202,7 +237,7 @@ async fn anthropic_escalation_blocked_when_ceiling_exceeded() {
         input_tokens: 100,
         output_tokens: 100,
     });
-    let (judge, dir, cost, _a) = build_judge("mock_codex.sh", Some(mock));
+    let (judge, dir, cost, _a) = build_judge("mock_codex", Some(mock));
     // Burn the ceiling to within $0.001 of the limit.
     cost.lock().unwrap().record_spend(9.999).expect("burn");
     let shot = dummy_screenshot(dir.path());
@@ -216,7 +251,7 @@ async fn anthropic_escalation_blocked_when_ceiling_exceeded() {
 #[tokio::test]
 #[should_panic(expected = "CodexCli missing from routing table")]
 async fn routing_table_mutation_panics_loud_on_codex_path() {
-    let (mut judge, dir, _c, _a) = build_judge("mock_codex.sh", None);
+    let (mut judge, dir, _c, _a) = build_judge("mock_codex", None);
     // Replace the routing table with one that has no providers at all.
     judge.routing_table = nexus_ui_repair::governance::routing::RoutingTable::empty_for_test();
     let shot = dummy_screenshot(dir.path());

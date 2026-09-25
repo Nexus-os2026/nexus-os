@@ -5,7 +5,7 @@
 //! They use mock LLMs and executors to verify every error path returns Err (not panic).
 
 use nexus_kernel::actuators::{ActuatorContext, ActuatorRegistry};
-use nexus_kernel::audit::AuditTrail;
+use nexus_kernel::audit::{AuditTrail, AuditWriter};
 use nexus_kernel::autonomy::AutonomyLevel;
 use nexus_kernel::cognitive::loop_runtime::CollectingEmitter;
 use nexus_kernel::cognitive::{
@@ -66,7 +66,7 @@ impl ActionExecutor for MockExecutor {
         &self,
         _agent_id: &str,
         _action: &PlannedAction,
-        _audit: &mut AuditTrail,
+        _audit: &mut dyn AuditWriter,
         _hitl_approved: bool,
     ) -> Result<String, String> {
         let mut results = self.results.lock().unwrap();

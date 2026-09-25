@@ -34,7 +34,7 @@ pub fn generate_code_with_llm<P: LlmProvider>(
         if filename.is_empty() || content.is_empty() {
             continue;
         }
-        let path = output_dir.join(filename);
+        let path = nexus_sdk::workspace::resolve_path(output_dir, Path::new(filename))?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
                 AgentError::ManifestError(format!("failed to create dir for {filename}: {e}"))
@@ -210,7 +210,7 @@ pub fn generate_code_decomposed<P: LlmProvider>(
 
     let mut created = Vec::new();
     for (filename, content) in &accumulated {
-        let path = output_dir.join(filename);
+        let path = nexus_sdk::workspace::resolve_path(output_dir, Path::new(filename))?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| AgentError::ManifestError(format!("failed to create dir: {e}")))?;

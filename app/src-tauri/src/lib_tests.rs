@@ -31,6 +31,50 @@ use serde_json::json;
 use std::{sync::Arc, thread, time::Duration};
 use uuid::Uuid;
 
+#[test]
+fn p0_002c1_appstate_owns_empty_shared_authority_registry() {
+    use nexus_kernel::manifest::FsPermissionLevel;
+    use nexus_kernel::workspace_authority::{
+        WorkspaceAuthorityError, WorkspaceAuthoritySource, WorkspaceBinding, WorkspaceGrantId,
+    };
+
+    let state = AppState::new_in_memory();
+    let cloned = state.clone();
+    assert!(Arc::ptr_eq(
+        &state.workspace_authority,
+        &cloned.workspace_authority
+    ));
+    let owner = WorkspaceBinding {
+        agent_id: Uuid::new_v4(),
+        run_id: Uuid::new_v4(),
+    };
+    let unknown: WorkspaceGrantId = serde_json::from_value(json!(Uuid::new_v4())).unwrap();
+    assert_eq!(
+        state
+            .workspace_authority
+            .resolve(unknown, owner)
+            .unwrap_err(),
+        WorkspaceAuthorityError::UnknownGrant
+    );
+    let id = state
+        .workspace_authority
+        .issue_trusted_root(
+            &std::env::temp_dir(),
+            owner,
+            WorkspaceAuthoritySource::BackendAllocated,
+            FsPermissionLevel::ReadOnly,
+            None,
+        )
+        .unwrap();
+    assert!(cloned.workspace_authority.resolve(id, owner).is_ok());
+    cloned.workspace_authority.revoke(id, owner).unwrap();
+    assert_eq!(
+        state.workspace_authority.resolve(id, owner).unwrap_err(),
+        WorkspaceAuthorityError::RevokedGrant
+    );
+    state.shutdown_oracle_runtime();
+}
+
 fn build_manifest(name: &str) -> String {
     json!({
         "name": name,

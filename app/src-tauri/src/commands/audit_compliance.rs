@@ -137,8 +137,6 @@ pub(crate) fn get_compliance_status(state: &AppState) -> Result<ComplianceStatus
     use nexus_kernel::compliance::monitor::{AgentSnapshot, ComplianceMonitor};
 
     let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
-    let identity_mgr = state.identity_mgr.lock().unwrap_or_else(|p| p.into_inner());
 
     let snapshots: Vec<AgentSnapshot> = supervisor
         .health_check()
@@ -156,6 +154,9 @@ pub(crate) fn get_compliance_status(state: &AppState) -> Result<ComplianceStatus
         })
         .collect();
 
+    drop(supervisor);
+    let audit = state.audit_snapshot();
+    let identity_mgr = state.identity_mgr.lock().unwrap_or_else(|p| p.into_inner());
     let monitor = ComplianceMonitor::new();
     let result = monitor.check_compliance(&snapshots, &audit, &identity_mgr);
 
@@ -401,7 +402,6 @@ pub(crate) fn verify_governance_invariants(state: &AppState) -> Result<String, S
     use nexus_kernel::verification::GovernanceVerifier;
 
     let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
 
     let mut verifier = GovernanceVerifier::new();
 
@@ -420,6 +420,8 @@ pub(crate) fn verify_governance_invariants(state: &AppState) -> Result<String, S
     } else {
         (0u64, 1000u64, vec!["llm.query".to_string()])
     };
+    drop(supervisor);
+    let audit = state.audit_snapshot();
 
     let manifest = nexus_kernel::manifest::AgentManifest {
         name: "verification-probe".to_string(),
@@ -469,7 +471,6 @@ pub(crate) fn verify_specific_invariant(
     use nexus_kernel::verification::GovernanceVerifier;
 
     let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
 
     let mut verifier = GovernanceVerifier::new();
 
@@ -487,6 +488,8 @@ pub(crate) fn verify_specific_invariant(
     } else {
         (0u64, 1000u64, vec!["llm.query".to_string()])
     };
+    drop(supervisor);
+    let audit = state.audit_snapshot();
 
     let proof = match invariant_name.as_str() {
         "FuelNeverNegative" => verifier.verify_fuel_invariant(fuel_remaining, fuel_budget),
@@ -542,7 +545,6 @@ pub(crate) fn export_compliance_report(state: &AppState) -> Result<String, Strin
     use nexus_kernel::verification::GovernanceVerifier;
 
     let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
 
     let mut verifier = GovernanceVerifier::new();
 
@@ -560,6 +562,8 @@ pub(crate) fn export_compliance_report(state: &AppState) -> Result<String, Strin
     } else {
         (0u64, 1000u64, vec!["llm.query".to_string()])
     };
+    drop(supervisor);
+    let audit = state.audit_snapshot();
 
     let manifest = nexus_kernel::manifest::AgentManifest {
         name: "verification-probe".to_string(),
@@ -957,8 +961,12 @@ pub(crate) fn compliance_governance_metrics(
     state: &AppState,
     time_range: String,
 ) -> Result<String, String> {
-    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
-    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let agent_statuses = state
+        .supervisor
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .health_check();
+    let audit = state.audit_snapshot();
     let events = audit.events();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1018,7 +1026,7 @@ pub(crate) fn compliance_governance_metrics(
     // Agent state distribution from supervisor
     let mut autonomy_dist: std::collections::HashMap<String, u32> =
         std::collections::HashMap::new();
-    for status in supervisor.health_check() {
+    for status in agent_statuses {
         let level = format!("{}", status.state);
         *autonomy_dist.entry(level).or_insert(0) += 1;
     }
