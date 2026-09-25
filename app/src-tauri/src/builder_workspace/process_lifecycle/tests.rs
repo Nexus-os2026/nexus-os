@@ -2246,3 +2246,49 @@ fn p0_002c4c1_production_start_remains_denied_even_with_an_owned_execution() {
     assert_eq!(control.terminations.load(Ordering::SeqCst), 0);
     production_stop(&p.state, &id).unwrap();
 }
+
+#[test]
+fn p0_002c4c1_final_exit_cleanup_does_not_depend_on_the_audit_lock() {
+    within(|| {
+        let p = Production::new();
+        let (id, _) = p.register();
+        let control = Control::new();
+        // A real owned execution in the production-owned registry.
+        let run = launch_target(
+            p.registry(),
+            p.target(&id),
+            p.audit(),
+            &control,
+            "c4b_fixture_hold",
+            None,
+        );
+        assert!(port_held(run.port.expect("descendant port")));
+        // Hold the AppState audit mutex: anything reaching audit_for/log_event
+        // (the lock, then the audit database) would now block.
+        let audit = Arc::clone(&p.state.audit);
+        let (held, is_held) = mpsc::channel();
+        let (release, released) = mpsc::channel::<()>();
+        let holder = thread::spawn(move || {
+            let _guard = audit.lock().unwrap_or_else(|poison| poison.into_inner());
+            held.send(()).unwrap();
+            let _ = released.recv_timeout(Duration::from_secs(60));
+        });
+        is_held.recv_timeout(WAIT).unwrap();
+        // The actual AppState-level final-exit helper.
+        let began = Instant::now();
+        shutdown_dev_servers(&p.state);
+        let elapsed = began.elapsed();
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "exit cleanup blocked: {elapsed:?}"
+        );
+        // The audit lock was held for the whole call.
+        assert!(p.state.audit.try_lock().is_err());
+        // Cleanup still happened: finalized, no longer owned, tree gone.
+        assert_eq!(p.registry().owned_status(uuid(&id)), None);
+        assert!(!p.registry().shared.state().accepting);
+        assert_tree_gone(&run, "final exit under audit contention");
+        release.send(()).unwrap();
+        holder.join().unwrap();
+    });
+}

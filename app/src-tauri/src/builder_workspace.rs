@@ -844,17 +844,21 @@ pub(super) fn dev_server_status(
 }
 
 /// Normal application exit: bounded Builder dev-server shutdown with one
-/// overall deadline. Never waits beyond it and never prevents exit; failure is
-/// reported (audit and bounded stderr) and exit continues. Forced termination
+/// overall deadline. Never waits beyond it and never prevents exit; a failure
+/// is reported only as bounded stderr and exit continues. Forced termination
 /// (SIGKILL, abort, or an immediate process exit call) bypasses this hook.
+///
+/// Final exit prioritizes process-tree cleanup over audit persistence: the
+/// lifecycle receives a quiet sink, so this path never takes the AppState
+/// audit lock or writes the audit database (either could exceed the bound).
 pub(super) fn shutdown_dev_servers(state: &crate::AppState) {
     let Ok(authority) = state.builder_workspace.as_deref() else {
         // No authority, so no authority-owned registry or execution exists.
         return;
     };
-    let audit = audit_for(state);
+    let quiet: Audit = Arc::new(|_| {});
     let deadline = Instant::now() + DEV_SERVER_SHUTDOWN_WAIT;
-    if authority.shutdown_dev_servers(deadline, &audit).is_err() {
+    if authority.shutdown_dev_servers(deadline, &quiet).is_err() {
         eprintln!("[shutdown] Builder dev-server cleanup not confirmed");
     }
 }

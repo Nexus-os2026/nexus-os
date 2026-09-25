@@ -2467,11 +2467,31 @@ fn p0_002c4c1_stop_waits_off_ipc_thread_and_exit_hook_is_bounded() {
     );
     assert_eq!(
         helper
-            .matches("shutdown_dev_servers(deadline, &audit)")
+            .matches("shutdown_dev_servers(deadline, &quiet)")
             .count(),
         1
     );
-    for forbidden in ["loop", "while", "thread::sleep", "prevent_exit"] {
+    // Final exit never depends on the normal audit pipeline: a quiet sink is
+    // passed to the lifecycle, and no audit lock, log call or audit database
+    // write is reachable from this helper.
+    assert_eq!(
+        helper
+            .matches("let quiet: Audit = Arc::new(|_| {});")
+            .count(),
+        1
+    );
+    for forbidden in [
+        "loop",
+        "while",
+        "thread::sleep",
+        "prevent_exit",
+        "audit_for(",
+        "log_event(",
+        "state.audit",
+        ".audit.lock",
+        "db.",
+        "append_audit",
+    ] {
         assert!(!helper.contains(forbidden), "{forbidden}");
     }
 }
