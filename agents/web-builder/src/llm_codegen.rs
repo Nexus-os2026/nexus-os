@@ -576,7 +576,7 @@ pub fn generate_site_v2<P: LlmProvider>(
     std::fs::create_dir_all(output_dir)
         .map_err(|e| AgentError::ManifestError(format!("failed to create output dir: {e}")))?;
 
-    let index_path = output_dir.join("index.html");
+    let index_path = nexus_kernel::workspace::resolve_path(output_dir, Path::new("index.html"))?;
     std::fs::write(&index_path, &html)
         .map_err(|e| AgentError::ManifestError(format!("failed to write index.html: {e}")))?;
 
@@ -886,7 +886,7 @@ pub fn generate_site_with_llm<P: LlmProvider>(
         if content.is_empty() {
             continue;
         }
-        let path = output_dir.join(name);
+        let path = nexus_kernel::workspace::resolve_path(output_dir, Path::new(name))?;
         std::fs::write(&path, content)
             .map_err(|e| AgentError::ManifestError(format!("failed to write {name}: {e}")))?;
         created.push(path);
@@ -1215,7 +1215,7 @@ pub fn generate_site_v2_streaming<S: StreamingLlmProvider + ?Sized>(
     std::fs::create_dir_all(output_dir)
         .map_err(|e| AgentError::ManifestError(format!("failed to create output dir: {e}")))?;
 
-    let index_path = output_dir.join("index.html");
+    let index_path = nexus_kernel::workspace::resolve_path(output_dir, Path::new("index.html"))?;
     std::fs::write(&index_path, &html)
         .map_err(|e| AgentError::ManifestError(format!("failed to write index.html: {e}")))?;
 

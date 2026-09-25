@@ -392,6 +392,9 @@ pub async fn run_agent_loop(
                                     name: tool_call.name.clone(),
                                     reason: format!("{}", e),
                                 });
+                                if e.is_filesystem_denial() {
+                                    return Err(e);
+                                }
                                 tool_results.push(ToolResultMessage {
                                     tool_call_id: tool_call.id.clone(),
                                     tool_name: tool_call.name.clone(),
@@ -421,6 +424,13 @@ pub async fn run_agent_loop(
                             is_error: true,
                         });
                     }
+                }
+                Err(e) if e.is_filesystem_denial() => {
+                    let _ = event_tx.send(AgentEvent::ToolCallDenied {
+                        name: tool_call.name.clone(),
+                        reason: e.to_string(),
+                    });
+                    return Err(e);
                 }
                 Err(NxError::CapabilityDenied {
                     ref capability,

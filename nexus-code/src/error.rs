@@ -93,6 +93,13 @@ impl fmt::Display for NxError {
 
 impl std::error::Error for NxError {}
 
+impl NxError {
+    pub fn is_filesystem_denial(&self) -> bool {
+        matches!(self, Self::CapabilityDenied { capability, .. }
+            if matches!(capability.as_str(), "path.workspace" | "path.scope" | "path.access" | "path.policy"))
+    }
+}
+
 impl From<std::io::Error> for NxError {
     fn from(err: std::io::Error) -> Self {
         Self::Io(err)

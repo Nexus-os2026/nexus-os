@@ -408,7 +408,7 @@ pub fn list_validation_runs(dir: &Path) -> Vec<ValidationRunSummary> {
             }
         }
     }
-    summaries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    summaries.sort_by_key(|a| std::cmp::Reverse(a.timestamp));
     summaries
 }
 

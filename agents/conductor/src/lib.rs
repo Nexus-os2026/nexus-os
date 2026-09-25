@@ -41,6 +41,8 @@ pub struct Conductor<P: LlmProvider> {
     gateway: GovernedLlmGateway<P>,
     monitor_config: MonitorConfig,
     model_name: String,
+    #[cfg(test)]
+    generation_fallbacks: usize,
 }
 
 impl<P: LlmProvider> Conductor<P> {
@@ -50,12 +52,25 @@ impl<P: LlmProvider> Conductor<P> {
             gateway: GovernedLlmGateway::new(provider),
             monitor_config: MonitorConfig::default(),
             model_name: model_name.to_string(),
+            #[cfg(test)]
+            generation_fallbacks: 0,
         }
     }
 
     pub fn with_monitor_config(mut self, config: MonitorConfig) -> Self {
         self.monitor_config = config;
         self
+    }
+
+    fn allow_generation_fallback(&mut self, error: AgentError) -> Result<AgentError, AgentError> {
+        if is_security_denial(&error) {
+            return Err(error);
+        }
+        #[cfg(test)]
+        {
+            self.generation_fallbacks += 1;
+        }
+        Ok(error)
     }
 
     /// Preview the plan without executing.
@@ -106,6 +121,7 @@ impl<P: LlmProvider> Conductor<P> {
                     eprintln!("[conductor] Decomposed codegen returned empty, trying single-shot");
                 }
                 Err(e) => {
+                    let e = self.allow_generation_fallback(e)?;
                     eprintln!("[conductor] Decomposed codegen failed: {e}, trying single-shot");
                 }
             }
@@ -137,6 +153,7 @@ impl<P: LlmProvider> Conductor<P> {
                     );
                 }
                 Err(e) => {
+                    let e = self.allow_generation_fallback(e)?;
                     eprintln!(
                         "[conductor] Single-shot LLM codegen failed: {e}, falling back to rules"
                     );
@@ -162,6 +179,7 @@ impl<P: LlmProvider> Conductor<P> {
             match self.llm_generate_website_files(&task.description, audit, agent_id) {
                 Ok(changes) => changes,
                 Err(e) => {
+                    let e = self.allow_generation_fallback(e)?;
                     eprintln!("[conductor] LLM website fallback failed: {e}, using template");
                     file_changes
                 }
@@ -170,7 +188,7 @@ impl<P: LlmProvider> Conductor<P> {
 
         for change in &final_changes {
             if let FileChange::Create(path, content) = change {
-                let full_path = output_dir.join(path);
+                let full_path = nexus_kernel::workspace::resolve_path(output_dir, Path::new(path))?;
                 if let Some(parent) = full_path.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| {
                         AgentError::ManifestError(format!("failed to create dir: {e}"))
@@ -234,6 +252,7 @@ impl<P: LlmProvider> Conductor<P> {
                     eprintln!("[conductor] Decomposed code-gen returned empty, trying single-shot");
                 }
                 Err(e) => {
+                    let e = self.allow_generation_fallback(e)?;
                     eprintln!("[conductor] Decomposed code-gen failed: {e}, trying single-shot");
                 }
             }
@@ -265,6 +284,7 @@ impl<P: LlmProvider> Conductor<P> {
                     );
                 }
                 Err(e) => {
+                    let e = self.allow_generation_fallback(e)?;
                     eprintln!(
                         "[conductor] Single-shot code-gen failed: {e}, falling back to rules"
                     );
@@ -295,12 +315,23 @@ impl<P: LlmProvider> Conductor<P> {
         let context = build_context(&project_map, &task.description)?;
         let file_changes = write_code(&context, &task.description)?;
 
+        Self::apply_coder_changes(output_dir, &file_changes, audit, agent_id)
+    }
+
+    // Shared by the real code-generation path and its deletion regressions.
+    fn apply_coder_changes(
+        output_dir: &Path,
+        file_changes: &[CoderFileChange],
+        audit: &mut AuditTrail,
+        agent_id: Uuid,
+    ) -> Result<Vec<PathBuf>, AgentError> {
         let mut created_paths = Vec::new();
-        for change in &file_changes {
+        for change in file_changes {
             match change {
                 CoderFileChange::Create(path, content)
                 | CoderFileChange::Modify(path, _, content) => {
-                    let full_path = output_dir.join(path);
+                    let full_path =
+                        nexus_kernel::workspace::resolve_path(output_dir, Path::new(path))?;
                     if let Some(parent) = full_path.parent() {
                         std::fs::create_dir_all(parent).map_err(|e| {
                             AgentError::ManifestError(format!("failed to create dir: {e}"))
@@ -317,8 +348,11 @@ impl<P: LlmProvider> Conductor<P> {
                     created_paths.push(full_path);
                 }
                 CoderFileChange::Delete(path) => {
-                    let full_path = output_dir.join(path);
-                    if full_path.exists() {
+                    let full_path = nexus_kernel::workspace::resolve_entry_for_unlink(
+                        output_dir,
+                        Path::new(path),
+                    )?;
+                    if std::fs::symlink_metadata(&full_path).is_ok() {
                         let _ = std::fs::remove_file(&full_path);
                         let _ = audit.append_event(
                             agent_id,
@@ -451,7 +485,7 @@ impl<P: LlmProvider> Conductor<P> {
             if filename.is_empty() || content.is_empty() {
                 continue;
             }
-            let path = output_dir.join(filename);
+            let path = nexus_kernel::workspace::resolve_path(output_dir, Path::new(filename))?;
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
                     AgentError::ManifestError(format!("failed to create dir for {filename}: {e}"))
@@ -519,7 +553,7 @@ impl<P: LlmProvider> Conductor<P> {
             if filename.is_empty() || content.is_empty() {
                 continue;
             }
-            let path = output_dir.join(filename);
+            let path = nexus_kernel::workspace::resolve_path(output_dir, Path::new(filename))?;
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
                     AgentError::ManifestError(format!("failed to create dir for {filename}: {e}"))
@@ -712,6 +746,14 @@ impl<P: LlmProvider> Conductor<P> {
                                     assignment.status = TaskStatus::Completed;
                                     assignment.fuel_used = assignment.fuel_allocated / 3;
                                 }
+                                Err(e) if is_security_denial(&e) => {
+                                    let _ = audit.append_event(
+                                        assignment.agent_id,
+                                        EventType::Error,
+                                        json!({ "event": "conductor.security_denied", "error": e.to_string() }),
+                                    );
+                                    return Err(e);
+                                }
                                 Err(e) => {
                                     assignment.status = TaskStatus::Failed;
                                     assignment.error = Some(format!("web build failed: {e}"));
@@ -742,6 +784,14 @@ impl<P: LlmProvider> Conductor<P> {
                                     }
                                     assignment.status = TaskStatus::Completed;
                                     assignment.fuel_used = assignment.fuel_allocated / 3;
+                                }
+                                Err(e) if is_security_denial(&e) => {
+                                    let _ = audit.append_event(
+                                        assignment.agent_id,
+                                        EventType::Error,
+                                        json!({ "event": "conductor.security_denied", "error": e.to_string() }),
+                                    );
+                                    return Err(e);
                                 }
                                 Err(e) => {
                                     assignment.status = TaskStatus::Failed;
@@ -774,6 +824,14 @@ impl<P: LlmProvider> Conductor<P> {
                                     assignment.status = TaskStatus::Completed;
                                     assignment.fuel_used = assignment.fuel_allocated / 3;
                                 }
+                                Err(e) if is_security_denial(&e) => {
+                                    let _ = audit.append_event(
+                                        assignment.agent_id,
+                                        EventType::Error,
+                                        json!({ "event": "conductor.security_denied", "error": e.to_string() }),
+                                    );
+                                    return Err(e);
+                                }
                                 Err(e) => {
                                     assignment.status = TaskStatus::Failed;
                                     assignment.error = Some(format!("fix project failed: {e}"));
@@ -802,6 +860,14 @@ impl<P: LlmProvider> Conductor<P> {
                                     }
                                     assignment.status = TaskStatus::Completed;
                                     assignment.fuel_used = assignment.fuel_allocated / 3;
+                                }
+                                Err(e) if is_security_denial(&e) => {
+                                    let _ = audit.append_event(
+                                        assignment.agent_id,
+                                        EventType::Error,
+                                        json!({ "event": "conductor.security_denied", "error": e.to_string() }),
+                                    );
+                                    return Err(e);
                                 }
                                 Err(e) => {
                                     assignment.status = TaskStatus::Failed;
@@ -832,6 +898,14 @@ impl<P: LlmProvider> Conductor<P> {
                                     }
                                     assignment.status = TaskStatus::Completed;
                                     assignment.fuel_used = assignment.fuel_allocated / 3;
+                                }
+                                Err(e) if is_security_denial(&e) => {
+                                    let _ = audit.append_event(
+                                        assignment.agent_id,
+                                        EventType::Error,
+                                        json!({ "event": "conductor.security_denied", "error": e.to_string() }),
+                                    );
+                                    return Err(e);
                                 }
                                 Err(e) => {
                                     assignment.status = TaskStatus::Failed;
@@ -997,6 +1071,7 @@ impl<P: LlmProvider> Conductor<P> {
                 eprintln!("[conductor] Streaming generation returned empty, falling back to non-streaming");
             }
             Err(e) => {
+                let e = self.allow_generation_fallback(e)?;
                 eprintln!(
                     "[conductor] Streaming generation failed: {e}, falling back to non-streaming"
                 );
@@ -1019,6 +1094,14 @@ impl<P: LlmProvider> Conductor<P> {
             .map_err(|e| AgentError::ManifestError(format!("rollback failed: {e}")))?;
         Ok(actions)
     }
+}
+
+// Use the kernel's existing terminal security/governance classification.
+fn is_security_denial(error: &AgentError) -> bool {
+    matches!(
+        nexus_kernel::errors::on_error(error),
+        nexus_kernel::errors::ErrorStrategy::Escalate
+    )
 }
 
 /// Extract content from a fenced code block labeled with the given name.
@@ -1170,3 +1253,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&out);
     }
 }
+
+#[cfg(test)]
+mod containment_tests;

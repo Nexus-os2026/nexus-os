@@ -34,6 +34,15 @@ pub enum DevServerError {
     GovernanceDenied(String),
 }
 
+fn contained_output_path(root: &Path, path: &str) -> Result<PathBuf, DevServerError> {
+    nexus_kernel::workspace::resolve_path(root, Path::new(path)).map_err(|error| match error {
+        nexus_kernel::errors::AgentError::CapabilityDenied(reason) => {
+            DevServerError::GovernanceDenied(reason)
+        }
+        error => DevServerError::Io(std::io::Error::other(error.to_string())),
+    })
+}
+
 // ─── Status ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,7 +100,7 @@ impl DevServer {
     /// Write React project files to disk.
     pub fn prepare(project: &ReactProject, project_dir: &Path) -> Result<(), DevServerError> {
         for file in &project.files {
-            let full_path = project_dir.join(&file.path);
+            let full_path = contained_output_path(project_dir, &file.path)?;
             if let Some(parent) = full_path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
@@ -281,7 +290,7 @@ impl DevServer {
 
     /// Write a single file to disk (triggers Vite HMR).
     pub fn write_file(&self, relative_path: &str, content: &str) -> Result<(), DevServerError> {
-        let full_path = self.project_dir.join(relative_path);
+        let full_path = contained_output_path(&self.project_dir, relative_path)?;
         if let Some(parent) = full_path.parent() {
             std::fs::create_dir_all(parent)?;
         }

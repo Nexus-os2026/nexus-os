@@ -1245,7 +1245,36 @@ impl nexus_kernel::actuators::ActionReviewEngine for WardenReviewEngine {
         action: &PlannedAction,
     ) -> Result<nexus_kernel::actuators::ActionReviewDecision, String> {
         let config = load_config().map_err(agent_error)?;
-        if !config.governance.enable_warden_review {
+        self.review_with(
+            actor_agent_id,
+            actor_name,
+            action,
+            config.governance.enable_warden_review,
+            get_default_model,
+            |prompt, model| {
+                let provider =
+                    select_provider(&build_provider_config(&config)).map_err(|e| e.to_string())?;
+                provider
+                    .query(prompt, 256, model)
+                    .map_err(agent_error)
+                    .map(|response| response.output_text)
+            },
+        )
+    }
+}
+
+impl WardenReviewEngine {
+    // Keep the network boundary injectable while exercising real review/audit/consent logic.
+    fn review_with(
+        &self,
+        actor_agent_id: &str,
+        actor_name: &str,
+        action: &PlannedAction,
+        enabled: bool,
+        default_model: impl FnOnce() -> String,
+        query: impl FnOnce(&str, &str) -> Result<String, String>,
+    ) -> Result<nexus_kernel::actuators::ActionReviewDecision, String> {
+        if !enabled {
             return Ok(nexus_kernel::actuators::ActionReviewDecision::Allow {
                 reason: "Warden governance review disabled".to_string(),
             });
@@ -1268,11 +1297,7 @@ impl nexus_kernel::actuators::ActionReviewEngine for WardenReviewEngine {
                         {
                             Some((
                                 status.id,
-                                handle
-                                    .manifest
-                                    .llm_model
-                                    .clone()
-                                    .unwrap_or_else(get_default_model),
+                                handle.manifest.llm_model.clone(),
                                 handle.manifest.name.clone(),
                             ))
                         } else {
@@ -1288,16 +1313,14 @@ impl nexus_kernel::actuators::ActionReviewEngine for WardenReviewEngine {
             (id, model, name)
         };
 
+        // Model fallback may access the secrets facade, which appends to audit.
+        // Resolve it only after releasing the supervisor snapshot guard.
+        let warden_model = warden_model.unwrap_or_else(default_model);
         let prompt = format!(
             "Agent {actor_name} wants to execute {}. Is this safe? Respond YES or NO with reason.",
             format_hitl_action_summary(action)
         );
-        let provider =
-            select_provider(&build_provider_config(&config)).map_err(|e| e.to_string())?;
-        let response = provider
-            .query(&prompt, 256, &warden_model)
-            .map_err(agent_error)?
-            .output_text;
+        let response = query(&prompt, &warden_model)?;
         let trimmed = response.trim();
         self.state.log_event(
             warden_id,
@@ -1493,6 +1516,28 @@ pub(crate) fn spawn_cognitive_loop(
     spawn_cognitive_loop_with_bridge(bridge, state, agent_id, goal_id);
 }
 
+// Shared synchronous entry used by the desktop driver and lock regressions.
+fn run_cognitive_cycle(
+    state: &AppState,
+    agent_id: &str,
+    planner: &nexus_kernel::cognitive::CognitivePlanner,
+    memory_mgr: &nexus_kernel::cognitive::AgentMemoryManager,
+    executor: &dyn nexus_kernel::cognitive::loop_runtime::ActionExecutor,
+) -> Result<nexus_kernel::cognitive::CycleResult, AgentError> {
+    // Pass the shared writer, never a guard, through routing and execution.
+    let mut audit = state.audit.clone();
+    with_agent_llm_route(state, agent_id, || {
+        state.cognitive_runtime.run_cycle_with_evolution(
+            agent_id,
+            planner,
+            memory_mgr,
+            executor,
+            &mut audit,
+            Some(&state.evolution_tracker),
+        )
+    })
+}
+
 pub(crate) fn spawn_cognitive_loop_with_bridge(
     bridge: BackendEventBridge,
     state: AppState,
@@ -1596,17 +1641,7 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
             // Run the cognitive cycle inside catch_unwind
             let cycle_result_or_panic =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let mut audit_guard = state.audit.lock().unwrap_or_else(|p| p.into_inner());
-                    with_agent_llm_route(&state, &agent_id, || {
-                        state.cognitive_runtime.run_cycle_with_evolution(
-                            &agent_id,
-                            &planner,
-                            &memory_mgr,
-                            &executor,
-                            &mut audit_guard,
-                            Some(&state.evolution_tracker),
-                        )
-                    })
+                    run_cognitive_cycle(&state, &agent_id, &planner, &memory_mgr, &executor)
                 }));
 
             // G1b: poll cancellation again immediately after the potentially
@@ -2371,3 +2406,6 @@ pub(crate) fn set_default_agent(
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod lock_tests;
