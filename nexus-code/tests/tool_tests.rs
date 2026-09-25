@@ -8,7 +8,6 @@ use nexus_code::tools::glob::GlobTool;
 use nexus_code::tools::search::SearchTool;
 use nexus_code::tools::{NxTool, ToolContext};
 use serde_json::json;
-use std::path::PathBuf;
 
 /// Create a ToolContext pointing at a temp directory with no restrictions.
 fn test_ctx(dir: &std::path::Path) -> ToolContext {
@@ -384,14 +383,27 @@ async fn test_bash_working_dir() {
     let dir = tempfile::tempdir().unwrap();
     let tool = BashTool;
     let ctx = test_ctx(dir.path());
-    let result = tool.execute(json!({"command": "pwd"}), &ctx).await;
+    let witness = format!("cwd-{}", uuid::Uuid::new_v4());
+    std::fs::write(dir.path().join(&witness), &witness).unwrap();
+    let result = tool
+        .execute(json!({"command": format!("cat {witness}")}), &ctx)
+        .await;
+    assert!(result.is_success(), "{}", result.output);
+    assert_eq!(result.output.trim(), witness);
 
-    assert!(result.is_success());
-    // The canonical paths should match
-    let expected = dir.path().canonicalize().unwrap();
-    let actual_path = PathBuf::from(result.output.trim());
-    let actual = actual_path.canonicalize().unwrap_or(actual_path);
-    assert_eq!(actual, expected);
+    // A successful shell or arbitrary output cannot satisfy the cwd contract.
+    let other = tempfile::tempdir().unwrap();
+    let wrong = tool
+        .execute(
+            json!({"command": format!("cat {witness}")}),
+            &test_ctx(other.path()),
+        )
+        .await;
+    assert!(!wrong.is_success(), "{}", wrong.output);
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join(&witness)).unwrap(),
+        witness
+    );
 }
 
 #[tokio::test]

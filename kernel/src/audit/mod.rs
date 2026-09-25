@@ -4,6 +4,9 @@ pub mod zk_mcp;
 pub mod zk_proof;
 pub mod zk_report;
 
+#[cfg(test)]
+mod writer_tests;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -19,6 +22,47 @@ pub enum AuditError {
     BatcherPoisoned,
     #[error("audit event serialization failed — fail-closed, no hash without payload")]
     SerializationFailed,
+}
+
+/// Synchronous, append-only access to the canonical audit trail.
+///
+/// Execution paths use this instead of borrowing an `AuditTrail` behind a
+/// cycle-wide mutex guard. Shared writers lock only for the append: never hold
+/// the audit mutex across provider/secrets access, Warden, supervisor operations,
+/// model calls, tools, or other callbacks that can emit audit events. Release
+/// supervisor guards before appending. Readers snapshot under a short lock and
+/// release it before acquiring other locks or invoking downstream code.
+pub trait AuditWriter {
+    fn append_event(
+        &mut self,
+        agent_id: Uuid,
+        event_type: EventType,
+        payload: Value,
+    ) -> Result<Uuid, AuditError>;
+}
+
+impl AuditWriter for AuditTrail {
+    fn append_event(
+        &mut self,
+        agent_id: Uuid,
+        event_type: EventType,
+        payload: Value,
+    ) -> Result<Uuid, AuditError> {
+        AuditTrail::append_event(self, agent_id, event_type, payload)
+    }
+}
+
+impl AuditWriter for Arc<Mutex<AuditTrail>> {
+    fn append_event(
+        &mut self,
+        agent_id: Uuid,
+        event_type: EventType,
+        payload: Value,
+    ) -> Result<Uuid, AuditError> {
+        self.lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .append_event(agent_id, event_type, payload)
+    }
 }
 
 const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -51,6 +95,8 @@ pub struct AuditEvent {
 ///
 /// Implemented by the distributed crate's `AuditChain` bridge. The kernel
 /// defines the interface; the distributed crate provides the implementation.
+/// Called synchronously inside an audit append/flush. Implementations must not
+/// re-enter the originating audit trail or acquire its supervisor lock.
 pub trait BlockBatchSink: Send + Sync {
     /// Seal a batch of events into an audit block.
     fn seal_batch(&mut self, events: Vec<AuditEvent>);

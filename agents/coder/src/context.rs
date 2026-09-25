@@ -110,7 +110,7 @@ pub fn build_context(
         }
     }
 
-    let import_bonus = compute_import_bonus(project_map, base_relevant_modules);
+    let import_bonus = compute_import_bonus(project_map, base_relevant_modules)?;
     for (path, bonus) in import_bonus {
         if let Some((_, score, reasons)) = scored
             .iter_mut()
@@ -144,7 +144,7 @@ pub fn build_context(
     let mut truncated_files = 0_usize;
     let mut total_chars = 0_usize;
     for (path, score, reason) in scored.into_iter().take(MAX_FILES_IN_CONTEXT) {
-        let full_path = root.join(path.as_str());
+        let full_path = nexus_sdk::workspace::resolve_path(&root, Path::new(&path))?;
         let Ok(content) = fs::read_to_string(full_path) else {
             continue;
         };
@@ -191,15 +191,15 @@ fn module_name(path: &str) -> Option<String> {
 fn compute_import_bonus(
     project_map: &ProjectMap,
     modules: HashSet<String>,
-) -> HashMap<String, f64> {
+) -> Result<HashMap<String, f64>, AgentError> {
     let mut bonuses = HashMap::new();
     if modules.is_empty() {
-        return bonuses;
+        return Ok(bonuses);
     }
 
     let root = PathBuf::from(project_map.root_path.as_str());
     for entry in &project_map.file_tree {
-        let full_path = root.join(entry.path.as_str());
+        let full_path = nexus_sdk::workspace::resolve_path(&root, Path::new(&entry.path))?;
         let Ok(content) = fs::read_to_string(full_path) else {
             continue;
         };
@@ -214,7 +214,7 @@ fn compute_import_bonus(
             bonuses.insert(entry.path.clone(), f64::from(hit_count) * 0.9);
         }
     }
-    bonuses
+    Ok(bonuses)
 }
 
 fn always_include(project_map: &ProjectMap) -> Result<Vec<String>, AgentError> {
@@ -235,7 +235,7 @@ fn always_include(project_map: &ProjectMap) -> Result<Vec<String>, AgentError> {
         if required.len() >= MAX_FILES_IN_CONTEXT {
             break;
         }
-        let full_path = root.join(entry.path.as_str());
+        let full_path = nexus_sdk::workspace::resolve_path(&root, Path::new(&entry.path))?;
         let Ok(content) = fs::read_to_string(full_path) else {
             continue;
         };

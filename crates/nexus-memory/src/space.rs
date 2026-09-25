@@ -191,7 +191,7 @@ impl MemorySpace {
         }
 
         // Sort by created_at descending (newest first)
-        results.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        results.sort_by_key(|entry| std::cmp::Reverse(entry.created_at));
 
         // Apply limit
         if let Some(limit) = query.limit {

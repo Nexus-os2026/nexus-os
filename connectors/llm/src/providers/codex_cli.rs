@@ -1102,16 +1102,16 @@ mod tests {
     #[test]
     fn test_prompt_dir_uses_home_env() {
         let dir = prompt_dir();
-        let dir_str = dir.to_string_lossy();
+        let suffix = PathBuf::from(".nexus").join("builds");
         assert!(
-            dir_str.contains(".nexus/builds"),
-            "expected .nexus/builds in path: {dir_str}"
+            dir.ends_with(&suffix),
+            "expected {suffix:?} at end of path: {dir:?}"
         );
-        // Must NOT contain a hardcoded username path
-        assert!(
-            !dir_str.contains("/home/nexus")
-                || std::env::var("HOME").ok().as_deref() == Some("/home/nexus"),
-            "prompt_dir hardcodes /home/nexus instead of using HOME"
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        assert_eq!(
+            dir,
+            PathBuf::from(home).join(suffix),
+            "prompt_dir must use HOME or the /tmp fallback instead of a hardcoded home directory"
         );
     }
 
