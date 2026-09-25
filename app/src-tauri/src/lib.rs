@@ -5938,17 +5938,25 @@ pub mod runtime {
         super::builder_workspace::dev_server_start(&state, &project_id)
     }
 
-    /// Builder dev-server stop. No C4A-owned server can exist; no PID, port or
-    /// process name is ever consulted.
+    /// Builder dev-server stop (P0-002C4C1): the backend-owned lifecycle
+    /// execution for `project_id`, if any; no PID, port or process name is
+    /// ever consulted. The bounded stop wait runs on Tauri's blocking pool,
+    /// never on the IPC/main thread.
     #[tauri::command]
-    fn builder_dev_server_stop(
+    async fn builder_dev_server_stop(
         state: tauri::State<'_, AppState>,
         project_id: String,
     ) -> Result<(), String> {
-        super::builder_workspace::dev_server_stop(&state, &project_id)
+        let state = state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            super::builder_workspace::dev_server_stop(&state, &project_id)
+        })
+        .await
+        .map_err(|_| "Builder dev server: stop not confirmed".to_owned())?
     }
 
-    /// Builder dev-server status for a registered project (always stopped).
+    /// Builder dev-server status: the backend-owned lifecycle state, else
+    /// C4A-validated `stopped`. Launch stays unavailable; no URL is returned.
     #[tauri::command]
     fn builder_dev_server_status(
         state: tauri::State<'_, AppState>,
@@ -11879,10 +11887,17 @@ pub mod runtime {
                 commands::swarm::swarm_audit_tail,
                 commands::oracle_runtime::oracle_runtime_status,
             ])
-            .run(tauri::generate_context!())
+            .build(tauri::generate_context!())
             .unwrap_or_else(|e| {
                 eprintln!("FATAL: Nexus OS failed to start: {e}");
                 std::process::exit(1);
+            })
+            .run(|app, event| {
+                // Normal final exit only: bounded Builder dev-server cleanup
+                // (one overall deadline) before teardown. Exit is never held.
+                if let tauri::RunEvent::Exit = event {
+                    super::builder_workspace::shutdown_dev_servers(&app.state::<AppState>());
+                }
             });
     }
 }

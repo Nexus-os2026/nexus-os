@@ -33,7 +33,7 @@ impl Drop for Fixture {
         let _ = std::fs::remove_dir_all(&self.path);
     }
 }
-fn generated() -> GeneratedPlan {
+pub(super) fn generated() -> GeneratedPlan {
     GeneratedPlan {
         result: serde_json::from_value(json!({
             "plan": {"product_brief": {"project_name":"../../model-selected", "project_type":"site", "target_audience":"people", "sections":[], "design_direction":"../outside", "tone":"clear", "template_suggestion":"/tmp/escape", "estimated_cost":"0", "estimated_time":"0"},
@@ -2165,35 +2165,59 @@ fn p0_002c4a_home_cwd_and_path_cannot_influence_or_trigger_execution() {
 }
 
 // Security invariant guard: no production launch path remains reachable from
-// the three dev-server commands or the Builder authority adapter.
+// the three dev-server commands or the Builder authority adapter. P0-002C4C1:
+// each command is checked separately; only stop may dispatch, and only its
+// bounded wait onto Tauri's blocking pool.
 #[test]
 fn p0_002c4a_production_dev_server_commands_have_no_launch_path() {
     let lib = include_str!("../lib.rs");
-    let start = lib.find("    fn builder_dev_server_start(").unwrap();
-    let end = lib.find("    fn builder_dev_server_write_file(").unwrap();
-    let commands = &lib[start..end];
-    for forbidden in [
-        "Command",
-        "DevServer",
-        "dev_server::",
-        "install_deps",
-        "forget",
-        "spawn",
-        "ResourceLimit",
-        "process.exec",
-        "HOME",
-        "env::",
-        "npm",
-        "npx",
-        "PathBuf",
-        "join(",
-    ] {
-        assert!(!commands.contains(forbidden), "{forbidden}");
+    let at = |needle: &str| lib.find(needle).unwrap();
+    let (start, stop, status, write) = (
+        at("fn builder_dev_server_start("),
+        at("fn builder_dev_server_stop("),
+        at("fn builder_dev_server_status("),
+        at("fn builder_dev_server_write_file("),
+    );
+    let commands = [
+        code_only(&lib[start..stop]),
+        code_only(&lib[stop..status]),
+        code_only(&lib[status..write]),
+    ];
+    for (index, command) in commands.iter().enumerate() {
+        for forbidden in [
+            "Command",
+            "DevServer",
+            "dev_server::",
+            "install_deps",
+            "forget",
+            "ResourceLimit",
+            "process.exec",
+            "HOME",
+            "env::",
+            "npm",
+            "npx",
+            "PathBuf",
+            "join(",
+        ] {
+            assert!(!command.contains(forbidden), "{index}: {forbidden}");
+        }
+        let dispatch = usize::from(index == 1);
+        assert_eq!(command.matches("spawn").count(), dispatch, "{index}");
+        assert_eq!(
+            command
+                .matches("tauri::async_runtime::spawn_blocking(")
+                .count(),
+            dispatch,
+            "{index}"
+        );
     }
     assert_eq!(
         commands
-            .matches("super::builder_workspace::dev_server_")
-            .count(),
+            .iter()
+            .map(|command| command
+                .matches("super::builder_workspace::dev_server_")
+                .count())
+            .sum::<usize>(),
         3
     );
     let adapter = include_str!("../builder_workspace.rs");
@@ -2223,15 +2247,16 @@ fn code_only(source: &str) -> String {
         .join("\n")
 }
 
-// P0-002C4B guard: the private lifecycle primitive is compiled but has no
-// production constructor, caller or process-creation path, and the frozen
-// C4A dev-server commands cannot reach it.
+// P0-002C4B/C4C1 guard: the lifecycle registry is constructed only by trusted
+// BuilderWorkspaceAuthority provisioning from its single ProjectCatalog;
+// production stop/status/shutdown may only stop, observe or drain it; the start
+// path cannot reach it; and the lifecycle module still cannot create a process.
 #[test]
 fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
     let lib = include_str!("../lib.rs");
-    let start = lib.find("    fn builder_dev_server_start(").unwrap();
-    let end = lib.find("    fn builder_dev_server_write_file(").unwrap();
-    let commands = &lib[start..end];
+    let start = lib.find("fn builder_dev_server_start(").unwrap();
+    let end = lib.find("fn builder_dev_server_write_file(").unwrap();
+    let commands = code_only(&lib[start..end]);
     for forbidden in [
         "lifecycle",
         "Lifecycle",
@@ -2239,7 +2264,6 @@ fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
         "ResourceLimit",
         "ResourceSpawnSpec",
         "Command",
-        "spawn",
         "npm",
         "npx",
         "vite",
@@ -2248,18 +2272,34 @@ fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
     ] {
         assert!(!commands.contains(forbidden), "lib commands: {forbidden}");
     }
-    // The whole Builder adapter code path behind the three commands.
+    // Callers supply only a project selector: no cwd, path, host, port or env.
+    let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    for name in [
+        "fn builder_dev_server_start(",
+        "fn builder_dev_server_stop(",
+        "fn builder_dev_server_status(",
+    ] {
+        let at = lib.find(name).unwrap() + name.len();
+        let parameters = flat(&lib[at..at + lib[at..].find(')').unwrap()]);
+        assert_eq!(
+            parameters, "state: tauri::State<'_, AppState>, project_id: String,",
+            "{name}"
+        );
+    }
     let adapter = include_str!("../builder_workspace.rs");
+    let production = code_only(adapter);
     let section = |from: &str, to: &str| {
-        let start = adapter.find(from).unwrap();
-        start..start + adapter[start..].find(to).unwrap()
+        let start = production.find(from).unwrap();
+        production[start..start + production[start..].find(to).unwrap()].to_lowercase()
     };
-    let path = [
-        section("type DevServerDenial", "struct WriteExecution"),
-        section("fn dev_server_authority", "fn audit_for"),
-    ]
-    .map(|range| code_only(&adapter[range]).to_lowercase());
-    for code in &path {
+    // The start path (selector validation chain plus both start functions).
+    for code in [
+        section("type DevServerDenial", "fn dev_server_stop(&self"),
+        section(
+            "pub(super) fn dev_server_start(",
+            "pub(super) fn dev_server_stop(",
+        ),
+    ] {
         assert!(code.contains("fn dev_server_start"));
         for forbidden in [
             "lifecycle",
@@ -2274,24 +2314,52 @@ fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
             "node",
             "process.exec",
             "std::process",
+            "env::",
         ] {
-            assert!(!code.contains(forbidden), "adapter: {forbidden}");
+            assert!(!code.contains(forbidden), "start path: {forbidden}");
         }
     }
-    // The module is declared once and constructed by no production source.
-    // Structure is checked per line so LF and CRLF checkouts are equivalent.
-    assert_eq!(adapter.matches("process_lifecycle").count(), 1);
+    // Construction: exactly once, in trusted provisioning, from the single
+    // ProjectCatalog the authority itself keeps.
+    assert_eq!(production.matches("LifecycleRegistry::new(").count(), 1);
+    assert_eq!(production.matches("ProjectCatalog::default()").count(), 1);
+    let provision = section("fn provision(", "fn begin(");
+    assert!(provision.contains("let catalog = arc::new(projectcatalog::default());"));
+    assert!(provision.contains("let lifecycle = lifecycleregistry::new(arc::clone(&catalog));"));
+    for source in [lib, include_str!("../lib_tests.rs")] {
+        assert!(!source.contains("LifecycleRegistry"));
+        assert!(!source.contains("process_lifecycle"));
+    }
+    // Production may only stop, observe or drain the registry; never start it.
+    assert!(!production.contains(".start("));
+    let mut uses = 0;
+    for (at, _) in production.match_indices("lifecycle.") {
+        let call = &production[at + "lifecycle.".len()..];
+        let method = &call[..call.find('(').unwrap()];
+        assert!(
+            ["stop", "owned_status", "shutdown_all"].contains(&method),
+            "lifecycle.{method}"
+        );
+        uses += 1;
+    }
+    assert!(uses >= 3);
+    // Declared once and imported once; structure checked per line (LF/CRLF).
+    assert_eq!(adapter.matches("process_lifecycle").count(), 2);
+    let lines: Vec<&str> = adapter.lines().map(str::trim_end).collect();
     assert_eq!(
-        adapter
-            .lines()
-            .filter(|line| line.trim_end() == "mod process_lifecycle;")
+        lines
+            .iter()
+            .filter(|line| **line == "mod process_lifecycle;")
             .count(),
         1
     );
-    for source in [lib, adapter] {
-        assert!(!source.contains("LifecycleRegistry"));
-    }
-    assert!(!lib.contains("process_lifecycle"));
+    assert_eq!(
+        lines
+            .iter()
+            .filter(|line| line.starts_with("use process_lifecycle::"))
+            .count(),
+        1
+    );
     // Non-test lifecycle code wraps an already-owned tree; it cannot create one.
     // All #[cfg(test)] fixtures and the real launcher live in its tests module:
     // the only #[cfg(test)] item is the final `mod tests;` declaration.
@@ -2340,4 +2408,70 @@ fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
     );
     assert_eq!(production.matches("allow(").count(), 1);
     assert!(lifecycle.contains("#![cfg_attr(not(test), allow(dead_code))]"));
+}
+
+// P0-002C4C1: the bounded stop wait is dispatched to Tauri's blocking pool,
+// never run on the IPC/main thread; start and status stay synchronous and
+// non-blocking; normal final Exit runs one bounded Builder shutdown and exit is
+// never held (no ExitRequested hold loop). Forced exits bypass the hook.
+#[test]
+fn p0_002c4c1_stop_waits_off_ipc_thread_and_exit_hook_is_bounded() {
+    let lib = code_only(include_str!("../lib.rs"));
+    let at = |needle: &str| lib.find(needle).unwrap();
+    let stop = &lib[at("fn builder_dev_server_stop(")..at("fn builder_dev_server_status(")];
+    assert!(lib.contains("async fn builder_dev_server_stop("));
+    assert!(!lib.contains("async fn builder_dev_server_start("));
+    assert!(!lib.contains("async fn builder_dev_server_status("));
+    let dispatch = stop
+        .find("tauri::async_runtime::spawn_blocking(move ||")
+        .unwrap();
+    let blocking = stop
+        .find("super::builder_workspace::dev_server_stop(&state, &project_id)")
+        .unwrap();
+    assert!(dispatch < blocking && blocking < stop.find(".await").unwrap());
+    // The generated handler still registers the same three commands.
+    for name in [
+        "builder_dev_server_start,",
+        "builder_dev_server_stop,",
+        "builder_dev_server_status,",
+    ] {
+        assert_eq!(lib.matches(name).count(), 1, "{name}");
+    }
+    // Application exit hook.
+    assert!(lib.contains(".build(tauri::generate_context!())"));
+    assert!(!lib.contains(".run(tauri::generate_context!())"));
+    assert_eq!(lib.matches("tauri::RunEvent::Exit").count(), 1);
+    assert_eq!(
+        lib.matches("super::builder_workspace::shutdown_dev_servers(")
+            .count(),
+        1
+    );
+    let hook = &lib[at("tauri::RunEvent::Exit")..];
+    let hook = &hook[..hook.len().min(400)];
+    assert!(hook.find("shutdown_dev_servers(").unwrap() < 200);
+    for forbidden in ["ExitRequested", "prevent_exit", "shutdown_oracle_runtime()"] {
+        assert!(!hook.contains(forbidden), "{forbidden}");
+    }
+    assert!(!lib.contains("ExitRequested"));
+    assert!(!lib.contains("prevent_exit"));
+    // One overall 10-second deadline for every owned dev server.
+    let adapter = code_only(include_str!("../builder_workspace.rs"));
+    assert!(adapter.contains("const DEV_SERVER_SHUTDOWN_WAIT: Duration = Duration::from_secs(10);"));
+    let helper = &adapter[adapter.find("pub(super) fn shutdown_dev_servers(").unwrap()..];
+    let helper = &helper[..helper.find("\n}").unwrap()];
+    assert_eq!(
+        helper
+            .matches("Instant::now() + DEV_SERVER_SHUTDOWN_WAIT")
+            .count(),
+        1
+    );
+    assert_eq!(
+        helper
+            .matches("shutdown_dev_servers(deadline, &audit)")
+            .count(),
+        1
+    );
+    for forbidden in ["loop", "while", "thread::sleep", "prevent_exit"] {
+        assert!(!helper.contains(forbidden), "{forbidden}");
+    }
 }

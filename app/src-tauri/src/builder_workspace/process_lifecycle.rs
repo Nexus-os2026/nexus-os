@@ -1,6 +1,8 @@
 //! P0-002C4B: private lifecycle primitive for a trusted, internally created
-//! owned process tree. Staged: no production source constructs a registry,
-//! creates a tree or reaches this module from IPC (C4C owns that wiring).
+//! owned process tree. P0-002C4C1: the only production registry is owned by
+//! BuilderWorkspaceAuthority (sharing its ProjectCatalog) and production uses
+//! only stop, owned_status and shutdown_all. No production source calls
+//! `start` or creates a tree; production launch is a later checkpoint.
 //!
 //! Exactly one owner thread holds each tree. Executions are identified by a
 //! private registry generation, never by an operating-system identifier. Stop,
@@ -16,7 +18,7 @@
 //! across a tree operation, catalog or identity validation, audit, the launcher
 //! or a completion wait. Terminal order: cleanup, generation-checked registry
 //! transition, unlock, completion, then audit.
-#![cfg_attr(not(test), allow(dead_code))] // Staged: C4C adds the only production caller.
+#![cfg_attr(not(test), allow(dead_code))] // Staged: `start` has no production caller until launch is approved.
 
 use super::{Audit, DevServerTarget, ProjectCatalog};
 use nexus_kernel::resource_limiter::{ResourceLimitError, ResourceLimitedChild};
@@ -115,6 +117,19 @@ pub(super) enum LifecycleStatus {
     Running,
     Stopping,
     CleanupFailed,
+}
+
+impl LifecycleStatus {
+    /// Bounded client label; never a generation, identifier or handle.
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            Self::Stopped => "stopped",
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::Stopping => "stopping",
+            Self::CleanupFailed => "cleanup_failed",
+        }
+    }
 }
 
 type Terminal = Result<Finalized, LifecycleError>;
@@ -275,11 +290,14 @@ impl LifecycleRegistry {
     }
 
     pub(super) fn status(&self, project: Uuid) -> LifecycleStatus {
-        self.shared
-            .state()
-            .slots
-            .get(&project)
-            .map_or(LifecycleStatus::Stopped, Slot::status)
+        self.owned_status(project)
+            .unwrap_or(LifecycleStatus::Stopped)
+    }
+
+    /// `Some` only while this registry owns an execution (any slot state) for
+    /// the project key; `None` means no backend-owned execution exists.
+    pub(super) fn owned_status(&self, project: Uuid) -> Option<LifecycleStatus> {
+        self.shared.state().slots.get(&project).map(Slot::status)
     }
 
     /// Reserve a generation, run the launcher with no lock held, and hand the

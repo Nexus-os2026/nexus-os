@@ -1327,27 +1327,80 @@ impl Capture {
 // #[cfg(test)]-only real launcher: absolute current test executable, no
 // PATH, shell or environment change; stdout is piped only as test evidence
 // and taken before the tree is handed to the lifecycle owner.
-fn fixture_launcher(
+fn spawn_fixture(
+    cwd: PathBuf,
+    mode: &'static str,
+    capture: &Mutex<Option<Capture>>,
+) -> Result<ResourceLimitedChild, ResourceLimitError> {
+    let program = std::env::current_exe().map_err(ResourceLimitError::SpawnFailed)?;
+    let mut child = ResourceLimiter::default().spawn(&ResourceSpawnSpec {
+        program: ResourceProgram::Executable {
+            program: program.into_os_string(),
+            args: fixture_args(mode),
+        },
+        current_dir: cwd,
+        stdin: ResourceStdin::Null,
+        stdout: ResourceOutput::Piped,
+        stderr: ResourceOutput::Null,
+    })?;
+    let stdout = child.take_stdout().expect("fixture stdout pipe");
+    *capture.lock().unwrap() = Some(Capture::new(stdout));
+    Ok(child)
+}
+
+// Test-only: holds the owner's poll_exit closed until opened, so a scenario
+// can act on a real owned execution before the owner's monitor proceeds.
+#[derive(Default)]
+struct Gate {
+    open: Mutex<bool>,
+    changed: std::sync::Condvar,
+}
+
+impl Gate {
+    fn open(&self) {
+        *self.open.lock().unwrap() = true;
+        self.changed.notify_all();
+    }
+
+    fn wait(&self) {
+        let deadline = soon();
+        let mut open = self.open.lock().unwrap();
+        while !*open && Instant::now() < deadline {
+            let left = deadline.saturating_duration_since(Instant::now());
+            open = self.changed.wait_timeout(open, left).unwrap().0;
+        }
+    }
+}
+
+struct Gated {
+    child: ResourceLimitedChild,
+    gate: Arc<Gate>,
+}
+
+impl OwnedTree for Gated {
+    fn poll_exit(&mut self) -> Result<Option<ExitStatus>, ResourceLimitError> {
+        self.gate.wait();
+        OwnedTree::poll_exit(&mut self.child)
+    }
+
+    fn terminate_and_reap(&mut self, deadline: Instant) -> Result<(), ResourceLimitError> {
+        OwnedTree::terminate_and_reap(&mut self.child, deadline)
+    }
+}
+
+fn gated_fixture_launcher(
     control: &Control,
     mode: &'static str,
     capture: Arc<Mutex<Option<Capture>>>,
+    gate: Option<Arc<Gate>>,
 ) -> impl FnOnce() -> Launch {
     let cwd = control.path.clone();
     move || {
-        let program = std::env::current_exe().map_err(ResourceLimitError::SpawnFailed)?;
-        let mut child = ResourceLimiter::default().spawn(&ResourceSpawnSpec {
-            program: ResourceProgram::Executable {
-                program: program.into_os_string(),
-                args: fixture_args(mode),
-            },
-            current_dir: cwd,
-            stdin: ResourceStdin::Null,
-            stdout: ResourceOutput::Piped,
-            stderr: ResourceOutput::Null,
-        })?;
-        let stdout = child.take_stdout().expect("fixture stdout pipe");
-        *capture.lock().unwrap() = Some(Capture::new(stdout));
-        Ok(Box::new(child))
+        let child = spawn_fixture(cwd, mode, &capture)?;
+        Ok(match gate {
+            Some(gate) => Box::new(Gated { child, gate }) as Box<dyn OwnedTree>,
+            None => Box::new(child),
+        })
     }
 }
 
@@ -1363,11 +1416,22 @@ fn launch(
     control: &Control,
     mode: &'static str,
 ) -> Run {
+    launch_target(r, target(f, id), f.audit(), control, mode, None)
+}
+
+fn launch_target(
+    r: &LifecycleRegistry,
+    target: DevServerTarget,
+    audit: Audit,
+    control: &Control,
+    mode: &'static str,
+    gate: Option<Arc<Gate>>,
+) -> Run {
     let slot = Arc::new(Mutex::new(None));
     r.start(
-        target(f, id),
-        f.audit(),
-        fixture_launcher(control, mode, Arc::clone(&slot)),
+        target,
+        audit,
+        gated_fixture_launcher(control, mode, Arc::clone(&slot), gate),
     )
     .unwrap();
     let capture = slot.lock().unwrap().take().expect("fixture stdout");
@@ -1732,4 +1796,453 @@ fn p0_002c4b_windows_retained_react_identity_blocks_project_ancestor_rename() {
         "project rename still denied after the execution released React identity"
     );
     std::fs::rename(&moved, &root).unwrap();
+}
+
+// ── P0-002C4C1: production-owned lifecycle registry ───────────────────────
+// These tests drive the real production path: AppState → BuilderWorkspace-
+// Authority → its own LifecycleRegistry. Production start stays denied, so the
+// tests insert executions through the authority-owned registry directly
+// (test-only; no production or IPC path can do this).
+
+use super::super::tests::generated;
+use super::super::{
+    dev_server_start as production_start, dev_server_status as production_status,
+    dev_server_stop as production_stop, run_plan, shutdown_dev_servers, BuilderWorkspaceAuthority,
+};
+
+struct Production {
+    state: crate::AppState,
+    path: PathBuf,
+    events: Arc<Mutex<Vec<Value>>>,
+}
+
+impl Production {
+    fn new() -> Self {
+        let mut state = crate::AppState::new_in_memory();
+        let path = std::env::temp_dir().join(format!("nexus-c4c1-{}", Uuid::new_v4()));
+        let authority =
+            BuilderWorkspaceAuthority::provision(Arc::clone(&state.workspace_authority), &path)
+                .unwrap();
+        state.builder_workspace = Ok(Arc::new(authority));
+        Self {
+            state,
+            path,
+            events: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn authority(&self) -> &BuilderWorkspaceAuthority {
+        self.state.builder_workspace.as_deref().unwrap()
+    }
+
+    fn registry(&self) -> &LifecycleRegistry {
+        &self.authority().lifecycle
+    }
+
+    fn audit(&self) -> Audit {
+        let events = Arc::clone(&self.events);
+        Arc::new(move |event| events.lock().unwrap().push(event))
+    }
+
+    fn register(&self) -> (String, PathBuf) {
+        let result = run_plan(self.authority(), self.audit(), "site", |_| Ok(generated())).unwrap();
+        let root = PathBuf::from(result.project_dir);
+        std::fs::create_dir(root.join("react")).unwrap();
+        (result.project_id, root)
+    }
+
+    fn target(&self, id: &str) -> DevServerTarget {
+        self.authority()
+            .dev_server_target(id, &self.audit())
+            .unwrap()
+    }
+
+    fn tombstone(&self, id: &str) {
+        let catalog = &self.authority().catalog;
+        let project = catalog.lookup(uuid(id)).unwrap();
+        catalog.invalidate(&project).unwrap();
+        assert!(catalog.lookup(uuid(id)).is_err());
+    }
+
+    fn start_fake(&self, id: &str, control: &Arc<FakeControl>) {
+        self.registry()
+            .start(self.target(id), self.audit(), fake(control))
+            .unwrap();
+    }
+
+    fn event(&self, operation: &str, outcome: &str, reason: &str) -> bool {
+        self.events.lock().unwrap().iter().any(|event| {
+            event["operation"] == operation
+                && event["outcome"] == outcome
+                && event["reason"] == reason
+        })
+    }
+}
+
+impl Drop for Production {
+    fn drop(&mut self) {
+        // Leave no owned execution behind, even after a failed assertion.
+        let _ = self
+            .registry()
+            .shutdown_all(Instant::now() + Duration::from_secs(10), &quiet());
+        self.state.shutdown_oracle_runtime();
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
+const DENIED: &str = "Builder dev server: project not registered";
+
+fn stopped() -> Value {
+    json!({"status": "stopped", "launch_available": false})
+}
+
+fn assert_bounded_status(value: &Value, expected: &str) {
+    assert_eq!(
+        value,
+        &json!({"status": expected, "launch_available": false})
+    );
+    let text = value.to_string();
+    for private in ["pid", "url", "port", "generation", "execution", "path"] {
+        assert!(!text.contains(private), "{private}");
+    }
+}
+
+#[test]
+fn p0_002c4c1_authority_owns_one_registry_sharing_its_catalog_and_appstate_clones() {
+    let p = Production::new();
+    let authority = p.authority();
+    // The one registry shares the authority's exact ProjectCatalog Arc.
+    assert!(Arc::ptr_eq(
+        &authority.catalog,
+        &authority.lifecycle.shared.catalog
+    ));
+    let (id, _) = p.register();
+    let control = Arc::new(FakeControl::default());
+    p.start_fake(&id, &control);
+    // AppState clones share the same authority and lifecycle state.
+    let clone = p.state.clone();
+    assert!(Arc::ptr_eq(
+        p.state.builder_workspace.as_ref().unwrap(),
+        clone.builder_workspace.as_ref().unwrap()
+    ));
+    assert_bounded_status(&production_status(&clone, &id).unwrap(), "running");
+    // A restarted authority (fresh AppState, same storage) has an empty
+    // registry and empty catalog: nothing serialized restores process authority.
+    let mut restarted = crate::AppState::new_in_memory();
+    restarted.builder_workspace = Ok(Arc::new(
+        BuilderWorkspaceAuthority::provision(Arc::clone(&restarted.workspace_authority), &p.path)
+            .unwrap(),
+    ));
+    let fresh = restarted.builder_workspace.as_deref().unwrap();
+    assert!(!Arc::ptr_eq(
+        &fresh.lifecycle.shared,
+        &authority.lifecycle.shared
+    ));
+    assert_eq!(fresh.lifecycle.owned_status(uuid(&id)), None);
+    assert_eq!(production_status(&restarted, &id).unwrap_err(), DENIED);
+    assert_eq!(production_stop(&restarted, &id).unwrap_err(), DENIED);
+    restarted.shutdown_oracle_runtime();
+    // The original clone can stop it; then the valid project reports stopped.
+    production_stop(&clone, &id).unwrap();
+    assert!(control.finalized.load(Ordering::SeqCst));
+    assert_eq!(production_status(&p.state, &id).unwrap(), stopped());
+}
+
+#[test]
+fn p0_002c4c1_production_status_reports_each_owned_state_without_private_material() {
+    let p = Production::new();
+    let (id, root) = p.register();
+    // No slot: C4A behaviour is unchanged.
+    assert_bounded_status(&production_status(&p.state, &id).unwrap(), "stopped");
+    for selector in [
+        Uuid::new_v4().to_string(),
+        "not-a-uuid".into(),
+        root.to_string_lossy().into_owned(),
+        String::new(),
+    ] {
+        assert_eq!(production_status(&p.state, &selector).unwrap_err(), DENIED);
+        assert_eq!(production_stop(&p.state, &selector).unwrap_err(), DENIED);
+    }
+    // Starting: a launcher still running.
+    let (release, released) = mpsc::channel::<()>();
+    let control = Arc::new(FakeControl::default());
+    thread::scope(|scope| {
+        let starter = scope.spawn(|| {
+            let tree = fake(&control);
+            p.registry().start(p.target(&id), p.audit(), move || {
+                released.recv_timeout(WAIT).unwrap();
+                tree()
+            })
+        });
+        assert!(wait_until(soon(), || {
+            p.registry().owned_status(uuid(&id)) == Some(LifecycleStatus::Starting)
+        }));
+        assert_bounded_status(&production_status(&p.state, &id).unwrap(), "starting");
+        release.send(()).unwrap();
+        starter.join().unwrap().unwrap();
+    });
+    assert_bounded_status(&production_status(&p.state, &id).unwrap(), "running");
+    // Stopping: finalization underway.
+    *control.terminate_delay.lock().unwrap() = Duration::from_millis(1500);
+    thread::scope(|scope| {
+        let stopper = scope.spawn(|| production_stop(&p.state, &id));
+        assert!(wait_until(soon(), || {
+            p.registry().owned_status(uuid(&id)) == Some(LifecycleStatus::Stopping)
+        }));
+        assert_bounded_status(&production_status(&p.state, &id).unwrap(), "stopping");
+        stopper.join().unwrap().unwrap();
+    });
+    assert_bounded_status(&production_status(&p.state, &id).unwrap(), "stopped");
+    // CleanupFailed: finalization could not be confirmed.
+    let failing = Arc::new(FakeControl::default());
+    *failing.permanent.lock().unwrap() = Some(Fail::Termination);
+    p.start_fake(&id, &failing);
+    assert_eq!(
+        production_stop(&p.state, &id).unwrap_err(),
+        "Builder dev server: cleanup failed"
+    );
+    assert_bounded_status(&production_status(&p.state, &id).unwrap(), "cleanup_failed");
+    *failing.permanent.lock().unwrap() = None;
+    production_stop(&p.state, &id).unwrap();
+    assert_bounded_status(&production_status(&p.state, &id).unwrap(), "stopped");
+}
+
+#[test]
+fn p0_002c4c1_owned_real_execution_is_observable_and_stoppable_after_tombstone() {
+    let p = Production::new();
+    let (id, _) = p.register();
+    let control = Control::new();
+    let gate = Arc::new(Gate::default());
+    // The owner's monitor is held so it cannot self-terminate on the tombstone
+    // before production stop acts on the retained owner.
+    let run = launch_target(
+        p.registry(),
+        p.target(&id),
+        p.audit(),
+        &control,
+        "c4b_fixture_hold",
+        Some(Arc::clone(&gate)),
+    );
+    let port = run.port.expect("descendant port");
+    assert!(port_held(port));
+    assert_bounded_status(&production_status(&p.state, &id).unwrap(), "running");
+    p.tombstone(&id);
+    // Still observable and stoppable by its backend owner; no re-authorization.
+    assert_bounded_status(&production_status(&p.state, &id).unwrap(), "running");
+    thread::scope(|scope| {
+        let stopper = scope.spawn(|| production_stop(&p.state, &id));
+        assert!(wait_until(soon(), || {
+            p.registry().owned_status(uuid(&id)) == Some(LifecycleStatus::Stopping)
+        }));
+        gate.open();
+        // Success only after confirmed finalization of the real tree.
+        stopper.join().unwrap().unwrap();
+    });
+    assert_tree_gone(&run, "production stop after tombstone");
+    // No owned execution remains: the tombstoned selector is denied again.
+    assert_eq!(production_status(&p.state, &id).unwrap_err(), DENIED);
+    assert_eq!(production_stop(&p.state, &id).unwrap_err(), DENIED);
+}
+
+#[test]
+fn p0_002c4c1_cleanup_failed_execution_remains_retryable_after_tombstone() {
+    let p = Production::new();
+    let (id, _) = p.register();
+    let control = Arc::new(FakeControl::default());
+    *control.permanent.lock().unwrap() = Some(Fail::Termination);
+    p.start_fake(&id, &control);
+    let failed = "Builder dev server: cleanup failed";
+    assert_eq!(production_stop(&p.state, &id).unwrap_err(), failed);
+    p.tombstone(&id);
+    assert_bounded_status(&production_status(&p.state, &id).unwrap(), "cleanup_failed");
+    assert_eq!(production_stop(&p.state, &id).unwrap_err(), failed);
+    assert!(
+        !control.dropped.load(Ordering::SeqCst),
+        "tree ownership lost"
+    );
+    *control.permanent.lock().unwrap() = None;
+    production_stop(&p.state, &id).unwrap();
+    assert!(control.finalized.load(Ordering::SeqCst));
+    assert_eq!(production_status(&p.state, &id).unwrap_err(), DENIED);
+}
+
+#[test]
+fn p0_002c4c1_stop_not_confirmed_is_surfaced_and_audit_reentry_is_safe() {
+    within(|| {
+        let p = Production::new();
+        let (id, _) = p.register();
+        let control = Arc::new(FakeControl::default());
+        *control.terminate_delay.lock().unwrap() = Duration::from_millis(1500);
+        p.start_fake(&id, &control);
+        // An audit callback re-enters status and stop with no lock held.
+        let reentry = Arc::new(Mutex::new(Vec::new()));
+        let audit: Audit = {
+            let (state, id, reentry, events) = (
+                p.state.clone(),
+                id.clone(),
+                Arc::clone(&reentry),
+                Arc::clone(&p.events),
+            );
+            Arc::new(move |event: Value| {
+                let stop = event["operation"] == "builder.devserver.stop";
+                events.lock().unwrap().push(event);
+                if stop {
+                    let authority = state.builder_workspace.as_deref().unwrap();
+                    let status = authority.dev_server_status(&id, Arc::new(|_| {}));
+                    reentry
+                        .lock()
+                        .unwrap()
+                        .push(status.map(|value| value["status"].clone()));
+                }
+            })
+        };
+        let short = Instant::now() + Duration::from_millis(100);
+        assert_eq!(
+            p.authority().dev_server_stop_until(&id, short, audit),
+            Err("stop not confirmed")
+        );
+        assert!(p.event("builder.devserver.stop", "failed", "not_confirmed"));
+        assert_eq!(*reentry.lock().unwrap(), vec![Ok(json!("stopping"))]);
+        // The bounded wait expired; finalization still completes afterwards.
+        assert!(wait_until(soon(), || p
+            .registry()
+            .owned_status(uuid(&id))
+            .is_none()));
+        assert!(control.finalized.load(Ordering::SeqCst));
+    });
+}
+
+#[test]
+fn p0_002c4c1_stop_is_per_project_and_shutdown_drains_production_registry() {
+    let p = Production::new();
+    let (a, _) = p.register();
+    let (b, _) = p.register();
+    let (control_a, control_b) = (Control::new(), Control::new());
+    let run_a = launch_target(
+        p.registry(),
+        p.target(&a),
+        p.audit(),
+        &control_a,
+        "c4b_fixture_hold",
+        None,
+    );
+    let run_b = launch_target(
+        p.registry(),
+        p.target(&b),
+        p.audit(),
+        &control_b,
+        "c4b_fixture_hold",
+        None,
+    );
+    // Stopping A never affects B.
+    production_stop(&p.state, &a).unwrap();
+    assert_tree_gone(&run_a, "production stop A");
+    assert!(port_held(run_b.port.unwrap()), "stopping A affected B");
+    assert_bounded_status(&production_status(&p.state, &b).unwrap(), "running");
+    assert_bounded_status(&production_status(&p.state, &a).unwrap(), "stopped");
+    // Normal-exit helper drains every owned execution through the production
+    // AppState and refuses new executions permanently.
+    let control_c = Control::new();
+    let run_c = launch_target(
+        p.registry(),
+        p.target(&a),
+        p.audit(),
+        &control_c,
+        "c4b_fixture_hold",
+        None,
+    );
+    shutdown_dev_servers(&p.state);
+    for (run, id) in [(&run_b, &b), (&run_c, &a)] {
+        assert_tree_gone(run, "production shutdown");
+        assert_bounded_status(&production_status(&p.state, id).unwrap(), "stopped");
+    }
+    assert!(!p.registry().shared.state().accepting);
+    shutdown_dev_servers(&p.state);
+    assert_eq!(
+        p.registry().start(
+            p.target(&a),
+            p.audit(),
+            fake(&Arc::new(FakeControl::default()))
+        ),
+        Err(LifecycleError::ShuttingDown)
+    );
+    // No authority: the helper is a bounded no-op.
+    let unavailable = crate::AppState::new_in_memory();
+    shutdown_dev_servers(&unavailable);
+    unavailable.shutdown_oracle_runtime();
+}
+
+#[test]
+fn p0_002c4c1_shutdown_uses_one_deadline_and_retries_cleanup_failed_truthfully() {
+    let p = Production::new();
+    let (a, _) = p.register();
+    let (b, _) = p.register();
+    // One overall deadline for all executions, not one per execution.
+    let slow = [
+        Arc::new(FakeControl::default()),
+        Arc::new(FakeControl::default()),
+    ];
+    for (id, control) in [(&a, &slow[0]), (&b, &slow[1])] {
+        *control.terminate_delay.lock().unwrap() = Duration::from_secs(3);
+        p.start_fake(id, control);
+    }
+    let began = Instant::now();
+    assert_eq!(
+        p.authority()
+            .shutdown_dev_servers(began + Duration::from_millis(500), &p.audit()),
+        Err("shutdown not confirmed")
+    );
+    assert!(
+        began.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        began.elapsed()
+    );
+    assert!(p.event("builder.devserver.shutdown", "failed", "not_confirmed"));
+    assert!(wait_until(soon(), || {
+        slow.iter()
+            .all(|control| control.finalized.load(Ordering::SeqCst))
+    }));
+    // A retained CleanupFailed tree is retried by a later shutdown.
+    let q = Production::new();
+    let (id, _) = q.register();
+    let failing = Arc::new(FakeControl::default());
+    *failing.permanent.lock().unwrap() = Some(Fail::Termination);
+    q.start_fake(&id, &failing);
+    let deadline = || Instant::now() + Duration::from_secs(10);
+    assert_eq!(
+        q.authority().shutdown_dev_servers(deadline(), &q.audit()),
+        Err("shutdown not confirmed")
+    );
+    assert_bounded_status(&production_status(&q.state, &id).unwrap(), "cleanup_failed");
+    *failing.permanent.lock().unwrap() = None;
+    assert_eq!(
+        q.authority().shutdown_dev_servers(deadline(), &q.audit()),
+        Ok(())
+    );
+    assert!(failing.finalized.load(Ordering::SeqCst));
+    assert!(q.event("builder.devserver.shutdown", "succeeded", "app_exit"));
+    // Shutdown audit carries only bounded fields.
+    for event in q.events.lock().unwrap().iter() {
+        if event["operation"] == "builder.devserver.shutdown" {
+            assert_eq!(event.as_object().unwrap().len(), 4);
+            assert_eq!(event["project_id"], Value::Null);
+        }
+    }
+}
+
+#[test]
+fn p0_002c4c1_production_start_remains_denied_even_with_an_owned_execution() {
+    let p = Production::new();
+    let (id, _) = p.register();
+    let unavailable = "Builder dev server: launch unavailable";
+    assert_eq!(production_start(&p.state, &id).unwrap_err(), unavailable);
+    // Start never creates or reserves an execution.
+    assert_eq!(p.registry().owned_status(uuid(&id)), None);
+    let control = Arc::new(FakeControl::default());
+    p.start_fake(&id, &control);
+    let before = execution_of(p.registry(), uuid(&id));
+    assert_eq!(production_start(&p.state, &id).unwrap_err(), unavailable);
+    assert_eq!(execution_of(p.registry(), uuid(&id)), before);
+    assert_eq!(control.terminations.load(Ordering::SeqCst), 0);
+    production_stop(&p.state, &id).unwrap();
 }

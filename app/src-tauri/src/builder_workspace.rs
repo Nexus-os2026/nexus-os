@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 use uuid::Uuid;
 use web_builder_agent::model_router::ModelSelection;
 use web_builder_agent::plan::PlanResult;
@@ -19,8 +19,10 @@ use web_builder_agent::project::{create_project, transition, ProjectState, Proje
 
 mod directory_identity;
 use directory_identity::{DirectoryIdentity, IdentityError};
-// P0-002C4B private lifecycle primitive. No production source constructs it.
+// P0-002C4B private lifecycle primitive. P0-002C4C1: constructed only by
+// BuilderWorkspaceAuthority::provision; production uses stop/status/shutdown.
 mod process_lifecycle;
+use process_lifecycle::{Finalized, LifecycleError, LifecycleRegistry};
 
 // Audit payloads contain descriptive project IDs, never grants or private principals.
 type Audit = Arc<dyn Fn(Value) + Send + Sync>;
@@ -51,6 +53,8 @@ pub(super) struct BuilderWorkspaceAuthority {
     writer: Uuid,
     storage_identity: Arc<DirectoryIdentity>,
     catalog: Arc<ProjectCatalog>,
+    // The only production lifecycle registry; it shares `catalog` exactly.
+    lifecycle: LifecycleRegistry,
 }
 impl BuilderWorkspaceAuthority {
     /// Trusted startup only. The existing identity-home policy rejects malformed
@@ -78,6 +82,8 @@ impl BuilderWorkspaceAuthority {
         validate_root(&root)?;
         let storage_identity = DirectoryIdentity::capture(&root)
             .map_err(|_| PlanningError::Authority("storage identity unavailable".into()))?;
+        let catalog = Arc::new(ProjectCatalog::default());
+        let lifecycle = LifecycleRegistry::new(Arc::clone(&catalog));
         Ok(Self {
             registry,
             root,
@@ -85,7 +91,8 @@ impl BuilderWorkspaceAuthority {
             planner: Uuid::new_v4(),
             writer: Uuid::new_v4(),
             storage_identity: Arc::new(storage_identity),
-            catalog: Arc::new(ProjectCatalog::default()),
+            catalog,
+            lifecycle,
         })
     }
 
@@ -402,15 +409,22 @@ impl BuilderWorkspaceAuthority {
     }
 }
 
-// P0-002C4A: no process-launch design is approved. Dev-server commands only
-// validate the private registration and retained identities; start then fails
-// closed. Nothing here spawns a process, creates a directory or holds a lock
-// across audit.
+// P0-002C4A: no process-launch design is approved. Start validates the private
+// registration and retained identities, then fails closed. P0-002C4C1: stop and
+// status first consult the authority-owned lifecycle registry by project key;
+// only without an owned execution do they fall back to C4A validation. Nothing
+// here spawns a process, creates a directory or holds a lock across audit.
+
+/// One bounded wait for a single stop (C4B cleanup budget plus monitor slack).
+const DEV_SERVER_STOP_WAIT: Duration = Duration::from_secs(8);
+/// One overall bound for all Builder dev servers at normal application exit.
+const DEV_SERVER_SHUTDOWN_WAIT: Duration = Duration::from_secs(10);
 #[derive(Clone, Copy)]
 enum DevServerOperation {
     Start,
     Stop,
     Status,
+    Shutdown,
 }
 
 impl DevServerOperation {
@@ -419,6 +433,7 @@ impl DevServerOperation {
             Self::Start => "start",
             Self::Stop => "stop",
             Self::Status => "status",
+            Self::Shutdown => "shutdown",
         }
     }
 }
@@ -530,9 +545,33 @@ impl BuilderWorkspaceAuthority {
         }
     }
 
-    /// No C4A-owned server can exist, so there is nothing to stop. No PID,
-    /// port, process name or historical process is ever consulted.
+    /// Stop by backend-owned execution first. An execution this registry
+    /// already owns is terminated through its retained owner even if the
+    /// registration was since invalidated or tombstoned: termination authority
+    /// is the owner, never a PID, port, process name or OS rediscovery.
+    /// Without an owned execution, the C4A selector validation applies.
     fn dev_server_stop(&self, selector: &str, audit: Audit) -> WriteResult<()> {
+        self.dev_server_stop_until(selector, Instant::now() + DEV_SERVER_STOP_WAIT, audit)
+    }
+
+    fn dev_server_stop_until(
+        &self,
+        selector: &str,
+        deadline: Instant,
+        audit: Audit,
+    ) -> WriteResult<()> {
+        if let Some(id) = self.owned_execution(selector) {
+            let (result, outcome, reason) = match self.lifecycle.stop(id, deadline, &audit) {
+                Ok(Finalized::NoOwnedServer) => (Ok(()), "succeeded", "no_owned_server"),
+                Ok(_) => (Ok(()), "succeeded", "owned_server_stopped"),
+                Err(error) => {
+                    let (reason, client) = stop_failure(error);
+                    (Err(client), "failed", reason)
+                }
+            };
+            dev_server_event(&audit, Some(id), DevServerOperation::Stop, outcome, reason);
+            return result;
+        }
         let id = self.dev_server(selector, DevServerOperation::Stop, &audit)?;
         dev_server_event(
             &audit,
@@ -544,7 +583,22 @@ impl BuilderWorkspaceAuthority {
         Ok(())
     }
 
+    /// Owned lifecycle state first (reported even for a since-invalidated
+    /// registration); otherwise C4A validation and `stopped`. Launch remains
+    /// unavailable and no URL, identifier or path is ever returned.
     fn dev_server_status(&self, selector: &str, audit: Audit) -> WriteResult<Value> {
+        if let Some(id) = self.owned_execution(selector) {
+            if let Some(status) = self.lifecycle.owned_status(id) {
+                dev_server_event(
+                    &audit,
+                    Some(id),
+                    DevServerOperation::Status,
+                    "succeeded",
+                    "owned_server",
+                );
+                return Ok(json!({"status": status.label(), "launch_available": false}));
+            }
+        }
         let id = self.dev_server(selector, DevServerOperation::Status, &audit)?;
         dev_server_event(
             &audit,
@@ -554,6 +608,46 @@ impl BuilderWorkspaceAuthority {
             "no_owned_server",
         );
         Ok(json!({"status": "stopped", "launch_available": false}))
+    }
+
+    /// The project key of an execution this registry currently owns. The
+    /// selector is only parsed as a key; it confers no other authority.
+    fn owned_execution(&self, selector: &str) -> Option<Uuid> {
+        let id = Uuid::parse_str(selector).ok()?;
+        self.lifecycle.owned_status(id).map(|_| id)
+    }
+
+    /// Bounded `shutdown_all` over the authority-owned registry (one overall
+    /// deadline). Refuses new executions permanently; never reports success
+    /// unless every owned execution was finalized.
+    fn shutdown_dev_servers(&self, deadline: Instant, audit: &Audit) -> WriteResult<()> {
+        let result = self.lifecycle.shutdown_all(deadline, audit);
+        let (outcome, reason) = match result {
+            Ok(()) => ("succeeded", "app_exit"),
+            Err(_) => ("failed", "not_confirmed"),
+        };
+        dev_server_event(audit, None, DevServerOperation::Shutdown, outcome, reason);
+        result.map_err(|_| "shutdown not confirmed")
+    }
+}
+
+// Bounded (audit reason, client error) for a lifecycle stop that could not be
+// confirmed. Never native errors, identifiers or paths.
+fn stop_failure(error: LifecycleError) -> (&'static str, &'static str) {
+    match error {
+        LifecycleError::CleanupFailed => ("cleanup_failed", "cleanup failed"),
+        LifecycleError::NotConfirmed | LifecycleError::StopPending => {
+            ("not_confirmed", "stop not confirmed")
+        }
+        LifecycleError::Unavailable => ("unavailable", "lifecycle unavailable"),
+        LifecycleError::NotRegistered
+        | LifecycleError::Busy
+        | LifecycleError::ShuttingDown
+        | LifecycleError::GenerationExhausted
+        | LifecycleError::StopRequested
+        | LifecycleError::OwnerUnavailable
+        | LifecycleError::LaunchFailed
+        | LifecycleError::IdentityDenied => ("not_confirmed", "stop not confirmed"),
     }
 }
 
@@ -747,6 +841,22 @@ pub(super) fn dev_server_status(
     authority
         .dev_server_status(selector, audit)
         .map_err(|error| format!("Builder dev server: {error}"))
+}
+
+/// Normal application exit: bounded Builder dev-server shutdown with one
+/// overall deadline. Never waits beyond it and never prevents exit; failure is
+/// reported (audit and bounded stderr) and exit continues. Forced termination
+/// (SIGKILL, abort, or an immediate process exit call) bypasses this hook.
+pub(super) fn shutdown_dev_servers(state: &crate::AppState) {
+    let Ok(authority) = state.builder_workspace.as_deref() else {
+        // No authority, so no authority-owned registry or execution exists.
+        return;
+    };
+    let audit = audit_for(state);
+    let deadline = Instant::now() + DEV_SERVER_SHUTDOWN_WAIT;
+    if authority.shutdown_dev_servers(deadline, &audit).is_err() {
+        eprintln!("[shutdown] Builder dev-server cleanup not confirmed");
+    }
 }
 
 fn audit_for(state: &crate::AppState) -> Audit {
