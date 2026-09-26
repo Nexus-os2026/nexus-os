@@ -188,11 +188,10 @@ pub(crate) fn mcp_host_call_tool(
         serde_json::from_str(&arguments).map_err(|e| format!("Invalid arguments JSON: {e}"))?;
 
     let mut manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
-    let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    let mut audit = state.audit.clone();
     // Governed call — enforces mcp.call capability and audit logging.
     // UI-initiated calls run as Uuid::nil with full capabilities.
     let result = manager.call_tool(&tool_name, args, SYSTEM_UUID, &["mcp.call"], &mut audit)?;
-    drop(audit);
     drop(manager);
 
     serde_json::to_string(&result).map_err(|e| e.to_string())

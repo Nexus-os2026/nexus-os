@@ -215,6 +215,7 @@ pub struct MemoryUsage {
 /// Hardware capability detection result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HardwareInfo {
+    /// Total system RAM in MiB; zero means unavailable or detection failed.
     pub total_ram_mb: u64,
     pub cpu_cores: u32,
     pub has_avx2: bool,

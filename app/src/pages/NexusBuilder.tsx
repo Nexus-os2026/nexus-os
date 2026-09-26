@@ -229,7 +229,8 @@ export default function NexusBuilder() {
   const [planCost, setPlanCost] = useState(0);
   const [planTime, setPlanTime] = useState(0);
   const [planModel, setPlanModel] = useState("");
-  const [planProjectId, setPlanProjectId] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [projectDir, setProjectDir] = useState("");
 
   /* --- checkpoints --- */
   const [cps, setCps] = useState<any[]>([]);
@@ -471,10 +472,9 @@ export default function NexusBuilder() {
     setRes(null); setCps([]); setCurCp(null); setVer(0);
     setShowProjectList(false);
 
-    // Create a project ID for artefact storage
-    const timestamp = Math.floor(Date.now() / 1000);
-    const projId = String(timestamp);
-    setPlanProjectId(projId);
+    // Fresh planning identity and storage are allocated by the backend.
+    setProjectId("");
+    setProjectDir("");
 
     // Show planning phase in narrative
     setPlanPhase("planning");
@@ -496,7 +496,7 @@ export default function NexusBuilder() {
     ]);
 
     try {
-      const result = await builderGeneratePlan(prompt, projId);
+      const result = await builderGeneratePlan(prompt);
       if (!mountedRef.current) return;
       const plan = result?.plan;
       if (!plan?.product_brief || !plan?.acceptance_criteria) {
@@ -506,7 +506,8 @@ export default function NexusBuilder() {
       setPlanCost(result.cost_usd ?? 0);
       setPlanTime(result.elapsed_seconds ?? 0);
       setPlanModel(result.model ?? "Haiku 4.5");
-      setPlanProjectId(result.project_dir ?? "");
+      setProjectId(result.project_id ?? "");
+      setProjectDir(result.project_dir ?? "");
       setPlanPhase("planned");
       setPhase("idle"); // Show plan card, not building spinner
       setBusy(false);
@@ -579,7 +580,7 @@ export default function NexusBuilder() {
     }]);
 
     // Use the same project directory where plan artefacts were saved
-    const outputDir = planProjectId || undefined;
+    const outputDir = projectDir || undefined;
     try {
       await conductBuildStreaming(
         prompt,
@@ -595,7 +596,7 @@ export default function NexusBuilder() {
       setBusy(false);
       busyRef.current = false;
     }
-  }, [prompt, planProjectId, modelConfig]);
+  }, [prompt, projectDir, modelConfig]);
 
   // Cancel plan: return to idle
   const doCancelPlan = useCallback(() => {
@@ -658,7 +659,7 @@ export default function NexusBuilder() {
     setHtml(""); setViewMode("preview"); setVp("desktop"); setSPct(0); setSTok(0); setSTime(0);
     setIterTxt(""); setItering(false); setCps([]); setCurCp(null); setRes(null);
     setNarrative([]); setProjectName(""); currentPhaseRef.current = "";
-    setPlanPhase("idle"); setPlanData(null); setPlanCost(0); setPlanTime(0); setPlanModel(""); setPlanProjectId("");
+    setPlanPhase("idle"); setPlanData(null); setPlanCost(0); setPlanTime(0); setPlanModel(""); setProjectId(""); setProjectDir("");
     await refreshProjects();
     if (mountedRef.current) setShowProjectList(true);
   }, [refreshProjects]);
@@ -685,7 +686,8 @@ export default function NexusBuilder() {
         // Show the plan card for approval
         setPlanData({ brief: data.plan.product_brief, criteria: data.plan.acceptance_criteria });
         setPlanPhase("planned");
-        setPlanProjectId(data.project_dir ?? "");
+        setProjectId(data.project_id ?? projectId);
+        setProjectDir(data.project_dir ?? "");
         setPhase("idle");
         setRes(null);
       } else if (status === "Draft" || status === "PlanFailed") {
@@ -733,7 +735,7 @@ export default function NexusBuilder() {
         setIterTxt(""); setItering(false); setCps([]); setCurCp(null);
         setNarrative([]); currentPhaseRef.current = "";
         setPlanPhase("idle"); setPlanData(null); setPlanCost(0);
-        setPlanTime(0); setPlanModel(""); setPlanProjectId("");
+        setPlanTime(0); setPlanModel(""); setProjectId(""); setProjectDir("");
         setViewMode("preview"); setEditMode(false);
       }
     } catch { /* */ }
@@ -802,7 +804,7 @@ export default function NexusBuilder() {
   const handleVisualTokenChange = useCallback(async (layer: 1 | 3, sectionId: string | null, tokenName: string, value: string) => {
     // postMessage already updated the iframe preview instantly.
     // This async call persists to the Rust backend.
-    const pid = projectId || undefined;
+    const pid = builtProjectId || undefined;
     if (!pid) return;
     try {
       await builderVisualEditToken(pid, layer, sectionId, tokenName, value);
@@ -812,7 +814,7 @@ export default function NexusBuilder() {
   }, [outDir]);
 
   const handleVisualTextChange = useCallback(async (sectionId: string, slotName: string, newText: string) => {
-    const pid = projectId || undefined;
+    const pid = builtProjectId || undefined;
     if (!pid) return;
     try {
       await builderVisualEditText(pid, sectionId, slotName, newText);
@@ -836,7 +838,7 @@ export default function NexusBuilder() {
 
   /* --- variant generation --- */
   const handleVariants = useCallback(async () => {
-    const pid = projectId || undefined;
+    const pid = builtProjectId || undefined;
     if (!pid) return;
     setVariantView(true);
     setVariantLoading(true);
@@ -856,7 +858,7 @@ export default function NexusBuilder() {
   }, [outDir]);
 
   const handleVariantSelect = useCallback(async (variantId: string, variantHtml: string) => {
-    const pid = projectId || undefined;
+    const pid = builtProjectId || undefined;
     if (pid) {
       try { await builderSelectVariant(pid, variantId); } catch (_) { /* log only */ }
     }
@@ -873,7 +875,7 @@ export default function NexusBuilder() {
 
   /* --- derived --- */
   /** Stable project ID extracted from outDir (e.g. "1712345678") */
-  const projectId = outDir ? outDir.replace(/\/+$/, "").split("/").pop() || "" : "";
+  const builtProjectId = outDir ? outDir.replace(/\/+$/, "").split("/").pop() || "" : "";
 
   const anthSpent = budget?.anthropic_spent ?? 0;
   const anthTotal = budget?.anthropic_initial ?? 0;
@@ -1149,6 +1151,7 @@ export default function NexusBuilder() {
                 {/* Plan card — shown after planning, before build */}
                 {isPlanned && planData && (
                   <BuildPlanCard
+                    key={projectId}
                     brief={planData.brief}
                     criteria={planData.criteria}
                     planCost={planCost}
@@ -1393,7 +1396,7 @@ export default function NexusBuilder() {
               <ActionBar
                 editMode={editMode}
                 onToggleEdit={() => { setEditMode(!editMode); if (viewMode !== "preview") setViewMode("preview"); }}
-                onExport={() => { if (projectId) exportProject(projectId); }}
+                onExport={() => { if (builtProjectId) exportProject(builtProjectId); }}
                 onShare={handleShare}
                 onVariants={handleVariants}
                 onTheme={() => setThemeOpen(!themeOpen)}
@@ -1403,7 +1406,7 @@ export default function NexusBuilder() {
                 onAuditTrail={() => setAuditOpen(!auditOpen)}
                 previewUrl={devServerUrl}
                 hasHtml={!!html}
-                projectId={projectId || undefined}
+                projectId={builtProjectId || undefined}
               />
             )}
             {!isPostBuild && html && (
@@ -1430,7 +1433,7 @@ export default function NexusBuilder() {
             />
             <button type="button" onClick={() => { if (outDir) rPreview(outDir); }} disabled={!outDir} style={{ background: "transparent", color: outDir ? C.muted : C.dim, border: "none", padding: "3px 6px", fontSize: 13, cursor: outDir ? "pointer" : "default" }} title="Refresh">{"\u21BB"}</button>
             <button type="button" onClick={doDownload} disabled={!html} style={{ background: "transparent", color: html ? C.muted : C.dim, border: "none", padding: "3px 6px", fontSize: 13, cursor: html ? "pointer" : "default" }} title="Download HTML" aria-label="Download HTML">{"\u2193"}</button>
-            {outDir && <button type="button" onClick={() => { if (projectId) exportProject(projectId); }} style={{ background: "transparent", color: C.muted, border: "none", padding: "3px 6px", fontSize: 10, cursor: "pointer", fontFamily: C.sans }} title="Export as ZIP">ZIP</button>}
+            {outDir && <button type="button" onClick={() => { if (builtProjectId) exportProject(builtProjectId); }} style={{ background: "transparent", color: C.muted, border: "none", padding: "3px 6px", fontSize: 10, cursor: "pointer", fontFamily: C.sans }} title="Export as ZIP">ZIP</button>}
           </div>
 
           {/* Variant Comparison Overlay */}
@@ -1447,7 +1450,7 @@ export default function NexusBuilder() {
           {/* Backend Panel */}
           {backendOpen && outDir && (
             <BackendPanel
-              projectId={projectId}
+              projectId={builtProjectId}
               onClose={() => setBackendOpen(false)}
             />
           )}
@@ -1455,16 +1458,16 @@ export default function NexusBuilder() {
           {/* Import Panel */}
           {importOpen && (
             <ImportPanel
-              projectId={projectId || "import"}
+              projectId={builtProjectId || "import"}
               onClose={() => setImportOpen(false)}
               onImportComplete={(importedHtml) => { setHtml(importedHtml); setImportOpen(false); }}
             />
           )}
 
           {/* Theme Panel */}
-          {themeOpen && projectId && (
+          {themeOpen && builtProjectId && (
             <ThemePanel
-              projectId={projectId}
+              projectId={builtProjectId}
               onClose={() => setThemeOpen(false)}
               previewRef={iframeRef}
               onCssChanged={() => { if (outDir) rPreview(outDir); }}
@@ -1474,9 +1477,9 @@ export default function NexusBuilder() {
           {/* Model Configuration Panel — now rendered as popover in toolbar */}
 
           {/* Audit Trail Viewer */}
-          {auditOpen && projectId && (
+          {auditOpen && builtProjectId && (
             <AuditTrailViewer
-              projectId={projectId}
+              projectId={builtProjectId}
               onClose={() => setAuditOpen(false)}
             />
           )}
