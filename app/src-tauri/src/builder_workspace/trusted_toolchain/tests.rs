@@ -6,6 +6,10 @@ use super::*;
 
 struct Fixture {
     root: PathBuf,
+    // Test-only: the absolute path the fixture was created through, before
+    // canonicalization. On Windows it is a non-verbatim spelling of `root`.
+    #[cfg(windows)]
+    created: PathBuf,
 }
 
 impl Fixture {
@@ -18,7 +22,11 @@ impl Fixture {
             std::fs::create_dir_all(target.parent().unwrap()).unwrap();
             std::fs::write(target, content).unwrap();
         }
-        Self { root }
+        Self {
+            root,
+            #[cfg(windows)]
+            created: dir,
+        }
     }
 }
 
@@ -321,19 +329,34 @@ fn p0_002c4d1a_file_and_directory_kinds_must_match() {
 fn p0_002c4d1a_root_must_be_absolute_existing_canonical_directory() {
     let fixture = Fixture::new(TREE);
     let files = entries(TREE);
-    let regular = fixture.root.join("entry.mjs");
+    // A genuinely different absolute spelling of the same existing root. On
+    // Windows the canonical root is verbatim (\\?\...) and std normalizes `..`
+    // away when joining onto a verbatim path, so the non-verbatim creation path
+    // is used; elsewhere an unresolved `bin/..` component remains in the path.
+    #[cfg(windows)]
+    let non_canonical = fixture.created.clone();
+    #[cfg(not(windows))]
     let non_canonical = fixture.root.join("bin").join("..");
-    for root in [
-        PathBuf::from("relative"),
-        fixture.root.join("missing"),
-        regular,
-        non_canonical,
+    assert!(non_canonical.is_absolute());
+    assert_ne!(
+        non_canonical, fixture.root,
+        "fixture must actually use a distinct non-canonical spelling"
+    );
+    assert_eq!(
+        non_canonical.canonicalize().unwrap(),
+        fixture.root,
+        "non-canonical spelling must resolve to the same real root"
+    );
+    for (case, root) in [
+        ("relative", PathBuf::from("relative")),
+        ("missing", fixture.root.join("missing")),
+        ("regular-file", fixture.root.join("entry.mjs")),
+        ("non-canonical", non_canonical),
     ] {
-        assert_eq!(
-            rejected(&root, &files),
-            ToolchainError::RootRejected,
-            "{root:?}"
-        );
+        match verify_tree(&manifest(&files), &root) {
+            Ok(_) => panic!("{case}: verification must fail for {root:?}"),
+            Err(error) => assert_eq!(error, ToolchainError::RootRejected, "{case}: {root:?}"),
+        }
     }
 }
 
