@@ -66,3 +66,7 @@ prompts/triage/
 
 # Claude skills: ZIP is a build artifact, only source is versioned
 docs/claude-skills/*.zip
+
+# P0-002C4D2: assembled packaged Builder toolchain (release/CI build output)
+/app/src-tauri/builder-toolchain/
+/app/src-tauri/builder-toolchain.assembly-*/

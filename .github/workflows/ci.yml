@@ -59,6 +59,30 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked
 
+      # P0-002C4D2: assemble this target's packaged Builder toolchain, run the
+      # trusted-entry tests with its own Node, and verify the real assembled
+      # bytes through the embedded manifest (packaged backend test build).
+      - name: Setup Node.js 24.21.0 (Builder toolchain assembly)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+
+      - name: Assemble Nexus Builder toolchain
+        shell: bash
+        run: node packaging/builder-toolchain/scripts/assemble.mjs --target x86_64-unknown-linux-gnu --out app/src-tauri/builder-toolchain
+
+      - name: Trusted Builder entry tests (packaged Node)
+        shell: bash
+        run: app/src-tauri/builder-toolchain/node/node --test packaging/builder-toolchain/test/entry.test.mjs
+
+      - name: Packaged Builder toolchain verification
+        shell: bash
+        env:
+          NEXUS_BUILDER_TOOLCHAIN: packaged
+        run: |
+          cargo test -p nexus-desktop-backend --locked --lib p0_002c4d2_assembled_ 2>&1 | tee packaged-toolchain.log
+          grep -q 'test result: ok. 2 passed' packaged-toolchain.log
+
   test-frontend:
     runs-on: ubuntu-latest
     steps:
@@ -104,6 +128,30 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked
 
+      # P0-002C4D2: assemble this target's packaged Builder toolchain, run the
+      # trusted-entry tests with its own Node, and verify the real assembled
+      # bytes through the embedded manifest (packaged backend test build).
+      - name: Setup Node.js 24.21.0 (Builder toolchain assembly)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+
+      - name: Assemble Nexus Builder toolchain
+        shell: bash
+        run: node packaging/builder-toolchain/scripts/assemble.mjs --target aarch64-apple-darwin --out app/src-tauri/builder-toolchain
+
+      - name: Trusted Builder entry tests (packaged Node)
+        shell: bash
+        run: app/src-tauri/builder-toolchain/node/node --test packaging/builder-toolchain/test/entry.test.mjs
+
+      - name: Packaged Builder toolchain verification
+        shell: bash
+        env:
+          NEXUS_BUILDER_TOOLCHAIN: packaged
+        run: |
+          cargo test -p nexus-desktop-backend --locked --lib p0_002c4d2_assembled_ 2>&1 | tee packaged-toolchain.log
+          grep -q 'test result: ok. 2 passed' packaged-toolchain.log
+
   test-windows:
     runs-on: windows-latest
     steps:
@@ -127,6 +175,30 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --locked
+
+      # P0-002C4D2: assemble this target's packaged Builder toolchain, run the
+      # trusted-entry tests with its own Node, and verify the real assembled
+      # bytes through the embedded manifest (packaged backend test build).
+      - name: Setup Node.js 24.21.0 (Builder toolchain assembly)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+
+      - name: Assemble Nexus Builder toolchain
+        shell: bash
+        run: node packaging/builder-toolchain/scripts/assemble.mjs --target x86_64-pc-windows-msvc --out app/src-tauri/builder-toolchain
+
+      - name: Trusted Builder entry tests (packaged Node)
+        shell: bash
+        run: app/src-tauri/builder-toolchain/node/node.exe --test packaging/builder-toolchain/test/entry.test.mjs
+
+      - name: Packaged Builder toolchain verification
+        shell: bash
+        env:
+          NEXUS_BUILDER_TOOLCHAIN: packaged
+        run: |
+          cargo test -p nexus-desktop-backend --locked --lib p0_002c4d2_assembled_ 2>&1 | tee packaged-toolchain.log
+          grep -q 'test result: ok. 2 passed' packaged-toolchain.log
 
   test-python:
     runs-on: ubuntu-latest

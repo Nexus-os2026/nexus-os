@@ -1,5 +1,6 @@
 //! P0-002C4D1A verifier tests. Synthetic fixture trees and borrowed fixture
 //! manifests only: no real toolchain, no process execution.
+use super::contract::{MAX_FILE_BYTES, MAX_PATH_BYTES};
 use super::*;
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -92,6 +93,9 @@ fn rejected(root: &Path, files: &[ManifestFile<'_>]) -> ToolchainError {
 
 // ── Production fail-closed ─────────────────────────────────────────────────
 
+// P0-002C4D2: only builds without an assembled packaged toolchain embed no
+// production manifest; those remain unavailable before any filesystem access.
+#[cfg(not(nexus_packaged_toolchain))]
 #[test]
 fn p0_002c4d1a_production_is_unavailable_without_any_filesystem_root() {
     assert!(std::hint::black_box(PRODUCTION_MANIFEST).is_none());
@@ -597,15 +601,20 @@ fn compact(text: &str) -> String {
 
 #[test]
 fn p0_002c4d1a_production_manifest_and_entry_stay_unavailable() {
+    // P0-002C4D2: the production manifest is only ever the build-generated
+    // one (absent unless a packaged toolchain was assembled), and production
+    // verification takes no path, root or manifest from any caller.
     let module = code(include_str!("../trusted_toolchain.rs"));
     assert!(compact(&module).contains(&compact(
-        "const PRODUCTION_MANIFEST: Option<&ToolchainManifest<'static>> = None;"
+        "include!(concat!(env!(\"OUT_DIR\"), \"/builder_toolchain_manifest.rs\"));"
     )));
+    assert!(!module.contains("const PRODUCTION_MANIFEST"));
+    assert_eq!(module.matches("PRODUCTION_MANIFEST").count(), 1);
     let installed = function(&module, "pub(super) fn verify_installed(");
+    assert!(installed.starts_with("pub(super) fn verify_installed() ->"));
     for forbidden in [
         "verify_tree",
         "native::",
-        "Path",
         "fs::",
         "DirectoryIdentity",
         "open",
@@ -619,7 +628,7 @@ fn p0_002c4d1a_production_manifest_and_entry_stay_unavailable() {
         installed
             .matches("Err(ToolchainError::Unavailable)")
             .count(),
-        2
+        1
     );
     // The opaque authority has exactly one constructor, at the end of verify_tree.
     assert_eq!(module.matches("VerifiedToolchain {").count(), 3); // struct, impl, constructor
@@ -641,13 +650,15 @@ fn p0_002c4d1a_verifier_has_no_launch_command_or_environment_authority() {
         "current_dir",
         "temp_dir",
         "home_dir",
-        "current_exe",
         "resource_dir",
         "APPDIR",
         "Serialize",
     ] {
         assert!(!module.contains(forbidden), "{forbidden}");
     }
+    // P0-002C4D2: the one executable-path query that derives the production
+    // root (see p0_002c4d2_production_root_uses_only_the_executable_path).
+    assert_eq!(module.matches("current_exe").count(), 1);
     // The authority declaration carries no derive (no Clone, Copy or Default).
     let declaration = module.find("pub(super) struct VerifiedToolchain").unwrap();
     let preceding = &module[..declaration];
