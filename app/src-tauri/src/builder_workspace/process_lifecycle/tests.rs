@@ -785,11 +785,16 @@ fn p0_002c4b_stale_react_identity_cannot_reach_launcher() {
         if case == "react-removed" {
             std::fs::create_dir(root.join("react")).unwrap();
         }
-        // A freshly captured target for the current React may start.
-        r.start(target(&f, &id), f.audit(), counted(&launched, &control))
-            .unwrap();
-        assert_eq!(launched.load(Ordering::SeqCst), 1);
-        assert_eq!(r.stop(p, soon(), &f.audit()), Ok(Finalized::Stopped));
+        // P0-002C4D1B: only the governed React identity retained by
+        // provisioning is trusted. A removed or replaced React, even when a
+        // directory is recreated at the same path, never yields a new target.
+        assert_eq!(
+            f.authority.dev_server_target(&id, &f.audit()).err(),
+            Some(("react", "React identity denied")),
+            "{case}"
+        );
+        assert_eq!(launched.load(Ordering::SeqCst), 0, "{case}: launcher ran");
+        assert_eq!(r.status(p), LifecycleStatus::Stopped);
     }
 }
 
@@ -1634,7 +1639,6 @@ fn p0_002c4b_identity_invalidation_terminates_real_tree() {
         let (r, p) = (registry(&f), uuid(&id));
         let control = Control::new();
         let run = launch(&r, &f, &id, &control, "c4b_fixture_hold");
-        let first = execution_of(&r, p).unwrap();
         let react = root.join("react");
         let detached = f.path.with_extension("project");
         let old_storage = f.path.with_extension("old");
@@ -1670,14 +1674,18 @@ fn p0_002c4b_identity_invalidation_terminates_real_tree() {
         // Storage/project changes keep C3 tombstone semantics; React does not.
         assert_eq!(f.authority.catalog.lookup(p).is_ok(), react_case, "{case}");
         if react_case {
+            // P0-002C4D1B: the registration survives, but a removed or replaced
+            // React (even recreated at the same path) is never the governed
+            // identity, so no new generation can be targeted.
             if case == "react-removed" {
                 std::fs::create_dir(&react).unwrap();
             }
-            let control = Control::new();
-            let run = launch(&r, &f, &id, &control, "c4b_fixture_hold");
-            assert!(execution_of(&r, p).unwrap() > first);
-            assert_eq!(r.stop(p, soon(), &f.audit()), Ok(Finalized::Stopped));
-            assert_tree_gone(&run, case);
+            assert_eq!(
+                f.authority.dev_server_target(&id, &f.audit()).err(),
+                Some(("react", "React identity denied")),
+                "{case}"
+            );
+            assert_eq!(r.status(p), LifecycleStatus::Stopped);
         } else {
             // A tombstoned registration cannot yield a target for any new
             // generation of this project.
@@ -1747,8 +1755,9 @@ fn p0_002c4b_windows_reparse_redirects_terminate_real_tree() {
 }
 
 // Windows platform invariant (security evidence, not a workaround): while an
-// execution retains the React directory identity, the OS refuses to rename the
-// project ancestor, so rename-based replacement cannot occur underneath it.
+// execution or a provisioned registration (P0-002C4D1B) retains the React
+// directory identity, the OS refuses to rename the project ancestor, so
+// rename-based replacement cannot occur underneath it.
 // This is not filesystem containment; removal is still possible and is
 // detected (see p0_002c4b_identity_invalidation_terminates_real_tree).
 #[cfg(windows)]
@@ -1788,14 +1797,15 @@ fn p0_002c4b_windows_retained_react_identity_blocks_project_ancestor_rename() {
     assert_eq!(r.stop(p, soon(), &f.audit()), Ok(Finalized::Stopped));
     assert_eq!(r.status(p), LifecycleStatus::Stopped);
     assert_tree_gone(&run, "stop after denied ancestor rename");
-    // Once the owner has released the retained React identity, the existing
-    // C3 semantics apply again: the rename proceeds (bounded wait for the
-    // owner thread to finish) and is restored.
-    assert!(
-        wait_until(soon(), || std::fs::rename(&root, &moved).is_ok()),
-        "project rename still denied after the execution released React identity"
+    // P0-002C4D1B: the provisioned registration itself retains the governed
+    // React and runtime identities, so the project ancestor rename stays
+    // refused after the execution released its reference.
+    let error = std::fs::rename(&root, &moved).expect_err(
+        "project ancestor rename must stay denied while the registration retains React/runtime",
     );
-    std::fs::rename(&moved, &root).unwrap();
+    assert_eq!(error.raw_os_error(), Some(ERROR_ACCESS_DENIED), "{error:?}");
+    assert!(!moved.exists());
+    assert!(f.authority.dev_server_target(&id, &f.audit()).is_ok());
 }
 
 // ── P0-002C4C1: production-owned lifecycle registry ───────────────────────
@@ -1846,9 +1856,10 @@ impl Production {
 
     fn register(&self) -> (String, PathBuf) {
         let result = run_plan(self.authority(), self.audit(), "site", |_| Ok(generated())).unwrap();
-        let root = PathBuf::from(result.project_dir);
-        std::fs::create_dir(root.join("react")).unwrap();
-        (result.project_id, root)
+        self.authority()
+            .provision_workspace(&result.project_id, &[], self.audit())
+            .unwrap();
+        (result.project_id, PathBuf::from(result.project_dir))
     }
 
     fn target(&self, id: &str) -> DevServerTarget {

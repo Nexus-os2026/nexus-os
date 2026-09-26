@@ -1,5 +1,6 @@
-//! Private authority for fresh Builder planning, registered React file writes and
-//! fail-closed dev-server selection (no process launch is authorized).
+//! Private authority for fresh Builder planning, governed React/runtime
+//! workspace provisioning, registered React file writes and fail-closed
+//! dev-server selection (no process launch is authorized).
 //! Metadata and paths are never accepted as credentials. No authority lock is
 //! held by this adapter across audit, provider calls, filesystem I/O or delivery.
 use nexus_kernel::manifest::FsPermissionLevel;
@@ -10,7 +11,7 @@ use nexus_kernel::workspace_authority::{
 use serde_json::{json, Value};
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime};
 use uuid::Uuid;
 use web_builder_agent::model_router::ModelSelection;
@@ -26,6 +27,10 @@ use process_lifecycle::{Finalized, LifecycleError, LifecycleRegistry};
 // P0-002C4D1A private trusted-toolchain verifier. Staged: production has no
 // trusted toolchain or root, and nothing outside this adapter can reach it.
 mod trusted_toolchain;
+// P0-002C4D1B governed React + private runtime provisioning. React identity is
+// accepted only as retained by a fully provisioned workspace.
+mod workspace_provisioning;
+use workspace_provisioning::ProvisionedWorkspace;
 
 // Audit payloads contain descriptive project IDs, never grants or private principals.
 type Audit = Arc<dyn Fn(Value) + Send + Sync>;
@@ -54,6 +59,7 @@ pub(super) struct BuilderWorkspaceAuthority {
     allocator: Uuid,
     planner: Uuid,
     writer: Uuid,
+    provisioner: Uuid,
     storage_identity: Arc<DirectoryIdentity>,
     catalog: Arc<ProjectCatalog>,
     // The only production lifecycle registry; it shares `catalog` exactly.
@@ -93,6 +99,7 @@ impl BuilderWorkspaceAuthority {
             allocator: Uuid::new_v4(),
             planner: Uuid::new_v4(),
             writer: Uuid::new_v4(),
+            provisioner: Uuid::new_v4(),
             storage_identity: Arc::new(storage_identity),
             catalog,
             lifecycle,
@@ -171,6 +178,7 @@ impl BuilderWorkspaceAuthority {
                 storage_root: self.root.clone(),
                 storage_identity: Arc::clone(&self.storage_identity),
                 identity,
+                workspace: OnceLock::new(),
             }));
             let child = self
                 .registry
@@ -211,6 +219,8 @@ struct RegisteredBuilderProject {
     storage_root: PathBuf,
     storage_identity: Arc<DirectoryIdentity>,
     identity: DirectoryIdentity,
+    // P0-002C4D1B: set once, only by successful governed provisioning.
+    workspace: OnceLock<ProvisionedWorkspace>,
 }
 
 impl RegisteredBuilderProject {
@@ -220,6 +230,14 @@ impl RegisteredBuilderProject {
             return Err(IdentityError::Changed);
         }
         self.identity.validate(&self.root)
+    }
+
+    /// The governed React identity retained by a fully provisioned workspace.
+    fn validate_react(&self) -> std::result::Result<(), IdentityError> {
+        self.workspace
+            .get()
+            .ok_or(IdentityError::Unavailable)?
+            .validate_react(&self.root)
     }
 }
 
@@ -355,10 +373,16 @@ impl BuilderWorkspaceAuthority {
             event(&audit, Some(id), "registration.lookup", "denied");
         })?;
         self.catalog.validate(&project, &audit)?;
+        // P0-002C4D1B: only the retained React identity of a fully provisioned
+        // workspace is accepted; an arbitrary existing `react/` never becomes
+        // trusted. Nothing in this path provisions storage or directories.
+        if project.workspace.get().is_none() {
+            return Err("workspace not provisioned");
+        }
+        project
+            .validate_react()
+            .map_err(|_| "React identity denied")?;
         let root = project.root.join("react");
-        // capture requires the exact canonical child, a directory and no reparse
-        // redirection. Nothing in this path provisions storage or directories.
-        let identity = DirectoryIdentity::capture(&root).map_err(|_| "React identity denied")?;
         validate_relative_file(relative)?;
         let binding = WorkspaceBinding {
             agent_id: self.writer,
@@ -386,7 +410,6 @@ impl BuilderWorkspaceAuthority {
             authority: self,
             project,
             root,
-            identity,
             binding,
             grant,
             audit,
@@ -457,25 +480,24 @@ fn dev_server_event(
 
 type DevServerDenial = (&'static str, &'static str); // (audit reason, client error)
 
-/// Retained trusted snapshot: the private registration and the identity of its
-/// existing React directory. React is always derived from the registration,
-/// never from caller data. Not serialized; not a credential or containment.
+/// Retained trusted snapshot: the private registration, whose fully provisioned
+/// workspace retains the governed React identity (P0-002C4D1B). React is always
+/// derived from the registration, never from caller data. Not serialized; not a
+/// credential or containment.
 struct DevServerTarget {
     project: Arc<RegisteredBuilderProject>,
-    react_identity: DirectoryIdentity,
 }
 
 impl DevServerTarget {
     fn validate_react(&self) -> std::result::Result<(), IdentityError> {
-        self.react_identity
-            .validate(&self.project.root.join("react"))
+        self.project.validate_react()
     }
 }
 
 impl BuilderWorkspaceAuthority {
-    /// Selector → private registration → storage, project and existing React
-    /// identity. React must be the exact, non-redirected child of the
-    /// registered project; it is observed, never created.
+    /// Selector → private registration → storage, project and the governed
+    /// React identity retained by provisioning. React must still be that exact,
+    /// non-redirected child of the registered project; it is never created here.
     fn validate_dev_server(
         &self,
         selector: &str,
@@ -499,14 +521,12 @@ impl BuilderWorkspaceAuthority {
         self.catalog
             .validate(&project, audit)
             .map_err(|error| ("identity", error))?;
-        let react_identity = DirectoryIdentity::capture(&project.root.join("react"))
-            .map_err(|_| ("react", "React identity denied"))?;
-        let target = DevServerTarget {
-            project,
-            react_identity,
-        };
-        // Final checks after capture: the registration is still current and
-        // React is still the same directory beneath the registered project.
+        if project.workspace.get().is_none() {
+            return Err(("workspace", "workspace not provisioned"));
+        }
+        let target = DevServerTarget { project };
+        // Final checks: the registration is still current and React is still
+        // the governed directory beneath the registered project.
         self.catalog
             .validate(&target.project, audit)
             .map_err(|error| ("identity", error))?;
@@ -658,7 +678,6 @@ struct WriteExecution<'a> {
     authority: &'a BuilderWorkspaceAuthority,
     project: Arc<RegisteredBuilderProject>,
     root: PathBuf,
-    identity: DirectoryIdentity,
     binding: WorkspaceBinding,
     grant: WorkspaceGrantId,
     audit: Audit,
@@ -692,8 +711,8 @@ impl WriteExecution<'_> {
         self.authority
             .catalog
             .validate(&self.project, &self.audit)?;
-        self.identity
-            .validate(&self.root)
+        self.project
+            .validate_react()
             .map_err(|_| "React identity denied")?;
         validate_relative_file(relative)?;
         let path = resolve_existing_relative(&self.root, Path::new(relative))
@@ -1133,7 +1152,7 @@ pub(super) fn generate_plan(
 ) -> std::result::Result<Value, String> {
     let authority = state.builder_workspace.as_ref().map_err(Clone::clone)?;
     let audit = audit_for(state);
-    let completed = run_plan(authority, audit, prompt, |fallback| {
+    let completed = run_plan(authority, Arc::clone(&audit), prompt, |fallback| {
         generate_with_provider(prompt, fallback)
     })
     .map_err(|e| e.to_string())?;
@@ -1142,7 +1161,42 @@ pub(super) fn generate_plan(
         &completed.generated.result,
         &completed.generated.result.plan.product_brief.project_name,
     );
+    provision_planned_workspace(
+        authority,
+        &completed.project_id,
+        prompt,
+        &completed.generated.result.plan.product_brief.project_name,
+        audit,
+    )
+    .map_err(|error| format!("Builder workspace provisioning: {error}"))?;
     Ok(completed.into_json())
+}
+
+/// P0-002C4D1B: provision the governed workspace of the registration just
+/// published, from the deterministic ($0) React scaffold for its brief. The
+/// scaffold is content only; `workspace_provisioning` decides what persists.
+fn provision_planned_workspace(
+    authority: &BuilderWorkspaceAuthority,
+    project_id: &str,
+    prompt: &str,
+    project_name: &str,
+    audit: Audit,
+) -> std::result::Result<(), &'static str> {
+    let scaffold = web_builder_agent::build_orchestrator::run_build_pipeline(
+        prompt,
+        web_builder_agent::react_gen::OutputMode::React,
+        project_name,
+        &|_| {},
+    )
+    .ok()
+    .and_then(|built| built.react_project)
+    .ok_or("scaffold unavailable")?;
+    let files: Vec<(&str, &[u8])> = scaffold
+        .files
+        .iter()
+        .map(|file| (file.path.as_str(), file.content.as_bytes()))
+        .collect();
+    authority.provision_workspace(project_id, &files, audit)
 }
 
 fn generate_with_provider(

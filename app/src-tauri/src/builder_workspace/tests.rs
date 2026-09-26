@@ -706,13 +706,21 @@ fn p0_002c2_real_success_pipeline_rechecks_between_every_mutation() {
     }
 }
 
-// C3 fixtures register through the real C2 pipeline. Only the test fixture
-// creates React output: the C3 command must never create it or its parents.
+// C3 fixtures register through the real C2 pipeline and provision through the
+// governed P0-002C4D1B path (empty scaffold: React starts empty). The C3
+// command must never create React or its parents.
 pub(super) fn registered(f: &Fixture) -> (String, PathBuf) {
+    let (id, root) = registered_only(f);
+    f.authority
+        .provision_workspace(&id, &[], f.audit())
+        .unwrap();
+    (id, root)
+}
+
+/// A current C2 registration whose workspace was never provisioned.
+pub(super) fn registered_only(f: &Fixture) -> (String, PathBuf) {
     let result = run_plan(&f.authority, f.audit(), "site", |_| Ok(generated())).unwrap();
-    let root = PathBuf::from(result.project_dir);
-    std::fs::create_dir(root.join("react")).unwrap();
-    (result.project_id, root)
+    (result.project_id, PathBuf::from(result.project_dir))
 }
 
 #[test]
@@ -852,6 +860,7 @@ fn p0_002c3_duplicate_and_conflicting_registration_cannot_overwrite() {
         storage_root: f.authority.root.clone(),
         storage_identity: Arc::clone(&f.authority.storage_identity),
         identity: DirectoryIdentity::capture(&other).unwrap(),
+        workspace: OnceLock::new(),
     });
     assert!(f.authority.catalog.publish(conflicting).is_err());
     assert!(Arc::ptr_eq(
@@ -866,7 +875,9 @@ fn p0_002c3_duplicate_and_conflicting_registration_cannot_overwrite() {
 fn p0_002c3_project_removal_and_same_path_replacement_permanently_invalidate() {
     for replacement in [false, true] {
         let f = Fixture::new();
-        let (id, root) = registered(&f);
+        // Registration-level mutation: an unprovisioned registration keeps project
+        // renames possible on every OS (a provisioned one retains React/runtime).
+        let (id, root) = registered_only(&f);
         let project = f
             .authority
             .catalog
@@ -907,7 +918,9 @@ fn p0_002c3_project_removal_and_same_path_replacement_permanently_invalidate() {
 fn p0_002c3_missing_and_replaced_storage_deny_without_recreation() {
     for replacement in [false, true] {
         let f = Fixture::new();
-        let (id, root) = registered(&f);
+        // Registration-level mutation: an unprovisioned registration keeps project
+        // renames possible on every OS (a provisioned one retains React/runtime).
+        let (id, root) = registered_only(&f);
         let old = f.path.with_extension("old");
         let detached_project = f.path.with_extension("project");
         // Windows permits moving the observed directory itself with share-delete,
@@ -1149,14 +1162,19 @@ fn p0_002c3_audit_reentry_and_final_checks_close_callback_mutation_window() {
                     "grant" => registry.revoke(grant, binding).unwrap(),
                     "project" => {
                         // Keep the same React directory/witness, while replacing
-                        // only its project ancestor. Moving the observed child
-                        // first also permits this namespace change on Windows.
+                        // only its project ancestor. Moving the observed children
+                        // (React and the retained runtime) first also permits
+                        // this namespace change on Windows.
                         let detached_react = callback_root.with_extension("react");
+                        let runtime = callback_root.join("runtime");
+                        let detached_runtime = callback_root.with_extension("runtime");
                         std::fs::rename(&react, &detached_react).unwrap();
+                        std::fs::rename(&runtime, &detached_runtime).unwrap();
                         std::fs::rename(&callback_root, callback_root.with_extension("old"))
                             .unwrap();
                         std::fs::create_dir(&callback_root).unwrap();
                         std::fs::rename(&detached_react, &react).unwrap();
+                        std::fs::rename(&detached_runtime, &runtime).unwrap();
                     }
                     "react" => {
                         std::fs::rename(&react, callback_root.join("old-react")).unwrap();
@@ -1323,7 +1341,9 @@ fn p0_002c3_appstate_clones_share_catalog_and_handles() {
     let clone_authority = cloned.builder_workspace.as_ref().unwrap();
     assert!(Arc::ptr_eq(authority, clone_authority));
     let result = run_plan(authority, f.audit(), "site", |_| Ok(generated())).unwrap();
-    std::fs::create_dir(Path::new(&result.project_dir).join("react")).unwrap();
+    authority
+        .provision_workspace(&result.project_id, &[], f.audit())
+        .unwrap();
     let id = Uuid::parse_str(&result.project_id).unwrap();
     let project = authority.catalog.lookup(id).unwrap();
     assert!(Arc::ptr_eq(
@@ -1526,7 +1546,8 @@ fn p0_002c3_windows_native_directory_identity_and_noninheritable_handle() {
     use std::os::windows::io::AsRawHandle;
     use windows_sys::Win32::Foundation::{GetHandleInformation, HANDLE_FLAG_INHERIT};
     let f = Fixture::new();
-    let (id, root) = registered(&f);
+    // Project identity only; an unprovisioned registration can still be renamed.
+    let (id, root) = registered_only(&f);
     let project = f
         .authority
         .catalog
@@ -1560,7 +1581,13 @@ fn p0_002c3_windows_native_reparse_project_and_react_redirect_deny() {
     use std::os::windows::fs::symlink_dir;
     for project_replacement in [true, false] {
         let f = Fixture::new();
-        let (id, root) = registered(&f);
+        // A provisioned registration retains React/runtime, so Windows refuses
+        // the project rename itself; project redirection is registration-level.
+        let (id, root) = if project_replacement {
+            registered_only(&f)
+        } else {
+            registered(&f)
+        };
         let target = if project_replacement {
             root.clone()
         } else {
@@ -1808,7 +1835,9 @@ fn p0_002c4a_selectors_without_current_registration_deny_every_operation() {
 fn p0_002c4a_project_and_storage_identity_changes_deny_and_permanently_invalidate() {
     for case in ["removed", "replaced", "storage-missing", "storage-replaced"] {
         let f = Fixture::new();
-        let (id, root) = registered(&f);
+        // Registration-level mutation: an unprovisioned registration keeps project
+        // renames possible on every OS (a provisioned one retains React/runtime).
+        let (id, root) = registered_only(&f);
         let detached = f.path.with_extension("project");
         let old_storage = f.path.with_extension("old");
         match case {
@@ -1880,12 +1909,11 @@ fn p0_002c4a_missing_or_non_directory_react_denies_without_creation() {
         .catalog
         .lookup(Uuid::parse_str(&id).unwrap())
         .is_ok());
+    // P0-002C4D1B: a directory recreated at the React path is not the governed
+    // identity retained by provisioning, so it never becomes trusted.
     std::fs::remove_file(&react).unwrap();
     std::fs::create_dir(&react).unwrap();
-    assert_eq!(
-        f.authority.dev_server_start(&id, f.audit()),
-        "launch unavailable"
-    );
+    assert_all_deny(&f, &id, "React identity denied");
 }
 
 #[cfg(unix)]
@@ -1920,7 +1948,13 @@ fn p0_002c4a_windows_native_reparse_project_and_react_redirect_deny() {
     use std::os::windows::fs::symlink_dir;
     for project_replacement in [true, false] {
         let f = Fixture::new();
-        let (id, root) = registered(&f);
+        // A provisioned registration retains React/runtime, so Windows refuses
+        // the project rename itself; project redirection is registration-level.
+        let (id, root) = if project_replacement {
+            registered_only(&f)
+        } else {
+            registered(&f)
+        };
         let target = if project_replacement {
             root.clone()
         } else {
@@ -1982,7 +2016,9 @@ fn p0_002c4a_audit_reentry_and_no_sensitive_material() {
     let events = Arc::new(Mutex::new(Vec::<Value>::new()));
     let result = run_plan(&authority, Arc::new(|_| {}), "site", |_| Ok(generated())).unwrap();
     let root = PathBuf::from(&result.project_dir);
-    std::fs::create_dir(root.join("react")).unwrap();
+    authority
+        .provision_workspace(&result.project_id, &[], Arc::new(|_| {}))
+        .unwrap();
     let id = result.project_id;
     let reentered = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let audit: Audit = {
@@ -2051,7 +2087,9 @@ fn p0_002c4a_appstate_commands_fail_closed_and_share_registration() {
     ));
     let authority = state.builder_workspace.as_ref().unwrap();
     let result = run_plan(authority, f.audit(), "site", |_| Ok(generated())).unwrap();
-    std::fs::create_dir(Path::new(&result.project_dir).join("react")).unwrap();
+    authority
+        .provision_workspace(&result.project_id, &[], f.audit())
+        .unwrap();
     let id = result.project_id;
     let cloned = state.clone();
     assert_eq!(
