@@ -357,6 +357,48 @@ fn p0_002c4d1a_unexpected_entry_names_reject() {
     }
 }
 
+// ── Root identity binding ───────────────────────────────────────────────────
+
+// A and B hold byte-identical trusted trees (same paths, sizes and digests),
+// yet B must be refused when the native verifier is handed A's retained
+// identity: the exact traversal-root handle must be the retained object.
+// Deterministic on every platform: no races, sleeps or threads.
+#[test]
+fn p0_002c4d1a_native_root_handle_must_match_retained_identity() {
+    let a = Fixture::new(TREE);
+    let b = Fixture::new(TREE);
+    let files = entries(TREE);
+    let manifest = manifest(&files);
+    let expected = Expected::new(&manifest);
+    let identity_a = DirectoryIdentity::capture(&a.root).unwrap();
+
+    // Control: A verifies natively against its own retained identity.
+    let mut found = BTreeSet::new();
+    assert_eq!(
+        native::verify(&a.root, &identity_a, &expected, &mut found),
+        Ok(())
+    );
+    assert_eq!(found.len(), files.len());
+
+    // B differs only in native filesystem identity and is refused before any
+    // of its entries are traversed.
+    let mut found = BTreeSet::new();
+    assert_eq!(
+        native::verify(&b.root, &identity_a, &expected, &mut found),
+        Err(ToolchainError::Changed)
+    );
+    assert!(found.is_empty());
+
+    // Control: B's tree is itself valid under its own identity.
+    let identity_b = DirectoryIdentity::capture(&b.root).unwrap();
+    let mut found = BTreeSet::new();
+    assert_eq!(
+        native::verify(&b.root, &identity_b, &expected, &mut found),
+        Ok(())
+    );
+    assert!(verify_tree(&manifest, &b.root).is_ok());
+}
+
 // ── Unix native redirection and unsupported kinds ──────────────────────────
 
 #[cfg(unix)]

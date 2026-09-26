@@ -294,7 +294,7 @@ mod native {
     use super::*;
     use rustix::fs::{fstat, openat, statat, AtFlags, Dir, FileType, Mode, OFlags, Stat, CWD};
     use rustix::io::Errno;
-    use std::os::fd::OwnedFd;
+    use std::os::fd::{AsFd, BorrowedFd};
 
     fn directory_flags() -> OFlags {
         OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::DIRECTORY
@@ -335,25 +335,29 @@ mod native {
         expected: &Expected<'_>,
         found: &mut BTreeSet<String>,
     ) -> Result<(), ToolchainError> {
-        let root_fd = openat(CWD, root, directory_flags(), Mode::empty())
-            .map_err(|_| ToolchainError::RootRejected)?;
+        // The exact no-follow root descriptor traversed below is bound directly
+        // to the retained backend identity; no pathname is re-resolved for it.
+        let root_dir = std::fs::File::from(
+            openat(CWD, root, directory_flags(), Mode::empty())
+                .map_err(|_| ToolchainError::RootRejected)?,
+        );
         identity
-            .validate(root)
+            .validate_handle(&root_dir)
             .map_err(|_| ToolchainError::Changed)?;
-        let pinned = fstat(&root_fd).map_err(io)?;
+        let pinned = fstat(&root_dir).map_err(io)?;
         let at_path = statat(CWD, root, AtFlags::SYMLINK_NOFOLLOW).map_err(open_error)?;
         if kind(&pinned) != FileType::Directory {
             return Err(ToolchainError::RootRejected);
         }
         same_object(&pinned, &at_path)?;
-        walk(&root_fd, "", expected, found)?;
+        walk(root_dir.as_fd(), "", expected, found)?;
         let after = statat(CWD, root, AtFlags::SYMLINK_NOFOLLOW).map_err(open_error)?;
         same_object(&pinned, &after)?;
-        same_object(&pinned, &fstat(&root_fd).map_err(io)?)
+        same_object(&pinned, &fstat(&root_dir).map_err(io)?)
     }
 
     fn walk(
-        dir: &OwnedFd,
+        dir: BorrowedFd<'_>,
         prefix: &str,
         expected: &Expected<'_>,
         found: &mut BTreeSet<String>,
@@ -388,7 +392,7 @@ mod native {
                         let child = openat(dir, name.as_str(), directory_flags(), Mode::empty())
                             .map_err(open_error)?;
                         same_object(&fstat(&child).map_err(io)?, &observed)?;
-                        walk(&child, &relative, expected, found)?;
+                        walk(child.as_fd(), &relative, expected, found)?;
                     }
                     other => return Err(rejected(other)),
                 }
@@ -408,7 +412,7 @@ mod native {
     }
 
     fn verify_file(
-        dir: &OwnedFd,
+        dir: BorrowedFd<'_>,
         name: &str,
         observed: &Stat,
         file: &ManifestFile<'_>,
@@ -513,8 +517,10 @@ mod native {
         if handle_kind(&root_handle)? != Kind::Directory {
             return Err(ToolchainError::RootRejected);
         }
+        // Bind this exact reparse-refusing root handle to the retained identity
+        // before traversal; no pathname is re-resolved for the binding.
         identity
-            .validate(root)
+            .validate_handle(&root_handle)
             .map_err(|_| ToolchainError::Changed)?;
         walk(root, &root_handle, "", expected, found)?;
         if handle_kind(&root_handle)? != Kind::Directory {

@@ -54,6 +54,15 @@ impl DirectoryIdentity {
         Ok(())
     }
 
+    /// Binds an already opened directory handle to this retained identity by
+    /// comparing native identities directly; no pathname is re-resolved.
+    pub(super) fn validate_handle(&self, handle: &File) -> Result<(), IdentityError> {
+        if identity(&self.handle)? != identity(handle)? {
+            return Err(IdentityError::Changed);
+        }
+        Ok(())
+    }
+
     #[cfg(test)]
     pub(super) fn handle(&self) -> &File {
         &self.handle
