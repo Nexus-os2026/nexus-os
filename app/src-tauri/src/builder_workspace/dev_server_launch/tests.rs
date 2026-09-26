@@ -361,11 +361,13 @@ fn p0_002c4c3_node_spelling_accepts_only_the_retained_canonical_form() {
     let separator = std::path::MAIN_SEPARATOR;
     let text = canonical.to_str().unwrap();
     let (parent, name) = text.rsplit_once(separator).unwrap();
+    // Built textually: pushing `.` or `..` onto a Windows verbatim path
+    // normalizes them away.
     for rejected in [
         PathBuf::from("relative").join("dir"),
         canonical.join("missing"),
-        canonical.join("..").join("with space"),
-        canonical.join("."),
+        PathBuf::from(format!("{text}{separator}..{separator}{name}")),
+        PathBuf::from(format!("{text}{separator}.")),
         PathBuf::from(format!("{text}{separator}")),
         PathBuf::from(format!("{parent}{separator}{separator}{name}")),
         PathBuf::from(format!("{parent}{separator}.{separator}{name}")),

@@ -660,8 +660,9 @@ fn p0_002c4c3_packaged_node_permission_model_confines_the_runtime() {
     let outside = temporary("outside");
     std::fs::write(outside.join("secret"), b"outside").unwrap();
     // A genuine, loadable native addon planted as project content and in the
-    // project directory (an ancestor of React).
-    let addon = toolchain_addon(&paths.toolchain);
+    // project directory (an ancestor of React). Located from the verified
+    // canonical root (`paths` holds the spellings Node receives).
+    let addon = toolchain_addon(verified.root());
     std::fs::copy(&addon, react.join("evil.node")).unwrap();
     std::fs::copy(&addon, g.root.join("evil.node")).unwrap();
     let user_home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })

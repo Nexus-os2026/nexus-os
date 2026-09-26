@@ -361,9 +361,18 @@ fn p0_002c4d1b_react_and_runtime_replacement_deny_governed_use() {
     f.authority
         .write_file(&id, "x.ts", b"governed", f.audit())
         .unwrap();
-    // Runtime replacement is detected by its retained identity.
+    // Runtime replacement is detected by its retained identity. P0-002C4C3
+    // retains each runtime child as well: native Windows then refuses to
+    // rename runtime/ itself, so the children are moved out first.
     let runtime = root.join(RUNTIME);
-    std::fs::rename(&runtime, root.join("runtime-original")).unwrap();
+    let original = root.join("runtime-original");
+    if cfg!(windows) {
+        assert!(std::fs::rename(&runtime, &original).is_err());
+    }
+    for child in RUNTIME_CHILDREN {
+        std::fs::rename(runtime.join(child), root.join(format!("runtime-{child}"))).unwrap();
+    }
+    std::fs::rename(&runtime, &original).unwrap();
     std::fs::create_dir(&runtime).unwrap();
     let registration = project(&f, &id);
     assert_eq!(

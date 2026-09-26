@@ -1,3 +1,4 @@
+use super::workspace_provisioning::RUNTIME_CHILDREN;
 use super::*;
 use nexus_kernel::workspace_authority::WorkspaceAuthorityError;
 use std::sync::Mutex;
@@ -1163,18 +1164,34 @@ fn p0_002c3_audit_reentry_and_final_checks_close_callback_mutation_window() {
                     "project" => {
                         // Keep the same React directory/witness, while replacing
                         // only its project ancestor. Moving the observed children
-                        // (React and the retained runtime) first also permits
-                        // this namespace change on Windows.
+                        // (React, then each retained runtime child and the
+                        // runtime itself; P0-002C4C3 retains the children, and
+                        // native Windows refuses to rename a directory above a
+                        // retained handle) first also permits this namespace
+                        // change on Windows.
                         let detached_react = callback_root.with_extension("react");
                         let runtime = callback_root.join("runtime");
                         let detached_runtime = callback_root.with_extension("runtime");
+                        let children: Vec<(PathBuf, PathBuf)> = RUNTIME_CHILDREN
+                            .iter()
+                            .map(|child| {
+                                let detached = format!("runtime-{child}");
+                                (runtime.join(child), callback_root.with_extension(detached))
+                            })
+                            .collect();
                         std::fs::rename(&react, &detached_react).unwrap();
+                        for (child, detached) in &children {
+                            std::fs::rename(child, detached).unwrap();
+                        }
                         std::fs::rename(&runtime, &detached_runtime).unwrap();
                         std::fs::rename(&callback_root, callback_root.with_extension("old"))
                             .unwrap();
                         std::fs::create_dir(&callback_root).unwrap();
                         std::fs::rename(&detached_react, &react).unwrap();
                         std::fs::rename(&detached_runtime, &runtime).unwrap();
+                        for (child, detached) in &children {
+                            std::fs::rename(detached, child).unwrap();
+                        }
                     }
                     "react" => {
                         std::fs::rename(&react, callback_root.join("old-react")).unwrap();
