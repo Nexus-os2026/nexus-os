@@ -9,13 +9,16 @@ pub mod file_read;
 pub mod file_write;
 pub mod git;
 pub mod glob;
+mod path_policy;
 pub mod project_index;
 pub mod screen_analyze;
 pub mod screen_capture;
 pub mod screen_interact;
 pub mod search;
+mod search_policy;
 pub mod sub_agent_tool;
 pub mod test_runner;
+mod traversal;
 pub mod web_fetch;
 
 use async_trait::async_trait;
@@ -32,6 +35,9 @@ pub struct ToolResult {
     /// Wall-clock execution duration in milliseconds.
     #[serde(default)]
     pub duration_ms: u64,
+    // Preserve the security category in-process without changing the wire result.
+    #[serde(skip)]
+    filesystem_denial: Option<(String, String)>,
 }
 
 impl ToolResult {
@@ -40,6 +46,7 @@ impl ToolResult {
             success: true,
             output: output.into(),
             duration_ms: 0,
+            filesystem_denial: None,
         }
     }
 
@@ -48,6 +55,7 @@ impl ToolResult {
             success: false,
             output: message.into(),
             duration_ms: 0,
+            filesystem_denial: None,
         }
     }
 
@@ -59,6 +67,23 @@ impl ToolResult {
 
     pub fn is_success(&self) -> bool {
         self.success
+    }
+
+    pub fn from_path_error(error: crate::error::NxError) -> Self {
+        let mut result = Self::error(error.to_string());
+        if let crate::error::NxError::CapabilityDenied { capability, reason } = error {
+            result.filesystem_denial = Some((capability, reason));
+        }
+        result
+    }
+
+    pub fn filesystem_error(&self) -> Option<crate::error::NxError> {
+        self.filesystem_denial.as_ref().map(|(capability, reason)| {
+            crate::error::NxError::CapabilityDenied {
+                capability: capability.clone(),
+                reason: reason.clone(),
+            }
+        })
     }
 
     /// Short summary for audit log (truncated to 200 chars).
@@ -78,7 +103,9 @@ impl ToolResult {
 /// Execution context passed to every tool. Immutable during execution.
 #[derive(Debug, Clone)]
 pub struct ToolContext {
-    /// Working directory for the session (absolute path).
+    /// Mandatory absolute project root supplied by the session's application state.
+    /// An empty/relative/invalid root grants no filesystem authority. Desktop/CLI
+    /// currently supply process cwd as a compatibility root, not per-agent authority.
     pub working_dir: std::path::PathBuf,
     /// Paths the agent cannot touch (from NEXUSCODE.md blocked_paths).
     pub blocked_paths: Vec<String>,
@@ -89,72 +116,83 @@ pub struct ToolContext {
 }
 
 impl ToolContext {
-    /// Check if a path is allowed by the configuration.
-    /// Returns Err(NxError::CapabilityDenied) if the path is blocked.
-    ///
-    /// SECURITY: This resolves symlinks before checking. A symlink to
-    /// /etc/passwd inside the allowed scope will be caught because
-    /// the resolved target is outside the scope.
-    pub fn check_path_allowed(&self, path: &std::path::Path) -> Result<(), crate::error::NxError> {
-        // Resolve symlinks for security — the canonical path is what we check.
-        // If the path doesn't exist yet (file_write), check the parent directory
-        // and the path itself as-is.
-        let check_path = if path.exists() {
-            path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
-        } else {
-            // For new files, resolve the parent and append the filename
-            if let Some(parent) = path.parent() {
-                if parent.exists() {
-                    let canonical_parent = parent
-                        .canonicalize()
-                        .unwrap_or_else(|_| parent.to_path_buf());
-                    if let Some(filename) = path.file_name() {
-                        canonical_parent.join(filename)
-                    } else {
-                        path.to_path_buf()
-                    }
-                } else {
-                    path.to_path_buf()
-                }
-            } else {
-                path.to_path_buf()
-            }
-        };
+    pub fn workspace_root(&self) -> Result<std::path::PathBuf, crate::error::NxError> {
+        if !self.working_dir.is_absolute() {
+            return Err(Self::workspace_denied(
+                "an absolute workspace root is required",
+            ));
+        }
+        let root = self
+            .working_dir
+            .canonicalize()
+            .map_err(|_| Self::workspace_denied("workspace root is unavailable"))?;
+        if !root.is_dir() {
+            return Err(Self::workspace_denied("workspace root must be a directory"));
+        }
+        Ok(root)
+    }
 
-        let path_str = check_path.to_string_lossy();
+    pub(crate) fn workspace_denied(reason: &str) -> crate::error::NxError {
+        crate::error::NxError::CapabilityDenied {
+            capability: "path.workspace".into(),
+            reason: reason.into(),
+        }
+    }
+
+    /// Resolve and validate before use. Optional globs may only narrow this root.
+    /// Reuses P0-002A; concurrent namespace replacement/hard links remain outside
+    /// this path-validation boundary.
+    pub fn resolve_workspace_path(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<std::path::PathBuf, crate::error::NxError> {
+        let resolved = self.resolve_contained_path(path)?;
+        let root = self.workspace_root()?;
 
         // Check blocked paths
         for blocked in &self.blocked_paths {
-            if glob_match::glob_match(blocked, &path_str) {
+            if path_policy::matches(blocked, &resolved, &self.working_dir, &root) {
                 return Err(crate::error::NxError::CapabilityDenied {
                     capability: "path.access".to_string(),
-                    reason: format!("Path '{}' is in blocked_paths", path_str),
+                    reason: "Path is in blocked_paths".into(),
                 });
             }
         }
 
         // Check max_file_scope if set
         if let Some(ref scope) = self.max_file_scope {
-            if !glob_match::glob_match(scope, &path_str) {
+            if !path_policy::matches(scope, &resolved, &self.working_dir, &root) {
                 return Err(crate::error::NxError::CapabilityDenied {
                     capability: "path.scope".to_string(),
-                    reason: format!("Path '{}' is outside max_file_scope '{}'", path_str, scope),
+                    reason: "Path is outside max_file_scope".into(),
                 });
             }
         }
 
-        Ok(())
+        Ok(resolved)
     }
 
-    /// Resolve a potentially relative path against the working directory.
-    /// Returns the absolute path (not canonicalized — use check_path_allowed for security).
-    pub fn resolve_path(&self, path: &str) -> std::path::PathBuf {
-        let p = std::path::Path::new(path);
-        if p.is_absolute() {
-            p.to_path_buf()
-        } else {
-            self.working_dir.join(p)
-        }
+    // For bounded enumeration and project-policy discovery only. Ordinary
+    // operations must still pass resolve_workspace_path after privacy filtering.
+    pub(super) fn resolve_contained_path(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<std::path::PathBuf, crate::error::NxError> {
+        let root = self.workspace_root()?;
+        nexus_kernel::workspace::resolve_path(&root, path).map_err(|e| match e {
+            nexus_kernel::errors::AgentError::CapabilityDenied(_) => Self::workspace_denied(
+                "filesystem path is outside the workspace or unsafe to resolve",
+            ),
+            _ => crate::error::NxError::Io(std::io::Error::other(e.to_string())),
+        })
+    }
+
+    pub fn check_path_allowed(&self, path: &std::path::Path) -> Result<(), crate::error::NxError> {
+        self.resolve_workspace_path(path).map(|_| ())
+    }
+
+    pub fn resolve_path(&self, path: &str) -> Result<std::path::PathBuf, crate::error::NxError> {
+        self.resolve_workspace_path(std::path::Path::new(path))
     }
 }
 
@@ -485,6 +523,9 @@ pub async fn execute_governed(
     );
     kernel.fuel.release_reservation(fuel_estimate);
 
+    if let Some(error) = result.filesystem_error() {
+        return Err(error);
+    }
     Ok(result)
 }
 
@@ -572,6 +613,9 @@ pub async fn execute_governed_instrumented(
     timing.total_us = total_start.elapsed().as_micros() as u64;
     timing.total_governance_overhead_us = timing.total_us.saturating_sub(timing.tool_execution_us);
 
+    if let Some(error) = result.filesystem_error() {
+        return Err(error);
+    }
     Ok((result, timing))
 }
 
@@ -631,5 +675,8 @@ pub async fn execute_after_consent(
     );
     kernel.fuel.release_reservation(fuel_estimate);
 
+    if let Some(error) = result.filesystem_error() {
+        return Err(error);
+    }
     Ok(result)
 }

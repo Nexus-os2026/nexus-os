@@ -1,3 +1,4 @@
+import * as eventMod from "@tauri-apps/api/event";
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import RequiresLlm from "../components/RequiresLlm";
 import { Clock, Lock, Pin, MapPin, StickyNote, Trash2, Mic, MicOff, ClipboardList, Image, Zap, Hexagon, Play, Pause, Square, X, AlertTriangle, Check, FolderOpen, ChevronUp, ChevronDown, RefreshCw, Paperclip } from "lucide-react";
@@ -668,7 +669,6 @@ export default function AiChatHub() {
     let unlisten: (() => void) | undefined;
     (async () => {
       try {
-        const eventMod = await import("@tauri-apps/api/event");
         unlisten = await eventMod.listen("model-downloaded", () => {
           loadModels();
           logAudit("New model downloaded — refreshing model list");
@@ -713,7 +713,6 @@ export default function AiChatHub() {
     let unlisten: (() => void) | undefined;
     (async () => {
       try {
-        const eventMod = await import("@tauri-apps/api/event");
         unlisten = await eventMod.listen<ConsentNotification>("consent-request-pending", (event) => {
           const notification = event.payload;
           setConversations(prev => {
@@ -760,7 +759,6 @@ export default function AiChatHub() {
     let unlisten: (() => void) | undefined;
     (async () => {
       try {
-        const eventMod = await import("@tauri-apps/api/event");
         unlisten = await eventMod.listen<{ consent_id: string; status: string }>(
           "consent-resolved",
           (event) => {
@@ -778,7 +776,6 @@ export default function AiChatHub() {
     let unlisten: (() => void) | undefined;
     (async () => {
       try {
-        const eventMod = await import("@tauri-apps/api/event");
         unlisten = await eventMod.listen<{ agent_id: string; old_score: number; new_score: number }>(
           "agent-evolved",
           (event) => {
@@ -929,8 +926,6 @@ export default function AiChatHub() {
 
     (async () => {
       try {
-        const eventMod = await import("@tauri-apps/api/event");
-
         unlistenPlan = await eventMod.listen<ConductorPlanEvent>("conductor:plan", (event) => {
           const plan = event.payload;
           const taskList = plan.tasks.map(t => t.description).join(", ");
@@ -1222,7 +1217,6 @@ export default function AiChatHub() {
         updateAgentMsg({ agentActivity: [], agentStatus: "running", agent: agentName });
 
         try {
-          const eventMod = await import("@tauri-apps/api/event");
           const agentId = selectedAgent.agent_id;
 
           const unlistenCycle = await eventMod.listen<{
@@ -1335,7 +1329,6 @@ export default function AiChatHub() {
       if (isOllamaModel) {
         let unlisten: (() => void) | undefined;
         try {
-          const eventMod = await import("@tauri-apps/api/event");
           unlisten = await eventMod.listen<ChatTokenEvent>("chat-token", (event) => {
             const { full, done } = event.payload;
             if (event.payload.error) {

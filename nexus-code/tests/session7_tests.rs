@@ -252,7 +252,7 @@ fn test_build_tree() {
     std::fs::write(dir.path().join("src/main.rs"), "fn main(){}").unwrap();
     std::fs::write(dir.path().join("README.md"), "# Hello").unwrap();
 
-    let tree = build_tree(dir.path(), 2, 0);
+    let tree = build_tree(&test_ctx(dir.path()), dir.path(), 2, 0).unwrap();
     assert!(tree.contains("src/"));
     assert!(tree.contains("README.md"));
 }
@@ -265,7 +265,7 @@ fn test_count_file_types() {
     std::fs::write(dir.path().join("c.txt"), "").unwrap();
     std::fs::write(dir.path().join("d.md"), "").unwrap();
 
-    let counts = count_file_types(dir.path());
+    let counts = count_file_types(&test_ctx(dir.path()), dir.path()).unwrap();
     let rs_count = counts.iter().find(|(ext, _)| ext == "rs").map(|(_, c)| *c);
     assert_eq!(rs_count, Some(2));
 }
@@ -279,7 +279,7 @@ fn test_extract_rust_definitions() {
     )
     .unwrap();
 
-    let defs = extract_definitions(dir.path());
+    let defs = extract_definitions(&test_ctx(dir.path()), dir.path()).unwrap();
     assert_eq!(defs.len(), 3); // pub fn, pub struct, pub enum (not private fn)
 }
 
@@ -290,7 +290,7 @@ fn test_ignores_hidden_dirs() {
     std::fs::write(dir.path().join(".git/config"), "").unwrap();
     std::fs::write(dir.path().join("visible.rs"), "").unwrap();
 
-    let tree = build_tree(dir.path(), 2, 0);
+    let tree = build_tree(&test_ctx(dir.path()), dir.path(), 2, 0).unwrap();
     assert!(!tree.contains(".git"));
     assert!(tree.contains("visible.rs"));
 }

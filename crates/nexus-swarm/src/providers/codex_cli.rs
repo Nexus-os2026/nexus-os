@@ -224,8 +224,43 @@ mod tests {
 
     #[tokio::test]
     async fn invoke_via_mock_script_round_trips() {
-        // Use `/bin/cat` as a trivial mock — it echoes stdin to stdout.
-        let p = CodexCliProvider::with_mock("/bin/cat".into(), vec![]);
+        // Native test-only stdin/stdout fixture; no Unix executable assumption
+        // and no libtest harness output contaminating the provider response.
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("echo.rs");
+        let executable = dir
+            .path()
+            .join(format!("echo{}", std::env::consts::EXE_SUFFIX));
+        std::fs::write(
+            &source,
+            r#"
+use std::{io, sync::mpsc, thread, time::Duration};
+fn main() {
+    let (send, receive) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let result = io::copy(&mut io::stdin().lock(), &mut io::stdout().lock());
+        let _ = send.send(result);
+    });
+    match receive.recv_timeout(Duration::from_secs(10)) {
+        Ok(Ok(_)) => {},
+        _ => std::process::exit(124),
+    }
+}
+"#,
+        )
+        .unwrap();
+        let compiler = std::process::Command::new("rustc")
+            .arg(&source)
+            .arg("-o")
+            .arg(&executable)
+            .output()
+            .unwrap();
+        assert!(
+            compiler.status.success(),
+            "{}",
+            String::from_utf8_lossy(&compiler.stderr)
+        );
+        let p = CodexCliProvider::with_mock(executable.to_string_lossy().into_owned(), vec![]);
         let resp = p
             .invoke(InvokeRequest {
                 model_id: CODEX_MODEL.into(),

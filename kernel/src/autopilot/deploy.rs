@@ -156,7 +156,7 @@ impl LiveDeployer {
             DeployPlatform::Railway => Ok(vec![
                 "railway login".into(),
                 "railway init".into(),
-                format!("railway up --detach"),
+                "railway up --detach".to_string(),
             ]),
             DeployPlatform::Render => Ok(vec![
                 "render login".into(),

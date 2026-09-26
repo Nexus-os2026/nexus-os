@@ -78,6 +78,12 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 urlencoding = "2"
 open = "5"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "=1.1.4", features = ["fs"] }
+
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 tauri = { version = "2.5.5", optional = true, default-features = false, features = ["tray-icon", "wry"] }
 tauri-plugin-global-shortcut = "2.3.1"
@@ -88,3 +94,5 @@ tauri-plugin-global-shortcut = "2.3.1"
 
 [build-dependencies]
 tauri-build = { version = "2.5.5" }
+# P0-002C4D2: the build script hashes the packaged Builder toolchain.
+sha2 = "0.10"

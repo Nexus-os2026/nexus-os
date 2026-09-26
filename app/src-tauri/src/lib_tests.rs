@@ -31,6 +31,50 @@ use serde_json::json;
 use std::{sync::Arc, thread, time::Duration};
 use uuid::Uuid;
 
+#[test]
+fn p0_002c1_appstate_owns_empty_shared_authority_registry() {
+    use nexus_kernel::manifest::FsPermissionLevel;
+    use nexus_kernel::workspace_authority::{
+        WorkspaceAuthorityError, WorkspaceAuthoritySource, WorkspaceBinding, WorkspaceGrantId,
+    };
+
+    let state = AppState::new_in_memory();
+    let cloned = state.clone();
+    assert!(Arc::ptr_eq(
+        &state.workspace_authority,
+        &cloned.workspace_authority
+    ));
+    let owner = WorkspaceBinding {
+        agent_id: Uuid::new_v4(),
+        run_id: Uuid::new_v4(),
+    };
+    let unknown: WorkspaceGrantId = serde_json::from_value(json!(Uuid::new_v4())).unwrap();
+    assert_eq!(
+        state
+            .workspace_authority
+            .resolve(unknown, owner)
+            .unwrap_err(),
+        WorkspaceAuthorityError::UnknownGrant
+    );
+    let id = state
+        .workspace_authority
+        .issue_trusted_root(
+            &std::env::temp_dir(),
+            owner,
+            WorkspaceAuthoritySource::BackendAllocated,
+            FsPermissionLevel::ReadOnly,
+            None,
+        )
+        .unwrap();
+    assert!(cloned.workspace_authority.resolve(id, owner).is_ok());
+    cloned.workspace_authority.revoke(id, owner).unwrap();
+    assert_eq!(
+        state.workspace_authority.resolve(id, owner).unwrap_err(),
+        WorkspaceAuthorityError::RevokedGrant
+    );
+    state.shutdown_oracle_runtime();
+}
+
 fn build_manifest(name: &str) -> String {
     json!({
         "name": name,
@@ -3172,4 +3216,136 @@ fn test_set_default_messaging_agent() {
     let state = AppState::new_in_memory();
     let result = set_default_agent(&state, "user-1".into(), "agent-abc".into());
     assert!(result.is_ok());
+}
+
+// ── P0-002C4D0: legacy Builder static build is closed ─────────────────────
+
+// Returns one function (signature through its matching closing brace) with
+// comments removed. CRLF is normalized first and braces are matched by depth,
+// skipping comments and string literals, so the result is identical on LF and
+// CRLF checkouts.
+fn p0_002c4d0_function(source: &str, signature: &str) -> String {
+    let source = source.replace("\r\n", "\n");
+    let start = source.find(signature).expect("function signature");
+    let chars: Vec<char> = source[start..].chars().collect();
+    let (mut out, mut depth, mut i) = (String::new(), 0usize, 0usize);
+    while i < chars.len() {
+        let c = chars[i];
+        let next = chars.get(i + 1).copied();
+        if c == '/' && next == Some('/') {
+            while i < chars.len() && chars[i] != '\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if c == '/' && next == Some('*') {
+            i += 2;
+            while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                i += 1;
+            }
+            i += 2;
+            continue;
+        }
+        out.push(c);
+        i += 1;
+        match c {
+            '"' => {
+                while i < chars.len() && chars[i] != '"' {
+                    if chars[i] == '\\' {
+                        out.push(chars[i]);
+                        i += 1;
+                    }
+                    out.push(chars[i]);
+                    i += 1;
+                }
+                out.push('"');
+                i += 1;
+            }
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return out;
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("unbalanced function: {signature}");
+}
+
+#[test]
+fn p0_002c4d0_function_extraction_is_line_ending_agnostic() {
+    let lf = "fn before() {}\nfn target(x: u8) -> u8 {\n    // a { comment\n    \
+              let s = \"}\\\"{\";\n    /* } */ if x > 0 { 1 } else { 0 }\n}\nfn after() {}\n";
+    let crlf = lf.replace('\n', "\r\n");
+    assert!(crlf.contains("\r\n}\r\n"));
+    let extracted = p0_002c4d0_function(lf, "fn target(");
+    assert_eq!(p0_002c4d0_function(&crlf, "fn target("), extracted);
+    assert!(extracted.starts_with("fn target(x: u8) -> u8 {"));
+    assert!(extracted.ends_with("{ 1 } else { 0 }\n}"));
+    assert!(!extracted.contains("comment") && !extracted.contains("fn after"));
+    assert!(extracted.contains("let s = \"}\\\"{\";"));
+}
+
+// Security invariant guard: the production `builder_build_static` command is a
+// direct bounded denial. It cannot derive a path from HOME or `project_id`,
+// touch the filesystem, or launch npm/npx/Node/Vite or any other process.
+#[test]
+fn p0_002c4d0_builder_build_static_always_denies_without_path_or_process() {
+    let lib = include_str!("lib.rs");
+    let command = p0_002c4d0_function(lib, "fn builder_build_static(");
+    let body = &command[command.find('{').unwrap()..];
+    let compact = |text: &str| text.split_whitespace().collect::<String>();
+    assert_eq!(
+        compact(body),
+        compact(r#"{ Err("Builder static build: build unavailable".into()) }"#),
+        "{command}"
+    );
+    assert!(!body.contains("project_id"), "project_id is not authority");
+    for forbidden in [
+        "std::env",
+        "env::",
+        "HOME",
+        "USERPROFILE",
+        "\".\"",
+        ".nexus",
+        "builds",
+        "Path",
+        "exists",
+        "package.json",
+        "node_modules",
+        "dist",
+        "fs::",
+        "join(",
+        "Command",
+        "process",
+        "spawn",
+        "npm",
+        "npx",
+        "node",
+        "vite",
+        "sh",
+        "cmd",
+        "exec",
+        "Grant",
+        "grant",
+        "pid",
+        "port",
+    ] {
+        assert!(!command.contains(forbidden), "{forbidden} in:\n{command}");
+    }
+    // Still registered, so callers get the explicit denial; defined only once.
+    let code = p0_002c4d0_code_only(lib);
+    assert_eq!(code.matches("fn builder_build_static(").count(), 1);
+    assert_eq!(code.matches("builder_build_static,").count(), 1);
+}
+
+fn p0_002c4d0_code_only(source: &str) -> String {
+    source
+        .replace("\r\n", "\n")
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
