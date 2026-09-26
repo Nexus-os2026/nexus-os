@@ -145,6 +145,8 @@ pub(crate) fn update_agent_permission(
         eprintln!("persistence: revoke_permission failed: {e}");
     }
 
+    // Keep mutation and persistence serialized, but never overlap supervisor and audit.
+    drop(supervisor);
     state.log_event(
         parsed,
         EventType::UserAction,
@@ -219,6 +221,8 @@ pub(crate) fn bulk_update_permissions(
         }
     }
 
+    // Logging uses only owned command inputs; no supervisor guard is needed.
+    drop(supervisor);
     state.log_event(
         parsed,
         EventType::UserAction,
@@ -473,11 +477,9 @@ pub(crate) fn get_protocols_status(state: &AppState) -> Result<ProtocolsStatusRo
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-    let audit = match state.audit.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
     let agent_count = supervisor.health_check().len() as u32;
+    drop(supervisor);
+    let audit = state.audit_snapshot();
 
     Ok(ProtocolsStatusRow {
         a2a_status: "stopped".to_string(),

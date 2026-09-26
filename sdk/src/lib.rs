@@ -53,3 +53,4 @@ pub use nexus_kernel::manifest as kernel_manifest;
 pub use nexus_kernel::redaction;
 pub use nexus_kernel::resource_limiter;
 pub use nexus_kernel::supervisor;
+pub use nexus_kernel::workspace;

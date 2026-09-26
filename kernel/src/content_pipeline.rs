@@ -5,7 +5,7 @@
 //! The pipeline structure is fixed code; the LLM generates the actual content.
 
 use crate::actuators::{ActuatorContext, ActuatorRegistry};
-use crate::audit::{AuditTrail, EventType};
+use crate::audit::{AuditWriter, EventType};
 use crate::cognitive::loop_runtime::LlmQueryHandler;
 use crate::cognitive::types::PlannedAction;
 use chrono::Utc;
@@ -50,7 +50,7 @@ impl ContentPipeline {
     }
 
     /// Run the full 5-phase pipeline.
-    pub fn run(&self, context: &ActuatorContext, audit: &mut AuditTrail) -> PipelineResult {
+    pub fn run(&self, context: &ActuatorContext, audit: &mut dyn AuditWriter) -> PipelineResult {
         let mut phases = Vec::new();
         let mut total_fuel = 0.0;
 
@@ -135,7 +135,11 @@ impl ContentPipeline {
 
     // ── Phase 1: Trend Scanning ──
 
-    fn phase_trend_scan(&self, context: &ActuatorContext, audit: &mut AuditTrail) -> PhaseResult {
+    fn phase_trend_scan(
+        &self,
+        context: &ActuatorContext,
+        audit: &mut dyn AuditWriter,
+    ) -> PhaseResult {
         eprintln!("[content-pipeline] phase 1: trend scanning");
         let mut output_parts = Vec::new();
         let mut fuel = 0.0;
@@ -193,7 +197,7 @@ impl ContentPipeline {
         &self,
         topic: &str,
         context: &ActuatorContext,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
     ) -> PhaseResult {
         eprintln!("[content-pipeline] phase 2: researching '{topic}'");
         let mut research_notes = Vec::new();
@@ -282,7 +286,7 @@ impl ContentPipeline {
         topic: &str,
         research: &str,
         _context: &ActuatorContext,
-        _audit: &mut AuditTrail,
+        _audit: &mut dyn AuditWriter,
     ) -> PhaseResult {
         eprintln!("[content-pipeline] phase 3: writing article on '{topic}'");
         let fuel = 10.0; // LLM query
@@ -336,7 +340,7 @@ impl ContentPipeline {
         article_md: &str,
         topic: &str,
         context: &ActuatorContext,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
     ) -> PhaseResult {
         eprintln!("[content-pipeline] phase 4: publishing '{title}'");
         let mut fuel = 0.0;
@@ -440,7 +444,7 @@ impl ContentPipeline {
         word_count: usize,
         sources: &[String],
         _context: &ActuatorContext,
-        audit: &mut AuditTrail,
+        audit: &mut dyn AuditWriter,
     ) -> PhaseResult {
         eprintln!("[content-pipeline] phase 5: analytics for '{title}'");
 

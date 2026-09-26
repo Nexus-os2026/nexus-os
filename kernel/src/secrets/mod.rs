@@ -215,6 +215,8 @@ impl SecretsFacade {
     /// must NEVER block credential resolution (mirror of
     /// Bug AL's record_swarm_audit defensive policy; Bug
     /// BE will surface a counter for these in observability).
+    // Callers must not already hold the shared audit mutex. Secrets operations
+    // append synchronously, including when invoked during provider construction.
     fn append_audit(
         audit: &Mutex<crate::audit::AuditTrail>,
         ctx: &SecretAuditCtx,

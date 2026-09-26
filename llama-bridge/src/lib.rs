@@ -68,24 +68,20 @@ pub fn cleanup() {
 /// Detect hardware capabilities for inference planning.
 pub fn detect_hardware() -> HardwareInfo {
     let total_ram_mb = {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
         {
-            // Read from /proc/meminfo
-            std::fs::read_to_string("/proc/meminfo")
-                .ok()
-                .and_then(|s| {
-                    s.lines()
-                        .find(|l| l.starts_with("MemTotal:"))
-                        .and_then(|l| {
-                            l.split_whitespace()
-                                .nth(1)
-                                .and_then(|v| v.parse::<u64>().ok())
-                        })
-                })
-                .map(|kb| kb / 1024)
-                .unwrap_or(0)
+            let mut system = sysinfo::System::new();
+            system.refresh_memory_specifics(sysinfo::MemoryRefreshKind::new().with_ram());
+            let total_bytes = system.total_memory();
+            total_ram_mib_from_bytes(total_bytes).unwrap_or_else(|| {
+                tracing::warn!(
+                    total_bytes,
+                    "Total system RAM detection returned less than 1 MiB; reporting 0 (unavailable)"
+                );
+                0
+            })
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
         {
             0u64
         }
@@ -104,6 +100,12 @@ pub fn detect_hardware() -> HardwareInfo {
         has_cuda: false, // would need runtime detection
         ssd_detected: detect_ssd(),
     }
+}
+
+#[cfg(any(test, target_os = "linux", target_os = "windows", target_os = "macos"))]
+fn total_ram_mib_from_bytes(total_bytes: u64) -> Option<u64> {
+    let total_mib = total_bytes / 1_048_576;
+    (total_mib > 0).then_some(total_mib)
 }
 
 /// Hint the OS to start reading a file into the page cache.
@@ -144,5 +146,46 @@ fn detect_ssd() -> bool {
     #[cfg(not(target_os = "linux"))]
     {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::total_ram_mib_from_bytes;
+
+    #[test]
+    fn total_ram_zero_bytes_is_unavailable() {
+        assert_eq!(total_ram_mib_from_bytes(0), None);
+    }
+
+    #[test]
+    fn total_ram_sub_mib_is_unavailable() {
+        assert_eq!(total_ram_mib_from_bytes(1), None);
+        assert_eq!(total_ram_mib_from_bytes(1_048_575), None);
+    }
+
+    #[test]
+    fn total_ram_exactly_one_mib() {
+        assert_eq!(total_ram_mib_from_bytes(1_048_576), Some(1));
+    }
+
+    #[test]
+    fn total_ram_sixteen_gib() {
+        assert_eq!(total_ram_mib_from_bytes(17_179_869_184), Some(16_384));
+    }
+
+    #[test]
+    fn total_ram_fractional_mib_truncates_downward() {
+        assert_eq!(total_ram_mib_from_bytes(1_572_864), Some(1));
+    }
+
+    #[test]
+    fn total_ram_above_four_gib() {
+        assert_eq!(total_ram_mib_from_bytes(5_368_709_120), Some(5_120));
+    }
+
+    #[test]
+    fn total_ram_max_u64_preserves_large_mib_value() {
+        assert_eq!(total_ram_mib_from_bytes(u64::MAX), Some(17_592_186_044_415));
     }
 }

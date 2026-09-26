@@ -385,15 +385,13 @@ impl ScheduleRunner {
             super::trigger::FailurePolicy::Retry {
                 max_attempts,
                 backoff_seconds: _,
-            } => {
-                if entry.run_count >= *max_attempts as u64 {
-                    eprintln!(
-                        "[schedule-runner] '{}' exceeded max retry attempts ({}), disabling",
-                        entry.name, max_attempts
-                    );
-                    // Best-effort: retry exhaustion already logged; disable prevents further attempts
-                    let _ = self.store.disable(&entry.id);
-                }
+            } if entry.run_count >= *max_attempts as u64 => {
+                eprintln!(
+                    "[schedule-runner] '{}' exceeded max retry attempts ({}), disabling",
+                    entry.name, max_attempts
+                );
+                // Best-effort: retry exhaustion already logged; disable prevents further attempts
+                let _ = self.store.disable(&entry.id);
             }
             _ => {} // Ignore, Alert — already logged
         }

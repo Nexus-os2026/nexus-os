@@ -218,7 +218,14 @@ impl SwarmAgentEntry for CoderEntry {
                 if filename.is_empty() || content.is_empty() {
                     continue;
                 }
-                let path = out_dir.join(filename);
+                let path =
+                    nexus_sdk::workspace::resolve_path(out_dir, std::path::Path::new(filename))
+                        .map_err(|error| match error {
+                            nexus_sdk::errors::AgentError::CapabilityDenied(reason) => {
+                                AgentError::InvalidInput(reason)
+                            }
+                            error => AgentError::Internal(error.to_string()),
+                        })?;
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| {
                         AgentError::Internal(format!("create dir for {filename}: {e}"))
@@ -423,6 +430,82 @@ mod tests {
             cancel,
             budget: Arc::new(Mutex::new(NodeBudget::new())),
         }
+    }
+
+    #[tokio::test]
+    async fn p0_002_artisan_denies_model_filename_escape() {
+        for absolute in [false, true] {
+            let temp = tempfile::TempDir::new().unwrap();
+            let output = temp.path().join("output");
+            let outside = temp.path().join("secret.txt");
+            std::fs::write(&outside, "outside evidence").unwrap();
+            let filename = if absolute {
+                outside.to_str().unwrap().to_string()
+            } else {
+                "../secret.txt".to_string()
+            };
+            let mut ctx = mk_ctx(Arc::new(RecordingEmitter::new()), CancelToken::new());
+            ctx.provider = Arc::new(FakeProvider {
+                text: format!("```text:{filename}\nreplacement\n```"),
+                ..FakeProvider::default()
+            });
+            let result = CoderEntry::new()
+                .execute(json!({"task": "write fixture", "output_dir": output}), &ctx)
+                .await;
+            assert_eq!(ctx.budget.lock().await.tokens_consumed, 12);
+            assert_eq!(
+                std::fs::read_to_string(&outside).unwrap(),
+                "outside evidence"
+            );
+            assert!(
+                matches!(result, Err(AgentError::InvalidInput(_))),
+                "{result:?}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn p0_002_artisan_denies_symlink_parent_escape() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let output = temp.path().join("output");
+        let outside = temp.path().join("outside");
+        std::fs::create_dir_all(&output).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, output.join("escape")).unwrap();
+        let mut ctx = mk_ctx(Arc::new(RecordingEmitter::new()), CancelToken::new());
+        ctx.provider = Arc::new(FakeProvider {
+            text: "```text:escape/new/deep/file.txt\nreplacement\n```".into(),
+            ..FakeProvider::default()
+        });
+        let result = CoderEntry::new()
+            .execute(json!({"task": "write fixture", "output_dir": output}), &ctx)
+            .await;
+        assert_eq!(ctx.budget.lock().await.tokens_consumed, 12);
+        assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 0);
+        assert!(
+            matches!(result, Err(AgentError::InvalidInput(_))),
+            "{result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn p0_002_artisan_writes_nested_file_inside_output() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let ctx = mk_ctx(Arc::new(RecordingEmitter::new()), CancelToken::new());
+        let result = CoderEntry::new()
+            .execute(
+                json!({"task": "write fixture", "output_dir": temp.path()}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let parsed: CoderOutput = serde_json::from_value(result).unwrap();
+        assert_eq!(parsed.files.len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("src/main.rs")).unwrap(),
+            parsed.files[0].content
+        );
     }
 
     #[tokio::test]

@@ -178,7 +178,7 @@ Additional capabilities must be granted via the REPL.
         println!("  {}", "Audit Trail".bold());
         println!("    Entries:    {}", audit.len());
         if let Some(last) = audit.entries().last() {
-            println!("    Last Hash:  {}", &last.entry_hash);
+            println!("    Last Hash:  {}", last.entry_hash);
             println!("    Last Sig:   {}...", &last.signature[..32]);
         }
         if audit.verify_chain().is_ok() {
