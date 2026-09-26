@@ -516,8 +516,10 @@ fn parse_entry_fields(
         .map_err(|e| MemoryError::PersistenceError(format!("parse content: {e}")))?;
 
     let embedding: Option<Vec<f32>> = embedding_blob.map(|blob| {
-        blob.chunks_exact(4)
-            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        let (chunks, _) = blob.as_chunks::<4>();
+        chunks
+            .iter()
+            .map(|chunk| f32::from_le_bytes(*chunk))
             .collect()
     });
 

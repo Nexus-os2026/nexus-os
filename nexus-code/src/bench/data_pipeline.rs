@@ -98,7 +98,7 @@ impl PaperDataPackage {
                 },
             })
             .collect();
-        tool_usage.sort_by(|a, b| b.usage_count.cmp(&a.usage_count));
+        tool_usage.sort_by_key(|a| std::cmp::Reverse(a.usage_count));
 
         let fuel_distribution: Vec<u64> = reports
             .iter()

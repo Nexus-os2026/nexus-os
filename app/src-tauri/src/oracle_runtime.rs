@@ -33,6 +33,7 @@ use nexus_crypto::{CryptoIdentity, SignatureAlgorithm};
 use nexus_governance_engine::{DecisionEngine, GovernanceRuleset, RulesetHandle};
 use nexus_governance_oracle::{GovernanceDecision, GovernanceOracle, OracleRequest};
 use serde::Serialize;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -126,7 +127,7 @@ impl std::fmt::Display for OracleRuntimeError {
         match self {
             Self::HomeDirMissing => write!(
                 f,
-                "cannot locate oracle identity: HOME environment variable is unset"
+                "cannot locate persistent identity: no valid absolute home directory could be resolved"
             ),
             Self::IdentityDirectoryCreate { path, source } => {
                 write!(f, "create identity directory {}: {source}", path.display())
@@ -192,7 +193,7 @@ pub enum IdentityMode {
 
 impl IdentityMode {
     /// Production resolution: honor `NEXUS_ORACLE_EPHEMERAL=1`, otherwise
-    /// use `$HOME/.nexus/oracle_identity.key`.
+    /// use [`default_identity_path`].
     pub fn from_env() -> Result<Self, OracleRuntimeError> {
         if std::env::var(EPHEMERAL_ENV).is_ok_and(|v| v == "1") {
             eprintln!(
@@ -206,16 +207,51 @@ impl IdentityMode {
 
 /// `$HOME/.nexus/oracle_identity.key`. Matches the convention used for
 /// `metering.db`, `swarm_routing.toml`, and other per-user state files.
+/// On Windows only, an absent HOME uses the native user profile instead.
 pub fn default_identity_path() -> Result<PathBuf, OracleRuntimeError> {
     default_identity_path_for("oracle_identity.key")
 }
 
 /// Generic resolver for `$HOME/.nexus/<file_name>`. Bug O reuses this so
 /// the swarm caller identity lives next to the oracle identity in the
-/// same convention. Additive helper; not behavior change.
+/// same convention. HOME must be nonempty and absolute when present;
+/// only an absent HOME on Windows may use the native user profile.
 pub fn default_identity_path_for(file_name: &str) -> Result<PathBuf, OracleRuntimeError> {
-    let home = std::env::var("HOME").map_err(|_| OracleRuntimeError::HomeDirMissing)?;
-    Ok(PathBuf::from(home).join(".nexus").join(file_name))
+    let home = std::env::var_os("HOME");
+    #[cfg(windows)]
+    let native_windows_home = if home.is_none() {
+        dirs::home_dir()
+    } else {
+        None
+    };
+    #[cfg(not(windows))]
+    let native_windows_home = None;
+
+    let home = resolve_identity_home_from(home, native_windows_home, cfg!(windows))?;
+    Ok(identity_path_in(&home, file_name))
+}
+
+/// Select once, then validate. A malformed HOME must never select another root.
+fn resolve_identity_home_from(
+    home: Option<OsString>,
+    native_windows_home: Option<PathBuf>,
+    allow_windows_fallback: bool,
+) -> Result<PathBuf, OracleRuntimeError> {
+    let home = match home {
+        Some(home) => PathBuf::from(home),
+        None if allow_windows_fallback => {
+            native_windows_home.ok_or(OracleRuntimeError::HomeDirMissing)?
+        }
+        None => return Err(OracleRuntimeError::HomeDirMissing),
+    };
+    if home.as_os_str().is_empty() || !home.is_absolute() {
+        return Err(OracleRuntimeError::HomeDirMissing);
+    }
+    Ok(home)
+}
+
+fn identity_path_in(home: &Path, file_name: &str) -> PathBuf {
+    home.join(".nexus").join(file_name)
 }
 
 /// Detection result for the V1 file-format ladder. Internal to the load
@@ -709,5 +745,207 @@ impl OracleRuntime {
             "[shutdown] GovernanceOracle runtime stopped (total_processed={})",
             self.processed.load(Ordering::Relaxed)
         );
+    }
+}
+
+#[cfg(test)]
+mod identity_home_tests {
+    use super::{identity_path_in, resolve_identity_home_from, OracleRuntimeError};
+    use std::ffi::OsString;
+    use std::path::PathBuf;
+
+    // Platform-native absolute fixtures; these tests never access the filesystem
+    // or mutate HOME, and can exercise Windows fallback policy on any host.
+    fn absolute_home(name: &str) -> PathBuf {
+        let root = if cfg!(windows) {
+            PathBuf::from(r"C:\Users")
+        } else {
+            PathBuf::from("/home")
+        };
+        root.join(name)
+    }
+
+    #[test]
+    fn valid_absolute_home_is_retained_exactly() {
+        let home = absolute_home("configured").join("..").join("selected");
+        for allow_windows_fallback in [false, true] {
+            let selected = resolve_identity_home_from(
+                Some(home.clone().into_os_string()),
+                None,
+                allow_windows_fallback,
+            )
+            .unwrap();
+            assert_eq!(selected.as_os_str(), home.as_os_str());
+        }
+    }
+
+    #[test]
+    fn home_takes_precedence_over_native_fallback() {
+        let home = absolute_home("configured");
+        for allow_windows_fallback in [false, true] {
+            let selected = resolve_identity_home_from(
+                Some(home.clone().into_os_string()),
+                Some(absolute_home("native")),
+                allow_windows_fallback,
+            )
+            .unwrap();
+            assert_eq!(selected, home);
+        }
+    }
+
+    #[test]
+    fn empty_home_is_rejected_without_falling_through() {
+        for allow_windows_fallback in [false, true] {
+            assert!(matches!(
+                resolve_identity_home_from(
+                    Some(OsString::new()),
+                    Some(absolute_home("native")),
+                    allow_windows_fallback,
+                ),
+                Err(OracleRuntimeError::HomeDirMissing)
+            ));
+        }
+    }
+
+    #[test]
+    fn relative_home_is_rejected_without_falling_through() {
+        for home in ["relative", ".", ".."] {
+            for allow_windows_fallback in [false, true] {
+                assert!(matches!(
+                    resolve_identity_home_from(
+                        Some(OsString::from(home)),
+                        Some(absolute_home("native")),
+                        allow_windows_fallback,
+                    ),
+                    Err(OracleRuntimeError::HomeDirMissing)
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn absent_home_uses_valid_windows_fallback() {
+        let native = absolute_home("native");
+        assert_eq!(
+            resolve_identity_home_from(None, Some(native.clone()), true).unwrap(),
+            native
+        );
+    }
+
+    #[test]
+    fn absent_home_with_missing_windows_fallback_fails() {
+        assert!(matches!(
+            resolve_identity_home_from(None, None, true),
+            Err(OracleRuntimeError::HomeDirMissing)
+        ));
+    }
+
+    #[test]
+    fn absent_home_on_non_windows_rejects_native_fallback() {
+        assert!(matches!(
+            resolve_identity_home_from(None, Some(absolute_home("native")), false),
+            Err(OracleRuntimeError::HomeDirMissing)
+        ));
+    }
+
+    #[test]
+    fn invalid_windows_fallback_is_rejected() {
+        for native in [
+            PathBuf::new(),
+            PathBuf::from("relative"),
+            PathBuf::from("."),
+        ] {
+            assert!(matches!(
+                resolve_identity_home_from(None, Some(native), true),
+                Err(OracleRuntimeError::HomeDirMissing)
+            ));
+        }
+    }
+
+    #[test]
+    fn selected_home_appends_oracle_identity_path() {
+        let home = absolute_home("configured");
+        let selected =
+            resolve_identity_home_from(Some(home.clone().into_os_string()), None, false).unwrap();
+        assert_eq!(
+            identity_path_in(&selected, "oracle_identity.key"),
+            home.join(".nexus").join("oracle_identity.key")
+        );
+    }
+
+    #[test]
+    fn selected_windows_fallback_appends_swarm_caller_identity_path() {
+        let native = absolute_home("native");
+        let selected = resolve_identity_home_from(None, Some(native.clone()), true).unwrap();
+        assert_eq!(
+            identity_path_in(&selected, "swarm_caller_identity.key"),
+            native.join(".nexus").join("swarm_caller_identity.key")
+        );
+    }
+
+    #[test]
+    fn paths_with_spaces_are_preserved() {
+        let home = absolute_home("User With Spaces");
+        for candidate in [Some(home.clone().into_os_string()), None] {
+            let selected = resolve_identity_home_from(candidate, Some(home.clone()), true).unwrap();
+            assert_eq!(selected, home);
+            for filename in ["oracle_identity.key", "swarm_caller_identity.key"] {
+                assert_eq!(
+                    identity_path_in(&selected, filename),
+                    home.join(".nexus").join(filename)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn missing_roots_never_fall_back_to_cwd() {
+        for allow_windows_fallback in [false, true] {
+            assert!(matches!(
+                resolve_identity_home_from(None, None, allow_windows_fallback),
+                Err(OracleRuntimeError::HomeDirMissing)
+            ));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_unicode_home_is_preserved() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let home = OsString::from_vec(b"/home/user-\xff".to_vec());
+        let selected = resolve_identity_home_from(Some(home.clone()), None, false).unwrap();
+        assert_eq!(selected.as_os_str(), home.as_os_str());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn non_unicode_home_is_preserved() {
+        use std::os::windows::ffi::OsStringExt;
+
+        let mut wide: Vec<u16> = r"C:\Users\user-".encode_utf16().collect();
+        wide.push(0xd800); // An unpaired surrogate is a valid OS-native path component.
+        let home = OsString::from_wide(&wide);
+        let selected = resolve_identity_home_from(Some(home.clone()), None, true).unwrap();
+        assert_eq!(selected.as_os_str(), home.as_os_str());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_drive_relative_and_root_relative_homes_are_rejected() {
+        for home in [r"C:Users\configured", r"\Users\configured"] {
+            assert!(matches!(
+                resolve_identity_home_from(
+                    Some(OsString::from(home)),
+                    Some(absolute_home("native")),
+                    true,
+                ),
+                Err(OracleRuntimeError::HomeDirMissing)
+            ));
+            assert!(matches!(
+                resolve_identity_home_from(None, Some(PathBuf::from(home)), true),
+                Err(OracleRuntimeError::HomeDirMissing)
+            ));
+        }
     }
 }

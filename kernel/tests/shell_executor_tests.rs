@@ -1,6 +1,7 @@
 //! Shell executor integration tests — verify commands actually execute on this machine.
 //! These tests run REAL commands via the GovernedShell actuator to confirm:
-//! - PATH resolution works (sh -c finds /usr/bin/free, etc.)
+//! - Native basic commands work on every supported OS; Unix monitoring tools
+//!   are exercised only where their OS interfaces exist.
 //! - Output is captured correctly
 //! - Allowlist permits monitoring commands
 //! - Blocklist blocks dangerous commands
@@ -11,27 +12,30 @@ use nexus_kernel::autonomy::AutonomyLevel;
 use nexus_kernel::cognitive::PlannedAction;
 use std::collections::HashSet;
 
-fn make_exec_context() -> ActuatorContext {
+fn make_exec_context() -> (tempfile::TempDir, ActuatorContext) {
+    let workspace = tempfile::tempdir().unwrap();
     let mut caps = HashSet::new();
     caps.insert("process.exec".to_string());
     caps.insert("fs.read".to_string());
-    ActuatorContext {
+    let context = ActuatorContext {
         agent_id: "test-sysmon".into(),
         agent_name: "Test Sysmon".into(),
-        working_dir: std::env::temp_dir().join("nexus-test-agent"),
+        working_dir: workspace.path().to_path_buf(),
         autonomy_level: AutonomyLevel::L3,
         capabilities: caps,
         fuel_remaining: 1000.0,
         egress_allowlist: vec![],
         action_review_engine: None,
         hitl_approved: false,
-    }
+    };
+    (workspace, context)
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn test_sh_free_m_produces_real_output() {
     let registry = ActuatorRegistry::with_defaults();
-    let ctx = make_exec_context();
+    let (_workspace, ctx) = make_exec_context();
     let mut audit = AuditTrail::new();
 
     let action = PlannedAction::ShellCommand {
@@ -54,10 +58,11 @@ fn test_sh_free_m_produces_real_output() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn test_sh_df_h_produces_real_output() {
     let registry = ActuatorRegistry::with_defaults();
-    let ctx = make_exec_context();
+    let (_workspace, ctx) = make_exec_context();
     let mut audit = AuditTrail::new();
 
     let action = PlannedAction::ShellCommand {
@@ -79,10 +84,11 @@ fn test_sh_df_h_produces_real_output() {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn test_sh_cat_proc_loadavg() {
     let registry = ActuatorRegistry::with_defaults();
-    let ctx = make_exec_context();
+    let (_workspace, ctx) = make_exec_context();
     let mut audit = AuditTrail::new();
 
     let action = PlannedAction::ShellCommand {
@@ -105,10 +111,11 @@ fn test_sh_cat_proc_loadavg() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn test_sh_uptime() {
     let registry = ActuatorRegistry::with_defaults();
-    let ctx = make_exec_context();
+    let (_workspace, ctx) = make_exec_context();
     let mut audit = AuditTrail::new();
 
     let action = PlannedAction::ShellCommand {
@@ -133,7 +140,7 @@ fn test_sh_uptime() {
 #[test]
 fn test_sh_echo_hello() {
     let registry = ActuatorRegistry::with_defaults();
-    let ctx = make_exec_context();
+    let (_workspace, ctx) = make_exec_context();
     let mut audit = AuditTrail::new();
 
     let action = PlannedAction::ShellCommand {
@@ -155,10 +162,11 @@ fn test_sh_echo_hello() {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn test_sh_uname() {
     let registry = ActuatorRegistry::with_defaults();
-    let ctx = make_exec_context();
+    let (_workspace, ctx) = make_exec_context();
     let mut audit = AuditTrail::new();
 
     let action = PlannedAction::ShellCommand {
@@ -171,8 +179,12 @@ fn test_sh_uname() {
         Ok(r) => {
             assert!(r.success, "uname -a should succeed");
             assert!(
-                r.output.contains("Linux"),
-                "output should contain 'Linux': {}",
+                r.output.contains(if cfg!(target_os = "macos") {
+                    "Darwin"
+                } else {
+                    "Linux"
+                }),
+                "output should identify the current Unix platform: {}",
                 r.output
             );
         }
@@ -183,7 +195,7 @@ fn test_sh_uname() {
 #[test]
 fn test_blocked_rm_rejected() {
     let registry = ActuatorRegistry::with_defaults();
-    let ctx = make_exec_context();
+    let (_workspace, ctx) = make_exec_context();
     let mut audit = AuditTrail::new();
 
     let action = PlannedAction::ShellCommand {
@@ -198,7 +210,7 @@ fn test_blocked_rm_rejected() {
 #[test]
 fn test_blocked_sudo_rejected() {
     let registry = ActuatorRegistry::with_defaults();
-    let ctx = make_exec_context();
+    let (_workspace, ctx) = make_exec_context();
     let mut audit = AuditTrail::new();
 
     let action = PlannedAction::ShellCommand {
@@ -213,7 +225,7 @@ fn test_blocked_sudo_rejected() {
 #[test]
 fn test_unknown_command_rejected() {
     let registry = ActuatorRegistry::with_defaults();
-    let ctx = make_exec_context();
+    let (_workspace, ctx) = make_exec_context();
     let mut audit = AuditTrail::new();
 
     let action = PlannedAction::ShellCommand {

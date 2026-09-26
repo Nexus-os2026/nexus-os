@@ -49,11 +49,10 @@ impl NxTool for FileWriteTool {
             None => return ToolResult::error("Missing required parameter: content"),
         };
 
-        let path = ctx.resolve_path(path_str);
-
-        if let Err(e) = ctx.check_path_allowed(&path) {
-            return ToolResult::error(format!("{}", e));
-        }
+        let path = match ctx.resolve_path(path_str) {
+            Ok(path) => path,
+            Err(e) => return ToolResult::from_path_error(e),
+        };
 
         // Check if the file already exists (for reporting)
         let existed = path.exists();

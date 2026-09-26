@@ -163,11 +163,24 @@ run().catch((error) => {
         start_url: &str,
         actions: &[BrowserAction],
     ) -> Result<PathBuf, ActuatorError> {
-        let runner_path = screenshot_dir.join("playwright-runner.cjs");
+        // A contained directory does not make pre-existing child symlinks safe.
+        // Validate every output before writing the runner/spec or launching Node.
+        let runner_path =
+            GovernedFilesystem::resolve_safe_path(screenshot_dir, "playwright-runner.cjs")?;
+        let safe_spec_path =
+            GovernedFilesystem::resolve_safe_path(screenshot_dir, &spec_path.to_string_lossy())?;
+        for index in 0..actions.len() {
+            for phase in ["before", "after"] {
+                GovernedFilesystem::resolve_safe_path(
+                    screenshot_dir,
+                    &format!("{index:02}-{phase}.png"),
+                )?;
+            }
+        }
         std::fs::write(&runner_path, Self::runner_script())
             .map_err(|error| ActuatorError::IoError(format!("write browser runner: {error}")))?;
         std::fs::write(
-            spec_path,
+            safe_spec_path,
             serde_json::to_vec_pretty(&json!({
                 "start_url": start_url,
                 "actions": actions,
@@ -279,6 +292,41 @@ mod tests {
             egress_allowlist: vec!["https://example.com".into()],
             action_review_engine: None,
             hitl_approved: false,
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn p0_002_browser_output_children_cannot_escape() {
+        for filename in [
+            "playwright-runner.cjs",
+            "spec.json",
+            "00-before.png",
+            "00-after.png",
+        ] {
+            let temp = TempDir::new().unwrap();
+            let screenshots = temp.path().join("screenshots");
+            std::fs::create_dir(&screenshots).unwrap();
+            let outside = temp.path().join("outside.txt");
+            std::fs::write(&outside, "outside evidence").unwrap();
+            std::os::unix::fs::symlink(&outside, screenshots.join(filename)).unwrap();
+            let result = BrowserActuator::write_runner_files(
+                &screenshots.join("spec.json"),
+                &screenshots,
+                "https://example.com",
+                &[BrowserAction::ExtractText {
+                    selector: "body".into(),
+                }],
+            );
+            assert_eq!(
+                std::fs::read_to_string(&outside).unwrap(),
+                "outside evidence"
+            );
+            assert!(
+                matches!(result, Err(ActuatorError::PathTraversal(_))),
+                "{result:?}"
+            );
+            assert_eq!(std::fs::read_dir(&screenshots).unwrap().count(), 1);
         }
     }
 

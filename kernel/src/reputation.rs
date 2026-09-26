@@ -251,10 +251,10 @@ impl ReputationRegistry {
                 match existing {
                     ReputationBadge::Verified
                     | ReputationBadge::Pioneer
-                    | ReputationBadge::Specialist(_) => {
-                        if !badges.contains(existing) {
-                            badges.push(existing.clone());
-                        }
+                    | ReputationBadge::Specialist(_)
+                        if !badges.contains(existing) =>
+                    {
+                        badges.push(existing.clone());
                     }
                     _ => {}
                 }

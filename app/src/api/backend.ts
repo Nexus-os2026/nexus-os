@@ -4687,8 +4687,8 @@ export function builderAuthenticateCli(cli: "claude" | "codex"): Promise<void> {
 
 // ============ BUILDER PLAN ============
 
-export function builderGeneratePlan(prompt: string, projectId: string): Promise<any> {
-  return invokeDesktop<any>("builder_generate_plan", { prompt, projectId, project_id: projectId });
+export function builderGeneratePlan(prompt: string): Promise<any> {
+  return invokeDesktop<any>("builder_generate_plan", { prompt });
 }
 
 export function builderLoadPlan(projectId: string): Promise<any> {

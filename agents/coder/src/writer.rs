@@ -147,7 +147,8 @@ pub fn detect_style(project_map: &ProjectMap) -> Result<StyleProfile, AgentError
         if entry.language != Language::Rust {
             continue;
         }
-        let full_path = root.join(entry.path.as_str());
+        let full_path =
+            nexus_sdk::workspace::resolve_path(&root, std::path::Path::new(&entry.path))?;
         let Ok(content) = fs::read_to_string(full_path) else {
             continue;
         };

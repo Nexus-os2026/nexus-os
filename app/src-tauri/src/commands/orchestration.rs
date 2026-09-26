@@ -264,12 +264,11 @@ pub async fn run_content_pipeline(
         Arc::new(BridgeLlmQueryHandler);
 
     let pipeline = nexus_kernel::content_pipeline::ContentPipeline::new(llm_handler);
-    let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    let mut audit = state.audit.clone();
     let result = pipeline.run(&context, &mut audit);
 
     // Send notification if article was created
     if result.success {
-        drop(audit); // release the lock before emitting
         #[cfg(all(
             feature = "tauri-runtime",
             any(target_os = "windows", target_os = "macos", target_os = "linux")
