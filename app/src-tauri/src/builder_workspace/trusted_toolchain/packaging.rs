@@ -4,9 +4,12 @@
 //! It accepts only an assembled tree the runtime verifier would accept for
 //! the build target: regular files and directories (no links, reparse points,
 //! special files or empty directories) under the shared contract, containing
-//! the Nexus Node executable and entry, no npm, and native binaries only where
-//! expected and only for the target OS and architecture. The manifest is
-//! rendered from the exact bytes present.
+//! the Nexus Node executable and entry and no npm. Native binaries are
+//! accepted only as the exact packaged Node executable or as `.node` addons
+//! beneath `node_modules/`, each built for the target OS and architecture.
+//! Any other file recognized as a native binary (ELF, PE or Mach-O, thin or
+//! universal) is rejected at its path, whatever its architecture. The
+//! manifest is rendered from the exact bytes present.
 use super::contract::{node_executable, valid_listing, ENTRY_MODULE};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
@@ -158,9 +161,11 @@ fn digest(path: &Path, expected: u64) -> std::io::Result<(u64, [u8; 32])> {
     Ok((size, hasher.finalize().into()))
 }
 
-/// Target-specific closure rules: the Node executable and entry present, no
-/// npm, and every native binary (the Node executable and `.node` addons only)
-/// built for the target.
+/// Target-specific closure rules: the Node executable and entry present and
+/// no npm. The only native binaries are the exact packaged Node executable and
+/// `.node` addons beneath `node_modules/`, each built for the target (a `.node`
+/// addon that is not a target native addon is rejected). Any other recognized
+/// native binary is rejected at its path, whatever its architecture.
 pub(super) fn check_target(
     root: &Path,
     files: &[PackagedFile],
@@ -186,8 +191,13 @@ pub(super) fn check_target(
         let binary = Binary::classify(&header);
         let role = if file.path == target.node() {
             Role::Executable
-        } else if file.path.ends_with(".node") || binary != Binary::Other {
+        } else if file.path.starts_with("node_modules/") && file.path.ends_with(".node") {
             Role::Addon
+        } else if binary != Binary::Other {
+            return Err(format!(
+                "native binary at an unexpected path: {}",
+                file.path
+            ));
         } else {
             continue;
         };

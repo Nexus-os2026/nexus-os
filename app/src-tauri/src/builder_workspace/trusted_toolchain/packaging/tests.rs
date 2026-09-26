@@ -391,10 +391,6 @@ fn p0_002c4d2_wrong_platform_closure_is_rejected() {
             "{target:?} {path}: {error}"
         );
     }
-    // A stray native binary anywhere else is an addon and must match too.
-    let mut stray = closure(Target::LinuxX64Gnu);
-    stray.push(("node_modules/tool/bin/tool", elf(EM_X86_64, ET_EXEC)));
-    assert!(generation_error(Target::LinuxX64Gnu, &stray).contains("not built for the target"));
     // Universal addons containing the arm64 slice are accepted on macOS.
     let fat = replaced(
         Target::MacosArm64,
@@ -414,6 +410,103 @@ fn p0_002c4d2_wrong_platform_closure_is_rejected() {
             );
         }
     }
+}
+
+// Correctly targeted native binaries at paths that are neither the exact
+// packaged Node executable nor a `.node` addon beneath `node_modules/`.
+fn stray_natives(target: Target) -> Vec<(&'static str, Vec<u8>)> {
+    match target {
+        Target::LinuxX64Gnu => vec![
+            ("node_modules/tool/libevil.so", elf(EM_X86_64, ET_DYN)),
+            ("node_modules/tool/bin/tool", elf(EM_X86_64, ET_EXEC)),
+            ("node/node2", elf(EM_X86_64, ET_EXEC)),
+            ("entry/native.node", elf(EM_X86_64, ET_DYN)),
+            ("node_modules/tool/libold.so", {
+                let mut h = elf(EM_X86_64, ET_DYN);
+                h[4] = 1; // 32-bit: still a native binary
+                h
+            }),
+        ],
+        Target::WindowsX64Msvc => vec![
+            (
+                "node_modules/tool/evil.dll",
+                pe(IMAGE_FILE_MACHINE_AMD64, true),
+            ),
+            (
+                "node_modules/tool/tool.exe",
+                pe(IMAGE_FILE_MACHINE_AMD64, false),
+            ),
+            ("node/node", pe(IMAGE_FILE_MACHINE_AMD64, false)),
+            ("entry/native.node", pe(IMAGE_FILE_MACHINE_AMD64, true)),
+        ],
+        Target::MacosArm64 => vec![
+            (
+                "node_modules/tool/libevil.dylib",
+                macho(CPU_TYPE_ARM64, MH_DYLIB),
+            ),
+            (
+                "node_modules/tool/libuniversal.dylib",
+                universal(&[CPU_TYPE_X86_64, CPU_TYPE_ARM64]),
+            ),
+            (
+                "node_modules/tool/bin/tool",
+                macho(CPU_TYPE_ARM64, MH_EXECUTE),
+            ),
+            ("entry/native.node", macho(CPU_TYPE_ARM64, MH_BUNDLE)),
+        ],
+    }
+}
+
+#[test]
+fn p0_002c4d2_native_binaries_only_as_the_node_executable_or_node_modules_addons() {
+    // A matching architecture never makes an arbitrary native path trusted.
+    for target in TARGETS {
+        for (path, bytes) in stray_natives(target) {
+            let mut files = closure(target);
+            files.push((path, bytes));
+            let error = generation_error(target, &files);
+            assert_eq!(
+                error,
+                format!("native binary at an unexpected path: {path}"),
+                "{target:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn p0_002c4d2_node_executable_node_addons_and_ordinary_files_are_accepted() {
+    for target in TARGETS {
+        let addon = closure(target)
+            .into_iter()
+            .find(|(path, _)| *path == "node_modules/native/binding.node")
+            .unwrap()
+            .1;
+        let mut files = closure(target);
+        files.extend([
+            ("node_modules/a/node_modules/b/binding.node", addon),
+            (
+                "node_modules/tool/index.js",
+                b"module.exports = 1;\n".to_vec(),
+            ),
+            (
+                "node_modules/tool/style.css",
+                b"body { color: red; }\n".to_vec(),
+            ),
+            ("node_modules/tool/package.json", b"{}".to_vec()),
+            ("node_modules/tool/data.wasm", b"\0asm\x01\0\0\0".to_vec()),
+        ]);
+        let tree = Tree::new(&files);
+        let source = generate(&tree.root, target).expect("valid closure");
+        assert_eq!(source.matches("ManifestFile {").count(), files.len());
+    }
+    // A `.node` addon beneath node_modules must itself be a target addon.
+    let text = replaced(
+        Target::LinuxX64Gnu,
+        "node_modules/native/binding.node",
+        b"not a binary".to_vec(),
+    );
+    assert!(generation_error(Target::LinuxX64Gnu, &text).contains("not built for the target"));
 }
 
 #[test]
