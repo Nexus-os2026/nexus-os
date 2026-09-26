@@ -1775,9 +1775,12 @@ pub(crate) fn create_warden_consent_request(
         "fuel_cost": 0.0,
         "side_effects": [format_hitl_action_summary(action)],
         "warden_reason": reason,
+        // Warden runs inside the cycle's loop-state guard. Only goal identity
+        // is needed here; its published snapshot is synchronized with goal
+        // assignment/removal and can be read without re-entering loop-state.
         "goal_id": state
             .cognitive_runtime
-            .get_agent_status(agent_id)
+            .get_agent_status_fast(agent_id)
             .and_then(|status| status.active_goal.map(|goal| goal.id)),
         "source_surface": "chat",
     });

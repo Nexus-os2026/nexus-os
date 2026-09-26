@@ -383,6 +383,13 @@ mod tests {
         let tempdir = TempDir::new().unwrap();
         let context = make_context(&tempdir);
         let resolved = ImageGenActuator::resolve_output_path(&context, "images/out.png").unwrap();
-        assert!(resolved.starts_with(tempdir.path()));
+        assert_eq!(
+            resolved,
+            tempdir
+                .path()
+                .canonicalize()
+                .unwrap()
+                .join("images/out.png")
+        );
     }
 }

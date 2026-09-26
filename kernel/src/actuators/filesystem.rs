@@ -25,65 +25,19 @@ const FUEL_COST_WRITE: f64 = 2.0;
 pub struct GovernedFilesystem;
 
 impl GovernedFilesystem {
-    /// System paths that agents can read (but never write).
-    /// These are safe because they're read-only virtual filesystems.
-    const READABLE_SYSTEM_PREFIXES: &'static [&'static str] =
-        &["/proc/", "/sys/class/", "/sys/devices/", "/etc/os-release"];
-
-    /// Resolves a user-supplied path to its canonical form.
-    /// Under Option B security posture, paths outside the workspace are permitted.
-    /// The blocklist (enforced in the shell actuator) is the only hard safety rail.
-    /// This function canonicalizes for symlink resolution, not for containment.
+    /// Resolve the effective target inside the configured workspace. The shared
+    /// resolver also handles missing targets without creating their parents.
     pub(crate) fn resolve_safe_path(
         workspace: &Path,
         user_path: &str,
     ) -> Result<std::path::PathBuf, ActuatorError> {
-        // Allow absolute paths to safe system directories (read-only).
-        // These are virtual filesystems that expose system info.
-        // NOTE: Only callers doing reads should reach this — writes must use
-        // resolve_safe_write_path() instead.
-        if user_path.starts_with('/') {
-            let abs = std::path::PathBuf::from(user_path);
-            for prefix in Self::READABLE_SYSTEM_PREFIXES {
-                if user_path.starts_with(prefix) && abs.exists() {
-                    return Ok(abs);
-                }
+        crate::workspace::resolve_path(workspace, Path::new(user_path)).map_err(|error| match error
+        {
+            crate::errors::AgentError::CapabilityDenied(reason) => {
+                ActuatorError::PathTraversal(reason)
             }
-        }
-
-        // Ensure workspace exists
-        if !workspace.exists() {
-            std::fs::create_dir_all(workspace)
-                .map_err(|e| ActuatorError::IoError(format!("cannot create workspace: {e}")))?;
-        }
-
-        let candidate = workspace.join(user_path);
-
-        // Canonicalize what exists; for new files, canonicalize the parent.
-        let canonical = if candidate.exists() {
-            candidate
-                .canonicalize()
-                .map_err(|e| ActuatorError::IoError(format!("canonicalize failed: {e}")))?
-        } else {
-            let parent = candidate
-                .parent()
-                .ok_or_else(|| ActuatorError::PathTraversal("no parent directory".into()))?;
-            if !parent.exists() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    ActuatorError::IoError(format!("cannot create parent dir: {e}"))
-                })?;
-            }
-            let canonical_parent = parent
-                .canonicalize()
-                .map_err(|e| ActuatorError::IoError(format!("canonicalize parent failed: {e}")))?;
-            canonical_parent.join(
-                candidate
-                    .file_name()
-                    .ok_or_else(|| ActuatorError::PathTraversal("no filename".into()))?,
-            )
-        };
-
-        Ok(canonical)
+            error => ActuatorError::IoError(error.to_string()),
+        })
     }
 
     /// Check if the file extension is blocked for writes.
@@ -162,6 +116,10 @@ impl Actuator for GovernedFilesystem {
                 }
 
                 let existed = safe_path.exists();
+                if let Some(parent) = safe_path.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| ActuatorError::IoError(format!("create parent dir: {e}")))?;
+                }
                 std::fs::write(&safe_path, content)
                     .map_err(|e| ActuatorError::IoError(format!("write: {e}")))?;
 
@@ -238,19 +196,14 @@ mod tests {
     }
 
     #[test]
-    fn absolute_path_allowed() {
+    fn absolute_path_inside_workspace_allowed() {
         let tmp = TempDir::new().unwrap();
-        let workspace = tmp.path();
-
-        let resolved = GovernedFilesystem::resolve_safe_path(workspace, "/tmp/test.txt")
-            .expect("Option B: absolute paths outside workspace must be permitted");
-        assert!(
-            resolved.ends_with("test.txt"),
-            "resolved path {resolved:?} should end with test.txt"
-        );
-        assert!(
-            resolved.to_string_lossy().contains("/tmp/"),
-            "resolved path {resolved:?} should be under /tmp"
+        let target = tmp.path().join("test.txt");
+        let resolved =
+            GovernedFilesystem::resolve_safe_path(tmp.path(), target.to_str().unwrap()).unwrap();
+        assert_eq!(
+            resolved,
+            tmp.path().canonicalize().unwrap().join("test.txt")
         );
     }
 

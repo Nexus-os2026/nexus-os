@@ -1,5 +1,6 @@
 #![allow(unexpected_cfgs)]
 #![allow(unused_imports)]
+mod builder_workspace;
 mod commands;
 mod nx_bridge;
 pub mod oracle_runtime;
@@ -1070,6 +1071,16 @@ struct ChatConversationState {
 #[derive(Clone)]
 pub struct AppState {
     pub supervisor: Arc<Mutex<Supervisor>>,
+    /// Backend-only authority store shared with the private Builder issuer.
+    /// Cloned AppState values share revocation state. No IPC issuer exists.
+    #[allow(dead_code)] // Retained owner; the private adapter holds an Arc clone.
+    workspace_authority: Arc<nexus_kernel::workspace_authority::WorkspaceAuthorityRegistry>,
+    builder_workspace: Result<Arc<builder_workspace::BuilderWorkspaceAuthority>, String>,
+    /// Lock invariant: audit and supervisor guards must never overlap. Do not
+    /// hold audit across routing, secrets, Warden, models, tools or callbacks.
+    /// Execution passes an AuditWriter; readers snapshot before downstream work.
+    /// Readers needing both take the supervisor snapshot, release its guard,
+    /// then take the audit snapshot.
     pub audit: Arc<Mutex<AuditTrail>>,
     meta: Arc<Mutex<HashMap<AgentId, AgentMeta>>>,
     voice: Arc<Mutex<VoiceRuntimeState>>,
@@ -1312,8 +1323,18 @@ impl AppState {
         let production_ruleset_handle: nexus_governance_engine::RulesetHandle =
             Arc::new(std::sync::RwLock::new(production_ruleset));
 
+        let workspace_authority =
+            Arc::new(nexus_kernel::workspace_authority::WorkspaceAuthorityRegistry::new());
+        let builder_workspace =
+            builder_workspace::BuilderWorkspaceAuthority::setup(Arc::clone(&workspace_authority));
+        if let Err(error) = &builder_workspace {
+            eprintln!("{error}; Builder planning is unavailable");
+        }
+
         let state = Self {
             supervisor: supervisor.clone(),
+            workspace_authority,
+            builder_workspace,
             audit,
             meta: Arc::new(Mutex::new(HashMap::new())),
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
@@ -1665,6 +1686,13 @@ impl AppState {
             Arc::new(std::sync::RwLock::new(test_ruleset));
         Self {
             supervisor: supervisor.clone(),
+            workspace_authority: Arc::new(
+                nexus_kernel::workspace_authority::WorkspaceAuthorityRegistry::new(),
+            ),
+            // Tests must explicitly provision isolated Builder storage; never use HOME.
+            builder_workspace: Err(
+                "Builder storage is not configured for this test AppState".into()
+            ),
             audit: Arc::new(Mutex::new(AuditTrail::new())),
             meta: Arc::new(Mutex::new(HashMap::new())),
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
@@ -1854,7 +1882,11 @@ impl AppState {
                     nexus_governance_evolution::default_attack_generators(),
                 ),
             )),
-            oracle_runtime: oracle_runtime::OracleRuntime::start_with_handle(test_ruleset_handle),
+            oracle_runtime: oracle_runtime::OracleRuntime::try_start_with_handle_and_mode(
+                test_ruleset_handle,
+                oracle_runtime::IdentityMode::Ephemeral,
+            )
+            .expect("ephemeral test Oracle identity initialization cannot fail"),
             swarm_caller_identity: {
                 // Tests always use Ephemeral so they don't touch the
                 // developer's real `~/.nexus/swarm_caller_identity.key`.
@@ -1872,6 +1904,11 @@ impl AppState {
         }
     }
 
+    /// Owned read snapshot. Never append to this copy; use the shared writer.
+    fn audit_snapshot(&self) -> AuditTrail {
+        self.audit.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
     fn log_event(&self, agent_id: AgentId, event_type: EventType, payload: serde_json::Value) {
         let event_type_str = format!("{event_type:?}");
         let mut guard = match self.audit.lock() {
@@ -1882,6 +1919,8 @@ impl AppState {
             eprintln!("audit append failed: {e}");
         }
 
+        // Leaf critical section: serialize the DB chain's read/count/append as
+        // before. No callbacks or supervisor operations while holding audit.
         // Persist audit event to database
         let prev_hash = self
             .db
@@ -5495,279 +5534,19 @@ pub mod runtime {
     /// directory so it survives app restarts.
     #[tauri::command]
     async fn builder_generate_plan(
+        state: tauri::State<'_, AppState>,
         prompt: String,
-        project_id: String,
     ) -> Result<serde_json::Value, String> {
-        let (tx, rx) = std::sync::mpsc::channel::<Result<serde_json::Value, String>>();
-
+        let state = state.inner().clone();
+        let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let config = match super::load_config() {
-                Ok(c) => c,
-                Err(e) => {
-                    let _ = tx.send(Err(format!("config error: {e}")));
-                    return;
-                }
-            };
-            let prov_config = super::build_provider_config(&config);
-
-            // Build provider instances for each provider type the model router may select.
-            // For Anthropic: prefer API key, fall back to Claude Code CLI if available.
-            let anthropic_provider: Box<dyn nexus_connectors_llm::providers::LlmProvider> = {
-                let has_key = prov_config
-                    .anthropic_api_key
-                    .as_deref()
-                    .map(|k| !k.trim().is_empty())
-                    .unwrap_or(false);
-                if has_key {
-                    Box::new(super::ClaudeProvider::new(
-                        prov_config.anthropic_api_key.clone(),
-                    ))
-                } else {
-                    // Try Claude Code CLI as Anthropic-compatible provider
-                    let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
-                    if status.installed && status.authenticated {
-                        Box::new(
-                            nexus_connectors_llm::providers::claude_code::ClaudeCodeProvider::new(),
-                        )
-                    } else {
-                        // Fall through with the (key-less) ClaudeProvider; it will error
-                        // if actually selected, but the router may pick a different provider.
-                        Box::new(super::ClaudeProvider::new(
-                            prov_config.anthropic_api_key.clone(),
-                        ))
-                    }
-                }
-            };
-            let openai = super::OpenAiProvider::new(prov_config.openai_api_key.clone());
-
-            eprintln!(
-                "[builder-plan] Generating plan for project '{}': {:?}",
-                project_id,
-                &prompt[..prompt.len().min(100)]
-            );
-
-            // Save artefacts to the project directory
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            let project_dir = std::path::PathBuf::from(&home)
-                .join(".nexus")
-                .join("builds")
-                .join(&project_id);
-
-            // Create or load project state
-            let mut proj_state = web_builder_agent::project::load_project_state(&project_dir)
-                .unwrap_or_else(|_| {
-                    web_builder_agent::project::create_project(&project_id, &prompt)
-                });
-
-            // Load user's model config (or smart defaults) — used for planning step.
-            let model_cfg = web_builder_agent::model_config::load_config();
-            let plan_choice = &model_cfg.planning;
-            let plan_prefixed = web_builder_agent::model_config::to_prefixed_model(plan_choice);
-            let plan_model_id = plan_choice.model_id.clone();
-            let plan_display = plan_choice.display_name.clone();
-            let plan_provider_str = plan_choice.provider.clone();
-
-            eprintln!(
-                "[builder-plan] Step \"planning\" using model: {} (from {})",
-                plan_display,
-                if std::path::Path::new(&std::env::var("HOME").unwrap_or_default())
-                    .join(".nexus/builder_model_config.json")
-                    .exists()
-                {
-                    "user config"
-                } else {
-                    "default \u{2014} no user config found"
-                }
-            );
-
-            // Try primary model, failover on error or bad JSON
-            let try_plan = |provider: &dyn nexus_connectors_llm::providers::LlmProvider,
-                            model: &str| {
-                let start = std::time::Instant::now();
-                eprintln!(
-                    "[builder-plan] Calling {} (prompt: {} chars)",
-                    model,
-                    prompt.len().min(200)
-                );
-                let result =
-                    web_builder_agent::plan::generate_plan_with_model(provider, &prompt, model);
-                let elapsed = start.elapsed();
-                match &result {
-                    Ok(r) => eprintln!(
-                        "[builder-plan] {} succeeded in {:.1}s, cost=${:.4}",
-                        model,
-                        elapsed.as_secs_f64(),
-                        r.cost_usd
-                    ),
-                    Err(e) => eprintln!(
-                        "[builder-plan] {} failed in {:.1}s: {}",
-                        model,
-                        elapsed.as_secs_f64(),
-                        &e[..e.len().min(200)]
-                    ),
-                }
-                result
-            };
-
-            // Create provider from user's model config choice
-            let primary_result = super::provider_from_prefixed_model(&plan_prefixed, &prov_config);
-
-            let codex_cli_prov =
-                nexus_connectors_llm::providers::codex_cli::CodexCliProvider::new();
-            let claude_code_prov =
-                nexus_connectors_llm::providers::claude_code::ClaudeCodeProvider::new();
-
-            // Build a ModelSelection-like struct for the response JSON
-            use web_builder_agent::model_router::*;
-            let make_selection = |display: &str, provider_s: &str, model_id: &str| ModelSelection {
-                provider: match provider_s {
-                    "ollama" => ProviderType::Ollama,
-                    "anthropic_api" | "anthropic" => ProviderType::Anthropic,
-                    "openai_api" | "openai" => ProviderType::OpenAI,
-                    "codex_cli" => ProviderType::CodexCli,
-                    "claude_cli" => ProviderType::ClaudeCode,
-                    _ => ProviderType::Ollama,
-                },
-                model_id: model_id.to_string(),
-                display_name: display.to_string(),
-                estimated_cost: 0.0,
-                is_local: provider_s == "ollama",
-            };
-            let selection = make_selection(&plan_display, &plan_provider_str, &plan_model_id);
-
-            let (result, used_model) = match primary_result {
-                Ok((primary_provider, _)) => {
-                    match try_plan(primary_provider.as_ref(), &plan_model_id) {
-                        Ok(r) => (r, selection.clone()),
-                        Err(e) => {
-                            eprintln!(
-                                "[builder-plan] {} failed: {}, attempting failover via model router",
-                                plan_display, e
-                            );
-                            // Failover: use model router budget-based selection
-                            let budget = RoutingBudget::from_budget_tracker();
-                            let fb = select_model(&BuilderTask::PlanGeneration, &budget);
-                            eprintln!(
-                                "[builder-plan] Failing over to {} ({})",
-                                fb.display_name, fb.provider
-                            );
-                            let fb_provider: &dyn nexus_connectors_llm::providers::LlmProvider =
-                                match fb.provider {
-                                    ProviderType::Ollama => {
-                                        &nexus_connectors_llm::providers::OllamaProvider::from_env()
-                                    }
-                                    ProviderType::Anthropic => anthropic_provider.as_ref(),
-                                    ProviderType::OpenAI => &openai,
-                                    ProviderType::CodexCli => &codex_cli_prov,
-                                    ProviderType::ClaudeCode => &claude_code_prov,
-                                };
-                            match try_plan(fb_provider, &fb.model_id) {
-                                Ok(r) => (r, fb),
-                                Err(e2) => {
-                                    proj_state.error_message = Some(e2.clone());
-                                    let _ = web_builder_agent::project::transition(
-                                        &mut proj_state,
-                                        web_builder_agent::project::ProjectStatus::PlanFailed,
-                                    );
-                                    let _ = web_builder_agent::project::save_project_state(
-                                        &project_dir,
-                                        &proj_state,
-                                    );
-                                    let _ = tx.send(Err(format!(
-                                        "plan generation failed (failover): {e2}"
-                                    )));
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(provider_err) => {
-                    eprintln!(
-                        "[builder-plan] Could not create provider for {}: {}, falling back to router",
-                        plan_display, provider_err
-                    );
-                    // Provider creation failed — fall back to budget-based router
-                    let budget = RoutingBudget::from_budget_tracker();
-                    let fb = select_model(&BuilderTask::PlanGeneration, &budget);
-                    let fb_provider: &dyn nexus_connectors_llm::providers::LlmProvider =
-                        match fb.provider {
-                            ProviderType::Ollama => {
-                                &nexus_connectors_llm::providers::OllamaProvider::from_env()
-                            }
-                            ProviderType::Anthropic => anthropic_provider.as_ref(),
-                            ProviderType::OpenAI => &openai,
-                            ProviderType::CodexCli => &codex_cli_prov,
-                            ProviderType::ClaudeCode => &claude_code_prov,
-                        };
-                    match try_plan(fb_provider, &fb.model_id) {
-                        Ok(r) => (r, fb),
-                        Err(e) => {
-                            proj_state.error_message = Some(e.clone());
-                            let _ = web_builder_agent::project::transition(
-                                &mut proj_state,
-                                web_builder_agent::project::ProjectStatus::PlanFailed,
-                            );
-                            let _ = web_builder_agent::project::save_project_state(
-                                &project_dir,
-                                &proj_state,
-                            );
-                            let _ = tx.send(Err(format!("plan generation failed: {e}")));
-                            return;
-                        }
-                    }
-                }
-            };
-
-            if let Err(e) = web_builder_agent::plan::save_plan_artefacts(&project_dir, &result.plan)
-            {
-                eprintln!("[builder-plan] Warning: failed to save plan artefacts: {e}");
-            }
-
-            // Record cost
-            let project_name = &result.plan.product_brief.project_name;
-            web_builder_agent::plan::record_plan_cost(&result, project_name);
-
-            // Update project state: Draft -> Planned
-            proj_state.project_name = Some(project_name.clone());
-            proj_state.plan_cost = result.cost_usd;
-            proj_state.total_cost += result.cost_usd;
-            if let Err(te) = web_builder_agent::project::transition(
-                &mut proj_state,
-                web_builder_agent::project::ProjectStatus::Planned,
-            ) {
-                eprintln!("[builder-plan] Warning: state transition failed: {te}");
-            }
-            if let Err(se) =
-                web_builder_agent::project::save_project_state(&project_dir, &proj_state)
-            {
-                eprintln!("[builder-plan] Warning: failed to save builder_state.json: {se}");
-            } else {
-                eprintln!("[builder-plan] Saved builder_state.json for project {project_id}");
-            }
-
-            eprintln!(
-                "[builder-plan] Plan generated: {} input tokens, {} output tokens, ${:.4}, {:.1}s",
-                result.input_tokens, result.output_tokens, result.cost_usd, result.elapsed_seconds
-            );
-
-            let _ = tx.send(Ok(serde_json::json!({
-                "plan": result.plan,
-                "input_tokens": result.input_tokens,
-                "output_tokens": result.output_tokens,
-                "cost_usd": result.cost_usd,
-                "elapsed_seconds": result.elapsed_seconds,
-                "model": used_model.display_name,
-                "model_id": used_model.model_id,
-                "provider": used_model.provider.to_string(),
-                "is_local": used_model.is_local,
-                "project_dir": project_dir.to_string_lossy(),
-            })));
+            // The worker owns the execution and revokes before channel delivery,
+            // including when the receiver has disappeared.
+            let result = super::builder_workspace::generate_plan(&state, &prompt);
+            let _ = tx.send(result);
         });
-
-        rx.recv().unwrap_or(Err(
-            "Plan generation thread terminated unexpectedly".to_string()
-        ))
+        rx.recv()
+            .unwrap_or_else(|_| Err("Plan generation thread terminated unexpectedly".into()))
     }
 
     /// Load a previously saved plan from a project's artefact directory.
@@ -6148,68 +5927,53 @@ pub mod runtime {
         serde_json::to_value(&result).map_err(|e| format!("serialize: {e}"))
     }
 
-    /// Start a Vite dev server for a React project.
+    /// Builder dev-server start (P0-002C4A). `project_id` is a selector for a
+    /// current-AppState registration only. No process-launch design is
+    /// approved, so this validates provenance and identity, then fails closed.
     #[tauri::command]
-    fn builder_dev_server_start(project_id: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id)
-            .join("react");
-
-        // Install deps if needed
-        // UI-initiated: grant process.exec capability for npm/vite.
-        let caps: &[&str] = &["process.exec"];
-        web_builder_agent::dev_server::DevServer::install_deps(&project_dir, caps)
-            .map_err(|e| format!("npm install: {e}"))?;
-
-        // Start the dev server
-        let mut server = web_builder_agent::dev_server::DevServer::new(project_dir);
-        let url = server.start(caps).map_err(|e| format!("start: {e}"))?;
-
-        // Note: In production, the server would be stored in AppState.
-        // For now we leak it intentionally — Drop will kill the process on app exit.
-        // A proper implementation would use DevServerRegistry in AppState.
-        std::mem::forget(server);
-
-        Ok(url)
+    fn builder_dev_server_start(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+    ) -> Result<String, String> {
+        super::builder_workspace::dev_server_start(&state, &project_id)
     }
 
-    /// Stop a Vite dev server for a React project.
+    /// Builder dev-server stop (P0-002C4C1): the backend-owned lifecycle
+    /// execution for `project_id`, if any; no PID, port or process name is
+    /// ever consulted. The bounded stop wait runs on Tauri's blocking pool,
+    /// never on the IPC/main thread.
     #[tauri::command]
-    fn builder_dev_server_stop(_project_id: String) -> Result<(), String> {
-        // In a full implementation, this would look up the server in DevServerRegistry.
-        // For now, the Drop implementation handles cleanup on app exit.
-        Ok(())
+    async fn builder_dev_server_stop(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+    ) -> Result<(), String> {
+        let state = state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            super::builder_workspace::dev_server_stop(&state, &project_id)
+        })
+        .await
+        .map_err(|_| "Builder dev server: stop not confirmed".to_owned())?
     }
 
-    /// Get the status of a project's dev server.
+    /// Builder dev-server status: the backend-owned lifecycle state, else
+    /// C4A-validated `stopped`. Launch stays unavailable; no URL is returned.
     #[tauri::command]
-    fn builder_dev_server_status(_project_id: String) -> Result<serde_json::Value, String> {
-        Ok(serde_json::json!({ "status": "stopped" }))
+    fn builder_dev_server_status(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+    ) -> Result<serde_json::Value, String> {
+        super::builder_workspace::dev_server_status(&state, &project_id)
     }
 
     /// Write a file to a React project directory (triggers Vite HMR).
     #[tauri::command]
     fn builder_dev_server_write_file(
+        state: tauri::State<'_, AppState>,
         project_id: String,
         relative_path: String,
         content: String,
     ) -> Result<(), String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id)
-            .join("react");
-
-        let full_path = project_dir.join(&relative_path);
-        if let Some(parent) = full_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("mkdir: {e}"))?;
-        }
-        std::fs::write(&full_path, content).map_err(|e| format!("write: {e}"))?;
-        Ok(())
+        super::builder_workspace::write_file(&state, &project_id, &relative_path, &content)
     }
 
     // ── Builder Deploy (Phase 7A) ─────────────────────────────────────
@@ -6536,61 +6300,14 @@ pub mod runtime {
         Ok(serde_json::json!(sites))
     }
 
-    /// Build static assets for deploy: for React projects runs npm run build,
-    /// for HTML projects returns the output path directly.
+    /// Builder static build (P0-002C4D0): closed. The legacy body derived a
+    /// directory from HOME and the caller's `project_id` and ran PATH-resolved
+    /// `npm install` / `npm run build`. No trusted static-build design is
+    /// approved, so this always fails closed: `project_id` is not inspected and
+    /// no filesystem access or process launch occurs.
     #[tauri::command]
-    fn builder_build_static(project_id: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let react_dir = project_dir.join("react");
-        if react_dir.exists() && react_dir.join("package.json").exists() {
-            // React project: ensure node_modules, then npm run build
-            if !react_dir.join("node_modules").exists() {
-                let install = std::process::Command::new("npm")
-                    .arg("install")
-                    .current_dir(&react_dir)
-                    .output()
-                    .map_err(|e| format!("npm install: {e}"))?;
-                if !install.status.success() {
-                    return Err(format!(
-                        "npm install failed: {}",
-                        String::from_utf8_lossy(&install.stderr)
-                    ));
-                }
-            }
-
-            let build = std::process::Command::new("npm")
-                .args(["run", "build"])
-                .current_dir(&react_dir)
-                .output()
-                .map_err(|e| format!("npm run build: {e}"))?;
-            if !build.status.success() {
-                return Err(format!(
-                    "npm run build failed: {}",
-                    String::from_utf8_lossy(&build.stderr)
-                ));
-            }
-
-            let dist = react_dir.join("dist");
-            if !dist.exists() {
-                return Err("dist/ not found after build".into());
-            }
-            return Ok(dist.to_string_lossy().to_string());
-        }
-
-        // HTML project: return the current output directory
-        if project_dir.join("current").join("index.html").exists() {
-            return Ok(project_dir.join("current").to_string_lossy().to_string());
-        }
-        if project_dir.join("index.html").exists() {
-            return Ok(project_dir.to_string_lossy().to_string());
-        }
-
-        Err("No build output found".into())
+    fn builder_build_static(_project_id: String) -> Result<String, String> {
+        Err("Builder static build: build unavailable".into())
     }
 
     // ── Builder Quality Critic (Phase 9A) ─────────────────────────────
@@ -12123,10 +11840,17 @@ pub mod runtime {
                 commands::swarm::swarm_audit_tail,
                 commands::oracle_runtime::oracle_runtime_status,
             ])
-            .run(tauri::generate_context!())
+            .build(tauri::generate_context!())
             .unwrap_or_else(|e| {
                 eprintln!("FATAL: Nexus OS failed to start: {e}");
                 std::process::exit(1);
+            })
+            .run(|app, event| {
+                // Normal final exit only: bounded Builder dev-server cleanup
+                // (one overall deadline) before teardown. Exit is never held.
+                if let tauri::RunEvent::Exit = event {
+                    super::builder_workspace::shutdown_dev_servers(&app.state::<AppState>());
+                }
             });
     }
 }

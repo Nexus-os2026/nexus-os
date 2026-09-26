@@ -350,10 +350,7 @@ impl AutoEvolutionManager {
         let agent_id = &genome.agent_id;
         let weak_tasks = {
             let trackers = self.trackers.lock().unwrap_or_else(|p| p.into_inner());
-            match trackers.get(agent_id) {
-                Some(t) => t.weak_tasks(),
-                None => return None,
-            }
+            trackers.get(agent_id)?.weak_tasks()
         };
 
         if weak_tasks.is_empty() {
