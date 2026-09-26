@@ -76,7 +76,8 @@ const MULTI_PAGE = {
 // Project content plus every project-controlled configuration and ancestor
 // package a naive toolchain would load. Returns the backend request.
 function fixture(files, extra = {}) {
-  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-c4d2-')));
+  // The canonical spelling, as the backend passes it (no 8.3 or symlinked alias).
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-c4d2-')));
   const markers = path.join(base, 'markers');
   fs.mkdirSync(markers);
   const ancestor = path.join(base, 'ancestor');
@@ -270,7 +271,7 @@ test('unprovided bare imports never resolve from ancestor node_modules', async (
     const f = fixture(SINGLE_PAGE, {
       'src/App.tsx': `import Home from './pages/Home'\nimport '${source}'\nexport default function App() {\n  return <Home />\n}\n`,
     });
-    await rejectedBuild(f, /does not provide/);
+    await rejectedBuild(f, new RegExp(`does not provide "${source.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}"`));
     assert.deepEqual(executedMarkers(f), [], source);
   }
 });
@@ -280,8 +281,20 @@ test('relative imports cannot escape the project', async () => {
     'src/App.tsx':
       "import Home from './pages/Home'\nimport { secret } from '../../../../outside.js'\nexport default function App() {\n  return <Home title={secret} />\n}\n",
   });
-  await rejectedBuild(f, /Nexus Builder runtime denied module/);
+  await rejectedBuild(f, /Nexus Builder runtime denied module "\.\.\/\.\.\/\.\.\/\.\.\/outside\.js"/);
 });
+
+// Other spellings of the canonical project root: a symlink (a junction on
+// Windows) and, where the platform provides one, the 8.3 short-name form.
+function aliases(f) {
+  const link = path.join(f.base, 'alias');
+  fs.symlinkSync(f.projectRoot, link, process.platform === 'win32' ? 'junction' : 'dir');
+  const found = [link];
+  const tmp = os.tmpdir();
+  const short = path.join(tmp, path.relative(fs.realpathSync.native(tmp), f.projectRoot));
+  if (short !== f.projectRoot) found.push(short);
+  return found;
+}
 
 test('backend requests are strictly validated', () => {
   const f = fixture(SINGLE_PAGE);
@@ -300,6 +313,8 @@ test('backend requests are strictly validated', () => {
     { ...good, projectRoot: path.join(good.cacheDir, 'react') },
     { ...good, cacheDir: good.projectRoot },
     { ...good, projectRoot: `${good.projectRoot}\0` },
+    { ...good, projectRoot: path.join(f.base, 'missing') },
+    ...aliases(f).map((alias) => ({ ...good, projectRoot: alias })),
   ]) {
     assert.throws(() => trusted.createTrustedViteConfig(request, toolchainRoot), /invalid Builder runtime request/);
   }

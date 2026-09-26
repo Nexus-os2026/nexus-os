@@ -3,6 +3,7 @@
 // contributes only content (index.html, src/**, public/**). No project Vite,
 // PostCSS, Tailwind or Babel configuration, package metadata, script,
 // environment file, tsconfig or dependency is ever loaded or trusted.
+import fs from 'node:fs';
 import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import postcss from 'postcss';
@@ -35,6 +36,8 @@ function invalidRequest() {
   return new Error('invalid Builder runtime request');
 }
 
+// Canonical existing locations only: the one spelling every containment
+// check compares (no symlinked, 8.3 short-name or other alias spellings).
 function absolutePath(value) {
   if (
     typeof value !== 'string' ||
@@ -42,11 +45,20 @@ function absolutePath(value) {
     !path.isAbsolute(value) ||
     path.resolve(value) !== value ||
     // Verbatim and UNC spellings are rejected; the backend passes plain paths.
-    (process.platform === 'win32' && value.startsWith('\\\\'))
+    (process.platform === 'win32' && value.startsWith('\\\\')) ||
+    canonical(value) !== value
   ) {
     throw invalidRequest();
   }
   return value;
+}
+
+function canonical(value) {
+  try {
+    return fs.realpathSync.native(value);
+  } catch {
+    return null;
+  }
 }
 
 export function isInside(file, root) {
@@ -57,7 +69,7 @@ export function isInside(file, root) {
   );
 }
 
-// The backend request: exactly two absolute, normalized, disjoint locations.
+// The backend request: exactly two canonical, disjoint locations.
 export function builderPaths(request) {
   if (request === null || typeof request !== 'object' || Array.isArray(request)) {
     throw invalidRequest();
