@@ -84,6 +84,11 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Stora
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "=1.1.4", features = ["fs"] }
 
+# P0-002C4C3 tests only: process snapshots as liveness and orphan evidence for
+# the real governed launch (same locked windows-sys; no new package).
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_Diagnostics_ToolHelp"] }
+
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 tauri = { version = "2.5.5", optional = true, default-features = false, features = ["tray-icon", "wry"] }
 tauri-plugin-global-shortcut = "2.3.1"

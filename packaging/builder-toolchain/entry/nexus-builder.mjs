@@ -1,29 +1,39 @@
-// P0-002C4D2: Nexus-owned Builder frontend runtime entry, packaged at
-// `entry/nexus-builder.mjs` inside the verified toolchain. A future launch
-// (C4C3) runs the packaged Node against this file, never a project script.
+// P0-002C4D2/C4C3: Nexus-owned Builder frontend runtime entry, packaged at
+// `entry/nexus-builder.mjs` inside the verified toolchain. The backend runs the
+// verified packaged Node against this file under the Node permission model
+// (never a project script) with one argument: the launch request.
 //
-// This checkpoint only confines module loading to the toolchain, validates
-// the backend request and builds the trusted Vite configuration. It never
-// starts a server, opens a port or launches any process.
+// Before any third-party module is imported it confines module loading to the
+// toolchain, denies process creation and makes existence probes respect the
+// permission model. It then validates the request, serves the project on a
+// loopback-only preview server and writes exactly one readiness line.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installExistenceProbes } from './fs-probe.mjs';
 import { installModuleGuard } from './module-guard.mjs';
+import { installProcessGuard } from './process-guard.mjs';
 
 const toolchainRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 installModuleGuard(toolchainRoot);
+installProcessGuard();
+installExistenceProbes();
 
-const { createTrustedViteConfig } = await import('./trusted-config.mjs');
+const { parseLaunchRequest, readinessRecord, startPreview } = await import('./preview-server.mjs');
 
 export const USAGE = 64;
-export const LAUNCH_UNAVAILABLE = 78;
+export const PREVIEW_FAILED = 70;
 
 let request;
 try {
-  request = JSON.parse(process.argv[2] ?? '');
-  createTrustedViteConfig(request, toolchainRoot);
+  request = parseLaunchRequest(process.argv[2] ?? '');
 } catch {
   process.stderr.write('Nexus Builder runtime: invalid request\n');
   process.exit(USAGE);
 }
-process.stderr.write('Nexus Builder runtime: launch unavailable\n');
-process.exit(LAUNCH_UNAVAILABLE);
+try {
+  const { port } = await startPreview(request, toolchainRoot);
+  process.stdout.write(readinessRecord(port));
+} catch (error) {
+  process.stderr.write(`Nexus Builder runtime: preview failed (${error?.code ?? 'error'})\n`);
+  process.exit(PREVIEW_FAILED);
+}

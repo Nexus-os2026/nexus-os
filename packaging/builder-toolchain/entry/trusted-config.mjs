@@ -3,6 +3,8 @@
 // contributes only content (index.html, src/**, public/**). No project Vite,
 // PostCSS, Tailwind or Babel configuration, package metadata, script,
 // environment file, tsconfig or dependency is ever loaded or trusted.
+// P0-002C4C3: the dev-server form (middleware mode, no HMR, no WebSocket, no
+// CORS, a watcher that never follows symlinks) served by preview-server.mjs.
 import fs from 'node:fs';
 import path from 'node:path';
 import react from '@vitejs/plugin-react';
@@ -193,7 +195,28 @@ export function createTrustedViteConfig(request, toolchainRoot) {
       modules: false,
       devSourcemap: false,
     },
+    // Exact aliases: Vite's dependency optimizer resolves `include` without
+    // user plugins, so the runtime imports name toolchain packages directly.
+    resolve: { alias: runtimeAliases(root) },
     optimizeDeps: { noDiscovery: true, entries: [], include: [...RUNTIME_IMPORTS] },
-    server: { open: false, fs: { strict: true, allow: [projectRoot, cacheDir] } },
+    // Warnings and errors only (stderr): stdout carries the readiness record.
+    logLevel: 'warn',
+    server: {
+      middlewareMode: true,
+      hmr: false,
+      ws: false,
+      cors: false,
+      open: false,
+      watch: { followSymlinks: false },
+      fs: { strict: true, allow: [projectRoot, cacheDir] },
+    },
   };
+}
+
+function runtimeAliases(toolchainRoot) {
+  const modules = path.join(toolchainRoot, 'node_modules');
+  return RUNTIME_IMPORTS.map((specifier) => ({
+    find: new RegExp(`^${specifier.replaceAll('/', '\\/')}$`),
+    replacement: path.join(modules, ...specifier.split('/')),
+  }));
 }

@@ -1810,9 +1810,10 @@ fn p0_002c4b_windows_retained_react_identity_blocks_project_ancestor_rename() {
 
 // ── P0-002C4C1: production-owned lifecycle registry ───────────────────────
 // These tests drive the real production path: AppState → BuilderWorkspace-
-// Authority → its own LifecycleRegistry. Production start stays denied, so the
-// tests insert executions through the authority-owned registry directly
-// (test-only; no production or IPC path can do this).
+// Authority → its own LifecycleRegistry. P0-002C4C3: production start is the
+// governed launch, which this test build denies at fresh toolchain
+// verification; the tests insert executions through the authority-owned
+// registry directly (test-only; no production or IPC path can do this).
 
 use super::super::tests::generated;
 use super::super::{
@@ -1904,14 +1905,11 @@ impl Drop for Production {
 const DENIED: &str = "Builder dev server: project not registered";
 
 fn stopped() -> Value {
-    json!({"status": "stopped", "launch_available": false})
+    json!({"status": "stopped"})
 }
 
 fn assert_bounded_status(value: &Value, expected: &str) {
-    assert_eq!(
-        value,
-        &json!({"status": expected, "launch_available": false})
-    );
+    assert_eq!(value, &json!({"status": expected}));
     let text = value.to_string();
     for private in ["pid", "url", "port", "generation", "execution", "path"] {
         assert!(!text.contains(private), "{private}");
@@ -2241,18 +2239,25 @@ fn p0_002c4c1_shutdown_uses_one_deadline_and_retries_cleanup_failed_truthfully()
     }
 }
 
+// P0-002C4C3 narrowing: production start is now the governed launch. In this
+// test build it is denied at fresh toolchain verification, and the reserved
+// generation is released (nothing launched or retained). An owned execution
+// is never replaced or disturbed: a second start is denied as busy.
 #[test]
 fn p0_002c4c1_production_start_remains_denied_even_with_an_owned_execution() {
     let p = Production::new();
     let (id, _) = p.register();
-    let unavailable = "Builder dev server: launch unavailable";
+    let unavailable = "Builder dev server: trusted toolchain unavailable";
     assert_eq!(production_start(&p.state, &id).unwrap_err(), unavailable);
-    // Start never creates or reserves an execution.
+    // A denied start leaves no execution behind.
     assert_eq!(p.registry().owned_status(uuid(&id)), None);
     let control = Arc::new(FakeControl::default());
     p.start_fake(&id, &control);
     let before = execution_of(p.registry(), uuid(&id));
-    assert_eq!(production_start(&p.state, &id).unwrap_err(), unavailable);
+    assert_eq!(
+        production_start(&p.state, &id).unwrap_err(),
+        "Builder dev server: dev server busy"
+    );
     assert_eq!(execution_of(p.registry(), uuid(&id)), before);
     assert_eq!(control.terminations.load(Ordering::SeqCst), 0);
     production_stop(&p.state, &id).unwrap();
@@ -2302,4 +2307,373 @@ fn p0_002c4c1_final_exit_cleanup_does_not_depend_on_the_audit_lock() {
         release.send(()).unwrap();
         holder.join().unwrap();
     });
+}
+
+// ── P0-002C4C3: readiness-proven start (deterministic) ────────────────────
+// Fake trees and proofs through the real registry, on every platform. The
+// real Node launch is exercised by the packaged `dev_server_launch` tests.
+
+fn proven(
+    control: &Arc<FakeControl>,
+    proof: impl FnOnce(&dyn Fn() -> bool) -> Result<u16, ProofFailure> + 'static,
+) -> impl FnOnce(&DevServerTarget) -> Result<Launched<u16>, &'static str> {
+    let control = Arc::clone(control);
+    move |_| {
+        Ok(Launched {
+            tree: Box::new(Fake(control)),
+            proof: Box::new(proof) as Proof<u16>,
+        })
+    }
+}
+
+/// A readiness proof that reports it is running, then waits (bounded) until
+/// the registry reports a pending stop or shutdown.
+fn cancellable(
+    started: mpsc::Sender<()>,
+) -> impl FnOnce(&dyn Fn() -> bool) -> Result<u16, ProofFailure> {
+    move |cancelled| {
+        started.send(()).unwrap();
+        if wait_until(soon(), cancelled) {
+            Err(ProofFailure::Cancelled)
+        } else {
+            Err(ProofFailure::Failed("test_timeout"))
+        }
+    }
+}
+
+fn never_running(f: &Fixture) -> bool {
+    !event_with(f, "started", "succeeded", "running")
+}
+
+#[test]
+fn p0_002c4c3_proven_start_is_running_only_after_its_proof() {
+    let f = Fixture::new();
+    let (id, _) = registered(&f);
+    let r = Arc::new(registry(&f));
+    let control = Arc::new(FakeControl::default());
+    let observer = Arc::clone(&r);
+    let project = uuid(&id);
+    let proof = move |cancelled: &dyn Fn() -> bool| {
+        // Starting (never Running) and not cancelled while the proof runs.
+        assert_eq!(
+            observer.owned_status(project),
+            Some(LifecycleStatus::Starting)
+        );
+        assert!(!cancelled());
+        Ok(4242)
+    };
+    assert_eq!(
+        r.start_proven(target(&f, &id), f.audit(), proven(&control, proof)),
+        Ok(Some(4242))
+    );
+    assert_eq!(r.owned_status(project), Some(LifecycleStatus::Running));
+    assert!(event_with(&f, "started", "succeeded", "running"));
+    assert_eq!(r.stop(project, soon(), &f.audit()), Ok(Finalized::Stopped));
+    assert_eq!(control.terminations.load(Ordering::SeqCst), 1);
+    assert_eq!(r.owned_status(project), None);
+}
+
+#[test]
+fn p0_002c4c3_failed_or_panicking_proof_finalizes_and_is_never_running() {
+    for (failure, reason) in [
+        (Some("readiness_malformed"), "readiness_malformed"),
+        (Some("probe_failed"), "probe_failed"),
+        (None, "proof_panicked"),
+    ] {
+        let f = Fixture::new();
+        let (id, _) = registered(&f);
+        let r = registry(&f);
+        let control = Arc::new(FakeControl::default());
+        let proof = move |_: &dyn Fn() -> bool| match failure {
+            Some(reason) => Err(ProofFailure::Failed(reason)),
+            None => panic!("injected proof panic"),
+        };
+        assert_eq!(
+            r.start_proven(target(&f, &id), f.audit(), proven(&control, proof)),
+            Err(LifecycleError::NotReady(reason))
+        );
+        // Explicitly finalized by the starting thread, never adopted or leaked.
+        assert_eq!(control.terminations.load(Ordering::SeqCst), 1);
+        assert!(control.finalized.load(Ordering::SeqCst));
+        assert_eq!(r.owned_status(uuid(&id)), None);
+        assert!(event_with(&f, "not_ready", "succeeded", reason), "{reason}");
+        assert!(never_running(&f), "{reason}");
+    }
+}
+
+#[test]
+fn p0_002c4c3_cleanup_failed_proof_blocks_a_replacement_generation() {
+    let f = Fixture::new();
+    let (id, _) = registered(&f);
+    let r = registry(&f);
+    let project = uuid(&id);
+    let control = Arc::new(FakeControl::default());
+    *control.permanent.lock().unwrap() = Some(Fail::Termination);
+    let proof = |_: &dyn Fn() -> bool| Err(ProofFailure::Failed("readiness_timeout"));
+    assert_eq!(
+        r.start_proven(target(&f, &id), f.audit(), proven(&control, proof)),
+        Err(LifecycleError::CleanupFailed)
+    );
+    assert_eq!(
+        r.owned_status(project),
+        Some(LifecycleStatus::CleanupFailed)
+    );
+    // No replacement generation while the tree is retained; its launcher
+    // never runs.
+    let launched = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&launched);
+    let other = Arc::new(FakeControl::default());
+    let replacement = move |target: &DevServerTarget| {
+        counter.fetch_add(1, Ordering::SeqCst);
+        proven(&other, |_: &dyn Fn() -> bool| Ok(1))(target)
+    };
+    assert_eq!(
+        r.start_proven(target(&f, &id), f.audit(), replacement),
+        Err(LifecycleError::Busy)
+    );
+    assert_eq!(launched.load(Ordering::SeqCst), 0);
+    // A failed retry stays retained; a successful retry frees the project.
+    assert_eq!(
+        r.stop(project, soon(), &f.audit()),
+        Err(LifecycleError::CleanupFailed)
+    );
+    *control.permanent.lock().unwrap() = None;
+    assert_eq!(r.stop(project, soon(), &f.audit()), Ok(Finalized::Stopped));
+    assert_eq!(r.owned_status(project), None);
+    let next = Arc::new(FakeControl::default());
+    assert_eq!(
+        r.start_proven(
+            target(&f, &id),
+            f.audit(),
+            proven(&next, |_: &dyn Fn() -> bool| Ok(2))
+        ),
+        Ok(Some(2))
+    );
+    r.stop(project, soon(), &f.audit()).unwrap();
+    // The replacement generation ran and was stopped by its own owner (whose
+    // audit follows completion).
+    assert!(wait_event(&f, "stopped", "stop_requested"));
+    assert_eq!(next.terminations.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn p0_002c4c3_stop_or_shutdown_during_readiness_cancels_and_finalizes() {
+    for shutdown in [false, true] {
+        let f = Fixture::new();
+        let (id, _) = registered(&f);
+        let r = Arc::new(registry(&f));
+        let project = uuid(&id);
+        let control = Arc::new(FakeControl::default());
+        let (started, proof_running) = mpsc::channel();
+        let starter = {
+            let (r, target, audit) = (Arc::clone(&r), target(&f, &id), f.audit());
+            let launch = proven(&control, cancellable(started));
+            thread::spawn(move || r.start_proven(target, audit, launch))
+        };
+        proof_running.recv_timeout(WAIT).unwrap();
+        assert_eq!(r.owned_status(project), Some(LifecycleStatus::Starting));
+        if shutdown {
+            assert_eq!(r.shutdown_all(soon(), &f.audit()), Ok(()));
+        } else {
+            // The stop waits for the cancelled proof's finalization.
+            assert_eq!(r.stop(project, soon(), &f.audit()), Ok(Finalized::Stopped));
+        }
+        assert_eq!(starter.join().unwrap(), Err(LifecycleError::StopRequested));
+        assert_eq!(control.terminations.load(Ordering::SeqCst), 1);
+        assert_eq!(r.owned_status(project), None);
+        let reason = if shutdown {
+            "shutdown"
+        } else {
+            "stop_requested"
+        };
+        assert!(event_with(&f, "stopped", "succeeded", reason), "{reason}");
+        assert!(never_running(&f));
+    }
+}
+
+#[test]
+fn p0_002c4c3_duplicate_start_during_readiness_is_denied_without_launch() {
+    let f = Fixture::new();
+    let (id, _) = registered(&f);
+    let r = Arc::new(registry(&f));
+    let project = uuid(&id);
+    let control = Arc::new(FakeControl::default());
+    let (started, proof_running) = mpsc::channel();
+    let starter = {
+        let (r, target, audit) = (Arc::clone(&r), target(&f, &id), f.audit());
+        let launch = proven(&control, cancellable(started));
+        thread::spawn(move || r.start_proven(target, audit, launch))
+    };
+    proof_running.recv_timeout(WAIT).unwrap();
+    let launched = Arc::new(AtomicUsize::new(0));
+    for _ in 0..3 {
+        let counter = Arc::clone(&launched);
+        let duplicate = move |_: &DevServerTarget| -> Result<Launched<u16>, &'static str> {
+            counter.fetch_add(1, Ordering::SeqCst);
+            Err("unreachable")
+        };
+        assert_eq!(
+            r.start_proven(target(&f, &id), f.audit(), duplicate),
+            Err(LifecycleError::Busy)
+        );
+    }
+    assert_eq!(launched.load(Ordering::SeqCst), 0);
+    assert_eq!(r.stop(project, soon(), &f.audit()), Ok(Finalized::Stopped));
+    assert_eq!(starter.join().unwrap(), Err(LifecycleError::StopRequested));
+    assert_eq!(control.terminations.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn p0_002c4c3_identity_change_during_spawn_or_readiness_is_never_running() {
+    for case in ["registration", "react", "runtime", "runtime_child"] {
+        let f = Fixture::new();
+        let (id, root) = registered(&f);
+        let r = registry(&f);
+        let control = Arc::new(FakeControl::default());
+        let catalog = Arc::clone(&f.authority.catalog);
+        let project = catalog.lookup(uuid(&id)).unwrap();
+        let root_for_proof = root.clone();
+        let launch = {
+            let control = Arc::clone(&control);
+            move |_: &DevServerTarget| {
+                if case == "registration" {
+                    // The registration is tombstoned while the process is created.
+                    catalog.invalidate(&project).unwrap();
+                }
+                let proof = move |_: &dyn Fn() -> bool| {
+                    // Governed directories are replaced while readiness is proven.
+                    let replaced = match case {
+                        "react" => Some(root_for_proof.join("react")),
+                        "runtime_child" => Some(root_for_proof.join("runtime").join("vite-cache")),
+                        _ => None,
+                    };
+                    if let Some(path) = replaced {
+                        std::fs::rename(&path, path.with_extension("original")).unwrap();
+                        std::fs::create_dir(&path).unwrap();
+                    }
+                    Ok(1u16)
+                };
+                Ok(Launched {
+                    tree: Box::new(Fake(control)) as Box<dyn OwnedTree>,
+                    proof: Box::new(proof) as Proof<u16>,
+                })
+            }
+        };
+        if case == "runtime" {
+            // Checked before the launcher. Native Windows refuses to rename
+            // runtime/ (an ancestor of the retained child handles).
+            let runtime = root.join("runtime");
+            let moved = std::fs::rename(&runtime, runtime.with_extension("original"));
+            if cfg!(windows) {
+                assert!(moved.is_err());
+                continue;
+            }
+            moved.unwrap();
+            std::fs::create_dir(&runtime).unwrap();
+            assert_eq!(
+                r.start_proven(target_unchecked(&f, &id), f.audit(), launch),
+                Err(LifecycleError::IdentityDenied)
+            );
+            assert_eq!(control.terminations.load(Ordering::SeqCst), 0);
+            assert!(event_with(&f, "invalidated", "denied", "runtime"));
+            continue;
+        }
+        assert_eq!(
+            r.start_proven(target(&f, &id), f.audit(), launch),
+            Err(LifecycleError::IdentityDenied),
+            "{case}"
+        );
+        // The created tree was finalized by the starting thread, never Running.
+        assert_eq!(control.terminations.load(Ordering::SeqCst), 1, "{case}");
+        assert_eq!(r.owned_status(uuid(&id)), None, "{case}");
+        assert!(event_with(&f, "invalidated", "succeeded", case), "{case}");
+        assert!(never_running(&f), "{case}");
+    }
+}
+
+/// A target captured while valid; the caller then mutates identities.
+fn target_unchecked(f: &Fixture, id: &str) -> DevServerTarget {
+    DevServerTarget {
+        project: f.authority.catalog.lookup(uuid(id)).unwrap(),
+    }
+}
+
+#[test]
+fn p0_002c4c3_root_exit_right_after_readiness_is_finalized() {
+    let f = Fixture::new();
+    let (id, _) = registered(&f);
+    let r = registry(&f);
+    let project = uuid(&id);
+    let control = Arc::new(FakeControl::default());
+    let exiting = Arc::clone(&control);
+    let proof = move |_: &dyn Fn() -> bool| {
+        // Ready, and the root exits before the registry adopts it.
+        *exiting.exit.lock().unwrap() = Some(true);
+        Ok(7)
+    };
+    let started = r.start_proven(target(&f, &id), f.audit(), proven(&control, proof));
+    assert!(matches!(started, Ok(Some(7)) | Ok(None)), "{started:?}");
+    // Whatever the adoption race, the owner explicitly finalizes the tree.
+    assert!(wait_until(soon(), || r.owned_status(project).is_none()));
+    assert!(wait_event(&f, "exited", "exited"));
+    assert_eq!(control.terminations.load(Ordering::SeqCst), 1);
+    assert!(control.finalized.load(Ordering::SeqCst));
+}
+
+#[test]
+fn p0_002c4c3_launcher_denial_or_panic_creates_nothing() {
+    let f = Fixture::new();
+    let (id, _) = registered(&f);
+    let r = registry(&f);
+    let denied = |_: &DevServerTarget| -> Result<Launched<u16>, &'static str> {
+        Err("toolchain_unavailable")
+    };
+    assert_eq!(
+        r.start_proven(target(&f, &id), f.audit(), denied),
+        Err(LifecycleError::LaunchDenied("toolchain_unavailable"))
+    );
+    assert!(event_with(&f, "started", "failed", "toolchain_unavailable"));
+    assert_eq!(r.owned_status(uuid(&id)), None);
+    let panicking = |_: &DevServerTarget| -> Result<Launched<u16>, &'static str> {
+        panic!("injected launcher panic")
+    };
+    assert_eq!(
+        r.start_proven(target(&f, &id), f.audit(), panicking),
+        Err(LifecycleError::LaunchFailed)
+    );
+    assert_eq!(r.owned_status(uuid(&id)), None);
+    assert!(never_running(&f));
+}
+
+#[test]
+fn p0_002c4c3_monitor_terminates_on_runtime_child_invalidation() {
+    for child in ["home", "tmp", "vite-cache", "env"] {
+        let f = Fixture::new();
+        let (id, root) = registered(&f);
+        let r = registry(&f);
+        let project = uuid(&id);
+        let control = Arc::new(FakeControl::default());
+        assert_eq!(
+            r.start_proven(
+                target(&f, &id),
+                f.audit(),
+                proven(&control, |_: &dyn Fn() -> bool| Ok(1))
+            ),
+            Ok(Some(1))
+        );
+        // At least one full monitor cycle validates the intact workspace.
+        let polls = control.polls.load(Ordering::SeqCst);
+        assert!(wait_until(soon(), || control.polls.load(Ordering::SeqCst) >= polls + 2));
+        assert_eq!(r.owned_status(project), Some(LifecycleStatus::Running));
+        // A replacement directory at the same path is never adopted.
+        let path = root.join("runtime").join(child);
+        std::fs::rename(&path, path.with_extension("original")).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert!(
+            wait_until(soon(), || r.owned_status(project).is_none()),
+            "{child}"
+        );
+        assert!(wait_event(&f, "invalidated", "runtime_child"), "{child}");
+        assert_eq!(control.terminations.load(Ordering::SeqCst), 1, "{child}");
+    }
 }

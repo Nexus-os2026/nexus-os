@@ -1724,7 +1724,7 @@ fn assert_all_deny(f: &Fixture, selector: &str, expected: &str) {
     let from = f.events.lock().unwrap().len();
     assert_eq!(
         f.authority.dev_server_start(selector, f.audit()),
-        expected,
+        Err(expected),
         "{selector:?}"
     );
     assert_eq!(
@@ -1739,13 +1739,50 @@ fn assert_all_deny(f: &Fixture, selector: &str, expected: &str) {
             .unwrap_err(),
         expected
     );
+    // Denied during selection: the lifecycle is never reached.
     let events = devserver_events(f, from);
     assert_eq!(events.len(), 3, "{selector:?}");
     assert!(events.iter().all(|v| v["outcome"] == "denied"
-        && v["reason"] != "launch_unavailable"
+        && !toolchain_denial(&v["reason"])
         && v["reason"] != "no_owned_server"));
 }
 
+/// P0-002C4C3: this test build has no installed trusted toolchain, so a fully
+/// governed START reaches the fresh verification and is denied there (before
+/// any process exists): "toolchain_unavailable" without a packaged manifest.
+/// A packaged test build derives an installed root it cannot verify.
+fn toolchain_denial(reason: &Value) -> bool {
+    reason == "toolchain_unavailable"
+        || (cfg!(nexus_packaged_toolchain) && reason == "toolchain_rejected")
+}
+
+const TOOLCHAIN_UNAVAILABLE: &str = "trusted toolchain unavailable";
+
+/// The events of one governed START denied at toolchain verification: a
+/// reserved generation, abandoned before launch, then the bounded START event.
+fn assert_toolchain_denied_start(events: &[Value], id: &str) {
+    assert_eq!(events.len(), 3, "{events:?}");
+    assert_eq!(
+        events[0],
+        json!({"operation": "builder.devserver.lifecycle.reserve", "project_id": id,
+            "outcome": "succeeded", "reason": "reserved"})
+    );
+    for (event, operation) in events[1..].iter().zip([
+        "builder.devserver.lifecycle.started",
+        "builder.devserver.start",
+    ]) {
+        assert_eq!(event["operation"], operation);
+        assert_eq!(event["project_id"], id);
+        assert_eq!(event["outcome"], "failed");
+        assert!(toolchain_denial(&event["reason"]), "{event}");
+        assert_eq!(event.as_object().unwrap().len(), 4);
+    }
+}
+
+// P0-002C4C3 narrowing: the retired "launch unavailable" outcome is now the
+// governed launch's own denial. Without a verified installed toolchain a fully
+// governed START is denied at fresh verification, before any process exists,
+// still without mutation, installation or registration change.
 #[test]
 fn p0_002c4a_registered_project_reaches_launch_unavailable_without_mutation() {
     let f = Fixture::new();
@@ -1756,15 +1793,12 @@ fn p0_002c4a_registered_project_reaches_launch_unavailable_without_mutation() {
         let from = f.events.lock().unwrap().len();
         assert_eq!(
             f.authority.dev_server_start(&id, f.audit()),
-            "launch unavailable"
+            Err(TOOLCHAIN_UNAVAILABLE)
         );
-        let events = devserver_events(&f, from);
+        assert_toolchain_denied_start(&devserver_events(&f, from), &id);
         assert_eq!(
-            events,
-            vec![
-                json!({"operation": "builder.devserver.start", "project_id": id,
-                "outcome": "denied", "reason": "launch_unavailable"})
-            ]
+            f.authority.dev_server_status(&id, f.audit()).unwrap(),
+            json!({"status": "stopped"})
         );
     }
     assert_eq!(tree(&f.path), before);
@@ -1824,7 +1858,7 @@ fn p0_002c4a_selectors_without_current_registration_deny_every_operation() {
             .unwrap();
     assert_eq!(
         restarted.dev_server_start(&id, f.audit()),
-        "project not registered"
+        Err("project not registered")
     );
     assert!(restarted.dev_server_stop(&id, f.audit()).is_err());
     assert!(restarted.dev_server_status(&id, f.audit()).is_err());
@@ -1858,7 +1892,7 @@ fn p0_002c4a_project_and_storage_identity_changes_deny_and_permanently_invalidat
         }
         assert_eq!(
             f.authority.dev_server_start(&id, f.audit()),
-            "registration identity denied",
+            Err("registration identity denied"),
             "{case}"
         );
         // Invalidation is permanent: later calls deny as unregistered.
@@ -1931,13 +1965,13 @@ fn p0_002c4a_unix_react_and_project_symlink_redirects_deny() {
     std::fs::rename(&relocated, &react).unwrap();
     assert_eq!(
         f.authority.dev_server_start(&id, f.audit()),
-        "launch unavailable"
+        Err(TOOLCHAIN_UNAVAILABLE)
     );
     std::fs::rename(&root, root.with_extension("old")).unwrap();
     symlink(root.with_extension("old"), &root).unwrap();
     assert_eq!(
         f.authority.dev_server_start(&id, f.audit()),
-        "registration identity denied"
+        Err("registration identity denied")
     );
     assert_all_deny(&f, &id, "project not registered");
 }
@@ -1964,10 +1998,8 @@ fn p0_002c4a_windows_native_reparse_project_and_react_redirect_deny() {
         std::fs::rename(&target, &old).unwrap();
         symlink_dir(&old, &target)
             .expect("native Windows test requires symlink creation privilege");
-        assert_ne!(
-            f.authority.dev_server_start(&id, f.audit()),
-            "launch unavailable"
-        );
+        let denied = f.authority.dev_server_start(&id, f.audit()).unwrap_err();
+        assert_ne!(denied, TOOLCHAIN_UNAVAILABLE);
         assert!(f.authority.dev_server_stop(&id, f.audit()).is_err());
         assert!(f.authority.dev_server_status(&id, f.audit()).is_err());
         assert_eq!(
@@ -1990,10 +2022,7 @@ fn p0_002c4a_stop_and_status_are_truthful_and_expose_no_process_authority() {
         f.authority.dev_server_stop(&id, f.audit()).unwrap();
     }
     let status = f.authority.dev_server_status(&id, f.audit()).unwrap();
-    assert_eq!(
-        status,
-        json!({"status": "stopped", "launch_available": false})
-    );
+    assert_eq!(status, json!({"status": "stopped"}));
     assert_eq!(tree(&f.path), before);
     let events = devserver_events(&f, from);
     assert_eq!(events.len(), 3);
@@ -2042,14 +2071,20 @@ fn p0_002c4a_audit_reentry_and_no_sensitive_material() {
         })
     };
     let mut output = String::new();
-    output += authority.dev_server_start(&id, Arc::clone(&audit));
+    output += authority
+        .dev_server_start(&id, Arc::clone(&audit))
+        .unwrap_err();
     authority.dev_server_stop(&id, Arc::clone(&audit)).unwrap();
     output += &authority
         .dev_server_status(&id, Arc::clone(&audit))
         .unwrap()
         .to_string();
-    output += authority.dev_server_start("../private/caller/root", Arc::clone(&audit));
-    output += authority.dev_server_start(&Uuid::new_v4().to_string(), audit);
+    output += authority
+        .dev_server_start("../private/caller/root", Arc::clone(&audit))
+        .unwrap_err();
+    output += authority
+        .dev_server_start(&Uuid::new_v4().to_string(), audit)
+        .unwrap_err();
     assert!(reentered.load(std::sync::atomic::Ordering::SeqCst) >= 3);
     output += &serde_json::to_string(&*events.lock().unwrap()).unwrap();
     for sensitive in [
@@ -2094,12 +2129,12 @@ fn p0_002c4a_appstate_commands_fail_closed_and_share_registration() {
     let cloned = state.clone();
     assert_eq!(
         dev_server_start(&cloned, &id).unwrap_err(),
-        "Builder dev server: launch unavailable"
+        "Builder dev server: trusted toolchain unavailable"
     );
     dev_server_stop(&cloned, &id).unwrap();
     assert_eq!(
         dev_server_status(&state, &id).unwrap(),
-        json!({"status": "stopped", "launch_available": false})
+        json!({"status": "stopped"})
     );
     assert_eq!(
         dev_server_start(&state, "not-a-uuid").unwrap_err(),
@@ -2158,14 +2193,16 @@ fn p0_002c4a_home_cwd_and_path_cannot_influence_or_trigger_execution() {
         std::env::set_var("HOME", &home.path);
         std::env::set_var("USERPROFILE", &home.path);
         std::env::set_var("PATH", &bin);
+        // P0-002C4C3: denied at fresh toolchain verification. HOME, cwd and
+        // PATH never select a toolchain, Node, entry or project.
         assert_eq!(
             f.authority.dev_server_start(&id, f.audit()),
-            "launch unavailable"
+            Err(TOOLCHAIN_UNAVAILABLE)
         );
         f.authority.dev_server_stop(&id, f.audit()).unwrap();
         assert_eq!(
             f.authority.dev_server_status(&id, f.audit()).unwrap(),
-            json!({"status": "stopped", "launch_available": false})
+            json!({"status": "stopped"})
         );
         // A selector naming the HOME-derived legacy project is not authority.
         let legacy_id = Uuid::new_v4().to_string();
@@ -2178,7 +2215,7 @@ fn p0_002c4a_home_cwd_and_path_cannot_influence_or_trigger_execution() {
         .unwrap();
         assert_eq!(
             f.authority.dev_server_start(&legacy_id, f.audit()),
-            "project not registered"
+            Err("project not registered")
         );
         std::env::set_current_dir(original).unwrap();
         // Give any hypothetical detached child a moment to reveal itself.
@@ -2202,10 +2239,11 @@ fn p0_002c4a_home_cwd_and_path_cannot_influence_or_trigger_execution() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("C4A environment witness"));
 }
 
-// Security invariant guard: no production launch path remains reachable from
-// the three dev-server commands or the Builder authority adapter. P0-002C4C1:
-// each command is checked separately; only stop may dispatch, and only its
-// bounded wait onto Tauri's blocking pool.
+// Security invariant guard: no legacy launch path remains reachable from the
+// three dev-server commands or the Builder authority adapter. P0-002C4C1: each
+// command is checked separately; only stop may dispatch its bounded wait onto
+// Tauri's blocking pool. P0-002C4C3 narrowing: start now also dispatches (the
+// governed launch, whose only process creation is in `dev_server_launch`).
 #[test]
 fn p0_002c4a_production_dev_server_commands_have_no_launch_path() {
     let lib = include_str!("../lib.rs");
@@ -2239,7 +2277,7 @@ fn p0_002c4a_production_dev_server_commands_have_no_launch_path() {
         ] {
             assert!(!command.contains(forbidden), "{index}: {forbidden}");
         }
-        let dispatch = usize::from(index == 1);
+        let dispatch = usize::from(index <= 1);
         assert_eq!(command.matches("spawn").count(), dispatch, "{index}");
         assert_eq!(
             command
@@ -2287,8 +2325,10 @@ fn code_only(source: &str) -> String {
 
 // P0-002C4B/C4C1 guard: the lifecycle registry is constructed only by trusted
 // BuilderWorkspaceAuthority provisioning from its single ProjectCatalog;
-// production stop/status/shutdown may only stop, observe or drain it; the start
-// path cannot reach it; and the lifecycle module still cannot create a process.
+// production stop/status/shutdown may only stop, observe or drain it; and the
+// lifecycle module still cannot create a process. P0-002C4C3 narrowing: the
+// start path reaches the registry exactly once, through `start_proven` with
+// the governed launcher; the commands themselves still cannot reach it.
 #[test]
 fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
     let lib = include_str!("../lib.rs");
@@ -2331,8 +2371,20 @@ fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
         production[start..start + production[start..].find(to).unwrap()].to_lowercase()
     };
     // The start path (selector validation chain plus both start functions).
+    // P0-002C4C3: its only lifecycle use is one `start_proven` whose launcher
+    // is the governed `dev_server_launch::launch`; it creates no process itself.
+    let flat_code = |code: &str| code.split_whitespace().collect::<String>();
+    let selection = section("type DevServerDenial", "fn dev_server_stop(&self");
+    assert_eq!(flat_code(&selection).matches(".lifecycle.").count(), 1);
+    assert_eq!(
+        flat_code(&selection)
+            .matches("self.lifecycle.start_proven(target,arc::clone(&audit),|target|")
+            .count(),
+        1
+    );
+    assert_eq!(selection.matches("dev_server_launch::launch(").count(), 1);
     for code in [
-        section("type DevServerDenial", "fn dev_server_stop(&self"),
+        selection.replace("lifecycle", ""),
         section(
             "pub(super) fn dev_server_start(",
             "pub(super) fn dev_server_stop(",
@@ -2368,19 +2420,24 @@ fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
         assert!(!source.contains("LifecycleRegistry"));
         assert!(!source.contains("process_lifecycle"));
     }
-    // Production may only stop, observe or drain the registry; never start it.
-    assert!(!production.contains(".start("));
+    // Production may stop, observe or drain the registry, and (P0-002C4C3)
+    // start it only through the one governed `start_proven`; never `start`.
+    let flat_production = production.split_whitespace().collect::<String>();
+    assert!(!flat_production.contains(".start("));
     let mut uses = 0;
-    for (at, _) in production.match_indices("lifecycle.") {
-        let call = &production[at + "lifecycle.".len()..];
+    let mut starts = 0;
+    for (at, _) in flat_production.match_indices("lifecycle.") {
+        let call = &flat_production[at + "lifecycle.".len()..];
         let method = &call[..call.find('(').unwrap()];
         assert!(
-            ["stop", "owned_status", "shutdown_all"].contains(&method),
+            ["stop", "owned_status", "shutdown_all", "start_proven"].contains(&method),
             "lifecycle.{method}"
         );
+        starts += usize::from(method == "start_proven");
         uses += 1;
     }
-    assert!(uses >= 3);
+    assert!(uses >= 4);
+    assert_eq!(starts, 1);
     // Declared once and imported once; structure checked per line (LF/CRLF).
     assert_eq!(adapter.matches("process_lifecycle").count(), 2);
     let lines: Vec<&str> = adapter.lines().map(str::trim_end).collect();
@@ -2399,10 +2456,18 @@ fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
         1
     );
     // Non-test lifecycle code wraps an already-owned tree; it cannot create one.
-    // All #[cfg(test)] fixtures and the real launcher live in its tests module:
-    // the only #[cfg(test)] item is the final `mod tests;` declaration.
+    // All #[cfg(test)] fixtures and the real launcher live in its tests module.
+    // P0-002C4C3: besides the final `mod tests;` declaration, only the C4B
+    // `start` form (a `start_proven` wrapper) and `status` are test-only.
     let lifecycle = include_str!("process_lifecycle.rs");
-    assert_eq!(lifecycle.matches("#[cfg(test)]").count(), 1);
+    assert_eq!(lifecycle.matches("#[cfg(test)]").count(), 3);
+    let normalized = lifecycle.replace("\r\n", "\n");
+    for item in [
+        "#[cfg(test)]\n    pub(super) fn start<L>(",
+        "#[cfg(test)]\n    pub(super) fn status(",
+    ] {
+        assert_eq!(normalized.matches(item).count(), 1, "{item}");
+    }
     let meaningful: Vec<&str> = lifecycle
         .lines()
         .map(str::trim_end)
@@ -2444,29 +2509,44 @@ fn p0_002c4b_production_commands_cannot_reach_lifecycle_or_launch() {
         production.matches(".id()").count(),
         production.matches("thread::current().id()").count()
     );
+    // P0-002C4C3: the staging allow is gone; only the variant production
+    // reports directly (a vacant slot is `stopped`) may stay unconstructed.
     assert_eq!(production.matches("allow(").count(), 1);
-    assert!(lifecycle.contains("#![cfg_attr(not(test), allow(dead_code))]"));
+    assert!(!lifecycle.contains("#![cfg_attr(not(test), allow(dead_code))]"));
+    assert_eq!(
+        production
+            .matches("#[cfg_attr(not(test), allow(dead_code))]\n    Stopped,")
+            .count(),
+        1
+    );
 }
 
 // P0-002C4C1: the bounded stop wait is dispatched to Tauri's blocking pool,
-// never run on the IPC/main thread; start and status stay synchronous and
+// never run on the IPC/main thread; status stays synchronous and
 // non-blocking; normal final Exit runs one bounded Builder shutdown and exit is
 // never held (no ExitRequested hold loop). Forced exits bypass the hook.
+// P0-002C4C3 narrowing: the governed start (bounded verification, readiness
+// and probe) is dispatched to the blocking pool exactly like stop.
 #[test]
 fn p0_002c4c1_stop_waits_off_ipc_thread_and_exit_hook_is_bounded() {
     let lib = code_only(include_str!("../lib.rs"));
     let at = |needle: &str| lib.find(needle).unwrap();
+    let start = &lib[at("fn builder_dev_server_start(")..at("fn builder_dev_server_stop(")];
     let stop = &lib[at("fn builder_dev_server_stop(")..at("fn builder_dev_server_status(")];
     assert!(lib.contains("async fn builder_dev_server_stop("));
-    assert!(!lib.contains("async fn builder_dev_server_start("));
+    assert!(lib.contains("async fn builder_dev_server_start("));
     assert!(!lib.contains("async fn builder_dev_server_status("));
-    let dispatch = stop
-        .find("tauri::async_runtime::spawn_blocking(move ||")
-        .unwrap();
-    let blocking = stop
-        .find("super::builder_workspace::dev_server_stop(&state, &project_id)")
-        .unwrap();
-    assert!(dispatch < blocking && blocking < stop.find(".await").unwrap());
+    for (command, operation) in [(start, "start"), (stop, "stop")] {
+        let dispatch = command
+            .find("tauri::async_runtime::spawn_blocking(move ||")
+            .unwrap();
+        let blocking = command
+            .find(&format!(
+                "super::builder_workspace::dev_server_{operation}(&state, &project_id)"
+            ))
+            .unwrap();
+        assert!(dispatch < blocking && blocking < command.find(".await").unwrap());
+    }
     // The generated handler still registers the same three commands.
     for name in [
         "builder_dev_server_start,",

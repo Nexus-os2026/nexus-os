@@ -132,6 +132,7 @@ fn p0_002c4d1b_fresh_registration_provisions_governed_react_and_private_runtime(
     let workspace = registration.workspace.get().unwrap();
     workspace.validate_react(&root).unwrap();
     workspace.validate_runtime(&root).unwrap();
+    workspace.validate_runtime_children(&root).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -141,13 +142,14 @@ fn p0_002c4d1b_fresh_registration_provisions_governed_react_and_private_runtime(
             .mode();
         assert_eq!(mode & 0o077, 0, "runtime must be private: {mode:o}");
     }
-    // The governed workspace is now usable by C3 and C4A (launch still denied).
+    // The governed workspace is now usable by C3 and the C4C3 launch (which
+    // this build denies only at fresh toolchain verification).
     f.authority
         .write_file(&id, "src/new.ts", b"export {}", f.audit())
         .unwrap();
     assert_eq!(
         f.authority.dev_server_start(&id, f.audit()),
-        "launch unavailable"
+        Err("trusted toolchain unavailable")
     );
 }
 
@@ -265,7 +267,7 @@ fn p0_002c4d1b_fresh_authority_never_inherits_provisioning() {
     );
     assert_eq!(
         restarted.dev_server_start(&id, f.audit()),
-        "project not registered"
+        Err("project not registered")
     );
     assert_eq!(tree(&root), before);
 }
@@ -329,7 +331,7 @@ fn p0_002c4d1b_provisioned_registration_change_tombstones_the_workspace() {
     );
     assert_eq!(
         f.authority.dev_server_start(&id, f.audit()),
-        "project not registered"
+        Err("project not registered")
     );
     assert!(weak.upgrade().is_none(), "retained workspace released");
     assert!(!root.exists(), "nothing was recreated");
@@ -347,9 +349,9 @@ fn p0_002c4d1b_react_and_runtime_replacement_deny_governed_use() {
         f.authority.write_file(&id, "x.ts", b"denied", f.audit()),
         Err("React identity denied")
     );
-    assert_ne!(
+    assert_eq!(
         f.authority.dev_server_start(&id, f.audit()),
-        "launch unavailable"
+        Err("React identity denied")
     );
     assert!(!react.join("x.ts").exists() && !original.join("x.ts").exists());
     // Identity, not the path, is the authority: restoring the governed
@@ -371,6 +373,10 @@ fn p0_002c4d1b_react_and_runtime_replacement_deny_governed_use() {
             .unwrap()
             .validate_runtime(&root),
         Err(IdentityError::Changed)
+    );
+    assert_eq!(
+        f.authority.dev_server_start(&id, f.audit()),
+        Err("runtime identity denied")
     );
 }
 

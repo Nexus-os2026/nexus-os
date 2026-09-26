@@ -168,6 +168,18 @@ fn repository(relative: &str) -> String {
         .replace("\r\n", "\n")
 }
 
+/// P0-002C4C3 test seam: the real assembled toolchain at `root`, verified
+/// against the embedded manifest exactly as the installed toolchain is (the
+/// launch tests' toolchain source). Unavailable without a packaged manifest.
+pub(in crate::builder_workspace) fn verify_assembled(
+    root: &Path,
+) -> Result<VerifiedToolchain, ToolchainError> {
+    let Some(manifest) = PRODUCTION_MANIFEST else {
+        return Err(ToolchainError::Unavailable);
+    };
+    verify_packaged_root(manifest, root)
+}
+
 // ── Root derivation ───────────────────────────────────────────────────────
 
 #[test]
@@ -406,25 +418,30 @@ fn p0_002c4d2_builds_without_a_packaged_toolchain_stay_unavailable() {
 
 // ── Build, bundle and runtime contracts ────────────────────────────────────
 
+// P0-002C4C3 narrowing: the verified paths now reach exactly one consumer, the
+// governed dev-server launch (and its tests); no command, frontend path or
+// other module can obtain or use them. Static build stays unavailable (C4D0).
 #[test]
 fn p0_002c4d2_verified_paths_reach_no_launch_or_frontend() {
-    // Nothing outside this module can obtain or use the verified paths yet;
-    // production START and static build stay unavailable (C4A/C4D0 tests).
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let own = src.join("builder_workspace").join("trusted_toolchain");
+    let workspace = src.join("builder_workspace");
+    let own = workspace.join("trusted_toolchain");
+    let launch = workspace.join("dev_server_launch.rs");
+    let launch_tests = workspace.join("dev_server_launch");
     let mut pending = vec![src.clone()];
     let mut checked = 0;
     while let Some(dir) = pending.pop() {
         for entry in std::fs::read_dir(&dir).unwrap() {
             let path = entry.unwrap().path();
             if path.is_dir() {
-                if path != own {
+                if path != own && path != launch_tests {
                     pending.push(path);
                 }
                 continue;
             }
             if path.extension().is_none_or(|e| e != "rs")
-                || path == src.join("builder_workspace").join("trusted_toolchain.rs")
+                || path == workspace.join("trusted_toolchain.rs")
+                || path == launch
             {
                 continue;
             }
@@ -442,6 +459,20 @@ fn p0_002c4d2_verified_paths_reach_no_launch_or_frontend() {
         }
     }
     assert!(checked > 10);
+    // The launch verifies freshly (never a cached VerifiedToolchain) and takes
+    // Node and the entry only from that verification.
+    let launch = code(&std::fs::read_to_string(&launch).unwrap());
+    assert_eq!(launch.matches("verify_installed()").count(), 1);
+    assert_eq!(launch.matches("settings.toolchain.verify()").count(), 1);
+    assert_eq!(launch.matches(".node_executable()").count(), 1);
+    assert_eq!(launch.matches(".entry_module()").count(), 1);
+    for forbidden in ["OnceLock", "LazyLock", "thread_local", "Mutex<", "RwLock<"] {
+        assert!(!launch.contains(forbidden), "{forbidden} in the launch");
+    }
+    assert!(launch
+        .lines()
+        .map(str::trim_start)
+        .all(|line| !line.starts_with("static ") && !line.contains(" static ")));
 }
 
 #[test]

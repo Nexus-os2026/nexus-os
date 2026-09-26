@@ -18,8 +18,11 @@ import { fileURLToPath } from 'node:url';
 const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pins = JSON.parse(fs.readFileSync(path.join(packageDir, 'node-release.json'), 'utf8'));
 const ENTRY_FILES = [
+  'fs-probe.mjs',
   'module-guard.mjs',
   'nexus-builder.mjs',
+  'preview-server.mjs',
+  'process-guard.mjs',
   'tailwind-theme.mjs',
   'trusted-config.mjs',
   'tsconfig.json',

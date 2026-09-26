@@ -1,8 +1,8 @@
 //! P0-002C4B: private lifecycle primitive for a trusted, internally created
 //! owned process tree. P0-002C4C1: the only production registry is owned by
-//! BuilderWorkspaceAuthority (sharing its ProjectCatalog) and production uses
-//! only stop, owned_status and shutdown_all. No production source calls
-//! `start` or creates a tree; production launch is a later checkpoint.
+//! BuilderWorkspaceAuthority (sharing its ProjectCatalog). P0-002C4C3: the
+//! governed dev-server launch is its only production `start_proven` caller;
+//! a launched tree must pass its readiness proof before it can be Running.
 //!
 //! Exactly one owner thread holds each tree. Executions are identified by a
 //! private registry generation, never by an operating-system identifier. Stop,
@@ -18,8 +18,6 @@
 //! across a tree operation, catalog or identity validation, audit, the launcher
 //! or a completion wait. Terminal order: cleanup, generation-checked registry
 //! transition, unlock, completion, then audit.
-#![cfg_attr(not(test), allow(dead_code))] // Staged: `start` has no production caller until launch is approved.
-
 use super::{Audit, DevServerTarget, ProjectCatalog};
 use nexus_kernel::resource_limiter::{ResourceLimitError, ResourceLimitedChild};
 use serde_json::{json, Value};
@@ -68,6 +66,8 @@ pub(super) enum Finalized {
     Crashed,
     Invalidated,
     MonitorFailure,
+    /// The readiness proof failed; the tree was finalized, never Running.
+    NotReady,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,7 +83,11 @@ pub(super) enum LifecycleError {
     StopPending,
     OwnerUnavailable,
     LaunchFailed,
-    /// The retained registration or React identity no longer validated
+    /// The launcher denied the launch before any process existed (bounded).
+    LaunchDenied(&'static str),
+    /// The launched tree failed its readiness proof and was finalized (bounded).
+    NotReady(&'static str),
+    /// The retained registration or workspace identity no longer validated
     /// before or during launch. The launcher was not run, or its tree was
     /// finalized without ever being published as Running.
     IdentityDenied,
@@ -103,6 +107,7 @@ impl LifecycleError {
             Self::StopRequested | Self::StopPending => "stop_requested",
             Self::OwnerUnavailable => "owner_unavailable",
             Self::LaunchFailed => "launch_failed",
+            Self::LaunchDenied(reason) | Self::NotReady(reason) => reason,
             Self::IdentityDenied => "identity_denied",
             Self::CleanupFailed => "cleanup_failed",
             Self::NotConfirmed => "not_confirmed",
@@ -112,6 +117,8 @@ impl LifecycleError {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum LifecycleStatus {
+    // Production reports a vacant slot as `stopped` directly (C4A fallback).
+    #[cfg_attr(not(test), allow(dead_code))]
     Stopped,
     Starting,
     Running,
@@ -133,6 +140,25 @@ impl LifecycleStatus {
 }
 
 type Terminal = Result<Finalized, LifecycleError>;
+
+/// A readiness proof: given a check that reports a pending stop or shutdown,
+/// it returns the proven result or a bounded failure.
+pub(super) type Proof<R> = Box<dyn FnOnce(&dyn Fn() -> bool) -> Result<R, ProofFailure>>;
+
+/// A created tree plus the readiness proof it must pass, with no lock held,
+/// before the execution may be published as Running.
+pub(super) struct Launched<R> {
+    pub(super) tree: Box<dyn OwnedTree>,
+    pub(super) proof: Proof<R>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ProofFailure {
+    /// Stop or shutdown was requested while the proof ran.
+    Cancelled,
+    /// Bounded reason category; never paths, output or identifiers.
+    Failed(&'static str),
+}
 
 #[derive(Clone, Copy)]
 enum StopReason {
@@ -289,6 +315,7 @@ impl LifecycleRegistry {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn status(&self, project: Uuid) -> LifecycleStatus {
         self.owned_status(project)
             .unwrap_or(LifecycleStatus::Stopped)
@@ -303,6 +330,8 @@ impl LifecycleRegistry {
     /// Reserve a generation, run the launcher with no lock held, and hand the
     /// created tree to its single owner thread. `Ok` means ownership was
     /// transferred; later outcomes are reported through stop, status and audit.
+    /// The C4B form: `start_proven` with a launcher that needs no readiness.
+    #[cfg(test)]
     pub(super) fn start<L>(
         &self,
         target: DevServerTarget,
@@ -311,6 +340,36 @@ impl LifecycleRegistry {
     ) -> Result<(), LifecycleError>
     where
         L: FnOnce() -> Result<Box<dyn OwnedTree>, ResourceLimitError>,
+    {
+        let launch = |_: &DevServerTarget| match launch() {
+            Ok(tree) => Ok(Launched {
+                tree,
+                proof: Box::new(|_: &dyn Fn() -> bool| Ok(())),
+            }),
+            Err(_) => Err(LifecycleError::LaunchFailed.reason()),
+        };
+        match self.start_proven(target, audit, launch) {
+            Ok(_) => Ok(()),
+            Err(LifecycleError::LaunchDenied(_)) => Err(LifecycleError::LaunchFailed),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// P0-002C4C3: `start` with a readiness proof. The launcher receives the
+    /// retained target and returns the created tree with its proof, which runs
+    /// with no lock held and is interrupted by stop or shutdown. Only a proven,
+    /// revalidated tree is adopted and published as Running; every other
+    /// outcome finalizes the tree here. `Ok(Some)` carries the proof result for
+    /// a published Running execution; `Ok(None)` means its owner had already
+    /// finalized it (the root exited at once).
+    pub(super) fn start_proven<L, R>(
+        &self,
+        target: DevServerTarget,
+        audit: Audit,
+        launch: L,
+    ) -> Result<Option<R>, LifecycleError>
+    where
+        L: FnOnce(&DevServerTarget) -> Result<Launched<R>, &'static str>,
     {
         let project = target.project.project_id;
         let reserved = self
@@ -329,12 +388,13 @@ impl LifecycleRegistry {
         lifecycle_event(&audit, Some(project), "reserve", "succeeded", "reserved");
         // Reservation callbacks may have requested stop or shutdown.
         if !self.confirm_launch(project, execution) {
-            return self.abandon(project, execution, &done, &audit, Abandon::Cancelled);
+            return Err(self.abandon(project, execution, &done, &audit, Abandon::Cancelled));
         }
         // Revalidate the retained target before any process can exist. Catalog
         // invalidation audits (and may re-enter) with no registry lock held.
         if let Err(reason) = validate_target(&self.shared.catalog, &target, &audit) {
-            return self.abandon(project, execution, &done, &audit, Abandon::Identity(reason));
+            let identity = Abandon::Identity(reason);
+            return Err(self.abandon(project, execution, &done, &audit, identity));
         }
         let (adopt, adoption) = sync_channel::<(Box<dyn OwnedTree>, DevServerTarget)>(1);
         let (control, control_receiver) = sync_channel::<StopReason>(1);
@@ -353,50 +413,92 @@ impl LifecycleRegistry {
             .spawn(move || owner.run(adoption));
         if spawned.is_err() {
             let error = Abandon::Failed(LifecycleError::OwnerUnavailable);
-            return self.abandon(project, execution, &done, &audit, error);
+            return Err(self.abandon(project, execution, &done, &audit, error));
         }
         // Last lifecycle check: validation callbacks may have re-entered stop
         // or shutdown. Nothing runs between this check and the launcher.
         if !self.confirm_launch(project, execution) {
             drop(adopt);
-            return self.abandon(project, execution, &done, &audit, Abandon::Cancelled);
+            return Err(self.abandon(project, execution, &done, &audit, Abandon::Cancelled));
         }
         // No lock is held. A panicking launcher is a launch failure.
-        let tree = match catch_unwind(AssertUnwindSafe(launch)) {
-            Ok(Ok(tree)) => tree,
-            _ => {
+        let Launched { tree, proof } = match catch_unwind(AssertUnwindSafe(|| launch(&target))) {
+            Ok(Ok(launched)) => launched,
+            Ok(Err(reason)) => {
+                drop(adopt);
+                let error = Abandon::Failed(LifecycleError::LaunchDenied(reason));
+                return Err(self.abandon(project, execution, &done, &audit, error));
+            }
+            Err(_) => {
                 drop(adopt);
                 let error = Abandon::Failed(LifecycleError::LaunchFailed);
-                return self.abandon(project, execution, &done, &audit, error);
+                return Err(self.abandon(project, execution, &done, &audit, error));
             }
         };
-        // Close identity changes during process creation. This thread is still
-        // the tree's only owner: it finalizes the tree, never publishes Running.
+        // Readiness proof with no lock held. This thread is still the tree's
+        // only owner: on cancellation or failure it finalizes the tree and
+        // never publishes Running.
+        let proven = catch_unwind(AssertUnwindSafe(|| {
+            proof(&|| !self.confirm_launch(project, execution))
+        }));
+        let result = match proven {
+            Ok(Ok(result)) => result,
+            Ok(Err(ProofFailure::Cancelled)) => {
+                drop(adopt);
+                let ending = Ending::Stop(self.cancellation());
+                let terminal = self.conclude(project, execution, tree, ending, &done, &audit);
+                return Err(terminal.err().unwrap_or(LifecycleError::StopRequested));
+            }
+            Ok(Err(ProofFailure::Failed(reason))) => {
+                drop(adopt);
+                let ending = Ending::NotReady(reason);
+                let terminal = self.conclude(project, execution, tree, ending, &done, &audit);
+                return Err(terminal.err().unwrap_or(LifecycleError::NotReady(reason)));
+            }
+            Err(_) => {
+                drop(adopt);
+                let ending = Ending::NotReady("proof_panicked");
+                let terminal = self.conclude(project, execution, tree, ending, &done, &audit);
+                return Err(terminal
+                    .err()
+                    .unwrap_or(LifecycleError::NotReady("proof_panicked")));
+            }
+        };
+        // Close identity changes during process creation and readiness.
         if let Err(reason) = validate_target(&self.shared.catalog, &target, &audit) {
             drop(adopt);
             let ending = Ending::Invalidated(reason);
-            let result = self.conclude(project, execution, tree, ending, &done, &audit);
-            return Err(result.err().unwrap_or(LifecycleError::IdentityDenied));
+            let terminal = self.conclude(project, execution, tree, ending, &done, &audit);
+            return Err(terminal.err().unwrap_or(LifecycleError::IdentityDenied));
         }
         if let Err(returned) = adopt.send((tree, target)) {
             // The owner vanished before adoption: finalize here, never drop.
             let (tree, _) = returned.0;
             let ending = Ending::Stop(StopReason::Released);
-            let result = self.conclude(project, execution, tree, ending, &done, &audit);
-            return Err(result.err().unwrap_or(LifecycleError::OwnerUnavailable));
+            let terminal = self.conclude(project, execution, tree, ending, &done, &audit);
+            return Err(terminal.err().unwrap_or(LifecycleError::OwnerUnavailable));
         }
         match self.publish(project, execution, control) {
             Published::Running => {
                 lifecycle_event(&audit, Some(project), "started", "succeeded", "running");
-                Ok(())
+                Ok(Some(result))
             }
             Published::Stop(control, reason) => {
-                // Stop or shutdown raced the launcher: the owner finalizes now.
+                // Stop or shutdown raced adoption: the owner finalizes now.
                 let _ = control.try_send(reason);
                 Err(LifecycleError::StopRequested)
             }
             // The owner already finalized this generation (early root exit).
-            Published::Ended => Ok(()),
+            Published::Ended => Ok(None),
+        }
+    }
+
+    /// The stop reason a cancelled readiness proof finalizes with.
+    fn cancellation(&self) -> StopReason {
+        if self.shared.state().accepting {
+            StopReason::Stop
+        } else {
+            StopReason::Shutdown
         }
     }
 
@@ -462,7 +564,7 @@ impl LifecycleRegistry {
         done: &Completion,
         audit: &Audit,
         outcome: Abandon,
-    ) -> Result<(), LifecycleError> {
+    ) -> LifecycleError {
         // Nothing was launched for this generation.
         let (finalized, event, error) = match outcome {
             Abandon::Cancelled => (
@@ -484,7 +586,7 @@ impl LifecycleRegistry {
         self.cancel(project, execution);
         done.publish(Ok(finalized));
         lifecycle_event(audit, Some(project), event.0, event.1, event.2);
-        Err(error)
+        error
     }
 
     /// Finalize a tree the calling thread still solely owns (never adopted by
@@ -768,6 +870,7 @@ enum Ending {
     Exited { success: bool },
     Invalidated(&'static str),
     MonitorFailure,
+    NotReady(&'static str),
 }
 
 type Event = (&'static str, &'static str, &'static str);
@@ -787,6 +890,7 @@ fn conclusion(ending: Ending, cleanup: Result<(), CleanupFailure>) -> (Terminal,
         Ending::Exited { success: false } => (Finalized::Crashed, ("exited", "crashed")),
         Ending::Invalidated(reason) => (Finalized::Invalidated, ("invalidated", reason)),
         Ending::MonitorFailure => (Finalized::MonitorFailure, ("stopped", "monitor_failure")),
+        Ending::NotReady(reason) => (Finalized::NotReady, ("not_ready", reason)),
     };
     (Ok(finalized), (event.0, "succeeded", event.1))
 }
@@ -882,7 +986,8 @@ impl Owner {
 
 /// Point-in-time revalidation of the retained target: the current registration
 /// with storage/project identity (C3 tombstones on Changed), then the retained
-/// React identity (never tombstones). Pathname identity, not containment.
+/// React, runtime and runtime-child identities (never tombstone). Pathname
+/// identity, not containment.
 /// A panicking invalidation audit cannot unwind out and strand a reservation.
 fn validate_target(
     catalog: &ProjectCatalog,
@@ -898,7 +1003,7 @@ fn validate_target(
     catalog
         .validate(&target.project, &guarded)
         .map_err(|_| "registration")?;
-    target.validate_react().map_err(|_| "react")
+    target.validate_workspace()
 }
 
 // Bounded categories only: never generations, identifiers, paths, handles,

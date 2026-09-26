@@ -16,8 +16,8 @@
 //! the assembled packaged toolchain and embedded in this executable (absent,
 //! and so always unavailable, in builds without one). The production root is
 //! derived solely from the installed executable's own path. Nothing here
-//! launches a process.
-#![cfg_attr(not(test), allow(dead_code))] // Staged: no production caller until C4C3.
+//! launches a process. P0-002C4C3: the governed dev-server launch is the only
+//! production caller, and verifies freshly for every launch.
 
 mod contract;
 #[cfg(test)]
@@ -119,6 +119,8 @@ include!(concat!(env!("OUT_DIR"), "/builder_toolchain_manifest.rs"));
 /// `verify_tree`. Deliberately not Clone, Copy, Default or serializable.
 pub(super) struct VerifiedToolchain {
     root: PathBuf,
+    // Held for the value's lifetime (the verified root's native handle).
+    #[cfg_attr(not(test), allow(dead_code))]
     root_identity: DirectoryIdentity,
 }
 
@@ -651,3 +653,5 @@ mod tests;
 
 #[cfg(test)]
 mod production_tests;
+#[cfg(test)]
+pub(super) use production_tests::verify_assembled;

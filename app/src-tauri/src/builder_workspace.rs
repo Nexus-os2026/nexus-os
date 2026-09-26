@@ -1,6 +1,8 @@
 //! Private authority for fresh Builder planning, governed React/runtime
-//! workspace provisioning, registered React file writes and fail-closed
-//! dev-server selection (no process launch is authorized).
+//! workspace provisioning, registered React file writes and the governed
+//! Builder dev-server lifecycle. P0-002C4C3: the only process this adapter
+//! launches is the freshly verified packaged Node running the Nexus entry,
+//! through the sealed resource-limited spawn owned by the lifecycle registry.
 //! Metadata and paths are never accepted as credentials. No authority lock is
 //! held by this adapter across audit, provider calls, filesystem I/O or delivery.
 use nexus_kernel::manifest::FsPermissionLevel;
@@ -21,11 +23,15 @@ use web_builder_agent::project::{create_project, transition, ProjectState, Proje
 mod directory_identity;
 use directory_identity::{DirectoryIdentity, IdentityError};
 // P0-002C4B private lifecycle primitive. P0-002C4C1: constructed only by
-// BuilderWorkspaceAuthority::provision; production uses stop/status/shutdown.
+// BuilderWorkspaceAuthority::provision. P0-002C4C3: production start is the
+// governed launch below; stop/status/shutdown are unchanged.
 mod process_lifecycle;
 use process_lifecycle::{Finalized, LifecycleError, LifecycleRegistry};
-// P0-002C4D1A private trusted-toolchain verifier. Staged: production has no
-// trusted toolchain or root, and nothing outside this adapter can reach it.
+// P0-002C4C3 governed dev-server launch (the lifecycle launcher and proof).
+mod dev_server_launch;
+use dev_server_launch::LaunchSettings;
+// P0-002C4D1A private trusted-toolchain verifier; P0-002C4D2 packaged
+// toolchain. Only the governed launch verifies, freshly for every launch.
 mod trusted_toolchain;
 // P0-002C4D1B governed React + private runtime provisioning. React identity is
 // accepted only as retained by a fully provisioned workspace.
@@ -239,6 +245,20 @@ impl RegisteredBuilderProject {
             .ok_or(IdentityError::Unavailable)?
             .validate_react(&self.root)
     }
+
+    /// P0-002C4C3: every identity a launch depends on, as retained by the
+    /// fully provisioned workspace: React, runtime, then each runtime child.
+    /// Point-in-time pathname identity (bounded reason), never containment.
+    fn validate_workspace(&self) -> std::result::Result<(), &'static str> {
+        let workspace = self.workspace.get().ok_or("workspace")?;
+        workspace.validate_react(&self.root).map_err(|_| "react")?;
+        workspace
+            .validate_runtime(&self.root)
+            .map_err(|_| "runtime")?;
+        workspace
+            .validate_runtime_children(&self.root)
+            .map_err(|_| "runtime_child")
+    }
 }
 
 impl ProjectCatalog {
@@ -435,11 +455,12 @@ impl BuilderWorkspaceAuthority {
     }
 }
 
-// P0-002C4A: no process-launch design is approved. Start validates the private
-// registration and retained identities, then fails closed. P0-002C4C1: stop and
-// status first consult the authority-owned lifecycle registry by project key;
-// only without an owned execution do they fall back to C4A validation. Nothing
-// here spawns a process, creates a directory or holds a lock across audit.
+// P0-002C4A selection: a selector names only a current private registration.
+// P0-002C4C1: stop and status first consult the authority-owned lifecycle
+// registry by project key; only without an owned execution do they fall back
+// to C4A validation. P0-002C4C3: start is the governed launch through that
+// registry (`dev_server_launch`). Nothing here creates a directory or holds a
+// lock across audit.
 
 /// One bounded wait for a single stop (C4B cleanup budget plus monitor slack).
 const DEV_SERVER_STOP_WAIT: Duration = Duration::from_secs(8);
@@ -481,7 +502,8 @@ fn dev_server_event(
 type DevServerDenial = (&'static str, &'static str); // (audit reason, client error)
 
 /// Retained trusted snapshot: the private registration, whose fully provisioned
-/// workspace retains the governed React identity (P0-002C4D1B). React is always
+/// workspace retains the governed React, runtime and runtime-child identities
+/// (P0-002C4D1B, P0-002C4C3) for the target's whole lifetime. Every location is
 /// derived from the registration, never from caller data. Not serialized; not a
 /// credential or containment.
 struct DevServerTarget {
@@ -489,15 +511,16 @@ struct DevServerTarget {
 }
 
 impl DevServerTarget {
-    fn validate_react(&self) -> std::result::Result<(), IdentityError> {
-        self.project.validate_react()
+    fn validate_workspace(&self) -> std::result::Result<(), &'static str> {
+        self.project.validate_workspace()
     }
 }
 
 impl BuilderWorkspaceAuthority {
     /// Selector → private registration → storage, project and the governed
-    /// React identity retained by provisioning. React must still be that exact,
-    /// non-redirected child of the registered project; it is never created here.
+    /// React, runtime and runtime-child identities retained by provisioning.
+    /// Each must still be that exact, non-redirected directory beneath the
+    /// registered project; none is ever created or replaced here.
     fn validate_dev_server(
         &self,
         selector: &str,
@@ -525,14 +548,15 @@ impl BuilderWorkspaceAuthority {
             return Err(("workspace", "workspace not provisioned"));
         }
         let target = DevServerTarget { project };
-        // Final checks: the registration is still current and React is still
-        // the governed directory beneath the registered project.
+        // Final checks: the registration is still current and the governed
+        // workspace directories are still the retained ones.
         self.catalog
             .validate(&target.project, audit)
             .map_err(|error| ("identity", error))?;
-        target
-            .validate_react()
-            .map_err(|_| ("react", "React identity denied"))?;
+        target.validate_workspace().map_err(|reason| match reason {
+            "react" | "workspace" => ("react", "React identity denied"),
+            _ => ("runtime", "runtime identity denied"),
+        })?;
         Ok(target)
     }
 
@@ -550,22 +574,56 @@ impl BuilderWorkspaceAuthority {
             })
     }
 
-    /// Returns only a denial: launching npm, npx, Vite or any other process is
-    /// not authorized until a separately approved launch design exists.
-    fn dev_server_start(&self, selector: &str, audit: Audit) -> &'static str {
-        match self.dev_server(selector, DevServerOperation::Start, &audit) {
-            Ok(id) => {
-                dev_server_event(
-                    &audit,
-                    Some(id),
-                    DevServerOperation::Start,
-                    "denied",
-                    "launch_unavailable",
-                );
-                "launch unavailable"
+    /// P0-002C4C3 governed launch. Selector → current private registration →
+    /// storage/project identity → C4D1B workspace (React, runtime, runtime
+    /// children) → lifecycle reservation → final identity validation → React
+    /// tree walk → fresh toolchain verification → sealed Node launch (identity
+    /// revalidated just before the spawn) → readiness proof → final identity
+    /// validation → Running. No caller path participates. Returns only
+    /// `http://127.0.0.1:<port>/` or a bounded error.
+    fn dev_server_start(&self, selector: &str, audit: Audit) -> WriteResult<String> {
+        self.dev_server_start_with(selector, audit, &LaunchSettings::production())
+    }
+
+    fn dev_server_start_with(
+        &self,
+        selector: &str,
+        audit: Audit,
+        settings: &LaunchSettings,
+    ) -> WriteResult<String> {
+        let target = match self.dev_server_target(selector, &audit) {
+            Ok(target) => target,
+            Err((reason, error)) => {
+                let project = Uuid::parse_str(selector).ok();
+                dev_server_event(&audit, project, DevServerOperation::Start, "denied", reason);
+                return Err(error);
             }
-            Err(error) => error,
-        }
+        };
+        let id = target.project.project_id;
+        let started = self
+            .lifecycle
+            .start_proven(target, Arc::clone(&audit), |target| {
+                // Immediately before the process exists: the registration is
+                // still current and every retained identity still validates.
+                let revalidate = || {
+                    self.catalog
+                        .validate(&target.project, &audit)
+                        .map_err(|_| "registration")?;
+                    target.validate_workspace()
+                };
+                dev_server_launch::launch(target, settings, &revalidate)
+            });
+        let (result, outcome, reason) = match started {
+            Ok(Some(preview)) => (Ok(preview.url()), "succeeded", "running"),
+            // Its owner already finalized it: the root exited at once.
+            Ok(None) => (Err("dev server exited"), "failed", "exited"),
+            Err(error) => {
+                let (reason, client) = start_failure(error);
+                (Err(client), "failed", reason)
+            }
+        };
+        dev_server_event(&audit, Some(id), DevServerOperation::Start, outcome, reason);
+        result
     }
 
     /// Stop by backend-owned execution first. An execution this registry
@@ -607,8 +665,8 @@ impl BuilderWorkspaceAuthority {
     }
 
     /// Owned lifecycle state first (reported even for a since-invalidated
-    /// registration); otherwise C4A validation and `stopped`. Launch remains
-    /// unavailable and no URL, identifier or path is ever returned.
+    /// registration); otherwise C4A validation and `stopped`. Only the bounded
+    /// state label: no URL, identifier or path is ever returned.
     fn dev_server_status(&self, selector: &str, audit: Audit) -> WriteResult<Value> {
         if let Some(id) = self.owned_execution(selector) {
             if let Some(status) = self.lifecycle.owned_status(id) {
@@ -619,7 +677,7 @@ impl BuilderWorkspaceAuthority {
                     "succeeded",
                     "owned_server",
                 );
-                return Ok(json!({"status": status.label(), "launch_available": false}));
+                return Ok(json!({"status": status.label()}));
             }
         }
         let id = self.dev_server(selector, DevServerOperation::Status, &audit)?;
@@ -630,7 +688,7 @@ impl BuilderWorkspaceAuthority {
             "succeeded",
             "no_owned_server",
         );
-        Ok(json!({"status": "stopped", "launch_available": false}))
+        Ok(json!({"status": "stopped"}))
     }
 
     /// The project key of an execution this registry currently owns. The
@@ -670,7 +728,31 @@ fn stop_failure(error: LifecycleError) -> (&'static str, &'static str) {
         | LifecycleError::StopRequested
         | LifecycleError::OwnerUnavailable
         | LifecycleError::LaunchFailed
+        | LifecycleError::LaunchDenied(_)
+        | LifecycleError::NotReady(_)
         | LifecycleError::IdentityDenied => ("not_confirmed", "stop not confirmed"),
+    }
+}
+
+// Bounded (audit reason, client error) for a start that did not reach Running.
+// Never native errors, identifiers, paths or process output.
+fn start_failure(error: LifecycleError) -> (&'static str, &'static str) {
+    match error {
+        LifecycleError::LaunchDenied(reason) => (reason, dev_server_launch::denial(reason)),
+        LifecycleError::NotReady(reason) => (reason, "dev server not ready"),
+        LifecycleError::NotRegistered => ("not_registered", "project not registered"),
+        LifecycleError::IdentityDenied => ("identity_denied", "identity denied"),
+        LifecycleError::Busy => ("busy", "dev server busy"),
+        LifecycleError::ShuttingDown => ("shutting_down", "shutting down"),
+        LifecycleError::StopRequested | LifecycleError::StopPending => {
+            ("stop_requested", "start cancelled")
+        }
+        LifecycleError::CleanupFailed => ("cleanup_failed", "cleanup failed"),
+        LifecycleError::Unavailable
+        | LifecycleError::GenerationExhausted
+        | LifecycleError::OwnerUnavailable
+        | LifecycleError::LaunchFailed
+        | LifecycleError::NotConfirmed => ("launch_failed", "launch failed"),
     }
 }
 
@@ -832,15 +914,18 @@ fn dev_server_authority<'a>(
     })
 }
 
-/// Always an error: no process-launch design is approved (P0-002C4A).
+/// P0-002C4C3: the governed launch; only the loopback preview URL or a
+/// bounded error. Blocking (bounded readiness and probe): callers run it off
+/// the IPC/main thread.
 pub(super) fn dev_server_start(
     state: &crate::AppState,
     selector: &str,
 ) -> std::result::Result<String, String> {
     let audit = audit_for(state);
     let authority = dev_server_authority(state, &audit, DevServerOperation::Start)?;
-    let denial = authority.dev_server_start(selector, audit);
-    Err(format!("Builder dev server: {denial}"))
+    authority
+        .dev_server_start(selector, audit)
+        .map_err(|error| format!("Builder dev server: {error}"))
 }
 
 pub(super) fn dev_server_stop(

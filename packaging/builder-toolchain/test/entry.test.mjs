@@ -1,11 +1,12 @@
-// P0-002C4D2 trusted-entry tests. Run with the packaged Node against an
+// P0-002C4D2/C4C3 trusted-entry tests. Run with the packaged Node against an
 // assembled toolchain:
 //   <toolchain>/node/node --test packaging/builder-toolchain/test/
 // NEXUS_BUILDER_TOOLCHAIN_ROOT (test harness only) names the toolchain root;
 // the default is the release staging location app/src-tauri/builder-toolchain.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -24,6 +25,8 @@ const { installModuleGuard, MODULE_DENIED } = await import(fromToolchain('entry'
 installModuleGuard(toolchainRoot);
 const { build } = await import(fromToolchain('node_modules', 'vite', 'dist', 'node', 'index.js'));
 const trusted = await import(fromToolchain('entry', 'trusted-config.mjs'));
+const preview = await import(fromToolchain('entry', 'preview-server.mjs'));
+const TOKEN = '0123456789abcdef0123456789abcdef';
 
 const MARKERS = [
   'vite-config',
@@ -175,6 +178,28 @@ test('trusted configuration is programmatic and discovers no project configurati
   assert.equal(config.optimizeDeps.noDiscovery, true);
   assert.deepEqual(config.optimizeDeps.entries, []);
   assert.deepEqual(config.server.fs.allow, [f.projectRoot, f.cacheDir]);
+  // P0-002C4C3 dev-server form: middleware behind the Nexus gate; no HMR,
+  // WebSocket, CORS or browser; a watcher that never follows links.
+  assert.equal(config.server.middlewareMode, true);
+  assert.equal(config.server.hmr, false);
+  assert.equal(config.server.ws, false);
+  assert.equal(config.server.cors, false);
+  assert.equal(config.server.fs.strict, true);
+  assert.deepEqual(config.server.watch, { followSymlinks: false });
+  assert.equal(config.server.host, undefined);
+  assert.equal(config.server.proxy, undefined);
+  assert.equal(config.server.https, undefined);
+  assert.equal(config.preview, undefined);
+  assert.equal(config.logLevel, 'warn');
+  // Runtime imports resolve only to the toolchain's exact packages.
+  const aliases = config.resolve.alias.map(({ find, replacement }) => [String(find), replacement]);
+  assert.deepEqual(
+    aliases.map(([find]) => find),
+    ['/^react$/', '/^react\\/jsx-runtime$/', '/^react\\/jsx-dev-runtime$/', '/^react-dom$/', '/^react-dom\\/client$/', '/^react-router-dom$/'],
+  );
+  for (const [, replacement] of aliases) {
+    assert.ok(replacement.startsWith(path.join(toolchainRoot, 'node_modules') + path.sep), replacement);
+  }
 });
 
 test('generated single-page project builds only from Nexus toolchain dependencies', async () => {
@@ -330,14 +355,322 @@ test('module guard denies code outside the toolchain in this process', async () 
   assert.deepEqual(executedMarkers(f), []);
 });
 
-test('entry validates the request and never launches', () => {
+// ── P0-002C4C3: the served preview ───────────────────────────────────────
+
+// The production Node arguments for a fixture (the backend builds the real
+// ones): the permission model with reads of the toolchain, React and the
+// runtime home/tmp/cache, writes of those three, and nothing else.
+function permissionArguments(f, runtime) {
+  return [
+    '--permission',
+    '--allow-addons',
+    `--allow-fs-read=${toolchainRoot}`,
+    `--allow-fs-read=${f.projectRoot}`,
+    ...['home', 'tmp', 'vite-cache'].map((child) => `--allow-fs-read=${path.join(runtime, child)}`),
+    ...['home', 'tmp', 'vite-cache'].map((child) => `--allow-fs-write=${path.join(runtime, child)}`),
+  ];
+}
+
+function sealedEnvironment(runtime) {
+  const home = path.join(runtime, 'home');
+  const tmp = path.join(runtime, 'tmp');
+  const env = process.platform === 'win32'
+    ? { USERPROFILE: home, TEMP: tmp, TMP: tmp, SystemRoot: process.env.SystemRoot, windir: process.env.windir }
+    : { HOME: home, TMPDIR: tmp };
+  return env;
+}
+
+function runtimeFor(f) {
+  const runtime = path.dirname(f.cacheDir);
+  for (const child of ['home', 'tmp']) fs.mkdirSync(path.join(runtime, child), { recursive: true });
+  return runtime;
+}
+
+function firstLine(stream) {
+  return new Promise((resolve, reject) => {
+    let text = '';
+    const timer = setTimeout(() => reject(new Error(`no readiness line: ${text}`)), 60_000);
+    stream.on('data', (chunk) => {
+      text += chunk;
+      const end = text.indexOf('\n');
+      if (end >= 0) {
+        clearTimeout(timer);
+        resolve(text.slice(0, end));
+      }
+    });
+    stream.on('end', () => {
+      clearTimeout(timer);
+      reject(new Error(`stdout ended before readiness: ${text}`));
+    });
+  });
+}
+
+function request(port, target, headers = {}, method = 'GET') {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      { host: '127.0.0.1', port, path: target, method, headers: { connection: 'close', ...headers }, setHost: false },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('entry rejects an invalid request before serving', () => {
   const f = fixture(SINGLE_PAGE);
   const node = process.execPath;
   const entry = path.join(toolchainRoot, 'entry', 'nexus-builder.mjs');
-  const good = spawnSync(node, [entry, JSON.stringify(f.request)], { encoding: 'utf8', timeout: 60_000 });
-  assert.equal(good.status, 78, good.stderr);
-  assert.match(good.stderr, /launch unavailable/);
-  const bad = spawnSync(node, [entry, '{"projectRoot":"relative"}'], { encoding: 'utf8', timeout: 60_000 });
-  assert.equal(bad.status, 64, bad.stderr);
+  for (const bad of [
+    '{"projectRoot":"relative"}',
+    JSON.stringify(f.request),
+    JSON.stringify({ ...f.request, probeToken: 'short' }),
+    JSON.stringify({ ...f.request, probeToken: TOKEN.toUpperCase() }),
+    JSON.stringify({ ...f.request, probeToken: TOKEN, extra: 1 }),
+    '',
+  ]) {
+    const run = spawnSync(node, [entry, bad], { encoding: 'utf8', timeout: 60_000 });
+    assert.equal(run.status, 64, `${bad}: ${run.stderr}`);
+    assert.equal(run.stdout, '');
+    assert.match(run.stderr, /invalid request/);
+  }
   assert.deepEqual(executedMarkers(f), []);
+});
+
+test('entry serves the project on loopback under the permission model', async () => {
+  const f = fixture(SINGLE_PAGE);
+  const runtime = runtimeFor(f);
+  const entry = path.join(toolchainRoot, 'entry', 'nexus-builder.mjs');
+  const child = spawn(
+    process.execPath,
+    [...permissionArguments(f, runtime), entry, JSON.stringify({ ...f.request, probeToken: TOKEN })],
+    { cwd: runtime, env: sealedEnvironment(runtime), stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  let stderr = '';
+  child.stderr.on('data', (chunk) => (stderr += chunk));
+  try {
+    const line = await firstLine(child.stdout.setEncoding('utf8'));
+    const record = JSON.parse(line);
+    assert.equal(line, preview.readinessRecord(record.port).trimEnd());
+    assert.deepEqual(Object.keys(record), ['event', 'host', 'port']);
+    assert.equal(record.host, '127.0.0.1');
+    const port = record.port;
+    const host = `127.0.0.1:${port}`;
+    const page = await request(port, '/', { host, accept: 'text/html' });
+    assert.equal(page.status, 200, stderr);
+    assert.equal(page.headers[preview.TOKEN_HEADER], TOKEN);
+    assert.match(page.body, /<div id="root"><\/div>/);
+    assert.equal(page.headers['access-control-allow-origin'], undefined);
+    // Project modules and pre-bundled dependencies (Windows: after Vite's
+    // network-drive question was answered without a process).
+    const main = await request(port, '/src/main.tsx', { host });
+    assert.equal(main.status, 200, stderr);
+    assert.match(main.body, /createRoot/);
+    const app = await request(port, '/src/App.tsx', { host });
+    assert.equal(app.status, 200, stderr);
+    // The gate on the real server.
+    assert.equal((await request(port, '/', { host: 'evil.example' })).status, 403);
+    assert.equal((await request(port, '/', { host, origin: 'http://evil.example' })).status, 403);
+    assert.equal((await request(port, '/__open-in-editor?file=src/main.tsx', { host })).status, 403);
+    assert.equal((await request(port, '/%5f%5fopen-in-editor?file=src/main.tsx', { host })).status, 403);
+    assert.equal((await request(port, '/', { host }, 'POST')).status, 405);
+    // Still serving: nothing above disturbed the preview.
+    assert.equal((await request(port, '/', { host, accept: 'text/html' })).status, 200);
+    assert.equal(child.exitCode, null, stderr);
+    // No write reached the project or its ancestors; the cache was used.
+    assert.equal(fs.existsSync(path.join(f.projectRoot, 'node_modules')), false);
+    assert.ok(fs.readdirSync(f.cacheDir).length > 0);
+    assert.deepEqual(executedMarkers(f), []);
+  } finally {
+    child.kill();
+  }
+});
+
+test('readiness records are exactly one canonical line', () => {
+  assert.equal(preview.readinessRecord(5173), '{"event":"ready","host":"127.0.0.1","port":5173}\n');
+});
+
+test('launch requests are strict', () => {
+  const f = fixture(SINGLE_PAGE);
+  const good = { ...f.request, probeToken: TOKEN };
+  assert.deepEqual(preview.parseLaunchRequest(JSON.stringify(good)), {
+    projectRoot: f.projectRoot,
+    cacheDir: f.cacheDir,
+    probeToken: TOKEN,
+  });
+  for (const bad of [
+    '',
+    'null',
+    '[]',
+    JSON.stringify(f.request),
+    JSON.stringify({ ...good, extra: 1 }),
+    JSON.stringify({ ...good, probeToken: 1 }),
+    JSON.stringify({ ...good, probeToken: TOKEN.slice(1) }),
+    JSON.stringify({ ...good, probeToken: `${TOKEN}0` }),
+    JSON.stringify({ ...good, probeToken: TOKEN.replace('a', 'g') }),
+    JSON.stringify({ ...good, projectRoot: 'relative' }),
+  ]) {
+    assert.throws(() => preview.parseLaunchRequest(bad), /invalid Builder runtime request/, bad);
+  }
+});
+
+// A request object as Node's http server presents it, and a recording response.
+function exchange(url, rawHeaders, method = 'GET') {
+  const req = { url, method, rawHeaders };
+  const res = {
+    status: null,
+    headers: {},
+    body: '',
+    writeHead(status, headers) {
+      this.status = status;
+      Object.assign(this.headers, headers);
+    },
+    setHeader(name, value) {
+      this.headers[name] = value;
+    },
+    end(body) {
+      this.body = body ?? '';
+    },
+  };
+  const admitted = preview.admit(req, res, { port: 5173, token: TOKEN });
+  return { admitted, res };
+}
+
+test('the Nexus gate admits only same-origin loopback reads', () => {
+  const host = ['Host', '127.0.0.1:5173'];
+  const ok = exchange('/src/main.tsx?import', host);
+  assert.equal(ok.admitted, true);
+  assert.equal(ok.res.headers[preview.TOKEN_HEADER], TOKEN);
+  assert.equal(exchange('/', [...host, 'Origin', 'http://127.0.0.1:5173']).admitted, true);
+  assert.equal(exchange('/', host, 'HEAD').admitted, true);
+  for (const [url, headers, method, status] of [
+    ['/', host, 'POST', 405],
+    ['/', host, 'OPTIONS', 405],
+    ['/', [], 'GET', 403],
+    ['/', ['Host', 'localhost:5173'], 'GET', 403],
+    ['/', ['Host', '127.0.0.1:5174'], 'GET', 403],
+    ['/', ['Host', '127.0.0.1'], 'GET', 403],
+    ['/', ['Host', 'evil.example'], 'GET', 403],
+    ['/', [...host, ...host], 'GET', 403],
+    ['/', [...host, 'Origin', 'http://evil.example'], 'GET', 403],
+    ['/', [...host, 'Origin', 'null'], 'GET', 403],
+    ['/', [...host, 'Origin', 'https://127.0.0.1:5173'], 'GET', 403],
+    ['/', [...host, 'Origin', 'http://127.0.0.1:5173', 'Origin', 'http://127.0.0.1:5173'], 'GET', 403],
+    ['http://evil.example/', host, 'GET', 400],
+    ['//evil.example/', host, 'GET', 400],
+    ['*', host, 'GET', 400],
+    ['/%E0%A4%A', host, 'GET', 400],
+    ['/__open-in-editor', host, 'GET', 403],
+    ['/__open-in-editor?file=src/main.tsx', host, 'GET', 403],
+    ['/__OPEN-IN-EDITOR?file=x', host, 'GET', 403],
+    ['/%5f%5fopen-in-editor?file=x', host, 'GET', 403],
+    ['/%255f%255fopen-in-editor?file=x', host, 'GET', 403],
+    ['/__open%2Din%2Deditor?file=x', host, 'GET', 403],
+    ['/src/../__open-in-editor?file=x', host, 'GET', 403],
+    ['/x/%2e%2e/__open-in-editor', host, 'GET', 403],
+  ]) {
+    const { admitted, res } = exchange(url, headers, method);
+    assert.equal(admitted, false, `${method} ${url} ${headers}`);
+    assert.equal(res.status, status, `${method} ${url} ${headers}`);
+    assert.equal(res.headers[preview.TOKEN_HEADER], undefined);
+  }
+  // Nothing is served before the server knows its own port.
+  const early = preview.admit({ url: '/', method: 'GET', rawHeaders: ['Host', '127.0.0.1:0'] }, exchange('/', host).res, { port: 0, token: TOKEN });
+  assert.equal(early, false);
+});
+
+// Runs `source` (an ES module) in a fresh Node under the permission model
+// with read access to the toolchain only (no child-process permission).
+function confined(source) {
+  const run = spawnSync(
+    process.execPath,
+    ['--permission', `--allow-fs-read=${toolchainRoot}`, '--input-type=module', '-e', source],
+    { encoding: 'utf8', timeout: 60_000, cwd: os.tmpdir() },
+  );
+  assert.equal(run.status, 0, run.stderr);
+  return JSON.parse(run.stdout);
+}
+
+test('the process guard creates no process and answers only the network-drive question', () => {
+  const guard = JSON.stringify(fromToolchain('entry', 'process-guard.mjs'));
+  const results = confined(`
+    const { installProcessGuard, PROCESS_DENIED } = await import(${guard});
+    installProcessGuard();
+    const childProcess = await import('node:child_process');
+    const { spawn, execSync } = childProcess;
+    const out = {};
+    const code = (fn) => { try { fn(); return 'returned'; } catch (error) { return error.code; } };
+    out.spawn = code(() => spawn('node'));
+    out.namedSpawn = code(() => childProcess.default.spawn('node'));
+    out.spawnSync = code(() => childProcess.spawnSync('node'));
+    out.execSync = code(() => execSync('echo'));
+    out.execFileSync = code(() => childProcess.execFileSync('node'));
+    out.fork = code(() => childProcess.fork('x'));
+    out.execNoCallback = code(() => childProcess.exec('net use'));
+    out.netUse = await new Promise((resolve) => childProcess.exec('net use', { windowsHide: true }, (error, stdout, stderr) => resolve({ error: error?.code ?? null, stdout, stderr })));
+    out.other = await new Promise((resolve) => childProcess.exec('whoami', (error) => resolve(error?.code ?? null)));
+    out.execFile = await new Promise((resolve) => childProcess.execFile('net', ['use'], (error) => resolve(error?.code ?? null)));
+    out.denied = PROCESS_DENIED;
+    process.stdout.write(JSON.stringify(out));
+  `);
+  const denied = results.denied;
+  assert.equal(denied, 'ERR_NEXUS_PROCESS_DENIED');
+  for (const api of ['spawn', 'namedSpawn', 'spawnSync', 'execSync', 'execFileSync', 'fork', 'execNoCallback', 'other', 'execFile']) {
+    assert.equal(results[api], denied, api);
+  }
+  // Vite's Windows probe: "no mapped network drives", without a process
+  // (the native permission denial would be ERR_ACCESS_DENIED).
+  assert.deepEqual(results.netUse, { error: null, stdout: '', stderr: '' });
+});
+
+test('existence probes answer false for denied locations and grant nothing', () => {
+  const probe = JSON.stringify(fromToolchain('entry', 'fs-probe.mjs'));
+  const outside = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-c4c3-outside-')));
+  fs.writeFileSync(path.join(outside, 'secret'), 'outside');
+  const results = confined(`
+    import fs from 'node:fs';
+    const { installExistenceProbes } = await import(${probe});
+    const code = (fn) => { try { return fn(); } catch (error) { return error.code; } };
+    const outside = ${JSON.stringify(path.join(outside, 'secret'))};
+    const before = code(() => fs.existsSync(outside));
+    installExistenceProbes();
+    const { existsSync } = await import('node:fs');
+    process.stdout.write(JSON.stringify({
+      before,
+      after: code(() => fs.existsSync(outside)),
+      named: code(() => existsSync(outside)),
+      toolchain: fs.existsSync(${JSON.stringify(path.join(toolchainRoot, 'entry', 'fs-probe.mjs'))}),
+      read: code(() => fs.readFileSync(outside, 'utf8')),
+      stat: code(() => fs.statSync(outside)),
+    }));
+  `);
+  assert.equal(results.after, false);
+  assert.equal(results.named, false);
+  assert.equal(results.toolchain, true);
+  assert.equal(results.read, 'ERR_ACCESS_DENIED');
+  assert.equal(results.stat, 'ERR_ACCESS_DENIED');
+  // Before installation Node itself already reports no access (never true).
+  assert.notEqual(results.before, true);
+});
+
+test('the entry installs every guard before any third-party module is imported', () => {
+  const entry = fs.readFileSync(path.join(toolchainRoot, 'entry', 'nexus-builder.mjs'), 'utf8');
+  const statics = [...entry.matchAll(/^import .* from '([^']+)';$/gm)].map((m) => m[1]);
+  assert.deepEqual(statics, ['node:path', 'node:url', './fs-probe.mjs', './module-guard.mjs', './process-guard.mjs']);
+  const order = ['installModuleGuard(toolchainRoot);', 'installProcessGuard();', 'installExistenceProbes();', "await import('./preview-server.mjs')"]
+    .map((needle) => entry.indexOf(needle));
+  assert.ok(order.every((at) => at > 0), String(order));
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+  // The guard modules themselves import only Node builtins.
+  for (const name of ['fs-probe.mjs', 'module-guard.mjs', 'process-guard.mjs']) {
+    const source = fs.readFileSync(path.join(toolchainRoot, 'entry', name), 'utf8');
+    for (const [, specifier] of source.matchAll(/^import .* from '([^']+)';$/gm)) {
+      assert.match(specifier, /^node:/, `${name}: ${specifier}`);
+    }
+    assert.doesNotMatch(source, /import\(/, name);
+  }
 });

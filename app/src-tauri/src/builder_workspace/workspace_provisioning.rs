@@ -4,8 +4,9 @@
 //! (project content) and a private `runtime/` tree (`home`, `tmp`,
 //! `vite-cache`, `env`) directly beneath the retained project directory,
 //! persists only policy-approved scaffold content into `react/`, and retains
-//! native identities for `react/` and `runtime/`. The C3 write path and
-//! C4A/C4B selection accept a registration only after the whole operation
+//! native identities for `react/`, `runtime/` and (P0-002C4C3) each runtime
+//! child, captured from the exact directories created here. The C3 write path
+//! and C4A/C4B selection accept a registration only after the whole operation
 //! succeeded and its temporary C1 grant was revoked. C3 grants are rooted at
 //! `react/`, so project writes can never reach `runtime/`.
 //!
@@ -31,14 +32,18 @@ use uuid::Uuid;
 
 pub(super) const REACT: &str = "react";
 pub(super) const RUNTIME: &str = "runtime";
-/// Private runtime children reserved for a later sealed launch (C4D2/C4C3).
-const RUNTIME_CHILDREN: [&str; 4] = ["home", "tmp", "vite-cache", "env"];
+/// Private runtime children: the sealed launch's home, temporary directory and
+/// Vite cache (P0-002C4C3), and `env` (reserved; never granted to a launch).
+pub(super) const RUNTIME_CHILDREN: [&str; 4] = ["home", "tmp", "vite-cache", "env"];
 
 /// Retained identities of a fully provisioned workspace. Set exactly once, only
 /// by successful provisioning; never serialized, cloned or exposed.
 pub(super) struct ProvisionedWorkspace {
     react: DirectoryIdentity,
     runtime: DirectoryIdentity,
+    /// Each runtime child, in `RUNTIME_CHILDREN` order. A directory later
+    /// recreated at a child path is never adopted.
+    children: [DirectoryIdentity; RUNTIME_CHILDREN.len()],
 }
 
 impl ProvisionedWorkspace {
@@ -48,6 +53,27 @@ impl ProvisionedWorkspace {
 
     pub(super) fn validate_runtime(&self, project_root: &Path) -> Result<(), IdentityError> {
         self.runtime.validate(&project_root.join(RUNTIME))
+    }
+
+    /// Every retained runtime child at its exact path beneath `runtime/`.
+    pub(super) fn validate_runtime_children(
+        &self,
+        project_root: &Path,
+    ) -> Result<(), IdentityError> {
+        let runtime = project_root.join(RUNTIME);
+        for (identity, name) in self.children.iter().zip(RUNTIME_CHILDREN) {
+            identity.validate(&runtime.join(name))?;
+        }
+        Ok(())
+    }
+
+    /// Binds an already opened no-follow React handle to the retained React
+    /// identity (the pre-launch tree walk starts from exactly that handle).
+    pub(super) fn validate_react_handle(
+        &self,
+        handle: &std::fs::File,
+    ) -> Result<(), IdentityError> {
+        self.react.validate_handle(handle)
     }
 }
 
@@ -343,9 +369,10 @@ impl<'a> ProvisioningExecution<'a> {
         self.event("react", "created");
         self.check()?;
         let runtime = tree.create_dir(Tree::PROJECT, RUNTIME, true)?;
+        let mut children = Vec::with_capacity(RUNTIME_CHILDREN.len());
         for child in RUNTIME_CHILDREN {
             self.check()?;
-            tree.create_dir(runtime, child, true)?;
+            children.push(tree.create_dir(runtime, child, true)?);
         }
         self.event("runtime", "created");
         let mut dirs = BTreeMap::new();
@@ -384,9 +411,21 @@ impl<'a> ProvisioningExecution<'a> {
         runtime_identity
             .validate_handle(tree.handle(runtime))
             .map_err(|_| "runtime identity denied")?;
+        let mut child_identities = Vec::with_capacity(RUNTIME_CHILDREN.len());
+        for (index, name) in children.into_iter().zip(RUNTIME_CHILDREN) {
+            let identity = DirectoryIdentity::capture(&root.join(RUNTIME).join(name))
+                .map_err(|_| "runtime identity denied")?;
+            identity
+                .validate_handle(tree.handle(index))
+                .map_err(|_| "runtime identity denied")?;
+            child_identities.push(identity);
+        }
         let workspace = ProvisionedWorkspace {
             react: react_identity,
             runtime: runtime_identity,
+            children: child_identities
+                .try_into()
+                .map_err(|_| "runtime identity denied")?,
         };
         self.check()?;
         workspace
@@ -394,6 +433,9 @@ impl<'a> ProvisioningExecution<'a> {
             .map_err(|_| "React identity denied")?;
         workspace
             .validate_runtime(root)
+            .map_err(|_| "runtime identity denied")?;
+        workspace
+            .validate_runtime_children(root)
             .map_err(|_| "runtime identity denied")?;
         Ok(workspace)
     }

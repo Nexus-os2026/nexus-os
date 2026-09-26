@@ -5927,15 +5927,22 @@ pub mod runtime {
         serde_json::to_value(&result).map_err(|e| format!("serialize: {e}"))
     }
 
-    /// Builder dev-server start (P0-002C4A). `project_id` is a selector for a
-    /// current-AppState registration only. No process-launch design is
-    /// approved, so this validates provenance and identity, then fails closed.
+    /// Builder dev-server start (P0-002C4C3). `project_id` is a selector for a
+    /// current-AppState registration only. The governed launch (fresh trusted
+    /// toolchain verification, sealed Node, bounded readiness proof) runs on
+    /// Tauri's blocking pool, never on the IPC/main thread, and returns only
+    /// the loopback preview URL or a bounded error.
     #[tauri::command]
-    fn builder_dev_server_start(
+    async fn builder_dev_server_start(
         state: tauri::State<'_, AppState>,
         project_id: String,
     ) -> Result<String, String> {
-        super::builder_workspace::dev_server_start(&state, &project_id)
+        let state = state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            super::builder_workspace::dev_server_start(&state, &project_id)
+        })
+        .await
+        .map_err(|_| "Builder dev server: launch failed".to_owned())?
     }
 
     /// Builder dev-server stop (P0-002C4C1): the backend-owned lifecycle
@@ -5956,7 +5963,7 @@ pub mod runtime {
     }
 
     /// Builder dev-server status: the backend-owned lifecycle state, else
-    /// C4A-validated `stopped`. Launch stays unavailable; no URL is returned.
+    /// C4A-validated `stopped`. Only the bounded state label; no URL is returned.
     #[tauri::command]
     fn builder_dev_server_status(
         state: tauri::State<'_, AppState>,
