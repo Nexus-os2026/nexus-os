@@ -707,9 +707,15 @@ fn p0_002c4c3_packaged_node_permission_model_confines_the_runtime() {
         let _ = sender.send(output);
     });
     let output = received.recv_timeout(Duration::from_secs(60));
+    // The probe ends by itself; finalize once its exit is observed (bounded).
+    // Darwin refuses SIGKILL for a group whose root is still exiting: the
+    // lifecycle absorbs that by retrying finalization, this direct probe by
+    // waiting for the observed exit.
+    let exited = wait_until(soon(), || matches!(child.poll_exit(), Ok(Some(_))));
     child.terminate_and_reap(soon()).unwrap();
     let stderr = String::from_utf8_lossy(&captured.lock().unwrap()).into_owned();
     let output = output.unwrap_or_else(|_| panic!("probe timed out: {stderr}"));
+    assert!(exited, "the permission probe did not exit: {stderr}");
     let results: Value =
         serde_json::from_str(&output).unwrap_or_else(|_| panic!("{output}\n{stderr}"));
     let denied = "ERR_ACCESS_DENIED";

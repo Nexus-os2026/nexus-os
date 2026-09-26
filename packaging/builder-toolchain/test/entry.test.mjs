@@ -472,6 +472,10 @@ test('entry serves the project on loopback under the permission model', async ()
     assert.match(main.body, /createRoot/);
     const app = await request(port, '/src/App.tsx', { host });
     assert.equal(app.status, 200, stderr);
+    // Project CSS through the Nexus-owned PostCSS/Tailwind (preflight ran).
+    const css = await request(port, '/src/index.css', { host });
+    assert.equal(css.status, 200, stderr);
+    assert.match(css.body, /box-sizing/);
     // The gate on the real server.
     assert.equal((await request(port, '/', { host: 'evil.example' })).status, 403);
     assert.equal((await request(port, '/', { host, origin: 'http://evil.example' })).status, 403);
@@ -655,6 +659,37 @@ test('existence probes answer false for denied locations and grant nothing', () 
   assert.equal(results.stat, 'ERR_ACCESS_DENIED');
   // Before installation Node itself already reports no access (never true).
   assert.notEqual(results.before, true);
+});
+
+test('Windows drive letters are restored to their canonical spelling, nothing else', async () => {
+  const { canonicalDrive } = await import(fromToolchain('entry', 'fs-probe.mjs'));
+  assert.equal(canonicalDrive('c:/Users/x/src/index.css'), 'C:/Users/x/src/index.css');
+  assert.equal(canonicalDrive('d:\\Temp\\a b\\x.tsx'), 'D:\\Temp\\a b\\x.tsx');
+  for (const unchanged of ['C:/Users/x', 'C:\\x', '/home/x/c:/y', 'cc:/x', 'c:x', '\\\\?\\c:\\x', '', undefined, 7]) {
+    assert.equal(canonicalDrive(unchanged), unchanged);
+  }
+  if (process.platform !== 'win32') return;
+  // Native Windows: the permission model compares spellings exactly, so a
+  // granted file named with a lower-case drive letter is denied until the
+  // probe restores the canonical letter. Nothing outside is granted.
+  const probe = JSON.stringify(fromToolchain('entry', 'fs-probe.mjs'));
+  const granted = path.join(toolchainRoot, 'entry', 'fs-probe.mjs');
+  const lower = granted[0].toLowerCase() + granted.slice(1).replaceAll('\\', '/');
+  const outside = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-c4c3-drive-')));
+  const outsideLower = outside[0].toLowerCase() + outside.slice(1);
+  const results = confined(`
+    import fs from 'node:fs';
+    const code = (fn) => { try { fn(); return 'ok'; } catch (error) { return error.code; } };
+    const before = code(() => fs.statSync(${JSON.stringify(lower)}));
+    const { installExistenceProbes } = await import(${probe});
+    installExistenceProbes();
+    process.stdout.write(JSON.stringify({
+      before,
+      after: code(() => fs.statSync(${JSON.stringify(lower)})),
+      outside: code(() => fs.statSync(${JSON.stringify(outsideLower)})),
+    }));
+  `);
+  assert.deepEqual(results, { before: 'ERR_ACCESS_DENIED', after: 'ok', outside: 'ERR_ACCESS_DENIED' });
 });
 
 test('the entry installs every guard before any third-party module is imported', () => {
