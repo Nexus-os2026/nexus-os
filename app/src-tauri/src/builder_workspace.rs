@@ -23,6 +23,9 @@ use directory_identity::{DirectoryIdentity, IdentityError};
 // BuilderWorkspaceAuthority::provision; production uses stop/status/shutdown.
 mod process_lifecycle;
 use process_lifecycle::{Finalized, LifecycleError, LifecycleRegistry};
+// P0-002C4D1A private trusted-toolchain verifier. Staged: production has no
+// trusted toolchain or root, and nothing outside this adapter can reach it.
+mod trusted_toolchain;
 
 // Audit payloads contain descriptive project IDs, never grants or private principals.
 type Audit = Arc<dyn Fn(Value) + Send + Sync>;

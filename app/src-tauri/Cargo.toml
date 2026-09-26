@@ -81,6 +81,9 @@ open = "5"
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "=1.1.4", features = ["fs"] }
+
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 tauri = { version = "2.5.5", optional = true, default-features = false, features = ["tray-icon", "wry"] }
 tauri-plugin-global-shortcut = "2.3.1"
