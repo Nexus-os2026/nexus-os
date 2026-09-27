@@ -1860,7 +1860,8 @@ impl Production {
         self.authority()
             .provision_workspace(&result.project_id, &[], self.audit())
             .unwrap();
-        (result.project_id, PathBuf::from(result.project_dir))
+        let root = self.authority().root.join(&result.project_id);
+        (result.project_id, root)
     }
 
     fn target(&self, id: &str) -> DevServerTarget {

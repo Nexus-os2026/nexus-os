@@ -521,36 +521,6 @@ pub(crate) fn voice_transcribe(state: &AppState, audio_base64: String) -> Result
     serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
-/// Load a Whisper model for on-device speech-to-text.
-pub(crate) fn voice_load_whisper_model(
-    state: &AppState,
-    model_path: String,
-) -> Result<String, String> {
-    let transcriber = WhisperTranscriber::load_model(&model_path)?;
-    let info = transcriber.model_info().unwrap_or_default();
-
-    let mut whisper = state.whisper.lock().unwrap_or_else(|p| p.into_inner());
-    *whisper = transcriber;
-    drop(whisper);
-
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::StateChange,
-        json!({
-            "source": "voice-assistant",
-            "action": "load_whisper_model",
-            "model_path": model_path,
-        }),
-    );
-
-    let result = json!({
-        "status": "loaded",
-        "engine": "candle-whisper",
-        "model_path": info,
-    });
-    serde_json::to_string(&result).map_err(|e| e.to_string())
-}
-
 /// Decode base64-encoded audio data to raw bytes.
 pub(crate) fn base64_decode_audio(encoded: &str) -> Result<Vec<u8>, String> {
     // Simple base64 decoder — handles standard base64 alphabet
@@ -1309,57 +1279,6 @@ pub(crate) fn replay_toggle_recording(state: &AppState, enabled: bool) -> Result
 }
 
 // ── Air-Gap Deployment ──────────────────────────────────────────────
-
-pub(crate) fn airgap_create_bundle(
-    _state: &AppState,
-    target_os: String,
-    target_arch: String,
-    output_path: String,
-    components: Option<String>,
-) -> Result<String, String> {
-    let mut builder = nexus_airgap::AirgapBuilder::new(&target_os, &target_arch);
-
-    // If components JSON array provided, add each
-    if let Some(comp_json) = components {
-        let comps: Vec<nexus_airgap::BundleComponent> =
-            serde_json::from_str(&comp_json).map_err(|e| format!("invalid components: {e}"))?;
-        for comp in comps {
-            builder.add_component(comp);
-        }
-    }
-
-    let bundle = builder.build(&output_path)?;
-    serde_json::to_string(&bundle).map_err(|e| e.to_string())
-}
-
-pub(crate) fn airgap_validate_bundle(
-    _state: &AppState,
-    bundle_path: String,
-) -> Result<String, String> {
-    let result = nexus_airgap::AirgapInstaller::validate_bundle(&bundle_path);
-    serde_json::to_string(&result).map_err(|e| e.to_string())
-}
-
-pub(crate) fn airgap_install_bundle(
-    state: &AppState,
-    bundle_path: String,
-    install_dir: String,
-) -> Result<String, String> {
-    let bundle = nexus_airgap::AirgapInstaller::install(&bundle_path, &install_dir)?;
-
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::StateChange,
-        json!({
-            "source": "airgap",
-            "action": "install_bundle",
-            "bundle_id": bundle.id,
-            "install_dir": install_dir,
-        }),
-    );
-
-    serde_json::to_string(&bundle).map_err(|e| e.to_string())
-}
 
 pub(crate) fn airgap_get_system_info(_state: &AppState) -> Result<String, String> {
     let info = nexus_airgap::get_system_info();

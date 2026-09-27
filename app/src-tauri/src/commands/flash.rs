@@ -19,179 +19,27 @@ pub async fn flash_detect_hardware() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub async fn flash_profile_model(model_path: String) -> Result<serde_json::Value, String> {
-    // Probe GGUF metadata without fully loading the model
-    let hw = nexus_flash_infer::detect_hardware();
-    let registry = {
-        let mut r = nexus_flash_infer::BackendRegistry::new();
-        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
-        r
-    };
-    let path = std::path::Path::new(&model_path);
-    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
-    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
-    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
-    serde_json::to_value(profile).map_err(|e| format!("serialize: {e}"))
+pub fn flash_profile_model() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "flash_profile_model",
+        crate::phase0_surface::Closure::FileSelection,
+    ))
 }
 
 #[tauri::command]
-pub async fn flash_auto_configure(
-    model_path: String,
-    target_context_len: u32,
-    priority: String,
-) -> Result<serde_json::Value, String> {
-    let hw = nexus_flash_infer::detect_hardware();
-    let registry = {
-        let mut r = nexus_flash_infer::BackendRegistry::new();
-        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
-        r
-    };
-    let path = std::path::Path::new(&model_path);
-    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
-    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
-    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
-
-    let prio = match priority.as_str() {
-        "speed" => nexus_flash_infer::InferencePriority::Speed,
-        "context" => nexus_flash_infer::InferencePriority::Context,
-        _ => nexus_flash_infer::InferencePriority::Balanced,
-    };
-
-    let preference = nexus_flash_infer::InferencePreference {
-        model_path,
-        target_context_len,
-        priority: prio,
-        generation_config: None,
-    };
-
-    let config =
-        nexus_flash_infer::auto_configure(&hw, &profile, preference).map_err(|e| e.to_string())?;
-    serde_json::to_value(config).map_err(|e| format!("serialize: {e}"))
+pub fn flash_auto_configure() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "flash_auto_configure",
+        crate::phase0_surface::Closure::FileSelection,
+    ))
 }
 
 #[tauri::command]
-pub async fn flash_create_session(
-    state: tauri::State<'_, AppState>,
-    model_path: String,
-    target_context_len: u32,
-    priority: String,
-) -> Result<String, String> {
-    let hw = state.flash_session_manager.hardware().clone();
-    let registry = {
-        let mut r = nexus_flash_infer::BackendRegistry::new();
-        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
-        r
-    };
-    let path = std::path::Path::new(&model_path);
-    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
-    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
-    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
-
-    let prio = match priority.as_str() {
-        "speed" => nexus_flash_infer::InferencePriority::Speed,
-        "context" => nexus_flash_infer::InferencePriority::Context,
-        _ => nexus_flash_infer::InferencePriority::Balanced,
-    };
-
-    // Auto-unload other models when loading a large model (>50 GB).
-    // Multiple loaded models split RAM and starve mmap page cache,
-    // killing MoE expert streaming performance.
-    let model_size_gb = profile.file_size_mb as f64 / 1024.0;
-    if model_size_gb > 50.0 {
-        let existing = state.flash_session_manager.list_sessions().await;
-        if !existing.is_empty() {
-            eprintln!(
-                "[flash] Unloading {} other model(s) to free RAM for large model ({:.0} GB)",
-                existing.len(),
-                model_size_gb
-            );
-            // Drop all cached providers first so model handles are released
-            {
-                let mut cache = state
-                    .flash_providers
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner());
-                cache.clear();
-            }
-            state.flash_session_manager.clear_all().await;
-            // Force glibc to return freed memory to the OS
-            #[cfg(target_os = "linux")]
-            {
-                extern "C" {
-                    fn malloc_trim(pad: usize) -> i32;
-                }
-                // SAFETY: malloc_trim is a standard glibc function with no UB risk.
-                // Best-effort: return freed memory to OS; return value only indicates if memory was released
-                let _ = unsafe { malloc_trim(0) };
-            }
-        }
-    }
-
-    let preference = nexus_flash_infer::InferencePreference {
-        model_path: model_path.clone(),
-        target_context_len,
-        priority: prio,
-        generation_config: None,
-    };
-
-    let (session_id, optimal_config) = state
-        .flash_session_manager
-        .create_session(&model_path, profile, preference)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Cache a shared FlashProvider so the model handle persists across generate calls.
-    // Pass the auto-configured LoadConfig and GenerationConfig so thread count,
-    // context size, and batch size match what auto_configure() computed.
-    let provider = std::sync::Arc::new(nexus_connectors_llm::providers::FlashProvider::new(
-        model_path.clone(),
-        optimal_config.load_config,
-        optimal_config.generation_config,
-    ));
-
-    // Pre-load the model into the provider NOW so that the model_handle is
-    // populated before any agent or UI query(). Without this, the agent's
-    // ensure_loaded() creates a SECOND llama context with wrong config
-    // (n_ctx=262144 default instead of the session's optimized value),
-    // which OOMs or asserts in llama.cpp.
-    // spawn_blocking works here — flash_generate uses the same pattern.
-    {
-        let prov_clone = provider.clone();
-        tokio::task::spawn_blocking(move || {
-            if let Err(e) = prov_clone.ensure_loaded() {
-                eprintln!("[flash] WARNING: pre-load failed: {e}");
-            } else {
-                eprintln!("[flash] model pre-loaded into provider");
-            }
-        })
-        .await
-        .unwrap_or_else(|e| eprintln!("[flash] pre-load thread panicked: {e}"));
-    }
-
-    {
-        let mut cache = state
-            .flash_providers
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        cache.insert(session_id.clone(), provider);
-    }
-
-    // Audit session creation
-    {
-        let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
-        // Best-effort: audit trail append; session creation succeeds regardless
-        let _ = audit.append_event(
-            SYSTEM_UUID,
-            EventType::UserAction,
-            json!({
-                "event_kind": "flash.session_created",
-                "session_id": session_id,
-                "model_path": model_path,
-            }),
-        );
-    }
-
-    Ok(session_id)
+pub fn flash_create_session() -> Result<String, String> {
+    Err(crate::phase0_surface::closed(
+        "flash_create_session",
+        crate::phase0_surface::Closure::FileSelection,
+    ))
 }
 
 /// Run governed inference on a loaded flash session.
@@ -666,65 +514,19 @@ pub async fn flash_system_metrics() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub async fn flash_estimate_performance(model_path: String) -> Result<serde_json::Value, String> {
-    let hw = nexus_flash_infer::detect_hardware();
-    let registry = {
-        let mut r = nexus_flash_infer::BackendRegistry::new();
-        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
-        r
-    };
-    let path = std::path::Path::new(&model_path);
-    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
-    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
-    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
-
-    let budget = nexus_flash_infer::MemoryBudget::calculate(&hw, &profile, 4096);
-    let estimate = profile.estimate_performance(&hw, &budget);
-    serde_json::to_value(estimate).map_err(|e| format!("serialize: {e}"))
+pub fn flash_estimate_performance() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "flash_estimate_performance",
+        crate::phase0_surface::Closure::FileSelection,
+    ))
 }
 
 #[tauri::command]
-pub async fn flash_run_benchmark(
-    state: tauri::State<'_, AppState>,
-    model_path: String,
-    priority: Option<String>,
-) -> Result<serde_json::Value, String> {
-    let hw = nexus_flash_infer::detect_hardware();
-    let registry = {
-        let mut r = nexus_flash_infer::BackendRegistry::new();
-        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
-        r
-    };
-    let path = std::path::Path::new(&model_path);
-    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
-    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
-    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
-
-    let prio = match priority.as_deref() {
-        Some("speed") => nexus_flash_infer::InferencePriority::Speed,
-        Some("context") => nexus_flash_infer::InferencePriority::Context,
-        _ => nexus_flash_infer::InferencePriority::Balanced,
-    };
-
-    let preference = nexus_flash_infer::InferencePreference {
-        model_path: model_path.clone(),
-        target_context_len: 4096,
-        priority: prio,
-        generation_config: None,
-    };
-
-    let config =
-        nexus_flash_infer::auto_configure(&hw, &profile, preference).map_err(|e| e.to_string())?;
-
-    let model_handle = backend
-        .load_model(path, &config.load_config)
-        .map_err(|e| e.to_string())?;
-
-    let budget_mb = state.flash_session_manager.remaining_budget_mb();
-    let results = nexus_flash_infer::run_full_benchmark(model_handle.as_ref(), &hw, budget_mb)
-        .map_err(|e| e.to_string())?;
-
-    serde_json::to_value(&results).map_err(|e| format!("serialize: {e}"))
+pub fn flash_run_benchmark() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "flash_run_benchmark",
+        crate::phase0_surface::Closure::FileSelection,
+    ))
 }
 
 #[tauri::command]
@@ -744,67 +546,12 @@ pub async fn flash_export_benchmark_report(
     Ok(report_path.to_string_lossy().into_owned())
 }
 
-/// Enable speculative decoding for the current session.
-///
-/// Loads a small fast "draft" model and pairs it with the loaded target model.
-/// The draft model generates tokens speculatively, then the target verifies
-/// them in batch. With ~70% acceptance rate, this gives 2-4x throughput
-/// for memory-bandwidth-bound MoE models.
 #[tauri::command]
-pub async fn flash_enable_speculative(
-    state: tauri::State<'_, AppState>,
-    draft_model_path: String,
-    draft_tokens: Option<u32>,
-) -> Result<serde_json::Value, String> {
-    let hw = state.flash_session_manager.hardware().clone();
-
-    // Auto-configure the draft model for speed
-    let registry = {
-        let mut r = nexus_flash_infer::BackendRegistry::new();
-        r.register(Box::new(nexus_flash_infer::LlamaBackend::new(hw.clone())));
-        r
-    };
-    let path = std::path::Path::new(&draft_model_path);
-    let backend = registry.select_backend(path).map_err(|e| e.to_string())?;
-    let metadata = backend.probe_model(path).map_err(|e| e.to_string())?;
-    let profile = nexus_flash_infer::ModelProfile::from_metadata(&metadata);
-
-    let preference = nexus_flash_infer::InferencePreference {
-        model_path: draft_model_path.clone(),
-        target_context_len: 2048,
-        priority: nexus_flash_infer::InferencePriority::Speed,
-        generation_config: None,
-    };
-
-    let optimal =
-        nexus_flash_infer::auto_configure(&hw, &profile, preference).map_err(|e| e.to_string())?;
-
-    let spec_config = nexus_flash_infer::SpeculativeConfig {
-        draft_model_path: draft_model_path.clone(),
-        draft_tokens: draft_tokens.unwrap_or(5),
-        draft_load_config: optimal.load_config,
-        draft_gen_config: optimal.generation_config,
-    };
-
-    let engine = nexus_flash_infer::SpeculativeEngine::new(spec_config, hw);
-    engine.load_draft().map_err(|e| e.to_string())?;
-
-    let info = json!({
-        "draft_model": draft_model_path,
-        "draft_tokens": draft_tokens.unwrap_or(5),
-        "status": "loaded",
-        "acceptance_rate": engine.acceptance_rate(),
-    });
-
-    {
-        let mut guard = state
-            .flash_speculative
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        *guard = Some(engine);
-    }
-
-    Ok(info)
+pub fn flash_enable_speculative() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "flash_enable_speculative",
+        crate::phase0_surface::Closure::FileSelection,
+    ))
 }
 
 /// Disable speculative decoding and unload the draft model.

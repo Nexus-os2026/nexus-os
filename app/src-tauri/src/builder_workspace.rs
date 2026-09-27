@@ -1128,16 +1128,18 @@ struct GeneratedPlan {
     result: PlanResult,
     selection: ModelSelection,
 }
+// P0-002C5A: the frontend receives the opaque project selector only. No
+// absolute project directory is returned for a caller to hand back as
+// build authority.
 struct CompletedPlan {
     project_id: String,
-    project_dir: String,
     generated: GeneratedPlan,
 }
 impl CompletedPlan {
     fn into_json(self) -> Value {
         let r = self.generated.result;
         let m = self.generated.selection;
-        json!({"project_id": self.project_id, "project_dir": self.project_dir,
+        json!({"project_id": self.project_id,
             "plan": r.plan, "input_tokens": r.input_tokens, "output_tokens": r.output_tokens,
             "cost_usd": r.cost_usd, "elapsed_seconds": r.elapsed_seconds,
             "model": m.display_name, "model_id": m.model_id, "provider": m.provider.to_string(), "is_local": m.is_local})
@@ -1178,7 +1180,6 @@ fn finish_plan(
                 execution.persist_plan(&generated.result, &mut state)?;
                 Ok(CompletedPlan {
                     project_id: execution.project_id.to_string(),
-                    project_dir: execution.root.to_string_lossy().into_owned(),
                     generated,
                 })
             }

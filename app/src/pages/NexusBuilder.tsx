@@ -230,7 +230,6 @@ export default function NexusBuilder() {
   const [planTime, setPlanTime] = useState(0);
   const [planModel, setPlanModel] = useState("");
   const [projectId, setProjectId] = useState("");
-  const [projectDir, setProjectDir] = useState("");
 
   /* --- checkpoints --- */
   const [cps, setCps] = useState<any[]>([]);
@@ -474,7 +473,6 @@ export default function NexusBuilder() {
 
     // Fresh planning identity and storage are allocated by the backend.
     setProjectId("");
-    setProjectDir("");
 
     // Show planning phase in narrative
     setPlanPhase("planning");
@@ -507,7 +505,6 @@ export default function NexusBuilder() {
       setPlanTime(result.elapsed_seconds ?? 0);
       setPlanModel(result.model ?? "Haiku 4.5");
       setProjectId(result.project_id ?? "");
-      setProjectDir(result.project_dir ?? "");
       setPlanPhase("planned");
       setPhase("idle"); // Show plan card, not building spinner
       setBusy(false);
@@ -579,12 +576,13 @@ export default function NexusBuilder() {
       status: "complete" as const,
     }]);
 
-    // Use the same project directory where plan artefacts were saved
-    const outputDir = projectDir || undefined;
+    // P0-002C5A: a plan's location is never handed back as build authority.
+    // The backend owns the governed project; the retired raw-path build
+    // surface fails closed and reports why.
     try {
       await conductBuildStreaming(
         prompt,
-        outputDir,
+        undefined,
         modelConfig ? toPrefixedModel(modelConfig.full_build) : "anthropic/claude-sonnet-4-6",
         JSON.stringify(approvedBrief),
         JSON.stringify(approvedCriteria),
@@ -596,7 +594,7 @@ export default function NexusBuilder() {
       setBusy(false);
       busyRef.current = false;
     }
-  }, [prompt, projectDir, modelConfig]);
+  }, [prompt, modelConfig]);
 
   // Cancel plan: return to idle
   const doCancelPlan = useCallback(() => {
@@ -659,7 +657,7 @@ export default function NexusBuilder() {
     setHtml(""); setViewMode("preview"); setVp("desktop"); setSPct(0); setSTok(0); setSTime(0);
     setIterTxt(""); setItering(false); setCps([]); setCurCp(null); setRes(null);
     setNarrative([]); setProjectName(""); currentPhaseRef.current = "";
-    setPlanPhase("idle"); setPlanData(null); setPlanCost(0); setPlanTime(0); setPlanModel(""); setProjectId(""); setProjectDir("");
+    setPlanPhase("idle"); setPlanData(null); setPlanCost(0); setPlanTime(0); setPlanModel(""); setProjectId("");
     await refreshProjects();
     if (mountedRef.current) setShowProjectList(true);
   }, [refreshProjects]);
@@ -687,7 +685,6 @@ export default function NexusBuilder() {
         setPlanData({ brief: data.plan.product_brief, criteria: data.plan.acceptance_criteria });
         setPlanPhase("planned");
         setProjectId(data.project_id ?? projectId);
-        setProjectDir(data.project_dir ?? "");
         setPhase("idle");
         setRes(null);
       } else if (status === "Draft" || status === "PlanFailed") {
@@ -735,7 +732,7 @@ export default function NexusBuilder() {
         setIterTxt(""); setItering(false); setCps([]); setCurCp(null);
         setNarrative([]); currentPhaseRef.current = "";
         setPlanPhase("idle"); setPlanData(null); setPlanCost(0);
-        setPlanTime(0); setPlanModel(""); setProjectId(""); setProjectDir("");
+        setPlanTime(0); setPlanModel(""); setProjectId("");
         setViewMode("preview"); setEditMode(false);
       }
     } catch { /* */ }

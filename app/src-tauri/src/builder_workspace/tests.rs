@@ -74,8 +74,10 @@ fn p0_002c2_trusted_run_persists_only_fixed_files_and_revokes_before_response() 
         .unwrap()
         .into_json();
     let id = Uuid::parse_str(response["project_id"].as_str().unwrap()).unwrap();
-    let root = PathBuf::from(response["project_dir"].as_str().unwrap());
-    assert_eq!(root, f.authority.root.join(id.to_string()));
+    // P0-002C5A: the response carries the opaque selector only, never the
+    // absolute project directory a caller could hand back as authority.
+    assert!(response.get("project_dir").is_none());
+    let root = f.authority.root.join(id.to_string());
     let state = web_builder_agent::project::load_project_state(&root).unwrap();
     assert_eq!(state.status, ProjectStatus::Planned);
     assert_eq!(state.project_id, id.to_string());
@@ -117,7 +119,6 @@ fn p0_002c2_trusted_run_persists_only_fixed_files_and_revokes_before_response() 
         f.authority.registry.resolve(forged, planner).unwrap_err(),
         WorkspaceAuthorityError::UnknownGrant
     );
-    assert!(serde_json::from_value::<WorkspaceGrantId>(response["project_dir"].clone()).is_err());
     assert!(
         serde_json::from_value::<WorkspaceGrantId>(serde_json::to_value(state).unwrap()).is_err()
     );
@@ -168,7 +169,7 @@ fn p0_002c2_concurrent_runs_receive_independent_roots_and_runs() {
                     let e = authority.begin(Arc::new(|_| {})).unwrap();
                     let run = e.planner.run_id;
                     let result = finish_plan(e, "same prompt", |_| Ok(generated())).unwrap();
-                    (result.project_dir, run)
+                    (authority.root.join(&result.project_id), run)
                 })
             })
             .collect();
@@ -561,7 +562,8 @@ fn p0_002c2_cwd_independence() {
         std::env::set_current_dir(&other.path).unwrap();
         let result = finish_plan(e, "prompt", |_| Ok(generated()));
         std::env::set_current_dir(original).unwrap();
-        assert_eq!(PathBuf::from(result.unwrap().project_dir), root);
+        assert_eq!(f.authority.root.join(result.unwrap().project_id), root);
+        assert!(root.join("builder_state.json").is_file());
         eprintln!("C2 cwd witness");
         return;
     }
@@ -721,7 +723,8 @@ pub(super) fn registered(f: &Fixture) -> (String, PathBuf) {
 /// A current C2 registration whose workspace was never provisioned.
 pub(super) fn registered_only(f: &Fixture) -> (String, PathBuf) {
     let result = run_plan(&f.authority, f.audit(), "site", |_| Ok(generated())).unwrap();
-    (result.project_id, PathBuf::from(result.project_dir))
+    let root = f.authority.root.join(&result.project_id);
+    (result.project_id, root)
 }
 
 #[test]
@@ -2061,7 +2064,7 @@ fn p0_002c4a_audit_reentry_and_no_sensitive_material() {
     );
     let events = Arc::new(Mutex::new(Vec::<Value>::new()));
     let result = run_plan(&authority, Arc::new(|_| {}), "site", |_| Ok(generated())).unwrap();
-    let root = PathBuf::from(&result.project_dir);
+    let root = authority.root.join(&result.project_id);
     authority
         .provision_workspace(&result.project_id, &[], Arc::new(|_| {}))
         .unwrap();

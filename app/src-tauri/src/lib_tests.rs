@@ -10,26 +10,56 @@ use super::{
     get_browser_history, get_configured_provider, get_input_control_status, get_knowledge_base,
     get_live_system_metrics, get_messaging_status, get_simulation_report, get_simulation_status,
     get_system_specs, ghost_protocol_add_peer, ghost_protocol_remove_peer, ghost_protocol_status,
-    ghost_protocol_toggle, index_document, inject_simulation_variable, learning_agent_action,
-    list_agents, list_indexed_documents, list_local_models, list_prebuilt_manifest_paths,
-    list_simulations, mcp_host_add_server, mcp_host_list_servers, mcp_host_list_tools,
-    mcp_host_remove_server, navigate_to, neural_bridge_delete, neural_bridge_ingest,
-    neural_bridge_search, neural_bridge_status, neural_bridge_toggle, parse_agent_manifest_json,
-    pause_agent, payment_create_invoice, payment_create_plan, payment_get_revenue_stats,
-    payment_list_plans, payment_pay_invoice, remove_indexed_document, replay_export_bundle,
-    replay_get_bundle, replay_list_bundles, replay_toggle_recording, replay_verify_bundle,
-    resume_agent, run_parallel_simulation_reports, search_documents, set_default_agent,
-    start_agent, start_build, start_learning, start_research, start_simulation_with_observer,
-    stop_agent, stop_computer_action, time_machine_create_checkpoint,
-    time_machine_list_checkpoints, time_machine_redo, time_machine_undo, tracing_end_span,
-    tracing_end_trace, tracing_get_trace, tracing_list_traces, tracing_start_span,
-    tracing_start_trace, voice_get_status, voice_load_whisper_model, voice_transcribe, AppState,
-    LearningSource,
+    ghost_protocol_toggle, inject_simulation_variable, learning_agent_action, list_agents,
+    list_indexed_documents, list_local_models, list_prebuilt_manifest_paths, list_simulations,
+    mcp_host_add_server, mcp_host_list_servers, mcp_host_list_tools, mcp_host_remove_server,
+    navigate_to, neural_bridge_delete, neural_bridge_ingest, neural_bridge_search,
+    neural_bridge_status, neural_bridge_toggle, parse_agent_manifest_json, pause_agent,
+    payment_create_invoice, payment_create_plan, payment_get_revenue_stats, payment_list_plans,
+    payment_pay_invoice, remove_indexed_document, replay_export_bundle, replay_get_bundle,
+    replay_list_bundles, replay_toggle_recording, replay_verify_bundle, resume_agent,
+    run_parallel_simulation_reports, search_documents, set_default_agent, start_agent, start_build,
+    start_learning, start_research, start_simulation_with_observer, stop_agent,
+    stop_computer_action, time_machine_create_checkpoint, time_machine_list_checkpoints,
+    time_machine_redo, time_machine_undo, tracing_end_span, tracing_end_trace, tracing_get_trace,
+    tracing_list_traces, tracing_start_span, tracing_start_trace, voice_get_status,
+    voice_transcribe, AppState, LearningSource,
 };
 use nexus_kernel::simulation::SimulationObserver;
 use serde_json::json;
 use std::{sync::Arc, thread, time::Duration};
 use uuid::Uuid;
+
+/// P0-002C5A: `index_document` took a raw file path as authority and is
+/// closed. The RAG wiring tests ingest their fixture text through the
+/// pipeline directly, with the same embedding-dimension probe it used.
+fn ingest_test_document(state: &AppState, label: &str, content: &str) -> Result<String, String> {
+    use nexus_connectors_llm::providers::LlmProvider;
+    let provider = get_configured_provider();
+    let mut rag = state.rag.lock().unwrap_or_else(|p| p.into_inner());
+    if rag.documents.is_empty() {
+        if let Ok(probe) = provider.embed(&["dimension probe"], &rag.config.embedding_model) {
+            if let Some(first) = probe.embeddings.first() {
+                if first.len() != rag.config.embedding_dimension {
+                    rag.config.embedding_dimension = first.len();
+                    rag.vector_store =
+                        nexus_connectors_llm::vector_store::VectorStore::new(first.len());
+                }
+            }
+        }
+    }
+    let mut redaction = nexus_kernel::redaction::RedactionEngine::default();
+    let doc = rag
+        .ingest_document(
+            content,
+            label,
+            nexus_connectors_llm::chunking::SupportedFormat::PlainText,
+            &provider,
+            &mut redaction,
+        )
+        .map_err(|e| format!("ingest failed: {e}"))?;
+    serde_json::to_string(&doc).map_err(|e| format!("serialize error: {e}"))
+}
 
 #[test]
 fn p0_002c1_appstate_owns_empty_shared_authority_registry() {
@@ -937,19 +967,12 @@ fn test_chat_with_documents_returns_answer() {
 
     let state = AppState::new();
 
-    // Write a temp file to index
-    let tmp = std::env::temp_dir().join("nexus_rag_test_chat.txt");
-    std::fs::write(
-        &tmp,
-        "Rust is a systems programming language focused on safety.",
-    )
-    .unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-
     // Index the document
-    let ingest_result = index_document(&state, tmp.to_string_lossy().to_string());
+    let ingest_result = ingest_test_document(
+        &state,
+        "nexus_rag_test_chat.txt",
+        "Rust is a systems programming language focused on safety.",
+    );
     assert!(
         ingest_result.is_ok(),
         "ingest failed: {:?}",
@@ -969,8 +992,6 @@ fn test_chat_with_documents_returns_answer() {
     assert!(parsed.get("sources").is_some());
     assert!(parsed.get("model").is_some());
     assert!(parsed.get("tokens").is_some());
-
-    let _ = std::fs::remove_file(&tmp);
     // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
 }
 
@@ -1001,57 +1022,6 @@ fn test_provider_status_command() {
 // ── RAG wiring tests ────────────────────────────────────────────────
 
 #[test]
-fn test_index_document_end_to_end() {
-    std::env::set_var("LLM_PROVIDER", "mock");
-    // Mock provider falls back to Ollama for embeddings; skip if unavailable.
-    let ollama = nexus_connectors_llm::providers::OllamaProvider::from_env();
-    let has_embed = ollama
-        .health_check()
-        .ok()
-        .filter(|&ok| ok)
-        .and_then(|_| ollama.list_models().ok())
-        .map(|models| models.iter().any(|m| m.name.contains("nomic-embed")))
-        .unwrap_or(false);
-    if !has_embed {
-        eprintln!("SKIPPED: Ollama embedding model not available");
-        return;
-    }
-    let state = AppState::new();
-    let tmp = std::env::temp_dir().join("nexus_test_index_e2e.md");
-    std::fs::write(&tmp, "# Heading\n\nSome markdown content about Nexus OS.").unwrap_or_else(
-        |e| {
-            eprintln!("fs::write failed: {e}");
-            std::process::exit(1)
-        },
-    );
-
-    let result = index_document(&state, tmp.to_string_lossy().to_string());
-    assert!(result.is_ok(), "index_document failed: {:?}", result.err());
-
-    let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
-        .unwrap_or_else(|e| {
-            eprintln!("JSON parse failed: {e}");
-            std::process::exit(1)
-        });
-    assert!(
-        parsed["chunk_count"].as_u64().unwrap_or_else(|| {
-            eprintln!("expected u64 value");
-            std::process::exit(1)
-        }) > 0
-    );
-    assert_eq!(
-        parsed["path"].as_str().unwrap_or_else(|| {
-            eprintln!("expected string value");
-            std::process::exit(1)
-        }),
-        tmp.to_string_lossy()
-    );
-
-    let _ = std::fs::remove_file(&tmp);
-    // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
-}
-
-#[test]
 fn test_search_documents_end_to_end() {
     std::env::set_var("LLM_PROVIDER", "mock");
     let ollama = nexus_connectors_llm::providers::OllamaProvider::from_env();
@@ -1067,17 +1037,12 @@ fn test_search_documents_end_to_end() {
         return;
     }
     let state = AppState::new();
-    let tmp = std::env::temp_dir().join("nexus_test_search_e2e.txt");
-    std::fs::write(
-        &tmp,
+    let _ = ingest_test_document(
+        &state,
+        "nexus_test_search_e2e.txt",
         "Quantum computing uses qubits for parallel computation.",
     )
     .unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-
-    let _ = index_document(&state, tmp.to_string_lossy().to_string()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -1095,8 +1060,6 @@ fn test_search_documents_end_to_end() {
         assert!(r.get("chunk_id").is_some());
         assert!(r.get("score").is_some());
     }
-
-    let _ = std::fs::remove_file(&tmp);
     // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
 }
 
@@ -1116,25 +1079,16 @@ fn test_list_indexed_documents_two_docs() {
         return;
     }
     let state = AppState::new();
-    let tmp1 = std::env::temp_dir().join("nexus_test_list_a.txt");
-    let tmp2 = std::env::temp_dir().join("nexus_test_list_b.txt");
-    std::fs::write(&tmp1, "Document A content.").unwrap_or_else(|e| {
-        eprintln!("fs::write failed: {e}");
-        std::process::exit(1)
-    });
-    std::fs::write(&tmp2, "Document B content.").unwrap_or_else(|e| {
-        eprintln!("fs::write failed: {e}");
-        std::process::exit(1)
-    });
-
-    let _ = index_document(&state, tmp1.to_string_lossy().to_string()).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    let _ = index_document(&state, tmp2.to_string_lossy().to_string()).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
+    let _ = ingest_test_document(&state, "nexus_test_list_a.txt", "Document A content.")
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
+    let _ = ingest_test_document(&state, "nexus_test_list_b.txt", "Document B content.")
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
     let result = list_indexed_documents(&state).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
@@ -1145,9 +1099,6 @@ fn test_list_indexed_documents_two_docs() {
         std::process::exit(1)
     });
     assert_eq!(parsed.len(), 2);
-
-    let _ = std::fs::remove_file(&tmp1);
-    let _ = std::fs::remove_file(&tmp2);
     // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
 }
 
@@ -1167,14 +1118,9 @@ fn test_remove_indexed_document() {
         return;
     }
     let state = AppState::new();
-    let tmp = std::env::temp_dir().join("nexus_test_remove.txt");
-    std::fs::write(&tmp, "Content to be removed.").unwrap_or_else(|e| {
-        eprintln!("fs::write failed: {e}");
-        std::process::exit(1)
-    });
-    let path_str = tmp.to_string_lossy().to_string();
+    let path_str = "nexus_test_remove.txt".to_string();
 
-    let _ = index_document(&state, path_str.clone()).unwrap_or_else(|e| {
+    let _ = ingest_test_document(&state, &path_str, "Content to be removed.").unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -1200,8 +1146,6 @@ fn test_remove_indexed_document() {
         std::process::exit(1)
     });
     assert!(docs.is_empty());
-
-    let _ = std::fs::remove_file(&tmp);
     // Note: don't remove LLM_PROVIDER — tests run in parallel in the same process.
 }
 
@@ -1434,23 +1378,6 @@ fn test_voice_transcribe_fallback_stub() {
     assert_eq!(parsed["engine"].as_str(), Some("none"));
     assert!(parsed.get("duration_ms").is_some());
     assert_eq!(parsed["error"].as_bool(), Some(true));
-}
-
-#[test]
-fn test_voice_load_whisper_model_missing() {
-    let state = AppState::new();
-    let result = voice_load_whisper_model(&state, "/nonexistent/whisper/model".to_string());
-    assert!(result.is_err());
-    // Whisper should still not be loaded
-    let status = voice_get_status(&state).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    let parsed: serde_json::Value = serde_json::from_str(&status).unwrap_or_else(|e| {
-        eprintln!("JSON parse failed: {e}");
-        std::process::exit(1)
-    });
-    assert_eq!(parsed["whisper_loaded"].as_bool(), Some(false));
 }
 
 #[test]

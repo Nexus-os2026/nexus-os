@@ -94,18 +94,6 @@ use uuid::Uuid;
 
 // ── Cognitive Filesystem commands ───────────────────────────────────
 
-pub(crate) fn cogfs_index_file(path: String) -> Result<(), String> {
-    let content =
-        std::fs::read_to_string(&path).map_err(|e| format!("failed to read file: {e}"))?;
-    let metadata = std::fs::metadata(&path).map_err(|e| format!("failed to stat file: {e}"))?;
-    let size_bytes = metadata.len();
-    let mut indexer = nexus_kernel::cogfs::SemanticIndexer::new();
-    indexer
-        .index_file(&path, &content, size_bytes)
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
 pub(crate) fn cogfs_query(question: String) -> Result<serde_json::Value, String> {
     let indexer = nexus_kernel::cogfs::SemanticIndexer::new();
     let query_engine = nexus_kernel::cogfs::NaturalQuery::new();
@@ -117,13 +105,6 @@ pub(crate) fn cogfs_get_graph(file_path: String) -> Result<serde_json::Value, St
     let graph = nexus_kernel::cogfs::KnowledgeGraph::new();
     let links = graph.get_links(&file_path);
     serde_json::to_value(&links).map_err(|e| e.to_string())
-}
-
-pub(crate) fn cogfs_watch_directory(path: String) -> Result<(), String> {
-    let mut watcher =
-        nexus_kernel::cogfs::FileWatcher::new(nexus_kernel::cogfs::WatchConfig::default());
-    watcher.add_watch(&path);
-    Ok(())
 }
 
 pub(crate) fn cogfs_get_entities(file_path: String) -> Result<serde_json::Value, String> {

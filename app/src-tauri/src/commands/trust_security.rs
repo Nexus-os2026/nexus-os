@@ -647,26 +647,6 @@ pub(crate) fn analyze_screen(state: &AppState, query: String) -> Result<String, 
     Ok(analysis.output)
 }
 
-pub(crate) fn analyze_media_file(
-    state: &AppState,
-    path: String,
-    query: String,
-) -> Result<String, String> {
-    let canonical = file_manager_validate_path(&path)?;
-    let analysis = analyze_stored_screenshot(&canonical, &query, None)?;
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::LlmCall,
-        json!({
-            "source": "media-studio",
-            "action": "analyze_media_file",
-            "path": canonical,
-            "query": query,
-        }),
-    );
-    Ok(analysis)
-}
-
 pub(crate) fn start_computer_action(
     state: &AppState,
     description: String,

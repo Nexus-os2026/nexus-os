@@ -4,6 +4,7 @@ mod builder_workspace;
 mod commands;
 mod nx_bridge;
 pub mod oracle_runtime;
+mod phase0_surface;
 pub mod swarm_caller_identity;
 use base64::Engine;
 use chrono::TimeZone;
@@ -187,154 +188,6 @@ thread_local! {
     /// Cached Flash provider for the current agent's cognitive loop.
     /// Set by `with_agent_llm_route` when a `flash:*` route is active.
     static ACTIVE_FLASH_PROVIDER: RefCell<Option<std::sync::Arc<nexus_connectors_llm::providers::FlashProvider>>> = const { RefCell::new(None) };
-}
-
-/// Replace the `:root { ... }` CSS block in an HTML string with new CSS.
-/// Returns the updated HTML, or the original if no `:root` block is found.
-/// Extract the raw `:root { ... }` block content from HTML, returning (start, end)
-/// byte offsets so the caller can splice.
-fn find_root_block(html: &str) -> Option<(usize, usize)> {
-    let root_start = html.find(":root {")?;
-    let after = &html[root_start..];
-    let mut depth = 0u32;
-    for (idx, ch) in after.char_indices() {
-        if ch == '{' {
-            depth += 1;
-        }
-        if ch == '}' {
-            depth -= 1;
-            if depth == 0 {
-                let root_end = root_start + idx + 1;
-                return Some((root_start, root_end));
-            }
-        }
-    }
-    None
-}
-
-/// Extract CSS custom-property names declared inside a `:root { ... }` block.
-fn extract_root_var_names(root_block: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    for line in root_block.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("--") {
-            if let Some(colon) = rest.find(':') {
-                let name = rest[..colon].trim();
-                if !name.is_empty() {
-                    names.push(name.to_string());
-                }
-            }
-        }
-    }
-    names
-}
-
-/// Build alias declarations that map common LLM short-form variable names
-/// to the structured TokenSet names, so `var(--accent)` resolves even after
-/// the `:root` block is replaced with TokenSet CSS.
-///
-/// Only emits aliases for names that actually appeared in the *original* HTML
-/// (i.e. the LLM-generated `:root` block) to avoid bloat.
-fn build_compat_aliases(original_var_names: &[String]) -> String {
-    // Map: LLM short name → TokenSet structured name (as CSS var reference)
-    static ALIAS_MAP: &[(&str, &str)] = &[
-        // Colors
-        ("accent", "var(--color-accent, var(--color-primary))"),
-        ("accent-hover", "var(--color-accent)"),
-        ("accent-h", "var(--color-accent)"),
-        ("primary", "var(--color-primary)"),
-        ("secondary", "var(--color-secondary)"),
-        ("bg", "var(--color-bg)"),
-        ("background", "var(--color-bg)"),
-        ("surface", "var(--color-bg-secondary)"),
-        ("text", "var(--color-text)"),
-        ("text-secondary", "var(--color-text-secondary)"),
-        ("text-muted", "var(--color-text-secondary)"),
-        ("muted", "var(--color-text-secondary)"),
-        ("border", "var(--color-border)"),
-        ("ghost", "var(--color-bg-secondary)"),
-        ("outline", "var(--color-border)"),
-        // Typography
-        ("font-display", "var(--font-heading)"),
-        ("ff-display", "var(--font-heading)"),
-        ("ff-body", "var(--font-body)"),
-        ("fh", "var(--font-heading)"),
-        ("fb", "var(--font-body)"),
-        // Radius
-        ("radius", "var(--radius-md)"),
-        ("radius-pill", "var(--radius-full, 9999px)"),
-        ("radius-card", "var(--radius-lg)"),
-        ("r", "var(--radius-md)"),
-        ("rc", "var(--radius-lg)"),
-        // Misc
-        ("transition", "0.3s ease"),
-        ("ease", "cubic-bezier(0.4,0,0.2,1)"),
-        ("section-pad", "var(--space-xl, 4rem)"),
-        ("shadow", "var(--shadow-md, 0 4px 6px rgba(0,0,0,0.1))"),
-    ];
-
-    let mut css = String::new();
-    for name in original_var_names {
-        // Skip names that are already structured TokenSet names (no alias needed)
-        if name.starts_with("color-")
-            || name.starts_with("btn-")
-            || name.starts_with("hero-")
-            || name.starts_with("nav-")
-            || name.starts_with("footer-")
-            || name.starts_with("card-")
-            || name.starts_with("space-")
-            || name.starts_with("duration-")
-        {
-            continue;
-        }
-        if let Some((_, val)) = ALIAS_MAP.iter().find(|(k, _)| *k == name.as_str()) {
-            use std::fmt::Write;
-            let _ = writeln!(css, "  --{name}: {val};");
-        }
-    }
-    css
-}
-
-fn replace_root_css(html: &str, new_css: &str) -> String {
-    if let Some((root_start, root_end)) = find_root_block(html) {
-        // Extract original variable names so we can generate compat aliases
-        let old_block = &html[root_start..root_end];
-        let original_names = extract_root_var_names(old_block);
-        let aliases = build_compat_aliases(&original_names);
-
-        if aliases.is_empty() {
-            return format!("{}{}{}", &html[..root_start], new_css, &html[root_end..]);
-        }
-        // Inject aliases into the new CSS right before the closing `}`
-        let injected = if let Some(close) = new_css.rfind('}') {
-            format!(
-                "{}\n  /* Compat aliases for LLM-generated variable names */\n{}{}",
-                &new_css[..close],
-                aliases,
-                &new_css[close..],
-            )
-        } else {
-            format!(
-                "{}\n/* Compat aliases */\n:root {{\n{}}}\n",
-                new_css, aliases
-            )
-        };
-        return format!("{}{}{}", &html[..root_start], injected, &html[root_end..]);
-    }
-    html.to_string()
-}
-
-/// Update the `:root {}` block in a project's `current/index.html` with new token CSS.
-fn persist_token_css_to_html(project_dir: &std::path::Path, token_css: &str) {
-    let html_path = project_dir.join("current").join("index.html");
-    if html_path.exists() {
-        if let Ok(html) = std::fs::read_to_string(&html_path) {
-            let updated = replace_root_css(&html, token_css);
-            if updated != html {
-                let _ = std::fs::write(&html_path, &updated);
-            }
-        }
-    }
 }
 
 fn normalize_agent_config_key(value: &str) -> String {
@@ -1090,7 +943,6 @@ pub struct AppState {
     build: Arc<Mutex<BuildManager>>,
     learning: Arc<Mutex<LearningManager>>,
     rag: Arc<Mutex<RagPipeline>>,
-    redaction_engine: Arc<Mutex<RedactionEngine>>,
     model_registry: Arc<Mutex<ModelRegistry>>,
     nexus_link: Arc<Mutex<NexusLink>>,
     evolution: Arc<Mutex<EvolutionEngine>>,
@@ -1351,7 +1203,6 @@ impl AppState {
             build: Arc::new(Mutex::new(BuildManager::new())),
             learning: Arc::new(Mutex::new(LearningManager::new())),
             rag: Arc::new(Mutex::new(RagPipeline::new(RagConfig::default()))),
-            redaction_engine: Arc::new(Mutex::new(RedactionEngine::default())),
             model_registry: Arc::new(Mutex::new(ModelRegistry::default_dir())),
             nexus_link: Arc::new(Mutex::new({
                 let hostname = std::env::var("HOSTNAME")
@@ -1709,7 +1560,6 @@ impl AppState {
             build: Arc::new(Mutex::new(BuildManager::new())),
             learning: Arc::new(Mutex::new(LearningManager::new())),
             rag: Arc::new(Mutex::new(RagPipeline::new(RagConfig::default()))),
-            redaction_engine: Arc::new(Mutex::new(RedactionEngine::default())),
             model_registry: Arc::new(Mutex::new(ModelRegistry::default_dir())),
             nexus_link: Arc::new(Mutex::new({
                 let hostname = std::env::var("HOSTNAME")
@@ -3010,11 +2860,11 @@ pub mod runtime {
     // ── RAG Pipeline Commands ──
 
     #[tauri::command]
-    fn index_document(
-        state: tauri::State<'_, AppState>,
-        file_path: String,
-    ) -> Result<String, String> {
-        super::index_document(state.inner(), file_path)
+    pub(crate) fn index_document() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "index_document",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
@@ -3777,11 +3627,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn voice_load_whisper_model(
-        state: tauri::State<'_, AppState>,
-        model_path: String,
-    ) -> Result<String, String> {
-        super::voice_load_whisper_model(state.inner(), model_path)
+    pub(crate) fn voice_load_whisper_model() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "voice_load_whisper_model",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     // ── Software Factory commands ────────────────────────────────────
@@ -3833,649 +3683,28 @@ pub mod runtime {
         super::factory_get_build_history(state.inner(), project_id)
     }
 
-    /// Run the Conductor orchestration pipeline with progress events.
     #[tauri::command]
-    async fn conduct_build(
-        window: tauri::Window,
-        state: tauri::State<'_, AppState>,
-        prompt: String,
-        output_dir: Option<String>,
-        model: Option<String>,
-    ) -> Result<serde_json::Value, String> {
-        let app_state = state.inner().clone();
-        let (tx, rx) = std::sync::mpsc::channel::<Result<serde_json::Value, String>>();
-
-        std::thread::spawn(move || {
-            // Compute output dir
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            let out_dir = output_dir.unwrap_or_else(|| format!("{home}/.nexus/builds/{timestamp}"));
-
-            if let Err(e) = std::fs::create_dir_all(&out_dir) {
-                // Best-effort: send error back to caller before returning from thread
-                let _ = tx.send(Err(format!("failed to create output dir: {e}")));
-                return;
-            }
-
-            let full_model =
-                model.unwrap_or_else(|| "openrouter/qwen/qwen3.6-plus:free".to_string());
-            let config = match super::load_config() {
-                Ok(c) => c,
-                Err(e) => {
-                    // Best-effort: send error back to caller before returning from thread
-                    let _ = tx.send(Err(format!("config error: {e}")));
-                    return;
-                }
-            };
-            let prov_config = super::build_provider_config(&config);
-            let (provider, model_name) =
-                match super::provider_from_prefixed_model(&full_model, &prov_config) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        // Best-effort: send error back to caller before returning from thread
-                        let _ = tx.send(Err(e));
-                        return;
-                    }
-                };
-            eprintln!("[conductor] Creating conductor with model={model_name}, provider prefix={full_model}");
-            let mut conductor = super::Conductor::new(provider, &model_name);
-
-            // Preview plan and emit
-            let request_for_plan = super::UserRequest::new(&prompt, &out_dir);
-            eprintln!("[conductor] Running planner...");
-            let plan = match conductor.preview_plan(&request_for_plan) {
-                Ok(p) => {
-                    eprintln!("[conductor] Plan ready: {} tasks", p.tasks.len());
-                    p
-                }
-                Err(e) => {
-                    eprintln!("[conductor] PLANNING FAILED: {e}");
-                    let _ = tx.send(Err(format!("planning failed (model={model_name}): {e}")));
-                    return;
-                }
-            };
-            // Best-effort: emit execution plan to frontend for preview
-            let _ = window.emit("conductor:plan", &plan);
-
-            // Run full orchestration
-            let request = super::UserRequest::new(&prompt, &out_dir);
-            let mut supervisor = app_state
-                .supervisor
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
-
-            eprintln!("[conductor] Running orchestration...");
-            let start = std::time::Instant::now();
-            let result = conductor.run(request, &mut supervisor);
-            drop(supervisor);
-            eprintln!(
-                "[conductor] Orchestration finished in {:.1}s: {:?}",
-                start.elapsed().as_secs_f64(),
-                result
-                    .as_ref()
-                    .map(|r| format!("{:?}, {} files", r.status, r.output_files.len()))
-                    .unwrap_or_else(|e| format!("ERROR: {e}"))
-            );
-
-            match result {
-                Ok(mut res) => {
-                    res.duration_secs = start.elapsed().as_secs_f64();
-
-                    // Best-effort: emit per-agent completion events to frontend
-                    let _ = window.emit(
-                        "conductor:agent_completed",
-                        &serde_json::json!({
-                            "agents_used": res.agents_used,
-                            "output_files": &res.output_files,
-                        }),
-                    );
-
-                    // Best-effort: emit conductor finished event to frontend
-                    let _ = window.emit("conductor:finished", &res);
-
-                    // Audit log
-                    app_state.log_event(
-                        SYSTEM_UUID,
-                        super::EventType::StateChange,
-                        serde_json::json!({
-                            "source": "conductor",
-                            "action": "conduct_build",
-                            "status": format!("{:?}", res.status),
-                            "agents_used": res.agents_used,
-                            "total_fuel_used": res.total_fuel_used,
-                            "duration_secs": res.duration_secs,
-                        }),
-                    );
-
-                    let plan_json = serde_json::to_value(&plan).unwrap_or_default();
-                    let result_json = serde_json::to_value(&res).unwrap_or_default();
-                    // Best-effort: send result back to caller; thread termination handled by recv
-                    let _ = tx.send(Ok(serde_json::json!({
-                        "plan": plan_json,
-                        "result": result_json,
-                    })));
-                }
-                Err(e) => {
-                    // Best-effort: send error back to caller before returning from thread
-                    let _ = tx.send(Err(format!("conductor failed: {e}")));
-                }
-            }
-        });
-
-        rx.recv()
-            .unwrap_or(Err("Conductor thread terminated unexpectedly".to_string()))
+    pub(crate) fn conduct_build() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "conduct_build",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Run a streaming web build with real-time progress events on `build-stream`.
-    ///
-    /// Uses the streaming LLM API (currently Anthropic only) to emit progress
-    /// events as tokens are generated. Falls back to non-streaming if the
-    /// selected model/provider doesn't support streaming.
     #[tauri::command]
-    async fn conduct_build_streaming(
-        window: tauri::Window,
-        state: tauri::State<'_, AppState>,
-        prompt: String,
-        output_dir: Option<String>,
-        model: Option<String>,
-        approved_plan: Option<String>,
-        acceptance_criteria: Option<String>,
-    ) -> Result<serde_json::Value, String> {
-        let app_state = state.inner().clone();
-        let (tx, rx) = std::sync::mpsc::channel::<Result<serde_json::Value, String>>();
-
-        std::thread::spawn(move || {
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            let out_dir = output_dir.unwrap_or_else(|| format!("{home}/.nexus/builds/{timestamp}"));
-
-            if let Err(e) = std::fs::create_dir_all(&out_dir) {
-                let _ = tx.send(Err(format!("failed to create output dir: {e}")));
-                return;
-            }
-
-            let config = match super::load_config() {
-                Ok(c) => c,
-                Err(e) => {
-                    let _ = tx.send(Err(format!("config error: {e}")));
-                    return;
-                }
-            };
-            let prov_config = super::build_provider_config(&config);
-
-            // Load user's model config once — used for full_build and classification steps.
-            let model_cfg = web_builder_agent::model_config::load_config();
-            let config_source = if std::path::Path::new(&std::env::var("HOME").unwrap_or_default())
-                .join(".nexus/builder_model_config.json")
-                .exists()
-            {
-                "user config"
-            } else {
-                "default \u{2014} no user config found"
-            };
-
-            // Auto-select build model from user's saved model config (or smart defaults).
-            let full_model = model.unwrap_or_else(|| {
-                let choice = &model_cfg.full_build;
-
-                if choice.is_none() {
-                    eprintln!("[conductor-stream] WARNING: No models configured for full build");
-                    return "claude-sonnet-4-6".to_string(); // ultimate fallback
-                }
-
-                let prefixed = web_builder_agent::model_config::to_prefixed_model(choice);
-                eprintln!(
-                    "[conductor-stream] Step \"full_build\" using model: {} (from {})",
-                    choice.display_name, config_source,
-                );
-                prefixed
-            });
-
-            // Try to get a streaming provider for the selected model.
-            // Uses prefixed model name so provider selection routes to the correct CLI/API.
-            let streaming_result =
-                super::streaming_provider_from_prefixed_model(&full_model, &prov_config);
-
-            if let Ok((streaming_provider, model_name)) = streaming_result {
-                // Create conductor with a non-streaming provider for fallback
-                let (conductor_provider, _) =
-                    match super::provider_from_prefixed_model(&full_model, &prov_config) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            let _ = tx.send(Err(e));
-                            return;
-                        }
-                    };
-                let mut conductor = super::Conductor::new(conductor_provider, &model_name);
-
-                // If an approved plan is provided, augment the prompt
-                let effective_prompt = match (&approved_plan, &acceptance_criteria) {
-                    (Some(plan_json), Some(criteria_json)) => {
-                        match (
-                            serde_json::from_str::<web_builder_agent::plan::ProductBrief>(
-                                plan_json,
-                            ),
-                            serde_json::from_str::<web_builder_agent::plan::AcceptanceCriteria>(
-                                criteria_json,
-                            ),
-                        ) {
-                            (Ok(brief), Ok(criteria)) => {
-                                eprintln!(
-                                    "[conductor-stream] Using approved plan: {}",
-                                    brief.project_name
-                                );
-
-                                // Phase 2: Classify into a template skeleton
-                                // Use the planning/classification model from user config
-                                let class_choice = &model_cfg.planning;
-                                let class_prefixed =
-                                    web_builder_agent::model_config::to_prefixed_model(
-                                        class_choice,
-                                    );
-                                let class_model_id = class_choice.model_id.clone();
-                                eprintln!(
-                                    "[conductor-stream] Step \"planning_classification\" using model: {} (from {})",
-                                    class_choice.display_name, config_source,
-                                );
-
-                                // Create provider from user config; fall back to model router on failure
-                                let (class_provider, effective_class_model): (
-                                    Box<dyn nexus_connectors_llm::providers::LlmProvider>,
-                                    String,
-                                ) = match super::provider_from_prefixed_model(
-                                    &class_prefixed,
-                                    &prov_config,
-                                ) {
-                                    Ok((p, _m)) => (p, class_model_id),
-                                    Err(e) => {
-                                        eprintln!(
-                                                "[conductor-stream] Config provider failed for classification: {}, falling back to router",
-                                                e
-                                            );
-                                        let class_budget = web_builder_agent::model_router::RoutingBudget::from_budget_tracker();
-                                        let class_selection = web_builder_agent::model_router::select_model(
-                                                &web_builder_agent::model_router::BuilderTask::TemplateClassification,
-                                                &class_budget,
-                                            );
-                                        let fb: Box<dyn nexus_connectors_llm::providers::LlmProvider> = match class_selection.provider {
-                                                web_builder_agent::model_router::ProviderType::Ollama => {
-                                                    Box::new(nexus_connectors_llm::providers::OllamaProvider::from_env())
-                                                }
-                                                web_builder_agent::model_router::ProviderType::OpenAI => {
-                                                    Box::new(super::OpenAiProvider::new(prov_config.openai_api_key.clone()))
-                                                }
-                                                _ => {
-                                                    let has_key = prov_config.anthropic_api_key.as_deref()
-                                                        .map(|k| !k.trim().is_empty()).unwrap_or(false);
-                                                    if has_key {
-                                                        Box::new(super::ClaudeProvider::new(prov_config.anthropic_api_key.clone()))
-                                                    } else {
-                                                        let status = nexus_connectors_llm::providers::claude_code::detect_claude_code();
-                                                        if status.installed && status.authenticated {
-                                                            Box::new(nexus_connectors_llm::providers::claude_code::ClaudeCodeProvider::new())
-                                                        } else {
-                                                            Box::new(super::ClaudeProvider::new(prov_config.anthropic_api_key.clone()))
-                                                        }
-                                                    }
-                                                }
-                                            };
-                                        (fb, class_selection.model_id.clone())
-                                    }
-                                };
-                                let selection = web_builder_agent::classifier::classify_with_model(
-                                    class_provider.as_ref(),
-                                    &prompt,
-                                    &brief,
-                                    &effective_class_model,
-                                );
-
-                                // Persist template selection to artefacts
-                                if let Err(e) =
-                                    web_builder_agent::classifier::save_selection_artefact(
-                                        std::path::Path::new(&out_dir),
-                                        &selection,
-                                    )
-                                {
-                                    eprintln!("[conductor-stream] Warning: failed to save template_selection.json: {e}");
-                                }
-
-                                // Save selected_template to builder_state
-                                if !selection.template_id.is_empty() {
-                                    let tmpl_path = std::path::Path::new(&out_dir);
-                                    if let Ok(mut ps) =
-                                        web_builder_agent::project::load_project_state(tmpl_path)
-                                    {
-                                        ps.selected_template = Some(selection.template_id.clone());
-                                        let _ = web_builder_agent::project::save_project_state(
-                                            tmpl_path, &ps,
-                                        );
-                                    }
-                                }
-
-                                let template_html = if !selection.template_id.is_empty() {
-                                    eprintln!(
-                                        "[conductor-stream] Template: {} (confidence: {:.2}, modifiers: {:?})",
-                                        selection.template_id, selection.confidence, selection.modifiers
-                                    );
-                                    if let Some(tmpl) = web_builder_agent::templates::get_template(
-                                        &selection.template_id,
-                                    ) {
-                                        let html = web_builder_agent::templates::modifiers::apply_modifiers(
-                                            tmpl.html, &selection.modifiers,
-                                        );
-                                        Some(html)
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    eprintln!("[conductor-stream] No template matched, generating from scratch");
-                                    None
-                                };
-
-                                web_builder_agent::plan::build_planned_prompt_with_template(
-                                    &prompt,
-                                    &brief,
-                                    &criteria,
-                                    template_html.as_deref(),
-                                )
-                            }
-                            _ => {
-                                eprintln!("[conductor-stream] Warning: failed to parse plan JSON, using raw prompt");
-                                prompt.clone()
-                            }
-                        }
-                    }
-                    _ => prompt.clone(),
-                };
-
-                // Create a single web-build task
-                let role = nexus_conductor::types::AgentRole::WebBuilder;
-                let task = nexus_conductor::types::PlannedTask {
-                    role: role.clone(),
-                    description: effective_prompt,
-                    expected_outputs: vec!["index.html".to_string()],
-                    estimated_fuel: 50_000,
-                    depends_on: vec![],
-                    capabilities_needed: role.default_capabilities(),
-                };
-
-                let mut audit = nexus_kernel::audit::AuditTrail::new();
-                let agent_id = uuid::Uuid::new_v4();
-                let output_path = std::path::Path::new(&out_dir);
-
-                // Emit events via the Tauri window, capturing build cost
-                let window_ref = &window;
-                let captured_build_cost = std::cell::Cell::new(0.0f64);
-                let emit_fn = |event: web_builder_agent::build_stream::BuildStreamEvent| {
-                    // Capture cost from BuildCompleted events
-                    if let web_builder_agent::build_stream::BuildStreamEvent::BuildCompleted {
-                        actual_cost,
-                        ..
-                    } = &event
-                    {
-                        captured_build_cost.set(*actual_cost);
-                    }
-                    let _ = window_ref.emit("build-stream", &event);
-                };
-
-                // Ensure builder_state.json exists and transition to Generating
-                {
-                    let project_id = output_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string();
-                    let mut proj_state = web_builder_agent::project::load_project_state(
-                        output_path,
-                    )
-                    .unwrap_or_else(|_| {
-                        // No state yet (direct build without planning) — create from Draft
-                        let mut s =
-                            web_builder_agent::project::create_project(&project_id, &prompt);
-                        // Skip straight to Approved for direct builds
-                        s.status = web_builder_agent::project::ProjectStatus::Approved;
-                        s
-                    });
-
-                    // If still Planned, approve first (user approved in UI)
-                    if proj_state.status == web_builder_agent::project::ProjectStatus::Planned {
-                        let _ = web_builder_agent::project::transition(
-                            &mut proj_state,
-                            web_builder_agent::project::ProjectStatus::Approved,
-                        );
-                    }
-                    if let Err(te) = web_builder_agent::project::transition(
-                        &mut proj_state,
-                        web_builder_agent::project::ProjectStatus::Generating,
-                    ) {
-                        eprintln!("[conductor-stream] Warning: state transition to Generating failed: {te}");
-                    }
-                    if let Err(se) =
-                        web_builder_agent::project::save_project_state(output_path, &proj_state)
-                    {
-                        eprintln!(
-                            "[conductor-stream] Warning: failed to save builder_state.json: {se}"
-                        );
-                    } else {
-                        eprintln!(
-                            "[conductor-stream] Saved builder_state.json (status=Generating)"
-                        );
-                    }
-                }
-
-                eprintln!(
-                    "[conductor-stream] Starting streaming build: model={}, dir={}",
-                    model_name, out_dir
-                );
-
-                let start = std::time::Instant::now();
-                match conductor.execute_web_build_streaming(
-                    &task,
-                    output_path,
-                    &mut audit,
-                    agent_id,
-                    streaming_provider.as_ref(),
-                    &emit_fn,
-                ) {
-                    Ok(paths) => {
-                        let elapsed = start.elapsed().as_secs_f64();
-                        eprintln!(
-                            "[conductor-stream] Build complete: {} files in {:.1}s",
-                            paths.len(),
-                            elapsed
-                        );
-
-                        app_state.log_event(
-                            agent_id,
-                            super::EventType::StateChange,
-                            serde_json::json!({
-                                "source": "conductor",
-                                "action": "conduct_build_streaming",
-                                "status": "Success",
-                                "output_files": paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>(),
-                                "duration_secs": elapsed,
-                            }),
-                        );
-
-                        // Save project metadata
-                        let project_dir = std::path::Path::new(&out_dir);
-                        let project_id = project_dir
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .unwrap_or("unknown")
-                            .to_string();
-                        // Derive site name from prompt (first few words)
-                        let site_name: String = prompt
-                            .split_whitespace()
-                            .filter(|w| {
-                                !["a", "an", "the", "build", "create", "make"]
-                                    .contains(&w.to_lowercase().as_str())
-                            })
-                            .take(4)
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        let mgr =
-                            web_builder_agent::checkpoint::CheckpointManager::new(project_dir);
-                        let cps = mgr.list_checkpoints();
-                        let html_lines = mgr
-                            .read_current_html()
-                            .map(|h| h.lines().count())
-                            .unwrap_or(0);
-                        let now = chrono::Utc::now().to_rfc3339();
-                        let meta = web_builder_agent::checkpoint::ProjectMeta {
-                            id: project_id,
-                            name: if site_name.is_empty() {
-                                "Untitled".to_string()
-                            } else {
-                                site_name
-                            },
-                            prompt: prompt.clone(),
-                            model: model_name.clone(),
-                            created_at: now.clone(),
-                            updated_at: now,
-                            versions: cps.len(),
-                            total_cost: 0.0, // updated by budget tracker
-                            lines: html_lines,
-                        };
-                        let _ =
-                            web_builder_agent::checkpoint::save_project_meta(project_dir, &meta);
-
-                        // Update builder_state: Generating -> Generated
-                        if let Ok(mut proj_state) =
-                            web_builder_agent::project::load_project_state(project_dir)
-                        {
-                            proj_state.line_count = Some(html_lines as u32);
-                            proj_state.char_count =
-                                mgr.read_current_html().ok().map(|h| h.len() as u32);
-                            proj_state.current_checkpoint = cps.last().map(|cp| cp.id.clone());
-                            // Set build cost from the captured BuildCompleted event
-                            let bc = captured_build_cost.get();
-                            if bc > 0.0 {
-                                proj_state.build_cost = bc;
-                                proj_state.total_cost = proj_state.plan_cost + bc;
-                            }
-                            let _ = web_builder_agent::project::transition(
-                                &mut proj_state,
-                                web_builder_agent::project::ProjectStatus::Generated,
-                            );
-                            if let Err(se) = web_builder_agent::project::save_project_state(
-                                project_dir,
-                                &proj_state,
-                            ) {
-                                eprintln!("[conductor-stream] Warning: failed to save Generated state: {se}");
-                            } else {
-                                eprintln!("[conductor-stream] Saved builder_state.json (status=Generated)");
-                            }
-                        } else {
-                            eprintln!("[conductor-stream] Warning: could not load builder_state.json for Generated transition");
-                        }
-
-                        let _ = tx.send(Ok(serde_json::json!({
-                            "status": "Success",
-                            "output_dir": out_dir,
-                            "output_files": paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>(),
-                            "duration_secs": elapsed,
-                            "streaming": true,
-                        })));
-                    }
-                    Err(e) => {
-                        eprintln!("[conductor-stream] Build failed: {e}");
-
-                        // Transition to GenerationFailed
-                        let project_dir = std::path::Path::new(&out_dir);
-                        if let Ok(mut proj_state) =
-                            web_builder_agent::project::load_project_state(project_dir)
-                        {
-                            proj_state.error_message = Some(e.to_string());
-                            let _ = web_builder_agent::project::transition(
-                                &mut proj_state,
-                                web_builder_agent::project::ProjectStatus::GenerationFailed,
-                            );
-                            if let Err(se) = web_builder_agent::project::save_project_state(
-                                project_dir,
-                                &proj_state,
-                            ) {
-                                eprintln!(
-                                    "[conductor-stream] Warning: failed to save GenerationFailed state: {se}"
-                                );
-                            }
-                        }
-
-                        let _ = tx.send(Err(format!("streaming build failed: {e}")));
-                    }
-                }
-            } else {
-                // Non-streaming fallback for providers without StreamingLlmProvider
-                eprintln!(
-                    "[conductor-stream] Model '{}' does not support streaming, using non-streaming path",
-                    full_model
-                );
-                let (provider, model_name) =
-                    match super::provider_from_prefixed_model(&full_model, &prov_config) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            let _ = tx.send(Err(e));
-                            return;
-                        }
-                    };
-
-                let mut conductor = super::Conductor::new(provider, &model_name);
-                let request = super::UserRequest::new(&prompt, &out_dir);
-                let mut supervisor = app_state
-                    .supervisor
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner());
-
-                let start = std::time::Instant::now();
-                let result = conductor.run(request, &mut supervisor);
-                drop(supervisor);
-
-                match result {
-                    Ok(mut res) => {
-                        res.duration_secs = start.elapsed().as_secs_f64();
-                        let _ = window.emit("conductor:finished", &res);
-                        let result_json = serde_json::to_value(&res).unwrap_or_default();
-                        let _ = tx.send(Ok(serde_json::json!({
-                            "result": result_json,
-                            "streaming": false,
-                        })));
-                    }
-                    Err(e) => {
-                        let _ = tx.send(Err(format!("conductor failed: {e}")));
-                    }
-                }
-            }
-        });
-
-        rx.recv()
-            .unwrap_or(Err("Conductor thread terminated unexpectedly".to_string()))
+    pub(crate) fn conduct_build_streaming() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "conduct_build_streaming",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Read a file from a build output directory. Used by the Builder preview pane.
     #[tauri::command]
-    fn read_build_file(path: String) -> Result<String, String> {
-        // Security: only allow reading from ~/.nexus/builds/
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        let builds_dir = format!("{home}/.nexus/builds/");
-        let canonical = std::fs::canonicalize(&path)
-            .map_err(|e| format!("file not found: {e}"))?
-            .to_string_lossy()
-            .to_string();
-        if !canonical.starts_with(
-            &std::fs::canonicalize(&builds_dir)
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string(),
-        ) {
-            return Err("Access denied: can only read files from ~/.nexus/builds/".to_string());
-        }
-        std::fs::read_to_string(&canonical).map_err(|e| format!("failed to read file: {e}"))
+    pub(crate) fn read_build_file() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "read_build_file",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     // ── Builder Budget Tracking ────────────────────────────────────────────
@@ -4500,46 +3729,27 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn builder_list_projects() -> Result<serde_json::Value, String> {
-        let projects = web_builder_agent::project::list_all_projects();
-        serde_json::to_value(projects).map_err(|e| format!("serialization error: {e}"))
+    pub(crate) fn builder_list_projects() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_list_projects",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     #[tauri::command]
-    fn builder_load_project(project_id: String) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let meta = web_builder_agent::checkpoint::load_project_meta(&project_dir)
-            .ok_or_else(|| format!("project {project_id} not found"))?;
-
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
-        let html = mgr.read_current_html().unwrap_or_default();
-        let checkpoints = mgr.list_checkpoints();
-
-        // Include builder_state if available
-        let state = web_builder_agent::project::load_project_state(&project_dir).ok();
-
-        // Load plan artefacts if available
-        let plan = web_builder_agent::plan::load_plan_artefacts(&project_dir);
-
-        serde_json::to_value(serde_json::json!({
-            "meta": meta,
-            "html": html,
-            "checkpoints": checkpoints,
-            "project_dir": project_dir.to_string_lossy(),
-            "state": state,
-            "plan": plan,
-        }))
-        .map_err(|e| format!("serialization error: {e}"))
+    pub(crate) fn builder_load_project() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_load_project",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     #[tauri::command]
-    fn builder_delete_project(project_id: String) -> Result<(), String> {
-        web_builder_agent::checkpoint::delete_project(&project_id)
+    pub(crate) fn builder_delete_project() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "builder_delete_project",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     #[tauri::command]
@@ -4709,822 +3919,44 @@ pub mod runtime {
         Ok(())
     }
 
-    /// Read the current preview HTML from a project's current/index.html.
     #[tauri::command]
-    fn builder_read_preview(project_dir: String) -> Result<String, String> {
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(std::path::Path::new(
-            &project_dir,
-        ));
-        mgr.read_current_html()
+    pub(crate) fn builder_read_preview() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_read_preview",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// List all checkpoints for a project.
     #[tauri::command]
-    fn builder_list_checkpoints(project_dir: String) -> Result<serde_json::Value, String> {
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(std::path::Path::new(
-            &project_dir,
-        ));
-        let checkpoints = mgr.list_checkpoints();
-        serde_json::to_value(checkpoints).map_err(|e| format!("serialization error: {e}"))
+    pub(crate) fn builder_list_checkpoints() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_list_checkpoints",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Rollback to a specific checkpoint.
     #[tauri::command]
-    fn builder_rollback(
-        project_dir: String,
-        checkpoint_id: String,
-    ) -> Result<serde_json::Value, String> {
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(std::path::Path::new(
-            &project_dir,
-        ));
-        let cp = mgr.rollback(&checkpoint_id)?;
-        serde_json::to_value(cp).map_err(|e| format!("serialization error: {e}"))
+    pub(crate) fn builder_rollback() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_rollback",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Initialize checkpoints from a completed build's output directory.
     #[tauri::command]
-    fn builder_init_checkpoint(
-        project_dir: String,
-        build_output_dir: String,
-        cost: f64,
-    ) -> Result<serde_json::Value, String> {
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(std::path::Path::new(
-            &project_dir,
-        ));
-        let cp = mgr.init_from_build(std::path::Path::new(&build_output_dir), cost)?;
-        serde_json::to_value(cp).map_err(|e| format!("serialization error: {e}"))
+    pub(crate) fn builder_init_checkpoint() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_init_checkpoint",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Iterate on a completed build: apply a change request via streaming LLM.
-    ///
-    /// 1. Auto-checkpoints current state
-    /// 2. Reads current HTML
-    /// 3. Builds iteration prompt with change request
-    /// 4. Generates via streaming (emits build-stream events)
-    /// 5. Writes result to current/
-    /// 6. Records cost in budget tracker
     #[tauri::command]
-    async fn builder_iterate(
-        window: tauri::Window,
-        project_dir: String,
-        change_request: String,
-        model: Option<String>,
-    ) -> Result<serde_json::Value, String> {
-        let (tx, rx) = std::sync::mpsc::channel::<Result<serde_json::Value, String>>();
-
-        std::thread::spawn(move || {
-            let config = match super::load_config() {
-                Ok(c) => c,
-                Err(e) => {
-                    let _ = tx.send(Err(format!("config error: {e}")));
-                    return;
-                }
-            };
-            let prov_config = super::build_provider_config(&config);
-
-            // Resolve the full model string from user config (or smart defaults).
-            // Falls back to "claude-sonnet-4-6" only if config loading fails entirely.
-            let full_model = model.unwrap_or_else(|| {
-                let iter_cfg = web_builder_agent::model_config::load_config();
-                let choice = &iter_cfg.full_build;
-                if choice.is_none() {
-                    eprintln!(
-                        "[builder-iterate] Step \"full_build\" using model: claude-sonnet-4-6 (default \u{2014} no user config found)"
-                    );
-                    return "claude-sonnet-4-6".to_string();
-                }
-                let prefixed = web_builder_agent::model_config::to_prefixed_model(choice);
-                eprintln!(
-                    "[builder-iterate] Step \"full_build\" using model: {} (from {})",
-                    choice.display_name,
-                    if std::path::Path::new(
-                        &std::env::var("HOME").unwrap_or_default(),
-                    )
-                    .join(".nexus/builder_model_config.json")
-                    .exists()
-                    {
-                        "user config"
-                    } else {
-                        "default \u{2014} no user config found"
-                    }
-                );
-                prefixed
-            });
-            let (streaming_provider, model_name) =
-                match super::streaming_provider_from_prefixed_model(&full_model, &prov_config) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        let _ = tx.send(Err(e));
-                        return;
-                    }
-                };
-
-            let mgr = web_builder_agent::checkpoint::CheckpointManager::new(std::path::Path::new(
-                &project_dir,
-            ));
-
-            // 1. Auto-checkpoint current state
-            let truncated_req: String = change_request.chars().take(50).collect();
-            let pre_cp = match mgr.save_checkpoint(&format!("Before: {truncated_req}"), 0.0) {
-                Ok(cp) => cp,
-                Err(e) => {
-                    let _ = tx.send(Err(format!("checkpoint failed: {e}")));
-                    return;
-                }
-            };
-
-            // 2. Read current HTML
-            let current_html = match mgr.read_current_html() {
-                Ok(html) => html,
-                Err(e) => {
-                    let _ = tx.send(Err(format!("read current failed: {e}")));
-                    return;
-                }
-            };
-
-            // 2.5. Transition to Iterating
-            let pd = std::path::Path::new(&project_dir);
-            if let Ok(mut proj_state) = web_builder_agent::project::load_project_state(pd) {
-                let _ = web_builder_agent::project::transition(
-                    &mut proj_state,
-                    web_builder_agent::project::ProjectStatus::Iterating,
-                );
-                let _ = web_builder_agent::project::save_project_state(pd, &proj_state);
-            }
-
-            // Helper: on iteration failure, transition to IterationFailed
-            let mark_iteration_failed = |error_msg: &str| {
-                let pd = std::path::Path::new(&project_dir);
-                if let Ok(mut ps) = web_builder_agent::project::load_project_state(pd) {
-                    ps.error_message = Some(error_msg.to_string());
-                    let _ = web_builder_agent::project::transition(
-                        &mut ps,
-                        web_builder_agent::project::ProjectStatus::IterationFailed,
-                    );
-                    if let Err(se) = web_builder_agent::project::save_project_state(pd, &ps) {
-                        eprintln!(
-                            "[builder-iterate] Warning: failed to save IterationFailed state: {se}"
-                        );
-                    }
-                }
-            };
-
-            // 3. Smart iteration: classify the edit request into tiers
-            use web_builder_agent::smart_iterate::*;
-            let classification = classify_edit(&change_request, &current_html);
-            eprintln!(
-                "[builder-iterate] Smart classify: tier={:?}, confidence={:.2}, reason={}",
-                classification.tier, classification.confidence, classification.reason
-            );
-
-            let window_ref = &window;
-            let emit_fn = |event: web_builder_agent::build_stream::BuildStreamEvent| {
-                let _ = window_ref.emit("build-stream", &event);
-            };
-
-            let start = std::time::Instant::now();
-
-            // Branch on tier
-            let (cleaned, input_tokens, output_tokens, actual_cost, tier_label, tier_detail): (
-                String,
-                usize,
-                usize,
-                f64,
-                String,
-                serde_json::Value,
-            ) = match classification.tier {
-                // ── Tier 1: CSS Variable Edit — instant, $0.00, no LLM ──
-                EditTier::CssVariable => {
-                    let changes = classification.css_changes.as_ref().unwrap();
-                    eprintln!(
-                        "[builder-iterate] Tier 1: {} CSS variable changes",
-                        changes.len()
-                    );
-
-                    emit_fn(
-                        web_builder_agent::build_stream::BuildStreamEvent::BuildStarted {
-                            project_name: format!("CSS edit: {truncated_req}"),
-                            estimated_cost: 0.0,
-                            estimated_tasks: 1,
-                            model_name: model_name.clone(),
-                            timestamp: String::new(),
-                        },
-                    );
-
-                    let result = match apply_css_changes(&current_html, changes) {
-                        Ok(html) => html,
-                        Err(e) => {
-                            emit_fn(
-                                web_builder_agent::build_stream::BuildStreamEvent::BuildFailed {
-                                    error: e.clone(),
-                                    tokens_consumed: 0,
-                                    cost_consumed: 0.0,
-                                },
-                            );
-                            mark_iteration_failed(&format!("CSS edit failed: {e}"));
-                            let _ = tx.send(Err(format!("CSS edit failed: {e}")));
-                            return;
-                        }
-                    };
-
-                    let detail = serde_json::json!({
-                        "css_changes": changes.iter().map(|c| serde_json::json!({
-                            "variable": c.variable,
-                            "old_value": c.old_value,
-                            "new_value": c.new_value,
-                        })).collect::<Vec<_>>(),
-                    });
-
-                    (result, 0, 0, 0.0, "css_variable".to_string(), detail)
-                }
-
-                // ── Tier 2: Section-Level Edit — LLM on one section ──
-                EditTier::SectionEdit => {
-                    let section_id = classification
-                        .target_section
-                        .as_deref()
-                        .unwrap_or("unknown");
-                    let is_remove = {
-                        let l = change_request.to_lowercase();
-                        l.contains("remove the") || l.contains("delete the")
-                    };
-                    let is_add = {
-                        let l = change_request.to_lowercase();
-                        l.contains("add a") || l.contains("add an")
-                    };
-
-                    eprintln!(
-                        "[builder-iterate] Tier 2: section=\"{}\", add={}, remove={}",
-                        section_id, is_add, is_remove
-                    );
-
-                    // Handle removal (no LLM needed)
-                    if is_remove {
-                        emit_fn(
-                            web_builder_agent::build_stream::BuildStreamEvent::BuildStarted {
-                                project_name: format!("Remove section: {section_id}"),
-                                estimated_cost: 0.0,
-                                estimated_tasks: 1,
-                                model_name: model_name.clone(),
-                                timestamp: String::new(),
-                            },
-                        );
-
-                        let result = match remove_section(&current_html, section_id) {
-                            Ok(html) => html,
-                            Err(e) => {
-                                emit_fn(web_builder_agent::build_stream::BuildStreamEvent::BuildFailed {
-                                    error: e.clone(),
-                                    tokens_consumed: 0,
-                                    cost_consumed: 0.0,
-                                });
-                                mark_iteration_failed(&format!("Section removal failed: {e}"));
-                                let _ = tx.send(Err(format!("Section removal failed: {e}")));
-                                return;
-                            }
-                        };
-
-                        let detail = serde_json::json!({
-                            "section": section_id,
-                            "action": "removed",
-                        });
-
-                        (result, 0, 0, 0.0, "section_edit".to_string(), detail)
-                    } else {
-                        // Section edit or add — requires LLM
-                        let (prompt, system_prompt) = if is_add {
-                            (
-                                build_section_add_prompt(
-                                    section_id,
-                                    &change_request,
-                                    &current_html,
-                                ),
-                                SECTION_ADD_SYSTEM_PROMPT,
-                            )
-                        } else {
-                            let section_html = match extract_section(&current_html, section_id) {
-                                Some(span) => span.content,
-                                None => {
-                                    mark_iteration_failed(&format!(
-                                        "Section '{}' not found",
-                                        section_id
-                                    ));
-                                    let _ =
-                                        tx.send(Err(format!("Section '{}' not found", section_id)));
-                                    return;
-                                }
-                            };
-                            (
-                                build_section_edit_prompt(&section_html, &change_request),
-                                SECTION_EDIT_SYSTEM_PROMPT,
-                            )
-                        };
-
-                        // Try local model first for section edits (free)
-                        let sect_budget =
-                            web_builder_agent::model_router::RoutingBudget::from_budget_tracker();
-                        let sect_sel = web_builder_agent::model_router::select_model(
-                            &web_builder_agent::model_router::BuilderTask::SectionEdit,
-                            &sect_budget,
-                        );
-
-                        // Attempt Ollama non-streaming first
-                        let ollama_result: Option<(
-                            String,
-                            usize,
-                            usize,
-                            f64,
-                            String,
-                            serde_json::Value,
-                        )> = if sect_sel.provider
-                            == web_builder_agent::model_router::ProviderType::Ollama
-                        {
-                            let full_prompt = format!("{system_prompt}\n\n{prompt}");
-                            let ollama =
-                                nexus_connectors_llm::providers::OllamaProvider::from_env();
-                            eprintln!(
-                                "[builder-iterate] Tier 2: trying Ollama {} for section edit",
-                                sect_sel.model_id
-                            );
-
-                            emit_fn(
-                                web_builder_agent::build_stream::BuildStreamEvent::BuildStarted {
-                                    project_name: format!("Section edit: {section_id}"),
-                                    estimated_cost: 0.0,
-                                    estimated_tasks: 1,
-                                    model_name: sect_sel.model_id.clone(),
-                                    timestamp: String::new(),
-                                },
-                            );
-
-                            let ollama_start = std::time::Instant::now();
-                            eprintln!(
-                                "[builder-iterate] Ollama prompt: {} chars",
-                                full_prompt.len()
-                            );
-                            match ollama.query(&full_prompt, 8192, &sect_sel.model_id) {
-                                Ok(resp)
-                                    if !resp.output_text.trim().is_empty()
-                                        && (resp.output_text.contains("<section")
-                                            || resp.output_text.contains("<footer")
-                                            || resp.output_text.contains("<header")
-                                            || resp.output_text.contains("<nav")) =>
-                                {
-                                    eprintln!(
-                                        "[builder-iterate] Ollama responded in {:.1}s, {} chars output",
-                                        ollama_start.elapsed().as_secs_f64(),
-                                        resp.output_text.len()
-                                    );
-                                    let cleaned =
-                                        web_builder_agent::llm_codegen::strip_markdown_fences(
-                                            &resp.output_text,
-                                        );
-                                    match splice_section(&current_html, section_id, &cleaned) {
-                                        Ok(spliced) => {
-                                            eprintln!("[builder-iterate] Ollama section edit succeeded ({})", sect_sel.model_id);
-                                            let in_tok = resp.input_tokens.unwrap_or(0) as usize;
-                                            let out_tok = resp.token_count as usize;
-                                            let detail = serde_json::json!({
-                                                "section": section_id,
-                                                "action": if is_add { "added" } else { "edited" },
-                                            });
-                                            Some((
-                                                spliced,
-                                                in_tok,
-                                                out_tok,
-                                                0.0,
-                                                "section_edit".to_string(),
-                                                detail,
-                                            ))
-                                        }
-                                        Err(e) => {
-                                            eprintln!("[builder-iterate] Ollama splice failed: {e}, falling back to API");
-                                            None
-                                        }
-                                    }
-                                }
-                                Ok(resp) => {
-                                    eprintln!(
-                                        "[builder-iterate] Ollama returned invalid section HTML in {:.1}s ({} chars), falling back to API",
-                                        ollama_start.elapsed().as_secs_f64(),
-                                        resp.output_text.len()
-                                    );
-                                    if !resp.output_text.is_empty() {
-                                        eprintln!(
-                                            "[builder-iterate] Ollama output preview: {}",
-                                            &resp.output_text[..resp.output_text.len().min(200)]
-                                        );
-                                    }
-                                    None
-                                }
-                                Err(e) => {
-                                    eprintln!(
-                                        "[builder-iterate] Ollama section edit failed in {:.1}s: {e}, falling back to API",
-                                        ollama_start.elapsed().as_secs_f64()
-                                    );
-                                    None
-                                }
-                            }
-                        } else {
-                            None
-                        };
-
-                        // If Ollama succeeded, use its result; otherwise fall through to streaming API
-                        if let Some(result) = ollama_result {
-                            result
-                        } else {
-                            // Streaming API path (Sonnet/GPT-4o)
-                            let est_input = prompt.len() / 4;
-                            let est_output = 2000;
-                            let est_cost = web_builder_agent::build_stream::estimate_cost(
-                                &model_name,
-                                est_input,
-                                est_output,
-                            );
-                            emit_fn(
-                                web_builder_agent::build_stream::BuildStreamEvent::BuildStarted {
-                                    project_name: format!("Section edit: {section_id}"),
-                                    estimated_cost: est_cost,
-                                    estimated_tasks: 1,
-                                    model_name: model_name.clone(),
-                                    timestamp: String::new(),
-                                },
-                            );
-
-                            // Stream LLM for section edit (uses whatever provider the user selected)
-                            use nexus_connectors_llm::streaming::StreamingLlmProvider;
-                            let mut stream = match streaming_provider.as_ref().stream_query(
-                                &prompt,
-                                system_prompt,
-                                8192,
-                                &model_name,
-                            ) {
-                                Ok(s) => s,
-                                Err(e) => {
-                                    emit_fn(web_builder_agent::build_stream::BuildStreamEvent::BuildFailed {
-                                    error: e.to_string(),
-                                    tokens_consumed: 0,
-                                    cost_consumed: 0.0,
-                                });
-                                    mark_iteration_failed(&format!(
-                                        "section streaming failed: {e}"
-                                    ));
-                                    let _ = tx.send(Err(format!("streaming failed: {e}")));
-                                    return;
-                                }
-                            };
-
-                            let mut accumulated = String::new();
-                            let mut token_count: usize = 0;
-                            let mut last_event_time = std::time::Instant::now();
-                            let estimated_total = est_output;
-
-                            loop {
-                                match stream.next() {
-                                    Some(Ok(chunk)) => {
-                                        accumulated.push_str(&chunk.text);
-                                        token_count += chunk.token_count.unwrap_or(1);
-                                        if last_event_time.elapsed()
-                                            >= std::time::Duration::from_millis(500)
-                                        {
-                                            emit_fn(web_builder_agent::build_stream::BuildStreamEvent::GenerationProgress {
-                                            phase: web_builder_agent::build_stream::GenerationPhase::Building,
-                                            tokens_generated: token_count,
-                                            estimated_total_tokens: estimated_total,
-                                            elapsed_seconds: start.elapsed().as_secs_f64(),
-                                            raw_chunk: Some(chunk.text),
-                                        });
-                                            last_event_time = std::time::Instant::now();
-                                        }
-                                    }
-                                    Some(Err(e)) => {
-                                        emit_fn(web_builder_agent::build_stream::BuildStreamEvent::BuildFailed {
-                                        error: e.to_string(),
-                                        tokens_consumed: token_count,
-                                        cost_consumed: 0.0,
-                                    });
-                                        mark_iteration_failed(&format!(
-                                            "section streaming error: {e}"
-                                        ));
-                                        let _ = tx.send(Err(format!("streaming error: {e}")));
-                                        return;
-                                    }
-                                    None => break,
-                                }
-                            }
-
-                            if accumulated.trim().is_empty() {
-                                emit_fn(
-                                web_builder_agent::build_stream::BuildStreamEvent::BuildFailed {
-                                    error: "LLM returned empty section".to_string(),
-                                    tokens_consumed: token_count,
-                                    cost_consumed: 0.0,
-                                },
-                            );
-                                mark_iteration_failed("section edit returned empty output");
-                                let _ =
-                                    tx.send(Err("section edit returned empty output".to_string()));
-                                return;
-                            }
-
-                            let usage = stream.usage();
-                            let in_tok = usage.input_tokens;
-                            let out_tok = if usage.output_tokens > 0 {
-                                usage.output_tokens
-                            } else {
-                                token_count
-                            };
-                            let cost = web_builder_agent::build_stream::calculate_cost(
-                                &model_name,
-                                in_tok,
-                                out_tok,
-                            );
-
-                            // Splice the new section into the full HTML
-                            let spliced = match splice_section(
-                                &current_html,
-                                section_id,
-                                &accumulated,
-                            ) {
-                                Ok(html) => html,
-                                Err(e) => {
-                                    emit_fn(web_builder_agent::build_stream::BuildStreamEvent::BuildFailed {
-                                    error: e.clone(),
-                                    tokens_consumed: token_count,
-                                    cost_consumed: cost,
-                                });
-                                    mark_iteration_failed(&format!("splice failed: {e}"));
-                                    let _ = tx.send(Err(format!("splice failed: {e}")));
-                                    return;
-                                }
-                            };
-
-                            let detail = serde_json::json!({
-                                "section": section_id,
-                                "action": if is_add { "added" } else { "edited" },
-                            });
-
-                            (
-                                spliced,
-                                in_tok,
-                                out_tok,
-                                cost,
-                                "section_edit".to_string(),
-                                detail,
-                            )
-                        } // end else (streaming API fallback)
-                    }
-                }
-
-                // ── Tier 3: Full Regeneration — existing behavior ──
-                EditTier::FullRegeneration => {
-                    let prompt = web_builder_agent::checkpoint::build_iteration_prompt(
-                        &current_html,
-                        &change_request,
-                    );
-                    let system_prompt = web_builder_agent::checkpoint::ITERATION_SYSTEM_PROMPT;
-                    let preview_len = prompt.len().min(200);
-                    eprintln!(
-                        "[builder-iterate] Tier 3: Full regen | Prompt preview: {}",
-                        &prompt[..preview_len]
-                    );
-
-                    let est_cost = web_builder_agent::build_stream::estimate_cost(
-                        &model_name,
-                        web_builder_agent::build_stream::ESTIMATED_ITERATION_INPUT_TOKENS,
-                        web_builder_agent::build_stream::ESTIMATED_TOTAL_TOKENS,
-                    );
-                    emit_fn(
-                        web_builder_agent::build_stream::BuildStreamEvent::BuildStarted {
-                            project_name: format!("Iteration: {truncated_req}"),
-                            estimated_cost: est_cost,
-                            estimated_tasks: 1,
-                            model_name: model_name.clone(),
-                            timestamp: String::new(),
-                        },
-                    );
-
-                    use nexus_connectors_llm::streaming::StreamingLlmProvider;
-                    let mut stream = match streaming_provider.as_ref().stream_query(
-                        &prompt,
-                        system_prompt,
-                        16384,
-                        &model_name,
-                    ) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            emit_fn(
-                                web_builder_agent::build_stream::BuildStreamEvent::BuildFailed {
-                                    error: e.to_string(),
-                                    tokens_consumed: 0,
-                                    cost_consumed: 0.0,
-                                },
-                            );
-                            mark_iteration_failed(&format!("full regen streaming failed: {e}"));
-                            let _ = tx.send(Err(format!("streaming failed: {e}")));
-                            return;
-                        }
-                    };
-
-                    let mut accumulated = String::new();
-                    let mut token_count: usize = 0;
-                    let mut last_event_time = std::time::Instant::now();
-                    let estimated_total = web_builder_agent::build_stream::ESTIMATED_TOTAL_TOKENS;
-
-                    loop {
-                        match stream.next() {
-                            Some(Ok(chunk)) => {
-                                accumulated.push_str(&chunk.text);
-                                token_count += chunk.token_count.unwrap_or(1);
-                                if last_event_time.elapsed()
-                                    >= std::time::Duration::from_millis(500)
-                                {
-                                    let phase = web_builder_agent::build_stream::detect_phase(
-                                        &accumulated,
-                                        token_count,
-                                        estimated_total,
-                                    );
-                                    emit_fn(web_builder_agent::build_stream::BuildStreamEvent::GenerationProgress {
-                                        phase,
-                                        tokens_generated: token_count,
-                                        estimated_total_tokens: estimated_total,
-                                        elapsed_seconds: start.elapsed().as_secs_f64(),
-                                        raw_chunk: Some(chunk.text),
-                                    });
-                                    last_event_time = std::time::Instant::now();
-                                }
-                            }
-                            Some(Err(e)) => {
-                                emit_fn(web_builder_agent::build_stream::BuildStreamEvent::BuildFailed {
-                                    error: e.to_string(),
-                                    tokens_consumed: token_count,
-                                    cost_consumed: web_builder_agent::build_stream::calculate_cost(
-                                        &model_name, 0, token_count,
-                                    ),
-                                });
-                                mark_iteration_failed(&format!("full regen streaming error: {e}"));
-                                let _ = tx.send(Err(format!("streaming error: {e}")));
-                                return;
-                            }
-                            None => break,
-                        }
-                    }
-
-                    if accumulated.trim().is_empty() {
-                        emit_fn(
-                            web_builder_agent::build_stream::BuildStreamEvent::BuildFailed {
-                                error: "LLM returned empty response".to_string(),
-                                tokens_consumed: token_count,
-                                cost_consumed: 0.0,
-                            },
-                        );
-                        mark_iteration_failed("iteration returned empty output");
-                        let _ = tx.send(Err("iteration returned empty output".to_string()));
-                        return;
-                    }
-
-                    let usage = stream.usage();
-                    let in_tok = usage.input_tokens;
-                    let out_tok = if usage.output_tokens > 0 {
-                        usage.output_tokens
-                    } else {
-                        token_count
-                    };
-                    let cost = web_builder_agent::build_stream::calculate_cost(
-                        &model_name,
-                        in_tok,
-                        out_tok,
-                    );
-
-                    let cleaned_html =
-                        web_builder_agent::llm_codegen::strip_markdown_fences(&accumulated);
-
-                    let detail = serde_json::json!({
-                        "reason": classification.reason,
-                    });
-
-                    (
-                        cleaned_html,
-                        in_tok,
-                        out_tok,
-                        cost,
-                        "full_regeneration".to_string(),
-                        detail,
-                    )
-                }
-            };
-
-            eprintln!(
-                "[builder-iterate] Tier={}, tokens={}in/{}out, cost=${:.4}, elapsed={:.1}s",
-                tier_label,
-                input_tokens,
-                output_tokens,
-                actual_cost,
-                start.elapsed().as_secs_f64()
-            );
-
-            // 4. Write result
-            if let Err(e) = mgr.write_current_html(&cleaned) {
-                mark_iteration_failed(&format!("write failed: {e}"));
-                let _ = tx.send(Err(format!("write failed: {e}")));
-                return;
-            }
-
-            // Save post-iteration checkpoint
-            let post_cp = mgr
-                .save_checkpoint(&format!("After: {truncated_req}"), actual_cost)
-                .unwrap_or_else(|_| web_builder_agent::checkpoint::Checkpoint {
-                    id: "unknown".to_string(),
-                    timestamp: String::new(),
-                    description: String::new(),
-                    cost: actual_cost,
-                    parent_id: None,
-                    lines: 0,
-                    chars: 0,
-                });
-
-            let elapsed = start.elapsed().as_secs_f64();
-            let governance = web_builder_agent::build_stream::quick_governance_scan(&cleaned);
-
-            // Emit BuildCompleted
-            emit_fn(
-                web_builder_agent::build_stream::BuildStreamEvent::BuildCompleted {
-                    project_name: format!("Iteration: {truncated_req}"),
-                    total_lines: cleaned.lines().count(),
-                    total_chars: cleaned.len(),
-                    input_tokens,
-                    output_tokens,
-                    actual_cost,
-                    model_name: model_name.clone(),
-                    elapsed_seconds: elapsed,
-                    checkpoint_id: post_cp.id.clone(),
-                    governance_status: governance,
-                    output_dir: project_dir.clone(),
-                },
-            );
-
-            // 5. Record cost in budget tracker (fire-and-forget)
-            let tracker = web_builder_agent::budget::BudgetTracker::new();
-            let _ = tracker.record_build(web_builder_agent::budget::BuildRecord {
-                project_name: format!("Iteration: {truncated_req}"),
-                model_name: model_name.clone(),
-                provider: "anthropic".to_string(),
-                input_tokens,
-                output_tokens,
-                cost_usd: actual_cost,
-                elapsed_seconds: elapsed,
-                lines_generated: cleaned.lines().count(),
-                checkpoint_id: post_cp.id.clone(),
-                timestamp: String::new(),
-            });
-
-            // 6. Update project metadata
-            let pd = std::path::Path::new(&project_dir);
-            if let Some(mut meta) = web_builder_agent::checkpoint::load_project_meta(pd) {
-                meta.updated_at = chrono::Utc::now().to_rfc3339();
-                meta.versions = mgr.list_checkpoints().len();
-                meta.total_cost += actual_cost;
-                meta.lines = cleaned.lines().count();
-                let _ = web_builder_agent::checkpoint::save_project_meta(pd, &meta);
-            }
-
-            // 7. Update builder_state: Iterating -> Generated
-            if let Ok(mut proj_state) = web_builder_agent::project::load_project_state(pd) {
-                proj_state.iteration_count += 1;
-                proj_state.iteration_costs.push(actual_cost);
-                proj_state.total_cost += actual_cost;
-                proj_state.line_count = Some(cleaned.lines().count() as u32);
-                proj_state.char_count = Some(cleaned.len() as u32);
-                proj_state.current_checkpoint = Some(post_cp.id.clone());
-                let _ = web_builder_agent::project::transition(
-                    &mut proj_state,
-                    web_builder_agent::project::ProjectStatus::Generated,
-                );
-                if let Err(se) = web_builder_agent::project::save_project_state(pd, &proj_state) {
-                    eprintln!("[builder-iterate] Warning: failed to save builder_state.json: {se}");
-                } else {
-                    eprintln!(
-                        "[builder-iterate] Saved builder_state.json (iteration_count={})",
-                        proj_state.iteration_count
-                    );
-                }
-            }
-
-            let _ = tx.send(Ok(serde_json::json!({
-                "checkpoint_id": post_cp.id,
-                "previous_checkpoint": pre_cp.id,
-                "cost": actual_cost,
-                "lines": cleaned.lines().count(),
-                "elapsed_seconds": elapsed,
-                "tier": tier_label,
-                "tier_detail": tier_detail,
-                "confidence": classification.confidence,
-                "reason": classification.reason,
-            })));
-        });
-
-        rx.recv()
-            .unwrap_or(Err("Iteration thread terminated unexpectedly".to_string()))
+    pub(crate) fn builder_iterate() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_iterate",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     /// Generate a build plan using Haiku 4.5 (cheap planning step).
@@ -5549,352 +3981,68 @@ pub mod runtime {
             .unwrap_or_else(|_| Err("Plan generation thread terminated unexpectedly".into()))
     }
 
-    /// Load a previously saved plan from a project's artefact directory.
-    ///
-    /// Returns null if no plan exists for the given project.
     #[tauri::command]
-    fn builder_load_plan(project_id: String) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        match web_builder_agent::plan::load_plan_artefacts(&project_dir) {
-            Some(plan) => {
-                serde_json::to_value(&plan).map_err(|e| format!("serialization error: {e}"))
-            }
-            None => Ok(serde_json::Value::Null),
-        }
+    pub(crate) fn builder_load_plan() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_load_plan",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Archive a project: transitions status to Archived.
     #[tauri::command]
-    fn builder_archive_project(project_id: String) -> Result<(), String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let mut state = web_builder_agent::project::load_project_state(&project_dir)
-            .unwrap_or_else(|_| {
-                // Legacy project — create a state from project.json
-                let mut s = web_builder_agent::project::create_project(&project_id, "");
-                s.status = web_builder_agent::project::ProjectStatus::Generated;
-                if let Some(meta) = web_builder_agent::checkpoint::load_project_meta(&project_dir) {
-                    s.prompt = meta.prompt;
-                    s.project_name = Some(meta.name);
-                    s.total_cost = meta.total_cost;
-                }
-                s
-            });
-
-        web_builder_agent::project::transition(
-            &mut state,
-            web_builder_agent::project::ProjectStatus::Archived,
-        )?;
-        web_builder_agent::project::save_project_state(&project_dir, &state)
+    pub(crate) fn builder_archive_project() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "builder_archive_project",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Unarchive a project: transitions status from Archived back to Generated.
     #[tauri::command]
-    fn builder_unarchive_project(project_id: String) -> Result<(), String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let mut state = web_builder_agent::project::load_project_state(&project_dir)
-            .map_err(|e| format!("project {project_id} not found: {e}"))?;
-
-        web_builder_agent::project::transition(
-            &mut state,
-            web_builder_agent::project::ProjectStatus::Generated,
-        )?;
-        web_builder_agent::project::save_project_state(&project_dir, &state)
+    pub(crate) fn builder_unarchive_project() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "builder_unarchive_project",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Export a project as a ZIP file with governance metadata.
     #[tauri::command]
-    fn builder_export_project(project_id: String) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Load or create project state
-        let mut state = web_builder_agent::project::load_project_state(&project_dir)
-            .unwrap_or_else(|_| {
-                let mut s = web_builder_agent::project::create_project(&project_id, "");
-                s.status = web_builder_agent::project::ProjectStatus::Generated;
-                if let Some(meta) = web_builder_agent::checkpoint::load_project_meta(&project_dir) {
-                    s.prompt = meta.prompt.clone();
-                    s.project_name = Some(meta.name.clone());
-                    s.total_cost = meta.total_cost;
-                    s.line_count = Some(meta.lines as u32);
-                    s.iteration_count = meta.versions.saturating_sub(1) as u32;
-                }
-                s
-            });
-
-        // Read index.html
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
-        let html = mgr
-            .read_current_html()
-            .map_err(|e| format!("no HTML to export: {e}"))?;
-
-        // Build export contents
-        let readme = web_builder_agent::project::build_export_readme(&state);
-        let metadata = web_builder_agent::project::build_export_metadata(&state);
-        let metadata_json = serde_json::to_string_pretty(&metadata)
-            .map_err(|e| format!("serialize metadata: {e}"))?;
-
-        // Load plan artefacts if available
-        let plan_json = web_builder_agent::plan::load_plan_artefacts(&project_dir)
-            .and_then(|plan| serde_json::to_string_pretty(&plan).ok())
-            .unwrap_or_else(|| "{}".to_string());
-
-        // Create ZIP
-        let export_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("exports");
-        std::fs::create_dir_all(&export_dir).map_err(|e| format!("create exports dir: {e}"))?;
-
-        let project_name_slug = state
-            .project_name
-            .as_deref()
-            .unwrap_or("project")
-            .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || c == '-' || c == '_' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect::<String>()
-            .to_lowercase();
-        let zip_filename = format!("{project_name_slug}_{project_id}.zip");
-        let zip_path = export_dir.join(&zip_filename);
-
-        let zip_file = std::fs::File::create(&zip_path).map_err(|e| format!("create zip: {e}"))?;
-        let mut zip_writer = zip::ZipWriter::new(zip_file);
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
-
-        zip_writer
-            .start_file("index.html", options)
-            .map_err(|e| format!("zip index.html: {e}"))?;
-        std::io::Write::write_all(&mut zip_writer, html.as_bytes())
-            .map_err(|e| format!("write index.html: {e}"))?;
-
-        zip_writer
-            .start_file("README.md", options)
-            .map_err(|e| format!("zip README.md: {e}"))?;
-        std::io::Write::write_all(&mut zip_writer, readme.as_bytes())
-            .map_err(|e| format!("write README.md: {e}"))?;
-
-        zip_writer
-            .start_file("metadata.json", options)
-            .map_err(|e| format!("zip metadata.json: {e}"))?;
-        std::io::Write::write_all(&mut zip_writer, metadata_json.as_bytes())
-            .map_err(|e| format!("write metadata.json: {e}"))?;
-
-        zip_writer
-            .start_file("build_plan.json", options)
-            .map_err(|e| format!("zip build_plan.json: {e}"))?;
-        std::io::Write::write_all(&mut zip_writer, plan_json.as_bytes())
-            .map_err(|e| format!("write build_plan.json: {e}"))?;
-
-        // Generate Trust Pack and include in ZIP
-        let tp_output_dir = std::env::temp_dir().join(format!("nexus-tp-export-{}", project_id));
-        let _ = std::fs::create_dir_all(&tp_output_dir);
-        if let Ok(_tp_result) =
-            web_builder_agent::trust_pack::generate_trust_pack(&project_dir, &tp_output_dir)
-        {
-            let tp_dir = tp_output_dir.join("trust-pack");
-            if let Ok(entries) = std::fs::read_dir(&tp_dir) {
-                for entry in entries.flatten() {
-                    if let Ok(content) = std::fs::read(entry.path()) {
-                        let filename =
-                            format!("trust-pack/{}", entry.file_name().to_string_lossy());
-                        let _ = zip_writer.start_file(filename.as_str(), options);
-                        let _ = std::io::Write::write_all(&mut zip_writer, &content);
-                    }
-                }
-            }
-            let _ = std::fs::remove_dir_all(&tp_output_dir);
-        }
-
-        zip_writer
-            .finish()
-            .map_err(|e| format!("finalize zip: {e}"))?;
-
-        // Transition state to Exported
-        let _ = web_builder_agent::project::transition(
-            &mut state,
-            web_builder_agent::project::ProjectStatus::Exported,
-        );
-        let _ = web_builder_agent::project::save_project_state(&project_dir, &state);
-
-        let zip_path_str = zip_path.to_string_lossy().to_string();
-        Ok(serde_json::json!({
-            "path": zip_path_str,
-            "filename": zip_filename,
-            "size_bytes": std::fs::metadata(&zip_path).map(|m| m.len()).unwrap_or(0),
-        }))
+    pub(crate) fn builder_export_project() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_export_project",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Save or update builder project state.
     #[tauri::command]
-    fn builder_save_state(project_id: String, state_json: String) -> Result<(), String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let state: web_builder_agent::project::ProjectState =
-            serde_json::from_str(&state_json).map_err(|e| format!("invalid state: {e}"))?;
-        web_builder_agent::project::save_project_state(&project_dir, &state)
+    pub(crate) fn builder_save_state() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "builder_save_state",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Load builder project state.
     #[tauri::command]
-    fn builder_load_state(project_id: String) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        match web_builder_agent::project::load_project_state(&project_dir) {
-            Ok(state) => serde_json::to_value(state).map_err(|e| format!("serialize: {e}")),
-            Err(_) => Ok(serde_json::Value::Null),
-        }
+    pub(crate) fn builder_load_state() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_load_state",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Visual editor: apply a token edit (Layer 1 foundation or Layer 3 instance).
     #[tauri::command]
-    fn builder_visual_edit_token(
-        project_id: String,
-        layer: u8,
-        section_id: Option<String>,
-        token_name: String,
-        value: String,
-    ) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Load current visual edit state
-        let mut edit_state = web_builder_agent::visual_edit::load_visual_edit_state(&project_dir)
-            .unwrap_or_default();
-
-        // Load or create TokenSet (using default for now — in production,
-        // this would be loaded from the project's persisted token state)
-        let mut token_set = web_builder_agent::tokens::TokenSet::default();
-        // Restore previous edits first
-        web_builder_agent::visual_edit::restore_visual_edits(&mut token_set, &edit_state);
-
-        // Apply the new edit
-        let css = web_builder_agent::visual_edit::apply_token_edit(
-            &mut token_set,
-            &mut edit_state,
-            layer,
-            section_id.as_deref(),
-            &token_name,
-            &value,
-        )
-        .map_err(|e| format!("{e}"))?;
-
-        // Persist edit state
-        web_builder_agent::visual_edit::save_visual_edit_state(&project_dir, &edit_state)
-            .map_err(|e| format!("save: {e}"))?;
-
-        // Also update current/index.html so edits persist across reloads
-        persist_token_css_to_html(&project_dir, &token_set.to_css());
-
-        Ok(css)
+    pub(crate) fn builder_visual_edit_token() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_visual_edit_token",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Visual editor: apply a text content edit to a slot.
     #[tauri::command]
-    fn builder_visual_edit_text(
-        project_id: String,
-        section_id: String,
-        slot_name: String,
-        new_text: String,
-    ) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Load visual edit state
-        let mut edit_state = web_builder_agent::visual_edit::load_visual_edit_state(&project_dir)
-            .unwrap_or_default();
-
-        // For text edits, we need the schema to validate.
-        // Try to load template from project state; fall back to saas_landing.
-        let template_id = match web_builder_agent::project::load_project_state(&project_dir) {
-            Ok(ps) => ps
-                .selected_template
-                .unwrap_or_else(|| "saas_landing".into()),
-            Err(_) => "saas_landing".into(),
-        };
-        let schema = web_builder_agent::slot_schema::get_template_schema(&template_id)
-            .ok_or_else(|| format!("unknown template: {template_id}"))?;
-
-        // Create a minimal payload for validation (text edits don't need full payload)
-        let mut payload = web_builder_agent::content_payload::ContentPayload {
-            template_id: template_id.clone(),
-            variant: web_builder_agent::variant_select::select_variant(&template_id, ""),
-            sections: vec![],
-        };
-
-        // Restore any previous text edits into the payload
-        for te in &edit_state.text_edits {
-            let section = payload
-                .sections
-                .iter_mut()
-                .find(|s| s.section_id == te.section_id);
-            if let Some(s) = section {
-                s.slots.insert(te.slot_name.clone(), te.new_text.clone());
-            } else {
-                payload
-                    .sections
-                    .push(web_builder_agent::content_payload::SectionContent {
-                        section_id: te.section_id.clone(),
-                        slots: std::collections::HashMap::from([(
-                            te.slot_name.clone(),
-                            te.new_text.clone(),
-                        )]),
-                    });
-            }
-        }
-
-        let escaped = web_builder_agent::visual_edit::apply_text_edit(
-            &mut payload,
-            &mut edit_state,
-            &schema,
-            &section_id,
-            &slot_name,
-            &new_text,
-        )
-        .map_err(|e| format!("{e}"))?;
-
-        // Persist
-        web_builder_agent::visual_edit::save_visual_edit_state(&project_dir, &edit_state)
-            .map_err(|e| format!("save: {e}"))?;
-
-        Ok(escaped)
+    pub(crate) fn builder_visual_edit_text() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_visual_edit_text",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     /// Run a scaffold build (deterministic, $0) using the build orchestrator.
@@ -5985,259 +4133,20 @@ pub mod runtime {
 
     // ── Builder Deploy (Phase 7A) ─────────────────────────────────────
 
-    /// Deploy a builder project to Netlify, Cloudflare Pages, or Vercel.
     #[tauri::command]
-    async fn builder_deploy(
-        project_id: String,
-        provider: String,
-        site_id: Option<String>,
-        site_name: Option<String>,
-    ) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Load credentials
-        let creds = web_builder_agent::deploy::credentials::load_credentials(&provider)
-            .map_err(|e| format!("credentials: {e}"))?
-            .ok_or_else(|| {
-                format!("No credentials stored for {provider}. Please configure credentials first.")
-            })?;
-
-        // Determine output directory
-        // For HTML mode: project_dir/current/index.html (single file)
-        // For React mode: project_dir/react/dist/ (after npm run build)
-        let output_dir = if project_dir.join("react").join("dist").exists() {
-            project_dir.join("react").join("dist")
-        } else if project_dir.join("current").exists() {
-            project_dir.join("current")
-        } else if project_dir.join("index.html").exists() {
-            project_dir.clone()
-        } else {
-            return Err("No build output found. Build the project first.".into());
-        };
-
-        // Collect files
-        let files = web_builder_agent::deploy::collect_deploy_files(&output_dir)
-            .map_err(|e| format!("collect files: {e}"))?;
-
-        if files.is_empty() {
-            return Err("No files to deploy.".into());
-        }
-
-        let client = reqwest::Client::new();
-        // UI-initiated deploys: grant deploy.execute capability.
-        let gov = web_builder_agent::deploy::DeployGovernance {
-            agent_id: SYSTEM_UUID,
-            capabilities: vec!["deploy.execute".into()],
-            fuel_budget_usd: 10.0,
-        };
-
-        // Create site if needed
-        let effective_site_id = match site_id {
-            Some(id) if !id.is_empty() => id,
-            _ => {
-                let name = site_name.as_deref().unwrap_or(&project_id);
-                let site = match provider.as_str() {
-                    "netlify" => {
-                        web_builder_agent::deploy::netlify::create_site(name, &creds, &client, &gov)
-                            .await
-                            .map_err(|e| format!("create site: {e}"))?
-                    }
-                    "cloudflare" => web_builder_agent::deploy::cloudflare::create_site(
-                        name, &creds, &client, &gov,
-                    )
-                    .await
-                    .map_err(|e| format!("create site: {e}"))?,
-                    "vercel" => {
-                        // Vercel creates project on first deploy
-                        web_builder_agent::deploy::SiteInfo {
-                            id: name.to_string(),
-                            name: name.to_string(),
-                            url: format!("https://{name}.vercel.app"),
-                            provider: "vercel".into(),
-                        }
-                    }
-                    _ => return Err(format!("Unknown provider: {provider}")),
-                };
-                site.id
-            }
-        };
-
-        // Deploy
-        let result = match provider.as_str() {
-            "netlify" => web_builder_agent::deploy::netlify::deploy(
-                &effective_site_id,
-                &files,
-                &creds,
-                &client,
-                &gov,
-            )
-            .await
-            .map_err(|e| format!("deploy: {e}"))?,
-            "cloudflare" => web_builder_agent::deploy::cloudflare::deploy(
-                &effective_site_id,
-                &files,
-                &creds,
-                &client,
-                &gov,
-            )
-            .await
-            .map_err(|e| format!("deploy: {e}"))?,
-            "vercel" => web_builder_agent::deploy::vercel::deploy(
-                &effective_site_id,
-                &files,
-                &creds,
-                &client,
-                &gov,
-            )
-            .await
-            .map_err(|e| format!("deploy: {e}"))?,
-            _ => return Err(format!("Unknown provider: {provider}")),
-        };
-
-        // Build and save governance manifest
-        let cost = web_builder_agent::build_orchestrator::load_cost_tracker(&project_dir);
-        let build_cost = web_builder_agent::build_orchestrator::BuildCost {
-            total: cost.total_cost,
-            ..Default::default()
-        };
-        let total_bytes: u64 = files.iter().map(|f| f.content.len() as u64).sum();
-        let mut manifest = web_builder_agent::deploy::manifest::create_deploy_manifest(
-            &result,
-            &build_cost,
-            &["claude-sonnet-4-6".to_string()],
-            files.len(),
-            total_bytes,
-        );
-        let _ = web_builder_agent::deploy::manifest::sign_manifest(&mut manifest);
-        let _ = web_builder_agent::deploy::manifest::save_manifest(&project_dir, &manifest);
-        let _ = web_builder_agent::deploy::manifest::append_deploy_history(&project_dir, &manifest);
-
-        // Phase 7B: Record deploy in history with file manifest
-        {
-            let mut history = web_builder_agent::deploy::history::load_history(&project_dir);
-            let files_manifest: Vec<web_builder_agent::deploy::history::FileManifestEntry> = files
-                .iter()
-                .map(|f| web_builder_agent::deploy::history::FileManifestEntry {
-                    path: f.path.clone(),
-                    hash: f.hash.clone(),
-                    size: f.content.len() as u64,
-                })
-                .collect();
-            let entry = web_builder_agent::deploy::history::DeployHistoryEntry {
-                id: uuid::Uuid::new_v4().to_string(),
-                deploy_id: result.deploy_id.clone(),
-                provider: result.provider.clone(),
-                site_id: effective_site_id.clone(),
-                url: result.url.clone(),
-                build_hash: result.build_hash.clone(),
-                timestamp: result.timestamp.clone(),
-                status: web_builder_agent::deploy::history::DeployStatus::Live,
-                quality_score: None,
-                file_count: files.len(),
-                total_bytes,
-                cost: build_cost.total,
-                model_attribution: vec!["claude-sonnet-4-6".into()],
-                files_manifest,
-                signature: None,
-            };
-            history.record_deploy(entry);
-            let _ = web_builder_agent::deploy::history::save_history(&project_dir, &history);
-        }
-
-        Ok(serde_json::json!({
-            "deploy_id": result.deploy_id,
-            "url": result.url,
-            "provider": result.provider,
-            "site_id": result.site_id,
-            "build_hash": result.build_hash,
-            "duration_ms": result.duration_ms,
-            "file_count": files.len(),
-        }))
+    pub(crate) fn builder_deploy() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_deploy",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Rollback a builder deploy to the previous version.
     #[tauri::command]
-    async fn builder_deploy_rollback(
-        project_id: String,
-        provider: String,
-        site_id: String,
-        deploy_id: String,
-    ) -> Result<serde_json::Value, String> {
-        let creds = web_builder_agent::deploy::credentials::load_credentials(&provider)
-            .map_err(|e| format!("credentials: {e}"))?
-            .ok_or_else(|| format!("No credentials for {provider}"))?;
-
-        let client = reqwest::Client::new();
-        let gov = web_builder_agent::deploy::DeployGovernance {
-            agent_id: SYSTEM_UUID,
-            capabilities: vec!["deploy.execute".into()],
-            fuel_budget_usd: 10.0,
-        };
-
-        let result = match provider.as_str() {
-            "netlify" => web_builder_agent::deploy::netlify::rollback(
-                &site_id, &deploy_id, &creds, &client, &gov,
-            )
-            .await
-            .map_err(|e| format!("rollback: {e}"))?,
-            "cloudflare" => web_builder_agent::deploy::cloudflare::rollback(
-                &site_id, &deploy_id, &creds, &client, &gov,
-            )
-            .await
-            .map_err(|e| format!("rollback: {e}"))?,
-            "vercel" => web_builder_agent::deploy::vercel::rollback(
-                &site_id, &deploy_id, &creds, &client, &gov,
-            )
-            .await
-            .map_err(|e| format!("rollback: {e}"))?,
-            _ => return Err(format!("Unknown provider: {provider}")),
-        };
-
-        // Update governance manifest
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let build_cost = web_builder_agent::build_orchestrator::BuildCost::default();
-        let mut manifest = web_builder_agent::deploy::manifest::create_deploy_manifest(
-            &result,
-            &build_cost,
-            &[],
-            0,
-            0,
-        );
-        let _ = web_builder_agent::deploy::manifest::sign_manifest(&mut manifest);
-        let _ = web_builder_agent::deploy::manifest::save_manifest(&project_dir, &manifest);
-        let _ = web_builder_agent::deploy::manifest::append_deploy_history(&project_dir, &manifest);
-
-        // Phase 7B: Update history — find the current live entry and the rollback target
-        {
-            let mut history = web_builder_agent::deploy::history::load_history(&project_dir);
-            // Find the current live entry
-            let current_id = history.current().map(|e| e.id.clone());
-            // Find the target entry (by deploy_id match)
-            let target_id = history
-                .entries
-                .iter()
-                .find(|e| e.deploy_id == deploy_id)
-                .map(|e| e.id.clone());
-            if let (Some(from), Some(to)) = (current_id, target_id) {
-                history.record_rollback(&from, &to);
-                let _ = web_builder_agent::deploy::history::save_history(&project_dir, &history);
-            }
-        }
-
-        Ok(serde_json::json!({
-            "deploy_id": result.deploy_id,
-            "url": result.url,
-            "provider": result.provider,
-        }))
+    pub(crate) fn builder_deploy_rollback() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_deploy_rollback",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     /// Store deploy provider credentials (encrypted on disk).
@@ -6319,285 +4228,56 @@ pub mod runtime {
 
     // ── Builder Quality Critic (Phase 9A) ─────────────────────────────
 
-    /// Run all six quality checks on a project's build output.
     #[tauri::command]
-    fn builder_quality_check(project_id: String) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Read HTML from the project
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
-        let html = mgr
-            .read_current_html()
-            .map_err(|e| format!("no HTML to check: {e}"))?;
-
-        let sections = web_builder_agent::quality::extract_sections(&html);
-        let input = web_builder_agent::quality::QualityInput {
-            html,
-            output_dir: Some(project_dir.clone()),
-            template_id: String::new(),
-            sections,
-        };
-
-        let report = web_builder_agent::quality::run_quality_checks(&input)
-            .map_err(|e| format!("quality check: {e}"))?;
-
-        // Save report
-        let _ = web_builder_agent::quality::save_report(&project_dir, &report);
-
-        serde_json::to_value(&report).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_quality_check() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_quality_check",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Apply selected auto-fixes by index from the quality report.
     #[tauri::command]
-    fn builder_quality_auto_fix(
-        project_id: String,
-        fix_indices: Vec<usize>,
-    ) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Load current report
-        let report = web_builder_agent::quality::load_report(&project_dir)
-            .ok_or("No quality report found — run quality check first")?;
-
-        // Collect fixes at the requested indices
-        let all_issues: Vec<&web_builder_agent::quality::QualityIssue> =
-            report.checks.iter().flat_map(|c| &c.issues).collect();
-
-        let fixes: Vec<web_builder_agent::quality::AutoFix> = fix_indices
-            .iter()
-            .filter_map(|&i| all_issues.get(i).and_then(|issue| issue.fix.clone()))
-            .collect();
-
-        if fixes.is_empty() {
-            return Err("No auto-fixable issues at the given indices".into());
-        }
-
-        // Read HTML
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
-        let html = mgr
-            .read_current_html()
-            .map_err(|e| format!("read html: {e}"))?;
-
-        // Apply fixes
-        let fix_result = web_builder_agent::quality::auto_fix::apply_auto_fixes(&html, &fixes);
-
-        // Write fixed HTML back
-        mgr.write_current_html(&fix_result.fixed_html)
-            .map_err(|e| format!("write fixed html: {e}"))?;
-
-        // Re-run quality checks on fixed HTML
-        let sections = web_builder_agent::quality::extract_sections(&fix_result.fixed_html);
-        let new_input = web_builder_agent::quality::QualityInput {
-            html: fix_result.fixed_html.clone(),
-            output_dir: Some(project_dir.clone()),
-            template_id: String::new(),
-            sections,
-        };
-        let new_report = web_builder_agent::quality::run_quality_checks(&new_input)
-            .map_err(|e| format!("re-check: {e}"))?;
-        let _ = web_builder_agent::quality::save_report(&project_dir, &new_report);
-
-        Ok(serde_json::json!({
-            "fixes_applied": fix_result.fixes_applied,
-            "fixes_failed": fix_result.fixes_failed,
-            "new_report": serde_json::to_value(&new_report).unwrap_or_default(),
-        }))
+    pub(crate) fn builder_quality_auto_fix() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_quality_auto_fix",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Apply ALL auto-fixable issues at once.
     #[tauri::command]
-    fn builder_quality_auto_fix_all(project_id: String) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let report = web_builder_agent::quality::load_report(&project_dir)
-            .ok_or("No quality report found — run quality check first")?;
-
-        let fixes: Vec<web_builder_agent::quality::AutoFix> = report
-            .checks
-            .iter()
-            .flat_map(|c| &c.issues)
-            .filter_map(|i| i.fix.clone())
-            .collect();
-
-        if fixes.is_empty() {
-            return Ok(serde_json::json!({
-                "fixes_applied": [],
-                "fixes_failed": [],
-                "new_report": serde_json::to_value(&report).unwrap_or_default(),
-            }));
-        }
-
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
-        let html = mgr
-            .read_current_html()
-            .map_err(|e| format!("read html: {e}"))?;
-
-        let fix_result = web_builder_agent::quality::auto_fix::apply_auto_fixes(&html, &fixes);
-
-        mgr.write_current_html(&fix_result.fixed_html)
-            .map_err(|e| format!("write: {e}"))?;
-
-        // Re-run checks
-        let sections = web_builder_agent::quality::extract_sections(&fix_result.fixed_html);
-        let new_input = web_builder_agent::quality::QualityInput {
-            html: fix_result.fixed_html.clone(),
-            output_dir: Some(project_dir.clone()),
-            template_id: String::new(),
-            sections,
-        };
-        let new_report = web_builder_agent::quality::run_quality_checks(&new_input)
-            .map_err(|e| format!("re-check: {e}"))?;
-        let _ = web_builder_agent::quality::save_report(&project_dir, &new_report);
-
-        Ok(serde_json::json!({
-            "fixes_applied": fix_result.fixes_applied,
-            "fixes_failed": fix_result.fixes_failed,
-            "new_report": serde_json::to_value(&new_report).unwrap_or_default(),
-        }))
+    pub(crate) fn builder_quality_auto_fix_all() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_quality_auto_fix_all",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     // ── Builder Conversion Critic (Phase 9B) ─────────────────────────
 
-    /// Run all four conversion checks on a project's build output.
     #[tauri::command]
-    fn builder_conversion_check(project_id: String) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Read HTML
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
-        let html = mgr
-            .read_current_html()
-            .map_err(|e| format!("no HTML to check: {e}"))?;
-
-        let sections = web_builder_agent::quality::extract_sections(&html);
-
-        // Load project state for template_id and brief
-        let state = web_builder_agent::project::load_project_state(&project_dir)
-            .unwrap_or_else(|_| web_builder_agent::project::create_project(&project_id, ""));
-        let template_id = state
-            .selected_template
-            .clone()
-            .unwrap_or_else(|| "saas_landing".into());
-
-        let quality_input = web_builder_agent::quality::QualityInput {
-            html,
-            output_dir: Some(project_dir.clone()),
-            template_id: template_id.clone(),
-            sections,
-        };
-
-        let conversion_input = web_builder_agent::quality::conversion::ConversionInput {
-            quality_input,
-            content_payload: web_builder_agent::content_payload::ContentPayload {
-                template_id: template_id.clone(),
-                variant: web_builder_agent::variant::VariantSelection::default(),
-                sections: vec![],
-            },
-            template_id,
-            brief: Some(state.prompt.clone()),
-        };
-
-        let report =
-            web_builder_agent::quality::conversion::run_conversion_checks(&conversion_input)
-                .map_err(|e| format!("conversion check: {e}"))?;
-
-        // Save report
-        let _ = web_builder_agent::quality::conversion::save_report(&project_dir, &report);
-
-        serde_json::to_value(&report).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_conversion_check() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_conversion_check",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Apply selected auto-fixes from conversion report by index.
     #[tauri::command]
-    fn builder_conversion_auto_fix(
-        project_id: String,
-        fix_indices: Vec<usize>,
-    ) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let report = web_builder_agent::quality::conversion::load_report(&project_dir)
-            .ok_or("No conversion report found — run conversion check first")?;
-
-        let all_issues: Vec<&web_builder_agent::quality::QualityIssue> =
-            report.checks.iter().flat_map(|c| &c.issues).collect();
-
-        let fixes: Vec<web_builder_agent::quality::AutoFix> = fix_indices
-            .iter()
-            .filter_map(|&i| all_issues.get(i).and_then(|issue| issue.fix.clone()))
-            .collect();
-
-        if fixes.is_empty() {
-            return Err("No auto-fixable issues at the given indices".into());
-        }
-
-        // Read HTML
-        let mgr = web_builder_agent::checkpoint::CheckpointManager::new(&project_dir);
-        let html = mgr
-            .read_current_html()
-            .map_err(|e| format!("read html: {e}"))?;
-
-        let fix_result = web_builder_agent::quality::auto_fix::apply_auto_fixes(&html, &fixes);
-
-        mgr.write_current_html(&fix_result.fixed_html)
-            .map_err(|e| format!("write fixed html: {e}"))?;
-
-        Ok(serde_json::json!({
-            "fixes_applied": fix_result.fixes_applied,
-            "fixes_failed": fix_result.fixes_failed,
-        }))
+    pub(crate) fn builder_conversion_auto_fix() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_conversion_auto_fix",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     // ── Builder Collaboration (Phase 14) ──────────────────────────────
 
-    /// Start hosting a collaboration session for a project.
     #[tauri::command]
-    fn builder_collab_start_hosting(
-        project_id: String,
-        port: Option<u16>,
-    ) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let identity =
-            nexus_crypto::CryptoIdentity::generate(nexus_crypto::SignatureAlgorithm::Ed25519)
-                .map_err(|e| format!("keygen: {e}"))?;
-
-        let owner = web_builder_agent::collab::CollaboratorIdentity::new(
-            hex::encode(identity.verifying_key()),
-            std::env::var("USER").unwrap_or_else(|_| "Host".into()),
-            web_builder_agent::collab::roles::CollaborationRole::Owner,
-        );
-
-        let actual_port = port.unwrap_or(web_builder_agent::collab::DEFAULT_COLLAB_PORT);
-        let session = web_builder_agent::collab::start_hosting(&project_id, actual_port, &owner)
-            .map_err(|e| format!("start hosting: {e}"))?;
-
-        let _ = web_builder_agent::collab::save_session(&project_dir, &session);
-
-        serde_json::to_value(&session).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_collab_start_hosting() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_collab_start_hosting",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     /// Join an existing collaboration session.
@@ -6626,171 +4306,52 @@ pub mod runtime {
         }))
     }
 
-    /// Leave the current collaboration session.
     #[tauri::command]
-    fn builder_collab_leave(project_id: String) -> Result<(), String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Remove session file
-        let path = project_dir.join("collab_session.json");
-        if path.exists() {
-            std::fs::remove_file(&path).map_err(|e| format!("remove session: {e}"))?;
-        }
-        Ok(())
-    }
-
-    /// Generate an invite link for a collaboration session.
-    #[tauri::command]
-    fn builder_collab_invite(project_id: String, role: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let session = web_builder_agent::collab::load_session(&project_dir)
-            .ok_or("No active session — start hosting first")?;
-
-        let collab_role = match role.as_str() {
-            "editor" => web_builder_agent::collab::roles::CollaborationRole::Editor,
-            "commenter" => web_builder_agent::collab::roles::CollaborationRole::Commenter,
-            "viewer" => web_builder_agent::collab::roles::CollaborationRole::Viewer,
-            _ => {
-                return Err(format!(
-                    "Invalid role: {role}. Use editor, commenter, or viewer"
-                ))
-            }
-        };
-
-        Ok(web_builder_agent::collab::generate_invite(
-            &session,
-            collab_role,
+    pub(crate) fn builder_collab_leave() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "builder_collab_leave",
+            crate::phase0_surface::Closure::LegacyBuilder,
         ))
     }
 
-    /// Set a collaborator's role.
     #[tauri::command]
-    fn builder_collab_set_role(
-        project_id: String,
-        public_key: String,
-        role: String,
-    ) -> Result<(), String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let mut session =
-            web_builder_agent::collab::load_session(&project_dir).ok_or("No active session")?;
-
-        let new_role = match role.as_str() {
-            "owner" => web_builder_agent::collab::roles::CollaborationRole::Owner,
-            "editor" => web_builder_agent::collab::roles::CollaborationRole::Editor,
-            "commenter" => web_builder_agent::collab::roles::CollaborationRole::Commenter,
-            "viewer" => web_builder_agent::collab::roles::CollaborationRole::Viewer,
-            _ => return Err(format!("Invalid role: {role}")),
-        };
-
-        if let Some(p) = session
-            .participants
-            .iter_mut()
-            .find(|p| p.public_key == public_key)
-        {
-            p.role = new_role;
-        } else {
-            return Err("Participant not found".into());
-        }
-
-        web_builder_agent::collab::save_session(&project_dir, &session)
+    pub(crate) fn builder_collab_invite() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_collab_invite",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Add a comment to a project.
     #[tauri::command]
-    fn builder_collab_add_comment(
-        project_id: String,
-        section_id: Option<String>,
-        text: String,
-    ) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let mut store = web_builder_agent::collab::comments::load_comments(&project_dir);
-
-        let identity =
-            nexus_crypto::CryptoIdentity::generate(nexus_crypto::SignatureAlgorithm::Ed25519)
-                .map_err(|e| format!("keygen: {e}"))?;
-
-        let author = web_builder_agent::collab::CollaboratorIdentity::new(
-            hex::encode(identity.verifying_key()),
-            std::env::var("USER").unwrap_or_else(|_| "User".into()),
-            web_builder_agent::collab::roles::CollaborationRole::Owner,
-        );
-
-        let comment = web_builder_agent::collab::comments::add_comment(
-            &mut store,
-            section_id.as_deref(),
-            &text,
-            &author,
-        );
-
-        web_builder_agent::collab::comments::save_comments(&project_dir, &store)
-            .map_err(|e| format!("save: {e}"))?;
-
-        serde_json::to_value(&comment).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_collab_set_role() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "builder_collab_set_role",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Get comments for a project, optionally filtered by section.
     #[tauri::command]
-    fn builder_collab_get_comments(
-        project_id: String,
-        section_id: Option<String>,
-    ) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let store = web_builder_agent::collab::comments::load_comments(&project_dir);
-
-        let comments: Vec<_> = if let Some(ref sid) = section_id {
-            web_builder_agent::collab::comments::get_comments_for_section(
-                &store,
-                Some(sid.as_str()),
-            )
-        } else {
-            store.comments.iter().collect()
-        };
-
-        serde_json::to_value(&comments).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_collab_add_comment() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_collab_add_comment",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Resolve a comment.
     #[tauri::command]
-    fn builder_collab_resolve_comment(
-        project_id: String,
-        comment_id: String,
-    ) -> Result<(), String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
+    pub(crate) fn builder_collab_get_comments() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_collab_get_comments",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
+    }
 
-        let mut store = web_builder_agent::collab::comments::load_comments(&project_dir);
-
-        web_builder_agent::collab::comments::resolve_comment(&mut store, &comment_id)
-            .map_err(|e| format!("resolve: {e}"))?;
-
-        web_builder_agent::collab::comments::save_comments(&project_dir, &store)
+    #[tauri::command]
+    pub(crate) fn builder_collab_resolve_comment() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "builder_collab_resolve_comment",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     // ── Backend Integration Commands (Phase 8A) ──
@@ -7192,46 +4753,11 @@ pub mod runtime {
     // ── Design Import Commands (Phase 10) ──
 
     #[tauri::command]
-    fn builder_import_design(
-        project_id: String,
-        html: String,
-        css: Option<String>,
-        design_md: Option<String>,
-        source: String,
-    ) -> Result<serde_json::Value, String> {
-        eprintln!(
-            "[builder-import] Importing design for '{}' from '{}' ({} chars)",
-            project_id,
-            source,
-            html.len()
-        );
-
-        let import_source = match source.as_str() {
-            "stitch" => web_builder_agent::design_import::ImportSource::Stitch,
-            "figma" => web_builder_agent::design_import::ImportSource::Figma,
-            "url" => web_builder_agent::design_import::ImportSource::Url,
-            _ => web_builder_agent::design_import::ImportSource::Paste,
-        };
-
-        let output = web_builder_agent::design_import::import_design(
-            &project_id,
-            &html,
-            css.as_deref(),
-            design_md.as_deref(),
-            import_source,
-        )
-        .map_err(|e| format!("import failed: {e}"))?;
-
-        // Save the HTML to the project directory
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-        let _ = std::fs::create_dir_all(&project_dir);
-        let _ = std::fs::write(project_dir.join("index.html"), &output.html);
-
-        serde_json::to_value(&output.result).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_import_design() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_import_design",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     #[tauri::command]
@@ -7250,175 +4776,19 @@ pub mod runtime {
     // ── Variant Generation Commands (Phase 11) ──
 
     #[tauri::command]
-    fn builder_generate_variants(
-        project_id: String,
-        count: Option<usize>,
-        offset: Option<usize>,
-    ) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let proj_state = web_builder_agent::project::load_project_state(&project_dir)
-            .map_err(|e| format!("load project: {e}"))?;
-
-        let template_id = proj_state
-            .selected_template
-            .as_deref()
-            .unwrap_or("saas_landing");
-
-        let variant_count = count.unwrap_or(3).min(6);
-        let seed_offset = offset.unwrap_or(0) as u64;
-
-        // Read the actual built HTML to use as base for CSS-token variants.
-        // This gives variants with REAL content (from the LLM build) plus
-        // visually distinct color schemes and typography.
-        let current_html_path = project_dir.join("current").join("index.html");
-        let base_html = if current_html_path.exists() {
-            std::fs::read_to_string(&current_html_path).unwrap_or_default()
-        } else {
-            // Fallback: try project root index.html
-            let root_html = project_dir.join("index.html");
-            if root_html.exists() {
-                std::fs::read_to_string(&root_html).unwrap_or_default()
-            } else {
-                String::new()
-            }
-        };
-
-        if base_html.is_empty() {
-            return Err(
-                "No built HTML found for variant generation. Build your site first.".into(),
-            );
-        }
-
-        // Generate diverse variant selections with unique seed per call
-        let base_variant = web_builder_agent::variant_select::select_variant(template_id, "");
-        let seed = 42u64.wrapping_add(seed_offset);
-        let selections = web_builder_agent::variant_select_diverse::select_diverse_variants_seeded(
-            template_id,
-            &base_variant,
-            variant_count,
-            seed,
-        );
-
-        eprintln!(
-            "[variants] Generating {} variants for template={}, seed={}, base_html={} chars, has_root_css={}",
-            variant_count, template_id, seed, base_html.len(), base_html.contains(":root {")
-        );
-
-        // For each variant: inject different CSS tokens into the real built HTML
-        let mut variants = Vec::with_capacity(variant_count);
-        for (i, selection) in selections.iter().enumerate() {
-            let token_set_opt = selection.to_token_set();
-            if token_set_opt.is_none() {
-                eprintln!(
-                    "[variants] WARNING: to_token_set() returned None for palette={}, typography={}",
-                    selection.palette_id, selection.typography_id
-                );
-            }
-            let token_set = token_set_opt.unwrap_or_default();
-            let token_css = token_set.to_css();
-            eprintln!(
-                "[variants] variant {}: palette={}, typography={}, css={} chars, primary={}",
-                i,
-                selection.palette_id,
-                selection.typography_id,
-                token_css.len(),
-                token_set.foundation.color_primary
-            );
-
-            // Inject variant tokens into the built HTML by replacing :root { ... }
-            let replaced = replace_root_css(&base_html, &token_css);
-            let variant_html = if replaced == base_html && !base_html.contains(":root {") {
-                // No :root block — inject tokens as a new <style> before </head>
-                base_html.replace("</head>", &format!("<style>{token_css}</style></head>"))
-            } else {
-                replaced
-            };
-
-            let palette_name = web_builder_agent::variant_select_diverse::palette_name_for_id(
-                &selection.palette_id,
-            );
-            let typo_name = web_builder_agent::variant_select_diverse::typography_name_for_id(
-                &selection.typography_id,
-            );
-
-            variants.push(web_builder_agent::variant_gen::VariantPayload {
-                id: format!(
-                    "variant_{}",
-                    ["a", "b", "c", "d", "e", "f"].get(i).unwrap_or(&"x")
-                ),
-                label: web_builder_agent::variant_select_diverse::variant_label(
-                    palette_name,
-                    typo_name,
-                ),
-                palette_id: selection.palette_id.clone(),
-                typography_id: selection.typography_id.clone(),
-                assembled_html: variant_html,
-            });
-        }
-
-        let payload = web_builder_agent::variant_gen::VariantSetPayload {
-            variants,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        };
-        serde_json::to_value(&payload).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_generate_variants() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_generate_variants",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     #[tauri::command]
-    fn builder_generate_section_variants(
-        project_id: String,
-        section_id: String,
-        variant_type: String,
-        count: Option<usize>,
-    ) -> Result<serde_json::Value, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let proj_state = web_builder_agent::project::load_project_state(&project_dir)
-            .map_err(|e| format!("load project: {e}"))?;
-
-        let template_id = proj_state
-            .selected_template
-            .as_deref()
-            .unwrap_or("saas_landing");
-        let base_variant = web_builder_agent::variant_select::select_variant(template_id, "");
-        let base_content = web_builder_agent::content_payload::ContentPayload {
-            template_id: template_id.to_string(),
-            variant: base_variant.clone(),
-            sections: vec![],
-        };
-
-        let brief = &proj_state.prompt;
-        let variant_count = count.unwrap_or(3).min(6);
-
-        let vt = match variant_type.as_str() {
-            "layout" => web_builder_agent::variant_gen::SectionVariantType::Layout,
-            "content" => web_builder_agent::variant_gen::SectionVariantType::Content,
-            "palette" => web_builder_agent::variant_gen::SectionVariantType::Palette,
-            _ => return Err(format!("unknown variant type: {variant_type}")),
-        };
-
-        let variant_set = web_builder_agent::variant_gen::generate_section_variants(
-            &section_id,
-            brief,
-            template_id,
-            &base_variant,
-            &base_content,
-            vt,
-            variant_count,
-            None,
-        )
-        .map_err(|e| format!("section variant generation failed: {e}"))?;
-
-        let payload: web_builder_agent::variant_gen::VariantSetPayload = variant_set.into();
-        serde_json::to_value(&payload).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_generate_section_variants() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_generate_section_variants",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     #[tauri::command]
@@ -7435,84 +4805,20 @@ pub mod runtime {
 
     // ── Phase 12: Theme Panel Commands ───────────────���──────────────────
 
-    /// Apply a theme to a project's token set.
     #[tauri::command]
-    fn builder_theme_apply(project_id: String, theme_json: String) -> Result<String, String> {
-        let theme: web_builder_agent::theme::Theme =
-            serde_json::from_str(&theme_json).map_err(|e| format!("parse theme: {e}"))?;
-
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Load existing visual edit state and token set
-        let mut edit_state = web_builder_agent::visual_edit::load_visual_edit_state(&project_dir)
-            .unwrap_or_default();
-        let mut token_set = web_builder_agent::tokens::TokenSet::default();
-        web_builder_agent::visual_edit::restore_visual_edits(&mut token_set, &edit_state);
-
-        // Apply theme (writes Layer 1 + dark mode)
-        web_builder_agent::theme::apply_theme(&mut token_set, &theme)
-            .map_err(|e| format!("{e}"))?;
-
-        // Record all foundation overrides so they persist
-        let ft = theme.to_foundation_tokens();
-        for name in web_builder_agent::tokens::FOUNDATION_TOKEN_NAMES {
-            if let Some(val) = ft.get(name) {
-                edit_state
-                    .foundation_overrides
-                    .insert(name.to_string(), val.to_string());
-            }
-        }
-
-        // Persist
-        web_builder_agent::visual_edit::save_visual_edit_state(&project_dir, &edit_state)
-            .map_err(|e| format!("save: {e}"))?;
-
-        // Also persist theme JSON for retrieval
-        let theme_path = project_dir.join("theme.json");
-        let theme_str =
-            serde_json::to_string_pretty(&theme).map_err(|e| format!("serialize theme: {e}"))?;
-        let _ = std::fs::create_dir_all(&project_dir);
-        std::fs::write(&theme_path, &theme_str).map_err(|e| format!("write theme.json: {e}"))?;
-
-        // Also update current/index.html so theme persists across reloads
-        let token_css = token_set.to_css();
-        persist_token_css_to_html(&project_dir, &token_css);
-
-        eprintln!(
-            "[builder-theme] Applied theme '{}' to project '{}'",
-            theme.name, project_id
-        );
-        Ok(token_css)
+    pub(crate) fn builder_theme_apply() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_theme_apply",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Get the current theme for a project.
     #[tauri::command]
-    fn builder_theme_get_current(project_id: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Try loading persisted theme
-        let theme_path = project_dir.join("theme.json");
-        if theme_path.exists() {
-            let json = std::fs::read_to_string(&theme_path)
-                .map_err(|e| format!("read theme.json: {e}"))?;
-            return Ok(json);
-        }
-
-        // Fall back to extracting from current token set
-        let edit_state = web_builder_agent::visual_edit::load_visual_edit_state(&project_dir)
-            .unwrap_or_default();
-        let mut token_set = web_builder_agent::tokens::TokenSet::default();
-        web_builder_agent::visual_edit::restore_visual_edits(&mut token_set, &edit_state);
-        let theme = web_builder_agent::theme::extract_theme(&token_set);
-        serde_json::to_string(&theme).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_theme_get_current() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_theme_get_current",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     /// Extract a theme from a URL (HTTPS only).
@@ -7524,29 +4830,12 @@ pub mod runtime {
         serde_json::to_string(&theme).map_err(|e| format!("serialize: {e}"))
     }
 
-    /// Export the current theme in a specified format.
     #[tauri::command]
-    fn builder_theme_export(project_id: String, format: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Get current theme
-        let edit_state = web_builder_agent::visual_edit::load_visual_edit_state(&project_dir)
-            .unwrap_or_default();
-        let mut token_set = web_builder_agent::tokens::TokenSet::default();
-        web_builder_agent::visual_edit::restore_visual_edits(&mut token_set, &edit_state);
-        let theme = web_builder_agent::theme::extract_theme(&token_set);
-
-        match format.as_str() {
-            "css" => Ok(theme.to_css_variables()),
-            "tailwind" => Ok(theme.to_tailwind_config()),
-            "design_md" => Ok(theme.to_design_md()),
-            "dtcg" => Ok(theme.to_dtcg_json()),
-            _ => Err(format!("unknown export format: {format}")),
-        }
+    pub(crate) fn builder_theme_export() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_theme_export",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     /// Import a theme from content in a specified format.
@@ -7590,200 +4879,46 @@ pub mod runtime {
         serde_json::to_string(&status).map_err(|e| format!("serialize: {e}"))
     }
 
-    /// Generate a single image for a specific slot.
     #[tauri::command]
-    async fn builder_generate_image(
-        project_id: String,
-        slot_name: String,
-        section_id: String,
-        prompt: Option<String>,
-    ) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let image_type = web_builder_agent::image_gen::infer_image_type(&slot_name);
-        let aspect_ratio = web_builder_agent::image_gen::AspectRatio::from_image_type(image_type);
-
-        let request = web_builder_agent::image_gen::ImageRequest {
-            prompt: prompt.unwrap_or_else(|| format!("Image for {slot_name}")),
-            slot_name: slot_name.clone(),
-            section_id,
-            image_type,
-            aspect_ratio,
-        };
-
-        let config = web_builder_agent::image_gen::ImageGenConfig::default();
-        let theme = web_builder_agent::image_gen::ThemeColors::default();
-
-        let result =
-            web_builder_agent::image_gen::generate_image(&request, &project_dir, &config, &theme)
-                .await;
-
-        eprintln!(
-            "[builder-image] Generated image for slot '{}' via {} (${:.4})",
-            slot_name, result.generation_method, result.cost
-        );
-
-        serde_json::to_string(&result).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_generate_image() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_generate_image",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Generate images for all ImagePrompt slots in a project.
     #[tauri::command]
-    async fn builder_generate_all_images(
-        project_id: String,
-        _app: tauri::AppHandle,
-    ) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        // Load the project state to get the template ID
-        let state = web_builder_agent::project::load_project_state(&project_dir)
-            .map_err(|e| format!("failed to load project state: {e}"))?;
-        let template_id = state.selected_template.as_deref().unwrap_or("saas_landing");
-        let schema = web_builder_agent::slot_schema::get_template_schema(template_id)
-            .ok_or_else(|| format!("unknown template: {template_id}"))?;
-
-        // Build a minimal content payload from latest checkpoint
-        let checkpoint_dir = project_dir.join("current");
-        let html_path = checkpoint_dir.join("index.html");
-        if !html_path.exists() {
-            return Err("no build output found — run a build first".into());
-        }
-
-        let config = web_builder_agent::image_gen::ImageGenConfig::default();
-        let theme = web_builder_agent::image_gen::ThemeColors::default();
-
-        // Collect all ImagePrompt slots from the schema and generate placeholders
-        let mut results = Vec::new();
-        let mut slot_count = 0usize;
-        let mut total_cost = 0.0f64;
-
-        for section in &schema.sections {
-            for (slot_name, constraint) in &section.slots {
-                if constraint.slot_type == web_builder_agent::slot_schema::SlotType::ImagePrompt {
-                    slot_count += 1;
-                    let image_type = web_builder_agent::image_gen::infer_image_type(slot_name);
-                    let request = web_builder_agent::image_gen::ImageRequest {
-                        prompt: format!("Image for {} in {}", slot_name, section.section_id),
-                        slot_name: slot_name.to_string(),
-                        section_id: section.section_id.clone(),
-                        image_type,
-                        aspect_ratio: web_builder_agent::image_gen::AspectRatio::from_image_type(
-                            image_type,
-                        ),
-                    };
-
-                    let result = web_builder_agent::image_gen::generate_image(
-                        &request,
-                        &project_dir,
-                        &config,
-                        &theme,
-                    )
-                    .await;
-
-                    total_cost += result.cost;
-                    results.push(result);
-                }
-            }
-        }
-
-        eprintln!(
-            "[builder-image] Generated {} images for project '{}' (total cost: ${:.4})",
-            slot_count, project_id, total_cost
-        );
-
-        serde_json::to_string(&results).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_generate_all_images() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_generate_all_images",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     // ── Phase 15: Enterprise Trust Pack Commands ───────────────────────
 
-    /// Generate a complete Trust Pack for a project.
     #[tauri::command]
-    fn builder_generate_trust_pack(project_id: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let output_dir = project_dir.clone();
-        let result = web_builder_agent::trust_pack::generate_trust_pack(&project_dir, &output_dir)
-            .map_err(|e| format!("trust pack failed: {e}"))?;
-
-        eprintln!(
-            "[builder-trust] Generated trust pack for '{}': {} files, signed={}",
-            project_id, result.total_files, result.signed
-        );
-
-        serde_json::to_string(&result).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_generate_trust_pack() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_generate_trust_pack",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Get the audit trail for a project.
     #[tauri::command]
-    fn builder_get_audit_trail(
-        project_id: String,
-        filter: Option<String>,
-        search: Option<String>,
-    ) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let state = web_builder_agent::project::load_project_state(&project_dir)
-            .unwrap_or_else(|_| web_builder_agent::project::create_project(&project_id, ""));
-
-        let mut events =
-            web_builder_agent::trust_pack::audit_trail::collect_audit_trail(&project_dir, &state);
-
-        // Apply filter
-        if let Some(ref filter_type) = filter {
-            let event_type: Option<web_builder_agent::trust_pack::audit_trail::AuditEventType> =
-                serde_json::from_str(&format!("\"{filter_type}\"")).ok();
-            if let Some(et) = event_type {
-                events = web_builder_agent::trust_pack::audit_trail::filter_by_type(&events, &et);
-            }
-        }
-
-        // Apply search
-        if let Some(ref query) = search {
-            events = web_builder_agent::trust_pack::audit_trail::search_events(&events, query);
-        }
-
-        serde_json::to_string(&events).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_get_audit_trail() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_get_audit_trail",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Export audit trail as CSV or JSON.
     #[tauri::command]
-    fn builder_export_audit_trail(project_id: String, format: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let state = web_builder_agent::project::load_project_state(&project_dir)
-            .unwrap_or_else(|_| web_builder_agent::project::create_project(&project_id, ""));
-
-        let events =
-            web_builder_agent::trust_pack::audit_trail::collect_audit_trail(&project_dir, &state);
-
-        match format.as_str() {
-            "csv" => Ok(web_builder_agent::trust_pack::audit_trail::export_csv(
-                &events,
-            )),
-            "json" => Ok(web_builder_agent::trust_pack::audit_trail::export_json(
-                &events,
-            )),
-            _ => Err(format!("unknown format: {format}")),
-        }
+    pub(crate) fn builder_export_audit_trail() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_export_audit_trail",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     /// Verify a build manifest's Ed25519 signature.
@@ -7798,113 +4933,28 @@ pub mod runtime {
 
     // ── Phase 7B: Deploy History Commands ────────────────────────────────
 
-    /// Get the full deploy history for a project.
     #[tauri::command]
-    fn builder_deploy_history(project_id: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-        let history = web_builder_agent::deploy::history::load_history(&project_dir);
-        serde_json::to_string(&history.all_newest_first()).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_deploy_history() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_deploy_history",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Compute diff between two deploys.
     #[tauri::command]
-    fn builder_deploy_diff(
-        project_id: String,
-        from_id: String,
-        to_id: String,
-    ) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-        let history = web_builder_agent::deploy::history::load_history(&project_dir);
-        let diff = history
-            .diff(&from_id, &to_id)
-            .ok_or_else(|| "deploy entries not found".to_string())?;
-        serde_json::to_string(&diff).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_deploy_diff() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_deploy_diff",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Rollback to any previous deploy by history entry ID.
     #[tauri::command]
-    async fn builder_deploy_rollback_to(
-        project_id: String,
-        entry_id: String,
-    ) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-
-        let mut history = web_builder_agent::deploy::history::load_history(&project_dir);
-
-        let target = history
-            .get(&entry_id)
-            .ok_or_else(|| format!("entry not found: {entry_id}"))?
-            .clone();
-
-        // Load credentials
-        let creds = web_builder_agent::deploy::credentials::load_credentials(&target.provider)
-            .map_err(|e| format!("credentials: {e}"))?
-            .ok_or_else(|| format!("No credentials for {}", target.provider))?;
-
-        let client = reqwest::Client::new();
-        let gov = web_builder_agent::deploy::DeployGovernance {
-            agent_id: SYSTEM_UUID,
-            capabilities: vec!["deploy.execute".into()],
-            fuel_budget_usd: 10.0,
-        };
-
-        // Rollback via provider
-        let result = match target.provider.as_str() {
-            "netlify" => web_builder_agent::deploy::netlify::rollback(
-                &target.site_id,
-                &target.deploy_id,
-                &creds,
-                &client,
-                &gov,
-            )
-            .await
-            .map_err(|e| format!("rollback: {e}"))?,
-            "cloudflare" => web_builder_agent::deploy::cloudflare::rollback(
-                &target.site_id,
-                &target.deploy_id,
-                &creds,
-                &client,
-                &gov,
-            )
-            .await
-            .map_err(|e| format!("rollback: {e}"))?,
-            "vercel" => web_builder_agent::deploy::vercel::rollback(
-                &target.site_id,
-                &target.deploy_id,
-                &creds,
-                &client,
-                &gov,
-            )
-            .await
-            .map_err(|e| format!("rollback: {e}"))?,
-            other => return Err(format!("Unknown provider: {other}")),
-        };
-
-        // Update history
-        let current_id = history.current().map(|e| e.id.clone());
-        if let Some(from) = current_id {
-            history.record_rollback(&from, &entry_id);
-        }
-        let _ = web_builder_agent::deploy::history::save_history(&project_dir, &history);
-
-        serde_json::to_string(&serde_json::json!({
-            "deploy_id": result.deploy_id,
-            "url": result.url,
-            "provider": result.provider,
-        }))
-        .map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_deploy_rollback_to() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_deploy_rollback_to",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     /// Generate a QR code SVG for a URL.
@@ -7913,48 +4963,20 @@ pub mod runtime {
         web_builder_agent::deploy::qr::generate_qr_svg(&url, 200).map_err(|e| format!("{e}"))
     }
 
-    /// Get share info for the current live deploy.
     #[tauri::command]
-    fn builder_deploy_share_info(project_id: String) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-        let history = web_builder_agent::deploy::history::load_history(&project_dir);
-        let live = history
-            .current()
-            .ok_or_else(|| "No live deploy found".to_string())?;
-
-        let qr_svg =
-            web_builder_agent::deploy::qr::generate_qr_svg(&live.url, 200).unwrap_or_default();
-
-        let info = serde_json::json!({
-            "url": live.url,
-            "qr_svg": qr_svg,
-            "provider": live.provider,
-            "deployed_at": live.timestamp,
-            "build_hash": live.build_hash,
-            "is_current": true,
-        });
-        serde_json::to_string(&info).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_deploy_share_info() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_deploy_share_info",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
-    /// Check deploy drift (current build vs live deploy).
     #[tauri::command]
-    fn builder_deploy_drift(
-        project_id: String,
-        current_build_hash: String,
-    ) -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let project_dir = std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("builds")
-            .join(&project_id);
-        let history = web_builder_agent::deploy::history::load_history(&project_dir);
-        let drift =
-            web_builder_agent::deploy::history::check_deploy_drift(&current_build_hash, &history);
-        serde_json::to_string(&drift).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_deploy_drift() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_deploy_drift",
+            crate::phase0_surface::Closure::LegacyBuilder,
+        ))
     }
 
     // ── Phase 16: Self-Improving Builder Commands ──────���─────────────────
@@ -8210,37 +5232,27 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn airgap_create_bundle(
-        state: tauri::State<'_, AppState>,
-        target_os: String,
-        target_arch: String,
-        output_path: String,
-        components: Option<String>,
-    ) -> Result<String, String> {
-        super::airgap_create_bundle(
-            state.inner(),
-            target_os,
-            target_arch,
-            output_path,
-            components,
-        )
+    pub(crate) fn airgap_create_bundle() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "airgap_create_bundle",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn airgap_validate_bundle(
-        state: tauri::State<'_, AppState>,
-        bundle_path: String,
-    ) -> Result<String, String> {
-        super::airgap_validate_bundle(state.inner(), bundle_path)
+    pub(crate) fn airgap_validate_bundle() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "airgap_validate_bundle",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn airgap_install_bundle(
-        state: tauri::State<'_, AppState>,
-        bundle_path: String,
-        install_dir: String,
-    ) -> Result<String, String> {
-        super::airgap_install_bundle(state.inner(), bundle_path, install_dir)
+    pub(crate) fn airgap_install_bundle() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "airgap_install_bundle",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
@@ -8358,12 +5370,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn analyze_media_file(
-        state: tauri::State<'_, AppState>,
-        path: String,
-        query: String,
-    ) -> Result<String, String> {
-        super::analyze_media_file(state.inner(), path, query)
+    pub(crate) fn analyze_media_file() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "analyze_media_file",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
@@ -8840,53 +5851,51 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn file_manager_list(
-        state: tauri::State<'_, AppState>,
-        path: String,
-    ) -> Result<String, String> {
-        super::file_manager_list(state.inner(), path)
+    pub(crate) fn file_manager_list() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "file_manager_list",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn file_manager_read(
-        state: tauri::State<'_, AppState>,
-        path: String,
-    ) -> Result<String, String> {
-        super::file_manager_read(state.inner(), path)
+    pub(crate) fn file_manager_read() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "file_manager_read",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn file_manager_write(
-        state: tauri::State<'_, AppState>,
-        path: String,
-        content: String,
-    ) -> Result<String, String> {
-        super::file_manager_write(state.inner(), path, content)
+    pub(crate) fn file_manager_write() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "file_manager_write",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn file_manager_create_dir(
-        state: tauri::State<'_, AppState>,
-        path: String,
-    ) -> Result<String, String> {
-        super::file_manager_create_dir(state.inner(), path)
+    pub(crate) fn file_manager_create_dir() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "file_manager_create_dir",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn file_manager_delete(
-        state: tauri::State<'_, AppState>,
-        path: String,
-    ) -> Result<String, String> {
-        super::file_manager_delete(state.inner(), path)
+    pub(crate) fn file_manager_delete() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "file_manager_delete",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn file_manager_rename(
-        state: tauri::State<'_, AppState>,
-        from: String,
-        to: String,
-    ) -> Result<String, String> {
-        super::file_manager_rename(state.inner(), from, to)
+    pub(crate) fn file_manager_rename() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "file_manager_rename",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
@@ -8896,43 +5905,43 @@ pub mod runtime {
 
     // ── Database Manager commands ──
     #[tauri::command]
-    fn db_connect(
-        state: tauri::State<'_, AppState>,
-        connection_string: String,
-    ) -> Result<String, String> {
-        super::db_connect(state.inner(), connection_string)
+    pub(crate) fn db_connect() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "db_connect",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn db_execute_query(
-        state: tauri::State<'_, AppState>,
-        connection_string: String,
-        query: String,
-    ) -> Result<String, String> {
-        super::db_execute_query(state.inner(), connection_string, query)
+    pub(crate) fn db_execute_query() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "db_execute_query",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn db_list_tables(
-        state: tauri::State<'_, AppState>,
-        connection_string: String,
-    ) -> Result<String, String> {
-        super::db_list_tables(state.inner(), connection_string)
+    pub(crate) fn db_list_tables() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "db_list_tables",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn db_export_table(
-        state: tauri::State<'_, AppState>,
-        connection_string: String,
-        table_name: String,
-        format: String,
-    ) -> Result<String, String> {
-        super::db_export_table(state.inner(), connection_string, table_name, format)
+    pub(crate) fn db_export_table() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "db_export_table",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn db_disconnect(state: tauri::State<'_, AppState>, db_path: String) -> Result<(), String> {
-        super::db_disconnect(state.inner(), db_path)
+    pub(crate) fn db_disconnect() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "db_disconnect",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     // ── API Client commands ──
@@ -9654,8 +6663,11 @@ pub mod runtime {
     // ── Cognitive Filesystem ──
 
     #[tauri::command]
-    fn cogfs_index_file(path: String) -> Result<(), String> {
-        super::cogfs_index_file(path)
+    pub(crate) fn cogfs_index_file() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "cogfs_index_file",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
@@ -9669,8 +6681,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn cogfs_watch_directory(path: String) -> Result<(), String> {
-        super::cogfs_watch_directory(path)
+    pub(crate) fn cogfs_watch_directory() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "cogfs_watch_directory",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
@@ -10400,11 +7415,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn backup_restore(
-        state: tauri::State<'_, AppState>,
-        archive_path: String,
-    ) -> Result<String, String> {
-        super::backup_restore(state.inner(), archive_path)
+    pub(crate) fn backup_restore() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "backup_restore",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
@@ -10413,11 +7428,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn backup_verify(
-        state: tauri::State<'_, AppState>,
-        archive_path: String,
-    ) -> Result<String, String> {
-        super::backup_verify(state.inner(), archive_path)
+    pub(crate) fn backup_verify() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "backup_verify",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     // ── Admin Console Commands ──

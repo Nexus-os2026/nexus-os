@@ -62,7 +62,7 @@ impl Governed {
         let audit = recorder(&events);
         let plan = run_plan(&authority, Arc::clone(&audit), PROMPT, |_| Ok(generated())).unwrap();
         provision_planned_workspace(&authority, &plan.project_id, PROMPT, NAME, audit).unwrap();
-        let root = PathBuf::from(&plan.project_dir);
+        let root = authority.root.join(&plan.project_id);
         assert!(root.to_str().unwrap().contains(' '));
         Self {
             base,

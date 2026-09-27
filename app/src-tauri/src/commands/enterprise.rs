@@ -133,30 +133,6 @@ pub(crate) fn backup_create(
     serde_json::to_string(&meta).map_err(|e| format!("serialize: {e}"))
 }
 
-pub(crate) fn backup_restore(state: &AppState, archive_path: String) -> Result<String, String> {
-    state.check_rate(nexus_kernel::rate_limit::RateCategory::AdminOperation)?;
-    state.validate_path_input(&archive_path)?;
-    use nexus_kernel::backup;
-    use nexus_kernel::crypto::EncryptionKey;
-
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::UserAction,
-        json!({"action": "backup_restore", "archive": &archive_path}),
-    );
-
-    let data_dir = nexus_data_dir()?;
-    let path = std::path::Path::new(&archive_path);
-
-    // Try loading encryption key (might be needed for encrypted backups).
-    let enc_key = EncryptionKey::from_env().ok();
-
-    let result = backup::restore_backup(path, &data_dir, enc_key.as_ref())
-        .map_err(|e| format!("restore failed: {e}"))?;
-
-    serde_json::to_string(&result).map_err(|e| format!("serialize: {e}"))
-}
-
 pub(crate) fn backup_list(_state: &AppState) -> Result<String, String> {
     use nexus_kernel::backup;
 
@@ -165,20 +141,6 @@ pub(crate) fn backup_list(_state: &AppState) -> Result<String, String> {
     let backups = backup::list_backups(&backup_dir).map_err(|e| format!("list failed: {e}"))?;
 
     serde_json::to_string(&backups).map_err(|e| format!("serialize: {e}"))
-}
-
-pub(crate) fn backup_verify(_state: &AppState, archive_path: String) -> Result<String, String> {
-    use nexus_kernel::backup;
-    use nexus_kernel::crypto::EncryptionKey;
-
-    let path = std::path::Path::new(&archive_path);
-    // Optional: encryption key may not be set; restore proceeds without decryption
-    let enc_key = EncryptionKey::from_env().ok();
-
-    let result =
-        backup::verify_backup(path, enc_key.as_ref()).map_err(|e| format!("verify failed: {e}"))?;
-
-    serde_json::to_string(&result).map_err(|e| format!("serialize: {e}"))
 }
 
 // ── Admin Console Functions (backed by enterprise crates) ──
