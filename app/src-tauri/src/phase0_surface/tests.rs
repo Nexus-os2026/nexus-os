@@ -501,6 +501,11 @@ const NEXUS_CODE_CLI_AGENT_ENTRY_POINTS: &[&str] = &[
     "App::new(",
     "check_claude_cli_available(",
     "ClaudeCliProvider",
+    // P0-002C5C: these no-CLI forms still read the working directory's
+    // NEXUSCODE.md and .nxrc; the desktop uses the `_for_desktop` forms.
+    "load_without_cli_agents(",
+    "diagnose_without_cli_agents(",
+    "new_without_cli_agents(",
 ];
 
 /// Whether `text` names `path` as a whole identifier path, not as the tail of
@@ -548,12 +553,58 @@ fn desktop_sources_start_no_external_cli_agent() {
     assert!(!swarm.contains(concat!("CodexCli", "Provider")));
     let bridge = include_str!("../nx_bridge/mod.rs");
     for required in [
-        "NxConfig::load_without_cli_agents()",
-        "setup::diagnose_without_cli_agents()",
-        "App::new_without_cli_agents(",
+        "NxConfig::load_for_desktop(",
+        "setup::diagnose_for_desktop()",
+        "App::new_for_desktop(",
+        "nexus_state_path(\"nexus-code/config.toml\")",
+        "nexus_state_path(\"nexus-code/memory.json\")",
     ] {
         assert!(bridge.contains(required), "nx bridge: {required}");
     }
+}
+
+/// P0-002C5C: the desktop's Nexus Code entry points read nothing from the
+/// process working directory, a project or git ancestor, or the platform
+/// configuration and data directories. (The standalone `nx` terminal keeps its
+/// project-local files through the other entry points.)
+#[test]
+fn desktop_nexus_code_takes_no_configuration_from_the_working_directory() {
+    let config = production_text(include_str!("../../../../nexus-code/src/config.rs"));
+    let setup = production_text(include_str!("../../../../nexus-code/src/setup.rs"));
+    let app = production_text(include_str!("../../../../nexus-code/src/app.rs"));
+    let body = |src: &str, name: &str| {
+        let at = src.find(name).unwrap_or_else(|| panic!("{name}"));
+        let open = at + src[at..].find('{').unwrap();
+        without_whitespace(&src[open + 1..block_end(src, open) - 1])
+    };
+    let load = body(&config, "pub fn load_for_desktop(");
+    let new = body(&app, "pub fn new_for_desktop(");
+    for (what, text) in [("load_for_desktop", &load), ("new_for_desktop", &new)] {
+        for forbidden in [
+            "NEXUSCODE",
+            "nxrc",
+            "current_dir",
+            "dirs::",
+            "config_dir",
+            "data_dir",
+            "Path::new(\"",
+            "load_with(",
+            "build(",
+        ] {
+            assert!(!text.contains(forbidden), "{what}: {forbidden}: {text}");
+        }
+    }
+    assert!(load.contains("auto_detect_provider(false)"), "{load}");
+    assert!(load.contains("filter(|path|path.is_absolute())"), "{load}");
+    assert!(
+        new.contains("build_with(config,false,memory_path)"),
+        "{new}"
+    );
+    assert_eq!(
+        body(&setup, "pub fn diagnose_for_desktop("),
+        "diagnose_with(false,false)"
+    );
+    assert!(without_whitespace(&setup).contains("has_nexuscode_md:project&&"));
 }
 
 /// Ambient roots no desktop production source may use, with the only approved

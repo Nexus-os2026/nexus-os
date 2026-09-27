@@ -43,7 +43,36 @@ impl App {
         Self::build(config, false)
     }
 
+    /// The Nexus Code application embedded in the Nexus OS desktop
+    /// (P0-002C5C): no external CLI agent is registered, and memory persists
+    /// only at the absolute path the backend chooses (the desktop's validated
+    /// application state), never the platform data directory. Without one,
+    /// memory starts empty and is not saved.
+    pub fn new_for_desktop(
+        config: NxConfig,
+        memory_path: Option<std::path::PathBuf>,
+    ) -> Result<Self, NxError> {
+        let memory_path = memory_path
+            .filter(|path| path.is_absolute())
+            .unwrap_or_default();
+        Self::build_with(config, false, memory_path)
+    }
+
     fn build(config: NxConfig, cli_agents: bool) -> Result<Self, NxError> {
+        // P0-002C5B: an absolute data directory or none; never the working
+        // directory. With none, memory starts empty and is not saved.
+        let memory_path = dirs::data_dir()
+            .filter(|dir| dir.is_absolute())
+            .map(|dir| dir.join("nexus-code").join("memory.json"))
+            .unwrap_or_default();
+        Self::build_with(config, cli_agents, memory_path)
+    }
+
+    fn build_with(
+        config: NxConfig,
+        cli_agents: bool,
+        memory_path: std::path::PathBuf,
+    ) -> Result<Self, NxError> {
         let governance = GovernanceKernel::new(config.fuel_budget)?;
 
         // Build provider registry
@@ -81,12 +110,6 @@ impl App {
             "You are Nexus Code, a governed terminal coding agent.",
         );
 
-        // P0-002C5B: an absolute data directory or none; never the working
-        // directory. With none, memory starts empty and is not saved.
-        let memory_path = dirs::data_dir()
-            .filter(|dir| dir.is_absolute())
-            .map(|dir| dir.join("nexus-code").join("memory.json"))
-            .unwrap_or_default();
         let memory = crate::persistence::memory::MemoryStore::load(memory_path);
 
         let mcp_manager = crate::mcp::McpManager::new();

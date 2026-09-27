@@ -43,7 +43,7 @@ pub fn default_model_for_provider(provider: &str) -> &'static str {
 ///
 /// Priority: anthropic > openai > ollama > google > openrouter > groq > deepseek
 fn detect_best_provider() -> Option<(String, String)> {
-    let status = nexus_code::setup::diagnose_without_cli_agents();
+    let status = nexus_code::setup::diagnose_for_desktop();
     let priority = [
         "anthropic",
         "openai",
@@ -66,19 +66,22 @@ fn detect_best_provider() -> Option<(String, String)> {
 
 /// Initialize the nx bridge. Called during Tauri app setup.
 ///
-/// Loads config from NEXUSCODE.md / env / config files, then
-/// auto-detects the best available provider if no explicit
-/// provider is set (or if the configured provider isn't available).
+/// Loads the desktop's Nexus Code configuration, then auto-detects the best
+/// available provider if no explicit provider is set (or if the configured
+/// provider isn't available).
 ///
 /// P0-002C5A: the desktop never runs, prefers or registers an external CLI
-/// agent. Configuration, diagnostics and the provider registry all use their
-/// `_without_cli_agents` forms, so no `claude` process is started here.
+/// agent. P0-002C5C: nothing in the process working directory configures it
+/// either (no `NEXUSCODE.md`, `.nxrc` or project ancestor): configuration,
+/// diagnostics and the application all use their `_for_desktop` forms, with
+/// an optional config file and memory under the validated identity home.
 pub fn init_nx_state() -> Result<NxState, String> {
-    let mut config = nexus_code::config::NxConfig::load_without_cli_agents()
+    let config_file = nexus_kernel::identity_home::nexus_state_path("nexus-code/config.toml").ok();
+    let mut config = nexus_code::config::NxConfig::load_for_desktop(config_file.as_deref())
         .map_err(|e| format!("Failed to load NxConfig: {}", e))?;
 
     // Auto-detect provider if the configured one isn't actually available
-    let status = nexus_code::setup::diagnose_without_cli_agents();
+    let status = nexus_code::setup::diagnose_for_desktop();
     let configured_ok = status
         .configured_providers
         .iter()
@@ -96,7 +99,8 @@ pub fn init_nx_state() -> Result<NxState, String> {
         }
     }
 
-    let app = nexus_code::app::App::new_without_cli_agents(config)
+    let memory = nexus_kernel::identity_home::nexus_state_path("nexus-code/memory.json").ok();
+    let app = nexus_code::app::App::new_for_desktop(config, memory)
         .map_err(|e| format!("Failed to initialize Nexus Code: {}", e))?;
 
     eprintln!(

@@ -57,6 +57,29 @@ impl NxConfig {
         Self::load_with(false)
     }
 
+    /// Configuration for Nexus Code embedded in the Nexus OS desktop
+    /// (P0-002C5C). The desktop is not a project shell, so nothing in the
+    /// process working directory configures it: no `NEXUSCODE.md`, no `.nxrc`,
+    /// no project or git ancestor, and no platform configuration directory.
+    /// It is the defaults, provider auto-detection without external CLI
+    /// agents, an optional absolute configuration file chosen by the backend
+    /// (the desktop passes one under its validated application state), and the
+    /// `NX_*` provider settings from the environment. The standalone `nx`
+    /// terminal keeps [`NxConfig::load`] and its project-local files.
+    pub fn load_for_desktop(config_file: Option<&Path>) -> Result<Self, NxError> {
+        let mut config = NxConfig::default();
+        config.auto_detect_provider(false);
+        if let Some(path) = config_file.filter(|path| path.is_absolute()) {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                if let Ok(file_config) = toml::from_str::<NxConfig>(&content) {
+                    config.merge_from(&file_config);
+                }
+            }
+        }
+        config.apply_env_overrides();
+        Ok(config)
+    }
+
     fn load_with(cli_agents: bool) -> Result<Self, NxError> {
         let mut config = NxConfig::default();
 
@@ -94,20 +117,23 @@ impl NxConfig {
             }
         }
 
-        // Environment variable overrides
+        config.apply_env_overrides();
+        Ok(config)
+    }
+
+    /// Environment variable overrides: provider settings, not locations.
+    fn apply_env_overrides(&mut self) {
         if let Ok(provider) = std::env::var("NX_PROVIDER") {
-            config.default_provider = provider;
+            self.default_provider = provider;
         }
         if let Ok(model) = std::env::var("NX_MODEL") {
-            config.default_model = model;
+            self.default_model = model;
         }
         if let Ok(fuel) = std::env::var("NX_FUEL_BUDGET") {
             if let Ok(budget) = fuel.parse::<u64>() {
-                config.fuel_budget = budget;
+                self.fuel_budget = budget;
             }
         }
-
-        Ok(config)
     }
 
     /// Auto-detect the best available provider.

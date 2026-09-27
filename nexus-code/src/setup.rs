@@ -19,7 +19,7 @@ pub const CLI_AGENT_UNAVAILABLE: &str =
 
 /// Run a full setup diagnostic.
 pub fn diagnose() -> SetupStatus {
-    diagnose_with(true)
+    diagnose_with(true, true)
 }
 
 /// Run the setup diagnostic without running any external CLI agent.
@@ -27,10 +27,17 @@ pub fn diagnose() -> SetupStatus {
 /// The Claude CLI is reported unavailable instead of being probed. The Nexus
 /// OS desktop uses this: it never runs an external CLI agent (P0-002C5A).
 pub fn diagnose_without_cli_agents() -> SetupStatus {
-    diagnose_with(false)
+    diagnose_with(false, true)
 }
 
-fn diagnose_with(cli_agents: bool) -> SetupStatus {
+/// The setup diagnostic for the Nexus OS desktop (P0-002C5C): no external CLI
+/// agent is run, and the process working directory is not inspected, because
+/// the desktop has no project `NEXUSCODE.md`.
+pub fn diagnose_for_desktop() -> SetupStatus {
+    diagnose_with(false, false)
+}
+
+fn diagnose_with(cli_agents: bool, project: bool) -> SetupStatus {
     let provider_checks = [
         ("anthropic", "ANTHROPIC_API_KEY"),
         ("openai", "OPENAI_API_KEY"),
@@ -79,7 +86,7 @@ fn diagnose_with(cli_agents: bool) -> SetupStatus {
         unconfigured_providers: unconfigured,
         has_git: check_command_exists("git"),
         has_ripgrep: check_command_exists("rg"),
-        has_nexuscode_md: std::path::Path::new("NEXUSCODE.md").exists(),
+        has_nexuscode_md: project && std::path::Path::new("NEXUSCODE.md").exists(),
     }
 }
 
