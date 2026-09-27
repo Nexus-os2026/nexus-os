@@ -186,24 +186,19 @@ impl OllamaProvider {
     /// Uses a fast TCP connect probe (200ms timeout) instead of a full HTTP request,
     /// so a dead Ollama is detected in milliseconds, not seconds.
     pub fn health_check(&self) -> Result<bool, AgentError> {
-        // Fast TCP probe: try connecting to the port. If Ollama isn't running,
-        // this fails in < 1ms instead of the 5s curl timeout.
-        let addr = self
-            .base_url
-            .trim_start_matches("http://")
-            .trim_start_matches("https://")
-            .trim_end_matches('/');
-        let socket_addr: std::net::SocketAddr = addr
-            .parse()
-            .or_else(|_| {
-                // If it's a hostname without port, try with default port
-                format!("{addr}:11434")
-                    .parse()
-                    .or_else(|_| "127.0.0.1:11434".parse())
-            })
-            .map_err(|e| {
-                AgentError::SupervisorError(format!("invalid Ollama address '{addr}': {e}"))
-            })?;
+        // P0-002C5C: the base URL must be a governed http(s) URL. The probe
+        // connects to its IP-literal host (port 11434 unless given), or to the
+        // default local Ollama address for a host name, and sends nothing.
+        let url = nexus_kernel::governed_http::http_url(&self.base_url).map_err(|_| {
+            AgentError::SupervisorError("invalid Ollama address: not an http(s) URL".to_string())
+        })?;
+        let host = url.host_str().unwrap_or_default();
+        let socket_addr = host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<std::net::IpAddr>()
+            .map(|ip| std::net::SocketAddr::new(ip, url.port().unwrap_or(11434)))
+            .unwrap_or_else(|_| std::net::SocketAddr::from(([127, 0, 0, 1], 11434)));
 
         match std::net::TcpStream::connect_timeout(
             &socket_addr,
@@ -211,7 +206,7 @@ impl OllamaProvider {
         ) {
             Ok(_) => Ok(true),
             Err(e) => Err(AgentError::SupervisorError(format!(
-                "Ollama not reachable at {addr}: {e}"
+                "Ollama not reachable at {socket_addr}: {e}"
             ))),
         }
     }
@@ -622,6 +617,35 @@ impl LlmProvider for OllamaProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p0_002c5c_the_health_probe_needs_a_governed_url_and_sends_nothing() {
+        for base in [
+            "file:///etc/passwd",
+            "gopher://127.0.0.1:11434",
+            "http://user@127.0.0.1:11434",
+            "http://127.0.0.1:11434\n",
+            "127.0.0.1:11434",
+            "",
+        ] {
+            let error = OllamaProvider::new(base).health_check().unwrap_err();
+            assert!(
+                error.to_string().contains("not an http(s) URL"),
+                "{base:?}: {error}"
+            );
+        }
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let provider = OllamaProvider::new(&format!("http://127.0.0.1:{port}/"));
+        assert!(provider.health_check().unwrap());
+        // The probe connected and sent nothing.
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let mut buf = [0u8; 1];
+        assert_eq!(std::io::Read::read(&mut stream, &mut buf).unwrap(), 0);
+    }
 
     #[test]
     fn vision_request_uses_ollama_images_format() {
