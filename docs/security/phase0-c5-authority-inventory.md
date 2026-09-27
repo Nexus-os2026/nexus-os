@@ -232,11 +232,24 @@ These implementations stay compiled, in their crates, with no desktop production
 - the nexus-code and computer-use agent loops (the nexus-code Claude CLI provider and screen-analysis tool are never registered by the desktop);
 - the content pipeline;
 - Time Machine file recording;
-- the full default actuator registry.
+- the full default actuator registry;
+- the dormant process-, code- and OS-input-bearing APIs of the desktop's dependency closure:
+  - the coder terminal, test runner and fix loop;
+  - the nexus-code agent module, its tools, and direct execution of a registered tool;
+  - computer-use vision (it runs the Claude CLI);
+  - SDK typed tools and the WASM agent sandboxes;
+  - the factory pipeline's build, test, deploy and full-pipeline shell runs (the desktop reads only its in-memory project list and build history);
+  - the shell, filesystem, code, Docker, browser, computer-use, input, screen-capture, API, image, speech and self-evolution actuators.
 
 The kernel action executor may be constructed only once in desktop production: as the Phase Zero agent executor, with an empty workspace root. Separately, the browser agent's Python bridge is never started by its session code.
 
-Other latent D (no desktop caller, not registered) remains as recorded by the audit: dormant raw-path storage APIs, the nexus-code bash and test-runner tools (capability never granted), the kernel self-evolution, governance-policy and agent-lifecycle actuators (not routed), and the out-of-closure developer tools. The `nexus-swarm` healthcheck binary is a developer tool, not part of the desktop, and it still registers the swarm Codex CLI provider. Reaching any of them from desktop production requires a new registered command or agent route, which the C5C guard will inventory.
+Other latent D remains as recorded by the audit. It has no desktop caller, is not registered, and is not named by the guard:
+
+- dormant raw-path storage APIs;
+- the kernel governance-policy, agent-lifecycle and cognitive-parameter actuators, which are not routed and change kernel state rather than files or processes;
+- the out-of-closure developer tools.
+
+The `nexus-swarm` healthcheck binary is a developer tool, not part of the desktop, and it still registers the swarm Codex CLI provider. Reaching any of these from desktop production requires a new registered command or agent route, which the C5C guard will inventory.
 
 ## 7. Final-gate review items (not fixed in C5A)
 

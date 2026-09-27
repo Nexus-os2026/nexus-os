@@ -697,6 +697,72 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
         "ActuatorRegistry::with_defaults",
         "full actuator set including shell, code and docker",
     ),
+    // Dormant process-, code- and OS-input-bearing APIs in the desktop's
+    // dependency closure. Nothing in desktop production calls them; each is
+    // named so that a new wiring must be classified first.
+    (
+        "coder_agent::terminal",
+        "coder terminal runs raw command text through the shell",
+    ),
+    (
+        "coder_agent::test_runner",
+        "coder test runner runs shell text in a project directory",
+    ),
+    (
+        "coder_agent::fix_loop",
+        "coder fix loop runs tests through the shell",
+    ),
+    (
+        "nexus_code::agent",
+        "nexus-code agent loop and sub-agents (process cwd root)",
+    ),
+    (
+        "nexus_code::tools",
+        "nexus-code bash, file, git, test-runner and sub-agent tools",
+    ),
+    (
+        "tool_registry.get(",
+        "direct execution of a registered nexus-code tool",
+    ),
+    ("VisionAnalyzer", "computer-use vision runs the Claude CLI"),
+    (
+        "nexus_sdk::typed_tools",
+        "SDK typed tools run npm, python and pip",
+    ),
+    ("WasmtimeSandbox", "WASM agents with host tool functions"),
+    ("WasmAgent", "WASM agents with host tool functions"),
+    ("ShadowSandbox", "speculative WASM sandbox with host tools"),
+    (
+        ".build_project(",
+        "factory pipeline runs build commands through the shell",
+    ),
+    (
+        ".test_project(",
+        "factory pipeline runs test commands through the shell",
+    ),
+    (
+        ".deploy_project(",
+        "factory pipeline runs deploy commands through the shell",
+    ),
+    (
+        ".run_full_pipeline(",
+        "factory pipeline runs its commands through the shell",
+    ),
+    ("GovernedShell", "shell actuator"),
+    ("GovernedFilesystem", "workspace filesystem actuator"),
+    ("CodeExecuteActuator", "code execution actuator"),
+    ("DockerActuator", "docker actuator"),
+    ("BrowserActuator", "browser automation actuator (node)"),
+    ("ComputerUseActuator", "computer-use actuator"),
+    ("InputControlActuator", "OS input actuator"),
+    ("ScreenCaptureActuator", "screen capture actuator"),
+    (
+        "GovernedApiClient",
+        "API actuator (curl with caller URLs and bodies)",
+    ),
+    ("ImageGenActuator", "image generation actuator (process)"),
+    ("TtsActuator", "speech synthesis actuator (process)"),
+    ("SelfEvolutionActuator", "self-evolution actuator"),
 ];
 
 /// The only approved construction of the kernel action executor: the Phase
