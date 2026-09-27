@@ -367,20 +367,76 @@ pub fn validate_hf_repo(hf_repo: &str) -> Result<(), FlashError> {
 
 // ── ModelDownloader ────────────────────────────────────────────────
 
+/// The largest model file the backend downloads (P0-002C5C). A Hugging Face
+/// file is at most 50 GB; a larger transfer, whatever length the server
+/// declares, is refused and its partial file removed.
+pub const MAX_MODEL_FILE_BYTES: u64 = 64 * 1024 * 1024 * 1024;
+
+/// How long a transfer may deliver no data before it is abandoned. The
+/// partial file is kept for a later resume.
+const STALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Where downloads come from and how far they may go: Hugging Face and the
+/// backend bounds in production.
+struct DownloadLimits {
+    base_url: String,
+    max_file_bytes: u64,
+    stall_timeout: std::time::Duration,
+}
+
+impl Default for DownloadLimits {
+    fn default() -> Self {
+        Self {
+            base_url: "https://huggingface.co".to_string(),
+            max_file_bytes: MAX_MODEL_FILE_BYTES,
+            stall_timeout: STALL_TIMEOUT,
+        }
+    }
+}
+
+/// Follow at most ten redirects, each to an `https` URL.
+fn https_redirects() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= 10 {
+            attempt.error("too many redirects")
+        } else if attempt.url().scheme() != "https" {
+            attempt.error("redirect away from https")
+        } else {
+            attempt.follow()
+        }
+    })
+}
+
+fn too_large(max_file_bytes: u64) -> FlashError {
+    FlashError::DownloadError(format!(
+        "model file exceeds the {max_file_bytes}-byte maximum"
+    ))
+}
+
 /// Downloads GGUF models from HuggingFace with resume support.
 pub struct ModelDownloader {
     storage: ModelStorage,
     client: reqwest::Client,
+    limits: DownloadLimits,
 }
 
 impl ModelDownloader {
     pub fn new(storage: ModelStorage) -> Self {
+        Self::with_limits(storage, DownloadLimits::default())
+    }
+
+    fn with_limits(storage: ModelStorage, limits: DownloadLimits) -> Self {
         let client = reqwest::Client::builder()
             .user_agent("NexusOS/9.3.0")
             .connect_timeout(std::time::Duration::from_secs(30))
+            .redirect(https_redirects())
             .build()
             .unwrap_or_default();
-        Self { storage, client }
+        Self {
+            storage,
+            client,
+            limits,
+        }
     }
 
     /// Access the underlying storage.
@@ -438,9 +494,10 @@ impl ModelDownloader {
         validate_hf_repo(hf_repo)?;
         let dest = self.storage.model_path(filename)?;
         let url = format!(
-            "https://huggingface.co/{}/resolve/main/{}",
-            hf_repo, filename
+            "{}/{}/resolve/main/{}",
+            self.limits.base_url, hf_repo, filename
         );
+        let max_file_bytes = self.limits.max_file_bytes;
         let part_path = self.storage.part_path(filename)?;
 
         // Already fully downloaded?
@@ -464,10 +521,15 @@ impl ModelDownloader {
             return build_local_model(filename, &dest);
         }
 
-        // Resume: check .part file
+        // Resume: check .part file. One already past the bound is removed.
         let mut downloaded_bytes: u64 = 0;
         if part_path.exists() {
             downloaded_bytes = std::fs::metadata(&part_path).map(|m| m.len()).unwrap_or(0);
+        }
+        if downloaded_bytes > max_file_bytes {
+            // Best-effort: the oversized partial file is discarded.
+            let _ = std::fs::remove_file(&part_path);
+            return Err(too_large(max_file_bytes));
         }
 
         // Best-effort: notify progress subscriber that download is starting
@@ -507,8 +569,15 @@ impl ModelDownloader {
             )));
         }
 
+        // A server that ignored the Range header sends the whole file: start
+        // over instead of appending it to the partial one.
+        let resumed = downloaded_bytes > 0 && response.status().as_u16() == 206;
+        if !resumed {
+            downloaded_bytes = 0;
+        }
+
         // Total size from Content-Range or Content-Length.
-        let total_bytes = if downloaded_bytes > 0 {
+        let total_bytes = if resumed {
             response
                 .headers()
                 .get("content-range")
@@ -522,10 +591,20 @@ impl ModelDownloader {
             response.content_length().unwrap_or(0)
         };
 
+        // A declared size past the bound is refused at once; a smaller or
+        // missing one is not trusted, and every chunk is checked below.
+        if total_bytes > max_file_bytes {
+            // Best-effort: the partial file cannot complete within the bound.
+            let _ = std::fs::remove_file(&part_path);
+            return Err(too_large(max_file_bytes));
+        }
+
         // Stream to .part file.
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
-            .append(true)
+            .write(true)
+            .append(resumed)
+            .truncate(!resumed)
             .open(&part_path)
             .await
             .map_err(|e| FlashError::DownloadError(format!("open part file: {e}")))?;
@@ -535,13 +614,32 @@ impl ModelDownloader {
         let start_time = std::time::Instant::now();
         let mut last_report = start_time;
 
-        while let Some(chunk_result) = stream.next().await {
-            let chunk =
-                chunk_result.map_err(|e| FlashError::DownloadError(format!("stream read: {e}")))?;
+        loop {
+            let chunk = match tokio::time::timeout(self.limits.stall_timeout, stream.next()).await {
+                Err(_) => {
+                    return Err(FlashError::DownloadError(
+                        "download stalled: no data received".to_string(),
+                    ))
+                }
+                Ok(None) => break,
+                Ok(Some(chunk)) => {
+                    chunk.map_err(|e| FlashError::DownloadError(format!("stream read: {e}")))?
+                }
+            };
+            // The bound applies to the bytes written, before they are written.
+            let Some(next) = downloaded_bytes
+                .checked_add(chunk.len() as u64)
+                .filter(|next| *next <= max_file_bytes)
+            else {
+                drop(file);
+                // Best-effort: the oversized partial file is discarded.
+                let _ = tokio::fs::remove_file(&part_path).await;
+                return Err(too_large(max_file_bytes));
+            };
             tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
                 .await
                 .map_err(|e| FlashError::DownloadError(format!("write: {e}")))?;
-            downloaded_bytes += chunk.len() as u64;
+            downloaded_bytes = next;
 
             // Report progress every 500ms.
             if last_report.elapsed() > std::time::Duration::from_millis(500) {
@@ -892,6 +990,227 @@ mod tests {
             vec![home.join(".nexus").join("models"), home.join("models")]
         );
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    // ── P0-002C5C: bounded downloads, against a loopback server ──
+
+    const MODEL: &str = "model-Q4_K_M.gguf";
+
+    /// A loopback server that answers one connection per scripted response
+    /// and records each request head. After answering it holds the connection
+    /// until the client closes it, so a response that stops early is a stall.
+    fn serve(responses: Vec<Vec<u8>>) -> (String, std::thread::JoinHandle<Vec<String>>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let handle = std::thread::spawn(move || {
+            let mut heads = Vec::new();
+            for response in responses {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut head = Vec::new();
+                let mut byte = [0u8; 1];
+                while !head.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                    head.push(byte[0]);
+                }
+                heads.push(String::from_utf8_lossy(&head).into_owned());
+                let _ = stream.write_all(&response);
+                let mut rest = [0u8; 256];
+                while matches!(stream.read(&mut rest), Ok(n) if n > 0) {}
+            }
+            heads
+        });
+        (base, handle)
+    }
+
+    fn response(status: &str, headers: &[&str], body: &[u8]) -> Vec<u8> {
+        let mut out = format!("HTTP/1.1 {status}\r\nConnection: close\r\n").into_bytes();
+        for header in headers {
+            out.extend_from_slice(format!("{header}\r\n").as_bytes());
+        }
+        out.extend_from_slice(b"\r\n");
+        out.extend_from_slice(body);
+        out
+    }
+
+    fn storage(label: &str) -> ModelStorage {
+        let dir =
+            std::env::temp_dir().join(format!("nexus-c5c-flash-{label}-{}", uuid::Uuid::new_v4()));
+        ModelStorage::with_dir(dir).unwrap()
+    }
+
+    fn download(storage: &ModelStorage, base_url: String) -> Result<LocalModel, FlashError> {
+        let downloader = ModelDownloader::with_limits(
+            ModelStorage::with_dir(storage.base_dir().to_path_buf()).unwrap(),
+            DownloadLimits {
+                base_url,
+                max_file_bytes: 1000,
+                stall_timeout: std::time::Duration::from_millis(300),
+            },
+        );
+        let (progress, _) = mpsc::channel(8);
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(downloader.download("org/repo", MODEL, progress))
+    }
+
+    fn error_text(result: Result<LocalModel, FlashError>) -> String {
+        match result {
+            Ok(model) => panic!("download succeeded: {model:?}"),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    #[test]
+    fn p0_002c5c_an_undeclared_oversized_body_is_stopped_and_removed() {
+        let storage = storage("undeclared");
+        let (base, server) = serve(vec![response("200 OK", &[], &[7u8; 5000])]);
+        let error = error_text(download(&storage, base));
+        assert!(error.contains("exceeds the 1000-byte maximum"), "{error}");
+        server.join().unwrap();
+        assert!(!storage.base_dir().join(MODEL).exists());
+        assert!(!storage.base_dir().join(format!("{MODEL}.part")).exists());
+        std::fs::remove_dir_all(storage.base_dir()).unwrap();
+    }
+
+    #[test]
+    fn p0_002c5c_a_declared_oversized_body_is_refused_before_any_write() {
+        let storage = storage("declared");
+        let (base, server) = serve(vec![response(
+            "200 OK",
+            &["Content-Length: 5000"],
+            &[7u8; 5000],
+        )]);
+        let error = error_text(download(&storage, base));
+        assert!(error.contains("exceeds the 1000-byte maximum"), "{error}");
+        server.join().unwrap();
+        assert_eq!(std::fs::read_dir(storage.base_dir()).unwrap().count(), 0);
+        std::fs::remove_dir_all(storage.base_dir()).unwrap();
+    }
+
+    #[test]
+    fn p0_002c5c_downloads_within_the_bound_complete() {
+        let storage = storage("within");
+        let (base, server) = serve(vec![response(
+            "200 OK",
+            &["Content-Length: 800"],
+            &[7u8; 800],
+        )]);
+        let model = download(&storage, base).unwrap();
+        server.join().unwrap();
+        assert_eq!(model.file_size_bytes, 800);
+        assert_eq!(
+            std::fs::read(storage.base_dir().join(MODEL)).unwrap(),
+            vec![7u8; 800]
+        );
+        std::fs::remove_dir_all(storage.base_dir()).unwrap();
+    }
+
+    #[test]
+    fn p0_002c5c_resumes_append_only_a_partial_response() {
+        // A server that ignores the Range header sends the whole file, which
+        // replaces the partial one instead of being appended to it.
+        let storage = storage("restart");
+        let part = storage.base_dir().join(format!("{MODEL}.part"));
+        std::fs::write(&part, [1u8; 300]).unwrap();
+        let (base, server) = serve(vec![response(
+            "200 OK",
+            &["Content-Length: 800"],
+            &[2u8; 800],
+        )]);
+        download(&storage, base).unwrap();
+        let heads = server.join().unwrap();
+        assert!(
+            heads[0].to_ascii_lowercase().contains("range: bytes=300-"),
+            "{heads:?}"
+        );
+        assert_eq!(
+            std::fs::read(storage.base_dir().join(MODEL)).unwrap(),
+            vec![2u8; 800]
+        );
+        std::fs::remove_dir_all(storage.base_dir()).unwrap();
+
+        // A partial response continues the partial file.
+        let storage = self::storage("resume");
+        let part = storage.base_dir().join(format!("{MODEL}.part"));
+        std::fs::write(&part, [1u8; 300]).unwrap();
+        let (base, server) = serve(vec![response(
+            "206 Partial Content",
+            &["Content-Range: bytes 300-799/800", "Content-Length: 500"],
+            &[2u8; 500],
+        )]);
+        download(&storage, base).unwrap();
+        server.join().unwrap();
+        let mut expected = vec![1u8; 300];
+        expected.extend_from_slice(&[2u8; 500]);
+        assert_eq!(
+            std::fs::read(storage.base_dir().join(MODEL)).unwrap(),
+            expected
+        );
+        std::fs::remove_dir_all(storage.base_dir()).unwrap();
+    }
+
+    #[test]
+    fn p0_002c5c_a_partial_file_past_the_bound_is_removed_without_a_request() {
+        let storage = storage("oversized-part");
+        let part = storage.base_dir().join(format!("{MODEL}.part"));
+        std::fs::write(&part, [1u8; 1500]).unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let error = error_text(download(&storage, base));
+        assert!(error.contains("exceeds the 1000-byte maximum"), "{error}");
+        assert!(!part.exists());
+        assert!(matches!(
+            listener.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+        std::fs::remove_dir_all(storage.base_dir()).unwrap();
+    }
+
+    #[test]
+    fn p0_002c5c_redirects_must_stay_on_https() {
+        let storage = storage("redirect");
+        let (base, server) = serve(vec![response(
+            "302 Found",
+            &[
+                "Location: http://127.0.0.1:9/elsewhere.gguf",
+                "Content-Length: 0",
+            ],
+            b"",
+        )]);
+        let error = error_text(download(&storage, base));
+        assert!(error.contains("HTTP request failed"), "{error}");
+        server.join().unwrap();
+        assert_eq!(std::fs::read_dir(storage.base_dir()).unwrap().count(), 0);
+        std::fs::remove_dir_all(storage.base_dir()).unwrap();
+    }
+
+    #[test]
+    fn p0_002c5c_a_stalled_transfer_is_abandoned_and_kept_for_resume() {
+        let storage = storage("stall");
+        let (base, server) = serve(vec![response(
+            "200 OK",
+            &["Content-Length: 900"],
+            &[3u8; 100],
+        )]);
+        let error = error_text(download(&storage, base));
+        assert!(error.contains("stalled"), "{error}");
+        server.join().unwrap();
+        let part = storage.base_dir().join(format!("{MODEL}.part"));
+        assert_eq!(std::fs::read(&part).unwrap(), vec![3u8; 100]);
+        assert!(!storage.base_dir().join(MODEL).exists());
+        std::fs::remove_dir_all(storage.base_dir()).unwrap();
+    }
+
+    #[test]
+    fn p0_002c5c_the_production_bound_is_finite_and_above_the_largest_hub_file() {
+        let limits = DownloadLimits::default();
+        assert_eq!(limits.max_file_bytes, MAX_MODEL_FILE_BYTES);
+        assert!(MAX_MODEL_FILE_BYTES > 50_000_000_000);
+        assert!(MAX_MODEL_FILE_BYTES < u64::MAX / 2);
+        assert_eq!(limits.base_url, "https://huggingface.co");
     }
 
     #[test]

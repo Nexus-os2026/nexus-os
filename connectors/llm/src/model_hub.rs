@@ -374,12 +374,17 @@ pub fn download_model_file(
         status: DownloadStatus::Starting,
     });
 
-    // First, get the file size via a HEAD request.
+    // First, get the file size via a HEAD request. A declared size above the
+    // maximum is refused at once; a smaller or missing one is not trusted.
     let total_bytes = get_content_length(&url).unwrap_or(0);
+    if total_bytes > MAX_MODEL_FILE_BYTES {
+        return Err(model_file_too_large());
+    }
 
     // Start curl download in the background: HTTPS only, including redirects,
     // failing on HTTP errors, with the URL after `--`. A stalled transfer is
-    // abandoned; total size is not bounded because model files are large.
+    // abandoned, and curl stops a transfer that reaches the backend maximum.
+    let max_filesize = MAX_MODEL_FILE_BYTES.to_string();
     let mut child = Command::new("curl")
         .args(nexus_kernel::governed_http::CURL_HTTPS_ONLY)
         .args([
@@ -392,6 +397,8 @@ pub fn download_model_file(
             "1",
             "--speed-time",
             "120",
+            "--max-filesize",
+            &max_filesize,
             "-o",
         ])
         .arg(&file_path_str)
@@ -400,54 +407,107 @@ pub fn download_model_file(
         .spawn()
         .map_err(|e| format!("curl spawn failed: {e}"))?;
 
-    // Monitor file size growth while curl runs.
-    let poll_interval = std::time::Duration::from_millis(500);
+    // Monitor file size growth while curl runs, whatever size was declared.
+    let final_size = watch_download(
+        &mut child,
+        &file_path,
+        MAX_MODEL_FILE_BYTES,
+        std::time::Duration::from_millis(500),
+        |current_size| {
+            let percent = if total_bytes > 0 {
+                (current_size as f32 / total_bytes as f32 * 100.0).min(99.9)
+            } else {
+                0.0
+            };
+            progress_callback(DownloadProgress {
+                model_id: model_id.to_string(),
+                filename: filename.to_string(),
+                bytes_downloaded: current_size,
+                total_bytes,
+                percent,
+                status: DownloadStatus::Downloading,
+            });
+        },
+    )?;
+    progress_callback(DownloadProgress {
+        model_id: model_id.to_string(),
+        filename: filename.to_string(),
+        bytes_downloaded: final_size,
+        total_bytes: if total_bytes > 0 {
+            total_bytes
+        } else {
+            final_size
+        },
+        percent: 100.0,
+        status: DownloadStatus::Completed,
+    });
+    Ok(file_path_str)
+}
+
+/// The largest model file the backend downloads (P0-002C5C). Hugging Face
+/// stores a single file of at most 50 GB, so a larger transfer, whatever
+/// length the server declares, is stopped and its file removed.
+pub const MAX_MODEL_FILE_BYTES: u64 = 64 * 1024 * 1024 * 1024;
+
+fn model_file_too_large() -> String {
+    format!("download refused: the model file exceeds the {MAX_MODEL_FILE_BYTES}-byte maximum")
+}
+
+/// A running transfer that writes the download file: the curl child.
+trait Transfer {
+    /// `Some(success)` once the transfer has ended, `None` while it runs.
+    fn finished(&mut self) -> std::io::Result<Option<bool>>;
+    /// Stop the transfer and reap it.
+    fn stop(&mut self);
+}
+
+impl Transfer for std::process::Child {
+    fn finished(&mut self) -> std::io::Result<Option<bool>> {
+        Ok(self.try_wait()?.map(|status| status.success()))
+    }
+
+    fn stop(&mut self) {
+        // Best-effort: the child may already have exited.
+        let _ = self.kill();
+        let _ = self.wait();
+    }
+}
+
+/// Watch `transfer` write `file_path` until it ends, reporting the size so
+/// far. A file larger than `max_bytes` stops the transfer and is removed,
+/// whether it is still growing or complete, so the bound never depends on a
+/// declared length. Any failure also removes the partial file.
+fn watch_download(
+    transfer: &mut dyn Transfer,
+    file_path: &Path,
+    max_bytes: u64,
+    poll_interval: std::time::Duration,
+    mut progress: impl FnMut(u64),
+) -> Result<u64, String> {
     loop {
-        match child.try_wait() {
-            Ok(Some(exit_status)) => {
-                if exit_status.success() && file_path.exists() {
-                    let final_size = std::fs::metadata(&file_path).map(|m| m.len()).unwrap_or(0);
-                    progress_callback(DownloadProgress {
-                        model_id: model_id.to_string(),
-                        filename: filename.to_string(),
-                        bytes_downloaded: final_size,
-                        total_bytes: if total_bytes > 0 {
-                            total_bytes
-                        } else {
-                            final_size
-                        },
-                        percent: 100.0,
-                        status: DownloadStatus::Completed,
-                    });
-                    return Ok(file_path_str);
-                } else {
-                    // Clean up partial file.
-                    // Best-effort: clean up partial download on curl failure
-                    let _ = std::fs::remove_file(&file_path);
-                    return Err("download failed: curl exited with error".to_string());
-                }
+        let finished = transfer.finished();
+        let size = std::fs::metadata(file_path).map(|m| m.len()).unwrap_or(0);
+        if size > max_bytes {
+            transfer.stop();
+            // Best-effort: the oversized file is removed.
+            let _ = std::fs::remove_file(file_path);
+            return Err(model_file_too_large());
+        }
+        match finished {
+            Ok(Some(true)) if file_path.exists() => return Ok(size),
+            Ok(Some(_)) => {
+                // Best-effort: clean up partial download on curl failure
+                let _ = std::fs::remove_file(file_path);
+                return Err("download failed: curl exited with error".to_string());
             }
             Ok(None) => {
-                // Still running — emit progress.
-                let current_size = std::fs::metadata(&file_path).map(|m| m.len()).unwrap_or(0);
-                let percent = if total_bytes > 0 {
-                    (current_size as f32 / total_bytes as f32 * 100.0).min(99.9)
-                } else {
-                    0.0
-                };
-                progress_callback(DownloadProgress {
-                    model_id: model_id.to_string(),
-                    filename: filename.to_string(),
-                    bytes_downloaded: current_size,
-                    total_bytes,
-                    percent,
-                    status: DownloadStatus::Downloading,
-                });
+                progress(size);
                 std::thread::sleep(poll_interval);
             }
             Err(e) => {
+                transfer.stop();
                 // Best-effort: clean up partial download on wait error
-                let _ = std::fs::remove_file(&file_path);
+                let _ = std::fs::remove_file(file_path);
                 return Err(format!("error waiting for curl: {e}"));
             }
         }
@@ -763,6 +823,94 @@ mod tests {
         "a/b/c/d/e",
         "-o",
     ];
+
+    /// A transfer that appends `chunk` bytes to the file each time it is
+    /// polled, `polls` times, then ends with `success`.
+    struct GrowingTransfer {
+        path: PathBuf,
+        chunk: usize,
+        polls: usize,
+        success: bool,
+        stopped: bool,
+    }
+
+    impl Transfer for GrowingTransfer {
+        fn finished(&mut self) -> std::io::Result<Option<bool>> {
+            use std::io::Write;
+            if self.stopped {
+                return Ok(Some(false));
+            }
+            if self.polls == 0 {
+                return Ok(Some(self.success));
+            }
+            self.polls -= 1;
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.path)?
+                .write_all(&vec![0u8; self.chunk])?;
+            Ok(None)
+        }
+
+        fn stop(&mut self) {
+            self.stopped = true;
+        }
+    }
+
+    /// P0-002C5C: the backend's model-file maximum is enforced on the bytes
+    /// written, while they are written, with no declared length involved.
+    #[test]
+    fn p0_002c5c_model_downloads_stop_and_are_removed_past_the_bound() {
+        let dir = std::env::temp_dir().join(format!("nexus-c5c-hub-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("model.gguf");
+        let transfer = |chunk, polls, success| GrowingTransfer {
+            path: path.clone(),
+            chunk,
+            polls,
+            success,
+            stopped: false,
+        };
+        let zero = std::time::Duration::ZERO;
+
+        // A transfer that keeps growing is stopped once past the bound, and
+        // its file removed; no progress report exceeds the bound.
+        let mut growing = transfer(400, 10, true);
+        let mut reported = Vec::new();
+        let result = watch_download(&mut growing, &path, 1000, zero, |size| reported.push(size));
+        assert_eq!(result, Err(model_file_too_large()));
+        assert!(growing.stopped);
+        assert!(!path.exists());
+        assert_eq!(reported, vec![400, 800]);
+
+        // A transfer that ends with a file past the bound is refused too.
+        std::fs::write(&path, vec![0u8; 1001]).unwrap();
+        let mut ended = transfer(0, 0, true);
+        assert_eq!(
+            watch_download(&mut ended, &path, 1000, zero, |_| {}),
+            Err(model_file_too_large())
+        );
+        assert!(!path.exists());
+
+        // Within the bound the file is kept.
+        let mut within = transfer(250, 4, true);
+        assert_eq!(
+            watch_download(&mut within, &path, 1000, zero, |_| {}),
+            Ok(1000)
+        );
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), 1000);
+        std::fs::remove_file(&path).unwrap();
+
+        // A failed transfer leaves no partial file.
+        let mut failed = transfer(100, 2, false);
+        assert!(watch_download(&mut failed, &path, 1000, zero, |_| {}).is_err());
+        assert!(!path.exists());
+
+        // The production bound is finite and above the largest hub file.
+        assert!(MAX_MODEL_FILE_BYTES > 50_000_000_000);
+        assert!(MAX_MODEL_FILE_BYTES < u64::MAX / 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn p0_002c5b_hub_identifiers_are_strict_grammars() {
