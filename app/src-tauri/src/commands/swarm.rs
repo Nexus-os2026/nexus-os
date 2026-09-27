@@ -151,11 +151,17 @@ fn state() -> Arc<SwarmInner> {
 
             let mut registry = CapabilityRegistry::new();
             registry.register(Arc::new(ArtisanAdapter::new(Arc::clone(&providers))));
-            registry.register(Arc::new(HeraldAdapter::new(
-                Arc::clone(&providers),
-                Arc::clone(&publish_state),
-                Arc::clone(&herald_db),
-            )));
+            // P0-002C5C: the desktop swarm drafts posts but never publishes
+            // them; a model-written post released by an IPC plan approval is
+            // not authority to use the stored X credentials.
+            registry.register(Arc::new(
+                HeraldAdapter::new(
+                    Arc::clone(&providers),
+                    Arc::clone(&publish_state),
+                    Arc::clone(&herald_db),
+                )
+                .drafts_only(),
+            ));
             registry.register(Arc::new(BrokerAdapter::new(Arc::clone(&providers))));
             registry.register(Arc::new(ScoutStub));
             registry.register(Arc::new(WatchdogStub));

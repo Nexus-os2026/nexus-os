@@ -36,6 +36,8 @@ pub struct HeraldAdapter {
     /// `IdempotencyManager::new`. Closes Bug AF's deferred swarm-path
     /// threading.
     db: Arc<nexus_persistence::NexusDatabase>,
+    /// P0-002C5C: when set, every invocation runs with `dry_run: true`.
+    drafts_only: bool,
 }
 
 impl HeraldAdapter {
@@ -48,8 +50,36 @@ impl HeraldAdapter {
             providers,
             publish_state,
             db,
+            drafts_only: false,
         }
     }
+
+    /// P0-002C5C: an adapter that drafts posts and never publishes them,
+    /// whatever `dry_run` the planned inputs carry. The Nexus OS desktop uses
+    /// it: the post text is written by a model after the plan is approved,
+    /// and a plan approval delivered over IPC is not authority to publish
+    /// with the stored X credentials.
+    pub fn drafts_only(mut self) -> Self {
+        self.drafts_only = true;
+        self
+    }
+}
+
+/// Force `dry_run: true` into the fields the social-poster entry reads: its
+/// `node_inputs` when present, otherwise the inputs themselves.
+fn force_dry_run(mut invocation: CapabilityInvocation) -> CapabilityInvocation {
+    let fields = if invocation.inputs.get("node_inputs").is_some() {
+        &mut invocation.inputs["node_inputs"]
+    } else {
+        &mut invocation.inputs
+    };
+    match fields.as_object_mut() {
+        Some(fields) => {
+            fields.insert("dry_run".into(), Value::Bool(true));
+        }
+        None => *fields = serde_json::json!({ "dry_run": true }),
+    }
+    invocation
 }
 
 #[async_trait]
@@ -134,6 +164,11 @@ impl SwarmCapability for HeraldAdapter {
                 audit,
             ))
         });
+        let invocation = if self.drafts_only {
+            force_dry_run(invocation)
+        } else {
+            invocation
+        };
         SocialPosterEntry::new(
             Arc::clone(&self.publish_state),
             facade,
@@ -248,5 +283,44 @@ mod tests {
                 ..
             }
         ));
+    }
+}
+
+#[cfg(test)]
+mod drafts_only_tests {
+    use super::*;
+
+    #[test]
+    fn p0_002c5c_drafts_only_forces_dry_run_where_the_entry_reads_it() {
+        for (inputs, pointer) in [
+            (
+                serde_json::json!({"node_inputs": {"message": "m", "dry_run": false}, "route": {}}),
+                "/node_inputs/dry_run",
+            ),
+            (
+                serde_json::json!({"message": "m", "dry_run": false}),
+                "/dry_run",
+            ),
+            (serde_json::json!({"message": "m"}), "/dry_run"),
+            (
+                serde_json::json!({"node_inputs": {"message": "m"}}),
+                "/node_inputs/dry_run",
+            ),
+        ] {
+            let forced = force_dry_run(CapabilityInvocation {
+                inputs: inputs.clone(),
+                parent_outputs: Default::default(),
+            });
+            assert_eq!(
+                forced.inputs.pointer(pointer),
+                Some(&Value::Bool(true)),
+                "{inputs}"
+            );
+        }
+        let forced = force_dry_run(CapabilityInvocation {
+            inputs: Value::String("not an object".into()),
+            parent_outputs: Default::default(),
+        });
+        assert_eq!(forced.inputs, serde_json::json!({"dry_run": true}));
     }
 }

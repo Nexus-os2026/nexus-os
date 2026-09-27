@@ -300,6 +300,33 @@ async fn herald_dry_run_false_with_no_creds_returns_credentials_missing() {
     );
 }
 
+/// P0-002C5C: a drafts-only Herald never reaches publishing, even when the
+/// planned inputs set `dry_run: false`.
+#[tokio::test]
+async fn p0_002c5c_a_drafts_only_herald_never_publishes() {
+    let rec = Arc::new(RecordingEmitter::new());
+    let ctx = mk_ctx(rec, CancelToken::new());
+    let adapter = HeraldAdapter::new(
+        herald_providers(),
+        Arc::new(social_poster_agent::publish_state::InMemoryPublishState::new()),
+        Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db")),
+    )
+    .drafts_only();
+    let out = adapter
+        .run_with_context(
+            herald_invocation_with_message("real run", Some(false)),
+            &ctx,
+        )
+        .await
+        .expect("ok");
+    assert_eq!(out.get("dry_run").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        out.get("publish_status").and_then(|v| v.as_str()),
+        Some("skipped_dry_run")
+    );
+    assert!(out.get("draft").and_then(|v| v.as_str()).is_some());
+}
+
 #[tokio::test]
 async fn herald_propagates_cancellation_through_social_poster_entry() {
     let rec = Arc::new(RecordingEmitter::new());

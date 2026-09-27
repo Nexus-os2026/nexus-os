@@ -2235,6 +2235,13 @@ fn p0_002c5c_no_delegation_path_runs_around_the_executor() {
     ] {
         assert!(!artisan.contains(forbidden), "swarm coder: {forbidden}");
     }
+    // The desktop swarm's social-post adapter only drafts.
+    let swarm = without_whitespace(&production_text(include_str!("../commands/swarm.rs")));
+    assert_eq!(swarm.matches("HeraldAdapter::new(").count(), 1);
+    assert!(
+        swarm.contains("Arc::clone(&herald_db),).drafts_only(),"),
+        "{swarm}"
+    );
     // Restored agent records pass the stored-manifest authority check.
     let agents = without_whitespace(&production_text(include_str!("../commands/agents.rs")));
     assert!(agents
