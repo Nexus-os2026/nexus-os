@@ -37,8 +37,8 @@ use nexus_kernel::computer_control::{
     capture_and_store_screen, ComputerControlEngine, InputAction, InputControlStatus, ScreenRegion,
 };
 use nexus_kernel::config::{
-    load_config, save_config as save_nexus_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
-    NexusConfig, OllamaConfig,
+    load_config, load_current_security_baseline, save_config as save_nexus_config, AgentLlmConfig,
+    HardwareConfig, ModelsConfig, NexusConfig, OllamaConfig,
 };
 use nexus_kernel::economic_identity::{EconomicConfig, EconomicEngine, TransactionType};
 use nexus_kernel::errors::AgentError;
@@ -717,25 +717,30 @@ pub(crate) fn get_config() -> Result<NexusConfig, String> {
 /// Saves interface-editable settings. The encryption-at-rest section chooses
 /// where the vault master key comes from (an environment variable or a key
 /// file), so it is backend-owned (P0-002C5B): a request must carry exactly the
-/// section the backend's own configuration holds, or nothing is written.
+/// section the existing configuration holds, or nothing is written.
 pub(crate) fn save_config(state: &AppState, config: NexusConfig) -> Result<(), String> {
-    save_config_with(state, config, load_config, save_nexus_config)
+    save_config_with(
+        state,
+        config,
+        load_current_security_baseline,
+        save_nexus_config,
+    )
 }
 
-/// [`save_config`] with the current-configuration loader and the writer
-/// injected. The loaded security section is the only baseline. If the loader
-/// fails (an unreadable, undecryptable or unparsable configuration, or no
-/// identity home), there is no baseline and the save is denied: no default
-/// ever stands in for it. A missing file is not a failure: the loader then
-/// creates the first-run default, which is the configuration startup uses.
-fn save_config_with(
+/// [`save_config`] with the security-baseline loader and the writer injected.
+/// The production loader, `load_current_security_baseline`, reads only an
+/// existing configuration and never bootstraps one: the interface is not the
+/// first-run authority. A missing, empty or whitespace-only, unreadable,
+/// undecryptable or unparsable configuration, or no identity home, leaves no
+/// baseline, and the save is denied: no default ever stands in for it.
+fn save_config_with<E>(
     state: &AppState,
     config: NexusConfig,
-    load_current: impl FnOnce() -> Result<NexusConfig, AgentError>,
+    load_baseline: impl FnOnce() -> Result<nexus_kernel::crypto::EncryptionConfig, E>,
     write: impl FnOnce(&NexusConfig) -> Result<(), AgentError>,
 ) -> Result<(), String> {
-    let current = match load_current() {
-        Ok(current) => current.security,
+    let current = match load_baseline() {
+        Ok(current) => current,
         Err(_) => return Err(deny_config_save(state, BASELINE_UNAVAILABLE)),
     };
     if config.security != current {
@@ -807,7 +812,7 @@ fn p0_002c5b_interface_saves_cannot_choose_the_vault_key_source() {
         let result = save_config_with(
             &state,
             requested,
-            || Ok(current.clone()),
+            || Ok::<_, AgentError>(current.security.clone()),
             |_| {
                 wrote.set(true);
                 Ok(())
@@ -821,7 +826,7 @@ fn p0_002c5b_interface_saves_cannot_choose_the_vault_key_source() {
     let result = save_config_with(
         &state,
         current.clone(),
-        || Ok(current.clone()),
+        || Ok::<_, AgentError>(current.security.clone()),
         |_| {
             wrote.set(wrote.get() + 1);
             Ok(())
@@ -877,6 +882,107 @@ fn p0_002c5b_an_unavailable_security_baseline_authorizes_no_save() {
     assert!(logged.contains(BASELINE_UNAVAILABLE.0));
     assert!(!logged.contains("marker"));
     assert!(!logged.contains("key_file"));
+}
+
+#[cfg(test)]
+#[test]
+fn p0_002c5b_interface_updates_need_an_existing_loadable_config() {
+    use nexus_kernel::config::{
+        load_config_from_path, load_security_baseline_from_path, save_config_to_path,
+    };
+    use nexus_kernel::crypto::EncryptionConfig;
+    let state = AppState::new_in_memory();
+    let dir = std::env::temp_dir().join(format!("nexus-c5b-baseline-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    // The real interface-baseline loader and the real writer, on isolated
+    // temporary files (never the user's configuration).
+    let save = |path: &std::path::Path, requested: NexusConfig| {
+        save_config_with(
+            &state,
+            requested,
+            || load_security_baseline_from_path(path),
+            |config| save_config_to_path(path, config),
+        )
+    };
+    let unavailable = Err(BASELINE_UNAVAILABLE.1.to_string());
+
+    // Missing: denied, and nothing is created.
+    let missing = dir.join("missing.toml");
+    assert_eq!(save(&missing, NexusConfig::default()), unavailable);
+    assert!(!missing.exists());
+
+    // Zero-byte, whitespace-only and malformed files: denied, left as they were.
+    for (name, content) in [
+        ("empty.toml", ""),
+        ("blank.toml", "  \n\t\n"),
+        ("malformed.toml", "[llm\nmarker = "),
+    ] {
+        let path = dir.join(name);
+        std::fs::write(&path, content).unwrap();
+        assert_eq!(save(&path, NexusConfig::default()), unavailable, "{name}");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), content, "{name}");
+    }
+
+    // An encrypted configuration that no longer decrypts: denied, unchanged.
+    let tampered = dir.join("tampered.toml");
+    save_config_to_path(&tampered, &NexusConfig::default()).unwrap();
+    let mut envelope: toml::Value =
+        toml::from_str(&std::fs::read_to_string(&tampered).unwrap()).unwrap();
+    let ciphertext = envelope
+        .get_mut("ciphertext")
+        .and_then(toml::Value::as_array_mut)
+        .unwrap();
+    let first = ciphertext[0].as_integer().unwrap();
+    ciphertext[0] = toml::Value::Integer(first ^ 1);
+    let tampered_text = toml::to_string(&envelope).unwrap();
+    std::fs::write(&tampered, &tampered_text).unwrap();
+    assert_eq!(save(&tampered, NexusConfig::default()), unavailable);
+    assert_eq!(std::fs::read_to_string(&tampered).unwrap(), tampered_text);
+
+    // An I/O failure (the path is a directory): denied.
+    assert_eq!(save(&dir, NexusConfig::default()), unavailable);
+
+    // An existing valid configuration: an exactly unchanged security section
+    // is written; a changed one is denied and leaves the file as it was.
+    let valid = dir.join("valid.toml");
+    save_config_to_path(&valid, &NexusConfig::default()).unwrap();
+    let mut update = NexusConfig::default();
+    update.llm.default_model = "updated-model".into();
+    assert_eq!(save(&valid, update.clone()), Ok(()));
+    assert_eq!(
+        load_config_from_path(&valid).unwrap().llm.default_model,
+        "updated-model"
+    );
+    let before = std::fs::read(&valid).unwrap();
+    let changed = NexusConfig {
+        security: EncryptionConfig {
+            enabled: true,
+            key_source: "file".into(),
+            key_file: Some("/marker/key-file".into()),
+            ..EncryptionConfig::default()
+        },
+        ..update
+    };
+    assert_eq!(
+        save(&valid, changed),
+        Err(SECURITY_BACKEND_OWNED.1.to_string())
+    );
+    assert_eq!(std::fs::read(&valid).unwrap(), before);
+
+    // Refusals are audited by reason class only.
+    let logged = audited_payloads(&state);
+    assert!(logged.contains(BASELINE_UNAVAILABLE.0));
+    assert!(logged.contains(SECURITY_BACKEND_OWNED.0));
+    for leaked in [
+        "marker",
+        "nexus-c5b-baseline",
+        "key_file",
+        "ciphertext",
+        "llm",
+    ] {
+        assert!(!logged.contains(leaked), "{leaked}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // ── Track C #3: local STT subprocess bridge ──────────────────────────────────

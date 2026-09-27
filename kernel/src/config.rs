@@ -372,6 +372,43 @@ pub fn load_config_from_path(path: &Path) -> Result<NexusConfig, AgentError> {
     }
 }
 
+/// Why an interface update has no current security baseline. It carries no
+/// path, configuration text, key source, key file, or parse or decryption
+/// detail.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("current security settings are unavailable")]
+pub struct SecurityBaselineUnavailable;
+
+/// The encryption-at-rest section of the current configuration: the baseline
+/// an interface update is compared against (P0-002C5B).
+///
+/// Backend bootstrap ([`load_config`]) creates the first-run default when the
+/// file is missing or empty, and migrates a plaintext file. An interface
+/// update is not a bootstrap authority, so this never creates, rewrites or
+/// migrates anything. A missing, empty or whitespace-only, unreadable,
+/// undecryptable or unparsable configuration yields no baseline. A valid
+/// historical plaintext configuration is read, not migrated.
+pub fn load_current_security_baseline(
+) -> Result<crate::crypto::EncryptionConfig, SecurityBaselineUnavailable> {
+    let path = config_path().map_err(|_| SecurityBaselineUnavailable)?;
+    load_security_baseline_from_path(&path)
+}
+
+/// [`load_current_security_baseline`] for an explicit configuration file.
+pub fn load_security_baseline_from_path(
+    path: &Path,
+) -> Result<crate::crypto::EncryptionConfig, SecurityBaselineUnavailable> {
+    let raw = fs::read_to_string(path).map_err(|_| SecurityBaselineUnavailable)?;
+    if raw.trim().is_empty() {
+        return Err(SecurityBaselineUnavailable);
+    }
+    let current = match toml::from_str::<EncryptedConfigEnvelope>(&raw) {
+        Ok(envelope) => decrypt_envelope(&envelope).map_err(|_| SecurityBaselineUnavailable)?,
+        Err(_) => toml::from_str::<NexusConfig>(&raw).map_err(|_| SecurityBaselineUnavailable)?,
+    };
+    Ok(current.security)
+}
+
 pub fn save_config_to_path(path: &Path, config: &NexusConfig) -> Result<(), AgentError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(to_io_error)?;
@@ -470,7 +507,10 @@ fn set_restrictive_permissions(_path: &Path) -> Result<(), AgentError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{load_config_from_path, save_config_to_path, NexusConfig};
+    use super::{
+        load_config_from_path, load_security_baseline_from_path, save_config_to_path,
+        EncryptedConfigEnvelope, NexusConfig, SecurityBaselineUnavailable,
+    };
     use std::fs;
     use std::path::PathBuf;
     use uuid::Uuid;
@@ -517,5 +557,57 @@ mod tests {
         let loaded = load_config_from_path(path.as_path());
         assert!(loaded.is_ok());
         let _ = fs::remove_file(path.as_path());
+    }
+
+    #[test]
+    fn p0_002c5b_security_baselines_come_only_from_an_existing_loadable_config() {
+        let path = temp_config_path();
+        let none = Err(SecurityBaselineUnavailable);
+        // Missing: no baseline, and nothing is created.
+        assert_eq!(load_security_baseline_from_path(&path), none);
+        assert!(!path.exists());
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        // Zero-byte, whitespace-only and malformed: none, nothing rewritten.
+        for content in ["", " \n\t\r\n", "[llm\nbroken = "] {
+            fs::write(&path, content).unwrap();
+            assert_eq!(load_security_baseline_from_path(&path), none, "{content:?}");
+            assert_eq!(fs::read_to_string(&path).unwrap(), content);
+        }
+        // An encrypted configuration that no longer decrypts: none.
+        save_config_to_path(&path, &NexusConfig::default()).unwrap();
+        let mut envelope: EncryptedConfigEnvelope =
+            toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        envelope.ciphertext[0] ^= 1;
+        let tampered = toml::to_string(&envelope).unwrap();
+        fs::write(&path, &tampered).unwrap();
+        assert_eq!(load_security_baseline_from_path(&path), none);
+        assert_eq!(fs::read_to_string(&path).unwrap(), tampered);
+        // An I/O failure (a directory is no configuration file): none.
+        assert_eq!(
+            load_security_baseline_from_path(path.parent().unwrap()),
+            none
+        );
+        // A valid encrypted configuration yields its security section.
+        let mut config = NexusConfig::default();
+        config.security.key_env = "NEXUS_OPERATOR_KEY".into();
+        save_config_to_path(&path, &config).unwrap();
+        assert_eq!(
+            load_security_baseline_from_path(&path),
+            Ok(config.security.clone())
+        );
+        // A valid historical plaintext configuration is read, not migrated.
+        let plaintext = toml::to_string(&config).unwrap();
+        fs::write(&path, &plaintext).unwrap();
+        assert_eq!(
+            load_security_baseline_from_path(&path),
+            Ok(config.security.clone())
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), plaintext);
+        // Bootstrap stays separate: the ordinary loader still creates the
+        // first-run configuration for backend startup.
+        fs::remove_file(&path).unwrap();
+        assert!(load_config_from_path(&path).is_ok());
+        assert!(path.exists());
+        let _ = fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
     }
 }

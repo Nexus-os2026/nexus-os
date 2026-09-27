@@ -1695,9 +1695,9 @@ fn p0_002c5b_serialized_records_choose_no_authority() {
     };
     assert_eq!(
         fn_body("pub(crate) fn save_config("),
-        "save_config_with(state,config,load_config,save_nexus_config)"
+        "save_config_with(state,config,load_current_security_baseline,save_nexus_config,)"
     );
-    let body = fn_body("fn save_config_with(");
+    let body = fn_body("fn save_config_with<");
     assert!(!body.contains("unwrap_or"), "{body}");
     assert!(
         body.contains("Err(_)=>returnErr(deny_config_save(state,BASELINE_UNAVAILABLE)),"),
@@ -1707,6 +1707,33 @@ fn p0_002c5b_serialized_records_choose_no_authority() {
         .find("ifconfig.security!=current{")
         .expect("save_config compares the security section");
     assert!(check < body.find("write(&config)").unwrap(), "{body}");
+    // The interface baseline comes only from an existing configuration: the
+    // helper never creates, writes, migrates or substitutes a default.
+    let config = production_text(include_str!("../../../../kernel/src/config.rs"));
+    let kernel_body = |name: &str| {
+        let at = config.find(name).unwrap_or_else(|| panic!("{name}"));
+        let open = at + config[at..].find('{').unwrap();
+        without_whitespace(&config[open + 1..block_end(&config, open) - 1])
+    };
+    assert_eq!(
+        kernel_body("pub fn load_current_security_baseline("),
+        "letpath=config_path().map_err(|_|SecurityBaselineUnavailable)?;load_security_baseline_from_path(&path)"
+    );
+    let helper = kernel_body("pub fn load_security_baseline_from_path(");
+    assert!(
+        helper.starts_with("letraw=fs::read_to_string(path).map_err(|_|SecurityBaselineUnavailable)?;ifraw.trim().is_empty(){returnErr(SecurityBaselineUnavailable);}"),
+        "{helper}"
+    );
+    for forbidden in [
+        "save_config_to_path(",
+        "fs::write(",
+        "create_dir",
+        "::default()",
+        "unwrap_or",
+        "exists()",
+    ] {
+        assert!(!helper.contains(forbidden), "{forbidden}: {helper}");
+    }
     // No production producer records Time Machine file entries.
     let conductor = production_text(include_str!("../../../../agents/conductor/src/lib.rs"));
     assert!(!conductor.contains("record_file_"));
