@@ -241,6 +241,7 @@ fn parse_scroll_direction(s: &str) -> ScrollDirection {
 
 /// Prompt the user for approval of a step. Returns the user's decision.
 /// This reads from stdin.
+#[derive(Debug, PartialEq, Eq)]
 pub enum ApprovalDecision {
     Approve,
     Skip,
@@ -262,15 +263,29 @@ fn prompt_user_approval(step: u32, plan: &crate::agent::action::ActionPlan) -> A
     print!("> ");
     let _ = io::stdout().flush();
 
-    let stdin = io::stdin();
+    read_approval_decision(&mut io::stdin().lock())
+}
+
+/// P0-002C5A: only a line the user actually entered can approve. `read_line`
+/// returns the number of bytes read, so end of input (`Ok(0)`: a closed,
+/// null or absent stdin) is never mistaken for pressing Enter; like a read
+/// error it aborts. A real blank line keeps the explicit Enter-to-approve.
+fn read_approval_decision(input: &mut impl BufRead) -> ApprovalDecision {
     let mut line = String::new();
-    if stdin.lock().read_line(&mut line).is_err() {
-        warn!("Failed to read stdin, aborting");
-        return ApprovalDecision::Abort;
+    match input.read_line(&mut line) {
+        Ok(0) => {
+            warn!("stdin closed before an approval decision, aborting");
+            return ApprovalDecision::Abort;
+        }
+        Ok(_) => {}
+        Err(_) => {
+            warn!("Failed to read stdin, aborting");
+            return ApprovalDecision::Abort;
+        }
     }
 
-    let input = line.trim().to_lowercase();
-    match input.as_str() {
+    let entered = line.trim().to_lowercase();
+    match entered.as_str() {
         "" | "y" | "yes" => ApprovalDecision::Approve,
         "n" | "no" => ApprovalDecision::Skip,
         "q" | "quit" | "abort" => ApprovalDecision::Abort,
@@ -278,10 +293,10 @@ fn prompt_user_approval(step: u32, plan: &crate::agent::action::ActionPlan) -> A
             print!("Enter replacement actions (JSON): ");
             let _ = io::stdout().flush();
             let mut mod_line = String::new();
-            if stdin.lock().read_line(&mut mod_line).is_err() {
-                return ApprovalDecision::Abort;
+            match input.read_line(&mut mod_line) {
+                Ok(0) | Err(_) => ApprovalDecision::Abort,
+                Ok(_) => ApprovalDecision::Modify(mod_line.trim().to_string()),
             }
-            ApprovalDecision::Modify(mod_line.trim().to_string())
         }
         _ => {
             println!("Unknown input, treating as skip");
@@ -811,5 +826,58 @@ mod tests {
             result.unwrap_err(),
             ComputerUseError::RateLimitExceeded { .. }
         ));
+    }
+
+    // ── P0-002C5A: stdin approval decisions ──
+
+    fn decide(input: &[u8]) -> ApprovalDecision {
+        read_approval_decision(&mut io::Cursor::new(input.to_vec()))
+    }
+
+    /// A reader whose every read fails.
+    struct FailingStdin;
+
+    impl io::Read for FailingStdin {
+        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::other("stdin unavailable"))
+        }
+    }
+
+    #[test]
+    fn test_approval_eof_aborts_instead_of_approving() {
+        // A closed, null or absent stdin reads zero bytes: never an approval.
+        assert_eq!(decide(b""), ApprovalDecision::Abort);
+    }
+
+    #[test]
+    fn test_approval_read_error_aborts() {
+        let mut input = io::BufReader::new(FailingStdin);
+        assert_eq!(read_approval_decision(&mut input), ApprovalDecision::Abort);
+    }
+
+    #[test]
+    fn test_approval_entered_blank_line_is_explicit_approval() {
+        // Pressing Enter delivers a real line ("\n"), unlike EOF.
+        assert_eq!(decide(b"\n"), ApprovalDecision::Approve);
+        assert_eq!(decide(b"\r\n"), ApprovalDecision::Approve);
+    }
+
+    #[test]
+    fn test_approval_explicit_answers() {
+        assert_eq!(decide(b"y\n"), ApprovalDecision::Approve);
+        assert_eq!(decide(b"yes\n"), ApprovalDecision::Approve);
+        assert_eq!(decide(b"n\n"), ApprovalDecision::Skip);
+        assert_eq!(decide(b"q\n"), ApprovalDecision::Abort);
+        assert_eq!(decide(b"what\n"), ApprovalDecision::Skip);
+    }
+
+    #[test]
+    fn test_approval_modify_requires_an_entered_replacement() {
+        assert_eq!(
+            decide(b"m\n[{\"type\":\"done\"}]\n"),
+            ApprovalDecision::Modify("[{\"type\":\"done\"}]".into())
+        );
+        // EOF before the replacement line aborts rather than modifying.
+        assert_eq!(decide(b"m\n"), ApprovalDecision::Abort);
     }
 }
