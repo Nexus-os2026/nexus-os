@@ -609,9 +609,11 @@ mod tests {
 
     #[test]
     fn test_save_and_load() {
-        let dir = format!("/tmp/nexus-memory-test-{}", Uuid::new_v4());
+        // A real absolute directory on every platform: persistence refuses a
+        // relative one, and `/tmp/..` has no drive prefix on Windows.
+        let dir = std::env::temp_dir().join(format!("nexus-memory-test-{}", Uuid::new_v4()));
         let config = MemoryConfig {
-            persistence_dir: dir.clone(),
+            persistence_dir: dir.to_string_lossy().into_owned(),
             ..test_config()
         };
 
