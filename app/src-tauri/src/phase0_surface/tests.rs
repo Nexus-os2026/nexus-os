@@ -982,6 +982,129 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
         "coder_agent::llm_codegen",
         "coder writers rooted at a raw output dir",
     ),
+    // P0-002C5C recount: latent process and network APIs of the desktop
+    // closure that no earlier needle named.
+    (
+        "coder_agent::git",
+        "coder git helpers run git in a project directory",
+    ),
+    (
+        "netlify::create_site(",
+        "Builder deploy upload with a stored provider token",
+    ),
+    (
+        "netlify::deploy(",
+        "Builder deploy upload with a stored provider token",
+    ),
+    (
+        "netlify::rollback(",
+        "Builder deploy rollback with a stored provider token",
+    ),
+    (
+        "cloudflare::create_site(",
+        "Builder deploy upload with a stored provider token",
+    ),
+    (
+        "cloudflare::deploy(",
+        "Builder deploy upload with a stored provider token",
+    ),
+    (
+        "cloudflare::rollback(",
+        "Builder deploy rollback with a stored provider token",
+    ),
+    (
+        "vercel::deploy(",
+        "Builder deploy upload with a stored provider token",
+    ),
+    (
+        "vercel::rollback(",
+        "Builder deploy rollback with a stored provider token",
+    ),
+    (
+        "image_gen::generate_image(",
+        "Builder image generation fetching a URL the API returns",
+    ),
+    (
+        "image_gen::generate_all_images(",
+        "Builder image generation fetching URLs the API returns",
+    ),
+    ("OidcClient", "OIDC discovery and token exchange"),
+    (
+        "send_response(",
+        "messaging adapter sends with stored bot tokens",
+    ),
+    (
+        "send_consent_prompt(",
+        "messaging adapter sends with stored bot tokens",
+    ),
+    (
+        ".send_message(",
+        "messaging adapter sends with stored bot tokens",
+    ),
+    (
+        "MessagingBridge",
+        "messaging polling and routing into agents",
+    ),
+    (
+        "poll_and_route",
+        "messaging polling and routing into agents",
+    ),
+    ("MatrixAdapter", "Matrix messaging adapter"),
+    ("WebhookAdapter", "outbound webhook messaging adapter"),
+    (
+        "with_base_and_token(",
+        "swarm provider with a caller base URL",
+    ),
+    (
+        "with_base_and_key(",
+        "swarm provider with a caller base URL",
+    ),
+    (
+        "TcpTransportManager",
+        "distributed TCP transport listener and peers",
+    ),
+    ("nexus_code::bench", "SWE-bench git runs (nx binary only)"),
+    (
+        "nexus_code::commands",
+        "nx slash commands (git in the working directory)",
+    ),
+    (
+        "McpManager",
+        "nexus-code MCP servers started from configuration",
+    ),
+    (
+        "mcp_manager",
+        "nexus-code MCP servers started from configuration",
+    ),
+    (
+        "router.complete(",
+        "nexus-code provider completions (nx_chat is closed)",
+    ),
+    (
+        "router.stream(",
+        "nexus-code provider completions (nx_chat is closed)",
+    ),
+    (
+        "StdioMcpClient",
+        "MCP stdio client spawning a caller command",
+    ),
+    (
+        "server_runtime",
+        "protocols HTTP gateway listener (server binaries only)",
+    ),
+    (
+        ".execute_action(",
+        "computer-control engine and actuator registry actions",
+    ),
+    (
+        "nexus_computer_use::input",
+        "computer-use OS input controllers",
+    ),
+    (
+        "ResourceLimiter::default().spawn(",
+        "unsealed resource-limited spawn (the Builder uses spawn_sealed)",
+    ),
+    (".spawn_actuator(", "actuator process spawn"),
 ];
 
 /// The only approved construction of the kernel action executor: the Phase
@@ -2239,6 +2362,19 @@ fn p0_002c5c_no_delegation_path_runs_around_the_executor() {
         "writer::",
     ] {
         assert!(!artisan.contains(forbidden), "swarm coder: {forbidden}");
+    }
+    // The integration router is built only from the default configuration,
+    // so no integration provider (GitHub, GitLab, Jira, Slack, Teams,
+    // Discord, Telegram, ServiceNow, webhook) is ever instantiated.
+    let lib = without_whitespace(&production_text(include_str!("../lib.rs")));
+    assert_eq!(lib.matches("IntegrationRouter::from_config(").count(), 1);
+    assert!(lib.contains(
+        "IntegrationRouter::from_config(&nexus_integrations::IntegrationConfig::default(),"
+    ));
+    for (relative, text) in desktop_production_texts() {
+        for forbidden in ["IntegrationConfig{", "IntegrationConfig {", ".set_consent("] {
+            assert!(!text.contains(forbidden), "{relative}: {forbidden}");
+        }
     }
     // The desktop swarm's social-post adapter only drafts.
     let swarm = without_whitespace(&production_text(include_str!("../commands/swarm.rs")));
