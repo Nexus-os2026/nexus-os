@@ -28,8 +28,7 @@ use nexus_integrations::IntegrationRouter;
 use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
 use nexus_kernel::cognitive::PlannedAction;
 use nexus_kernel::computer_control::{
-    activate_emergency_kill_switch, analyze_stored_screenshot, capture_and_analyze_screen,
-    capture_and_store_screen, ComputerControlEngine, InputControlStatus, ScreenRegion,
+    activate_emergency_kill_switch, ComputerControlEngine, InputControlStatus,
 };
 use nexus_kernel::config::{
     load_config, save_config as save_nexus_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
@@ -295,13 +294,12 @@ pub(crate) fn get_trust_overview(state: &AppState) -> Result<Vec<TrustOverviewAg
 }
 
 // ── Computer Control Engine ──────────────────────────────────────────
-
-/// The desktop control artifact directory under the validated identity home
-/// (P0-002C5B). It is an application-owned location, not an agent workspace.
-pub(crate) fn desktop_control_workspace() -> Result<PathBuf, String> {
-    nexus_kernel::identity_home::nexus_state_path("desktop-backend/computer-control")
-        .map_err(|e| e.to_string())
-}
+//
+// P0-002C5C (Architect decision): the desktop has no screen-capture or
+// capture-plus-analysis route. `capture_screen`, `analyze_screen` and
+// `computer_control_capture_screen` are closed in `runtime`, and the
+// enabling branch of `computer_control_toggle` is refused. Status, history,
+// disabling, `stop_computer_action` and the emergency stop remain.
 
 /// A desktop-notification command line (P0-002C5C). The message is never
 /// part of a script: it is a separate argument after `--` for `notify-send`,
@@ -373,25 +371,6 @@ pub(crate) fn show_desktop_notification(message: &str) {
     let _ = command.output();
 }
 
-pub(crate) fn computer_control_capture_screen(
-    state: &AppState,
-    region: Option<String>,
-) -> Result<String, String> {
-    let engine = state
-        .computer_control
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-    if !engine.is_enabled() {
-        return Err("Computer control engine is disabled".into());
-    }
-    let region_parsed: Option<nexus_kernel::computer_control::ScreenRegion> = match region {
-        Some(r) => Some(serde_json::from_str(&r).map_err(|e| e.to_string())?),
-        None => None,
-    };
-    let result = engine.capture_screen(region_parsed.as_ref());
-    serde_json::to_string(&result).map_err(|e| e.to_string())
-}
-
 pub(crate) fn computer_control_get_history(state: &AppState) -> Result<String, String> {
     let engine = state
         .computer_control
@@ -401,22 +380,28 @@ pub(crate) fn computer_control_get_history(state: &AppState) -> Result<String, S
     serde_json::to_string(&history).map_err(|e| e.to_string())
 }
 
+/// P0-002C5C (Architect decision): enabling the computer-control engine over
+/// IPC is refused before any state is read or changed. An IPC request is not
+/// proof of the user's consent, and no brokered mechanism authorizes screen
+/// observation or input in Phase Zero. Disabling stays available.
 pub(crate) fn computer_control_toggle(state: &AppState, enabled: bool) -> Result<String, String> {
+    if enabled {
+        return Err(crate::phase0_surface::closed(
+            "computer_control_toggle",
+            crate::phase0_surface::Closure::ScreenObservation,
+        ));
+    }
     let mut engine = state
         .computer_control
         .lock()
         .unwrap_or_else(|p| p.into_inner());
-    if enabled {
-        engine.enable();
-    } else {
-        engine.disable();
-    }
+    engine.disable();
     state.log_event(
         SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "computer-control",
-            "action": if enabled { "enable" } else { "disable" },
+            "action": "disable",
         }),
     );
     Ok(json!({ "enabled": engine.is_enabled() }).to_string())
@@ -428,54 +413,6 @@ pub(crate) fn computer_control_status(state: &AppState) -> Result<String, String
         .lock()
         .unwrap_or_else(|p| p.into_inner());
     serde_json::to_string(&engine.status()).map_err(|e| e.to_string())
-}
-
-pub(crate) fn capture_screen(
-    state: &AppState,
-    region: Option<ScreenRegion>,
-) -> Result<String, String> {
-    let mut engine = state
-        .computer_control
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-    if !engine.is_enabled() {
-        engine.enable();
-    }
-    let workspace = desktop_control_workspace()?;
-    let path = capture_and_store_screen(&workspace, region.as_ref(), "tauri-capture-screen")?;
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::ToolCall,
-        json!({
-            "source": "computer-control",
-            "action": "capture_screen",
-            "path": path,
-        }),
-    );
-    Ok(path.display().to_string())
-}
-
-pub(crate) fn analyze_screen(state: &AppState, query: String) -> Result<String, String> {
-    let mut engine = state
-        .computer_control
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-    if !engine.is_enabled() {
-        engine.enable();
-    }
-    let workspace = desktop_control_workspace()?;
-    let analysis = capture_and_analyze_screen(&workspace, &query, None)?;
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::LlmCall,
-        json!({
-            "source": "computer-control",
-            "action": "analyze_screen",
-            "path": analysis.screenshot_path,
-            "model": analysis.model,
-        }),
-    );
-    Ok(analysis.output)
 }
 
 pub(crate) fn stop_computer_action(state: &AppState, agent_id: String) -> Result<(), String> {

@@ -3311,3 +3311,141 @@ fn p0_002c5b_persisted_agents_naming_a_consent_policy_path_are_not_restored() {
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// P0-002C5C (Architect decision): screen observation over desktop IPC is
+/// denied. The four capture routes (including the real nx handler) and the
+/// enabling branch of `computer_control_toggle` return their bounded denial
+/// whatever the engine or emergency-stop state is. They never enable the
+/// engine, clear or bypass the emergency stop, record an action, or audit a
+/// capture, analysis or enable. Status, history, disabling and stop stay
+/// available, and the earlier OS-input closures stay closed. Nothing here
+/// captures the screen, starts a capture tool or contacts a model: every
+/// route under test fails before any of that.
+#[cfg(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
+#[test]
+fn p0_002c5c_screen_observation_requests_are_denied_and_change_nothing() {
+    use crate::phase0_surface::{closed, Closure};
+    use crate::runtime::{
+        analyze_screen, capture_screen, computer_control_capture_screen,
+        computer_control_execute_action, start_computer_action,
+    };
+    use nexus_kernel::computer_control::{
+        activate_emergency_kill_switch, emergency_kill_switch_active, reset_emergency_kill_switch,
+    };
+
+    // The emergency stop is process-wide; this is the only test that sets it.
+    static EMERGENCY_STOP: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _serial = EMERGENCY_STOP.lock().unwrap_or_else(|p| p.into_inner());
+
+    let observation = |command| Err(closed(command, Closure::ScreenObservation));
+    let denied = |state: &AppState| {
+        assert_eq!(capture_screen(), observation("capture_screen"));
+        assert_eq!(analyze_screen(), observation("analyze_screen"));
+        assert_eq!(
+            computer_control_capture_screen(),
+            observation("computer_control_capture_screen")
+        );
+        match tauri::async_runtime::block_on(
+            crate::nx_bridge::commands::nx_computer_use_screenshot(),
+        ) {
+            Ok(shot) => panic!("the nx handler returned a screenshot: {shot:?}"),
+            Err(error) => assert_eq!(
+                error,
+                closed("nx_computer_use_screenshot", Closure::ScreenObservation)
+            ),
+        }
+        assert_eq!(
+            super::computer_control_toggle(state, true),
+            observation("computer_control_toggle")
+        );
+        assert_eq!(
+            computer_control_execute_action(),
+            Err(closed("computer_control_execute_action", Closure::OsInput))
+        );
+        assert_eq!(
+            start_computer_action(),
+            Err(closed("start_computer_action", Closure::OsInput))
+        );
+    };
+    let engine = |state: &AppState| {
+        let engine = state
+            .computer_control
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        (engine.is_enabled(), engine.total_actions())
+    };
+
+    // A disabled engine stays disabled, and nothing is recorded.
+    let state = AppState::new_in_memory();
+    assert_eq!(engine(&state), (false, 0));
+    denied(&state);
+    assert_eq!(engine(&state), (false, 0));
+    assert_eq!(
+        super::computer_control_get_history(&state),
+        Ok("[]".to_string())
+    );
+    let status: serde_json::Value = serde_json::from_str(
+        &super::computer_control_status(&state).expect("status stays readable"),
+    )
+    .expect("status json");
+    assert_eq!(status["enabled"], json!(false));
+    assert!(
+        !get_input_control_status(&state)
+            .expect("input status stays readable")
+            .enabled
+    );
+
+    // Denial does not depend on the engine state: an engine enabled by other
+    // means is not a capture grant, and the requests leave it unchanged.
+    state
+        .computer_control
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .enable();
+    denied(&state);
+    assert_eq!(engine(&state), (true, 0));
+    // Disabling stays available.
+    assert_eq!(
+        super::computer_control_toggle(&state, false),
+        Ok(json!({ "enabled": false }).to_string())
+    );
+    assert_eq!(engine(&state), (false, 0));
+
+    // After the emergency stop the requests stay denied. They neither clear
+    // nor bypass it. Stop and disable stay available during it.
+    activate_emergency_kill_switch();
+    denied(&state);
+    assert!(emergency_kill_switch_active());
+    assert_eq!(engine(&state), (false, 0));
+    assert!(
+        get_input_control_status(&state)
+            .expect("input status stays readable")
+            .kill_switch_active
+    );
+    stop_computer_action(&state, "p0-002c5c-session".to_string()).expect("stop stays available");
+    assert_eq!(
+        super::computer_control_toggle(&state, false),
+        Ok(json!({ "enabled": false }).to_string())
+    );
+    assert!(emergency_kill_switch_active());
+    assert_eq!(engine(&state), (false, 0));
+    // Test cleanup only: no desktop route can clear the stop.
+    reset_emergency_kill_switch();
+
+    // No capture, analysis or enable was audited; only the disables were.
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    let control: Vec<&str> = audit
+        .events()
+        .iter()
+        .filter(|event| event.payload["source"] == "computer-control")
+        .filter_map(|event| event.payload["action"].as_str())
+        .collect();
+    assert_eq!(
+        control,
+        ["disable", "stop_computer_action", "disable"],
+        "{control:?}"
+    );
+}

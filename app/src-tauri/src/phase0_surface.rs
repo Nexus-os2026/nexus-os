@@ -43,6 +43,11 @@ pub(crate) enum Closure {
     /// approved mechanism authorizes OS input in Phase Zero, and the agent
     /// executor already refuses screen and input actions.
     OsInput,
+    /// C5C (Architect decision): screen capture, capture plus analysis, or
+    /// enabling screen observation, requested over desktop IPC. No brokered
+    /// mechanism authorizes observing the screen in Phase Zero, and an IPC
+    /// request is not proof of the user's consent.
+    ScreenObservation,
 }
 
 impl Closure {
@@ -68,6 +73,7 @@ impl Closure {
             Self::OsInput => {
                 "keyboard and mouse input from the interface or a model is unavailable in Phase Zero"
             }
+            Self::ScreenObservation => "governed screen observation is unavailable in Phase Zero",
         }
     }
 }

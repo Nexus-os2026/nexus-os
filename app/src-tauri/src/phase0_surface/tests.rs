@@ -159,6 +159,18 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("start_computer_action", Closure::OsInput),
     // C5C: a raw output path for the browser bridge (never started) to write.
     ("browser_screenshot", Closure::FileSelection),
+    // C5C (Architect decision): screen capture and capture plus analysis
+    // requested over desktop IPC. These are denied unconditionally. The
+    // enabling branch of `computer_control_toggle` is refused as well, but
+    // its disabling branch stays open, so that command is not listed here
+    // (see `p0_002c5c_no_desktop_route_observes_the_screen`).
+    (
+        "computer_control_capture_screen",
+        Closure::ScreenObservation,
+    ),
+    ("capture_screen", Closure::ScreenObservation),
+    ("analyze_screen", Closure::ScreenObservation),
+    ("nx_computer_use_screenshot", Closure::ScreenObservation),
 ];
 
 const LIB_RS: &str = include_str!("../lib.rs");
@@ -296,7 +308,7 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             )),*),*]
         }};
     }
-    handlers!(
+    let mut handlers = handlers!(
         runtime => [
             file_manager_list, file_manager_read, file_manager_write, file_manager_create_dir,
             file_manager_delete, file_manager_rename, analyze_media_file, index_document,
@@ -332,6 +344,7 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             force_evolve_agent, trigger_immune_scan, get_git_repo_status,
             voice_start_listening, voice_pipeline_health, transcribe_push_to_talk,
             computer_control_execute_action, start_computer_action,
+            computer_control_capture_screen, capture_screen, analyze_screen,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
@@ -345,7 +358,17 @@ fn closed_handlers() -> Vec<ClosedHandler> {
         ],
         crate::nx_bridge::commands => [nx_agent_run, nx_chat, nx_tool],
         crate::commands::orchestration => [run_content_pipeline],
-    )
+    );
+    // The nx screenshot handler is async: the real handler's future is run
+    // to completion.
+    handlers.push((
+        "nx_computer_use_screenshot",
+        (|| {
+            tauri::async_runtime::block_on(crate::nx_bridge::commands::nx_computer_use_screenshot())
+                .map(|_| ())
+        }) as fn() -> Result<(), String>,
+    ));
+    handlers
 }
 
 #[cfg(all(
@@ -377,6 +400,7 @@ fn closure_reasons_are_bounded_and_echo_no_input() {
         Closure::AgentExecution,
         Closure::AmbientResource,
         Closure::OsInput,
+        Closure::ScreenObservation,
     ] {
         let reason = closure.reason();
         assert!(reason.contains("Phase Zero"), "{reason}");
@@ -1293,6 +1317,39 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
         "unsealed resource-limited spawn (the Builder uses spawn_sealed)",
     ),
     (".spawn_actuator(", "actuator process spawn"),
+    // P0-002C5C (Architect decision): screen observation. The four desktop
+    // capture routes are closed. The capture, analysis and emergency-stop
+    // APIs behind them must gain no other desktop caller, whether called
+    // directly, reached through a module path or imported. Three kernel
+    // capture names still sit unused in the shared command-module import
+    // blocks; `p0_002c5c_no_desktop_route_observes_the_screen` covers them.
+    (
+        "take_screenshot",
+        "direct computer-use screen capture (grim, scrot, import)",
+    ),
+    ("ScreenshotOptions", "computer-use screen capture options"),
+    (
+        "nexus_computer_use::capture",
+        "computer-use screen capture module",
+    ),
+    ("computer_control::capture_screen", "kernel screen capture"),
+    ("computer_control::capture_window", "kernel window capture"),
+    ("capture_window(", "kernel window capture"),
+    (
+        "capture_and_store_window",
+        "kernel window capture to a stored file",
+    ),
+    (".capture_screen(", "computer-control engine screen capture"),
+    ("query_vision_model", "screen image sent to a vision model"),
+    (
+        "detect_vision_model",
+        "vision model selection for screen analysis",
+    ),
+    ("reset_emergency_kill_switch", "clears the emergency stop"),
+    (
+        "ComputerControlEngine::enable",
+        "enables the computer-control engine",
+    ),
 ];
 
 /// The only approved construction of the kernel action executor: the Phase
@@ -2781,6 +2838,16 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
             own,
             &["p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed"][..],
         ),
+        (
+            "screen observation, or enabling it, over desktop IPC",
+            own,
+            &["p0_002c5c_no_desktop_route_observes_the_screen"][..],
+        ),
+        (
+            "screen observation, or enabling it, over desktop IPC",
+            lib_tests,
+            &["p0_002c5c_screen_observation_requests_are_denied_and_change_nothing"][..],
+        ),
     ] {
         for guard in guards {
             assert!(
@@ -2954,4 +3021,234 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
     }
     assert!(safe.contains("return escapeHtml(text)"));
     assert!(safe.contains("let html = escapeHtml(md)"));
+}
+
+/// Kernel capture APIs that the shared command-module import blocks still
+/// name, unused, under `#![allow(unused_imports)]` (P0-002C5C). Outside a
+/// `use` item they must not appear, and no `use` item may rename them.
+const IMPORTED_CAPTURE_APIS: &[&str] = &[
+    "capture_and_store_screen",
+    "capture_and_analyze_screen",
+    "analyze_stored_screenshot",
+];
+
+/// The `use` items of production text, and everything else.
+fn use_items_and_code(text: &str) -> (String, String) {
+    let (mut uses, mut code, mut in_use) = (String::new(), String::new(), false);
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        let starts_use = ["use ", "pub use ", "pub(crate) use ", "pub(super) use "]
+            .iter()
+            .any(|prefix| trimmed.starts_with(prefix));
+        if in_use || starts_use {
+            uses.push_str(line);
+            uses.push('\n');
+            in_use = !line.contains(';');
+        } else {
+            code.push_str(line);
+            code.push('\n');
+        }
+    }
+    (uses, code)
+}
+
+/// Whitespace-free body of the first item whose text starts at `signature`.
+fn body_after(src: &str, signature: &str) -> String {
+    let at = src.find(signature).unwrap_or_else(|| panic!("{signature}"));
+    let open = at + src[at..].find('{').unwrap();
+    without_whitespace(&src[open + 1..block_end(src, open) - 1])
+}
+
+/// P0-002C5C (Architect decision): no unbrokered desktop IPC route captures
+/// the screen, starts capture plus analysis, enables observation, or rearms
+/// it after a disable or the emergency stop.
+///
+/// - The four capture routes are closed (`CLOSED_COMMANDS`).
+/// - `computer_control_toggle` refuses its enabling branch before it reads or
+///   changes state. Disabling, status, history, `stop_computer_action`, the
+///   input status and nx readiness stay registered and available.
+/// - No desktop production code does any of the following:
+///   - calls a capture or vision API (the `LATENT_UNSAFE_APIS` needles; here,
+///     the imported kernel names and every `capture_screen(` call);
+///   - renames one of those APIs;
+///   - enables the engine;
+///   - clears the emergency stop.
+/// - The emergency-stop shortcut still sets the kill switch and disables the
+///   engine.
+/// - Omniscience stays an in-memory placeholder:
+///   - `start()` only sets a flag;
+///   - `capture_context` only stores a context it is given;
+///   - neither the kernel module nor the desktop wrapper reaches a capture
+///     primitive, a process, a worker thread or the network.
+///
+///   Wiring one of these in fails here and needs a separately approved
+///   mission.
+#[test]
+fn p0_002c5c_no_desktop_route_observes_the_screen() {
+    for command in [
+        "computer_control_capture_screen",
+        "capture_screen",
+        "analyze_screen",
+        "nx_computer_use_screenshot",
+    ] {
+        assert!(
+            CLOSED_COMMANDS.contains(&(command, Closure::ScreenObservation)),
+            "{command} must stay closed as screen observation"
+        );
+    }
+    let handlers = registered_handlers();
+    for available in [
+        "computer_control_toggle",
+        "computer_control_status",
+        "computer_control_get_history",
+        "stop_computer_action",
+        "get_input_control_status",
+        "nx_computer_use_status",
+    ] {
+        let registered = handlers
+            .iter()
+            .filter(|entry| split_handler(entry).1 == available)
+            .count();
+        assert_eq!(registered, 1, "{available} must stay registered");
+        assert!(
+            !CLOSED_COMMANDS
+                .iter()
+                .any(|(command, _)| *command == available),
+            "{available} must stay available"
+        );
+    }
+
+    // The toggle refuses enabling before it reads or changes any state.
+    let trust = production_text(include_str!("../commands/trust_security.rs"));
+    let toggle = body_after(&trust, "fn computer_control_toggle(").replace(",)", ")");
+    assert!(
+        toggle.starts_with(concat!(
+            "ifenabled{returnErr(crate::phase0_surface::closed(\"computer_control_toggle\",",
+            "crate::phase0_surface::Closure::ScreenObservation));}",
+        )),
+        "{toggle}"
+    );
+
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    production_sources(&root, &mut files);
+    assert!(files.len() > 20, "desktop sources not found");
+    for path in files {
+        let relative = path
+            .strip_prefix(&root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        let text = production_text(&std::fs::read_to_string(&path).unwrap());
+        let (uses, code) = use_items_and_code(&text);
+        for api in IMPORTED_CAPTURE_APIS {
+            assert!(!names(&code, api), "{relative}: {api} is used");
+            assert!(
+                !uses.contains(&format!("{api} as")),
+                "{relative}: {api} is renamed"
+            );
+        }
+        // Every `capture_screen(` is a closed handler's definition or the
+        // tail of a longer name, never a call of a capture API.
+        for (at, _) in code.match_indices("capture_screen(") {
+            let definition = code[..at].trim_end().ends_with("fn");
+            let longer_name = code[..at]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_');
+            assert!(
+                definition || longer_name,
+                "{relative}: calls a capture_screen API"
+            );
+        }
+        if code.contains(".computer_control") {
+            assert!(
+                !code.contains(".enable()"),
+                "{relative}: enables the computer-control engine"
+            );
+        }
+    }
+
+    // The emergency stop sets the kill switch and disables the engine.
+    let lib = production_text(LIB_RS);
+    assert_eq!(lib.matches("activate_emergency_kill_switch();").count(), 1);
+    let stop = lib.find("activate_emergency_kill_switch();").unwrap();
+    let upto = lib[stop..]
+        .find("log_event(")
+        .expect("emergency stop audit");
+    let stop_handler = without_whitespace(&lib[stop..stop + upto]);
+    assert!(
+        stop_handler.contains(".computer_control.lock()")
+            && stop_handler.contains("engine.disable();"),
+        "{stop_handler}"
+    );
+
+    // Omniscience is an in-memory placeholder, not screen observation.
+    let screen = production_text(include_str!("../../../../kernel/src/omniscience/screen.rs"));
+    assert_eq!(
+        body_after(&screen, "pub fn start(&mut self)"),
+        "self.active=true;"
+    );
+    assert_eq!(
+        body_after(
+            &screen,
+            "pub fn capture_context(&mut self, context: ScreenContext)"
+        ),
+        "ifself.history.len()>=self.max_history{self.history.pop_front();}self.history.push_back(context);"
+    );
+    for (file, source) in [
+        (
+            "mod.rs",
+            include_str!("../../../../kernel/src/omniscience/mod.rs"),
+        ),
+        (
+            "screen.rs",
+            include_str!("../../../../kernel/src/omniscience/screen.rs"),
+        ),
+        (
+            "apps.rs",
+            include_str!("../../../../kernel/src/omniscience/apps.rs"),
+        ),
+        (
+            "executor.rs",
+            include_str!("../../../../kernel/src/omniscience/executor.rs"),
+        ),
+        (
+            "intent.rs",
+            include_str!("../../../../kernel/src/omniscience/intent.rs"),
+        ),
+        (
+            "assistant.rs",
+            include_str!("../../../../kernel/src/omniscience/assistant.rs"),
+        ),
+    ] {
+        let text = production_text(source);
+        for forbidden in [
+            "std::process",
+            "Command::new",
+            "spawn(",
+            "std::thread",
+            "tokio::",
+            "std::net",
+            "std::fs",
+            "reqwest",
+            "curl",
+            "computer_control",
+            "nexus_computer_use",
+            "capture_screen",
+            "take_screenshot",
+            "screencapture",
+        ] {
+            assert!(!text.contains(forbidden), "omniscience/{file}: {forbidden}");
+        }
+    }
+    let advanced = production_text(include_str!("../commands/advanced.rs"));
+    assert_eq!(
+        body_after(&advanced, "fn omniscience_enable(interval_ms: u64)"),
+        "letmutscreen=omniscience_engine().lock().unwrap_or_else(|p|p.into_inner());screen.set_capture_interval_ms(interval_ms);screen.start();Ok(())"
+    );
+    assert_eq!(
+        body_after(&advanced, "fn omniscience_get_screen_context()"),
+        "letscreen=omniscience_engine().lock().unwrap_or_else(|p|p.into_inner());letcontext=screen.get_rolling_context(1);serde_json::to_value(&context).map_err(|e|e.to_string())"
+    );
 }

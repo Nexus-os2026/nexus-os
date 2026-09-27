@@ -389,22 +389,18 @@ pub struct LearningStats {
 
 // ─── Computer Use Commands ───
 
-/// Take a screenshot via the governed computer-use pipeline.
+/// P0-002C5C (Architect decision): screen capture is unavailable in Phase
+/// Zero. This command used to capture the whole screen directly and return it
+/// to the interface, bypassing the engine state and the emergency stop. It now
+/// denies unconditionally. No capture options, capture backend, image
+/// encoding, file access or model request precedes the denial, and readiness
+/// (`nx_computer_use_status`) is not a condition for it.
 #[command]
 pub async fn nx_computer_use_screenshot() -> Result<NxScreenshot, String> {
-    let opts = nexus_computer_use::capture::ScreenshotOptions::default();
-    let shot = nexus_computer_use::capture::screenshot::take_screenshot(opts)
-        .await
-        .map_err(|e| format!("Screenshot failed: {}", e))?;
-
-    Ok(NxScreenshot {
-        base64: shot.base64,
-        width: shot.width,
-        height: shot.height,
-        backend: shot.backend,
-        file_size_bytes: shot.file_size_bytes,
-        audit_hash: shot.audit_hash,
-    })
+    Err(crate::phase0_surface::closed(
+        "nx_computer_use_screenshot",
+        crate::phase0_surface::Closure::ScreenObservation,
+    ))
 }
 
 /// Check computer-use system readiness: display server, capture, input.

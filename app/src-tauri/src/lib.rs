@@ -5265,11 +5265,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn computer_control_capture_screen(
-        state: tauri::State<'_, AppState>,
-        region: Option<String>,
-    ) -> Result<String, String> {
-        super::computer_control_capture_screen(state.inner(), region)
+    pub(crate) fn computer_control_capture_screen() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "computer_control_capture_screen",
+            crate::phase0_surface::Closure::ScreenObservation,
+        ))
     }
 
     #[tauri::command]
@@ -5299,16 +5299,19 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn capture_screen(
-        state: tauri::State<'_, AppState>,
-        region: Option<ScreenRegion>,
-    ) -> Result<String, String> {
-        super::capture_screen(state.inner(), region)
+    pub(crate) fn capture_screen() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "capture_screen",
+            crate::phase0_surface::Closure::ScreenObservation,
+        ))
     }
 
     #[tauri::command]
-    fn analyze_screen(state: tauri::State<'_, AppState>, query: String) -> Result<String, String> {
-        super::analyze_screen(state.inner(), query)
+    pub(crate) fn analyze_screen() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "analyze_screen",
+            crate::phase0_surface::Closure::ScreenObservation,
+        ))
     }
 
     #[tauri::command]
