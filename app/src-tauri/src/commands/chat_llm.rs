@@ -1486,7 +1486,9 @@ pub(crate) fn cleanup_legacy_agent_db_if_needed(
 
 #[cfg(not(test))]
 pub(crate) fn maybe_cleanup_legacy_agent_db() {
-    if std::env::var("NEXUS_DB_PATH").is_ok() {
+    // An operator database override is left alone, however it is spelled:
+    // `nexus_db_path` reads it with `var_os`, so a non-UTF-8 value counts.
+    if std::env::var_os("NEXUS_DB_PATH").is_some() {
         return;
     }
 

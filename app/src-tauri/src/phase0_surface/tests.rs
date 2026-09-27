@@ -2031,3 +2031,84 @@ fn p0_002c5c_notification_text_never_becomes_a_script() {
     }
     assert_eq!(callers, 1);
 }
+
+/// Operator state-location overrides and where each is read. Every mention
+/// is a `var_os` read: the kernel resolvers pass it to `operator_override`
+/// (a non-empty absolute path, or no location), and the legacy-database
+/// cleanup only checks that it is set.
+const OPERATOR_OVERRIDE_READS: &[(&str, &str, usize)] = &[
+    ("app/src-tauri/src/commands/chat_llm.rs", "NEXUS_DB_PATH", 1),
+    ("kernel/src/config.rs", "NEXUS_CONFIG_PATH", 1),
+    ("kernel/src/identity_home.rs", "NEXUS_DB_PATH", 1),
+];
+
+/// P0-002C5C: `NEXUS_DB_PATH` and `NEXUS_CONFIG_PATH` are launch
+/// configuration only. No production code sets or removes an environment
+/// variable except the provider-key facade, whose variable names are a fixed
+/// allowlist of API-key names; the overrides are read only at the approved
+/// sites, and only through `operator_override`.
+#[test]
+fn p0_002c5c_operator_overrides_stay_launch_configuration() {
+    let mut mutations = Vec::new();
+    let mut reads = Vec::new();
+    for (relative, text) in workspace_production_sources() {
+        let count = text.matches("set_var(").count() + text.matches("remove_var(").count();
+        if count > 0 {
+            mutations.push((relative.clone(), count));
+        }
+        for name in ["NEXUS_DB_PATH", "NEXUS_CONFIG_PATH"] {
+            let mentions = text.matches(&format!("\"{name}\"")).count();
+            if mentions > 0 {
+                let via_var_os = text.matches(&format!("var_os(\"{name}\")")).count();
+                assert_eq!(
+                    via_var_os, mentions,
+                    "{relative}: {name} read other than by var_os"
+                );
+                reads.push((relative.clone(), name, mentions));
+            }
+        }
+    }
+    assert_eq!(
+        mutations,
+        [("app/src-tauri/src/commands/chat_llm.rs".to_string(), 1)]
+    );
+    let approved: Vec<_> = OPERATOR_OVERRIDE_READS
+        .iter()
+        .map(|(file, name, count)| (file.to_string(), *name, *count))
+        .collect();
+    assert_eq!(reads, approved);
+
+    // The one environment write names only API-key variables.
+    let chat = production_text(include_str!("../commands/chat_llm.rs"));
+    let at = chat
+        .find("pub(crate) fn save_provider_api_key(")
+        .expect("save_provider_api_key");
+    let open = at + chat[at..].find('{').unwrap();
+    let body = &chat[open..block_end(&chat, open)];
+    assert!(body.contains("std::env::set_var(env_name, &api_key);"));
+    let names: Vec<&str> = body
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .filter(|literal| literal.chars().all(|c| c.is_ascii_uppercase() || c == '_'))
+        .filter(|literal| literal.len() > 1)
+        .collect();
+    assert_eq!(names.len(), 7, "{names:?}");
+    for name in names {
+        assert!(name.ends_with("_API_KEY"), "{name}");
+    }
+
+    // Both kernel resolvers pass the override to `operator_override`.
+    let identity = without_whitespace(&production_text(include_str!(
+        "../../../../kernel/src/identity_home.rs"
+    )));
+    assert!(identity.contains(
+        "ifletSome(path)=std::env::var_os(\"NEXUS_DB_PATH\"){returnoperator_override(path);}"
+    ));
+    let config = without_whitespace(&production_text(include_str!(
+        "../../../../kernel/src/config.rs"
+    )));
+    assert!(config.contains(
+        "ifletSome(path)=env::var_os(\"NEXUS_CONFIG_PATH\"){returncrate::identity_home::operator_override(path)"
+    ));
+}
