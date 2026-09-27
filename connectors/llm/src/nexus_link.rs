@@ -26,6 +26,37 @@ const FLAG_PLAINTEXT: u8 = 0x00;
 /// Wire-format flag: message payload is AES-256-GCM encrypted.
 const FLAG_ENCRYPTED: u8 = 0x01;
 
+/// Largest message a peer may announce (P0-002C5C). A transfer chunk is
+/// `chunk_size` (1 MiB) of data plus framing; a longer length prefix is
+/// refused before anything is allocated for it.
+const MAX_LINK_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
+
+/// How long connecting to a peer may take.
+const PEER_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Connect to a peer `host:port` within [`PEER_CONNECT_TIMEOUT`], trying each
+/// resolved address, with read and write timeouts on the stream.
+fn connect_peer(address: &str, io_timeout: std::time::Duration) -> Result<TcpStream, String> {
+    use std::net::ToSocketAddrs;
+    let addresses = address
+        .to_socket_addrs()
+        .map_err(|e| format!("Failed to resolve peer {address}: {e}"))?;
+    let mut last_error = format!("Peer {address} has no address");
+    for resolved in addresses {
+        match TcpStream::connect_timeout(&resolved, PEER_CONNECT_TIMEOUT) {
+            Ok(stream) => {
+                stream
+                    .set_read_timeout(Some(io_timeout))
+                    .and_then(|()| stream.set_write_timeout(Some(io_timeout)))
+                    .map_err(|e| format!("Failed to set timeout: {e}"))?;
+                return Ok(stream);
+            }
+            Err(e) => last_error = format!("Failed to connect to peer {address}: {e}"),
+        }
+    }
+    Err(last_error)
+}
+
 // ── Protocol types ──────────────────────────────────────────────────────────
 
 /// A device participating in Nexus Link model sharing.
@@ -450,11 +481,7 @@ impl NexusLink {
             "[nexus-link][governance] tcp_connect peer={} op=discover_models",
             peer.address
         );
-        let mut stream = TcpStream::connect(&peer.address)
-            .map_err(|e| format!("Failed to connect to peer {}: {e}", peer.address))?;
-        stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(10)))
-            .map_err(|e| format!("Failed to set read timeout: {e}"))?;
+        let mut stream = connect_peer(&peer.address, std::time::Duration::from_secs(10))?;
 
         // Authenticate before exchanging messages
         self.authenticate_as_initiator(&mut stream)?;
@@ -527,11 +554,7 @@ impl NexusLink {
         eprintln!(
             "[nexus-link][governance] tcp_connect peer={peer_address} op=send_model model_id={model_id}"
         );
-        let mut stream = TcpStream::connect(peer_address)
-            .map_err(|e| format!("Failed to connect to peer: {e}"))?;
-        stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(30)))
-            .map_err(|e| format!("Failed to set timeout: {e}"))?;
+        let mut stream = connect_peer(peer_address, std::time::Duration::from_secs(30))?;
 
         // Authenticate before exchanging messages
         self.authenticate_as_initiator(&mut stream)?;
@@ -886,6 +909,11 @@ impl NexusLink {
             .read_exact(&mut len_buf)
             .map_err(|e| format!("Failed to read message length: {e}"))?;
         let len = u32::from_be_bytes(len_buf) as usize;
+        if len > MAX_LINK_MESSAGE_BYTES {
+            return Err(format!(
+                "Peer message of {len} bytes exceeds the {MAX_LINK_MESSAGE_BYTES}-byte limit"
+            ));
+        }
 
         // Read payload
         let mut payload = vec![0u8; len];
@@ -1276,6 +1304,51 @@ mod tests {
         let deserialized2 = NexusLink::deserialize_message_plaintext(&serialized).unwrap();
         let json_rt2 = serde_json::to_string(&deserialized2).unwrap();
         assert_eq!(json_orig, json_rt2);
+    }
+
+    // ── P0-002C5C: bounded peer connections ─────────────────────────────
+
+    #[test]
+    fn p0_002c5c_peer_messages_are_bounded_before_allocation() {
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let peer = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            // A peer announcing a 4 GiB message and sending none of it.
+            stream
+                .write_all(&[FLAG_PLAINTEXT, 0xFF, 0xFF, 0xFF, 0xFF])
+                .unwrap();
+            let mut rest = [0u8; 16];
+            while matches!(stream.read(&mut rest), Ok(n) if n > 0) {}
+        });
+        let link = NexusLink::new("client", "/tmp/models");
+        let mut stream = connect_peer(&address, std::time::Duration::from_secs(5)).unwrap();
+        assert_eq!(
+            stream.read_timeout().unwrap(),
+            Some(std::time::Duration::from_secs(5))
+        );
+        assert_eq!(
+            stream.write_timeout().unwrap(),
+            Some(std::time::Duration::from_secs(5))
+        );
+        let error = match link.read_message(&mut stream) {
+            Ok(_) => panic!("an oversized message was accepted"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error,
+            "Peer message of 4294967295 bytes exceeds the 16777216-byte limit"
+        );
+        drop(stream);
+        peer.join().unwrap();
+
+        for address in ["", "no-port", "127.0.0.1"] {
+            assert!(
+                connect_peer(address, std::time::Duration::from_secs(5)).is_err(),
+                "{address:?}"
+            );
+        }
     }
 
     // ── HMAC-SHA256 challenge-response auth tests ───────────────────────
