@@ -716,34 +716,66 @@ pub(crate) fn get_config() -> Result<NexusConfig, String> {
 
 /// Saves interface-editable settings. The encryption-at-rest section chooses
 /// where the vault master key comes from (an environment variable or a key
-/// file), so it is backend-owned (P0-002C5B): a request that would change it
-/// is refused and nothing is written.
+/// file), so it is backend-owned (P0-002C5B): a request must carry exactly the
+/// section the backend's own configuration holds, or nothing is written.
 pub(crate) fn save_config(state: &AppState, config: NexusConfig) -> Result<(), String> {
-    let current = load_config()
-        .map(|current| current.security)
-        .unwrap_or_default();
-    security_unchanged(state, &current, &config.security)?;
-    save_nexus_config(&config).map_err(agent_error)
+    save_config_with(state, config, load_config, save_nexus_config)
 }
 
-fn security_unchanged(
+/// [`save_config`] with the current-configuration loader and the writer
+/// injected. The loaded security section is the only baseline. If the loader
+/// fails (an unreadable, undecryptable or unparsable configuration, or no
+/// identity home), there is no baseline and the save is denied: no default
+/// ever stands in for it. A missing file is not a failure: the loader then
+/// creates the first-run default, which is the configuration startup uses.
+fn save_config_with(
     state: &AppState,
-    current: &nexus_kernel::crypto::EncryptionConfig,
-    requested: &nexus_kernel::crypto::EncryptionConfig,
+    config: NexusConfig,
+    load_current: impl FnOnce() -> Result<NexusConfig, AgentError>,
+    write: impl FnOnce(&NexusConfig) -> Result<(), AgentError>,
 ) -> Result<(), String> {
-    if requested == current {
-        return Ok(());
+    let current = match load_current() {
+        Ok(current) => current.security,
+        Err(_) => return Err(deny_config_save(state, BASELINE_UNAVAILABLE)),
+    };
+    if config.security != current {
+        return Err(deny_config_save(state, SECURITY_BACKEND_OWNED));
     }
+    write(&config).map_err(agent_error)
+}
+
+/// (audit reason class, bounded error) for a refused interface config save.
+const BASELINE_UNAVAILABLE: (&str, &str) = (
+    "current_security_settings_unavailable",
+    "save_config: current security settings are unavailable",
+);
+const SECURITY_BACKEND_OWNED: (&str, &str) = (
+    "security_settings_backend_owned",
+    "save_config: security settings are backend-owned",
+);
+
+/// Records a refused save by reason class only (never a path, parse text,
+/// key source, key file or secret) and returns its bounded error.
+fn deny_config_save(state: &AppState, (reason, error): (&str, &str)) -> String {
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({
-            "action": "save_config",
-            "outcome": "denied",
-            "reason": "security_settings_backend_owned",
-        }),
+        json!({"action": "save_config", "outcome": "denied", "reason": reason}),
     );
-    Err("save_config: security settings are backend-owned".to_string())
+    error.to_string()
+}
+
+#[cfg(test)]
+fn audited_payloads(state: &AppState) -> String {
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    serde_json::to_string(
+        &audit
+            .events()
+            .iter()
+            .map(|e| &e.payload)
+            .collect::<Vec<_>>(),
+    )
+    .unwrap()
 }
 
 #[cfg(test)]
@@ -751,42 +783,100 @@ fn security_unchanged(
 fn p0_002c5b_interface_saves_cannot_choose_the_vault_key_source() {
     use nexus_kernel::crypto::EncryptionConfig;
     let state = AppState::new_in_memory();
-    let current = EncryptionConfig::default();
-    assert_eq!(
-        security_unchanged(&state, &current, &current.clone()),
-        Ok(())
-    );
-    for requested in [
+    let current = NexusConfig::default();
+    for security in [
         EncryptionConfig {
             key_source: "file".into(),
             key_file: Some("/marker/key-file".into()),
-            ..current.clone()
+            ..current.security.clone()
         },
         EncryptionConfig {
             key_env: "PATH".into(),
-            ..current.clone()
+            ..current.security.clone()
         },
         EncryptionConfig {
             enabled: true,
-            ..current.clone()
+            ..current.security.clone()
         },
     ] {
-        assert_eq!(
-            security_unchanged(&state, &current, &requested),
-            Err("save_config: security settings are backend-owned".to_string())
+        let wrote = std::cell::Cell::new(false);
+        let requested = NexusConfig {
+            security,
+            ..current.clone()
+        };
+        let result = save_config_with(
+            &state,
+            requested,
+            || Ok(current.clone()),
+            |_| {
+                wrote.set(true);
+                Ok(())
+            },
         );
+        assert_eq!(result, Err(SECURITY_BACKEND_OWNED.1.to_string()));
+        assert!(!wrote.get());
     }
-    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
-    let logged = serde_json::to_string(
-        &audit
-            .events()
-            .iter()
-            .map(|e| &e.payload)
-            .collect::<Vec<_>>(),
-    )
-    .unwrap();
-    assert!(logged.contains("security_settings_backend_owned"));
+    // An unchanged section, against a baseline that loaded, is written once.
+    let wrote = std::cell::Cell::new(0);
+    let result = save_config_with(
+        &state,
+        current.clone(),
+        || Ok(current.clone()),
+        |_| {
+            wrote.set(wrote.get() + 1);
+            Ok(())
+        },
+    );
+    assert_eq!(result, Ok(()));
+    assert_eq!(wrote.get(), 1);
+    let logged = audited_payloads(&state);
+    assert!(logged.contains(SECURITY_BACKEND_OWNED.0));
     assert!(!logged.contains("marker"));
+}
+
+#[cfg(test)]
+#[test]
+fn p0_002c5b_an_unavailable_security_baseline_authorizes_no_save() {
+    use nexus_kernel::crypto::EncryptionConfig;
+    let state = AppState::new_in_memory();
+    // The request that a default baseline would wrongly authorize (an
+    // unchanged default section), and one that also changes the key source.
+    let default_request = NexusConfig::default();
+    let key_file_request = NexusConfig {
+        security: EncryptionConfig {
+            enabled: true,
+            key_source: "file".into(),
+            key_file: Some("/marker/key-file".into()),
+            ..EncryptionConfig::default()
+        },
+        ..NexusConfig::default()
+    };
+    for requested in [default_request, key_file_request] {
+        for failure in [
+            AgentError::SupervisorError(
+                "invalid config format: marker-parse-text key_file = \"/marker/key\"".into(),
+            ),
+            AgentError::SupervisorError("marker-decrypt-failure".into()),
+            AgentError::ManifestError("marker-no-identity-home".into()),
+        ] {
+            let wrote = std::cell::Cell::new(false);
+            let result = save_config_with(
+                &state,
+                requested.clone(),
+                || Err(failure),
+                |_| {
+                    wrote.set(true);
+                    Ok(())
+                },
+            );
+            assert_eq!(result, Err(BASELINE_UNAVAILABLE.1.to_string()));
+            assert!(!wrote.get(), "nothing may be written without a baseline");
+        }
+    }
+    let logged = audited_payloads(&state);
+    assert!(logged.contains(BASELINE_UNAVAILABLE.0));
+    assert!(!logged.contains("marker"));
+    assert!(!logged.contains("key_file"));
 }
 
 // ── Track C #3: local STT subprocess bridge ──────────────────────────────────

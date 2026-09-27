@@ -343,7 +343,7 @@ content and absolute path are never recorded.
 | Time Machine entries | Grant-bound (§5.1); legacy raw-path entries do not deserialize |
 | Backup archive entries | Validated names inside a fresh directory (§5.2) |
 | Agent manifests, `consent_policy_path` | Refused (§5.8) |
-| `NexusConfig.security` (vault master-key source: `enabled`, `key_source`, `key_env`, `key_file`) | `save_config` (interface IPC) refuses any change and audits the refusal; a configured key file must be an absolute path; key-file errors no longer name the file |
+| `NexusConfig.security` (vault master-key source: `enabled`, `key_source`, `key_env`, `key_file`) | `save_config` (interface IPC) writes only when the request carries exactly the section loaded from the backend's own configuration. If that configuration cannot be loaded (unreadable, undecryptable, unparsable, or no identity home), no baseline exists: the save is refused, nothing is written, and no default stands in. Refusals are audited by reason class only (`security_settings_backend_owned`, `current_security_settings_unavailable`). A configured key file must be an absolute path, and key-file errors no longer name the file. |
 | nx sessions, notes, projects, email, tokens | Named only through §5.3 |
 | Scheduler records | Name agents and goals, no path; the store lives under the identity home |
 | `NexusConfig.backup.output_dir` | Stored, but read by no code (there is no scheduled-backup consumer) |

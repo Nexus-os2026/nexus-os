@@ -1658,17 +1658,28 @@ fn p0_002c5b_serialized_records_choose_no_authority() {
     ] {
         assert!(nexus_kernel::manifest::parse_manifest(manifest).is_err());
     }
-    // Interface config saves cannot choose the vault key source.
+    // Interface config saves cannot choose the vault key source, and without
+    // a loaded current security section nothing authorizes a save.
     let chat = production_text(include_str!("../commands/chat_llm.rs"));
-    let at = chat
-        .find("pub(crate) fn save_config(")
-        .expect("save_config");
-    let open = at + chat[at..].find('{').unwrap();
-    let body = without_whitespace(&chat[open + 1..block_end(&chat, open) - 1]);
+    let fn_body = |name: &str| {
+        let at = chat.find(name).unwrap_or_else(|| panic!("{name}"));
+        let open = at + chat[at..].find('{').unwrap();
+        without_whitespace(&chat[open + 1..block_end(&chat, open) - 1])
+    };
+    assert_eq!(
+        fn_body("pub(crate) fn save_config("),
+        "save_config_with(state,config,load_config,save_nexus_config)"
+    );
+    let body = fn_body("fn save_config_with(");
+    assert!(!body.contains("unwrap_or"), "{body}");
+    assert!(
+        body.contains("Err(_)=>returnErr(deny_config_save(state,BASELINE_UNAVAILABLE)),"),
+        "{body}"
+    );
     let check = body
-        .find("security_unchanged(state,&current,&config.security)?;")
-        .expect("save_config checks the security section");
-    assert!(check < body.find("save_nexus_config(").unwrap(), "{body}");
+        .find("ifconfig.security!=current{")
+        .expect("save_config compares the security section");
+    assert!(check < body.find("write(&config)").unwrap(), "{body}");
     // No production producer records Time Machine file entries.
     let conductor = production_text(include_str!("../../../../agents/conductor/src/lib.rs"));
     assert!(!conductor.contains("record_file_"));
