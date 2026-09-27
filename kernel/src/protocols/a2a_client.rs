@@ -123,7 +123,8 @@ impl A2aClient {
 
         let output = std::process::Command::new("curl")
             .args(crate::governed_http::CURL_HTTP_ONLY)
-            .args(["-s", "-m", "10", "--", checked.as_str()])
+            .args(["-s", "-m", "10", "--max-filesize", "1048576", "--"])
+            .arg(checked.as_str())
             .output()
             .map_err(|e| A2aClientError::DiscoveryFailed {
                 url: card_url.clone(),
@@ -499,6 +500,8 @@ impl A2aClient {
                 "-s",
                 "-m",
                 "30",
+                "--max-filesize",
+                "16777216",
                 "-X",
                 "POST",
                 "-H",

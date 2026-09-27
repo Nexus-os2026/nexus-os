@@ -518,7 +518,16 @@ fn watch_download(
 fn get_content_length(url: &str) -> Option<u64> {
     let output = Command::new("curl")
         .args(nexus_kernel::governed_http::CURL_HTTPS_ONLY)
-        .args(["-sS", "-L", "-I", "-m", "10", "--"])
+        .args([
+            "-sS",
+            "-L",
+            "-I",
+            "-m",
+            "10",
+            "--max-filesize",
+            "1048576",
+            "--",
+        ])
         .arg(url)
         .output()
         // Optional: curl may not be installed or HEAD request may fail
@@ -759,6 +768,8 @@ pub fn register_downloaded_model_with_ollama(
             "-sS",
             "-m",
             "600",
+            "--max-filesize",
+            "16777216",
             "-X",
             "POST",
             "-H",

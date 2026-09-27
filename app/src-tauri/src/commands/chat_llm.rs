@@ -298,7 +298,7 @@ pub(crate) fn get_default_model() -> String {
         if let Ok(output) = tags.map_err(|_| ()).and_then(|tags| {
             std::process::Command::new("curl")
                 .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-                .args(["-sS", "-m", "0.5", "--"])
+                .args(["-sS", "-m", "0.5", "--max-filesize", "10485760", "--"])
                 .arg(tags.as_str())
                 .output()
                 .map_err(|_| ())
@@ -1947,7 +1947,15 @@ pub(crate) fn delete_ollama_model(
 
     let output = Command::new("curl")
         .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-        .args(["-sS", "-m", "30", "-X", "DELETE"])
+        .args([
+            "-sS",
+            "-m",
+            "30",
+            "--max-filesize",
+            "1048576",
+            "-X",
+            "DELETE",
+        ])
         .arg("-H")
         .arg("content-type: application/json")
         .arg("--data-raw")

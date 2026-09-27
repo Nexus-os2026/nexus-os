@@ -180,6 +180,8 @@ pub(crate) fn curl_get_status(endpoint: &str) -> Result<u16, AgentError> {
             "-L",
             "-m",
             "5",
+            "--max-filesize",
+            "1048576",
             "-o",
             "/dev/null",
             "-w",
@@ -235,7 +237,14 @@ pub(crate) fn curl_post_json_with_timeout(
     let mut command = Command::new("curl");
     command
         .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-        .args(["-sS", "-L", "-m", &timeout_str]);
+        .args([
+            "-sS",
+            "-L",
+            "-m",
+            &timeout_str,
+            "--max-filesize",
+            "33554432",
+        ]);
     for (header_name, header_value) in headers {
         let header = nexus_kernel::governed_http::http_header(header_name, header_value)
             .map_err(|error| AgentError::SupervisorError(error.to_string()))?;

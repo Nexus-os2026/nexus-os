@@ -1377,6 +1377,40 @@ fn p0_002c5b_curl_invocations_keep_caller_values_out_of_curl_syntax() {
     );
 }
 
+/// P0-002C5C: every production curl site is bounded in time (a total `-m`
+/// or `--max-time`, or for the model download a `--speed-time` stall bound,
+/// with its size watched by the caller) and in response size
+/// (`--max-filesize`). C5B described all sites as bounded in both; fourteen
+/// had no size bound until C5C.
+#[test]
+fn p0_002c5c_every_production_curl_site_is_bounded_in_time_and_size() {
+    let mut sites = 0;
+    for (relative, text) in workspace_production_sources() {
+        let invocations =
+            text.matches("Command::new(\"curl\")").count() + text.matches("(\"curl\",").count();
+        if invocations == 0 {
+            continue;
+        }
+        let time = text.matches("\"-m\"").count()
+            + text.matches("\"--max-time\"").count()
+            + text.matches("\"--speed-time\"").count();
+        let size = text.matches("\"--max-filesize\"").count();
+        assert!(
+            time >= invocations,
+            "{relative}: {time} time bounds, {invocations} sites"
+        );
+        assert!(
+            size >= invocations,
+            "{relative}: {size} size bounds, {invocations} sites"
+        );
+        sites += invocations;
+    }
+    assert_eq!(
+        sites,
+        CURL_SITES.iter().map(|(_, count)| count).sum::<usize>()
+    );
+}
+
 /// Ambient per-user roots: HOME and platform directories, the shared temp
 /// directory and the working directory.
 const STATE_ROOT_NEEDLES: &[&str] = &[

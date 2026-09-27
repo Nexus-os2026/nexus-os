@@ -63,7 +63,8 @@ fn searxng_url() -> Option<String> {
     let health = crate::governed_http::http_url(&format!("{url}/healthz")).ok()?;
     if let Ok(output) = Command::new("curl")
         .args(crate::governed_http::CURL_HTTP_ONLY)
-        .args(["-sS", "--max-time", "2", "--", health.as_str()])
+        .args(["-sS", "--max-time", "2", "--max-filesize", "1048576", "--"])
+        .arg(health.as_str())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
