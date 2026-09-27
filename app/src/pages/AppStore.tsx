@@ -9,6 +9,7 @@ import {
 } from "../api/backend";
 import type { MarketplaceAgent, PreinstalledAgent } from "../types";
 import "./app-store.css";
+import { safeHttpUrl } from "../lib/safeHtml";
 
 type LevelFilter = "All" | "L1" | "L2" | "L3" | "L4" | "L5" | "L6";
 
@@ -389,7 +390,7 @@ export default function AppStore(): JSX.Element {
                       <span style={{ opacity: 0.5 }}>by {agent.author} · {agent.stars} stars</span>
                       <div style={{ display: "flex", gap: 8 }}>
                         <button type="button" className="cursor-pointer" onClick={() => void handleInstall(agent.name)} style={{ padding: "4px 12px", background: "rgba(34,211,238,0.15)", border: "1px solid rgba(34,211,238,0.3)", borderRadius: 4, color: "#22d3ee", fontSize: "0.7rem", cursor: "pointer", fontFamily: "inherit" }}>Install</button>
-                        <a href={agent.url} target="_blank" rel="noopener noreferrer" style={{ color: "#818cf8", textDecoration: "none", padding: "4px 0" }}>View</a>
+                        <a href={safeHttpUrl(agent.url)} target="_blank" rel="noopener noreferrer" style={{ color: "#818cf8", textDecoration: "none", padding: "4px 0" }}>View</a>
                       </div>
                     </div>
                   </div>

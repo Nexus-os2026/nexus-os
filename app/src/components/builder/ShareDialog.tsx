@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { builderDeployQrCode, type DeployHistoryEntry } from "../../api/backend";
+import { safeHttpUrl } from "../../lib/safeHtml";
 
 const C = {
   bg: "#0a0e14",
@@ -45,7 +46,8 @@ export default function ShareDialog({ projectId: _projectId, entry, onClose }: S
   }, [entry.url]);
 
   const openUrl = useCallback(() => {
-    window.open(entry.url, "_blank");
+    const url = safeHttpUrl(entry.url);
+    if (url) window.open(url, "_blank");
   }, [entry.url]);
 
   const formatTime = (iso: string) => {
@@ -81,7 +83,7 @@ export default function ShareDialog({ projectId: _projectId, entry, onClose }: S
           textAlign: "center", wordBreak: "break-all",
           boxSizing: "border-box",
         }}>
-          <a href={entry.url} target="_blank" rel="noopener noreferrer" style={{
+          <a href={safeHttpUrl(entry.url)} target="_blank" rel="noopener noreferrer" style={{
             color: C.accent, fontSize: 11, textDecoration: "none",
           }}>
             {entry.url}

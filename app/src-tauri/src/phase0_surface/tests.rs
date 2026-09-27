@@ -2560,6 +2560,23 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
                 "{relative}: innerHTML assignment"
             );
         }
+        // Links and window targets taken from data must be http(s).
+        for (at, needle) in text.match_indices("href={") {
+            let value = &text[at + needle.len()..];
+            assert!(
+                value.starts_with("safeHttpUrl(") || value.starts_with('"'),
+                "{relative}: href from data without safeHttpUrl"
+            );
+        }
+        for (at, needle) in text.match_indices("window.open(") {
+            let target = &text[at + needle.len()..];
+            assert!(
+                target.starts_with("url,")
+                    || (relative == "src/pages/AiChatHub.tsx"
+                        && target.starts_with("`file://${indexPath}`")),
+                "{relative}: window.open target not checked"
+            );
+        }
     }
     let expected: Vec<_> = FRONTEND_HTML_SINKS
         .iter()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeHtml, renderChatContent, renderNoteMarkdown } from "../safeHtml";
+import { escapeHtml, renderChatContent, renderNoteMarkdown, safeHttpUrl } from "../safeHtml";
 
 /** Parse rendered HTML the way the webview would and report what it built. */
 function parse(html: string) {
@@ -86,5 +86,24 @@ describe("P0-002C5C: text never becomes markup", () => {
       renderNoteMarkdown("[docs](https://example.com/a?x=1&y=2) ![pic](https://example.com/p.png)"),
     );
     expect(urls).toEqual(["https://example.com/a?x=1&y=2", "https://example.com/p.png"]);
+  });
+
+  it("admits only http(s) URLs as link and window targets", () => {
+    expect(safeHttpUrl("https://example.com/a?b=1")).toBe("https://example.com/a?b=1");
+    expect(safeHttpUrl("http://localhost:3000/")).toBe("http://localhost:3000/");
+    for (const hostile of [
+      "javascript:alert(1)",
+      " javascript:alert(1)",
+      "JAVASCRIPT:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "file:///etc/passwd",
+      "vbscript:msgbox(1)",
+      "not a url",
+      "",
+      null,
+      undefined,
+    ]) {
+      expect(safeHttpUrl(hostile), String(hostile)).toBeUndefined();
+    }
   });
 });

@@ -19,6 +19,22 @@ export function escapeHtml(text: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * A link or window target taken from data (a stored record, a remote
+ * response, a model): the URL if it parses as http(s), otherwise undefined.
+ * React 18 renders `javascript:` URLs, so every such `href` and
+ * `window.open` goes through here.
+ */
+export function safeHttpUrl(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Whether escaped URL text is an http(s) URL. */
 function isHttpUrl(escapedUrl: string): boolean {
   return /^https?:\/\/[^\s]+$/i.test(escapedUrl);

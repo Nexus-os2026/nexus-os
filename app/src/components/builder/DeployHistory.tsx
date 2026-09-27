@@ -14,6 +14,7 @@ import {
 } from "../../api/backend";
 import DeployDiff from "./DeployDiff";
 import ShareDialog from "./ShareDialog";
+import { safeHttpUrl } from "../../lib/safeHtml";
 
 const C = {
   bg: "#0a0e14",
@@ -195,7 +196,7 @@ export default function DeployHistory({ projectId, onClose }: DeployHistoryProps
             <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }}>
               {entry.status === "Live" && (
                 <>
-                  <SmallBtn label="Open" onClick={() => window.open(entry.url, "_blank")} />
+                  <SmallBtn label="Open" onClick={() => { const url = safeHttpUrl(entry.url); if (url) window.open(url, "_blank"); }} />
                   <SmallBtn label="Share" onClick={() => setShareEntry(entry)} />
                 </>
               )}

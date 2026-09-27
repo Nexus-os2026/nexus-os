@@ -1,4 +1,5 @@
 import type { KnowledgeEntry } from "../../types";
+import { safeHttpUrl } from "../../lib/safeHtml";
 
 interface KnowledgeCardProps {
   entry: KnowledgeEntry;
@@ -65,7 +66,7 @@ export function KnowledgeCard({ entry }: KnowledgeCardProps): JSX.Element {
 
       <a
         className="knowledge-card-source"
-        href={entry.source_url}
+        href={safeHttpUrl(entry.source_url)}
         target="_blank"
         rel="noopener noreferrer"
         title={entry.source_url}

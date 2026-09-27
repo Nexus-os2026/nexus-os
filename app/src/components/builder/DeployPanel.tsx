@@ -16,6 +16,7 @@ import {
   builderDeployRollback,
   type DeployResult,
 } from "../../api/backend";
+import { safeHttpUrl } from "../../lib/safeHtml";
 
 const C = {
   bg: "#0a0e14",
@@ -142,9 +143,8 @@ export default function DeployPanel({ projectId, onClose, lastDeploy, onHistory 
   }, [result]);
 
   const openUrl = useCallback(() => {
-    if (result?.url) {
-      window.open(result.url, "_blank");
-    }
+    const url = safeHttpUrl(result?.url);
+    if (url) window.open(url, "_blank");
   }, [result]);
 
   // Panel backdrop + slide-out
@@ -348,7 +348,7 @@ export default function DeployPanel({ projectId, onClose, lastDeploy, onHistory 
                 Your site is live!
               </div>
               <a
-                href={result.url}
+                href={safeHttpUrl(result.url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ color: C.text, fontSize: 11, wordBreak: "break-all", textDecoration: "underline" }}
