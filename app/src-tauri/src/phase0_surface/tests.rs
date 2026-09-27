@@ -2438,6 +2438,11 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
             own,
             &["p0_002c5c_tool_calls_run_at_the_registered_agents_autonomy"][..],
         ),
+        (
+            "model, remote or note text rendered as markup in the webview",
+            own,
+            &["p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed"][..],
+        ),
     ] {
         for guard in guards {
             assert!(
@@ -2455,7 +2460,133 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
         "const NEXUS_CODE_CLI_AGENT_ENTRY_POINTS: &[&str]",
         "const OPERATOR_OVERRIDE_READS: &[(&str, &str, usize)]",
         "const BENCHMARK_PROCESS_SITES: &[(&str, usize)]",
+        "const FRONTEND_HTML_SINKS: &[(&str, usize, &str)]",
     ] {
         assert!(own.contains(registry), "registry {registry} is missing");
     }
+}
+
+/// Frontend raw-HTML sinks (P0-002C5C) and what makes each safe. The webview
+/// CSP is `null`, so markup built from model, remote or note text would run
+/// with access to every IPC command.
+const FRONTEND_HTML_SINKS: &[(&str, usize, &str)] = &[
+    (
+        "src/components/browser/BuildMode.tsx",
+        1,
+        "highlightCode escapes the generated code first",
+    ),
+    (
+        "src/components/builder/ShareDialog.tsx",
+        1,
+        "the backend QR code SVG (qrcode crate, no text)",
+    ),
+    (
+        "src/pages/AiChatHub.tsx",
+        3,
+        "renderChatContent escapes model text first",
+    ),
+    (
+        "src/pages/ApiClient.tsx",
+        1,
+        "highlightJson escapes the response body first",
+    ),
+    (
+        "src/pages/NotesApp.tsx",
+        1,
+        "renderNoteMarkdown escapes note text first; http(s) links only",
+    ),
+];
+
+/// P0-002C5C: every raw-HTML sink in the frontend is counted and renders
+/// escaped text; every `srcDoc` preview iframe is sandboxed so that it never
+/// runs script with the app's origin; the crash screen escapes its message.
+#[test]
+fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
+    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<(String, String)>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !matches!(name.as_str(), "__tests__" | "test" | "node_modules") {
+                    walk(root, &path, out);
+                }
+            } else if (name.ends_with(".ts") || name.ends_with(".tsx")) && !name.contains(".test.")
+            {
+                let relative = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                out.push((relative, std::fs::read_to_string(&path).unwrap()));
+            }
+        }
+    }
+    let app = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    walk(&app, &app.join("src"), &mut files);
+    assert!(files.len() > 100, "frontend sources not found");
+
+    let mut sinks = Vec::new();
+    let mut previews = 0;
+    for (relative, text) in &files {
+        let count = text.matches("dangerouslySetInnerHTML={").count();
+        if count > 0 {
+            sinks.push((relative.clone(), count));
+        }
+        for (at, _) in text.match_indices("srcDoc=") {
+            let open = text[..at]
+                .rfind("<iframe")
+                .expect("srcDoc outside an iframe");
+            let close = at + text[at..].find("/>").expect("iframe element end");
+            let element = &text[open..close];
+            let sandbox = element
+                .split("sandbox=\"")
+                .nth(1)
+                .and_then(|rest| rest.split('"').next())
+                .unwrap_or_else(|| panic!("{relative}: srcDoc iframe without sandbox"));
+            assert!(
+                !(sandbox.contains("allow-scripts") && sandbox.contains("allow-same-origin")),
+                "{relative}: sandboxed preview may run script with the app's origin"
+            );
+            previews += 1;
+        }
+        if relative != "src/main.tsx" {
+            assert!(
+                !text.contains("innerHTML ="),
+                "{relative}: innerHTML assignment"
+            );
+        }
+    }
+    let expected: Vec<_> = FRONTEND_HTML_SINKS
+        .iter()
+        .map(|(file, count, _)| (file.to_string(), *count))
+        .collect();
+    assert_eq!(sinks, expected, "a raw-HTML sink must be classified");
+    assert!(previews >= 6, "{previews}");
+
+    let source = |file: &str| {
+        &files
+            .iter()
+            .find(|(relative, _)| relative == file)
+            .unwrap_or_else(|| panic!("{file}"))
+            .1
+    };
+    let chat = source("src/pages/AiChatHub.tsx");
+    assert!(chat.contains("renderChatContent(content)"));
+    assert!(!chat.contains("const highlightCode"));
+    let notes = source("src/pages/NotesApp.tsx");
+    assert!(notes.contains("renderNoteMarkdown(selectedNote.content)"));
+    assert!(!notes.contains("function renderMarkdown"));
+    let main = source("src/main.tsx");
+    assert!(main.contains("${escapeHtml(e.message || \"Unknown error\")}"));
+    let safe = source("src/lib/safeHtml.ts");
+    for escaped in ["&amp;", "&lt;", "&gt;", "&quot;", "&#39;"] {
+        assert!(safe.contains(escaped), "escapeHtml: {escaped}");
+    }
+    assert!(safe.contains("return escapeHtml(text)"));
+    assert!(safe.contains("let html = escapeHtml(md)"));
 }

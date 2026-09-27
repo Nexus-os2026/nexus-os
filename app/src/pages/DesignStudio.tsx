@@ -270,18 +270,17 @@ export default function DesignStudio(): JSX.Element {
             className="mt-4 w-full rounded-2xl border border-cyan-500/20 bg-slate-950/70 px-3 py-3 font-mono text-sm text-cyan-50"
           />
           <div className="mt-4 rounded-2xl border border-cyan-500/15 bg-white p-4">
-            {format === "html" ? (
-              <iframe
-                title="Design Preview"
-                srcDoc={markup}
-                className="h-[320px] w-full rounded-xl border border-slate-200"
-              />
-            ) : (
-              <div
-                className="flex min-h-[320px] items-center justify-center rounded-xl border border-slate-200"
-                dangerouslySetInnerHTML={{ __html: markup }}
-              />
-            )}
+            {/* P0-002C5C: the preview runs no script and shares no origin with the app. */}
+            <iframe
+              title="Design Preview"
+              srcDoc={markup}
+              sandbox=""
+              className={
+                format === "html"
+                  ? "h-[320px] w-full rounded-xl border border-slate-200"
+                  : "min-h-[320px] w-full rounded-xl border border-slate-200"
+              }
+            />
           </div>
         </section>
       </div>

@@ -14,6 +14,7 @@ import type {
   PreinstalledAgent, ConsentNotification, AuditEventRow,
 } from "../types";
 import "./ai-chat-hub.css";
+import { renderChatContent } from "../lib/safeHtml";
 
 /* ─── types ─── */
 type View = "chat" | "compare" | "history";
@@ -1006,24 +1007,8 @@ export default function AiChatHub() {
     return `${Math.floor(diff / 86400000)}d`;
   };
 
-  const highlightCode = (content: string) => {
-    if (!content) return "";
-    return content.replace(/```(\w+)?\n([\s\S]*?)```/g, (_match, lang: string, code: string) => {
-      const l = lang || "text";
-      return `<div class="ch-code-block"><div class="ch-code-header"><span>${l}</span><button type="button" class="ch-code-run" data-code="${encodeURIComponent(code.trim())}">▶ Run</button></div><pre class="ch-code-pre"><code>${code.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre></div>`;
-    });
-  };
-
-  const renderContent = (content: string) => {
-    if (!content) return "";
-    let html = content;
-    html = highlightCode(html);
-    html = html
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/(?<!`)`(?!`)([^`\n]+)`(?!`)/g, '<code class="ch-inline-code">$1</code>');
-    html = html.replace(/\n/g, "<br/>");
-    return html;
-  };
+  // P0-002C5C: model text is escaped before any markup is added.
+  const renderContent = (content: string) => renderChatContent(content);
 
   const updateStreamingMsg = useCallback((convId: string, msgId: string, content: string, done: boolean) => {
     setConversations(prev => prev.map(c => {

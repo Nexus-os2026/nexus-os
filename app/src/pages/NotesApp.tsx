@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ClipboardList, FolderOpen, Microscope, Calendar, Hexagon, FileText, Package, StickyNote, Bug, Search, ChevronLeft, ChevronRight, ChevronDown, Pin, PinOff, Tag, Download, Copy, Zap, Play } from "lucide-react";
 import { notesGet, notesList, notesSave, notesDelete } from "../api/backend";
 import "./notes-app.css";
+import { renderNoteMarkdown } from "../lib/safeHtml";
 
 /* ─── Backend calls go through backend.ts ─── */
 
@@ -94,42 +95,6 @@ const TEMPLATES: Record<string, { title: string; content: string; tags: string[]
     tags: [],
   },
 };
-
-/* ─── markdown renderer (simple) ─── */
-function renderMarkdown(md: string): string {
-  let html = md
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="na-code-block"><code>$2</code></pre>')
-    .replace(/`([^`]+)`/g, '<code class="na-inline-code">$1</code>')
-    .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/~~(.+?)~~/g, '<del>$1</del>')
-    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-    .replace(/^---$/gm, '<hr />')
-    .replace(/^- \[x\] (.+)$/gm, '<div class="na-checkbox checked">☑ $1</div>')
-    .replace(/^- \[ \] (.+)$/gm, '<div class="na-checkbox">☐ $1</div>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-    .replace(/^\|(.+)\|$/gm, (match) => {
-      const cells = match.split("|").filter(c => c.trim());
-      if (cells.every(c => /^[\s-:]+$/.test(c))) return '';
-      const tag = "td";
-      return `<tr>${cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join("")}</tr>`;
-    })
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2" class="na-img" />')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="na-link">$1</a>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br />');
-
-  html = html.replace(/((?:<li>.*?<\/li>\s*)+)/g, '<ul>$1</ul>');
-  html = html.replace(/((?:<tr>.*?<\/tr>\s*)+)/g, '<table class="na-table">$1</table>');
-
-  return `<p>${html}</p>`;
-}
 
 /* ─── component ─── */
 export default function NotesApp() {
@@ -587,7 +552,7 @@ export default function NotesApp() {
               )}
               {(viewMode === "preview" || viewMode === "split") && (
                 <div className="na-preview-pane">
-                  <div className="na-preview-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(selectedNote.content) }} />
+                  <div className="na-preview-content" dangerouslySetInnerHTML={{ __html: renderNoteMarkdown(selectedNote.content) }} />
                 </div>
               )}
             </div>
