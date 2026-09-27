@@ -581,8 +581,8 @@ The sweep started read-only at the authoritative C5B head `58e5a4c0` (tree
 and ambient roots, processes, network, recovery and records, and IPC and agent
 dispatch. Each finding was re-verified in source and traced to its IPC
 command, startup task or agent path. C5C repaired every reachable finding it
-could bound (§10.2) and then recounted the desktop closure at the C5C head
-(§10.8).
+could bound (§10.2), recounted the desktop closure (§10.8) and repaired what
+the recount found.
 
 ### 10.2 Findings and repairs
 
@@ -608,8 +608,8 @@ could bound (§10.2) and then recounted the desktop closure at the C5C head
 | `sim_run` answered file and environment preconditions and simulated writes and deletes by probing the host for the caller's paths and names (an existence oracle) | reachable | The sandbox has no view of the host: files exist only if the scenario wrote them, and no variable is set | `sandbox::tests::p0_002c5c_simulations_reveal_nothing_about_the_host`; NX10 |
 | `swarm_approve` ran a model-planned swarm whose Herald node could publish a model-written post with the stored X credentials when the plan set `dry_run: false` | reachable (model choice released by an IPC approval) | `HeraldAdapter::drafts_only()` in the desktop registry | `p0_002c5c_a_drafts_only_herald_never_publishes`; delegation guard; NX11 |
 | `get_config` returned every stored credential still held in the configuration, in plaintext, to the interface | reachable | Credentials are returned as a placeholder; a save of the placeholder keeps the stored value; messaging connect resolves it | `p0_002c5c_the_interface_never_reads_stored_credentials`; serialized-records guard; NX12 |
-| The flash provider defaulted its model file to the relative `flash-local` (`test_llm_connection`, `LLM_PROVIDER=flash`) | reachable | Only an absolute configured path; otherwise the provider is unavailable | `connectors/llm/tests/phase0_flash_model_path.rs`; NX13 |
-| A chat model id `flash/<path>` (`send_chat`, and the same resolver in the cognitive and Builder routes) became a native model load of the caller's path, plus a `blockdev` run and reads of neighbouring `.gguf` files, in builds linked with real llama.cpp | reachable | The `flash` prefix returns the file-selection closure | `p0_002c5c_a_flash_model_id_never_names_a_file` |
+| The flash provider defaulted its model file to the relative `flash-local` (`test_llm_connection`, `LLM_PROVIDER=flash`), so the working directory chose the file for the llama loader and its page-cache warm-up | reachable; only builds linked with real llama.cpp open the file (no release build sets `NEXUS_LLAMA_CPP_PATH`, so released desktops link the stub loader) | Only an absolute configured path; otherwise the provider is unavailable | `connectors/llm/tests/phase0_flash_model_path.rs`; NX13 |
+| A chat model id `flash/<path>` (`send_chat`, and the same resolver in the cognitive and Builder routes) would have named a file for the native model loader | not compiled: the arm required a `flash-infer` feature that the desktop crate does not declare, so the id failed as an unknown prefix. The message of `1b61903c` calls the arm reachable; it was not. | Hardening: the `flash` prefix returns the file-selection closure, whatever the build features | `p0_002c5c_a_flash_model_id_never_names_a_file` |
 | `email_send_message` wrote the caller's recipient and subject into raw header lines (CR/LF added headers such as `Bcc`) | reachable | CR, LF and NUL refused before any token is read | `p0_002c5c_email_header_values_cannot_add_headers`; NX14 |
 | C4B exit-race test failed about 1 in 1,500 runs | test defect | Test accepts the valid finalized-before-stop ordering | stress evidence in the C5C report |
 
@@ -730,6 +730,8 @@ only: tests, benches, examples, fixtures, build scripts and
 - **After the recount.** The findings were repaired (the last rows of §10.2)
   and the latent APIs named (§10.5). The tables give both states. Every Rust
   change after `d5e068d8` is a repair listed there, or test and guard code.
+  Both site scans were re-run at the C5C head: the production site sets are
+  unchanged, so only the classes moved.
 
 **IPC commands** (804 registered, 128 closed, 676 open):
 
@@ -763,21 +765,35 @@ Independent of class:
 - `execute_tool`, the nx agent loop and the browser bridge are DENIED.
 - None of the 18 startup items is unresolved.
 
-**Sites in the desktop closure:**
+**Sites in the desktop closure** (at the recount → after the C5C repairs):
 
 | Bucket | Filesystem and ambient roots | Process and network |
 |---|---:|---:|
-| Reachable: GOVERNED | 105 | 46 |
-| Reachable: FIXED | 150 | 112 |
-| Reachable: DENIED | 87 | 0 |
-| Reachable: UNRESOLVED (D/E) | 2, see below | 0 |
-| Latent: GUARDED | 259 at the recount; 369 once C5C named the rest | 100 at the recount; 200 once named |
-| Latent: UNGUARDED | 110 at the recount; 0 | 100 at the recount; 0 |
+| Reachable: GOVERNED | 105 → 105 | 46 → 46 |
+| Reachable: FIXED | 152 → 150 | 112 → 108 |
+| Reachable: DENIED | 76 → 87 | 0 → 4 |
+| Reachable: UNRESOLVED (D/E) | 11 → 2, see below | 0 → 0 |
+| Latent: GUARDED | 259 → 369 | 100 → 200 |
+| Latent: UNGUARDED | 110 → 0 | 100 → 0 |
 | Total | 713 | 358 |
 
-The process and network recount counted a site behind a refusal (a closed
-command or the executor) as latent. The filesystem recount counted it as
-DENIED. Neither convention hides a reachable effect.
+What moved after the recount:
+
+- **Flash model file** (`23489c1d`). At the recount, 9 filesystem sites were
+  unresolved: the llama loader and its page-cache warm-up, reached through the
+  relative `flash-local` (§10.2). The desktop configures no absolute flash
+  path, so it now refuses the provider. Those 9 sites are DENIED, and so are
+  the 2 fixed `/sys` and `/proc` reads and the `blockdev` run on the same
+  load path.
+- **Herald** (`7570d6f2`). The desktop swarm only drafts, so the three X
+  request sites are DENIED.
+- **Latent APIs** (`fc9a416b`, `aae835f5`, `3e6a0506`). Every latent site is
+  now named.
+
+The process and network recount counted a site as latent when its only path
+runs through a closed command, the executor or a named latent API. The
+filesystem recount counted such a site as DENIED. Neither convention hides a
+reachable effect.
 
 The two filesystem entries that remain classified E are:
 
@@ -814,9 +830,11 @@ The two filesystem entries that remain classified E are:
   unpackaged agent libraries.
 - **Benchmarks:** `benchmarks/` and `benchmarks/conductor-bench`.
 
-**Summary:** unresolved reachable D/E is 0, besides the Architect-deferred
-item A. Unguarded latent is 0. Every other site is governed, fixed backend
-state, denied or guarded latent.
+**Summary:** after the repairs, unresolved reachable D/E is 0, besides the
+Architect-deferred item A. The vault key file is counted as operator
+configuration, pending the Architect's confirmation (item E). Unguarded latent
+is 0. Every other site is governed, fixed backend state, denied or guarded
+latent.
 
 ### 10.9 Final trust-surface guard
 
