@@ -415,9 +415,11 @@ fn test_select_provider_explicit_unknown_returns_error() {
 
 #[test]
 fn test_select_provider_explicit_flash() {
+    // P0-002C5C: the model file is named by an absolute path.
+    let model = std::env::temp_dir().join("test-model.gguf");
     let config = ProviderSelectionConfig {
         provider: Some("flash".into()),
-        flash_model_path: Some("test-model.gguf".into()),
+        flash_model_path: Some(model.to_string_lossy().into_owned()),
         ..Default::default()
     };
     let result = select_provider(&config);
