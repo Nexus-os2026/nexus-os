@@ -918,8 +918,8 @@ mod tests {
         assert!(!path.exists());
 
         // The production bound is finite and above the largest hub file.
-        assert!(MAX_MODEL_FILE_BYTES > 50_000_000_000);
-        assert!(MAX_MODEL_FILE_BYTES < u64::MAX / 2);
+        const { assert!(MAX_MODEL_FILE_BYTES > 50_000_000_000) };
+        const { assert!(MAX_MODEL_FILE_BYTES < u64::MAX / 2) };
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

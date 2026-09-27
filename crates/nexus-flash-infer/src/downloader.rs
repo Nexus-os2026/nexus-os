@@ -1208,8 +1208,8 @@ mod tests {
     fn p0_002c5c_the_production_bound_is_finite_and_above_the_largest_hub_file() {
         let limits = DownloadLimits::default();
         assert_eq!(limits.max_file_bytes, MAX_MODEL_FILE_BYTES);
-        assert!(MAX_MODEL_FILE_BYTES > 50_000_000_000);
-        assert!(MAX_MODEL_FILE_BYTES < u64::MAX / 2);
+        const { assert!(MAX_MODEL_FILE_BYTES > 50_000_000_000) };
+        const { assert!(MAX_MODEL_FILE_BYTES < u64::MAX / 2) };
         assert_eq!(limits.base_url, "https://huggingface.co");
     }
 

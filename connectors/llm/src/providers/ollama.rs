@@ -636,7 +636,7 @@ mod tests {
         }
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        let provider = OllamaProvider::new(&format!("http://127.0.0.1:{port}/"));
+        let provider = OllamaProvider::new(format!("http://127.0.0.1:{port}/"));
         assert!(provider.health_check().unwrap());
         // The probe connected and sent nothing.
         let (mut stream, _) = listener.accept().unwrap();
