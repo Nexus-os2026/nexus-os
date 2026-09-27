@@ -1234,6 +1234,11 @@ pub(crate) fn email_fetch_messages(
     Ok(result)
 }
 
+/// A value that fits on one message header line: no CR, LF or NUL.
+fn email_header_ok(value: &str) -> bool {
+    !value.chars().any(|c| matches!(c, '\r' | '\n' | '\0'))
+}
+
 pub(crate) fn email_send_message(
     state: &AppState,
     provider: String,
@@ -1242,6 +1247,11 @@ pub(crate) fn email_send_message(
     body: String,
 ) -> Result<String, String> {
     let known = email_provider(state, "email_send", &provider)?;
+    // P0-002C5C: the recipient and subject become message header lines, so
+    // neither may carry a line break (which would add headers such as Bcc).
+    if !email_header_ok(&to) || !email_header_ok(&subject) {
+        return Err(deny(state, "email_send", "invalid_header"));
+    }
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,

@@ -493,3 +493,30 @@ fn p0_002c5c_legacy_mixed_case_files_are_listed_but_never_selected_by_another_sp
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// P0-002C5C: email recipients and subjects stay on one header line.
+#[test]
+fn p0_002c5c_email_header_values_cannot_add_headers() {
+    for ok in ["a@example.com", "Weekly report", "Ünïcode ✓", ""] {
+        assert!(email_header_ok(ok), "{ok:?}");
+    }
+    for hostile in [
+        "a@example.com\r\nBcc: spy@example.com",
+        "subject\nBcc: spy@example.com",
+        "subject\rX: y",
+        "nul\0byte",
+    ] {
+        assert!(!email_header_ok(hostile), "{hostile:?}");
+    }
+    let state = AppState::new_in_memory();
+    assert_eq!(
+        email_send_message(
+            &state,
+            "gmail".into(),
+            "a@example.com\r\nBcc: spy@example.com".into(),
+            "hello".into(),
+            "body".into(),
+        ),
+        Err("email_send: invalid header".to_string())
+    );
+}
