@@ -22,26 +22,31 @@ without a local same-user foothold or an operator mistake.
 | Item | Topic | State at C5C | Final-Gate status |
 |---|---|---|---|
 | A | Configuration encryption key | Derived from ambient user and host values | Open: design |
-| B | Egress policy | Allowlist matching fixed in C5C; destinations open | Open: policy |
+| B | Egress policy | Allowlist matching, explicit scheme and effective port enforced (C5C); destinations, addresses and DNS open | Open: policy |
 | C | Secrets in subprocess argv | API keys in curl `-H` arguments and one URL path | Open: design |
 | D | `null` webview CSP | CSP unchanged; C5C repaired the frontend text-as-markup sinks and stopped returning stored credentials | Open: design |
-| E | Operator overrides | Location overrides absolute-only and launch-only (C5C); endpoint and key overrides recorded | Open: review |
+| E | Operator overrides | Location overrides absolute-only and launch-only (C5C); the vault key file is accepted as an operator trust assumption (Architect); endpoint and key overrides recorded | Open: review |
 | F | Network peers (Nexus Link) | Bounded in C5C; any peer allowed by default | Open: policy |
 | G | Approval channel | Approvals arrive over webview IPC; the desktop swarm only drafts (C5C) | Open: design |
 | H | Secrets at rest outside the vault | OAuth token files are plaintext | Open: design |
 | I | PATH-resolved helper programs | Fixed arguments; `ollama serve` detached | Open: review |
 | J | Shipped non-desktop binaries | `crates/nexus-server` is unauthenticated on all interfaces | **Blocker** |
 | K | Reliability signals | Windows `executes_python_code`, retained as debt | Open: debt |
-| L | Screen observation from the interface | Capture needs no gesture; it re-enables the engine after the kill switch | Open: design |
+| L | Screen observation from the interface | Unbrokered observation is unavailable: the four capture routes are closed and enabling is refused (Architect decision) | Closed; a brokered mechanism is future work |
 
 Items A–F are the Final-Gate topics named by the Architect. G–L were found or
 confirmed by the C5C sweep. Two parts of these items were immediately
 exploitable from untrusted surfaces when C5C started, and C5C repaired both:
 the egress allowlist matching of item B (from model output) and the frontend
-text-as-markup sinks of item D (from model output and remote content). As
-the desktop stands at C5C, none of A–I or L is known to be immediately
-exploitable from an untrusted surface; the reasoning is given per item. J
-concerns a separately deployed server, not the desktop.
+text-as-markup sinks of item D (from model output and remote content).
+
+After review, the Architect required two further repairs:
+- Item B: an explicit scheme and port are restrictions.
+- Item L: unbrokered screen observation is unavailable.
+
+Both are in place. As the desktop stands at C5C, none of A–I or L is known to
+be immediately exploitable from an untrusted surface; the reasoning is given
+per item. J concerns a separately deployed server, not the desktop.
 
 ## A. Configuration encryption key
 
@@ -76,7 +81,9 @@ concerns a separately deployed server, not the desktop.
   local process of the same user can read the file and derive the key; that
   process already has the user's authority.
 - **Decision needed.** Whether the key must come from an OS keystore or a
-  user secret, and how existing files migrate.
+  user secret, and how existing files migrate. This stays unresolved after
+  C5C. The Architect's repair review authorized no crypto, vault or server
+  redesign.
 
 ## B. Egress policy
 
@@ -124,9 +131,41 @@ of governed shape to a destination the interface chooses:
 | `save_config`, `run_setup_wizard` | persist `llm.ollama_url` | all later planner and agent LLM traffic |
 | Agent web fetch | `kernel/src/actuators/web.rs` | the agent manifest's `allowed_endpoints`, which the interface chooses at creation |
 
+**Repaired in C5C (Architect repair B): explicit transport restrictions.**
+
+`endpoint_admits` (`kernel/src/firewall/egress.rs`) now compares a request and
+an allowlist entry as a scheme, a normalized host, an effective port and whole
+leading path segments. It uses the existing `url` parser and
+`governed_http::http_url`. The rules:
+
+- **Explicit scheme.** An entry with a scheme admits only that scheme. For
+  example, `https://example.test/v1` never admits `http://example.test/v1`,
+  and an `http` entry never admits `https`.
+- **Effective port.** It must match. `https://host` and `https://host:443`
+  are the same entry, and another port is denied.
+- **Host.** Hosts are compared after normalization (case, IDNA, IPv4 forms),
+  never as text prefixes. `/v1` never admits `/v11`, and paths are
+  case-sensitive.
+- **Legacy entries without a scheme.** They keep a documented compatibility
+  meaning. `host[:port][/path]` admits `http` and `https` to that host: on its
+  explicit port, or else on the request scheme's default port. An explicit
+  `:80` stays port 80. The rule applies only to entries written without a
+  scheme. Each entry keeps its own meaning, so a legacy entry never changes
+  what a schemed entry admits. A legacy entry for the same host and path does
+  admit `http` by its own meaning; that is a separate entry the operator or
+  interface listed.
+- **Rejected input.** Malformed, credential-bearing, ambiguous or
+  non-HTTP(S) entries and requests admit nothing. That covers user
+  information, a query, fragment or backslash in an entry, `.` or `..`
+  segments, a non-numeric or empty port, and another scheme.
+- **Unchanged.** Default deny for an absent or empty policy, rate limiting
+  and auditing are unchanged.
+
+The kernel comments at the web and API actuators' `check_egress` still
+describe the earlier scheme stripping. Those files were outside the approved
+change area, and `endpoint_admits` alone decides the behaviour.
+
 - **Also open.**
-  - An allowlist entry is scheme-insensitive: an `https` entry admits the
-    same host over plain `http`.
   - There is no address policy: loopback, private and link-local
     destinations are reachable wherever a caller chooses the destination
     (the external-tools denylist is substring-based).
@@ -135,9 +174,12 @@ of governed shape to a destination the interface chooses:
   shape to any host through `api_client_request`, so the rows above add no
   authority beyond that surface. None of them lets a caller choose a file, a
   program, a curl option or another protocol (C5B). The allowlist-matching
-  defect, the one model-reachable bypass, is repaired.
+  defect, the one model-reachable bypass, is repaired. Since the Architect
+  repair, a model can no longer downgrade an agent's `https` endpoint to
+  plain `http`.
 - **Decision needed.** A destination policy for interface-chosen requests, an
-  address policy, and whether scheme downgrade is allowed.
+  address policy, DNS pinning and peer policy (item F). These remain
+  unresolved; no general egress redesign was authorized.
 
 ## C. Secrets in subprocess argv
 
@@ -255,14 +297,21 @@ all `*_API_KEY` (guard
     override.
   - C5B requires it to be absolute, and the interface cannot change the
     security section.
-  - C5C proposes treating it as operator configuration. Until the Architect
-    decides, it stays an unresolved E finding. **Architect confirmation
-    requested**: that this is an approved operator override, alongside
-    `NEXUS_DB_PATH` and `NEXUS_CONFIG_PATH`.
+  - **Architect decision: an approved operator trust assumption.** The key
+    file is accepted in principle only as an operator-controlled startup
+    secret source. It is not frontend or model file selection, not agent
+    workspace authority, and security-section editing over IPC is not
+    reopened.
+  - The decision is a trust assumption about the operator, not proof of
+    secure secret storage. Key-file ownership, permissions, redirection and
+    key-source integrity remain Final-Gate review.
+  - The inventory counts it separately, as an approved operator assumption.
+    It is neither unresolved nor fixed.
 
 **Endpoints.** Each sets where requests go:
 
-- `OLLAMA_URL`, which also receives screen captures for `analyze_screen`;
+- `OLLAMA_URL` (it received screen captures for `analyze_screen` until
+  Architect repair A closed that command);
 - `SEARXNG_URL`;
 - the provider base URLs `ANTHROPIC_URL`, `OPENAI_URL`, `DEEPSEEK_URL`,
   `GEMINI_URL`, `GROQ_URL`, `MISTRAL_URL`, `COHERE_URL`, `FIREWORKS_URL`,
@@ -373,8 +422,10 @@ arguments:
 - the `which` presence probes for git, ripgrep and ollama (`nexus-code/src/setup.rs`, `check_command_exists`);
 - `notify-send`, `osascript` and `powershell` (notifications; C5C passes the
   message only as data);
-- `import` (Linux) and `screencapture` (macOS) for screen capture, into a
-  private temp directory (`kernel/src/computer_control.rs`);
+- `import` (Linux) and `screencapture` (macOS) screen capture into a private
+  temp directory (`kernel/src/computer_control.rs`). No desktop route reaches
+  them since Architect repair A (item L). `nx_computer_use_status` still
+  probes for capture tools with `which`;
 - `df` (flash disk space).
 
 A program earlier on `PATH` with the same name runs instead. That requires
@@ -442,8 +493,8 @@ bundle). The desktop never reaches the binaries below.
   copy every workspace member except `nexus-code/`, which is a member, so
   the image builds appear unable to load the workspace.
 - **Decision needed.** J1 (`crates/nexus-server`) must be fixed or withdrawn
-  from deployment before any Phase Zero completion claim. The others need
-  review.
+  from deployment before any Phase Zero completion claim; it remains a
+  Final-Gate blocker after C5C. The others need review.
 
 ## K. Reliability signals
 
@@ -470,21 +521,56 @@ bundle). The desktop never reaches the binaries below.
 
 ## L. Screen observation from the interface
 
-- **Where.** `capture_screen`, `analyze_screen`,
-  `computer_control_capture_screen` (`app/src-tauri/src/commands/trust_security.rs`),
-  `nx_computer_use_screenshot` and `nx_computer_use_status`
-  (`app/src-tauri/src/nx_bridge/commands.rs`).
-- **Effect.**
-  - Any script in the webview can capture the whole screen, with no gesture
-    or approval.
-  - `capture_screen` and `analyze_screen` re-enable the computer-control
-    engine after the emergency kill switch disabled it.
-  - Captures go to a private temp directory and the identity home.
-    `analyze_screen` sends the capture to the operator's `OLLAMA_URL`.
-  - Agents cannot capture: the Phase Zero executor refuses the actions.
-- **Decision needed.** Whether screen capture needs a user gesture or an
-  out-of-band approval, and whether the kill switch should cover capture.
-  C5C closed OS input, but not observation.
+**Closed in C5C (Architect repair A).** Unbrokered desktop screen observation
+is unavailable in Phase Zero. Before the repair, any script in the webview
+could capture the whole screen, and two routes rearmed the engine after the
+emergency stop.
+
+**Denied unconditionally** (`Closure::ScreenObservation`). Each handler takes
+no input, and its whole body is the denial:
+
+| Command | Behaviour before the repair |
+|---|---|
+| `capture_screen` (`runtime`, `lib.rs`) | Enabled a disabled engine, even after the emergency stop, then `capture_and_store_screen` ran `import` or `screencapture` and wrote a PNG and an audit line under the identity home |
+| `analyze_screen` (`runtime`) | The same, then `capture_and_analyze_screen` sent the capture to a vision model at `OLLAMA_URL` |
+| `computer_control_capture_screen` (`runtime`) | `engine.capture_screen` whenever the engine was enabled; the emergency stop was never consulted |
+| `nx_computer_use_screenshot` (`app/src-tauri/src/nx_bridge/commands.rs`) | Captured the whole screen directly (grim, scrot or import, `crates/nexus-computer-use`) and returned it as base64, ignoring the engine and the stop |
+
+The live capture implementations were removed from the desktop:
+`capture_screen`, `analyze_screen`, `computer_control_capture_screen` and
+`desktop_control_workspace` in `trust_security.rs`, and the nx body.
+
+**Refused enabling branch.** `computer_control_toggle(enabled: true)` returns
+the same bounded denial before it reads or changes state. An IPC request is
+not proof of consent. `computer_control_toggle(false)` still disables.
+
+**Kept available:** disabling, `stop_computer_action`, the emergency-stop
+shortcut, `computer_control_status`, `get_input_control_status`,
+`computer_control_get_history` and `nx_computer_use_status`. Readiness
+reporting is not a condition for capture.
+
+**Inert and open: Omniscience.** `omniscience_enable` and
+`omniscience_get_screen_context` stay open. `ScreenUnderstanding::start()`
+only sets an in-memory flag. `capture_context` only stores a context it is
+given, and nothing in production supplies one. Neither starts a screen
+capture. This classification does not authorize future observation wiring.
+The guard fails if either the kernel module or the desktop wrapper gains a
+capture primitive, a process, a worker or network access.
+
+**Dormant.** The kernel capture functions still exist, and they do not
+consult the emergency stop. So do the computer-use capture backend and the
+refused kernel screen, input and computer-use actuators. No desktop startup,
+scheduler, agent or IPC route reaches them. The following fail if one does:
+- the `LATENT_UNSAFE_APIS` needles;
+- `p0_002c5c_no_desktop_route_observes_the_screen`, which also covers
+  aliases, the kernel names still imported unused, engine enabling and
+  emergency-stop resets.
+
+Stored screenshots were not touched.
+
+- **Decision needed (future).** A brokered observation mechanism with
+  out-of-band consent, if screen observation is ever reopened. That needs a
+  separately approved mission.
 
 ## Resource bounds (non-authority)
 
@@ -502,13 +588,18 @@ They are denial-of-service items for the Final Gate, not authority items.
 
 These are unavailable rather than working unsafely. The C5 inventory lists each closure.
 
-- **128 IPC commands closed**, each taking no input and returning one bounded
+- **132 IPC commands closed**, each taking no input and returning one bounded
   reason. C5A closed 125: user-file selection, the legacy Builder, process
   execution, caller-asserted approval, external CLI agents, agent execution
-  and ambient resources. C5C closed three:
+  and ambient resources. C5C closed seven:
   - OS keyboard and mouse input: `computer_control_execute_action`,
     `start_computer_action`;
-  - the browser screenshot's raw output path: `browser_screenshot`.
+  - the browser screenshot's raw output path: `browser_screenshot`;
+  - screen observation (Architect repair A): `capture_screen`,
+    `analyze_screen`, `computer_control_capture_screen`,
+    `nx_computer_use_screenshot`.
+- **Enabling computer control over IPC** is refused, and disabling remains
+  (`computer_control_toggle`).
 - **Agent actions.** Filesystem, shell, code, Docker, API, image, speech,
   browser, screen and input actions are refused by `Phase0AgentExecutor`. So
   is A2A delegation, since C5C.

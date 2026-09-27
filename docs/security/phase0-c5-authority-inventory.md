@@ -9,7 +9,7 @@ bounded checkpoints:
 |---|---|
 | **P0-002C5A** | Make every reachable E1–E5 surface fail closed unless an approved backend-owned authority mechanism already governs it; fix the computer-use EOF approval bug; stabilise the Darwin sealed-spawn fixture; record this inventory and the reachability guard. |
 | **P0-002C5B** | Governed recovery and the remaining straightforward filesystem migrations: every reachable surface deferred by C5A is migrated onto an existing Phase Zero primitive or fails closed (§5). |
-| **P0-002C5C** | A fresh whole-repository audit, repair of every reachable finding it could bound (two remain unresolved, §10.8), the final recount and the final trust-surface guard (§10). The Final-Gate evidence is in `phase0-final-gate-dossier.md`. |
+| **P0-002C5C** | A fresh whole-repository audit, repair of every reachable finding it could bound, the final recount and the final trust-surface guard (§10). After the Architect's review, it also closes unbrokered screen observation and enforces explicit egress schemes and ports (§10.10). One finding remains unresolved and one is an approved operator assumption (§10.8). The Final-Gate evidence is in `phase0-final-gate-dossier.md`. |
 
 The invariant C5 serves: **a path is not authority.** C5C states it in its
 general form: **a string is never authority**, including frontend, model and
@@ -552,7 +552,8 @@ P0-002C5C extends these guards into the final trust-surface guard (§10.9).
     runtime or a secret vault;
   - a destination policy for interface-chosen requests;
   - an out-of-band approval channel;
-  - a user gesture for screen capture;
+  - a brokered screen-observation mechanism: unbrokered observation is
+    closed instead (§10.10);
   - a CSP.
 
   `docs/security/phase0-final-gate-dossier.md` records these as Final-Gate
@@ -612,6 +613,8 @@ the recount found.
 | A chat model id `flash/<path>` (`send_chat`, and the same resolver in the cognitive and Builder routes) would have named a file for the native model loader | not compiled: the arm required a `flash-infer` feature that the desktop crate does not declare, so the id failed as an unknown prefix. The message of `1b61903c` calls the arm reachable; it was not. | Hardening: the `flash` prefix returns the file-selection closure, whatever the build features | `p0_002c5c_a_flash_model_id_never_names_a_file` |
 | `email_send_message` wrote the caller's recipient and subject into raw header lines (CR/LF added headers such as `Bcc`) | reachable | CR, LF and NUL refused before any token is read | `p0_002c5c_email_header_values_cannot_add_headers`; NX14 |
 | C4B exit-race test failed about 1 in 1,500 runs | test defect | Test accepts the valid finalized-before-stop ordering | stress evidence in the C5C report |
+| Unbrokered screen observation over IPC (Final-Gate item L), in four routes. `capture_screen` and `analyze_screen` enabled a disabled engine, even after the emergency stop, and captured; `analyze_screen` also sent the capture to a vision model. `computer_control_capture_screen` captured without consulting the stop. `nx_computer_use_screenshot` captured the whole screen directly, ignoring the engine and the stop. Separately, `computer_control_toggle(true)` enabled the engine over IPC | reachable (classified FIXED at the recount) | Architect repair A: the four routes closed (`Closure::ScreenObservation`) and their live implementations removed; the toggle's enabling branch refused; the capture, vision and stop-reset APIs named latent (§10.10) | `p0_002c5c_screen_observation_requests_are_denied_and_change_nothing`; `p0_002c5c_no_desktop_route_observes_the_screen`; closed-command guards; controls A1–A3 |
+| An explicit `https` allowlist entry admitted plain `http`: C5C's matcher compared entries without their scheme, and ports as text | reachable from model output (agent web fetch, API and browser actuators, content pipeline) | Architect repair B: scheme, normalized host, effective port and whole path segments; a documented compatibility rule for entries without a scheme (§10.10) | four `firewall::egress` tests; `http_does_not_match_https_allowlist`; control B |
 
 ### 10.3 Desktop Nexus Code configuration
 
@@ -688,6 +691,24 @@ Among them are the gaps the recounts found in earlier needles: needles that
 named a wrapper but not the API behind it, `enable_retention(`, the
 messaging `BridgeDaemon` polling loop, and `ProviderSelectionConfig::from_env()`.
 
+**Architect repair A (§10.10).** C5C also names the screen-capture,
+vision-request and emergency-stop APIs:
+- **Computer-use capture:** `take_screenshot`, `ScreenshotOptions` and
+  `nexus_computer_use::capture`.
+- **Kernel capture:** `computer_control::capture_screen`,
+  `computer_control::capture_window`, `capture_window(`,
+  `capture_and_store_window` and `.capture_screen(`.
+- **Vision requests:** `query_vision_model` and `detect_vision_model`.
+- **Engine and emergency stop:** `reset_emergency_kill_switch` and
+  `ComputerControlEngine::enable`.
+
+The shared command-module import blocks still name three kernel capture
+functions, unused: `capture_and_store_screen`, `capture_and_analyze_screen`
+and `analyze_stored_screenshot`. The guard
+`p0_002c5c_no_desktop_route_observes_the_screen` forbids them outside
+imports, forbids renaming them, and forbids any `capture_screen(` call. It
+also forbids enabling the engine anywhere that holds it.
+
 ### 10.6 Out-of-desktop members
 
 The installers ship only the desktop app. See §10.8 for the recount, and
@@ -733,15 +754,22 @@ only: tests, benches, examples, fixtures, build scripts and
   Both site scans were re-run at the C5C head: the production site sets are
   unchanged, so only the classes moved.
 
-**IPC commands** (804 registered, 128 closed, 676 open):
+**IPC commands:** 804 registered. 128 were closed and 676 open until the
+Architect repair; since then 132 are closed and 672 open.
 
-| Class of the open commands | Recount | After C5C repairs |
-|---|---:|---:|
-| NONE (no filesystem, process, network, input or secret effect) | 490 | 492 |
-| GOVERNED | 65 | 66 |
-| FIXED | 109 | 110 |
-| DENIED | 8 | 8 |
-| UNRESOLVED (D/E) | 4 | 0 |
+| Class of the open commands | Recount | After C5C repairs | After the Architect repair (§10.10) |
+|---|---:|---:|---:|
+| NONE (no filesystem, process, network, input or secret effect) | 490 | 492 | 492 |
+| GOVERNED | 65 | 66 | 66 |
+| FIXED | 109 | 110 | 106 |
+| DENIED | 8 | 8 | 8 |
+| UNRESOLVED (D/E) | 4 | 0 | 0 |
+| Open in total | 676 | 676 | 672 |
+
+The Architect repair closed four commands that the recount had classified
+FIXED: `capture_screen`, `analyze_screen`, `computer_control_capture_screen`
+and `nx_computer_use_screenshot`. `computer_control_toggle` stays open and
+NONE; only its enabling branch is refused.
 
 The four unresolved commands and how each was reclassified:
 - `sim_run` became NONE: it no longer probes the host.
@@ -764,18 +792,20 @@ Independent of class:
   caller-chosen destinations.
 - `execute_tool`, the nx agent loop and the browser bridge are DENIED.
 - None of the 18 startup items is unresolved as a command or dispatcher. The
-  configuration load reaches the two unresolved filesystem entries below.
+  configuration load reaches the two filesystem entries described below.
 
-**Sites in the desktop closure** (at the recount → after the C5C repairs):
+**Sites in the desktop closure** (at the recount → after the C5C repairs →
+after the Architect repair):
 
 | Bucket | Filesystem and ambient roots | Process and network |
 |---|---:|---:|
-| Reachable: GOVERNED | 105 → 105 | 46 → 46 |
-| Reachable: FIXED | 152 → 150 | 112 → 108 |
-| Reachable: DENIED | 76 → 87 | 0 → 4 |
-| Reachable: UNRESOLVED (D/E) | 11 → 2, see below | 0 → 0 |
-| Latent: GUARDED | 259 → 369 | 100 → 200 |
-| Latent: UNGUARDED | 110 → 0 | 100 → 0 |
+| Reachable: GOVERNED | 105 → 105 → 101 | 46 → 46 → 43 |
+| Reachable: FIXED | 152 → 150 → 145 | 112 → 108 → 100 |
+| Reachable: DENIED | 76 → 87 → 94 | 0 → 4 → 4 |
+| Reachable: approved operator assumption | 0 → 0 → 1, see below | 0 |
+| Reachable: UNRESOLVED (D/E) | 11 → 2 → 1, see below | 0 → 0 → 0 |
+| Latent: GUARDED | 259 → 369 → 371 | 100 → 200 → 211 |
+| Latent: UNGUARDED | 110 → 0 → 0 | 100 → 0 → 0 |
 | Total | 713 | 358 |
 
 What moved after the recount:
@@ -790,24 +820,46 @@ What moved after the recount:
   request sites are DENIED.
 - **Latent APIs** (`fc9a416b`, `aae835f5`, `3e6a0506`). Every latent site is
   now named.
+- **Screen observation** (Architect repair A, §10.10). Closing the four
+  capture routes moves 9 filesystem and 11 process and network sites:
+  - **Kernel, 7 filesystem sites:** the capture reads, the stored screenshot
+    and its read, and the audit log. They were FIXED or GOVERNED and are now
+    DENIED, because only the kernel screen, input and computer-use actuators
+    still reach them, and `Phase0AgentExecutor` refuses those.
+  - **Computer-use, 2 filesystem sites:** the capture temp directory and its
+    read. They are now latent and guarded.
+  - **Process and network, 11 sites:** the six grim, scrot and import
+    captures, the kernel `import` and `screencapture` runs, `run_command`,
+    and the two vision-model curl helpers. They are now latent and guarded.
+    The `which` probes stay reachable through `nx_computer_use_status`.
+- **Vault key file** (Architect decision, §10.10). It is now an approved
+  operator assumption, counted in its own row. It is not FIXED.
 
 The process and network recount counted a site as latent when its only path
 runs through a closed command, the executor or a named latent API. The
 filesystem recount counted such a site as DENIED. Neither convention hides a
 reachable effect.
 
-The two filesystem entries that remain unresolved (E) are:
+Of the two filesystem entries that the C5C repairs left open, one remains
+unresolved and one is an approved operator assumption:
 
-1. **`config_user_key`** (`kernel/src/config.rs`). `HOME`, `USER`,
-   `USERNAME` and `HOSTNAME` are the configuration-encryption key material.
-   The Architect deferred it to the Final Gate (dossier item A), so C5C did
-   not change it. It stays unresolved.
-2. **`EncryptionKey::from_file`** (`kernel/src/crypto.rs`). It reads the
-   vault key file named by the configuration's `security.key_file`. Under the
-   C5B rule, the path must be absolute and the interface cannot change the
-   security section, so only the operator chooses it. C5C proposes classifying
-   it as operator configuration, but it stays unresolved until the Architect
-   decides (dossier item E).
+1. **`config_user_key`** (`kernel/src/config.rs`): **unresolved (E).**
+   `HOME`, `USER`, `USERNAME` and `HOSTNAME` are the configuration-encryption
+   key material. The Architect deferred it to the Final Gate (dossier item A),
+   so C5C did not change it. No crypto, vault or server redesign was
+   authorized.
+2. **`EncryptionKey::from_file`** (`kernel/src/crypto.rs`): **approved
+   operator trust assumption** (Architect decision). It reads the vault key
+   file named by the configuration's `security.key_file`.
+   - Under the C5B rule, the path must be absolute and the interface cannot
+     change the security section.
+   - It is accepted in principle only as an operator-controlled startup
+     secret source. It is not frontend or model file selection, not agent
+     workspace authority, and security-section editing over IPC is not
+     reopened.
+   - This is a trust assumption about the operator, not proof of secure
+     secret storage. Key-file ownership, permissions, redirection and
+     key-source integrity remain Final-Gate review (dossier item E).
 
 **Outside the desktop:**
 
@@ -832,11 +884,16 @@ The two filesystem entries that remain unresolved (E) are:
   unpackaged agent libraries.
 - **Benchmarks:** `benchmarks/` and `benchmarks/conductor-bench`.
 
-**Summary:** after the repairs, two reachable filesystem entries remain
-unresolved (E): the configuration key (item A, deferred to the Final Gate)
-and the vault key file (item E, awaiting the Architect's decision). No other
-reachable D/E remains. Unguarded latent is 0. Every other site is governed,
-fixed backend state, denied or guarded latent.
+**Summary:** after the C5C and Architect repairs:
+- **Unresolved.** One reachable filesystem entry remains unresolved (E): the
+  configuration key (item A, deferred to the Final Gate). No other reachable
+  D/E remains.
+- **Operator assumption.** The vault key file is an approved operator trust
+  assumption (item E). It is reported as such and is neither unresolved nor
+  fixed.
+- **Latent.** Unguarded latent is 0.
+- **Everything else** is governed, fixed backend state, denied or guarded
+  latent.
 
 ### 10.9 Final trust-surface guard
 
@@ -862,3 +919,108 @@ each caught by an assertion, never a compile error.
 | Caller text becoming script, markup or a link in the webview | `p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed`, vitest `safeHtml.test.ts` | NX7, NX8, NX9 |
 | Notification text becoming a script | `p0_002c5c_notification_text_never_becomes_a_script` | NC6 |
 | A caller-asserted tool autonomy level | `p0_002c5c_tool_calls_run_at_the_registered_agents_autonomy` | NX5 |
+| Screen observation, or enabling it, over desktop IPC | `p0_002c5c_no_desktop_route_observes_the_screen`, the closed-command guards, `p0_002c5c_screen_observation_requests_are_denied_and_change_nothing` | A1, A2, A3 |
+| An egress entry admitting another scheme, port, host or path | `firewall::egress` tests `p0_002c5c_entries_admit_only_whole_hosts_and_path_segments`, `p0_002c5c_explicit_schemes_and_ports_are_enforced`, `p0_002c5c_legacy_scheme_less_entries_keep_their_documented_meaning`, `p0_002c5c_malformed_or_ambiguous_endpoints_admit_nothing`; web `http_does_not_match_https_allowlist` | B, NX2 |
+
+### 10.10 Architect repair: screen observation and egress transport
+
+After reviewing C5C at `443e24ab`, the Architect required two bounded repairs
+and recorded four decisions.
+
+**Decisions.**
+
+1. **Screen observation.** Unbrokered desktop screen observation is
+   unavailable in Phase Zero. It is closed, not left as deferred item L.
+2. **Egress transport.** Explicit egress scheme and port constraints are
+   enforced (repair B). Broader destination, address, DNS and peer policy
+   stays unresolved (dossier items B and F).
+3. **Vault key file.** `security.key_file` is accepted in principle only as
+   an operator-controlled startup secret source. It is not frontend or model
+   file selection, not agent workspace authority, and security-section
+   editing over IPC is not reopened. This is an approved operator trust
+   assumption, not proof of secure secret storage. Ownership, permissions,
+   redirection and key-source integrity remain Final-Gate review.
+4. **Unchanged.** Ambient configuration-key derivation stays unresolved
+   (item A). The unauthenticated shipped server stays a Final-Gate blocker
+   (item J1). No crypto, vault or server redesign was authorized.
+
+**Repair A: screen observation.**
+
+| Route | Call path before the repair | After |
+|---|---|---|
+| `capture_screen` | `runtime::capture_screen` → `trust_security::capture_screen`: enable the engine if disabled (including after the emergency stop), then `capture_and_store_screen` → `capture_screen` → `import`/`screencapture`, a PNG and an audit line under the identity home | Denied unconditionally (`Closure::ScreenObservation`) |
+| `analyze_screen` | The same enable, then `capture_and_analyze_screen` → capture, store, and `query_vision_model` (curl to `OLLAMA_URL`) | Denied unconditionally |
+| `computer_control_capture_screen` | `engine.capture_screen` when enabled; the emergency stop was not consulted | Denied unconditionally |
+| `nx_computer_use_screenshot` | `nexus_computer_use` capture (grim, scrot or import, private temp directory), returned as base64; ignores the engine and the stop | Denied unconditionally; the no-input async handler keeps its name and `Result<NxScreenshot, String>` type |
+| `computer_control_toggle(true)` | `engine.enable()` | The enabling branch is refused before any state is read or changed. `toggle(false)` still disables. The command stays open and NONE |
+
+- **Removed from the desktop:** the live capture implementations
+  (`trust_security.rs`: `capture_screen`, `analyze_screen`,
+  `computer_control_capture_screen`, `desktop_control_workspace`) and the nx
+  capture body.
+- **Still available:**
+  - `computer_control_status`, `get_input_control_status` and
+    `computer_control_get_history`;
+  - disabling, `stop_computer_action` and the emergency-stop shortcut, which
+    sets the kill switch and disables the engine;
+  - `nx_computer_use_status`, which only probes readiness. Readiness is not
+    a condition for capture.
+- **Untouched:** stored screenshots.
+- **Inert and open: Omniscience.** `omniscience_enable` and
+  `omniscience_get_screen_context` stay open.
+  - `ScreenUnderstanding::start()` only sets an in-memory flag.
+  - `capture_context` only stores a context it is given, and nothing in
+    production supplies one.
+  - Neither starts a screen capture, and the classification does not
+    authorize future observation wiring. The guard pins both kernel methods
+    and both desktop wrappers. It also forbids processes, workers, network
+    and capture primitives in the kernel Omniscience module.
+- **Dormant library code:** the kernel capture functions, the computer-use
+  capture backend, and the refused kernel screen, input and computer-use
+  actuators. None of them consults the emergency stop, and no desktop route
+  reaches them (§10.5, §10.9).
+
+**Repair B: egress transport.** `endpoint_admits`
+(`kernel/src/firewall/egress.rs`) compares a scheme, a normalized host, an
+effective port and whole leading path segments. It uses the `url` parser and
+`governed_http::http_url`. Dossier item B gives the full rules. In short:
+- **Schemed entries.** An entry with a scheme admits only that scheme, on its
+  effective port.
+- **Legacy entries without a scheme.** They keep the documented compatibility
+  meaning: `http` and `https` to their host, on their explicit port or else
+  on the request scheme's default port.
+- **Rejected input.** Malformed, credential-bearing, ambiguous and
+  non-HTTP(S) input admits nothing.
+- **Unchanged.** Default deny, rate limiting and auditing.
+- **Tests.**
+  - The C5C egress test used to list the `https`-to-`http` downgrade as
+    admitted. So did the kernel web test `http_matches_https_allowlist`,
+    now `http_does_not_match_https_allowlist`.
+  - Both now assert the corrected, Architect-approved policy. This is a
+    policy correction, not a weakened test.
+- **Comments.** The kernel comments at the web and API actuators'
+  `check_egress` still describe the old scheme stripping. Those files'
+  production code was outside the approved change area.
+
+**Classification after the repair.**
+
+- **Corrected or closed paths (C5C).** Every row of §10.2. That includes the
+  four screen-observation routes and the toggle's enabling branch (repair A),
+  and the `https`-to-`http` downgrade and port comparison (repair B).
+- **Governed paths.** The GOVERNED buckets of §10.8. Interface-chosen
+  destinations of governed shape remain open (item B).
+- **Approved operator assumptions.** `NEXUS_DB_PATH` and `NEXUS_CONFIG_PATH`
+  (absolute, launch-only, C5C), and the vault key file `security.key_file`
+  (Architect decision above).
+- **Unresolved Final-Gate items.**
+  - A: configuration key derivation;
+  - J1: the unauthenticated `crates/nexus-server`, a blocker;
+  - B: destination, address and DNS policy;
+  - C: secrets in argv;
+  - D: the CSP;
+  - E: ownership and integrity of operator-supplied key material;
+  - F: peers;
+  - G: the approval channel;
+  - H: secrets at rest;
+  - I: PATH helpers;
+  - K: reliability debt.
