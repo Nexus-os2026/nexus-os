@@ -963,6 +963,25 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
         "RetentionBuffer::new(",
         "audit archive defaulting to shared temp",
     ),
+    // P0-002C5C: the kernel MCP server builds the full default actuator
+    // registry; the desktop only lists its tools. Invoking one would run an
+    // actuator outside Phase0AgentExecutor.
+    (
+        ".invoke_tool(",
+        "kernel MCP tool invocation over the full actuator registry",
+    ),
+    (
+        "execute_input_action(",
+        "kernel OS keyboard and mouse input (xdotool / osascript)",
+    ),
+    (
+        "tauri_commands::screenshot(",
+        "browser bridge screenshot to a caller-chosen output path",
+    ),
+    (
+        "coder_agent::llm_codegen",
+        "coder writers rooted at a raw output dir",
+    ),
 ];
 
 /// The only approved construction of the kernel action executor: the Phase
@@ -2159,4 +2178,50 @@ fn p0_002c5c_tool_calls_run_at_the_registered_agents_autonomy() {
     assert!(bridges.contains(
         "letautonomy_level=tool_call_autonomy(&state,&agent_id,autonomy_level)?;tools_cmds::tools_execute(&state.external_tools,&agent_id,autonomy_level,"
     ));
+}
+
+/// P0-002C5C: the agent loop dispatches every planned action through its
+/// executor and holds no transport of its own; the swarm coder stays
+/// LLM-only (it parses generated files and writes none).
+#[test]
+fn p0_002c5c_no_delegation_path_runs_around_the_executor() {
+    let runtime = production_text(include_str!(
+        "../../../../kernel/src/cognitive/loop_runtime.rs"
+    ));
+    for forbidden in ["A2aClient", "a2a_client", "send_task(", "discover_agent("] {
+        assert!(!runtime.contains(forbidden), "cognitive loop: {forbidden}");
+    }
+    let run_cycle = runtime
+        .find("pub fn run_cycle_with_evolution(")
+        .expect("run_cycle_with_evolution");
+    let open = run_cycle + runtime[run_cycle..].find('{').unwrap();
+    let body = &runtime[open..block_end(&runtime, open)];
+    assert_eq!(body.matches(".execute(").count(), 1, "one dispatch site");
+    assert!(body.contains("executor.execute(agent_id, &action_clone, audit, requires_hitl)"));
+    for forbidden in [
+        "execute_action(",
+        "registry.",
+        "PlannedAction::A2aDelegation",
+    ] {
+        assert!(!body.contains(forbidden), "cycle dispatch: {forbidden}");
+    }
+
+    let artisan = production_text(include_str!("../../../../agents/coder/src/swarm_entry.rs"));
+    for forbidden in [
+        "generate_code_with_llm",
+        "generate_code_decomposed",
+        "std::fs::",
+        "tokio::fs::",
+        "Command::new",
+        "terminal::",
+        "test_runner::",
+        "fix_loop::",
+        "writer::",
+    ] {
+        assert!(!artisan.contains(forbidden), "swarm coder: {forbidden}");
+    }
+    // Restored agent records pass the stored-manifest authority check.
+    let agents = without_whitespace(&production_text(include_str!("../commands/agents.rs")));
+    assert!(agents
+        .contains("ifletErr(error)=nexus_kernel::manifest::validate_stored_manifest(&manifest){"));
 }
