@@ -157,6 +157,8 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     // C5C: OS keyboard and mouse input from the interface or a model.
     ("computer_control_execute_action", Closure::OsInput),
     ("start_computer_action", Closure::OsInput),
+    // C5C: a raw output path for the browser bridge (never started) to write.
+    ("browser_screenshot", Closure::FileSelection),
 ];
 
 const LIB_RS: &str = include_str!("../lib.rs");
@@ -339,7 +341,7 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             cc_execute_action, mcp2_client_add, mcp2_client_discover, mcp2_client_call,
             cm_execute_validation_run, cm_list_validation_runs, cm_get_validation_run,
             cm_three_way_comparison, memory_save, memory_load, memory_list_agents,
-            mcp2_server_handle,
+            mcp2_server_handle, browser_screenshot,
         ],
         crate::nx_bridge::commands => [nx_agent_run, nx_chat, nx_tool],
         crate::commands::orchestration => [run_content_pipeline],

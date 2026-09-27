@@ -333,13 +333,14 @@ pub fn browser_navigate(
     nexus_browser_agent::tauri_commands::navigate(&state.browser_agent, &session_id, &url)
 }
 
+/// P0-002C5C: the command took a raw output path from the interface for the
+/// browser bridge to write (the bridge is never started, so it was dormant).
 #[tauri::command]
-pub fn browser_screenshot(
-    state: tauri::State<'_, AppState>,
-    session_id: String,
-    output_path: Option<String>,
-) -> Result<nexus_browser_agent::BrowserActionResult, String> {
-    nexus_browser_agent::tauri_commands::screenshot(&state.browser_agent, &session_id, output_path)
+pub fn browser_screenshot() -> Result<nexus_browser_agent::BrowserActionResult, String> {
+    Err(crate::phase0_surface::closed(
+        "browser_screenshot",
+        crate::phase0_surface::Closure::FileSelection,
+    ))
 }
 
 #[tauri::command]
