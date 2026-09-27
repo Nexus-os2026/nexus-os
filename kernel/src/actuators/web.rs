@@ -85,7 +85,7 @@ impl WebSearchBackend for CurlWebBackend {
         if let Some(base) = searxng_url() {
             let url =
                 format!("{base}/search?q={encoded}&format=json&categories=general&language=en");
-            if let Ok(body) = curl_get(&url) {
+            if let Ok(body) = curl_get(&url, true) {
                 let results = parse_searxng_results(&body);
                 if !results.is_empty() {
                     return Ok(results);
@@ -95,7 +95,7 @@ impl WebSearchBackend for CurlWebBackend {
 
         // 2. Fallback: DuckDuckGo HTML (public, may be rate-limited)
         let ddg_url = format!("https://html.duckduckgo.com/html/?q={encoded}");
-        if let Ok(body) = curl_get(&ddg_url) {
+        if let Ok(body) = curl_get(&ddg_url, true) {
             let results = parse_duckduckgo_results(&body);
             if !results.is_empty() {
                 return Ok(results);
@@ -104,7 +104,7 @@ impl WebSearchBackend for CurlWebBackend {
 
         // 3. Fallback: HackerNews RSS (good for tech/AI queries)
         let hn_url = format!("https://hnrss.org/newest?q={encoded}&count=10");
-        if let Ok(body) = curl_get(&hn_url) {
+        if let Ok(body) = curl_get(&hn_url, true) {
             let results = parse_rss_results(&body);
             if !results.is_empty() {
                 return Ok(results);
@@ -118,7 +118,10 @@ impl WebSearchBackend for CurlWebBackend {
     }
 
     fn fetch_content(&self, url: &str) -> Result<String, String> {
-        let body = curl_get(url).map_err(|e| e.to_string())?;
+        // P0-002C5C: a fetch follows no redirect. The allowlist admitted the
+        // requested URL, not wherever it redirects; the agent may fetch the
+        // target itself, which is checked in turn.
+        let body = curl_get(url, false).map_err(|e| e.to_string())?;
         Ok(strip_html(&body))
     }
 }
@@ -148,11 +151,11 @@ impl GovernedWeb {
     fn check_egress(url: &str, context: &ActuatorContext) -> Result<(), ActuatorError> {
         // Scheme is stripped on both sides so `http://host` matches an
         // `https://host` allowlist entry (see firewall::egress::strip_scheme).
-        let candidate = crate::firewall::egress::strip_scheme(url);
+        // P0-002C5C: an entry admits only whole host and path segments.
         let allowed = context
             .egress_allowlist
             .iter()
-            .any(|prefix| candidate.starts_with(crate::firewall::egress::strip_scheme(prefix)));
+            .any(|entry| crate::firewall::egress::endpoint_admits(entry, url));
 
         if !allowed {
             return Err(ActuatorError::EgressDenied(format!(
@@ -267,27 +270,37 @@ impl Actuator for GovernedWeb {
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
+/// Marks where curl reports the redirect target of an unfollowed redirect.
+const REDIRECT_MARKER: &str = "\n__NEXUS_REDIRECT__:";
+
 /// Perform a blocking HTTP GET via curl subprocess.
 /// Safe to call from async context — spawns a child process.
-fn curl_get(url: &str) -> Result<String, ActuatorError> {
+///
+/// With `follow_redirects` false (an agent's fetch), a redirect response is
+/// refused and names its target instead of being followed.
+fn curl_get(url: &str, follow_redirects: bool) -> Result<String, ActuatorError> {
     // P0-002C5B: HTTP(S) only, including redirects, with the URL after `--`.
     let url = crate::governed_http::http_url(url)
         .map_err(|error| ActuatorError::IoError(error.to_string()))?;
     let timeout_str = REQUEST_TIMEOUT_SECS.to_string();
-    let output = Command::new("curl")
-        .args(crate::governed_http::CURL_HTTP_ONLY)
-        .args([
-            "-sS",
-            "-L",
-            "--max-time",
-            &timeout_str,
-            "--max-filesize",
-            &MAX_RESPONSE_BYTES.to_string(),
-            "-A",
-            USER_AGENT,
-            "--",
-            url.as_str(),
-        ])
+    let redirect_format = format!("{REDIRECT_MARKER}%{{redirect_url}}");
+    let mut command = Command::new("curl");
+    command.args(crate::governed_http::CURL_HTTP_ONLY).args([
+        "-sS",
+        "--max-time",
+        &timeout_str,
+        "--max-filesize",
+        &MAX_RESPONSE_BYTES.to_string(),
+        "-A",
+        USER_AGENT,
+    ]);
+    if follow_redirects {
+        command.arg("-L");
+    } else {
+        command.args(["-w", &redirect_format]);
+    }
+    let output = command
+        .args(["--", url.as_str()])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -307,12 +320,21 @@ fn curl_get(url: &str) -> Result<String, ActuatorError> {
         )));
     }
 
-    let body = String::from_utf8_lossy(&output.stdout).to_string();
-    if body.len() > MAX_RESPONSE_BYTES {
-        Ok(body[..MAX_RESPONSE_BYTES].to_string())
-    } else {
-        Ok(body)
+    let mut body = String::from_utf8_lossy(&output.stdout).to_string();
+    if !follow_redirects {
+        if let Some(at) = body.rfind(REDIRECT_MARKER) {
+            let target = body[at + REDIRECT_MARKER.len()..].trim().to_string();
+            body.truncate(at);
+            if !target.is_empty() {
+                return Err(ActuatorError::IoError(format!(
+                    "the page redirects to {target}; fetch that URL if the egress allowlist admits it"
+                )));
+            }
+        }
     }
+    // P0-002C5C: cut on a character boundary, never inside one.
+    body.truncate(body.floor_char_boundary(MAX_RESPONSE_BYTES));
+    Ok(body)
 }
 
 /// Convert HTML to clean readable content for LLM consumption.
@@ -552,7 +574,7 @@ fn parse_rss_results(xml: &str) -> Vec<WebSearchResult> {
             title,
             url: link,
             snippet: if desc.len() > 200 {
-                format!("{}...", &desc[..200])
+                format!("{}...", &desc[..desc.floor_char_boundary(200)])
             } else {
                 desc
             },
@@ -586,6 +608,85 @@ mod tests {
     use super::*;
     use crate::autonomy::AutonomyLevel;
     use std::collections::HashSet;
+
+    /// Answer each connection on a loopback port with the next of `responses`.
+    fn serve(responses: Vec<Vec<u8>>) -> (String, std::thread::JoinHandle<usize>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let handle = std::thread::spawn(move || {
+            let count = responses.len();
+            for response in responses {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut head = Vec::new();
+                let mut byte = [0u8; 1];
+                while !head.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                    head.push(byte[0]);
+                }
+                let _ = stream.write_all(&response);
+            }
+            count
+        });
+        (base, handle)
+    }
+
+    /// P0-002C5C: an agent's fetch follows no redirect: the allowlist
+    /// admitted the requested URL, not its target, so the target is named
+    /// and nothing is sent to it.
+    #[test]
+    fn p0_002c5c_agent_fetches_follow_no_redirect() {
+        let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        target.set_nonblocking(true).unwrap();
+        let target_url = format!("http://{}/exfiltrate", target.local_addr().unwrap());
+        let (base, server) = serve(vec![format!(
+            "HTTP/1.1 302 Found\r\nLocation: {target_url}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .into_bytes()]);
+        let mut ctx = make_context();
+        ctx.egress_allowlist = vec![base.clone()];
+        let web = GovernedWeb::new();
+        let action = PlannedAction::WebFetch {
+            url: format!("{base}/start"),
+        };
+        let error = web.execute(&action, &ctx).unwrap_err().to_string();
+        assert!(
+            error.contains(&format!("redirects to {target_url}")),
+            "{error}"
+        );
+        assert_eq!(server.join().unwrap(), 1);
+        assert!(matches!(
+            target.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+        // A fetch outside the allowlist, such as the target, is refused.
+        let refused = PlannedAction::WebFetch { url: target_url };
+        assert!(matches!(
+            web.execute(&refused, &ctx),
+            Err(ActuatorError::EgressDenied(_))
+        ));
+    }
+
+    /// P0-002C5C: remote text is cut on character boundaries. Invalid
+    /// UTF-8 widens under lossy decoding (one byte to three), so the cut
+    /// falls inside a character unless it is placed on a boundary.
+    #[test]
+    fn p0_002c5c_remote_text_is_cut_on_character_boundaries() {
+        let mut response =
+            b"HTTP/1.1 200 OK\r\nContent-Length: 400000\r\nConnection: close\r\n\r\n".to_vec();
+        response.extend_from_slice(&[0xFF; 400_000]);
+        let (base, server) = serve(vec![response]);
+        let body = curl_get(&format!("{base}/"), false).unwrap();
+        server.join().unwrap();
+        assert!(body.len() <= MAX_RESPONSE_BYTES);
+        assert!(body.chars().all(|c| c == '\u{FFFD}'));
+
+        let long = format!("{}é{}", "a".repeat(199), "b".repeat(100));
+        let rss = format!(
+            "<rss><item><title>t</title><link>https://example.com/</link><description>{long}</description></item></rss>"
+        );
+        let results = parse_rss_results(&rss);
+        assert_eq!(results[0].snippet, format!("{}...", "a".repeat(199)));
+    }
 
     fn make_context() -> ActuatorContext {
         let mut caps = HashSet::new();
@@ -855,7 +956,7 @@ mod tests {
             "https://a@example.com/",
         ] {
             assert_eq!(
-                curl_get(url).unwrap_err().to_string(),
+                curl_get(url, false).unwrap_err().to_string(),
                 "io error: URL must be an http or https URL with a host",
                 "{url:?}"
             );

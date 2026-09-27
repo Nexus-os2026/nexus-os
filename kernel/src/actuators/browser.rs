@@ -17,7 +17,7 @@ impl BrowserActuator {
         if context
             .egress_allowlist
             .iter()
-            .any(|allowed| url.starts_with(allowed))
+            .any(|allowed| crate::firewall::egress::endpoint_admits(allowed, url))
         {
             return Ok(());
         }

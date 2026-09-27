@@ -539,7 +539,9 @@ fn extract_fetchable_urls(search_results: &str, allowlist: &[String]) -> Vec<Str
             !c.is_alphanumeric() && c != ':' && c != '/' && c != '.' && c != '-' && c != '_'
         });
         if (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
-            && allowlist.iter().any(|prefix| trimmed.starts_with(prefix))
+            && allowlist
+                .iter()
+                .any(|entry| crate::firewall::egress::endpoint_admits(entry, trimmed))
             && !urls.contains(&trimmed.to_string())
         {
             urls.push(trimmed.to_string());

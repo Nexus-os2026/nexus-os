@@ -30,6 +30,25 @@ pub fn strip_scheme(url: &str) -> &str {
     }
 }
 
+/// Whether the allowlist entry `entry` admits `url` (P0-002C5C). Both are
+/// compared without their `http`/`https` scheme, as before. The entry must
+/// match whole: the URL either ends where the entry ends or continues with
+/// `/`, `?` or `#` (or the entry itself ends with `/`). A URL prefix is not
+/// authority, so `https://example.com` admits `https://example.com/page` but
+/// not `https://example.com.evil.net`, `https://example.community` or
+/// another port, and `https://api.example.com/v1` does not admit
+/// `https://api.example.com/v1beta`. An empty entry admits nothing.
+pub fn endpoint_admits(entry: &str, url: &str) -> bool {
+    let entry = strip_scheme(entry);
+    if entry.is_empty() {
+        return false;
+    }
+    match strip_scheme(url).strip_prefix(entry) {
+        Some(rest) => entry.ends_with('/') || rest.is_empty() || rest.starts_with(['/', '?', '#']),
+        None => false,
+    }
+}
+
 /// Default rate limit: 60 requests per minute per endpoint.
 pub const DEFAULT_RATE_LIMIT_PER_MIN: u32 = 60;
 
@@ -143,11 +162,10 @@ impl EgressGovernor {
         // Find the matching allowed endpoint prefix.
         // Scheme is stripped on both sides so an `http://host` candidate
         // matches an `https://host` allowlist entry (and vice versa).
-        let candidate_no_scheme = strip_scheme(url);
         let matched_prefix = policy
             .allowed_endpoints
             .iter()
-            .find(|prefix| candidate_no_scheme.starts_with(strip_scheme(prefix.as_str())));
+            .find(|prefix| endpoint_admits(prefix, url));
 
         let prefix = match matched_prefix {
             Some(p) => p.clone(),
@@ -236,6 +254,58 @@ mod tests {
 
     fn id() -> Uuid {
         Uuid::new_v4()
+    }
+
+    /// P0-002C5C: an allowlist entry admits whole host and path segments,
+    /// never a longer host, another port or a longer path segment.
+    #[test]
+    fn p0_002c5c_entries_admit_only_whole_hosts_and_path_segments() {
+        for (entry, url) in [
+            ("https://example.com", "https://example.com"),
+            ("https://example.com", "https://example.com/"),
+            ("https://example.com", "https://example.com/page?x=1#y"),
+            ("https://example.com", "https://example.com?q=1"),
+            ("https://example.com", "http://example.com/downgrade"),
+            ("https://example.com/", "https://example.com/a"),
+            (
+                "https://api.example.com/v1",
+                "https://api.example.com/v1/chat",
+            ),
+            ("https://example.com:8443", "https://example.com:8443/x"),
+        ] {
+            assert!(endpoint_admits(entry, url), "{entry} should admit {url}");
+        }
+        for (entry, url) in [
+            ("https://example.com", "https://example.com.evil.net/"),
+            ("https://example.com", "https://example.community/"),
+            ("https://example.com", "https://example.com:8443/"),
+            ("https://example.com", "https://example.com.:443/"),
+            (
+                "https://api.example.com/v1",
+                "https://api.example.com/v1beta",
+            ),
+            (
+                "https://example.com",
+                "https://evil.net/https://example.com",
+            ),
+            ("https://example.com", "https://evil.net/?next=example.com"),
+            ("", "https://example.com/"),
+            ("https://", "https://example.com/"),
+        ] {
+            assert!(!endpoint_admits(entry, url), "{entry} must not admit {url}");
+        }
+        let mut governor = EgressGovernor::new();
+        let agent = id();
+        governor.register_agent(agent, vec!["https://api.example.com".into()]);
+        let mut audit = AuditTrail::new();
+        assert!(matches!(
+            governor.check_egress(agent, "https://api.example.com.evil.net/x", &mut audit),
+            EgressDecision::Deny { .. }
+        ));
+        assert!(matches!(
+            governor.check_egress(agent, "https://api.example.com/x", &mut audit),
+            EgressDecision::Allow { .. }
+        ));
     }
 
     #[test]
