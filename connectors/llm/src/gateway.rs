@@ -147,8 +147,8 @@ pub fn select_provider(
 
     // Flash Inference: local GGUF model (free, private, often smarter than small Ollama models)
     #[cfg(feature = "flash-infer")]
-    if let Some(ref model_path) = config.flash_model_path {
-        if !model_path.trim().is_empty() && std::path::Path::new(model_path).exists() {
+    if let Some(model_path) = flash_model_path(config).map(str::to_string) {
+        if std::path::Path::new(&model_path).exists() {
             eprintln!("[nexus-llm] using Flash Inference: {model_path}");
             return Ok(Box::new(crate::providers::FlashProvider::new(
                 model_path.clone(),
@@ -297,6 +297,17 @@ fn has_key(key: &Option<String>) -> bool {
         .unwrap_or(false)
 }
 
+/// The configured local model file, only when it is an absolute path
+/// (P0-002C5C). A model file is never located through the process working
+/// directory, so a relative value, or none, leaves the flash provider
+/// unavailable.
+fn flash_model_path(config: &ProviderSelectionConfig) -> Option<&str> {
+    config
+        .flash_model_path
+        .as_deref()
+        .filter(|path| std::path::Path::new(path).is_absolute())
+}
+
 fn explicit_provider(
     explicit: &str,
     config: &ProviderSelectionConfig,
@@ -325,10 +336,14 @@ fn explicit_provider(
         "claude-code" => Ok(Box::new(ClaudeCodeProvider::new())),
         "codex-cli" | "codex" => Ok(Box::new(CodexCliProvider::new())),
         "flash" | "flash-infer" | "local-gguf" => {
-            let model_path = config
-                .flash_model_path
-                .clone()
-                .unwrap_or_else(|| "flash-local".to_string());
+            let model_path = flash_model_path(config)
+                .ok_or_else(|| {
+                    AgentError::SupervisorError(
+                        "The flash provider needs an absolute model path; none is configured."
+                            .to_string(),
+                    )
+                })?
+                .to_string();
             #[cfg(feature = "flash-infer")]
             {
                 Ok(Box::new(FlashProvider::new(
