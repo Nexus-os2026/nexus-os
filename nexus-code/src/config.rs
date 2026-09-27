@@ -47,11 +47,22 @@ impl Default for NxConfig {
 impl NxConfig {
     /// Load config with priority: env vars > .nxrc > ~/.config/nexus-code/config.toml > NEXUSCODE.md > defaults.
     pub fn load() -> Result<Self, NxError> {
+        Self::load_with(true)
+    }
+
+    /// Load config as [`NxConfig::load`] does, except that provider
+    /// auto-detection never runs or prefers an external CLI agent. The Nexus OS
+    /// desktop uses this: it never runs an external CLI agent (P0-002C5A).
+    pub fn load_without_cli_agents() -> Result<Self, NxError> {
+        Self::load_with(false)
+    }
+
+    fn load_with(cli_agents: bool) -> Result<Self, NxError> {
         let mut config = NxConfig::default();
 
         // Auto-detect best provider if user hasn't explicitly configured one.
         // Priority: claude_cli > anthropic > openai > ollama
-        config.auto_detect_provider();
+        config.auto_detect_provider(cli_agents);
 
         // Try NEXUSCODE.md in current directory
         let nexuscode_path = Path::new("NEXUSCODE.md");
@@ -100,9 +111,9 @@ impl NxConfig {
     }
 
     /// Auto-detect the best available provider.
-    /// Priority: claude_cli > anthropic > openai > ollama
-    fn auto_detect_provider(&mut self) {
-        if crate::setup::check_claude_cli_available() {
+    /// Priority: claude_cli (only with `cli_agents`) > anthropic > openai > ollama
+    fn auto_detect_provider(&mut self, cli_agents: bool) {
+        if cli_agents && crate::setup::check_claude_cli_available() {
             self.default_provider = "claude_cli".to_string();
             self.default_model = "claude-cli".to_string();
         } else if std::env::var("ANTHROPIC_API_KEY").is_ok() {

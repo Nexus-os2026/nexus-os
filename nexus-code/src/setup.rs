@@ -12,8 +12,25 @@ pub struct SetupStatus {
     pub has_nexuscode_md: bool,
 }
 
+/// Why a host that runs no external CLI agent reports the Claude CLI
+/// unavailable.
+pub const CLI_AGENT_UNAVAILABLE: &str =
+    "Unavailable in the Nexus OS desktop: an external CLI agent runs outside Nexus authority";
+
 /// Run a full setup diagnostic.
 pub fn diagnose() -> SetupStatus {
+    diagnose_with(true)
+}
+
+/// Run the setup diagnostic without running any external CLI agent.
+///
+/// The Claude CLI is reported unavailable instead of being probed. The Nexus
+/// OS desktop uses this: it never runs an external CLI agent (P0-002C5A).
+pub fn diagnose_without_cli_agents() -> SetupStatus {
+    diagnose_with(false)
+}
+
+fn diagnose_with(cli_agents: bool) -> SetupStatus {
     let provider_checks = [
         ("anthropic", "ANTHROPIC_API_KEY"),
         ("openai", "OPENAI_API_KEY"),
@@ -35,7 +52,9 @@ pub fn diagnose() -> SetupStatus {
     }
 
     // Claude CLI — uses Claude Code binary (Max plan = $0 cost)
-    if check_claude_cli_available() {
+    if !cli_agents {
+        unconfigured.push(("claude_cli".to_string(), CLI_AGENT_UNAVAILABLE.to_string()));
+    } else if check_claude_cli_available() {
         configured.push("claude_cli".to_string());
     } else {
         unconfigured.push((

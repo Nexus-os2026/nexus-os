@@ -39,11 +39,11 @@ pub fn default_model_for_provider(provider: &str) -> &'static str {
     }
 }
 
-/// Auto-detect the best available provider using `diagnose()`.
+/// Auto-detect the best available provider from the setup diagnostic.
 ///
 /// Priority: anthropic > openai > ollama > google > openrouter > groq > deepseek
 fn detect_best_provider() -> Option<(String, String)> {
-    let status = nexus_code::setup::diagnose();
+    let status = nexus_code::setup::diagnose_without_cli_agents();
     let priority = [
         "anthropic",
         "openai",
@@ -69,12 +69,16 @@ fn detect_best_provider() -> Option<(String, String)> {
 /// Loads config from NEXUSCODE.md / env / config files, then
 /// auto-detects the best available provider if no explicit
 /// provider is set (or if the configured provider isn't available).
+///
+/// P0-002C5A: the desktop never runs, prefers or registers an external CLI
+/// agent. Configuration, diagnostics and the provider registry all use their
+/// `_without_cli_agents` forms, so no `claude` process is started here.
 pub fn init_nx_state() -> Result<NxState, String> {
-    let mut config = nexus_code::config::NxConfig::load()
+    let mut config = nexus_code::config::NxConfig::load_without_cli_agents()
         .map_err(|e| format!("Failed to load NxConfig: {}", e))?;
 
     // Auto-detect provider if the configured one isn't actually available
-    let status = nexus_code::setup::diagnose();
+    let status = nexus_code::setup::diagnose_without_cli_agents();
     let configured_ok = status
         .configured_providers
         .iter()
@@ -92,7 +96,7 @@ pub fn init_nx_state() -> Result<NxState, String> {
         }
     }
 
-    let app = nexus_code::app::App::new(config)
+    let app = nexus_code::app::App::new_without_cli_agents(config)
         .map_err(|e| format!("Failed to initialize Nexus Code: {}", e))?;
 
     eprintln!(

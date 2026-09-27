@@ -489,9 +489,32 @@ fn production_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) 
     }
 }
 
+/// Nexus Code entry points that run, prefer or register the external Claude
+/// CLI agent. The desktop nx bridge must use their `_without_cli_agents` forms.
+const NEXUS_CODE_CLI_AGENT_ENTRY_POINTS: &[&str] = &[
+    "diagnose()",
+    "NxConfig::load()",
+    "App::new(",
+    "check_claude_cli_available(",
+    "ClaudeCliProvider",
+];
+
+/// Whether `text` names `path` as a whole identifier path, not as the tail of
+/// a longer identifier (`App::new(` does not match `TuiApp::new(`).
+fn names(text: &str, path: &str) -> bool {
+    text.match_indices(path).any(|(at, _)| {
+        !text[..at]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+    })
+}
+
 /// No desktop production source starts an external CLI agent or bypasses its
 /// permission checks, and the desktop swarm registers no external CLI agent
 /// provider. (The providers themselves fail closed in `nexus-connectors-llm`.)
+/// The nx bridge configures, diagnoses and builds Nexus Code without running,
+/// preferring or registering the Claude CLI.
 #[test]
 fn desktop_sources_start_no_external_cli_agent() {
     let mut files = Vec::new();
@@ -509,9 +532,24 @@ fn desktop_sources_start_no_external_cli_agent() {
         ] {
             assert!(!text.contains(forbidden), "{}: {forbidden}", path.display());
         }
+        for entry_point in NEXUS_CODE_CLI_AGENT_ENTRY_POINTS {
+            assert!(
+                !names(&text, entry_point),
+                "{}: {entry_point} runs, prefers or registers an external CLI agent",
+                path.display()
+            );
+        }
     }
     let swarm = include_str!("../commands/swarm.rs");
     assert!(!swarm.contains(concat!("CodexCli", "Provider")));
+    let bridge = include_str!("../nx_bridge/mod.rs");
+    for required in [
+        "NxConfig::load_without_cli_agents()",
+        "setup::diagnose_without_cli_agents()",
+        "App::new_without_cli_agents(",
+    ] {
+        assert!(bridge.contains(required), "nx bridge: {required}");
+    }
 }
 
 /// Ambient roots no desktop production source may use, with the only approved

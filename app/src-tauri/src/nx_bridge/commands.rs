@@ -132,7 +132,7 @@ pub fn nx_tool() -> Result<serde_json::Value, String> {
 /// Run diagnostics (like `nx doctor`).
 #[command]
 pub async fn nx_doctor() -> Result<DiagnosticResult, String> {
-    let status = nexus_code::setup::diagnose();
+    let status = nexus_code::setup::diagnose_without_cli_agents();
     Ok(DiagnosticResult {
         has_any_provider: status.has_any_provider,
         configured_providers: status.configured_providers,
@@ -154,7 +154,7 @@ pub async fn nx_doctor() -> Result<DiagnosticResult, String> {
 /// List configured providers with status.
 #[command]
 pub async fn nx_providers() -> Result<Vec<serde_json::Value>, String> {
-    let status = nexus_code::setup::diagnose();
+    let status = nexus_code::setup::diagnose_without_cli_agents();
     let mut providers = Vec::new();
     for name in &status.configured_providers {
         providers.push(serde_json::json!({ "name": name, "configured": true }));
@@ -251,7 +251,7 @@ pub async fn nx_switch_provider(
     }
 
     // Validate the provider is available
-    let status = nexus_code::setup::diagnose();
+    let status = nexus_code::setup::diagnose_without_cli_agents();
     if !status.configured_providers.iter().any(|p| p == &provider) {
         return Err(format!(
             "Provider '{}' is not configured. Available: {}",

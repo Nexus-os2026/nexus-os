@@ -168,6 +168,11 @@ Each stays registered and returns one bounded reason. Its handler takes no input
   - every query, stream and login fails closed;
   - no process spawn or permission bypass remains.
 - **Desktop swarm:** it registers no Codex provider.
+- **Nexus Code bridge** (`nx_bridge`). It configures, diagnoses and builds Nexus Code through the `_without_cli_agents` entry points of `nexus-code`, so the desktop:
+  - never runs the Claude CLI, not even `claude --version`;
+  - never prefers it during provider auto-detection;
+  - never registers it as a provider; `nx_doctor` and `nx_providers` report it unavailable.
+  - The standalone `nx` terminal CLI keeps its own behaviour.
 - **Process cwd:** it is no longer set from `NEXUS_WORKSPACE_ROOT` or a git ancestor at startup.
 - **Prebuilt agent manifests** (authority-bearing):
   - they resolve from no ambient location;
@@ -224,14 +229,14 @@ These implementations stay compiled, in their crates, with no desktop production
 - computer-control `sh -c` execution;
 - the MCP stdio client and MCP tool handler;
 - agent-memory persistence;
-- the nexus-code and computer-use agent loops;
+- the nexus-code and computer-use agent loops (the nexus-code Claude CLI provider and screen-analysis tool are never registered by the desktop);
 - the content pipeline;
 - Time Machine file recording;
 - the full default actuator registry.
 
 The kernel action executor may be constructed only once in desktop production: as the Phase Zero agent executor, with an empty workspace root. Separately, the browser agent's Python bridge is never started by its session code.
 
-Other latent D (no desktop caller, not registered) remains as recorded by the audit: dormant raw-path storage APIs, the nexus-code bash and test-runner tools (capability never granted), the kernel self-evolution, governance-policy and agent-lifecycle actuators (not routed), and the out-of-closure developer tools. Reaching any of them from desktop production requires a new registered command or agent route, which the C5C guard will inventory.
+Other latent D (no desktop caller, not registered) remains as recorded by the audit: dormant raw-path storage APIs, the nexus-code bash and test-runner tools (capability never granted), the kernel self-evolution, governance-policy and agent-lifecycle actuators (not routed), and the out-of-closure developer tools. The `nexus-swarm` healthcheck binary is a developer tool, not part of the desktop, and it still registers the swarm Codex CLI provider. Reaching any of them from desktop production requires a new registered command or agent route, which the C5C guard will inventory.
 
 ## 7. Final-gate review items (not fixed in C5A)
 
@@ -249,7 +254,7 @@ PHASE ZERO FINAL-GATE REVIEW REQUIRED:
 Also recorded for the final inventory:
 
 - **Operator state-location environment overrides** (`NEXUS_DB_PATH`, `NEXUS_CONFIG_PATH`). They relocate app state; they are not code-bearing.
-- **PATH-resolved helper binaries run with fixed arguments.** This includes curl, git, `which`, and version probes of external CLIs at nx bridge startup.
+- **PATH-resolved helper binaries run with fixed arguments.** This includes curl, git, and `which` presence probes for git, ripgrep and ollama at nx bridge startup. No external CLI agent is among them.
 - **OS input** by the kernel computer-control commands. The E6 decision covered only the EOF approval bug.
 - The `null` webview CSP.
 
@@ -268,10 +273,17 @@ Also recorded for the final inventory:
   - starts an external CLI agent;
   - bypasses its permissions;
   - registers a CLI agent in the swarm;
+  - calls a Nexus Code entry point that runs, prefers or registers the Claude CLI (the nx bridge must use the `_without_cli_agents` forms);
   - uses an ambient root. The only exceptions are the counted C4D2 packaged-toolchain lookup and the test-only prebuilt source.
 - Latent unsafe APIs have no desktop production caller; the executor is constructed only as the Phase Zero agent executor.
 
-The CLI providers (`connectors/llm`), the planner and loop (`kernel`), the swarm coder (`agents/coder`) and computer-use approval (`crates/nexus-computer-use`) carry their own closure tests.
+These carry their own closure tests:
+
+- the CLI providers (`connectors/llm`);
+- the Nexus Code desktop entry points (`nexus-code/tests/phase0_cli_agents.rs`, with a fake `claude` on `PATH`);
+- the planner and loop (`kernel`);
+- the swarm coder (`agents/coder`);
+- computer-use approval (`crates/nexus-computer-use`).
 
 **Maintainers.**
 

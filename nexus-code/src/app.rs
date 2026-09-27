@@ -33,11 +33,24 @@ pub struct App {
 impl App {
     /// Create a new application instance.
     pub fn new(config: NxConfig) -> Result<Self, NxError> {
+        Self::build(config, true)
+    }
+
+    /// Create an application instance whose provider registry holds no
+    /// external CLI agent. The Nexus OS desktop uses this: it never runs an
+    /// external CLI agent (P0-002C5A).
+    pub fn new_without_cli_agents(config: NxConfig) -> Result<Self, NxError> {
+        Self::build(config, false)
+    }
+
+    fn build(config: NxConfig, cli_agents: bool) -> Result<Self, NxError> {
         let governance = GovernanceKernel::new(config.fuel_budget)?;
 
         // Build provider registry
         let mut registry = ProviderRegistry::new();
-        registry.register(Box::new(ClaudeCliProvider::new()));
+        if cli_agents {
+            registry.register(Box::new(ClaudeCliProvider::new()));
+        }
         registry.register(Box::new(AnthropicProvider::new()));
         registry.register(Box::new(crate::llm::providers::create_openai_provider()));
         registry.register(Box::new(GoogleProvider::new()));
