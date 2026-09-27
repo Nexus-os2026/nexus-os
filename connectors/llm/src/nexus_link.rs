@@ -1437,4 +1437,29 @@ mod tests {
         assert!(link.encryption_key.is_none());
         assert!(link.shared_secret.is_none());
     }
+
+    #[test]
+    fn p0_002c5b_send_model_names_a_stored_file_only_by_its_exact_spelling() {
+        let base = std::env::temp_dir().join(format!("nexus-p0-002c5b-{}", uuid::Uuid::new_v4()));
+        let models = base.join("models");
+        std::fs::create_dir_all(models.join("m")).unwrap();
+        std::fs::write(models.join("model.gguf"), b"x").unwrap();
+        std::fs::write(models.join("m").join("q4.gguf"), b"x").unwrap();
+        let link = NexusLink::new("device", &models.to_string_lossy());
+        for (model_id, filename) in [
+            ("m", "Model.gguf"),
+            ("m", "MODEL.GGUF"),
+            ("M", "q4.gguf"),
+            ("m", "Q4.gguf"),
+        ] {
+            let error = link
+                .send_model("127.0.0.1:9", model_id, filename, |_| {})
+                .unwrap_err();
+            assert!(
+                error.contains("not found beneath"),
+                "{model_id:?} {filename:?}: {error}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }

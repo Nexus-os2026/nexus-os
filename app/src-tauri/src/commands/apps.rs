@@ -117,14 +117,17 @@ fn deny(state: &AppState, action: &str, reason: &str) -> String {
     format!("{action}: {}", reason.replace('_', " "))
 }
 
-/// The JSON file for a caller identifier beneath a store directory.
+/// The JSON file for a caller identifier beneath a store directory. Note and
+/// project ids are backend-grammar storage identifiers (the interface issues
+/// `n-<millis>` and `default`): lowercase only, so no second spelling of an
+/// id can name the same file on a case-insensitive filesystem.
 fn identified_file(
     state: &AppState,
     action: &str,
     dir: &Path,
     id: &str,
 ) -> Result<PathBuf, String> {
-    nexus_kernel::governed_path::validate_identifier(id, MAX_STORE_ID_BYTES)
+    nexus_kernel::governed_path::validate_storage_identifier(id, MAX_STORE_ID_BYTES)
         .map_err(|_| deny(state, action, "invalid_identifier"))?;
     Ok(dir.join(format!("{id}.json")))
 }

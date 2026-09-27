@@ -27,6 +27,8 @@ pub enum PathDenied {
     WrongKind,
     #[error("filesystem object is unavailable")]
     Unavailable,
+    #[error("name differs from an existing entry only by letter case")]
+    CaseAlias,
 }
 
 /// Longest governed relative path, in bytes.
@@ -92,16 +94,42 @@ pub fn validate_identifier(id: &str, max_len: usize) -> Result<(), PathDenied> {
     Ok(())
 }
 
+/// A caller identifier used directly as a storage file stem: the
+/// [`validate_identifier`] grammar in ASCII lowercase only. A
+/// case-insensitive filesystem (Windows, and macOS by default) resolves two
+/// spellings that differ only by case to one file, so a store keyed by such
+/// identifiers accepts exactly one spelling of each. An uppercase letter is
+/// invalid; it is never folded, because folding would merge identifiers that
+/// are distinct.
+pub fn validate_storage_identifier(id: &str, max_len: usize) -> Result<(), PathDenied> {
+    validate_identifier(id, max_len)?;
+    if id.bytes().any(|b| b.is_ascii_uppercase()) {
+        return Err(PathDenied::InvalidName);
+    }
+    Ok(())
+}
+
+/// Prefix of generated storage stems. No raw stem starts with it in any
+/// letter case: raw stems are lowercase, and a lowercase `h-` value is hashed.
+const GENERATED_STEM_PREFIX: &str = "h-";
+
 /// A deterministic storage stem for an identifier that may legitimately fall
-/// outside [`validate_identifier`] (for example a remote provider's message
-/// id). A valid identifier is used as is unless it starts with `h-`; every
-/// other value, and every `h-` value, becomes `h-` plus its SHA-256, so two
-/// different identifiers never share a stem.
+/// outside [`validate_storage_identifier`] (for example a remote provider's
+/// case-sensitive message id). A valid lowercase storage identifier that does
+/// not start with `h-` is used as is. Every other value becomes `h-` plus the
+/// lowercase hex SHA-256 of its original bytes (never of a folded form).
+///
+/// Raw stems are lowercase and never start with `h-`; generated stems are
+/// lowercase `h-` digests. Two different identifiers therefore never share a
+/// stem, even when stems are compared with ASCII case folding, as a
+/// case-insensitive filesystem compares these ASCII names.
 pub fn storage_stem(id: &str) -> String {
-    if !id.starts_with("h-") && validate_identifier(id, MAX_COMPONENT_BYTES - 16).is_ok() {
+    if !id.starts_with(GENERATED_STEM_PREFIX)
+        && validate_storage_identifier(id, MAX_COMPONENT_BYTES - 16).is_ok()
+    {
         return id.to_string();
     }
-    format!("h-{:x}", Sha256::digest(id.as_bytes()))
+    format!("{GENERATED_STEM_PREFIX}{:x}", Sha256::digest(id.as_bytes()))
 }
 
 fn is_device_name(component: &str) -> bool {
@@ -135,6 +163,52 @@ pub fn join_relative(root: &Path, relative: &str) -> Result<PathBuf, PathDenied>
     Ok(path)
 }
 
+/// Refuses `name` when `dir` holds an entry spelled differently from it only
+/// by ASCII letter case, and none spelled exactly like it. A case-insensitive
+/// filesystem would resolve such a spelling to that entry, so a store keyed by
+/// file names accepts one spelling of each name on every platform. An absent
+/// directory, an absent name or an exact entry passes. The file-name grammars
+/// this guards are ASCII, so ASCII case folding is the folding those
+/// filesystems apply to them.
+pub fn case_exact_entry(dir: &Path, name: &str) -> Result<(), PathDenied> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err(PathDenied::Unavailable),
+    };
+    let mut alias = false;
+    for entry in entries {
+        let entry_name = entry.map_err(unavailable)?.file_name();
+        match entry_name.to_str() {
+            Some(entry_name) if entry_name == name => return Ok(()),
+            Some(entry_name) if entry_name.eq_ignore_ascii_case(name) => alias = true,
+            _ => {}
+        }
+    }
+    if alias {
+        Err(PathDenied::CaseAlias)
+    } else {
+        Ok(())
+    }
+}
+
+/// [`case_exact_entry`] for each component of a relative path beneath
+/// `root`, down to the first component that does not exist yet as a real
+/// directory.
+pub fn case_exact_relative(root: &Path, relative: &str) -> Result<(), PathDenied> {
+    validate_relative(relative)?;
+    let mut dir = root.to_path_buf();
+    for component in relative.split('/') {
+        case_exact_entry(&dir, component)?;
+        dir.push(component);
+        let is_dir = std::fs::symlink_metadata(&dir).is_ok_and(|m| !is_redirect(&m) && m.is_dir());
+        if !is_dir {
+            break;
+        }
+    }
+    Ok(())
+}
+
 /// An existing absolute directory that is its own canonical spelling and not
 /// itself a symbolic link or reparse point.
 pub fn existing_root(path: &Path) -> Result<(), PathDenied> {
@@ -154,7 +228,9 @@ pub fn existing_root(path: &Path) -> Result<(), PathDenied> {
 /// The regular file at a validated relative path beneath `root`, which must be
 /// an existing absolute directory that is not itself a redirect. Every
 /// directory on the way must be a real directory and the target a regular
-/// file; none may be a symbolic link or reparse point.
+/// file; none may be a symbolic link or reparse point, and each must be
+/// spelled exactly as stored (no letter-case alias, see
+/// [`case_exact_entry`]).
 pub fn regular_file_beneath(root: &Path, relative: &str) -> Result<PathBuf, PathDenied> {
     let root_metadata = std::fs::symlink_metadata(root).map_err(|_| PathDenied::InvalidRoot)?;
     if is_redirect(&root_metadata) {
@@ -167,11 +243,13 @@ pub fn regular_file_beneath(root: &Path, relative: &str) -> Result<PathBuf, Path
     let components: Vec<&str> = relative.split('/').collect();
     let mut path = root.to_path_buf();
     for (index, component) in components.iter().enumerate() {
+        let parent = path.clone();
         path.push(component);
         let metadata = std::fs::symlink_metadata(&path).map_err(unavailable)?;
         if is_redirect(&metadata) {
             return Err(PathDenied::Redirected);
         }
+        case_exact_entry(&parent, component)?;
         let last = index + 1 == components.len();
         if (last && !metadata.is_file()) || (!last && !metadata.is_dir()) {
             return Err(PathDenied::WrongKind);

@@ -1550,7 +1550,7 @@ fn p0_002c5b_identifier_joins_stay_behind_their_grammars() {
     // Joins that remain sit behind a grammar or an allowlist, each counted;
     // the pre-C5B spellings that bypassed them stay gone.
     for (file, spelling, count) in [
-        // identified_file, after validate_identifier.
+        // identified_file, after validate_storage_identifier (lowercase only).
         (
             "app/src-tauri/src/commands/apps.rs",
             "join(format!(\"{id}.json\"))",
@@ -1568,11 +1568,22 @@ fn p0_002c5b_identifier_joins_stay_behind_their_grammars() {
             "join(format!(\"{provider}_tokens.json\"))",
             3,
         ),
-        // nx_session_save, after validate_identifier.
+        // nx_session_file: the name's storage stem, never the raw name.
+        (
+            "app/src-tauri/src/nx_bridge/commands.rs",
+            "join(format!(\"{stem}.json\"))",
+            1,
+        ),
         (
             "app/src-tauri/src/nx_bridge/commands.rs",
             "join(format!(\"{}.json\", name))",
-            1,
+            0,
+        ),
+        // Store ids use the lowercase storage grammar, never the plain one.
+        (
+            "app/src-tauri/src/commands/apps.rs",
+            "governed_path::validate_identifier(",
+            0,
         ),
         // generate_model_config, after validate_hf_filename.
         ("connectors/llm/src/model_hub.rs", "join(filename)", 1),
@@ -1604,6 +1615,22 @@ fn p0_002c5b_identifier_joins_stay_behind_their_grammars() {
             "app/src-tauri/src/nx_bridge/commands.rs",
             "validate_identifier(",
             1,
+        ),
+        (
+            "app/src-tauri/src/nx_bridge/commands.rs",
+            "storage_stem(",
+            1,
+        ),
+        (
+            "app/src-tauri/src/commands/apps.rs",
+            "validate_storage_identifier(",
+            1,
+        ),
+        ("connectors/llm/src/model_hub.rs", "case_exact_relative(", 1),
+        (
+            "crates/nexus-flash-infer/src/downloader.rs",
+            "case_exact(",
+            3,
         ),
         (
             "connectors/llm/src/model_hub.rs",

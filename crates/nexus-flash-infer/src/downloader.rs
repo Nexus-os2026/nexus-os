@@ -242,7 +242,16 @@ impl ModelStorage {
     /// a path (P0-002C5B).
     pub fn model_path(&self, filename: &str) -> Result<PathBuf, FlashError> {
         validate_model_filename(filename)?;
+        case_exact(&self.base_dir, filename)?;
         Ok(self.base_dir.join(filename))
+    }
+
+    /// The partial-download file for a model name, under the same rules.
+    fn part_path(&self, filename: &str) -> Result<PathBuf, FlashError> {
+        validate_model_filename(filename)?;
+        let part = format!("{filename}.part");
+        case_exact(&self.base_dir, &part)?;
+        Ok(self.base_dir.join(part))
     }
 
     /// The base directory.
@@ -253,11 +262,11 @@ impl ModelStorage {
     /// Delete a downloaded model and any `.part` file.
     pub fn delete_model(&self, filename: &str) -> Result<(), FlashError> {
         let path = self.model_path(filename)?;
+        let part = self.part_path(filename)?;
         if path.exists() {
             std::fs::remove_file(&path)
                 .map_err(|e| FlashError::DownloadError(format!("delete failed: {e}")))?;
         }
-        let part = self.base_dir.join(format!("{filename}.part"));
         if part.exists() {
             // Best-effort: clean up leftover partial download file
             let _ = std::fs::remove_file(&part);
@@ -299,6 +308,40 @@ fn hub_name(name: &str, max: usize, plus: bool) -> bool {
         && bytes.iter().all(|b| {
             b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-') || (plus && *b == b'+')
         })
+}
+
+/// Refuses a name that differs from an entry of `dir` only by ASCII letter
+/// case when no entry is spelled exactly like it (the rule of
+/// `nexus_kernel::governed_path::case_exact_entry`; this crate does not
+/// depend on the kernel). A case-insensitive filesystem would resolve such a
+/// name to the stored file, so the model store holds one spelling per name.
+/// Model names are ASCII, so ASCII case folding is the folding that applies.
+fn case_exact(dir: &Path, name: &str) -> Result<(), FlashError> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(FlashError::DownloadError(format!(
+                "cannot read model dir: {}",
+                error.kind()
+            )))
+        }
+    };
+    let mut alias = false;
+    for entry in entries.flatten() {
+        match entry.file_name().to_str() {
+            Some(entry_name) if entry_name == name => return Ok(()),
+            Some(entry_name) if entry_name.eq_ignore_ascii_case(name) => alias = true,
+            _ => {}
+        }
+    }
+    if alias {
+        Err(FlashError::DownloadError(
+            "model file name differs from a stored file only by letter case".into(),
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 /// A downloadable model file name: one hub name segment of at most 200 bytes.
@@ -398,7 +441,7 @@ impl ModelDownloader {
             "https://huggingface.co/{}/resolve/main/{}",
             hf_repo, filename
         );
-        let part_path = self.storage.base_dir().join(format!("{filename}.part"));
+        let part_path = self.storage.part_path(filename)?;
 
         // Already fully downloaded?
         if dest.exists() {
@@ -807,6 +850,28 @@ mod tests {
             b"original"
         );
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn p0_002c5b_model_names_cannot_alias_a_stored_file_by_case() {
+        let home = std::env::temp_dir().join(format!("nexus-flash-case-{}", std::process::id()));
+        std::fs::create_dir_all(&home).unwrap();
+        let storage = ModelStorage::for_home(&home).unwrap();
+        std::fs::write(storage.base_dir().join("model.gguf"), b"stored").unwrap();
+        std::fs::write(storage.base_dir().join("other.gguf.part"), b"partial").unwrap();
+        assert!(storage.model_path("model.gguf").is_ok());
+        assert!(storage.part_path("other.gguf").is_ok());
+        for alias in ["Model.gguf", "MODEL.GGUF"] {
+            assert!(storage.model_path(alias).is_err(), "{alias}");
+            assert!(storage.delete_model(alias).is_err(), "{alias}");
+        }
+        // A partial download is never resumed under another spelling.
+        assert!(storage.part_path("Other.gguf").is_err());
+        assert_eq!(
+            std::fs::read(storage.base_dir().join("model.gguf")).unwrap(),
+            b"stored"
+        );
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]

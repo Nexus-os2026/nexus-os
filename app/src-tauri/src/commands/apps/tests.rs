@@ -205,3 +205,38 @@ fn p0_002c5b_ollama_deletes_need_an_http_base_url() {
         );
     }
 }
+
+#[test]
+fn p0_002c5b_store_ids_have_one_spelling_and_email_stems_never_alias() {
+    let state = AppState::new_in_memory();
+    let dir = Path::new("/nexus/notes");
+    // Note and project ids are lowercase storage identifiers: a second
+    // spelling is refused rather than folded onto the same file.
+    for id in ["N-1712345678901", "Default", "DEFAULT", "n-1712345678901X"] {
+        assert_eq!(
+            identified_file(&state, "notes_get", dir, id).unwrap_err(),
+            "notes_get: invalid identifier",
+            "{id:?}"
+        );
+    }
+    for id in ["n-1712345678901", "default"] {
+        assert!(
+            identified_file(&state, "project_get", dir, id).is_ok(),
+            "{id:?}"
+        );
+    }
+    // Email ids that differ only by case keep distinct stems, even folded,
+    // and no spelling of a generated stem selects it.
+    let lower = nexus_kernel::governed_path::storage_stem("messagea");
+    let upper = nexus_kernel::governed_path::storage_stem("MessageA");
+    assert_eq!(lower, "messagea");
+    assert!(!lower.eq_ignore_ascii_case(&upper));
+    for spelling in [
+        upper.clone(),
+        upper.to_uppercase(),
+        format!("H{}", &upper[1..]),
+    ] {
+        let stem = nexus_kernel::governed_path::storage_stem(&spelling);
+        assert!(!stem.eq_ignore_ascii_case(&upper), "{spelling:?}");
+    }
+}

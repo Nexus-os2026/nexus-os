@@ -190,18 +190,29 @@ fn nx_sessions_dir() -> Result<std::path::PathBuf, String> {
     nexus_kernel::identity_home::nexus_state_path("nexus-code/sessions").map_err(|e| e.to_string())
 }
 
+/// The file of a saved session. A session name is a user label (a narrow
+/// identifier grammar, but case-sensitive) and never a path. The file is its
+/// storage stem, so two names that differ only by case never share a file on
+/// a case-insensitive filesystem; the listing reads names from file contents.
+fn nx_session_file(
+    sessions_dir: &std::path::Path,
+    name: &str,
+) -> Result<std::path::PathBuf, String> {
+    nexus_kernel::governed_path::validate_identifier(name, 64)
+        .map_err(|_| "nx_session_save: invalid session name".to_string())?;
+    let stem = nexus_kernel::governed_path::storage_stem(name);
+    Ok(sessions_dir.join(format!("{stem}.json")))
+}
+
 /// Save the current session.
 #[command]
 pub async fn nx_session_save(name: String, state: State<'_, NxState>) -> Result<String, String> {
-    // P0-002C5B: a session name is an identifier, never a path.
-    nexus_kernel::governed_path::validate_identifier(&name, 64)
-        .map_err(|_| "nx_session_save: invalid session name".to_string())?;
-    let app = state.app.lock().await;
     // P0-002C5B: sessions live under the validated identity home.
     let sessions_dir = nx_sessions_dir()?;
+    let session_file = nx_session_file(&sessions_dir, &name)?;
+    let app = state.app.lock().await;
     std::fs::create_dir_all(&sessions_dir).map_err(|e| format!("{}", e))?;
 
-    let session_file = sessions_dir.join(format!("{}.json", name));
     let session_data = serde_json::json!({
         "name": name,
         "session_id": app.governance.identity.session_id(),
@@ -521,3 +532,25 @@ pub async fn nx_learning_stats() -> Result<LearningStats, String> {
 // ─── Internal: Computer Use Agent Loop ───
 
 // ─── Internal: Agent Loop with Event Emission ───
+
+#[cfg(test)]
+mod tests {
+    use super::nx_session_file;
+    use std::path::Path;
+
+    #[test]
+    fn p0_002c5b_session_names_never_share_a_file_by_case() {
+        let dir = Path::new("/nexus/sessions");
+        let lower = nx_session_file(dir, "work").unwrap();
+        assert_eq!(lower, dir.join("work.json"));
+        let upper = nx_session_file(dir, "Work").unwrap();
+        let shout = nx_session_file(dir, "WORK").unwrap();
+        for (a, b) in [(&lower, &upper), (&lower, &shout), (&upper, &shout)] {
+            let (a, b) = (a.to_string_lossy(), b.to_string_lossy());
+            assert!(!a.eq_ignore_ascii_case(&b), "{a} aliases {b}");
+        }
+        for hostile in ["", "../escape", "a/b", "CON", "a b", &"a".repeat(65)] {
+            assert!(nx_session_file(dir, hostile).is_err(), "{hostile:?}");
+        }
+    }
+}

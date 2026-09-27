@@ -354,6 +354,11 @@ pub fn download_model_file(
     let model_dir = model_storage_dir(target_root, model_id);
     let file_path = nexus_kernel::governed_path::join_relative(&model_dir, filename)
         .map_err(|_| "invalid Hugging Face file name".to_string())?;
+    // A name that differs from a stored file only by letter case would reach
+    // that file on a case-insensitive filesystem: one spelling per name.
+    nexus_kernel::governed_path::case_exact_relative(&model_dir, filename).map_err(|_| {
+        "model file name differs from a stored file only by letter case".to_string()
+    })?;
     let parent = file_path.parent().unwrap_or(&model_dir);
     std::fs::create_dir_all(parent)
         .map_err(|e| format!("failed to create model directory: {e}"))?;
@@ -1092,5 +1097,31 @@ mod tests {
                 "{url:?}: {err}"
             );
         }
+    }
+
+    #[test]
+    fn p0_002c5b_case_variants_of_a_stored_model_file_are_refused() {
+        let root = std::env::temp_dir().join(format!("nexus-p0-002c5b-{}", uuid::Uuid::new_v4()));
+        let model_dir = model_storage_dir(&root, "org/model");
+        std::fs::create_dir_all(model_dir.join("gguf")).unwrap();
+        std::fs::write(model_dir.join("model.Q4_K_M.gguf"), b"stored").unwrap();
+        std::fs::write(model_dir.join("gguf").join("q4.gguf"), b"stored").unwrap();
+        let target = root.to_string_lossy().into_owned();
+        // Refused before any directory, file or request.
+        for alias in [
+            "Model.Q4_K_M.gguf",
+            "model.q4_k_m.gguf",
+            "GGUF/q4.gguf",
+            "gguf/Q4.gguf",
+        ] {
+            let error = download_model_file("org/model", alias, &target, |_| {}).unwrap_err();
+            assert!(error.contains("letter case"), "{alias}: {error}");
+        }
+        assert_eq!(
+            std::fs::read(model_dir.join("model.Q4_K_M.gguf")).unwrap(),
+            b"stored"
+        );
+        assert_eq!(std::fs::read_dir(&model_dir).unwrap().count(), 2);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

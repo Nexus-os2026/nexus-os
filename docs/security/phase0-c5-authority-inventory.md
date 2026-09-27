@@ -209,7 +209,9 @@ isolation:
 
 - **`governed_path`**:
   - grammars: `validate_relative`, `validate_component` (the C4 grammar) and `validate_identifier`;
-  - `storage_stem`, a deterministic digest for identifiers outside the grammar;
+  - `validate_storage_identifier`, the identifier grammar in ASCII lowercase only, for ids used directly as file stems;
+  - `storage_stem`, which keeps a lowercase storage identifier and otherwise uses a deterministic digest of the original bytes;
+  - `case_exact_entry` and `case_exact_relative`, which refuse a name that differs from a stored entry only by letter case;
   - `join_relative`, `existing_root` and `regular_file_beneath`, a no-follow walk;
   - `FileIdentity` (device and inode, or volume and 128-bit file id);
   - `private_temp_dir`.
@@ -270,20 +272,26 @@ content and absolute path are never recorded.
 
 | Surface | Model |
 |---|---|
-| notes_{get,save,delete}, project_{get,save,delete} | `validate_identifier` (ASCII `[A-Za-z0-9._-]`, alphanumeric first, at most 128 bytes, no trailing dot, no device name) before any path or log |
-| email_{save,delete} | `storage_stem`: grammar-valid ids keep their name; any other value becomes `h-<sha256>` |
+| notes_{get,save,delete}, project_{get,save,delete} | `validate_storage_identifier` before any path or log: ASCII `[a-z0-9._-]`, alphanumeric first, at most 128 bytes, no trailing dot, no device name. The interface issues `n-<millis>` and `default`. An uppercase spelling is refused, never folded. |
+| email_{save,delete} | `storage_stem`. A lowercase storage identifier outside the reserved `h-` namespace keeps its name. Any other value becomes `h-<sha256 of its original bytes>`; that covers a case variant such as `MessageA`, and any spelling of `h-`. |
 | Email token reads, fetch, send, search, disconnect | provider allowlist (`gmail`, `outlook`) as `&'static str` |
 | messaging_{connect_platform,send,poll_messages} | platform allowlist (`telegram`, `discord`, `slack`); Discord channel ids are 1–20 digit snowflakes; Telegram tokens are checked before any URL use |
 | Agent memory (SDK persistence) | the agent id must parse as a UUID; the file is named by its hyphenated form |
-| nx_session_save | `validate_identifier(name, 64)` |
-| download_model, its Modelfile and model config | Hugging Face ids: 1–2 segments, at most 96 bytes. File names: at most 4 segments of 128 bytes. The storage directory is `hf-<digest>` of the id, never a `/` replacement. The target is absolute and joined with `join_relative`. |
-| nexus_link_send_model | `regular_file_beneath` the models directory (a no-follow walk to a regular file) |
-| flash_download_model, flash_download_multi, flash_delete_local_model | `validate_model_filename` (one hub name, at most 200 bytes) and `validate_hf_repo`; `ModelStorage::model_path` returns an error |
+| nx_session_save | `validate_identifier(name, 64)` for the label. The file is `storage_stem(name)`, and the listing reads names from file contents. |
+| download_model, its Modelfile and model config | Hugging Face ids: 1–2 segments, at most 96 bytes. File names: at most 4 segments of 128 bytes. The storage directory is `hf-<digest>` of the id, never a `/` replacement. The target is absolute and joined with `join_relative`. A file name that differs from a stored file only by letter case is refused (`case_exact_relative`). |
+| nexus_link_send_model | `regular_file_beneath` the models directory: a no-follow walk to a regular file, with each component spelled exactly as stored |
+| flash_download_model, flash_download_multi, flash_delete_local_model | `validate_model_filename` (one hub name, at most 200 bytes) and `validate_hf_repo`. `ModelStorage::model_path` returns an error, and a model or `.part` name that differs from a stored file only by letter case is refused. |
 
 - **Unchanged, already safe:** the integration OAuth token file (`provider_id` must match github, gitlab, slack or jira before any write) and email OAuth status (a fixed provider list).
+- **Case-insensitive filesystems.** Windows and default macOS resolve two spellings that differ only by case to one file. Every identifier-to-file mapping above therefore holds at most one spelling per stored object, on every platform:
+  - Backend-grammar ids (notes, projects) are lowercase-only storage identifiers.
+  - Case-sensitive ids (email, nx session labels) map through `storage_stem`. Raw stems are lowercase and never start with `h-`; generated stems are lowercase `h-` digests of the original bytes. Stems are therefore distinct even under ASCII case folding, and no spelling of `h-` selects a generated stem.
+  - Filename-keyed stores (Hugging Face downloads, flash models, Nexus Link send) refuse a name that differs from a stored entry only by case. Their grammars are ASCII, so ASCII folding is the folding those filesystems apply.
+  - The token files use fixed lowercase names from allowlists, and SDK agent memory is named by the canonical hyphenated UUID (UUIDs are case-insensitive by definition).
 - **Tests:**
   - `governed_path` grammars: separators, `.`/`..`, absolute and prefixed forms, drives, UNC, ADS, device names, controls and length;
-  - desktop `commands::apps` (identifiers, providers, platforms, snowflakes, tokens, and audit records that never echo a value);
+  - case aliasing: stems stay distinct after folding, no spelling of `h-` reaches a generated stem, storage identifiers have one spelling, and exact-spelling checks refuse variants. A native Windows test shows NTFS resolving a variant to the stored file while the rules still refuse it.
+  - desktop `commands::apps` (identifiers, providers, platforms, snowflakes, tokens, and audit records that never echo a value) and the nx session file helper;
   - SDK memory, connectors-llm hub and Nexus Link;
   - flash downloader (with the `download` feature).
 
@@ -536,7 +544,10 @@ These carry their own closure tests:
 - **Nexus Code configuration** read at nx bridge startup: `NEXUSCODE.md` and `.nxrc` from the working directory, and the user config from the platform config directory.
 - **A2A delegation** is dispatched in the cognitive loop before the Phase Zero agent executor. It needs an `a2a.delegate` capability that the registry does not grant.
 - **Behavioural changes:**
-  - Email ids outside the grammar (for example Microsoft Graph ids containing `=`) are now stored under a digest name. Files written before C5B under the raw id are no longer addressed by that id.
+  - Email ids that are not lowercase storage identifiers are now stored under a digest name: Microsoft Graph ids containing `=`, and any mixed-case id. Files written earlier under the raw id are still listed, because the list reads file contents, but they are no longer addressed by that id.
+  - Note and project ids with an uppercase letter are refused. The interface never issues them, so such a file written earlier is listed but not addressed.
+  - An nx session saved earlier under a mixed-case name keeps its old file. Saving that name again writes the digest-named file, so both are listed.
+  - A model file name that differs from a stored file only by case is refused. Stored files are unchanged.
   - The external-tools `email` and `database` tools fail closed.
   - Model downloads have no total-size bound.
 - **The desktop test-support state** (`AppState::new_in_memory`) still gives its schedule store the shared temp directory. It is compiled only for tests and the `test-support` feature.

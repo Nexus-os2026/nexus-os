@@ -327,3 +327,160 @@ fn unix_links_on_the_way_to_a_regular_file_are_refused() {
         Err(PathDenied::Redirected)
     );
 }
+
+#[test]
+fn storage_identifiers_have_exactly_one_lowercase_spelling() {
+    for id in ["n-1712345678901", "default", "em-1", "abc.def_1-2", "0"] {
+        assert_eq!(validate_storage_identifier(id, 64), Ok(()), "{id:?}");
+    }
+    // An uppercase letter is refused, never folded: the lowercase spelling
+    // is a different identifier.
+    for id in [
+        "N-1712345678901",
+        "Default",
+        "MessageA",
+        "DEFAULT",
+        "a-B",
+        "Em-1",
+    ] {
+        assert_eq!(
+            validate_storage_identifier(id, 64),
+            Err(PathDenied::InvalidName),
+            "{id:?}"
+        );
+    }
+    for id in ["", "../../escape", "a/b", "CON", "con.x", "x.", "a:b"] {
+        assert!(validate_storage_identifier(id, 64).is_err(), "{id:?}");
+    }
+    assert!(validate_storage_identifier(&"a".repeat(65), 64).is_err());
+}
+
+#[test]
+fn storage_stems_never_alias_under_ascii_case_folding() {
+    // Lowercase grammar-valid ids keep their stored name.
+    assert_eq!(storage_stem("messagea"), "messagea");
+    assert_eq!(storage_stem("em-1712"), "em-1712");
+    // A case variant is a different identifier: it gets a digest of its
+    // original bytes, never of a folded form.
+    let upper = storage_stem("MessageA");
+    assert_eq!(upper, format!("h-{:x}", Sha256::digest(b"MessageA")));
+    assert_ne!(upper, format!("h-{:x}", Sha256::digest(b"messagea")));
+    assert_ne!(upper, storage_stem("messagea"));
+    assert!(!upper.eq_ignore_ascii_case(&storage_stem("messagea")));
+
+    // No spelling of the generated namespace selects a generated stem.
+    let generated = storage_stem("../../escape");
+    for spelling in [
+        generated.clone(),
+        generated.to_uppercase(),
+        format!("H{}", &generated[1..]),
+        format!("h-{}", generated[2..].to_uppercase()),
+        "h-abc".to_string(),
+        "H-abc".to_string(),
+    ] {
+        let stem = storage_stem(&spelling);
+        assert!(
+            stem.starts_with("h-") && stem.len() == 66,
+            "{spelling:?} -> {stem}"
+        );
+        assert!(!stem.eq_ignore_ascii_case(&generated), "{spelling:?}");
+    }
+
+    // Ordinary, case-variant and hostile ids keep distinct stems after
+    // folding, every stem is itself a lowercase storage identifier, and the
+    // mapping is deterministic.
+    let ids = [
+        "messagea",
+        "MessageA",
+        "MESSAGEA",
+        "messageA",
+        "h-abc",
+        "H-abc",
+        "em-1",
+        "EM-1",
+        "../../escape",
+        "/etc/passwd",
+        "C:\\x",
+        "AAMkAG+/base64==",
+        "a:b",
+        "",
+        generated.as_str(),
+    ];
+    let mut folded = std::collections::HashSet::new();
+    for id in ids {
+        let stem = storage_stem(id);
+        assert_eq!(validate_storage_identifier(&stem, 66), Ok(()), "{id:?}");
+        assert_eq!(stem, storage_stem(id), "{id:?}");
+        assert!(
+            folded.insert(stem.to_ascii_lowercase()),
+            "{id:?} shares a folded stem"
+        );
+    }
+}
+
+#[test]
+fn case_exact_entries_admit_one_spelling_per_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(root.join("model.gguf"), b"x").unwrap();
+    assert_eq!(case_exact_entry(&root, "model.gguf"), Ok(()));
+    assert_eq!(case_exact_entry(&root, "other.gguf"), Ok(()));
+    for alias in ["Model.gguf", "MODEL.GGUF", "model.GGUF"] {
+        assert_eq!(
+            case_exact_entry(&root, alias),
+            Err(PathDenied::CaseAlias),
+            "{alias}"
+        );
+    }
+    assert_eq!(case_exact_entry(&root.join("missing"), "x"), Ok(()));
+
+    std::fs::create_dir(root.join("gguf")).unwrap();
+    std::fs::write(root.join("gguf").join("q4.gguf"), b"x").unwrap();
+    assert_eq!(case_exact_relative(&root, "gguf/q4.gguf"), Ok(()));
+    assert_eq!(case_exact_relative(&root, "gguf/new/q4.gguf"), Ok(()));
+    for alias in ["GGUF/q4.gguf", "gguf/Q4.gguf"] {
+        assert_eq!(
+            case_exact_relative(&root, alias),
+            Err(PathDenied::CaseAlias),
+            "{alias}"
+        );
+    }
+    // The no-follow walk reaches a stored file only by its exact spelling.
+    assert!(regular_file_beneath(&root, "gguf/q4.gguf").is_ok());
+    for alias in ["gguf/Q4.gguf", "GGUF/q4.gguf", "Model.gguf"] {
+        assert!(regular_file_beneath(&root, alias).is_err(), "{alias}");
+    }
+}
+
+/// Native proof on a case-insensitive filesystem (NTFS): the OS resolves a
+/// case variant to the stored object, and the storage rules still refuse it;
+/// two identifiers that differ only by case get two stored objects.
+#[cfg(windows)]
+#[test]
+fn windows_case_variants_reach_one_object_but_are_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::write(root.join("model.gguf"), b"x").unwrap();
+    assert!(
+        root.join("Model.gguf").exists(),
+        "NTFS resolves the variant"
+    );
+    assert_eq!(
+        case_exact_entry(&root, "Model.gguf"),
+        Err(PathDenied::CaseAlias)
+    );
+    assert_eq!(
+        regular_file_beneath(&root, "Model.gguf"),
+        Err(PathDenied::CaseAlias)
+    );
+
+    let lower = root.join(format!("{}.json", storage_stem("messagea")));
+    let upper = root.join(format!("{}.json", storage_stem("MessageA")));
+    std::fs::write(&lower, b"lower").unwrap();
+    assert!(
+        !upper.exists(),
+        "the variant's stem reached the lowercase file"
+    );
+    std::fs::write(&upper, b"upper").unwrap();
+    assert_eq!(std::fs::read(&lower).unwrap(), b"lower");
+}
