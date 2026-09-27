@@ -1807,11 +1807,6 @@ impl AppState {
             .map_err(|e| e.to_string())
     }
 
-    /// Validate a file path against traversal attacks.
-    fn validate_path_input(&self, path: &str) -> Result<(), String> {
-        nexus_kernel::rate_limit::validate_path(path).map_err(|e| e.to_string())
-    }
-
     pub fn register_blocked_consent_wait(&self, agent_id: &str, consent_id: &str) -> Arc<Notify> {
         let notify = Arc::new(Notify::new());
         self.blocked_consent_waits
@@ -3637,37 +3632,35 @@ pub mod runtime {
     // ── Software Factory commands ────────────────────────────────────
 
     #[tauri::command]
-    fn factory_create_project(
-        state: tauri::State<'_, AppState>,
-        name: String,
-        language: String,
-        source_dir: String,
-    ) -> Result<String, String> {
-        super::factory_create_project(state.inner(), name, language, source_dir)
+    pub(crate) fn factory_create_project() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "factory_create_project",
+            crate::phase0_surface::Closure::FileSelection,
+        ))
     }
 
     #[tauri::command]
-    fn factory_build_project(
-        state: tauri::State<'_, AppState>,
-        project_id: String,
-    ) -> Result<String, String> {
-        super::factory_build_project(state.inner(), project_id)
+    pub(crate) fn factory_build_project() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "factory_build_project",
+            crate::phase0_surface::Closure::ProcessExecution,
+        ))
     }
 
     #[tauri::command]
-    fn factory_test_project(
-        state: tauri::State<'_, AppState>,
-        project_id: String,
-    ) -> Result<String, String> {
-        super::factory_test_project(state.inner(), project_id)
+    pub(crate) fn factory_test_project() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "factory_test_project",
+            crate::phase0_surface::Closure::ProcessExecution,
+        ))
     }
 
     #[tauri::command]
-    fn factory_run_pipeline(
-        state: tauri::State<'_, AppState>,
-        project_id: String,
-    ) -> Result<String, String> {
-        super::factory_run_pipeline(state.inner(), project_id)
+    pub(crate) fn factory_run_pipeline() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "factory_run_pipeline",
+            crate::phase0_surface::Closure::ProcessExecution,
+        ))
     }
 
     #[tauri::command]
@@ -5173,21 +5166,19 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn terminal_execute(
-        state: tauri::State<'_, AppState>,
-        command: String,
-        cwd: String,
-    ) -> Result<String, String> {
-        super::terminal_execute(state.inner(), command, cwd)
+    pub(crate) fn terminal_execute() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "terminal_execute",
+            crate::phase0_surface::Closure::ProcessExecution,
+        ))
     }
 
     #[tauri::command]
-    fn terminal_execute_approved(
-        state: tauri::State<'_, AppState>,
-        command: String,
-        cwd: String,
-    ) -> Result<String, String> {
-        super::terminal_execute_approved(state.inner(), command, cwd)
+    pub(crate) fn terminal_execute_approved() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "terminal_execute_approved",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ))
     }
 
     #[tauri::command]

@@ -619,22 +619,11 @@ pub fn token_get_pricing(state: tauri::State<'_, AppState>) -> Vec<token_cmds::P
 // ── Governed Computer Control Commands ────────────────────────────────────────
 
 #[tauri::command]
-pub fn cc_execute_action(
-    state: tauri::State<'_, AppState>,
-    agent_id: String,
-    autonomy_level: u8,
-    capabilities: Vec<String>,
-    action_json: String,
-) -> Result<nexus_computer_control::ActionResult, String> {
-    let action: nexus_computer_control::ComputerAction =
-        serde_json::from_str(&action_json).map_err(|e| format!("Invalid action: {e}"))?;
-    cc_cmds::execute_action(
-        &state.governed_control,
-        &agent_id,
-        autonomy_level,
-        &capabilities,
-        &action,
-    )
+pub fn cc_execute_action() -> Result<nexus_computer_control::ActionResult, String> {
+    Err(crate::phase0_surface::closed(
+        "cc_execute_action",
+        crate::phase0_surface::Closure::ProcessExecution,
+    ))
 }
 
 #[tauri::command]
@@ -1256,14 +1245,11 @@ pub fn mcp2_server_list_tools(
 }
 
 #[tauri::command]
-pub fn mcp2_client_add(
-    state: tauri::State<'_, AppState>,
-    id: String,
-    name: String,
-    command: String,
-    args: Vec<String>,
-) -> Result<(), String> {
-    mcp2_cmds::mcp_client_add_server(&state.mcp_standalone, &id, &name, &command, args)
+pub fn mcp2_client_add() -> Result<(), String> {
+    Err(crate::phase0_surface::closed(
+        "mcp2_client_add",
+        crate::phase0_surface::Closure::ProcessExecution,
+    ))
 }
 
 #[tauri::command]
@@ -1275,26 +1261,19 @@ pub fn mcp2_client_remove(
 }
 
 #[tauri::command]
-pub fn mcp2_client_discover(
-    state: tauri::State<'_, AppState>,
-    server_id: String,
-) -> Result<Vec<nexus_mcp::McpTool>, String> {
-    mcp2_cmds::mcp_client_discover_tools(&state.mcp_standalone, &server_id)
+pub fn mcp2_client_discover() -> Result<Vec<nexus_mcp::McpTool>, String> {
+    Err(crate::phase0_surface::closed(
+        "mcp2_client_discover",
+        crate::phase0_surface::Closure::ProcessExecution,
+    ))
 }
 
 #[tauri::command]
-pub fn mcp2_client_call(
-    state: tauri::State<'_, AppState>,
-    server_id: String,
-    tool_name: String,
-    arguments_json: String,
-) -> Result<serde_json::Value, String> {
-    mcp2_cmds::mcp_client_call_tool(
-        &state.mcp_standalone,
-        &server_id,
-        &tool_name,
-        &arguments_json,
-    )
+pub fn mcp2_client_call() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "mcp2_client_call",
+        crate::phase0_surface::Closure::ProcessExecution,
+    ))
 }
 
 // ── A2A Crate commands ──────────────────────────────────────────────────────

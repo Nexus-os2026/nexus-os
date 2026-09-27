@@ -81,63 +81,12 @@ pub async fn nx_status(state: State<'_, NxState>) -> Result<GovernanceStatus, St
     })
 }
 
-/// Send a message to the nx agent. Streams results via Tauri events.
 #[command]
-pub async fn nx_chat(
-    message: String,
-    app_handle: AppHandle,
-    state: State<'_, NxState>,
-) -> Result<(), String> {
-    if state.is_running.load(std::sync::atomic::Ordering::Relaxed) {
-        return Err("Agent is already running. Call nx_chat_cancel first.".to_string());
-    }
-    state
-        .is_running
-        .store(true, std::sync::atomic::Ordering::Relaxed);
-
-    let nx_app = state.app.clone();
-    let pending_consents = state.pending_consents.clone();
-    let is_running = state.is_running.clone();
-    let cancel_token = tokio_util::sync::CancellationToken::new();
-
-    {
-        let mut ct = state.cancel_token.lock().await;
-        *ct = Some(cancel_token.clone());
-    }
-
-    let handle = app_handle.clone();
-
-    tokio::spawn(async move {
-        let result = run_agent_with_events(
-            &message,
-            nx_app,
-            pending_consents,
-            handle.clone(),
-            cancel_token,
-        )
-        .await;
-
-        is_running.store(false, std::sync::atomic::Ordering::Relaxed);
-
-        if let Err(e) = result {
-            let _ = handle.emit(
-                "nx:error",
-                super::events::NxErrorEvent {
-                    message: format!("{}", e),
-                },
-            );
-        }
-
-        let _ = handle.emit(
-            "nx:done",
-            super::events::NxDone {
-                reason: "finished".to_string(),
-                total_turns: 0,
-            },
-        );
-    });
-
-    Ok(())
+pub fn nx_chat() -> Result<(), String> {
+    Err(crate::phase0_surface::closed(
+        "nx_chat",
+        crate::phase0_surface::Closure::AgentExecution,
+    ))
 }
 
 /// Cancel the currently running agent loop.
@@ -172,46 +121,12 @@ pub async fn nx_consent_respond(
     }
 }
 
-/// Invoke a single tool through the governance pipeline.
 #[command]
-pub async fn nx_tool(
-    tool_name: String,
-    input: String,
-    state: State<'_, NxState>,
-) -> Result<serde_json::Value, String> {
-    let input_value: serde_json::Value =
-        serde_json::from_str(&input).map_err(|e| format!("Invalid JSON input: {}", e))?;
-
-    let mut app = state.app.lock().await;
-
-    let tool = nexus_code::tools::create_tool(&tool_name)
-        .ok_or_else(|| format!("Unknown tool: {}", tool_name))?;
-
-    let tool_ctx = nexus_code::tools::ToolContext {
-        working_dir: app.config.project_dir().unwrap_or_default(),
-        blocked_paths: app.config.blocked_paths.clone(),
-        max_file_scope: app.config.max_file_scope.clone(),
-        non_interactive: false,
-    };
-
-    match nexus_code::tools::execute_governed(
-        tool.as_ref(),
-        input_value,
-        &tool_ctx,
-        &mut app.governance,
-    )
-    .await
-    {
-        Ok(result) => Ok(serde_json::json!({
-            "success": result.success,
-            "output": result.output,
-            "duration_ms": result.duration_ms,
-        })),
-        Err(nexus_code::error::NxError::ConsentRequired { .. }) => {
-            Err("Consent required. Use nx_chat for interactive consent flow.".to_string())
-        }
-        Err(e) => Err(format!("{}", e)),
-    }
+pub fn nx_tool() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "nx_tool",
+        crate::phase0_surface::Closure::AgentExecution,
+    ))
 }
 
 /// Run diagnostics (like `nx doctor`).
@@ -486,44 +401,12 @@ pub async fn nx_computer_use_status() -> Result<ComputerUseStatus, String> {
     })
 }
 
-/// Run the full computer-use agent loop, streaming progress via events.
 #[command]
-pub async fn nx_agent_run(
-    task: String,
-    auto_approve: bool,
-    max_steps: Option<u32>,
-    app_handle: AppHandle,
-    state: State<'_, NxState>,
-) -> Result<AgentRunResult, String> {
-    if state.is_running.load(std::sync::atomic::Ordering::Relaxed) {
-        return Err("Agent is already running. Cancel the current run first.".to_string());
-    }
-    state
-        .is_running
-        .store(true, std::sync::atomic::Ordering::Relaxed);
-
-    let is_running = state.is_running.clone();
-    let handle = app_handle.clone();
-
-    let config = nexus_computer_use::agent::AgentConfig {
-        task: task.clone(),
-        max_steps: max_steps.unwrap_or(20),
-        confidence_threshold: 0.6_f64,
-        require_user_approval: !auto_approve,
-        dry_run: false,
-        screenshot_max_width: Some(1280),
-        session: None,
-    };
-
-    let result = tokio::spawn(async move {
-        let run_result = run_computer_use_agent(config, handle.clone()).await;
-        is_running.store(false, std::sync::atomic::Ordering::Relaxed);
-        run_result
-    })
-    .await
-    .map_err(|e| format!("Agent task panicked: {}", e))?;
-
-    result
+pub fn nx_agent_run() -> Result<AgentRunResult, String> {
+    Err(crate::phase0_surface::closed(
+        "nx_agent_run",
+        crate::phase0_surface::Closure::ProcessExecution,
+    ))
 }
 
 /// Approve or deny a pending HITL consent request during an agent run.
@@ -619,207 +502,4 @@ pub async fn nx_learning_stats() -> Result<LearningStats, String> {
 
 // ─── Internal: Computer Use Agent Loop ───
 
-async fn run_computer_use_agent(
-    config: nexus_computer_use::agent::AgentConfig,
-    app_handle: AppHandle,
-) -> Result<AgentRunResult, String> {
-    let max_steps = config.max_steps;
-    let task = config.task.clone();
-
-    // Emit step started
-    let _ = app_handle.emit(
-        "nx:agent:step_started",
-        super::events::NxAgentStepStarted { step: 1, max_steps },
-    );
-
-    let result = nexus_computer_use::agent::loop_controller::run_agent_loop(config)
-        .await
-        .map_err(|e| format!("Agent error: {}", e))?;
-
-    // Emit completion
-    let _ = app_handle.emit(
-        "nx:agent:complete",
-        super::events::NxAgentComplete {
-            summary: result.summary.clone(),
-            steps: result.steps_executed,
-            fuel: result.fuel_consumed,
-        },
-    );
-
-    Ok(AgentRunResult {
-        task,
-        completed: result.completed,
-        summary: result.summary,
-        steps_executed: result.steps_executed,
-        fuel_consumed: result.fuel_consumed,
-        total_duration_ms: result.total_duration_ms,
-        audit_hash: result.audit_hash,
-    })
-}
-
 // ─── Internal: Agent Loop with Event Emission ───
-
-async fn run_agent_with_events(
-    message: &str,
-    nx_app: Arc<tokio::sync::Mutex<nexus_code::app::App>>,
-    pending_consents: Arc<
-        tokio::sync::Mutex<std::collections::HashMap<String, super::ConsentPending>>,
-    >,
-    app_handle: AppHandle,
-    cancel: tokio_util::sync::CancellationToken,
-) -> Result<(), nexus_code::error::NxError> {
-    let mut app = nx_app.lock().await;
-
-    let agent_config = nexus_code::agent::AgentConfig {
-        max_turns: 10,
-        system_prompt: nexus_code::agent::build_system_prompt(
-            "You are Nexus Code, a governed coding agent within Nexus OS. \
-             You have access to the project's files, can run tests, and can make changes \
-             through the governed execution pipeline. Be concise and precise.",
-            &app.tool_registry,
-        ),
-        model_slot: nexus_code::llm::router::ModelSlot::Execution,
-        auto_approve_tier2: false,
-        auto_approve_tier3: false,
-        computer_use_active: false,
-    };
-
-    let tool_ctx = nexus_code::tools::ToolContext {
-        working_dir: app.config.project_dir().unwrap_or_default(),
-        blocked_paths: app.config.blocked_paths.clone(),
-        max_file_scope: app.config.max_file_scope.clone(),
-        non_interactive: false,
-    };
-
-    let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
-
-    // Consent handler: emits Tauri event, waits for frontend response
-    let consents_for_handler = pending_consents.clone();
-    let handle_for_consent = app_handle.clone();
-    let consent_handler: Arc<
-        dyn Fn(&nexus_code::governance::ConsentRequest) -> bool + Send + Sync,
-    > = Arc::new(move |request| {
-        let request_id = uuid::Uuid::new_v4().to_string();
-
-        let _ = handle_for_consent.emit(
-            "nx:consent-required",
-            super::events::NxConsentRequired {
-                request_id: request_id.clone(),
-                tool_name: request.action.clone(),
-                tier: format!("{:?}", request.tier),
-                details: request.details.clone(),
-            },
-        );
-
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        {
-            let consents = consents_for_handler.clone();
-            let rid = request_id;
-            // Use block_on since the consent_handler closure is sync
-            tokio::runtime::Handle::current().block_on(async {
-                let mut map = consents.lock().await;
-                map.insert(rid, super::ConsentPending { response_tx: tx });
-            });
-        }
-
-        rx.blocking_recv().unwrap_or(false)
-    });
-
-    let mut messages = vec![nexus_code::llm::types::Message {
-        role: nexus_code::llm::types::Role::User,
-        content: message.to_string(),
-    }];
-
-    // Forward agent events to Tauri events
-    let handle_for_events = app_handle.clone();
-    let nx_app_for_update = nx_app.clone();
-    let event_forwarder = tokio::spawn(async move {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                nexus_code::agent::AgentEvent::TextDelta(text) => {
-                    let _ = handle_for_events
-                        .emit("nx:text-delta", super::events::NxTextDelta { text });
-                }
-                nexus_code::agent::AgentEvent::ToolCallStart { name, id } => {
-                    let _ = handle_for_events
-                        .emit("nx:tool-start", super::events::NxToolStart { name, id });
-                }
-                nexus_code::agent::AgentEvent::ToolCallComplete {
-                    name,
-                    success,
-                    duration_ms,
-                    summary,
-                } => {
-                    let _ = handle_for_events.emit(
-                        "nx:tool-complete",
-                        super::events::NxToolComplete {
-                            name,
-                            success,
-                            duration_ms,
-                            summary,
-                        },
-                    );
-                    // Emit governance update after each tool completion
-                    if let Ok(locked) = nx_app_for_update.try_lock() {
-                        let _ = handle_for_events.emit(
-                            "nx:governance-update",
-                            super::events::NxGovernanceUpdate {
-                                fuel_remaining: locked.governance.fuel.remaining(),
-                                fuel_consumed: locked.governance.fuel.budget().consumed,
-                                audit_entries: locked.governance.audit.len(),
-                            },
-                        );
-                    }
-                }
-                nexus_code::agent::AgentEvent::ToolCallDenied { name, reason } => {
-                    let _ = handle_for_events.emit(
-                        "nx:tool-denied",
-                        super::events::NxToolDenied { name, reason },
-                    );
-                }
-                nexus_code::agent::AgentEvent::Done {
-                    reason,
-                    total_turns,
-                } => {
-                    let _ = handle_for_events.emit(
-                        "nx:done",
-                        super::events::NxDone {
-                            reason,
-                            total_turns,
-                        },
-                    );
-                }
-                nexus_code::agent::AgentEvent::Error(msg) => {
-                    let _ = handle_for_events
-                        .emit("nx:error", super::events::NxErrorEvent { message: msg });
-                }
-                _ => {}
-            }
-        }
-    });
-
-    // Split borrows: router/tool_registry (immutable) and governance (mutable)
-    // are independent fields of App, so we can borrow them separately.
-    let nexus_code::app::App {
-        ref router,
-        ref tool_registry,
-        ref mut governance,
-        ..
-    } = *app;
-
-    let result = nexus_code::agent::run_agent_loop(
-        &mut messages,
-        router,
-        tool_registry,
-        &tool_ctx,
-        governance,
-        &agent_config,
-        event_tx,
-        consent_handler,
-        cancel,
-    )
-    .await;
-
-    event_forwarder.await.ok();
-    result.map(|_| ())
-}

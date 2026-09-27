@@ -4,7 +4,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub mod commands;
-pub mod events;
 
 /// Shared Nexus Code state, managed by Tauri.
 ///

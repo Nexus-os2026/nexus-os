@@ -26,6 +26,13 @@ pub(crate) enum Closure {
     /// E2: the retired raw-path Builder surface. The governed Builder project
     /// flow (C1-C4) is the approved authority path.
     LegacyBuilder,
+    /// E3: arbitrary program or command text is not process authority.
+    ProcessExecution,
+    /// E3: a caller's assertion is not proof of user approval.
+    ApprovalRequired,
+    /// E4: agent actions holding filesystem or process authority (the process
+    /// working directory is not an agent workspace).
+    AgentExecution,
 }
 
 impl Closure {
@@ -36,6 +43,13 @@ impl Closure {
             }
             Self::LegacyBuilder => {
                 "the legacy Builder project surface is retired in Phase Zero; use the governed Builder project flow"
+            }
+            Self::ProcessExecution => "ungoverned process execution is unavailable in Phase Zero",
+            Self::ApprovalRequired => {
+                "approval required: a caller-asserted approval is not user approval, and backend-verified approval is unavailable in Phase Zero"
+            }
+            Self::AgentExecution => {
+                "agent filesystem and process actions are unavailable in Phase Zero"
             }
         }
     }

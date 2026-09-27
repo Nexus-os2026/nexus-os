@@ -76,7 +76,6 @@ impl CognitivePlanner {
         };
 
         let allowed_actions = self.allowed_actions_description(&context.agent_capabilities);
-        let workspace = context.working_directory.as_deref().unwrap_or("/home/user");
         // G8: splice in the real top-level cwd contents so the planner can
         // resolve phrases like "src/" against the actual layout rather than
         // hallucinating paths. Empty string when no listing is available.
@@ -88,6 +87,15 @@ impl CognitivePlanner {
                 "\n\nCurrent working directory contents (top-level, max 60 entries):\n{listing}\n\nIf the user mentions a directory or file not visible in the listing above, it is likely nested inside one of the listed directories — search for it there before assuming the path is at the workspace root.\n"
             ),
             None => String::new(),
+        };
+        // P0-002C5A: without a workspace the planner is told so, rather than
+        // being handed an invented directory to read from and write to.
+        let workspace_block = match context.working_directory.as_deref() {
+            Some(workspace) => format!(
+                "WORKSPACE DIRECTORY: {workspace}\n(Use ABSOLUTE paths starting from this directory when reading/writing files. Example: \"{workspace}/README.md\"){cwd_block}"
+            ),
+            None => "WORKSPACE DIRECTORY: none (no filesystem workspace is available to this agent)"
+                .to_string(),
         };
 
         let prompt = format!(
@@ -102,8 +110,7 @@ AGENT DESCRIPTION:
 GOAL: {goal_desc}
 PRIORITY: {priority}
 
-WORKSPACE DIRECTORY: {workspace}
-(Use ABSOLUTE paths starting from this directory when reading/writing files. Example: "{workspace}/README.md"){cwd_block}
+{workspace_block}
 
 AGENT CAPABILITIES: [{capabilities}]
 AVAILABLE FUEL: {fuel}
@@ -165,7 +172,6 @@ Do NOT include any text outside the JSON array."#,
             agent_description = agent_description,
             goal_desc = goal.description,
             priority = goal.priority,
-            workspace = workspace,
             capabilities = capabilities_str,
             fuel = context.available_fuel,
             autonomy = context.autonomy_level,
@@ -869,6 +875,18 @@ mod tests {
             directory_listing: None,
             autonomy_level: 2,
         }
+    }
+
+    #[test]
+    fn p0_002c5a_planning_prompt_without_workspace_invents_no_directory() {
+        let planner = CognitivePlanner::new(Box::new(MockLlm {
+            response: "[]".to_string(),
+        }));
+        let goal = AgentGoal::new("list the files".into(), 5);
+        let prompt = planner.build_planning_prompt(&goal, &make_context(vec!["llm.query"]));
+        assert!(prompt.contains("WORKSPACE DIRECTORY: none"), "{prompt}");
+        assert!(!prompt.contains("/home/user"));
+        assert!(!prompt.contains("Current working directory contents"));
     }
 
     #[test]

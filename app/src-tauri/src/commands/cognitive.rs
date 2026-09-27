@@ -1538,6 +1538,87 @@ fn run_cognitive_cycle(
     })
 }
 
+/// P0-002C5A: agent actions that need no filesystem, process or OS-input
+/// authority. Everything else, including any action variant added later, is
+/// refused by `Phase0AgentExecutor`. A fetch is web-only: a model-chosen
+/// `file:` (or any non-HTTP) URL would be a local path under another name.
+pub(crate) fn phase0_agent_action_permitted(
+    action: &nexus_kernel::cognitive::PlannedAction,
+) -> bool {
+    use nexus_kernel::cognitive::PlannedAction;
+    match action {
+        PlannedAction::WebFetch { url } => {
+            let url = url.trim_start().to_ascii_lowercase();
+            url.starts_with("https://") || url.starts_with("http://")
+        }
+        other => matches!(
+            other,
+            PlannedAction::LlmQuery { .. }
+                | PlannedAction::Noop
+                | PlannedAction::MemoryStore { .. }
+                | PlannedAction::MemoryRecall { .. }
+                | PlannedAction::SendNotification { .. }
+                | PlannedAction::AgentMessage { .. }
+                | PlannedAction::HitlRequest { .. }
+                | PlannedAction::WebSearch { .. }
+                | PlannedAction::KnowledgeGraphUpdate { .. }
+                | PlannedAction::KnowledgeGraphQuery { .. }
+        ),
+    }
+}
+
+/// P0-002C5A: the production agent executor.
+///
+/// Agents hold no approved filesystem, process or OS-input authority in Phase
+/// Zero. The process working directory is not a workspace; a WorkspaceGrant
+/// would not contain shell, code or Docker execution; and the file, image,
+/// speech, browser, computer-control and cognitive actuators kept their state
+/// under that directory. Those actions fail closed before reaching the kernel
+/// registry, which is given no workspace root at all.
+pub(crate) struct Phase0AgentExecutor<E> {
+    inner: E,
+}
+
+impl<E: nexus_kernel::cognitive::loop_runtime::ActionExecutor>
+    nexus_kernel::cognitive::loop_runtime::ActionExecutor for Phase0AgentExecutor<E>
+{
+    fn execute(
+        &self,
+        agent_id: &str,
+        action: &nexus_kernel::cognitive::PlannedAction,
+        audit: &mut dyn nexus_kernel::audit::AuditWriter,
+        hitl_approved: bool,
+    ) -> Result<String, String> {
+        if !phase0_agent_action_permitted(action) {
+            return Err(crate::phase0_surface::closed(
+                action.action_type(),
+                crate::phase0_surface::Closure::AgentExecution,
+            ));
+        }
+        self.inner.execute(agent_id, action, audit, hitl_approved)
+    }
+}
+
+/// The executor every production cognitive loop runs with.
+pub(crate) fn phase0_agent_executor(
+    state: &AppState,
+    memory: Arc<nexus_kernel::cognitive::AgentMemoryManager>,
+) -> Phase0AgentExecutor<nexus_kernel::cognitive::RegistryExecutor> {
+    Phase0AgentExecutor {
+        inner: nexus_kernel::cognitive::RegistryExecutor::new(
+            // No workspace root: an actuator that needed one would fail closed.
+            std::path::PathBuf::new(),
+            state.audit.clone(),
+            state.supervisor.clone(),
+            Some(Arc::new(WardenReviewEngine {
+                state: state.clone(),
+            })),
+        )
+        .with_llm_handler(Arc::new(BridgeLlmQueryHandler))
+        .with_memory_manager(memory),
+    }
+}
+
 pub(crate) fn spawn_cognitive_loop_with_bridge(
     bridge: BackendEventBridge,
     state: AppState,
@@ -1583,30 +1664,10 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
         };
         let memory_mgr = nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(mem_store));
 
-        // Option B: agents run in the process cwd, not a per-UUID sandbox.
-        // See commit message for security posture notes.
-        let workspace_base = std::env::current_dir().unwrap_or_else(|err| {
-            eprintln!(
-                "[cognitive] WARNING: failed to read current_dir ({}), falling back to /home/nexus",
-                err
-            );
-            std::path::PathBuf::from("/home/nexus")
-        });
-        eprintln!(
-            "[cognitive] agent working directory: {}",
-            workspace_base.display()
-        );
+        // P0-002C5A: the process working directory is not an agent workspace
+        // ("Option B" is withdrawn). See `phase0_agent_executor`.
         let memory_mgr = Arc::new(memory_mgr);
-        let executor = nexus_kernel::cognitive::RegistryExecutor::new(
-            workspace_base,
-            state.audit.clone(),
-            state.supervisor.clone(),
-            Some(Arc::new(WardenReviewEngine {
-                state: state.clone(),
-            })),
-        )
-        .with_llm_handler(Arc::new(BridgeLlmQueryHandler))
-        .with_memory_manager(memory_mgr.clone());
+        let executor = phase0_agent_executor(&state, memory_mgr.clone());
 
         let max_cycles = 500u32;
         'cycle_loop: for _cycle in 0..max_cycles {

@@ -215,82 +215,10 @@ pub fn infer_team_role(name: &str) -> String {
 
 // ── Content Pipeline Commands ────────────────────────────────────────
 
-/// Run the full content pipeline: scan trends → research → write → publish → analytics.
-/// Returns a PipelineResult with the article path, word count, and all phase details.
 #[tauri::command]
-pub async fn run_content_pipeline(
-    state: tauri::State<'_, AppState>,
-    agent_id: String,
-) -> Result<serde_json::Value, String> {
-    let agent_uuid = Uuid::parse_str(&agent_id).map_err(|e| format!("invalid agent id: {e}"))?;
-
-    // Build the pipeline context from the agent's manifest
-    let (agent_name, capabilities, fuel_remaining, autonomy_level, egress_allowlist) = {
-        let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-        let handle = supervisor.get_agent(agent_uuid).ok_or("agent not found")?;
-        (
-            handle.manifest.name.clone(),
-            handle.manifest.capabilities.clone(),
-            handle.remaining_fuel as f64,
-            nexus_kernel::autonomy::AutonomyLevel::from_numeric(handle.autonomy_level)
-                .unwrap_or_default(),
-            handle
-                .manifest
-                .allowed_endpoints
-                .clone()
-                .unwrap_or_default(),
-        )
-    };
-
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let workspace = std::path::PathBuf::from(&home).join("agent-output");
-    if !workspace.exists() {
-        std::fs::create_dir_all(&workspace).map_err(|e| format!("create workspace: {e}"))?;
-    }
-
-    let context = nexus_kernel::actuators::ActuatorContext {
-        agent_id: agent_id.clone(),
-        agent_name,
-        working_dir: workspace,
-        autonomy_level,
-        capabilities: capabilities.into_iter().collect(),
-        fuel_remaining,
-        egress_allowlist,
-        action_review_engine: None,
-        hitl_approved: false,
-    };
-
-    let llm_handler: Arc<dyn nexus_kernel::cognitive::loop_runtime::LlmQueryHandler> =
-        Arc::new(BridgeLlmQueryHandler);
-
-    let pipeline = nexus_kernel::content_pipeline::ContentPipeline::new(llm_handler);
-    let mut audit = state.audit.clone();
-    let result = pipeline.run(&context, &mut audit);
-
-    // Send notification if article was created
-    if result.success {
-        #[cfg(all(
-            feature = "tauri-runtime",
-            any(target_os = "windows", target_os = "macos", target_os = "linux")
-        ))]
-        {
-            if let Some(app) = state.app_handle() {
-                // Best-effort: notify frontend of new content; missed events are non-fatal
-                let _ = app.emit(
-                    "agent-notification",
-                    json!({
-                        "agent_id": agent_id,
-                        "title": format!("New article: {}", result.article_title),
-                        "body": format!(
-                            "Published {} words on '{}'. Saved to {}",
-                            result.word_count, result.topic, result.article_path
-                        ),
-                        "level": "success",
-                    }),
-                );
-            }
-        }
-    }
-
-    serde_json::to_value(result).map_err(|e| format!("serialize: {e}"))
+pub fn run_content_pipeline() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "run_content_pipeline",
+        crate::phase0_surface::Closure::AgentExecution,
+    ))
 }

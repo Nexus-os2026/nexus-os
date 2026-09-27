@@ -18,9 +18,10 @@
 //! }
 //! ```
 //!
-//! `task` is required. Everything else is optional. When `output_dir` is
-//! present, generated files are written to disk and their absolute paths
-//! returned. When absent, file contents are returned inline.
+//! `task` is required. Everything else is optional. Generated file
+//! contents are always returned inline. P0-002C5A: `output_dir` is refused
+//! before any provider call; a directory chosen by the planning model is not
+//! filesystem authority, and nothing is written to disk.
 //!
 //! # Output schema
 //!
@@ -40,7 +41,7 @@
 //! 2. `planning`          — `{ tool: "coder", language?, conventions? }`
 //! 3. `generating`        — `{ model_id, max_tokens }` (just before the provider call)
 //! 4. `parsing_response`  — `{ response_chars }` (just after the provider call)
-//! 5. `writing_files`     — `{ count, output_dir? }` (only when files written)
+//! 5. `writing_files`     — never emitted: no files are written (P0-002C5A)
 //! 6. `complete`          — `{ files_count, tokens_used }`
 
 use crate::llm_codegen::parse_multi_file_response;
@@ -85,9 +86,7 @@ pub struct CoderInput {
 pub struct GeneratedFile {
     pub path: String,
     pub size_bytes: u64,
-    /// Inline file contents. Always populated; redundant when
-    /// `output_dir` was provided but useful for callers that prefer not
-    /// to re-read from disk.
+    /// Inline file contents. Always populated.
     pub content: String,
 }
 
@@ -121,6 +120,14 @@ impl SwarmAgentEntry for CoderEntry {
             .map_err(|e| AgentError::InvalidInput(format!("CoderInput parse: {e}")))?;
         if parsed.task.trim().is_empty() {
             return Err(AgentError::InvalidInput("task must not be empty".into()));
+        }
+        // P0-002C5A: a model-chosen output directory is not filesystem
+        // authority. Refuse it before spending any provider tokens.
+        if parsed.output_dir.is_some() {
+            return Err(AgentError::InvalidInput(
+                "output_dir is unavailable in Phase Zero: a model-chosen directory is not filesystem authority; generated files are returned inline"
+                    .into(),
+            ));
         }
         let task_chars = parsed.task.chars().count();
         ctx.emit
@@ -206,59 +213,17 @@ impl SwarmAgentEntry for CoderEntry {
 
         let parsed_files = parse_multi_file_response(&resp.text);
 
-        // Phase 5: writing_files. Only emitted when `output_dir` is
-        // present — when it isn't, files are returned inline and we
-        // skip filesystem side-effects entirely.
+        // Phase 5: no files are written; contents are returned inline.
         let mut generated: Vec<GeneratedFile> = Vec::with_capacity(parsed_files.len());
-        if let Some(out_dir) = parsed.output_dir.as_ref() {
-            std::fs::create_dir_all(out_dir).map_err(|e| {
-                AgentError::Internal(format!("create_dir_all {}: {e}", out_dir.display()))
-            })?;
-            for (filename, content) in &parsed_files {
-                if filename.is_empty() || content.is_empty() {
-                    continue;
-                }
-                let path =
-                    nexus_sdk::workspace::resolve_path(out_dir, std::path::Path::new(filename))
-                        .map_err(|error| match error {
-                            nexus_sdk::errors::AgentError::CapabilityDenied(reason) => {
-                                AgentError::InvalidInput(reason)
-                            }
-                            error => AgentError::Internal(error.to_string()),
-                        })?;
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent).map_err(|e| {
-                        AgentError::Internal(format!("create dir for {filename}: {e}"))
-                    })?;
-                }
-                std::fs::write(&path, content)
-                    .map_err(|e| AgentError::Internal(format!("write {filename}: {e}")))?;
-                generated.push(GeneratedFile {
-                    path: path.to_string_lossy().into_owned(),
-                    size_bytes: content.len() as u64,
-                    content: content.clone(),
-                });
+        for (filename, content) in &parsed_files {
+            if filename.is_empty() || content.is_empty() {
+                continue;
             }
-            ctx.emit
-                .emit_phase(
-                    "writing_files",
-                    json!({
-                        "count": generated.len(),
-                        "output_dir": out_dir.to_string_lossy(),
-                    }),
-                )
-                .await;
-        } else {
-            for (filename, content) in &parsed_files {
-                if filename.is_empty() || content.is_empty() {
-                    continue;
-                }
-                generated.push(GeneratedFile {
-                    path: filename.clone(),
-                    size_bytes: content.len() as u64,
-                    content: content.clone(),
-                });
-            }
+            generated.push(GeneratedFile {
+                path: filename.clone(),
+                size_bytes: content.len() as u64,
+                content: content.clone(),
+            });
         }
 
         let summary = format!(
@@ -452,7 +417,8 @@ mod tests {
             let result = CoderEntry::new()
                 .execute(json!({"task": "write fixture", "output_dir": output}), &ctx)
                 .await;
-            assert_eq!(ctx.budget.lock().await.tokens_consumed, 12);
+            // P0-002C5A: refused before any provider call.
+            assert_eq!(ctx.budget.lock().await.tokens_consumed, 0);
             assert_eq!(
                 std::fs::read_to_string(&outside).unwrap(),
                 "outside evidence"
@@ -481,7 +447,8 @@ mod tests {
         let result = CoderEntry::new()
             .execute(json!({"task": "write fixture", "output_dir": output}), &ctx)
             .await;
-        assert_eq!(ctx.budget.lock().await.tokens_consumed, 12);
+        // P0-002C5A: refused before any provider call.
+        assert_eq!(ctx.budget.lock().await.tokens_consumed, 0);
         assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 0);
         assert!(
             matches!(result, Err(AgentError::InvalidInput(_))),
@@ -490,7 +457,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn p0_002_artisan_writes_nested_file_inside_output() {
+    async fn p0_002c5a_artisan_refuses_a_model_chosen_output_dir() {
+        // Even a plain nested file inside the requested directory is refused:
+        // the directory itself came from the planning model.
         let temp = tempfile::TempDir::new().unwrap();
         let ctx = mk_ctx(Arc::new(RecordingEmitter::new()), CancelToken::new());
         let result = CoderEntry::new()
@@ -498,14 +467,13 @@ mod tests {
                 json!({"task": "write fixture", "output_dir": temp.path()}),
                 &ctx,
             )
-            .await
-            .unwrap();
-        let parsed: CoderOutput = serde_json::from_value(result).unwrap();
-        assert_eq!(parsed.files.len(), 1);
-        assert_eq!(
-            std::fs::read_to_string(temp.path().join("src/main.rs")).unwrap(),
-            parsed.files[0].content
+            .await;
+        assert!(
+            matches!(&result, Err(AgentError::InvalidInput(reason)) if reason.contains("output_dir is unavailable")),
+            "{result:?}"
         );
+        assert_eq!(ctx.budget.lock().await.tokens_consumed, 0);
+        assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
     }
 
     #[tokio::test]

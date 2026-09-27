@@ -5,11 +5,11 @@ use super::{
     economy_create_wallet, economy_earn, economy_freeze_wallet, economy_get_history,
     economy_get_stats, economy_get_wallet, economy_spend, economy_transfer, evolution_evolve_once,
     evolution_get_active_strategy, evolution_get_history, evolution_get_status,
-    evolution_register_strategy, evolution_rollback, factory_create_project,
-    factory_get_build_history, factory_list_projects, get_active_llm_provider, get_agent_activity,
-    get_browser_history, get_configured_provider, get_input_control_status, get_knowledge_base,
-    get_live_system_metrics, get_messaging_status, get_simulation_report, get_simulation_status,
-    get_system_specs, ghost_protocol_add_peer, ghost_protocol_remove_peer, ghost_protocol_status,
+    evolution_register_strategy, evolution_rollback, factory_get_build_history,
+    factory_list_projects, get_active_llm_provider, get_agent_activity, get_browser_history,
+    get_configured_provider, get_input_control_status, get_knowledge_base, get_live_system_metrics,
+    get_messaging_status, get_simulation_report, get_simulation_status, get_system_specs,
+    ghost_protocol_add_peer, ghost_protocol_remove_peer, ghost_protocol_status,
     ghost_protocol_toggle, inject_simulation_variable, learning_agent_action, list_agents,
     list_indexed_documents, list_local_models, list_prebuilt_manifest_paths, list_simulations,
     mcp_host_add_server, mcp_host_list_servers, mcp_host_list_tools, mcp_host_remove_server,
@@ -2085,68 +2085,6 @@ fn test_agent_memory_remember_and_recall() {
 }
 
 // ── Factory wiring tests ────────────────────────────────────────────
-
-#[test]
-fn test_factory_create_project_and_list() {
-    let state = AppState::new();
-    let tmp_dir = std::env::temp_dir().join("nexus_test_factory");
-    let _ = std::fs::create_dir_all(&tmp_dir);
-
-    let create = factory_create_project(
-        &state,
-        "test-project".to_string(),
-        "rust".to_string(),
-        tmp_dir.to_string_lossy().to_string(),
-    );
-    assert!(create.is_ok());
-    let project: serde_json::Value = serde_json::from_str(&create.unwrap_or_else(|e| {
-        eprintln!("JSON parse failed: {e}");
-        std::process::exit(1)
-    }))
-    .unwrap_or_else(|e| {
-        eprintln!("deserialization failed: {e}");
-        std::process::exit(1)
-    });
-    assert_eq!(
-        project["name"].as_str().unwrap_or_else(|| {
-            eprintln!("expected string value");
-            std::process::exit(1)
-        }),
-        "test-project"
-    );
-    assert!(project.get("id").is_some());
-
-    // List
-    let list = factory_list_projects(&state).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    let projects: Vec<serde_json::Value> = serde_json::from_str(&list).unwrap_or_else(|e| {
-        eprintln!("JSON parse failed: {e}");
-        std::process::exit(1)
-    });
-    assert_eq!(projects.len(), 1);
-
-    // Build history (empty initially)
-    let project_id = project["id"]
-        .as_str()
-        .unwrap_or_else(|| {
-            eprintln!("expected string value");
-            std::process::exit(1)
-        })
-        .to_string();
-    let history = factory_get_build_history(&state, project_id).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    let h: Vec<serde_json::Value> = serde_json::from_str(&history).unwrap_or_else(|e| {
-        eprintln!("JSON parse failed: {e}");
-        std::process::exit(1)
-    });
-    assert!(h.is_empty());
-
-    let _ = std::fs::remove_dir_all(&tmp_dir);
-}
 
 // ── Payments wiring tests ───────────────────────────────────────────
 

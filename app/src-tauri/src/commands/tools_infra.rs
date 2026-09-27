@@ -566,95 +566,6 @@ pub(crate) fn base64_decode_audio(encoded: &str) -> Result<Vec<u8>, String> {
 
 // ── Software Factory commands ───────────────────────────────────────────
 
-pub(crate) fn factory_create_project(
-    state: &AppState,
-    name: String,
-    language: String,
-    source_dir: String,
-) -> Result<String, String> {
-    let mut factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
-    let project = factory.create_project(&name, &language, &source_dir);
-
-    drop(factory);
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::StateChange,
-        json!({
-            "source": "software-factory",
-            "action": "create_project",
-            "project_id": project.id,
-            "name": name,
-            "language": language,
-        }),
-    );
-
-    serde_json::to_string(&project).map_err(|e| e.to_string())
-}
-
-pub(crate) fn factory_build_project(
-    state: &AppState,
-    project_id: String,
-) -> Result<String, String> {
-    let mut factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
-    let result = factory.build_project(&project_id)?;
-
-    drop(factory);
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::StateChange,
-        json!({
-            "source": "software-factory",
-            "action": "build",
-            "project_id": project_id,
-            "success": result.success,
-            "duration_ms": result.duration_ms,
-        }),
-    );
-
-    serde_json::to_string(&result).map_err(|e| e.to_string())
-}
-
-pub(crate) fn factory_test_project(state: &AppState, project_id: String) -> Result<String, String> {
-    let mut factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
-    let result = factory.test_project(&project_id)?;
-
-    drop(factory);
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::StateChange,
-        json!({
-            "source": "software-factory",
-            "action": "test",
-            "project_id": project_id,
-            "success": result.success,
-            "passed": result.passed,
-            "failed": result.failed,
-        }),
-    );
-
-    serde_json::to_string(&result).map_err(|e| e.to_string())
-}
-
-pub(crate) fn factory_run_pipeline(state: &AppState, project_id: String) -> Result<String, String> {
-    let mut factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
-    let result = factory.run_full_pipeline(&project_id)?;
-
-    drop(factory);
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::StateChange,
-        json!({
-            "source": "software-factory",
-            "action": "full_pipeline",
-            "project_id": project_id,
-            "overall_success": result.overall_success,
-            "total_duration_ms": result.total_duration_ms,
-        }),
-    );
-
-    serde_json::to_string(&result).map_err(|e| e.to_string())
-}
-
 pub(crate) fn factory_list_projects(state: &AppState) -> Result<String, String> {
     let factory = state.factory.lock().unwrap_or_else(|p| p.into_inner());
     let projects = factory.list_projects();
@@ -758,8 +669,13 @@ pub(crate) fn conduct_build(
 
 // ── Typed Tools ─────────────────────────────────────────────────────
 
+/// P0-002C5A: a typed tool always runs a process (git, cargo, npm, python,
+/// pip, file and system utilities, or a custom program) in the process working
+/// directory, and Phase Zero grants neither. Nothing is executed: a tool that
+/// needs approval is refused as such, because a caller cannot supply that
+/// approval, and every other tool is refused for lack of backend authority.
 pub(crate) fn execute_tool(state: &AppState, tool_json: String) -> Result<String, String> {
-    use nexus_kernel::typed_tools::{self, TypedTool};
+    use nexus_kernel::typed_tools::TypedTool;
 
     let tool: TypedTool =
         serde_json::from_str(&tool_json).map_err(|e| format!("invalid tool JSON: {e}"))?;
@@ -767,10 +683,6 @@ pub(crate) fn execute_tool(state: &AppState, tool_json: String) -> Result<String
     // Validate arguments first
     tool.validate()?;
 
-    // Check fuel cost
-    let cost = tool.fuel_cost();
-
-    // If destructive or custom-with-approval, flag for HITL
     let needs_hitl = tool.is_destructive()
         || matches!(
             &tool,
@@ -779,417 +691,36 @@ pub(crate) fn execute_tool(state: &AppState, tool_json: String) -> Result<String
                 ..
             }
         );
+    let closure = if needs_hitl {
+        crate::phase0_surface::Closure::ApprovalRequired
+    } else {
+        crate::phase0_surface::Closure::ProcessExecution
+    };
 
-    // Execute
-    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let output = typed_tools::execute_typed_tool(&tool, &cwd)?;
-
-    // Audit log
+    // Bounded audit: the tool kind only, never a caller-chosen program name.
+    let kind = match &tool {
+        TypedTool::Custom { .. } => "Custom".to_string(),
+        other => other.tool_name(),
+    };
     state.log_event(
         SYSTEM_UUID,
         EventType::StateChange,
         json!({
             "source": "typed-tools",
-            "tool": output.tool,
-            "exit_code": output.exit_code,
-            "duration_ms": output.duration_ms,
-            "fuel_cost": cost,
+            "tool": kind,
             "capability": tool.capability_required(),
             "destructive": tool.is_destructive(),
             "hitl_required": needs_hitl,
+            "outcome": "denied",
         }),
     );
 
-    serde_json::to_string(&output).map_err(|e| e.to_string())
+    Err(crate::phase0_surface::closed("execute_tool", closure))
 }
 
 pub(crate) fn list_tools() -> Result<String, String> {
     let tools = nexus_kernel::typed_tools::list_available_tools();
     serde_json::to_string(&tools).map_err(|e| e.to_string())
-}
-
-/// Parse a shell command string into a TypedTool and execute it.
-///
-/// Maps well-known commands to safe TypedTool variants.  Unknown commands
-/// become `TypedTool::Custom` with `requires_approval: true`.
-///
-/// Returns JSON-serialised `TerminalResult`.
-pub(crate) fn terminal_execute(
-    state: &AppState,
-    command: String,
-    cwd: String,
-) -> Result<String, String> {
-    state.check_rate(nexus_kernel::rate_limit::RateCategory::AgentExecute)?;
-    state.validate_input(&command)?;
-    state.validate_path_input(&cwd)?;
-    use nexus_kernel::typed_tools::{self, TypedTool};
-
-    #[derive(serde::Serialize)]
-    struct TerminalResult {
-        stdout: String,
-        stderr: String,
-        exit_code: i32,
-        duration_ms: u64,
-        tool: String,
-        needs_approval: bool,
-        fuel_cost: u64,
-    }
-
-    let parts: Vec<&str> = command.split_whitespace().collect();
-    if parts.is_empty() {
-        return Err("empty command".into());
-    }
-
-    let working_dir = std::path::PathBuf::from(&cwd);
-    if !working_dir.is_dir() {
-        return Err(format!("directory does not exist: {cwd}"));
-    }
-
-    // Parse command string → TypedTool
-    let tool: TypedTool = match parts[0] {
-        "git" => match parts.get(1).copied() {
-            Some("status") => TypedTool::GitStatus,
-            Some("diff") => {
-                let path = parts.get(2).map(|s| s.to_string());
-                TypedTool::GitDiff { path }
-            }
-            Some("log") => {
-                let count = parts
-                    .iter()
-                    .find_map(|p| p.strip_prefix('-').and_then(|n| n.parse::<usize>().ok()))
-                    .unwrap_or(10);
-                TypedTool::GitLog { count }
-            }
-            Some("commit") => {
-                let msg = if let Some(pos) = parts.iter().position(|p| *p == "-m") {
-                    parts[pos + 1..]
-                        .join(" ")
-                        .trim_matches('"')
-                        .trim_matches('\'')
-                        .to_string()
-                } else {
-                    String::new()
-                };
-                TypedTool::GitCommit { message: msg }
-            }
-            Some("push") => {
-                let remote = parts.get(2).unwrap_or(&"origin").to_string();
-                let branch = parts.get(3).unwrap_or(&"main").to_string();
-                TypedTool::GitPush { remote, branch }
-            }
-            Some("pull") => {
-                let remote = parts.get(2).unwrap_or(&"origin").to_string();
-                let branch = parts.get(3).unwrap_or(&"main").to_string();
-                TypedTool::GitPull { remote, branch }
-            }
-            Some("checkout") => {
-                let branch = parts.get(2).unwrap_or(&"main").to_string();
-                TypedTool::GitCheckout { branch }
-            }
-            _ => TypedTool::Custom {
-                program: "git".into(),
-                args: parts[1..].iter().map(|s| s.to_string()).collect(),
-                requires_approval: false,
-            },
-        },
-        "cargo" => match parts.get(1).copied() {
-            Some("build") | Some("b") => {
-                let release = parts.contains(&"--release");
-                let package = parts
-                    .iter()
-                    .position(|p| *p == "-p" || *p == "--package")
-                    .and_then(|i| parts.get(i + 1))
-                    .map(|s| s.to_string());
-                TypedTool::CargoBuild { package, release }
-            }
-            Some("test") | Some("t") => {
-                let package = parts
-                    .iter()
-                    .position(|p| *p == "-p" || *p == "--package")
-                    .and_then(|i| parts.get(i + 1))
-                    .map(|s| s.to_string());
-                let test_name = parts.get(2).and_then(|s| {
-                    if s.starts_with('-') {
-                        None
-                    } else {
-                        Some(s.to_string())
-                    }
-                });
-                TypedTool::CargoTest { package, test_name }
-            }
-            Some("fmt") => {
-                let check = parts.contains(&"--check");
-                TypedTool::CargoFmt { check }
-            }
-            Some("clippy") => {
-                let deny_warnings = parts.contains(&"-D") || parts.contains(&"warnings");
-                TypedTool::CargoClippy { deny_warnings }
-            }
-            Some("run") | Some("r") => {
-                let package = parts
-                    .iter()
-                    .position(|p| *p == "-p" || *p == "--package")
-                    .and_then(|i| parts.get(i + 1))
-                    .map(|s| s.to_string());
-                let extra_args: Vec<String> =
-                    if let Some(pos) = parts.iter().position(|p| *p == "--") {
-                        parts[pos + 1..].iter().map(|s| s.to_string()).collect()
-                    } else {
-                        vec![]
-                    };
-                TypedTool::CargoRun {
-                    package,
-                    args: extra_args,
-                }
-            }
-            _ => TypedTool::Custom {
-                program: "cargo".into(),
-                args: parts[1..].iter().map(|s| s.to_string()).collect(),
-                requires_approval: false,
-            },
-        },
-        "npm" => match (parts.get(1).copied(), parts.get(2).copied()) {
-            (Some("install") | Some("ci") | Some("i"), _) => TypedTool::NpmInstall,
-            (Some("test"), _) => TypedTool::NpmTest,
-            (Some("run"), Some("build")) => TypedTool::NpmBuild,
-            (Some("run"), Some(script)) => TypedTool::NpmRun {
-                script: script.to_string(),
-            },
-            _ => TypedTool::Custom {
-                program: "npm".into(),
-                args: parts[1..].iter().map(|s| s.to_string()).collect(),
-                requires_approval: false,
-            },
-        },
-        "ls" => {
-            let recursive = parts.iter().any(|p| p.contains('R'));
-            let path = parts
-                .iter()
-                .find(|p| !p.starts_with('-') && **p != "ls")
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| ".".into());
-            TypedTool::FileList { path, recursive }
-        }
-        "dir" => TypedTool::FileList {
-            path: ".".into(),
-            recursive: false,
-        },
-        "pwd" => TypedTool::Custom {
-            program: "pwd".into(),
-            args: vec![],
-            requires_approval: false,
-        },
-        "cat" | "head" | "tail" => TypedTool::Custom {
-            program: parts[0].to_string(),
-            args: parts[1..].iter().map(|s| s.to_string()).collect(),
-            requires_approval: false,
-        },
-        "echo" => TypedTool::Custom {
-            program: "echo".into(),
-            args: parts[1..].iter().map(|s| s.to_string()).collect(),
-            requires_approval: false,
-        },
-        "whoami" | "date" | "uname" | "uptime" | "hostname" => TypedTool::Custom {
-            program: parts[0].to_string(),
-            args: parts[1..].iter().map(|s| s.to_string()).collect(),
-            requires_approval: false,
-        },
-        "ps" => TypedTool::ProcessList,
-        "df" => TypedTool::DiskUsage {
-            path: parts.get(1).unwrap_or(&".").to_string(),
-        },
-        "free" => TypedTool::Custom {
-            program: "free".into(),
-            args: parts[1..].iter().map(|s| s.to_string()).collect(),
-            requires_approval: false,
-        },
-        "mkdir" => {
-            let path = parts
-                .iter()
-                .find(|p| !p.starts_with('-') && **p != "mkdir")
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            if path.is_empty() {
-                return Err("mkdir: missing operand".into());
-            }
-            TypedTool::MakeDirectory { path }
-        }
-        "cp" => {
-            if parts.len() < 3 {
-                return Err("cp: missing operand".into());
-            }
-            TypedTool::FileCopy {
-                from: parts[parts.len() - 2].to_string(),
-                to: parts[parts.len() - 1].to_string(),
-            }
-        }
-        "mv" => {
-            if parts.len() < 3 {
-                return Err("mv: missing operand".into());
-            }
-            TypedTool::FileMove {
-                from: parts[1].to_string(),
-                to: parts[2].to_string(),
-            }
-        }
-        "rm" => {
-            let path = parts
-                .iter()
-                .find(|p| !p.starts_with('-') && **p != "rm")
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            if path.is_empty() {
-                return Err("rm: missing operand".into());
-            }
-            TypedTool::FileRemove { path }
-        }
-        "python3" | "python" => {
-            let script = parts.get(1).unwrap_or(&"--version").to_string();
-            let args: Vec<String> = parts[2..].iter().map(|s| s.to_string()).collect();
-            TypedTool::PythonRun { script, args }
-        }
-        "pip3" | "pip" => {
-            if parts.get(1).copied() == Some("install") {
-                TypedTool::PipInstall {
-                    packages: parts[2..].iter().map(|s| s.to_string()).collect(),
-                }
-            } else {
-                TypedTool::Custom {
-                    program: parts[0].to_string(),
-                    args: parts[1..].iter().map(|s| s.to_string()).collect(),
-                    requires_approval: true,
-                }
-            }
-        }
-        "grep" | "rg" | "find" | "wc" | "sort" | "uniq" | "tree" | "which" | "env" | "printenv"
-        | "touch" => TypedTool::Custom {
-            program: parts[0].to_string(),
-            args: parts[1..].iter().map(|s| s.to_string()).collect(),
-            requires_approval: false,
-        },
-        _ => TypedTool::Custom {
-            program: parts[0].to_string(),
-            args: parts[1..].iter().map(|s| s.to_string()).collect(),
-            requires_approval: true,
-        },
-    };
-
-    let needs_approval = tool.is_destructive()
-        || matches!(
-            &tool,
-            TypedTool::Custom {
-                requires_approval: true,
-                ..
-            }
-        );
-
-    // If it needs approval, return early — frontend handles HITL confirmation
-    if needs_approval {
-        let result = TerminalResult {
-            stdout: String::new(),
-            stderr: String::new(),
-            exit_code: -1,
-            duration_ms: 0,
-            tool: tool.tool_name(),
-            needs_approval: true,
-            fuel_cost: tool.fuel_cost(),
-        };
-        return serde_json::to_string(&result).map_err(|e| e.to_string());
-    }
-
-    // Execute
-    let output = typed_tools::execute_typed_tool(&tool, &working_dir)?;
-    let fuel_cost = tool.fuel_cost();
-
-    // Audit log
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::StateChange,
-        json!({
-            "source": "terminal",
-            "command": command,
-            "tool": output.tool,
-            "exit_code": output.exit_code,
-            "duration_ms": output.duration_ms,
-            "fuel_cost": fuel_cost,
-        }),
-    );
-
-    let result = TerminalResult {
-        stdout: output.stdout,
-        stderr: output.stderr,
-        exit_code: output.exit_code,
-        duration_ms: output.duration_ms,
-        tool: output.tool,
-        needs_approval: false,
-        fuel_cost,
-    };
-    serde_json::to_string(&result).map_err(|e| e.to_string())
-}
-
-/// Force-execute a command that previously required HITL approval.
-/// Called after the user clicks "Approve" in the terminal UI.
-pub(crate) fn terminal_execute_approved(
-    state: &AppState,
-    command: String,
-    cwd: String,
-) -> Result<String, String> {
-    state.check_rate(nexus_kernel::rate_limit::RateCategory::AgentExecute)?;
-    state.validate_input(&command)?;
-    state.validate_path_input(&cwd)?;
-    use nexus_kernel::typed_tools::{self, TypedTool};
-
-    #[derive(serde::Serialize)]
-    struct TerminalResult {
-        stdout: String,
-        stderr: String,
-        exit_code: i32,
-        duration_ms: u64,
-        tool: String,
-        needs_approval: bool,
-        fuel_cost: u64,
-    }
-
-    let parts: Vec<&str> = command.split_whitespace().collect();
-    if parts.is_empty() {
-        return Err("empty command".into());
-    }
-
-    let working_dir = std::path::PathBuf::from(&cwd);
-
-    // For approved commands, build the tool the same way but force-execute
-    let tool = TypedTool::Custom {
-        program: parts[0].to_string(),
-        args: parts[1..].iter().map(|s| s.to_string()).collect(),
-        requires_approval: false, // Already approved by HITL
-    };
-
-    let output = typed_tools::execute_typed_tool(&tool, &working_dir)?;
-    let fuel_cost = tool.fuel_cost();
-
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::StateChange,
-        json!({
-            "source": "terminal-hitl-approved",
-            "command": command,
-            "tool": output.tool,
-            "exit_code": output.exit_code,
-            "duration_ms": output.duration_ms,
-            "fuel_cost": fuel_cost,
-        }),
-    );
-
-    let result = TerminalResult {
-        stdout: output.stdout,
-        stderr: output.stderr,
-        exit_code: output.exit_code,
-        duration_ms: output.duration_ms,
-        tool: output.tool,
-        needs_approval: false,
-        fuel_cost,
-    };
-    serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
 // ── Replay Evidence ─────────────────────────────────────────────────
