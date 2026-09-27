@@ -1287,7 +1287,7 @@ impl CognitiveRuntime {
                             agent_id,
                             action_clone.action_type(),
                             result.len(),
-                            &result[..result.len().min(200)]
+                            &result[..result.floor_char_boundary(200)]
                         );
                         step.status = StepStatus::Succeeded;
                         // LLM query results get full text (user needs to see
@@ -1347,7 +1347,7 @@ impl CognitiveRuntime {
                             "[agent:{}] executor FAILED for {}: {}",
                             agent_id,
                             action_clone.action_type(),
-                            &error[..error.len().min(300)]
+                            &error[..error.floor_char_boundary(300)]
                         );
                         if error.starts_with("human approval required:")
                             || error.starts_with("Warden blocked action:")
@@ -1856,7 +1856,7 @@ impl CognitiveRuntime {
     fn emit_step_executed(&self, agent_id: &str, step: &AgentStep) {
         let preview = step.result.as_ref().map(|r| {
             if r.len() > 100 {
-                format!("{}...", &r[..100])
+                format!("{}...", &r[..r.floor_char_boundary(100)])
             } else {
                 r.clone()
             }

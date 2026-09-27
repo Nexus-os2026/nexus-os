@@ -195,7 +195,7 @@ pub(crate) fn curl_get_status(endpoint: &str) -> Result<u16, AgentError> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout_preview = String::from_utf8_lossy(&output.stdout);
         let stdout_short = if stdout_preview.len() > 300 {
-            &stdout_preview[..300]
+            &stdout_preview[..stdout_preview.floor_char_boundary(300)]
         } else {
             &stdout_preview
         };
@@ -282,7 +282,7 @@ pub(crate) fn curl_post_json_with_timeout(
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout_preview = String::from_utf8_lossy(&output.stdout);
         let stdout_short = if stdout_preview.len() > 300 {
-            &stdout_preview[..300]
+            &stdout_preview[..stdout_preview.floor_char_boundary(300)]
         } else {
             &stdout_preview
         };
@@ -310,7 +310,10 @@ pub(crate) fn curl_post_json_with_timeout(
         serde_json::from_str::<Value>(trimmed_body).map_err(|error| {
             // Show first 200 chars of the raw response for debugging
             let preview = if trimmed_body.len() > 200 {
-                format!("{}...", &trimmed_body[..200])
+                format!(
+                    "{}...",
+                    &trimmed_body[..trimmed_body.floor_char_boundary(200)]
+                )
             } else {
                 trimmed_body.to_string()
             };

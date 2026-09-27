@@ -104,7 +104,7 @@ pub(crate) fn execute_openai_compatible_query(
     })?;
     let payload: Value = serde_json::from_str(&raw_text).map_err(|error| {
         let preview = if raw_text.len() > 200 {
-            &raw_text[..200]
+            &raw_text[..raw_text.floor_char_boundary(200)]
         } else {
             &raw_text
         };

@@ -408,7 +408,7 @@ Each item must be:
             "[planner:{}] raw LLM response ({} chars): {}",
             goal_id,
             first_response.len(),
-            &first_response[..first_response.len().min(500)]
+            &first_response[..first_response.floor_char_boundary(500)]
         );
         match self.parse_plan_response(&first_response, goal_id, capabilities) {
             Ok(steps) => {
@@ -437,7 +437,7 @@ Each item must be:
                     "[planner:{}] retry raw LLM response ({} chars): {}",
                     goal_id,
                     retry_response.len(),
-                    &retry_response[..retry_response.len().min(500)]
+                    &retry_response[..retry_response.floor_char_boundary(500)]
                 );
                 match self.parse_plan_response(&retry_response, goal_id, capabilities) {
                     Ok(steps) => {
