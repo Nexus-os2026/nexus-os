@@ -1107,6 +1107,187 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
         "GovernedControlEngine",
         "computer-control engine (sh -c and OS input)",
     ),
+    // P0-002C5C recount: latent filesystem APIs of the desktop closure that
+    // no earlier needle named.
+    (
+        "PreferenceStore",
+        "adaptation preferences stored under a caller-chosen dir",
+    ),
+    (
+        "coder_agent::analyzer",
+        "coder analysis reading a caller-chosen project",
+    ),
+    (
+        "coder_agent::editor",
+        "coder multi-file editor writing a caller-chosen project",
+    ),
+    (
+        "MultiFileEditor",
+        "coder multi-file editor writing a caller-chosen project",
+    ),
+    (
+        "ProjectInitializer",
+        "coder project initializer rooted at the working directory",
+    ),
+    (
+        "coder_agent::watcher",
+        "coder file watcher over a caller-chosen project",
+    ),
+    (
+        "detect_style(",
+        "coder style detection reading a caller-chosen file",
+    ),
+    (
+        "run_social_poster_from_manifest",
+        "social-poster manifest and database from caller paths",
+    ),
+    ("load_manifest(", "agent manifest read from a caller path"),
+    (
+        "save_cost_tracker(",
+        "Builder cost tracker written under a raw project dir",
+    ),
+    (
+        "save_attribution_log(",
+        "Builder collaboration log written under a raw project dir",
+    ),
+    (
+        "load_attribution_log(",
+        "Builder collaboration log read from a raw project dir",
+    ),
+    (
+        "save_plan_artefacts(",
+        "Builder plan artefacts written under a raw project dir",
+    ),
+    (
+        "save_to_file(",
+        "session and vector stores written to a caller path",
+    ),
+    (
+        "load_from_file(",
+        "session and vector stores read from a caller path",
+    ),
+    (
+        "LocalSlmProvider",
+        "local SLM loading model and tokenizer files (feature local-slm)",
+    ),
+    (
+        "RagPipeline::load(",
+        "RAG index read from a caller-chosen dir",
+    ),
+    ("rag.save(", "RAG index written to a caller-chosen dir"),
+    (
+        "ContentCalendar",
+        "content calendar stored at a caller-chosen path",
+    ),
+    (
+        "VisionLoop",
+        "control vision loop writing screenshots to a caller-chosen dir",
+    ),
+    (
+        "MemoryPersistence",
+        "agent memory persistence under a caller-chosen dir",
+    ),
+    (
+        "write_report(",
+        "capability report written to a caller path",
+    ),
+    (
+        "ModelStorage::with_dir(",
+        "flash model storage at a caller-chosen dir",
+    ),
+    (
+        "MemoryKernelState::new(",
+        "memory kernel databases under a caller-chosen dir",
+    ),
+    (
+        "MemoryAuditLog",
+        "memory audit database at a caller-chosen path",
+    ),
+    (
+        "DevicePairingManager",
+        "device pairings and keys under caller-chosen paths",
+    ),
+    (
+        "FileAuditStore",
+        "distributed audit blocks under a caller-chosen dir",
+    ),
+    (
+        "enforce_retention(",
+        "backup retention pruning a caller-chosen dir",
+    ),
+    ("decrypt_file(", "in-place decryption of a caller path"),
+    (
+        "rotate_encryption_key(",
+        "re-encryption of every database under a caller-chosen dir",
+    ),
+    (
+        "SealedKeyStore",
+        "sealed key store (machine-derived secret)",
+    ),
+    ("derive_machine_secret", "machine-derived key material"),
+    (
+        "load_all(",
+        "persisted agent identities read from a directory",
+    ),
+    ("GovernanceDb", "governance database at a caller path"),
+    (
+        "EvidenceFile",
+        "replay evidence written to and read from caller paths",
+    ),
+    (
+        "verifier::verify_file(",
+        "replay evidence read from a caller path",
+    ),
+    (
+        "open_in_memory(",
+        "marketplace registry constructor (no desktop caller)",
+    ),
+    (
+        "App::init(",
+        "nexus-code NEXUSCODE.md written into a project dir",
+    ),
+    (
+        "ChatRepl",
+        "nexus-code REPL rooted at the working directory",
+    ),
+    (
+        "project_dir(",
+        "nexus-code project root from the working directory",
+    ),
+    ("NexusCodeMd", "NEXUSCODE.md read from a project dir"),
+    ("SavedSession", "nexus-code session files"),
+    (
+        "init_nexuscode_md(",
+        "NEXUSCODE.md written into a caller dir",
+    ),
+    (
+        "nexus_code::tui",
+        "nexus-code TUI rooted at the working directory",
+    ),
+    (
+        "http_gateway",
+        "protocols HTTP gateway (server binaries only)",
+    ),
+    (
+        "ResumableWorkflowEngine",
+        "workflow checkpoints under a caller-chosen dir",
+    ),
+    (
+        "enable_retention(",
+        "audit archive defaulting to shared temp",
+    ),
+    (
+        "BridgeDaemon",
+        "messaging polling into agents (voice notes in shared temp)",
+    ),
+    (
+        "run_polling_loop(",
+        "messaging polling into agents (voice notes in shared temp)",
+    ),
+    (
+        "ProviderSelectionConfig::from_env(",
+        "provider selection from the environment (LLM_PROVIDER, FLASH_MODEL_PATH)",
+    ),
     (
         "ResourceLimiter::default().spawn(",
         "unsealed resource-limited spawn (the Builder uses spawn_sealed)",
