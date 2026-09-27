@@ -24,15 +24,16 @@ impl SimulationSandbox {
     }
 
     /// Check a precondition.
+    ///
+    /// P0-002C5C: the sandbox has no view of the host. A scenario's paths and
+    /// variable names are caller text, so a file exists only if the scenario
+    /// wrote it, and no environment variable is set; the answer never reveals
+    /// the real filesystem or environment.
     pub fn check_condition(&self, condition: &Condition) -> bool {
         match &condition.check_type {
-            ConditionCheck::FileExists(path) => {
-                self.virtual_fs.contains_key(path) || std::path::Path::new(path).exists()
-            }
-            ConditionCheck::FileNotExists(path) => {
-                !self.virtual_fs.contains_key(path) && !std::path::Path::new(path).exists()
-            }
-            ConditionCheck::EnvVarSet(var) => std::env::var(var).is_ok(),
+            ConditionCheck::FileExists(path) => self.virtual_fs.contains_key(path),
+            ConditionCheck::FileNotExists(path) => !self.virtual_fs.contains_key(path),
+            ConditionCheck::EnvVarSet(_) => false,
             ConditionCheck::SufficientBudget { .. } => true,
             ConditionCheck::HasCapability(_) => true,
             ConditionCheck::ServiceReachable { .. } => true,
@@ -190,7 +191,7 @@ impl SimulationSandbox {
             };
         }
 
-        let existed = self.virtual_fs.contains_key(path) || std::path::Path::new(path).exists();
+        let existed = self.virtual_fs.contains_key(path);
         self.virtual_fs.insert(path.into(), content.into());
 
         let side_effect = if existed {
@@ -213,7 +214,7 @@ impl SimulationSandbox {
     }
 
     fn simulate_file_delete(&mut self, step: u32, path: &str) -> StepResult {
-        let exists = self.virtual_fs.contains_key(path) || std::path::Path::new(path).exists();
+        let exists = self.virtual_fs.contains_key(path);
         self.virtual_fs.remove(path);
 
         if exists {
@@ -279,5 +280,65 @@ impl SimulationSandbox {
             ],
             risk: StepRisk::High,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn action(action_type: SimActionType) -> SimulatedAction {
+        SimulatedAction {
+            step: 1,
+            action_type,
+            description: "step".into(),
+            depends_on: Vec::new(),
+            predicted_outcome: None,
+        }
+    }
+
+    fn condition(check_type: ConditionCheck) -> Condition {
+        Condition {
+            description: "precondition".into(),
+            check_type,
+        }
+    }
+
+    /// P0-002C5C: a simulation never probes the host for a caller's path or
+    /// variable name, so it cannot be used to learn whether a file exists.
+    #[test]
+    fn p0_002c5c_simulations_reveal_nothing_about_the_host() {
+        let host_file = std::env::temp_dir().join(format!("nexus-c5c-sim-{}", std::process::id()));
+        std::fs::write(&host_file, "real").unwrap();
+        let path = host_file.to_string_lossy().into_owned();
+        let mut sandbox = SimulationSandbox::new(&SimulationConfig::default());
+
+        assert!(!sandbox.check_condition(&condition(ConditionCheck::FileExists(path.clone()))));
+        assert!(sandbox.check_condition(&condition(ConditionCheck::FileNotExists(path.clone()))));
+        std::env::set_var("NEXUS_C5C_SIM_PROBE", "1");
+        assert!(
+            !sandbox.check_condition(&condition(ConditionCheck::EnvVarSet(
+                "NEXUS_C5C_SIM_PROBE".into()
+            )))
+        );
+        std::env::remove_var("NEXUS_C5C_SIM_PROBE");
+
+        // Deleting the real file is simulated as deleting a missing file.
+        let delete =
+            sandbox.simulate_action(&action(SimActionType::FileDelete { path: path.clone() }));
+        assert!(!delete.success);
+        // Writing it is simulated as creating a new file; nothing is written.
+        let write = sandbox.simulate_action(&action(SimActionType::FileWrite {
+            path: path.clone(),
+            content: "simulated".into(),
+        }));
+        assert!(matches!(
+            write.side_effects.as_slice(),
+            [SideEffect::FileCreated { .. }]
+        ));
+        // A file the scenario wrote exists for the rest of the scenario.
+        assert!(sandbox.check_condition(&condition(ConditionCheck::FileExists(path.clone()))));
+        assert_eq!(std::fs::read_to_string(&host_file).unwrap(), "real");
+        std::fs::remove_file(&host_file).unwrap();
     }
 }
