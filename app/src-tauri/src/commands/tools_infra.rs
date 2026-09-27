@@ -355,54 +355,6 @@ pub(crate) fn ghost_protocol_get_state(state: &AppState) -> Result<String, Strin
 
 // ── Voice Assistant commands ────────────────────────────────────────────
 
-pub(crate) fn voice_start_listening(state: &AppState) -> Result<String, String> {
-    let mut vp = state
-        .voice_process
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-
-    // Spawn the Python voice server if not already running.
-    if !vp.running {
-        let script = std::path::Path::new("services/voice/nexus_voice/voice_server.py");
-
-        match Command::new("python3")
-            .arg(script)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
-            Ok(child) => {
-                vp.child = Some(child);
-                vp.running = true;
-            }
-            Err(_) => {
-                // Python not available — voice works in stub mode.
-                vp.running = false;
-            }
-        }
-    }
-
-    // Update the voice runtime state.
-    let mut voice = state.voice.lock().unwrap_or_else(|p| p.into_inner());
-    voice.wake_word_enabled = true;
-    voice.overlay_visible = true;
-
-    drop(voice);
-    drop(vp);
-
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::StateChange,
-        json!({
-            "source": "voice-assistant",
-            "action": "start_listening",
-        }),
-    );
-
-    let result = json!({ "status": "listening" });
-    serde_json::to_string(&result).map_err(|e| e.to_string())
-}
-
 pub(crate) fn voice_stop_listening(state: &AppState) -> Result<String, String> {
     let mut vp = state
         .voice_process

@@ -898,7 +898,9 @@ pub(crate) fn build_provider_config(config: &NexusConfig) -> ProviderSelectionCo
         cohere_api_key: std::env::var("COHERE_API_KEY").ok(),
         openrouter_api_key: llm_lookup("openrouter", "OPENROUTER_API_KEY"),
         nvidia_api_key: llm_lookup("nvidia", "NVIDIA_NIM_API_KEY"),
-        flash_model_path: std::env::var("FLASH_MODEL_PATH").ok(),
+        // P0-002C5A: an environment variable does not choose a file for the
+        // native model loader.
+        flash_model_path: None,
         claude_code_enabled: std::env::var("CLAUDE_CODE_ENABLED")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false),

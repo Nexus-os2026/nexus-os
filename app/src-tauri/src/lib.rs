@@ -391,15 +391,7 @@ fn auto_select_best_model(
         }
     }
 
-    // --- Tier 1: Check for FLASH_MODEL_PATH env var (auto-load Flash model) ---
-    if let Ok(model_path) = std::env::var("FLASH_MODEL_PATH") {
-        if std::path::Path::new(&model_path).exists() {
-            eprintln!("[auto-select] using Flash Inference from FLASH_MODEL_PATH={model_path}");
-            return Some(AgentLlmRoute {
-                model: format!("flash/{model_path}"),
-            });
-        }
-    }
+    // --- Tier 1 (P0-002C5A): no environment variable selects a model file. ---
 
     // --- Tier 2: Check Ollama for available models ---
     // Fast TCP probe first — if Ollama isn't running, skip the slow list_models() call
@@ -1409,7 +1401,9 @@ impl AppState {
             adversarial_arena: Arc::new(Mutex::new(
                 nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
             )),
-            capability_measurement: Arc::new(MeasurementState::new()),
+            // P0-002C5A: no test battery is read from a path relative to the
+            // process working directory.
+            capability_measurement: Arc::new(MeasurementState::with_batteries(Vec::new())),
             predictive_router: Arc::new(RouterState::new()),
             browser_agent: Arc::new(BrowserState::default()),
             token_economy: Arc::new(token_cmds::EconomyState::new()),
@@ -1708,7 +1702,9 @@ impl AppState {
             adversarial_arena: Arc::new(Mutex::new(
                 nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena::new(),
             )),
-            capability_measurement: Arc::new(MeasurementState::new()),
+            // P0-002C5A: no test battery is read from a path relative to the
+            // process working directory.
+            capability_measurement: Arc::new(MeasurementState::with_batteries(Vec::new())),
             predictive_router: Arc::new(RouterState::new()),
             browser_agent: Arc::new(BrowserState::default()),
             token_economy: Arc::new(token_cmds::EconomyState::new()),
@@ -2171,11 +2167,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn force_evolve_agent(
-        state: tauri::State<'_, AppState>,
-        agent_id: String,
-    ) -> Result<nexus_kernel::genome::EvolutionResult, String> {
-        super::force_evolve_agent(state.inner(), agent_id)
+    pub(crate) fn force_evolve_agent() -> Result<nexus_kernel::genome::EvolutionResult, String> {
+        Err(crate::phase0_surface::closed(
+            "force_evolve_agent",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
@@ -2205,19 +2201,19 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn transcribe_push_to_talk(
-        state: tauri::State<'_, AppState>,
-        audio_bytes: Vec<u8>,
-        sample_rate: u32,
-    ) -> Result<super::TranscribeResult, String> {
-        super::transcribe_push_to_talk(state.inner(), audio_bytes, sample_rate)
+    pub(crate) fn transcribe_push_to_talk() -> Result<super::TranscribeResult, String> {
+        Err(crate::phase0_surface::closed(
+            "transcribe_push_to_talk",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn voice_pipeline_health(
-        state: tauri::State<'_, AppState>,
-    ) -> Result<super::VoicePipelineHealth, String> {
-        super::voice_pipeline_health(state.inner())
+    pub(crate) fn voice_pipeline_health() -> Result<super::VoicePipelineHealth, String> {
+        Err(crate::phase0_surface::closed(
+            "voice_pipeline_health",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
@@ -3273,99 +3269,101 @@ pub mod runtime {
     // ── Agent DNA / Genome commands ─────────────────────────────────────
 
     #[tauri::command]
-    fn get_agent_genome(
-        state: tauri::State<'_, AppState>,
-        agent_id: String,
-    ) -> Result<String, String> {
-        super::get_agent_genome(state.inner(), agent_id)
+    pub(crate) fn get_agent_genome() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "get_agent_genome",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn breed_agents(
-        state: tauri::State<'_, AppState>,
-        parent_a: String,
-        parent_b: String,
-    ) -> Result<String, String> {
-        super::breed_agents(state.inner(), parent_a, parent_b)
+    pub(crate) fn breed_agents() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "breed_agents",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn mutate_agent(state: tauri::State<'_, AppState>, agent_id: String) -> Result<String, String> {
-        super::mutate_agent(state.inner(), agent_id)
+    pub(crate) fn mutate_agent() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "mutate_agent",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn get_agent_lineage(
-        state: tauri::State<'_, AppState>,
-        agent_id: String,
-    ) -> Result<String, String> {
-        super::get_agent_lineage(state.inner(), agent_id)
+    pub(crate) fn get_agent_lineage() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "get_agent_lineage",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn generate_all_genomes(state: tauri::State<'_, AppState>) -> Result<String, String> {
-        super::generate_all_genomes(state.inner())
+    pub(crate) fn generate_all_genomes() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "generate_all_genomes",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn evolve_population(
-        state: tauri::State<'_, AppState>,
-        agent_ids: Vec<String>,
-        task: String,
-        generations: u32,
-    ) -> Result<String, String> {
-        super::evolve_population(state.inner(), agent_ids, task, generations)
+    pub(crate) fn evolve_population() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "evolve_population",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     // ── Genesis Protocol commands ──────────────────────────────────────
 
     #[tauri::command]
-    fn genesis_analyze_gap(
-        state: tauri::State<'_, AppState>,
-        user_request: String,
-    ) -> Result<String, String> {
-        super::genesis_analyze_gap(state.inner(), user_request)
+    pub(crate) fn genesis_analyze_gap() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "genesis_analyze_gap",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn genesis_preview_agent(
-        state: tauri::State<'_, AppState>,
-        user_request: String,
-        llm_response: String,
-    ) -> Result<String, String> {
-        super::genesis_preview_agent(state.inner(), user_request, llm_response)
+    pub(crate) fn genesis_preview_agent() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "genesis_preview_agent",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn genesis_create_agent(
-        state: tauri::State<'_, AppState>,
-        spec_json: String,
-        system_prompt: String,
-    ) -> Result<String, String> {
-        super::genesis_create_agent(state.inner(), spec_json, system_prompt)
+    pub(crate) fn genesis_create_agent() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "genesis_create_agent",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn genesis_store_pattern(
-        state: tauri::State<'_, AppState>,
-        spec_json: String,
-        missing_capabilities: Vec<String>,
-        test_score: f64,
-    ) -> Result<String, String> {
-        super::genesis_store_pattern(state.inner(), spec_json, missing_capabilities, test_score)
+    pub(crate) fn genesis_store_pattern() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "genesis_store_pattern",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn genesis_list_generated(state: tauri::State<'_, AppState>) -> Result<String, String> {
-        super::genesis_list_generated(state.inner())
+    pub(crate) fn genesis_list_generated() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "genesis_list_generated",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
-    fn genesis_delete_agent(
-        state: tauri::State<'_, AppState>,
-        agent_name: String,
-    ) -> Result<String, String> {
-        super::genesis_delete_agent(state.inner(), agent_name)
+    pub(crate) fn genesis_delete_agent() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "genesis_delete_agent",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     // ── Consciousness commands ──────────────────────────────────────────
@@ -3611,8 +3609,11 @@ pub mod runtime {
     // ── Voice Assistant commands ─────────────────────────────────────
 
     #[tauri::command]
-    fn voice_start_listening(state: tauri::State<'_, AppState>) -> Result<String, String> {
-        super::voice_start_listening(state.inner())
+    pub(crate) fn voice_start_listening() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "voice_start_listening",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
@@ -5699,8 +5700,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn get_git_repo_status() -> Result<super::GitRepoStatusRow, String> {
-        super::get_git_repo_status()
+    pub(crate) fn get_git_repo_status() -> Result<super::GitRepoStatusRow, String> {
+        Err(crate::phase0_surface::closed(
+            "get_git_repo_status",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
@@ -6554,8 +6558,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn trigger_immune_scan(state: tauri::State<'_, AppState>) -> Result<(), String> {
-        super::trigger_immune_scan(state.inner())
+    pub(crate) fn trigger_immune_scan() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "trigger_immune_scan",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
@@ -6735,10 +6742,11 @@ pub mod runtime {
     // ── Self-Rewrite ──
 
     #[tauri::command]
-    fn self_rewrite_analyze(
-        state: tauri::State<'_, AppState>,
-    ) -> Result<serde_json::Value, String> {
-        super::self_rewrite_analyze(state.inner())
+    pub(crate) fn self_rewrite_analyze() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "self_rewrite_analyze",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
@@ -6757,11 +6765,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn self_rewrite_test_patch(
-        state: tauri::State<'_, AppState>,
-        patch_id: String,
-    ) -> Result<serde_json::Value, String> {
-        super::self_rewrite_test_patch(state.inner(), patch_id)
+    pub(crate) fn self_rewrite_test_patch() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "self_rewrite_test_patch",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
@@ -6773,11 +6781,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn self_rewrite_rollback(
-        state: tauri::State<'_, AppState>,
-        patch_id: String,
-    ) -> Result<(), String> {
-        super::self_rewrite_rollback(state.inner(), patch_id)
+    pub(crate) fn self_rewrite_rollback() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "self_rewrite_rollback",
+            crate::phase0_surface::Closure::AmbientResource,
+        ))
     }
 
     #[tauri::command]
@@ -7683,85 +7691,10 @@ pub mod runtime {
         }
     }
 
-    /// Resolves the Nexus OS workspace root.
-    ///
-    /// Resolution order:
-    ///   1. `NEXUS_WORKSPACE_ROOT` env var (if set and the path exists)
-    ///   2. Walk up from `current_dir()` looking for a `.git` directory or file
-    ///   3. Fall back to `current_dir()` with a warning
-    ///
-    /// G7: Tauri launches the backend with cwd == `app/src-tauri`, which broke
-    /// every agent goal expressed relative to the repo root (C2: "read
-    /// README.md", C3: "list src-tauri/src/"). `run()` calls this once at
-    /// startup and `set_current_dir`s into the result so both the executor's
-    /// `workspace_base` and the planner's `PlanningContext.working_directory`
-    /// read the same corrected cwd.
-    fn resolve_workspace_root() -> std::path::PathBuf {
-        use std::path::PathBuf;
-
-        if let Ok(env_root) = std::env::var("NEXUS_WORKSPACE_ROOT") {
-            let p = PathBuf::from(&env_root);
-            if p.exists() {
-                return p;
-            }
-            eprintln!(
-                "[startup] NEXUS_WORKSPACE_ROOT='{}' does not exist; ignoring",
-                env_root
-            );
-        }
-
-        let cwd = std::env::current_dir().unwrap_or_else(|err| {
-            eprintln!("[startup] WARNING: current_dir() failed: {err}; using /home/nexus");
-            PathBuf::from("/home/nexus")
-        });
-
-        let mut walker = cwd.as_path();
-        loop {
-            if walker.join(".git").exists() {
-                return walker.to_path_buf();
-            }
-            match walker.parent() {
-                Some(parent) => walker = parent,
-                None => {
-                    eprintln!(
-                        "[startup] WARNING: workspace root could not be resolved (no .git ancestor from {}); falling back to cwd",
-                        cwd.display()
-                    );
-                    return cwd;
-                }
-            }
-        }
-    }
-
     pub fn run() {
-        // G7: anchor the process cwd to the repo root BEFORE anything else —
-        // AppState construction, tokio spawn, Tauri handler registration, and
-        // every `std::env::current_dir()` consumer in the runtime (kernel
-        // planner + executor, chat_llm, tools_infra, simulation,
-        // audit_compliance) all observe the corrected value once this block
-        // runs. The three-line log below is the safety belt for regressions.
-        let original_cwd = std::env::current_dir().unwrap_or_default();
-        let workspace_root = resolve_workspace_root();
-        eprintln!("[startup] cwd before: {}", original_cwd.display());
-        eprintln!(
-            "[startup] workspace_root resolved to: {}",
-            workspace_root.display()
-        );
-        if workspace_root != original_cwd {
-            if let Err(err) = std::env::set_current_dir(&workspace_root) {
-                eprintln!(
-                    "[startup] WARNING: failed to set cwd to {}: {} — agents will use the launched-from cwd",
-                    workspace_root.display(),
-                    err
-                );
-            } else {
-                eprintln!(
-                    "[startup] cwd after:  {}",
-                    std::env::current_dir().unwrap_or_default().display()
-                );
-            }
-        }
-
+        // P0-002C5A: the process working directory is not selected from the
+        // environment or a repository ancestor, and grants no authority: no
+        // agent, tool or resource is rooted at it.
         let builder = tauri::Builder::<tauri::Wry>::default()
             .plugin(
                 tauri_plugin_global_shortcut::Builder::new()

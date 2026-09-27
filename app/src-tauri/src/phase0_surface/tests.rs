@@ -119,6 +119,37 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("nx_chat", Closure::AgentExecution),
     ("nx_tool", Closure::AgentExecution),
     ("run_content_pipeline", Closure::AgentExecution),
+    // E5: code- or authority-bearing resources found through the process
+    // working directory, the environment or a developer checkout path.
+    ("self_rewrite_analyze", Closure::AmbientResource),
+    ("self_rewrite_test_patch", Closure::AmbientResource),
+    ("self_rewrite_rollback", Closure::AmbientResource),
+    ("genesis_analyze_gap", Closure::AmbientResource),
+    ("genesis_preview_agent", Closure::AmbientResource),
+    ("genesis_create_agent", Closure::AmbientResource),
+    ("genesis_store_pattern", Closure::AmbientResource),
+    ("genesis_list_generated", Closure::AmbientResource),
+    ("genesis_delete_agent", Closure::AmbientResource),
+    ("get_agent_genome", Closure::AmbientResource),
+    ("mutate_agent", Closure::AmbientResource),
+    ("breed_agents", Closure::AmbientResource),
+    ("get_agent_lineage", Closure::AmbientResource),
+    ("generate_all_genomes", Closure::AmbientResource),
+    ("evolve_population", Closure::AmbientResource),
+    ("force_evolve_agent", Closure::AmbientResource),
+    ("trigger_immune_scan", Closure::AmbientResource),
+    ("get_git_repo_status", Closure::AmbientResource),
+    ("voice_start_listening", Closure::AmbientResource),
+    ("voice_pipeline_health", Closure::AmbientResource),
+    ("transcribe_push_to_talk", Closure::AmbientResource),
+    ("cm_execute_validation_run", Closure::AmbientResource),
+    ("cm_list_validation_runs", Closure::AmbientResource),
+    ("cm_get_validation_run", Closure::AmbientResource),
+    ("cm_three_way_comparison", Closure::AmbientResource),
+    ("memory_save", Closure::AmbientResource),
+    ("memory_load", Closure::AmbientResource),
+    ("memory_list_agents", Closure::AmbientResource),
+    ("mcp2_server_handle", Closure::AmbientResource),
 ];
 
 const LIB_RS: &str = include_str!("../lib.rs");
@@ -284,7 +315,13 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             terminal_execute_approved, factory_create_project, factory_build_project,
             factory_test_project, factory_run_pipeline, detect_claude_code_cli,
             detect_codex_cli, trigger_claude_code_login, trigger_codex_cli_login,
-            builder_check_cli_auth, builder_authenticate_cli,
+            builder_check_cli_auth, builder_authenticate_cli, self_rewrite_analyze,
+            self_rewrite_test_patch, self_rewrite_rollback, genesis_analyze_gap,
+            genesis_preview_agent, genesis_create_agent, genesis_store_pattern,
+            genesis_list_generated, genesis_delete_agent, get_agent_genome, mutate_agent,
+            breed_agents, get_agent_lineage, generate_all_genomes, evolve_population,
+            force_evolve_agent, trigger_immune_scan, get_git_repo_status,
+            voice_start_listening, voice_pipeline_health, transcribe_push_to_talk,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
@@ -292,6 +329,9 @@ fn closed_handlers() -> Vec<ClosedHandler> {
         ],
         crate::commands::crate_bridges => [
             cc_execute_action, mcp2_client_add, mcp2_client_discover, mcp2_client_call,
+            cm_execute_validation_run, cm_list_validation_runs, cm_get_validation_run,
+            cm_three_way_comparison, memory_save, memory_load, memory_list_agents,
+            mcp2_server_handle,
         ],
         crate::nx_bridge::commands => [nx_agent_run, nx_chat, nx_tool],
         crate::commands::orchestration => [run_content_pipeline],
@@ -325,6 +365,7 @@ fn closure_reasons_are_bounded_and_echo_no_input() {
         Closure::ApprovalRequired,
         Closure::ExternalCliAgent,
         Closure::AgentExecution,
+        Closure::AmbientResource,
     ] {
         let reason = closure.reason();
         assert!(reason.contains("Phase Zero"), "{reason}");
@@ -471,4 +512,71 @@ fn desktop_sources_start_no_external_cli_agent() {
     }
     let swarm = include_str!("../commands/swarm.rs");
     assert!(!swarm.contains(concat!("CodexCli", "Provider")));
+}
+
+/// Ambient roots no desktop production source may use, with the only approved
+/// occurrences (each exactly counted) and why.
+const AMBIENT_ROOTS: &[&str] = &[
+    "set_current_dir",
+    "current_dir()",
+    "current_exe()",
+    "CARGO_MANIFEST_DIR",
+    "FLASH_MODEL_PATH",
+    "NEXUS_WORKSPACE_ROOT",
+    "MeasurementState::new(",
+    "\"agents/",
+    "\"data/",
+    "\"services/",
+    "\"kernel/src",
+    "\"crates/",
+];
+const APPROVED_AMBIENT: &[(&str, &str, usize, &str)] = &[
+    (
+        "builder_workspace/trusted_toolchain.rs",
+        "current_exe()",
+        1,
+        "C4D2: the packaged Builder toolchain is located from the installed executable",
+    ),
+    (
+        "commands/chat_llm.rs",
+        "CARGO_MANIFEST_DIR",
+        1,
+        "prebuilt manifests: #[cfg(test)]-only developer checkout source",
+    ),
+];
+
+/// No desktop production source takes authority or a code-bearing resource
+/// from the process working directory, the executable's ancestors, the
+/// developer checkout or a path-selecting environment variable.
+#[test]
+fn desktop_sources_hold_no_ambient_authority_roots() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    production_sources(&root, &mut files);
+    for path in files {
+        let relative = path
+            .strip_prefix(&root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        let text = std::fs::read_to_string(&path).unwrap();
+        for needle in AMBIENT_ROOTS {
+            let found = text.matches(needle).count();
+            let approved = APPROVED_AMBIENT
+                .iter()
+                .find(|(file, approved, _, _)| *file == relative && approved == needle)
+                .map_or(0, |(_, _, count, _)| *count);
+            assert_eq!(found, approved, "{relative}: {needle}");
+        }
+    }
+    // The approved checkout source is compiled only into tests: production
+    // resolves no prebuilt manifest directory.
+    let chat = include_str!("../commands/chat_llm.rs");
+    let at = chat
+        .find("fn resolve_prebuilt_manifest_dir_uncached()")
+        .expect("prebuilt resolver");
+    let open = at + chat[at..].find('{').unwrap();
+    let body = without_whitespace(&chat[open + 1..block_end(chat, open) - 1]);
+    assert!(body.starts_with("#[cfg(test)]{"), "{body}");
+    assert!(body.ends_with("#[cfg(not(test))]{None}"), "{body}");
 }

@@ -35,6 +35,10 @@ pub(crate) enum Closure {
     /// E4: agent actions holding filesystem or process authority (the process
     /// working directory is not an agent workspace).
     AgentExecution,
+    /// E5: a code- or authority-bearing resource located through the process
+    /// working directory, the environment or a developer checkout path, for
+    /// which no deterministic Nexus-owned installed location exists.
+    AmbientResource,
 }
 
 impl Closure {
@@ -53,6 +57,9 @@ impl Closure {
             Self::ExternalCliAgent => "external CLI agent providers are unavailable in Phase Zero",
             Self::AgentExecution => {
                 "agent filesystem and process actions are unavailable in Phase Zero"
+            }
+            Self::AmbientResource => {
+                "this feature depends on an ambient resource location and is unavailable in Phase Zero"
             }
         }
     }

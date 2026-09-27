@@ -156,36 +156,38 @@ pub fn cm_upload_darwin(
 
 #[tauri::command]
 pub fn cm_execute_validation_run(
-    state: tauri::State<'_, AppState>,
-    run_label: String,
-    enable_routing: bool,
 ) -> Result<nexus_capability_measurement::ValidationRunOutput, String> {
-    nexus_capability_measurement::tauri_commands::execute_validation_run(
-        &state.capability_measurement,
-        &run_label,
-        enable_routing,
-    )
+    Err(crate::phase0_surface::closed(
+        "cm_execute_validation_run",
+        crate::phase0_surface::Closure::AmbientResource,
+    ))
 }
 
 #[tauri::command]
 pub fn cm_list_validation_runs(
 ) -> Result<Vec<nexus_capability_measurement::ValidationRunSummary>, String> {
-    Ok(nexus_capability_measurement::tauri_commands::list_validation_runs())
+    Err(crate::phase0_surface::closed(
+        "cm_list_validation_runs",
+        crate::phase0_surface::Closure::AmbientResource,
+    ))
 }
 
 #[tauri::command]
-pub fn cm_get_validation_run(
-    run_label: String,
-) -> Result<nexus_capability_measurement::ValidationRunOutput, String> {
-    nexus_capability_measurement::tauri_commands::get_validation_run(&run_label)
+pub fn cm_get_validation_run() -> Result<nexus_capability_measurement::ValidationRunOutput, String>
+{
+    Err(crate::phase0_surface::closed(
+        "cm_get_validation_run",
+        crate::phase0_surface::Closure::AmbientResource,
+    ))
 }
 
 #[tauri::command]
 pub fn cm_three_way_comparison(
-    run1_label: String,
-    run2_label: String,
 ) -> Result<nexus_capability_measurement::evaluation::three_way::ThreeWayComparison, String> {
-    nexus_capability_measurement::tauri_commands::three_way_comparison(&run1_label, &run2_label)
+    Err(crate::phase0_surface::closed(
+        "cm_three_way_comparison",
+        crate::phase0_surface::Closure::AmbientResource,
+    ))
 }
 
 // ── A/B Validation Commands ──────────────────────────────────────────────────
@@ -904,18 +906,27 @@ pub fn memory_consolidate(
 }
 
 #[tauri::command]
-pub fn memory_save(state: tauri::State<'_, AppState>, agent_id: String) -> Result<String, String> {
-    memory_cmds::memory_save(&state.persistent_memory, &agent_id)
+pub fn memory_save() -> Result<String, String> {
+    Err(crate::phase0_surface::closed(
+        "memory_save",
+        crate::phase0_surface::Closure::AmbientResource,
+    ))
 }
 
 #[tauri::command]
-pub fn memory_load(state: tauri::State<'_, AppState>, agent_id: String) -> Result<String, String> {
-    memory_cmds::memory_load(&state.persistent_memory, &agent_id)
+pub fn memory_load() -> Result<String, String> {
+    Err(crate::phase0_surface::closed(
+        "memory_load",
+        crate::phase0_surface::Closure::AmbientResource,
+    ))
 }
 
 #[tauri::command]
-pub fn memory_list_agents(state: tauri::State<'_, AppState>) -> Vec<String> {
-    memory_cmds::memory_list_agents(&state.persistent_memory)
+pub fn memory_list_agents() -> Result<Vec<String>, String> {
+    Err(crate::phase0_surface::closed(
+        "memory_list_agents",
+        crate::phase0_surface::Closure::AmbientResource,
+    ))
 }
 
 #[tauri::command]
@@ -1230,11 +1241,11 @@ pub fn mcp2_server_status(
 }
 
 #[tauri::command]
-pub fn mcp2_server_handle(
-    state: tauri::State<'_, AppState>,
-    request_json: String,
-) -> Result<String, String> {
-    mcp2_cmds::mcp_server_handle_request(&state.mcp_standalone, &request_json)
+pub fn mcp2_server_handle() -> Result<String, String> {
+    Err(crate::phase0_surface::closed(
+        "mcp2_server_handle",
+        crate::phase0_surface::Closure::AmbientResource,
+    ))
 }
 
 #[tauri::command]
