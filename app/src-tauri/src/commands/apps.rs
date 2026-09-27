@@ -129,7 +129,46 @@ fn identified_file(
 ) -> Result<PathBuf, String> {
     nexus_kernel::governed_path::validate_storage_identifier(id, MAX_STORE_ID_BYTES)
         .map_err(|_| deny(state, action, "invalid_identifier"))?;
-    Ok(dir.join(format!("{id}.json")))
+    stored_file(state, action, dir, id)
+}
+
+/// The JSON file for a storage stem beneath a store directory (P0-002C5C).
+/// A stored file whose name differs from it only by letter case, such as one
+/// written before C5B when stems were raw caller ids, is refused rather than
+/// selected: on a case-insensitive filesystem it would be the same file.
+/// Nothing searches for a similar name.
+fn stored_file(state: &AppState, action: &str, dir: &Path, stem: &str) -> Result<PathBuf, String> {
+    let name = format!("{stem}.json");
+    nexus_kernel::governed_path::case_exact_entry(dir, &name).map_err(|denied| {
+        let reason = match denied {
+            nexus_kernel::governed_path::PathDenied::CaseAlias => "stored_name_differs_by_case",
+            _ => "store_unavailable",
+        };
+        deny(state, action, reason)
+    })?;
+    Ok(dir.join(name))
+}
+
+/// Every JSON document in a store directory, whatever its file name: stored
+/// files, including legacy ones, stay listed even when no identifier selects
+/// them.
+fn json_documents(dir: &Path) -> Result<Vec<serde_json::Value>, String> {
+    let mut documents = Vec::new();
+    if dir.exists() {
+        let read_dir = std::fs::read_dir(dir).map_err(|e| format!("read_dir failed: {e}"))?;
+        for entry in read_dir {
+            let entry = entry.map_err(|e| format!("entry error: {e}"))?;
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                let content =
+                    std::fs::read_to_string(&path).map_err(|e| format!("read failed: {e}"))?;
+                if let Ok(document) = serde_json::from_str::<serde_json::Value>(&content) {
+                    documents.push(document);
+                }
+            }
+        }
+    }
+    Ok(documents)
 }
 
 /// The supported email providers.
@@ -480,24 +519,7 @@ pub(crate) fn notes_list(state: &AppState) -> Result<String, String> {
         json!({"action": "notes_list"}),
     );
 
-    let dir = notes_dir()?;
-    let mut notes = Vec::new();
-
-    if dir.exists() {
-        let read_dir = std::fs::read_dir(&dir).map_err(|e| format!("read_dir failed: {e}"))?;
-        for entry in read_dir {
-            let entry = entry.map_err(|e| format!("entry error: {e}"))?;
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("json") {
-                let content =
-                    std::fs::read_to_string(&path).map_err(|e| format!("read failed: {e}"))?;
-                if let Ok(note) = serde_json::from_str::<serde_json::Value>(&content) {
-                    notes.push(note);
-                }
-            }
-        }
-    }
-
+    let notes = json_documents(&notes_dir()?)?;
     serde_json::to_string(&notes).map_err(|e| format!("json error: {e}"))
 }
 
@@ -596,22 +618,7 @@ pub(crate) fn email_list(state: &AppState) -> Result<String, String> {
         EventType::UserAction,
         json!({"action": "email_list"}),
     );
-    let dir = emails_dir()?;
-    let mut emails = Vec::new();
-    if dir.exists() {
-        let read_dir = std::fs::read_dir(&dir).map_err(|e| format!("read_dir failed: {e}"))?;
-        for entry in read_dir {
-            let entry = entry.map_err(|e| format!("entry error: {e}"))?;
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("json") {
-                let content =
-                    std::fs::read_to_string(&path).map_err(|e| format!("read failed: {e}"))?;
-                if let Ok(email) = serde_json::from_str::<serde_json::Value>(&content) {
-                    emails.push(email);
-                }
-            }
-        }
-    }
+    let emails = json_documents(&emails_dir()?)?;
     serde_json::to_string(&emails).map_err(|e| format!("json error: {e}"))
 }
 
@@ -628,7 +635,7 @@ pub(crate) fn email_save(
         EventType::UserAction,
         json!({"action": "email_save", "id": stem}),
     );
-    let path = emails_dir()?.join(format!("{stem}.json"));
+    let path = stored_file(state, "email_save", &emails_dir()?, &stem)?;
     // Validate JSON
     let _parsed: serde_json::Value =
         serde_json::from_str(&data_json).map_err(|e| format!("invalid json: {e}"))?;
@@ -643,7 +650,7 @@ pub(crate) fn email_delete(state: &AppState, id: String) -> Result<String, Strin
         EventType::UserAction,
         json!({"action": "email_delete", "id": stem}),
     );
-    let path = emails_dir()?.join(format!("{stem}.json"));
+    let path = stored_file(state, "email_delete", &emails_dir()?, &stem)?;
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| format!("delete failed: {e}"))?;
     }
@@ -1836,22 +1843,7 @@ pub(crate) fn project_list(state: &AppState) -> Result<String, String> {
         EventType::UserAction,
         json!({"action": "project_list"}),
     );
-    let dir = projects_dir()?;
-    let mut projects = Vec::new();
-    if dir.exists() {
-        let read_dir = std::fs::read_dir(&dir).map_err(|e| format!("read_dir failed: {e}"))?;
-        for entry in read_dir {
-            let entry = entry.map_err(|e| format!("entry error: {e}"))?;
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("json") {
-                let content =
-                    std::fs::read_to_string(&path).map_err(|e| format!("read failed: {e}"))?;
-                if let Ok(project) = serde_json::from_str::<serde_json::Value>(&content) {
-                    projects.push(project);
-                }
-            }
-        }
-    }
+    let projects = json_documents(&projects_dir()?)?;
     serde_json::to_string(&projects).map_err(|e| format!("json error: {e}"))
 }
 

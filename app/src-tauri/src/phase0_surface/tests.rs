@@ -1771,12 +1771,19 @@ fn p0_002c5b_identifier_joins_stay_behind_their_grammars() {
     // Joins that remain sit behind a grammar or an allowlist, each counted;
     // the pre-C5B spellings that bypassed them stay gone.
     for (file, spelling, count) in [
-        // identified_file, after validate_storage_identifier (lowercase only).
+        // identified_file (lowercase grammar) and the email stems name their
+        // file only through stored_file, which refuses a case alias (C5C).
         (
             "app/src-tauri/src/commands/apps.rs",
             "join(format!(\"{id}.json\"))",
-            1,
+            0,
         ),
+        (
+            "app/src-tauri/src/commands/apps.rs",
+            "join(format!(\"{stem}.json\"))",
+            0,
+        ),
+        ("app/src-tauri/src/commands/apps.rs", "dir.join(name)", 1),
         // read_messaging_token: an allowlisted &'static str platform.
         (
             "app/src-tauri/src/commands/apps.rs",
@@ -1789,10 +1796,11 @@ fn p0_002c5b_identifier_joins_stay_behind_their_grammars() {
             "join(format!(\"{provider}_tokens.json\"))",
             3,
         ),
-        // nx_session_file: the name's storage stem, never the raw name.
+        // nx_session_file: the name's storage stem, never the raw name, and
+        // never a stored file that differs only by case (C5C).
         (
             "app/src-tauri/src/nx_bridge/commands.rs",
-            "join(format!(\"{stem}.json\"))",
+            "sessions_dir.join(file)",
             1,
         ),
         (
@@ -1831,6 +1839,13 @@ fn p0_002c5b_identifier_joins_stay_behind_their_grammars() {
     }
     for (file, required, at_least) in [
         ("app/src-tauri/src/commands/apps.rs", "identified_file(", 6),
+        ("app/src-tauri/src/commands/apps.rs", "stored_file(", 4),
+        ("app/src-tauri/src/commands/apps.rs", "case_exact_entry(", 1),
+        (
+            "app/src-tauri/src/nx_bridge/commands.rs",
+            "case_exact_entry(",
+            1,
+        ),
         ("app/src-tauri/src/commands/apps.rs", "storage_stem(", 2),
         (
             "app/src-tauri/src/nx_bridge/commands.rs",

@@ -200,8 +200,12 @@ fn nx_session_file(
 ) -> Result<std::path::PathBuf, String> {
     nexus_kernel::governed_path::validate_identifier(name, 64)
         .map_err(|_| "nx_session_save: invalid session name".to_string())?;
-    let stem = nexus_kernel::governed_path::storage_stem(name);
-    Ok(sessions_dir.join(format!("{stem}.json")))
+    let file = format!("{}.json", nexus_kernel::governed_path::storage_stem(name));
+    // P0-002C5C: a stored file differing only by letter case (a session saved
+    // before C5B under its raw name) is refused, never selected.
+    nexus_kernel::governed_path::case_exact_entry(sessions_dir, &file)
+        .map_err(|_| "nx_session: a stored session differs only by letter case".to_string())?;
+    Ok(sessions_dir.join(file))
 }
 
 /// Save the current session.
@@ -552,5 +556,46 @@ mod tests {
         for hostile in ["", "../escape", "a/b", "CON", "a b", &"a".repeat(65)] {
             assert!(nx_session_file(dir, hostile).is_err(), "{hostile:?}");
         }
+    }
+
+    /// P0-002C5C: a session saved before C5B under its raw name keeps its
+    /// file, which no spelling selects or overwrites; its name now maps to a
+    /// digest-backed replacement that no other name reaches.
+    #[test]
+    fn p0_002c5c_legacy_session_files_are_never_selected_or_overwritten() {
+        let dir = std::env::temp_dir().join(format!("nexus-c5c-sessions-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("MySession.json"), r#"{"name":"MySession"}"#).unwrap();
+
+        // A lowercase spelling would be the legacy file on a case-insensitive
+        // filesystem: refused everywhere, with no search for a similar name.
+        assert_eq!(
+            nx_session_file(&dir, "mysession"),
+            Err("nx_session: a stored session differs only by letter case".to_string())
+        );
+        // The legacy name maps to its digest-backed replacement.
+        let replacement = nx_session_file(&dir, "MySession").unwrap();
+        let stem = nexus_kernel::governed_path::storage_stem("MySession");
+        assert!(stem.starts_with("h-"));
+        assert_eq!(replacement, dir.join(format!("{stem}.json")));
+        std::fs::write(&replacement, r#"{"name":"MySession","saved":2}"#).unwrap();
+        // No other spelling, including the stem itself, reaches it.
+        for other in [
+            stem.clone(),
+            stem.to_uppercase(),
+            format!("H{}", &stem[1..]),
+        ] {
+            if let Ok(path) = nx_session_file(&dir, &other) {
+                assert_ne!(path, replacement, "{other:?}");
+                assert!(!path
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&replacement.to_string_lossy()));
+            }
+        }
+        assert_eq!(
+            std::fs::read_to_string(dir.join("MySession.json")).unwrap(),
+            r#"{"name":"MySession"}"#
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

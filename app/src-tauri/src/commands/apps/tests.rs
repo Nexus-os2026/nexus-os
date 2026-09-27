@@ -429,3 +429,67 @@ fn p0_002c5c_the_oauth_wait_ends_at_its_deadline() {
     );
     assert!(elapsed < std::time::Duration::from_secs(30), "{elapsed:?}");
 }
+
+/// P0-002C5C: files written before C5B under raw, mixed-case names stay
+/// listed, but no identifier selects, overwrites or deletes them through
+/// another spelling, and nothing looks for a similar name.
+#[test]
+fn p0_002c5c_legacy_mixed_case_files_are_listed_but_never_selected_by_another_spelling() {
+    let state = AppState::new_in_memory();
+    let dir = std::env::temp_dir().join(format!("nexus-c5c-legacy-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let legacy_email = r#"{"id":"Msg-ABC","legacy":true}"#;
+    let legacy_note = r#"{"id":"Note-1","legacy":true}"#;
+    std::fs::write(dir.join("Msg-ABC.json"), legacy_email).unwrap();
+    std::fs::write(dir.join("Note-1.json"), legacy_note).unwrap();
+
+    let listed = json_documents(&dir).unwrap();
+    assert_eq!(listed.len(), 2);
+
+    // An email id whose stem differs from the legacy file only by case is
+    // refused for save and delete alike.
+    let stem = nexus_kernel::governed_path::storage_stem("msg-abc");
+    assert_eq!(stem, "msg-abc");
+    for action in ["email_save", "email_delete"] {
+        assert_eq!(
+            stored_file(&state, action, &dir, &stem),
+            Err(format!("{action}: stored name differs by case"))
+        );
+    }
+    // The original mixed-case id now has a digest stem: another file.
+    let original = nexus_kernel::governed_path::storage_stem("Msg-ABC");
+    assert!(original.starts_with("h-"));
+    assert_eq!(
+        stored_file(&state, "email_delete", &dir, &original),
+        Ok(dir.join(format!("{original}.json")))
+    );
+
+    // An uppercase legacy note is not addressable: its own spelling fails
+    // the grammar, and the lowercase spelling is refused, not folded.
+    assert_eq!(
+        identified_file(&state, "notes_get", &dir, "Note-1"),
+        Err("notes_get: invalid identifier".to_string())
+    );
+    for action in ["notes_get", "notes_save", "notes_delete", "project_get"] {
+        assert_eq!(
+            identified_file(&state, action, &dir, "note-1"),
+            Err(format!("{action}: stored name differs by case"))
+        );
+    }
+    // Only an exact spelling is ever selected.
+    std::fs::write(dir.join("note-1.json"), "{}").unwrap();
+    assert_eq!(
+        identified_file(&state, "notes_get", &dir, "note-1"),
+        Ok(dir.join("note-1.json"))
+    );
+    // The legacy files are untouched.
+    assert_eq!(
+        std::fs::read_to_string(dir.join("Msg-ABC.json")).unwrap(),
+        legacy_email
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.join("Note-1.json")).unwrap(),
+        legacy_note
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
