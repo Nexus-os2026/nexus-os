@@ -480,23 +480,19 @@ impl NexusLink {
         progress_callback: impl Fn(TransferProgress),
     ) -> Result<(), String> {
         self.check_peer_allowed(peer_address)?;
-        let file_path = std::path::Path::new(&self.models_dir).join(filename);
-        if !file_path.exists() {
-            // Try subdirectory matching model_id
-            let alt_path = std::path::Path::new(&self.models_dir)
-                .join(model_id)
-                .join(filename);
-            if !alt_path.exists() {
-                return Err(format!("Model file not found: {filename}"));
-            }
-            return self.send_model_from_path(
-                &alt_path,
-                peer_address,
-                model_id,
-                filename,
-                progress_callback,
-            );
-        }
+        // P0-002C5B: the file is named only by a validated relative path
+        // beneath the models directory (directly or inside the model's own
+        // directory); every step must be a real directory and the target a
+        // regular file, with no link followed anywhere.
+        let root = std::path::Path::new(&self.models_dir);
+        let file_path = nexus_kernel::governed_path::regular_file_beneath(root, filename)
+            .or_else(|_| {
+                nexus_kernel::governed_path::regular_file_beneath(
+                    root,
+                    &format!("{model_id}/{filename}"),
+                )
+            })
+            .map_err(|_| "Model file not found beneath the models directory".to_string())?;
         self.send_model_from_path(
             &file_path,
             peer_address,
@@ -916,6 +912,42 @@ impl NexusLink {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p0_002c5b_send_model_reads_only_regular_files_beneath_the_models_dir() {
+        let base = std::env::temp_dir().join(format!("nexus-p0-002c5b-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&base).unwrap();
+        let root = base.canonicalize().unwrap();
+        let models = root.join("models");
+        std::fs::create_dir(&models).unwrap();
+        std::fs::write(root.join("secret"), b"not a model").unwrap();
+        let link = NexusLink::new("device", &models.to_string_lossy());
+        for (model_id, filename) in [
+            ("m", "../secret"),
+            ("m", "/etc/passwd"),
+            ("..", "secret"),
+            ("m", "C:\\x"),
+            ("../..", "etc/passwd"),
+            ("m", ""),
+        ] {
+            let error = link
+                .send_model("127.0.0.1:9", model_id, filename, |_| {})
+                .unwrap_err();
+            assert!(
+                error.contains("not found beneath"),
+                "{model_id:?} {filename:?}: {error}"
+            );
+        }
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(root.join("secret"), models.join("link.gguf")).unwrap();
+            let error = link
+                .send_model("127.0.0.1:9", "m", "link.gguf", |_| {})
+                .unwrap_err();
+            assert!(error.contains("not found beneath"), "{error}");
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
 
     #[test]
     fn test_new_creates_device() {

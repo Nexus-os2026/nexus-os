@@ -259,3 +259,58 @@ fn private_temp_dirs_are_unpredictable_owner_only_and_removed() {
     drop(first);
     assert!(!path.exists());
 }
+
+#[test]
+fn regular_files_beneath_a_root_follow_no_link_and_leave_no_tree() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    std::fs::create_dir(root.join("models")).unwrap();
+    std::fs::write(root.join("models").join("m.gguf"), b"x").unwrap();
+    std::fs::write(root.join("secret"), b"s").unwrap();
+    assert_eq!(
+        regular_file_beneath(&root, "models/m.gguf").unwrap(),
+        root.join("models").join("m.gguf")
+    );
+    for hostile in [
+        "../secret",
+        "/etc/passwd",
+        "models/../secret",
+        "models",
+        "",
+        "C:\\x",
+    ] {
+        assert!(regular_file_beneath(&root, hostile).is_err(), "{hostile:?}");
+    }
+    assert_eq!(
+        regular_file_beneath(&root, "models"),
+        Err(PathDenied::WrongKind)
+    );
+    assert!(regular_file_beneath(Path::new("relative"), "models/m.gguf").is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn unix_links_on_the_way_to_a_regular_file_are_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().canonicalize().unwrap();
+    let outside = root.join("outside");
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::write(outside.join("secret"), b"s").unwrap();
+    let models = root.join("models");
+    std::fs::create_dir(&models).unwrap();
+    std::os::unix::fs::symlink(outside.join("secret"), models.join("link.gguf")).unwrap();
+    std::os::unix::fs::symlink(&outside, models.join("dir")).unwrap();
+    assert_eq!(
+        regular_file_beneath(&models, "link.gguf"),
+        Err(PathDenied::Redirected)
+    );
+    assert_eq!(
+        regular_file_beneath(&models, "dir/secret"),
+        Err(PathDenied::Redirected)
+    );
+    std::os::unix::fs::symlink(&outside, root.join("root-link")).unwrap();
+    assert_eq!(
+        regular_file_beneath(&root.join("root-link"), "secret"),
+        Err(PathDenied::Redirected)
+    );
+}

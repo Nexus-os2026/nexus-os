@@ -6,8 +6,54 @@
 
 use crate::model_registry::{ModelConfig, Quantization};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+// ─── Identifiers (P0-002C5B) ─────────────────────────────────────────────────
+
+/// Whether `segment` is a hub name segment: ASCII letters, digits, `.`, `_`
+/// and `-` (and `+` for file names), starting with a letter or digit, no
+/// trailing dot, not a DOS device name, at most `max` bytes. Such a segment is
+/// safe both as a path component and as a URL path segment.
+fn hub_segment(segment: &str, max: usize, plus: bool) -> bool {
+    let bytes = segment.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= max
+        && bytes[0].is_ascii_alphanumeric()
+        && !segment.ends_with('.')
+        && bytes.iter().all(|b| {
+            b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-') || (plus && *b == b'+')
+        })
+        && nexus_kernel::governed_path::validate_component(segment).is_ok()
+}
+
+/// A Hugging Face repository id: `name` or `owner/name`. It names a hub
+/// resource and is never a filesystem path.
+pub fn validate_hf_model_id(model_id: &str) -> Result<(), String> {
+    let segments: Vec<&str> = model_id.split('/').collect();
+    if segments.len() > 2 || !segments.iter().all(|s| hub_segment(s, 96, false)) {
+        return Err("invalid Hugging Face model id".into());
+    }
+    Ok(())
+}
+
+/// A file inside a repository: at most four `/`-separated hub name segments.
+pub fn validate_hf_filename(filename: &str) -> Result<(), String> {
+    let segments: Vec<&str> = filename.split('/').collect();
+    if segments.len() > 4 || !segments.iter().all(|s| hub_segment(s, 128, true)) {
+        return Err("invalid Hugging Face file name".into());
+    }
+    Ok(())
+}
+
+/// The backend-owned directory holding a repository's files beneath the
+/// models root: named by a digest of the id, never by the id itself, which
+/// contains `/`.
+pub fn model_storage_dir(models_root: &Path, model_id: &str) -> PathBuf {
+    let digest = format!("{:x}", Sha256::digest(model_id.as_bytes()));
+    models_root.join(format!("hf-{}", &digest[..32]))
+}
 
 // ─── HuggingFace API types ───────────────────────────────────────────────────
 
@@ -286,19 +332,28 @@ pub fn download_model_file(
     target_dir: &str,
     progress_callback: impl Fn(DownloadProgress),
 ) -> Result<String, String> {
+    // P0-002C5B: the id and file name are validated grammars, the target root
+    // is the backend's absolute models directory, and the file lands in a
+    // digest-named directory beneath it.
+    validate_hf_model_id(model_id)?;
+    validate_hf_filename(filename)?;
+    let target_root = Path::new(target_dir);
+    if !target_root.is_absolute() {
+        return Err("models directory is unavailable".into());
+    }
+
     // Build the download URL.
     let url = format!(
         "https://huggingface.co/{}/resolve/main/{}",
         model_id, filename
     );
 
-    // Create the target directory.
-    let model_name = model_id.replace('/', "__");
-    let model_dir = PathBuf::from(target_dir).join(&model_name);
-    std::fs::create_dir_all(&model_dir)
+    let model_dir = model_storage_dir(target_root, model_id);
+    let file_path = nexus_kernel::governed_path::join_relative(&model_dir, filename)
+        .map_err(|_| "invalid Hugging Face file name".to_string())?;
+    let parent = file_path.parent().unwrap_or(&model_dir);
+    std::fs::create_dir_all(parent)
         .map_err(|e| format!("failed to create model directory: {e}"))?;
-
-    let file_path = model_dir.join(filename);
     let file_path_str = file_path.to_string_lossy().to_string();
 
     // Emit starting status.
@@ -314,10 +369,22 @@ pub fn download_model_file(
     // First, get the file size via a HEAD request.
     let total_bytes = get_content_length(&url).unwrap_or(0);
 
-    // Start curl download in the background.
+    // Start curl download in the background: HTTPS only, including redirects,
+    // failing on HTTP errors, with the URL after `--`.
     let mut child = Command::new("curl")
-        .args(["-sS", "-L", "-o"])
+        .args([
+            "-q",
+            "-sS",
+            "-L",
+            "--fail",
+            "--proto",
+            "=https",
+            "--proto-redir",
+            "=https",
+            "-o",
+        ])
         .arg(&file_path_str)
+        .arg("--")
         .arg(&url)
         .spawn()
         .map_err(|e| format!("curl spawn failed: {e}"))?;
@@ -379,7 +446,19 @@ pub fn download_model_file(
 /// Get Content-Length of a URL via a HEAD request.
 fn get_content_length(url: &str) -> Option<u64> {
     let output = Command::new("curl")
-        .args(["-sS", "-L", "-I", "-m", "10"])
+        .args([
+            "-q",
+            "-sS",
+            "-L",
+            "-I",
+            "-m",
+            "10",
+            "--proto",
+            "=https",
+            "--proto-redir",
+            "=https",
+            "--",
+        ])
         .arg(url)
         .output()
         // Optional: curl may not be installed or HEAD request may fail
@@ -404,7 +483,13 @@ pub fn generate_model_config(
     filename: &str,
     model_dir: &str,
 ) -> Result<ModelConfig, String> {
+    // P0-002C5B: both values are interpolated into TOML and a path.
+    validate_hf_model_id(model_id)?;
+    validate_hf_filename(filename)?;
     let dir = PathBuf::from(model_dir);
+    if !dir.is_absolute() {
+        return Err("model directory must be absolute".into());
+    }
 
     // Determine file size for RAM estimate.
     let file_path = dir.join(filename);
@@ -610,13 +695,15 @@ pub fn register_downloaded_model_with_ollama(
 
     let result = Command::new("curl")
         .args([
+            "-q",
             "-sS",
             "-X",
             "POST",
             "-H",
             "Content-Type: application/json",
-            "-d",
+            "--data-raw",
             &payload.to_string(),
+            "--",
             "http://localhost:11434/api/create",
         ])
         .output();
@@ -639,6 +726,90 @@ pub fn register_downloaded_model_with_ollama(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const HOSTILE_IDS: &[&str] = &[
+        "",
+        "..",
+        "../x",
+        "a/../b",
+        "/abs",
+        "a//b",
+        "a/b/c",
+        "C:\\x",
+        "a\\b",
+        "a b",
+        "a?b",
+        "a#b",
+        "a:b",
+        "org/CON",
+        "trailing.",
+        "-flag",
+    ];
+    const HOSTILE_FILES: &[&str] = &[
+        "",
+        "..",
+        "../../escape.gguf",
+        "/etc/passwd",
+        "a/../b",
+        "a//b",
+        "C:\\x",
+        "a\\b",
+        "x.gguf?x=1",
+        "x#y",
+        "a:ads",
+        "CON",
+        "a/b/c/d/e",
+        "-o",
+    ];
+
+    #[test]
+    fn p0_002c5b_hub_identifiers_are_strict_grammars() {
+        for id in ["gpt2", "org/model", "TheBloke/Llama-2-7B-GGUF", "a.b_c-d/e"] {
+            assert_eq!(validate_hf_model_id(id), Ok(()), "{id:?}");
+        }
+        for id in HOSTILE_IDS {
+            assert!(validate_hf_model_id(id).is_err(), "{id:?}");
+        }
+        for file in ["model.gguf", "onnx/model.onnx", "a/b/c/d.bin", "x+y.gguf"] {
+            assert_eq!(validate_hf_filename(file), Ok(()), "{file:?}");
+        }
+        for file in HOSTILE_FILES {
+            assert!(validate_hf_filename(file).is_err(), "{file:?}");
+        }
+    }
+
+    #[test]
+    fn p0_002c5b_model_storage_is_a_digest_never_the_repository_id() {
+        let root = std::path::Path::new("/nexus/models");
+        let dir = model_storage_dir(root, "org/model");
+        assert_eq!(dir.parent(), Some(root));
+        let name = dir.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.starts_with("hf-") && name.len() == 35, "{name}");
+        assert!(!name.contains("org") && !name.contains("model"));
+        assert_ne!(dir, model_storage_dir(root, "org/model2"));
+        assert_eq!(dir, model_storage_dir(root, "org/model"));
+    }
+
+    #[test]
+    fn p0_002c5b_hostile_downloads_are_refused_before_any_file_or_request() {
+        let root = std::env::temp_dir().join(format!("nexus-p0-002c5b-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let target = root.to_string_lossy().into_owned();
+        for file in HOSTILE_FILES {
+            let result = download_model_file("org/model", file, &target, |_| {});
+            assert!(result.is_err(), "{file:?}");
+        }
+        for id in HOSTILE_IDS {
+            let result = download_model_file(id, "model.gguf", &target, |_| {});
+            assert!(result.is_err(), "{id:?}");
+        }
+        assert!(download_model_file("org/model", "model.gguf", "relative", |_| {}).is_err());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        assert!(generate_model_config("../x", "model.gguf", &target).is_err());
+        assert!(generate_model_config("org/model", "../x.gguf", &target).is_err());
+        assert!(generate_model_config("org/model", "model.gguf", "relative").is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     // ── Quantization parsing ──
 

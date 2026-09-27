@@ -74,7 +74,7 @@ use serde_json::{json, Value};
 use sha2::Digest;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -95,6 +95,83 @@ use uuid::Uuid;
 /// The Nexus state directory under the validated identity home (P0-002C5B).
 pub(crate) fn nexus_data_dir() -> Result<PathBuf, String> {
     nexus_kernel::identity_home::nexus_state_dir().map_err(|e| e.to_string())
+}
+
+// ── Caller identifiers (P0-002C5B) ────────────────────────────────────
+//
+// A caller identifier is never a path. Notes and projects accept only the
+// identifier grammar; email messages map any provider id to a deterministic
+// storage stem; providers and platforms come from explicit allowlists checked
+// before any token file is named. A refusal records only the operation, the
+// outcome and a reason class, never the rejected value.
+
+/// Longest note or project identifier.
+const MAX_STORE_ID_BYTES: usize = 128;
+
+fn deny(state: &AppState, action: &str, reason: &str) -> String {
+    state.log_event(
+        SYSTEM_UUID,
+        EventType::UserAction,
+        json!({"action": action, "outcome": "denied", "reason": reason}),
+    );
+    format!("{action}: {}", reason.replace('_', " "))
+}
+
+/// The JSON file for a caller identifier beneath a store directory.
+fn identified_file(
+    state: &AppState,
+    action: &str,
+    dir: &Path,
+    id: &str,
+) -> Result<PathBuf, String> {
+    nexus_kernel::governed_path::validate_identifier(id, MAX_STORE_ID_BYTES)
+        .map_err(|_| deny(state, action, "invalid_identifier"))?;
+    Ok(dir.join(format!("{id}.json")))
+}
+
+/// The supported email providers.
+fn email_provider(state: &AppState, action: &str, provider: &str) -> Result<&'static str, String> {
+    match provider {
+        "gmail" => Ok("gmail"),
+        "outlook" => Ok("outlook"),
+        _ => Err(deny(state, action, "unsupported_provider")),
+    }
+}
+
+/// The supported messaging platforms.
+fn messaging_platform(
+    state: &AppState,
+    action: &str,
+    platform: &str,
+) -> Result<&'static str, String> {
+    match platform {
+        "telegram" => Ok("telegram"),
+        "discord" => Ok("discord"),
+        "slack" => Ok("slack"),
+        _ => Err(deny(state, action, "unsupported_platform")),
+    }
+}
+
+/// A Discord channel id placed in an API URL path: a snowflake of digits.
+fn discord_snowflake(state: &AppState, action: &str, value: &str) -> Result<(), String> {
+    if (1..=20).contains(&value.len()) && value.bytes().all(|b| b.is_ascii_digit()) {
+        Ok(())
+    } else {
+        Err(deny(state, action, "invalid_channel"))
+    }
+}
+
+/// A Telegram bot token placed in an API URL path: `<digits>:<token>`, with no
+/// URL syntax.
+fn telegram_token_ok(token: &str) -> bool {
+    token.split_once(':').is_some_and(|(bot, secret)| {
+        (1..=20).contains(&bot.len())
+            && bot.bytes().all(|b| b.is_ascii_digit())
+            && (1..=128).contains(&secret.len())
+            && secret
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+    })
 }
 
 // ── API Client ────────────────────────────────────────────────────────
@@ -399,13 +476,13 @@ pub(crate) fn notes_list(state: &AppState) -> Result<String, String> {
 }
 
 pub(crate) fn notes_get(state: &AppState, id: String) -> Result<String, String> {
+    let path = identified_file(state, "notes_get", &notes_dir()?, &id)?;
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "notes_get", "id": id}),
     );
 
-    let path = notes_dir()?.join(format!("{id}.json"));
     if !path.exists() {
         return Err(format!("note not found: {id}"));
     }
@@ -420,14 +497,12 @@ pub(crate) fn notes_save(
     folder_id: String,
     tags_json: String,
 ) -> Result<String, String> {
+    let path = identified_file(state, "notes_save", &notes_dir()?, &id)?;
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "notes_save", "id": id, "title": title}),
     );
-
-    let dir = notes_dir()?;
-    let path = dir.join(format!("{id}.json"));
 
     let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
 
@@ -466,13 +541,13 @@ pub(crate) fn notes_save(
 }
 
 pub(crate) fn notes_delete(state: &AppState, id: String) -> Result<String, String> {
+    let path = identified_file(state, "notes_delete", &notes_dir()?, &id)?;
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "notes_delete", "id": id}),
     );
 
-    let path = notes_dir()?.join(format!("{id}.json"));
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| format!("delete failed: {e}"))?;
     }
@@ -519,13 +594,15 @@ pub(crate) fn email_save(
     id: String,
     data_json: String,
 ) -> Result<String, String> {
+    // P0-002C5B: provider message ids may hold `/`, `=` or anything else, so
+    // they map to a deterministic storage stem and are never a path.
+    let stem = nexus_kernel::governed_path::storage_stem(&id);
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "email_save", "id": id}),
+        json!({"action": "email_save", "id": stem}),
     );
-    let dir = emails_dir()?;
-    let path = dir.join(format!("{id}.json"));
+    let path = emails_dir()?.join(format!("{stem}.json"));
     // Validate JSON
     let _parsed: serde_json::Value =
         serde_json::from_str(&data_json).map_err(|e| format!("invalid json: {e}"))?;
@@ -534,12 +611,13 @@ pub(crate) fn email_save(
 }
 
 pub(crate) fn email_delete(state: &AppState, id: String) -> Result<String, String> {
+    let stem = nexus_kernel::governed_path::storage_stem(&id);
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "email_delete", "id": id}),
+        json!({"action": "email_delete", "id": stem}),
     );
-    let path = emails_dir()?.join(format!("{id}.json"));
+    let path = emails_dir()?.join(format!("{stem}.json"));
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| format!("delete failed: {e}"))?;
     }
@@ -556,7 +634,7 @@ pub(crate) fn email_oauth_dir() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-pub(crate) fn read_messaging_token(platform: &str) -> Result<String, String> {
+pub(crate) fn read_messaging_token(platform: &'static str) -> Result<String, String> {
     let path = nexus_data_dir()?
         .join("messaging_tokens")
         .join(format!("{platform}.json"));
@@ -784,7 +862,7 @@ pub(crate) fn email_oauth_status(state: &AppState) -> Result<String, String> {
     serde_json::to_string(&statuses).map_err(|e| format!("json: {e}"))
 }
 
-pub(crate) fn get_email_access_token(provider: &str) -> Result<String, String> {
+pub(crate) fn get_email_access_token(provider: &'static str) -> Result<String, String> {
     let path = email_oauth_dir()?.join(format!("{provider}_tokens.json"));
     if !path.exists() {
         return Err(format!("{provider} not connected"));
@@ -806,12 +884,13 @@ pub(crate) fn email_fetch_messages(
     folder: String,
     page: u32,
 ) -> Result<String, String> {
+    let known = email_provider(state, "email_fetch_messages", &provider)?;
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "email_fetch_messages", "provider": provider, "folder": folder}),
+        json!({"action": "email_fetch_messages", "provider": known, "folder": folder}),
     );
-    let token = get_email_access_token(&provider)?;
+    let token = get_email_access_token(known)?;
     let max_results = 20u32;
 
     let result = block_on_async(async {
@@ -1003,12 +1082,13 @@ pub(crate) fn email_send_message(
     subject: String,
     body: String,
 ) -> Result<String, String> {
+    let known = email_provider(state, "email_send", &provider)?;
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "email_send", "provider": provider, "to": to}),
+        json!({"action": "email_send", "provider": known, "to": to}),
     );
-    let token = get_email_access_token(&provider)?;
+    let token = get_email_access_token(known)?;
 
     let result = block_on_async(async {
         match provider.as_str() {
@@ -1070,12 +1150,13 @@ pub(crate) fn email_search_messages(
     provider: String,
     query: String,
 ) -> Result<String, String> {
+    let known = email_provider(state, "email_search", &provider)?;
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "email_search", "provider": provider, "query": query}),
+        json!({"action": "email_search", "provider": known, "query": query}),
     );
-    let token = get_email_access_token(&provider)?;
+    let token = get_email_access_token(known)?;
 
     let result = block_on_async(async {
         match provider.as_str() {
@@ -1112,12 +1193,13 @@ pub(crate) fn email_search_messages(
 }
 
 pub(crate) fn email_disconnect(state: &AppState, provider: String) -> Result<String, String> {
+    let known = email_provider(state, "email_disconnect", &provider)?;
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "email_disconnect", "provider": provider}),
+        json!({"action": "email_disconnect", "provider": known}),
     );
-    let path = email_oauth_dir()?.join(format!("{provider}_tokens.json"));
+    let path = email_oauth_dir()?.join(format!("{known}_tokens.json"));
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| format!("remove: {e}"))?;
     }
@@ -1131,10 +1213,14 @@ pub(crate) fn messaging_connect_platform(
     platform: String,
     token_value: String,
 ) -> Result<String, String> {
+    let known = messaging_platform(state, "messaging_connect", &platform)?;
+    if known == "telegram" && !telegram_token_ok(&token_value) {
+        return Err(deny(state, "messaging_connect", "invalid_token"));
+    }
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "messaging_connect", "platform": platform}),
+        json!({"action": "messaging_connect", "platform": known}),
     );
 
     // Store token in messaging tokens file
@@ -1142,7 +1228,7 @@ pub(crate) fn messaging_connect_platform(
     if !msg_dir.exists() {
         std::fs::create_dir_all(&msg_dir).map_err(|e| format!("mkdir: {e}"))?;
     }
-    let token_path = msg_dir.join(format!("{platform}.json"));
+    let token_path = msg_dir.join(format!("{known}.json"));
     std::fs::write(
         &token_path,
         serde_json::to_string_pretty(&json!({"token": token_value, "platform": platform, "connected_at": chrono::Utc::now().to_rfc3339()})).map_err(|e| format!("json: {e}"))?,
@@ -1255,13 +1341,20 @@ pub(crate) fn messaging_send(
     channel: String,
     text: String,
 ) -> Result<String, String> {
+    let known = messaging_platform(state, "messaging_send", &platform)?;
+    if known == "discord" {
+        discord_snowflake(state, "messaging_send", &channel)?;
+    }
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "messaging_send", "platform": platform, "channel": channel}),
+        json!({"action": "messaging_send", "platform": known, "channel": channel}),
     );
 
-    let token = read_messaging_token(&platform)?;
+    let token = read_messaging_token(known)?;
+    if known == "telegram" && !telegram_token_ok(&token) {
+        return Err(deny(state, "messaging_send", "invalid_token"));
+    }
 
     let result = block_on_async(async {
         match platform.as_str() {
@@ -1311,13 +1404,20 @@ pub(crate) fn messaging_poll_messages(
     channel: String,
     last_id: String,
 ) -> Result<String, String> {
+    let known = messaging_platform(state, "messaging_poll", &platform)?;
+    if known == "discord" {
+        discord_snowflake(state, "messaging_poll", &channel)?;
+    }
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "messaging_poll", "platform": platform}),
+        json!({"action": "messaging_poll", "platform": known}),
     );
 
-    let token = read_messaging_token(&platform)?;
+    let token = read_messaging_token(known)?;
+    if known == "telegram" && !telegram_token_ok(&token) {
+        return Err(deny(state, "messaging_poll", "invalid_token"));
+    }
 
     let result = block_on_async(async {
         match platform.as_str() {
@@ -1636,12 +1736,12 @@ pub(crate) fn project_list(state: &AppState) -> Result<String, String> {
 }
 
 pub(crate) fn project_get(state: &AppState, id: String) -> Result<String, String> {
+    let path = identified_file(state, "project_get", &projects_dir()?, &id)?;
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "project_get", "id": id}),
     );
-    let path = projects_dir()?.join(format!("{id}.json"));
     if !path.exists() {
         return Err(format!("project not found: {id}"));
     }
@@ -1653,13 +1753,12 @@ pub(crate) fn project_save(
     id: String,
     data_json: String,
 ) -> Result<String, String> {
+    let path = identified_file(state, "project_save", &projects_dir()?, &id)?;
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "project_save", "id": id}),
     );
-    let dir = projects_dir()?;
-    let path = dir.join(format!("{id}.json"));
     let _parsed: serde_json::Value =
         serde_json::from_str(&data_json).map_err(|e| format!("invalid json: {e}"))?;
     std::fs::write(&path, &data_json).map_err(|e| format!("write failed: {e}"))?;
@@ -1667,14 +1766,17 @@ pub(crate) fn project_save(
 }
 
 pub(crate) fn project_delete(state: &AppState, id: String) -> Result<String, String> {
+    let path = identified_file(state, "project_delete", &projects_dir()?, &id)?;
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
         json!({"action": "project_delete", "id": id}),
     );
-    let path = projects_dir()?.join(format!("{id}.json"));
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| format!("delete failed: {e}"))?;
     }
     Ok("ok".to_string())
 }
+
+#[cfg(test)]
+mod tests;

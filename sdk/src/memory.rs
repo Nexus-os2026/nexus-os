@@ -317,22 +317,33 @@ impl AgentMemory {
     /// Persist an agent's memories to `persistence_dir/{agent_id}.json`.
     pub fn save(&self, agent_id: &str) -> Result<(), String> {
         let entries = self.memories.get(agent_id).cloned().unwrap_or_default();
+        let path = self.agent_file(agent_id)?;
         let dir = self.persistence_root()?;
         std::fs::create_dir_all(dir).map_err(|e| format!("create dir: {e}"))?;
-        let path = format!("{dir}/{agent_id}.json");
         let json = serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?;
         std::fs::write(&path, json).map_err(|e| format!("write: {e}"))
     }
 
     /// Load an agent's memories from disk, replacing any in-memory entries.
     pub fn load(&mut self, agent_id: &str) -> Result<(), String> {
-        let dir = self.persistence_root()?;
-        let path = format!("{dir}/{agent_id}.json");
+        let path = self.agent_file(agent_id)?;
         let data = std::fs::read_to_string(&path).map_err(|e| format!("read: {e}"))?;
         let entries: Vec<MemoryEntry> =
             serde_json::from_str(&data).map_err(|e| format!("parse: {e}"))?;
         self.memories.insert(agent_id.to_string(), entries);
         Ok(())
+    }
+
+    /// The persistence file for an agent: named only by the agent's canonical
+    /// UUID, never by caller text (P0-002C5B).
+    fn agent_file(&self, agent_id: &str) -> Result<String, String> {
+        let id = uuid::Uuid::parse_str(agent_id)
+            .map_err(|_| "agent memory persistence needs a UUID agent id".to_string())?;
+        Ok(format!(
+            "{}/{}.json",
+            self.persistence_root()?,
+            id.hyphenated()
+        ))
     }
 
     /// The persistence directory, which must be absolute.
@@ -412,6 +423,38 @@ fn recall_score(entry: &MemoryEntry, query_lower: &str, now: u64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p0_002c5b_persistence_files_are_named_only_by_agent_uuid() {
+        let dir = std::env::temp_dir().join(format!("nexus-memory-uuid-{}", Uuid::new_v4()));
+        let mut memory = AgentMemory::new(MemoryConfig {
+            persistence_dir: dir.to_string_lossy().into_owned(),
+            ..MemoryConfig::default()
+        });
+        for hostile in [
+            "../../escape",
+            "/etc/passwd",
+            "C:\\x",
+            "a/b",
+            "..",
+            "",
+            "not-a-uuid",
+        ] {
+            memory.remember(hostile, "x", MemoryType::Fact, 0.5, Vec::new());
+            assert!(memory.save(hostile).is_err(), "{hostile:?}");
+            assert!(memory.load(hostile).is_err(), "{hostile:?}");
+        }
+        assert!(!dir.exists());
+        assert!(!dir.parent().unwrap().join("escape.json").exists());
+
+        // Any accepted spelling lands on the canonical hyphenated file.
+        let id = Uuid::new_v4();
+        let braced = format!("{{{}}}", id.hyphenated()).to_uppercase();
+        memory.remember(&braced, "kept", MemoryType::Fact, 0.5, Vec::new());
+        memory.save(&braced).unwrap();
+        assert!(dir.join(format!("{}.json", id.hyphenated())).is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn p0_002c5b_persistence_needs_an_absolute_directory() {
@@ -572,23 +615,24 @@ mod tests {
             ..test_config()
         };
 
+        let agent = Uuid::new_v4().to_string();
         let mut mem = AgentMemory::new(config.clone());
         mem.remember(
-            "a1",
+            &agent,
             "persistent fact",
             MemoryType::Fact,
             0.7,
             vec!["tag1".to_string()],
         );
-        mem.save("a1").unwrap();
+        mem.save(&agent).unwrap();
 
         // Load into a fresh instance
         let mut mem2 = AgentMemory::new(config);
-        mem2.load("a1").unwrap();
-        let stats = mem2.get_stats("a1");
+        mem2.load(&agent).unwrap();
+        let stats = mem2.get_stats(&agent);
         assert_eq!(stats.total, 1);
 
-        let entries = mem2.memories.get("a1").unwrap();
+        let entries = mem2.memories.get(agent.as_str()).unwrap();
         assert_eq!(entries[0].content, "persistent fact");
         assert_eq!(entries[0].tags, vec!["tag1".to_string()]);
 

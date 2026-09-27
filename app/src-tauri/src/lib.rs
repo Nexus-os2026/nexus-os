@@ -2974,6 +2974,10 @@ pub mod runtime {
         model_id: String,
         filename: String,
     ) -> Result<String, String> {
+        // P0-002C5B: the repository id and file name are validated grammars and
+        // the models root is the backend's absolute directory.
+        super::model_hub::validate_hf_model_id(&model_id)?;
+        super::model_hub::validate_hf_filename(&filename)?;
         // Read models_dir from registry (lock briefly)
         let models_dir = {
             let registry = state
@@ -2982,6 +2986,9 @@ pub mod runtime {
                 .unwrap_or_else(|p| p.into_inner());
             registry.models_dir().clone()
         };
+        if !models_dir.is_absolute() {
+            return Err("models directory is unavailable".to_string());
+        }
 
         let model_id_clone = model_id.clone();
         let filename_clone = filename.clone();
@@ -3018,14 +3025,18 @@ pub mod runtime {
 
             match &result {
                 Ok(model_path) => {
-                    // Best-effort: generate nexus-model.toml so ModelRegistry can discover it
+                    // Best-effort: generate nexus-model.toml in the model's own
+                    // backend-derived directory so ModelRegistry can discover it
+                    let model_dir =
+                        super::model_hub::model_storage_dir(&models_dir, &model_id_clone);
                     let _ = super::model_hub::generate_model_config(
                         &model_id_clone,
                         &filename_clone,
-                        model_path,
+                        &model_dir.to_string_lossy(),
                     );
-                    // Best-effort: register with Ollama so it appears in Chat model list
-                    let model_file_path = std::path::Path::new(model_path).join(&filename_clone);
+                    // Best-effort: register the downloaded file with Ollama so it
+                    // appears in Chat model list
+                    let model_file_path = std::path::PathBuf::from(model_path);
                     let ollama_name = model_id_clone.replace('/', "--");
                     let _ = super::model_hub::register_downloaded_model_with_ollama(
                         &model_file_path,

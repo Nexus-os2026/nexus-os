@@ -54,8 +54,12 @@ mod download_tests {
         assert!(storage.list_models().unwrap().is_empty());
 
         // Create fake .gguf files
-        std::fs::write(storage.model_path("test-Q4_K_M.gguf"), b"fake-gguf").unwrap();
-        std::fs::write(storage.model_path("another-Q8_0.gguf"), b"data").unwrap();
+        std::fs::write(
+            storage.model_path("test-Q4_K_M.gguf").unwrap(),
+            b"fake-gguf",
+        )
+        .unwrap();
+        std::fs::write(storage.model_path("another-Q8_0.gguf").unwrap(), b"data").unwrap();
         // Non-gguf should be ignored
         std::fs::write(tmp.join("notes.txt"), b"ignore").unwrap();
 
@@ -76,7 +80,11 @@ mod download_tests {
         let _ = std::fs::remove_dir_all(&tmp);
 
         let storage = ModelStorage::with_dir(tmp.clone()).unwrap();
-        std::fs::write(storage.model_path("to-delete-Q4_K_M.gguf"), b"data").unwrap();
+        std::fs::write(
+            storage.model_path("to-delete-Q4_K_M.gguf").unwrap(),
+            b"data",
+        )
+        .unwrap();
         // Also create a .part file
         std::fs::write(tmp.join("to-delete-Q4_K_M.gguf.part"), b"partial").unwrap();
 
@@ -122,8 +130,8 @@ mod download_tests {
         let storage = ModelStorage::with_dir(tmp.clone()).unwrap();
         assert_eq!(storage.total_models_size().unwrap(), 0);
 
-        std::fs::write(storage.model_path("a-Q4_K_M.gguf"), b"12345").unwrap();
-        std::fs::write(storage.model_path("b-Q8_0.gguf"), b"123456789").unwrap();
+        std::fs::write(storage.model_path("a-Q4_K_M.gguf").unwrap(), b"12345").unwrap();
+        std::fs::write(storage.model_path("b-Q8_0.gguf").unwrap(), b"123456789").unwrap();
 
         let total = storage.total_models_size().unwrap();
         assert_eq!(total, 14); // 5 + 9 bytes

@@ -151,6 +151,35 @@ pub fn existing_root(path: &Path) -> Result<(), PathDenied> {
     Ok(())
 }
 
+/// The regular file at a validated relative path beneath `root`, which must be
+/// an existing absolute directory that is not itself a redirect. Every
+/// directory on the way must be a real directory and the target a regular
+/// file; none may be a symbolic link or reparse point.
+pub fn regular_file_beneath(root: &Path, relative: &str) -> Result<PathBuf, PathDenied> {
+    let root_metadata = std::fs::symlink_metadata(root).map_err(|_| PathDenied::InvalidRoot)?;
+    if is_redirect(&root_metadata) {
+        return Err(PathDenied::Redirected);
+    }
+    if !root.is_absolute() || !root_metadata.is_dir() {
+        return Err(PathDenied::InvalidRoot);
+    }
+    validate_relative(relative)?;
+    let components: Vec<&str> = relative.split('/').collect();
+    let mut path = root.to_path_buf();
+    for (index, component) in components.iter().enumerate() {
+        path.push(component);
+        let metadata = std::fs::symlink_metadata(&path).map_err(unavailable)?;
+        if is_redirect(&metadata) {
+            return Err(PathDenied::Redirected);
+        }
+        let last = index + 1 == components.len();
+        if (last && !metadata.is_file()) || (!last && !metadata.is_dir()) {
+            return Err(PathDenied::WrongKind);
+        }
+    }
+    Ok(path)
+}
+
 /// Whether metadata taken without following the final component describes a
 /// symbolic link (Unix) or a reparse point (Windows).
 pub fn is_redirect(metadata: &Metadata) -> bool {

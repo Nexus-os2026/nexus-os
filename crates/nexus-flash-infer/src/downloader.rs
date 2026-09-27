@@ -237,8 +237,12 @@ impl ModelStorage {
     }
 
     /// Path where a model would be stored.
-    pub fn model_path(&self, filename: &str) -> PathBuf {
-        self.base_dir.join(filename)
+    /// The file for a model name beneath the base directory. The name must be
+    /// a single model file name (see [`validate_model_filename`]); it is never
+    /// a path (P0-002C5B).
+    pub fn model_path(&self, filename: &str) -> Result<PathBuf, FlashError> {
+        validate_model_filename(filename)?;
+        Ok(self.base_dir.join(filename))
     }
 
     /// The base directory.
@@ -248,7 +252,7 @@ impl ModelStorage {
 
     /// Delete a downloaded model and any `.part` file.
     pub fn delete_model(&self, filename: &str) -> Result<(), FlashError> {
-        let path = self.model_path(filename);
+        let path = self.model_path(filename)?;
         if path.exists() {
             std::fs::remove_file(&path)
                 .map_err(|e| FlashError::DownloadError(format!("delete failed: {e}")))?;
@@ -270,6 +274,51 @@ impl ModelStorage {
     pub fn total_models_size(&self) -> Result<u64, FlashError> {
         let models = self.list_models()?;
         Ok(models.iter().map(|m| m.file_size_bytes).sum())
+    }
+}
+
+// ── Identifiers (P0-002C5B) ────────────────────────────────────────
+
+/// Whether `name` is a hub name segment: ASCII letters, digits, `.`, `_`,
+/// `-` (and `+` for file names), starting with a letter or digit, no trailing
+/// dot, not a DOS device name, at most `max` bytes. Such a segment is safe as a
+/// file name and as a URL path segment.
+fn hub_name(name: &str, max: usize, plus: bool) -> bool {
+    let bytes = name.as_bytes();
+    let stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
+    let device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(prefix)
+                .is_some_and(|n| n.len() == 1 && n.as_bytes()[0].is_ascii_digit() && n != "0")
+        });
+    !bytes.is_empty()
+        && bytes.len() <= max
+        && bytes[0].is_ascii_alphanumeric()
+        && !name.ends_with('.')
+        && !device
+        && bytes.iter().all(|b| {
+            b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-') || (plus && *b == b'+')
+        })
+}
+
+/// A downloadable model file name: one hub name segment of at most 200 bytes.
+pub fn validate_model_filename(filename: &str) -> Result<(), FlashError> {
+    if hub_name(filename, 200, true) {
+        Ok(())
+    } else {
+        Err(FlashError::DownloadError("invalid model file name".into()))
+    }
+}
+
+/// A Hugging Face repository id: `name` or `owner/name`.
+pub fn validate_hf_repo(hf_repo: &str) -> Result<(), FlashError> {
+    let segments: Vec<&str> = hf_repo.split('/').collect();
+    if segments.len() <= 2 && segments.iter().all(|s| hub_name(s, 96, false)) {
+        Ok(())
+    } else {
+        Err(FlashError::DownloadError(
+            "invalid Hugging Face repository".into(),
+        ))
     }
 }
 
@@ -330,7 +379,7 @@ impl ModelDownloader {
         }
         // Return the first shard — llama.cpp loads from the first file.
         let first = &filenames[0];
-        let path = self.storage.model_path(first);
+        let path = self.storage.model_path(first)?;
         build_local_model(first, &path)
     }
 
@@ -342,11 +391,13 @@ impl ModelDownloader {
         file_count: u32,
         progress_tx: &mpsc::Sender<DownloadProgress>,
     ) -> Result<LocalModel, FlashError> {
+        // P0-002C5B: both values become URL path segments and the name a file.
+        validate_hf_repo(hf_repo)?;
+        let dest = self.storage.model_path(filename)?;
         let url = format!(
             "https://huggingface.co/{}/resolve/main/{}",
             hf_repo, filename
         );
-        let dest = self.storage.model_path(filename);
         let part_path = self.storage.base_dir().join(format!("{filename}.part"));
 
         // Already fully downloaded?
@@ -710,6 +761,55 @@ mod tests {
     use super::*;
 
     #[test]
+    fn p0_002c5b_model_names_and_repositories_are_strict_grammars() {
+        for name in ["model-Q4_K_M.gguf", "Llama-3.2-1B.Q8_0.gguf", "x+y.gguf"] {
+            assert!(validate_model_filename(name).is_ok(), "{name:?}");
+        }
+        for name in [
+            "",
+            "..",
+            ".",
+            "../../escape.gguf",
+            "/etc/passwd",
+            "a/b.gguf",
+            "a\\b.gguf",
+            "C:x.gguf",
+            "x.gguf:ads",
+            "CON",
+            "nul.gguf",
+            "trailing.",
+            "-o",
+            "a b.gguf",
+        ] {
+            assert!(validate_model_filename(name).is_err(), "{name:?}");
+        }
+        for repo in ["gpt2", "bartowski/gemma-2-2b-it-GGUF"] {
+            assert!(validate_hf_repo(repo).is_ok(), "{repo:?}");
+        }
+        for repo in ["", "..", "a/../b", "/abs", "a/b/c", "a?b", "a#b", "a b/c"] {
+            assert!(validate_hf_repo(repo).is_err(), "{repo:?}");
+        }
+    }
+
+    #[test]
+    fn p0_002c5b_hostile_names_never_reach_a_path_or_a_delete() {
+        let base = std::env::temp_dir().join(format!("nexus-flash-c5b-{}", std::process::id()));
+        let models = base.join("models");
+        std::fs::create_dir_all(&models).unwrap();
+        std::fs::write(base.join("victim.gguf"), b"original").unwrap();
+        let storage = ModelStorage::with_dir(models.clone()).unwrap();
+        for name in ["../victim.gguf", "/etc/passwd", "a/../../victim.gguf", ".."] {
+            assert!(storage.model_path(name).is_err(), "{name:?}");
+            assert!(storage.delete_model(name).is_err(), "{name:?}");
+        }
+        assert_eq!(
+            std::fs::read(base.join("victim.gguf")).unwrap(),
+            b"original"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
     fn p0_002c5b_storage_derives_only_from_a_validated_home() {
         for home in ["", ".", "relative/home", "~"] {
             assert!(ModelStorage::for_home(Path::new(home)).is_err(), "{home:?}");
@@ -825,11 +925,15 @@ mod tests {
         for i in 1..=4 {
             let name = format!("Qwen3.5-397B-A17B-UD-IQ3_XXS-{:05}-of-00004.gguf", i);
             let data = vec![0u8; shard_size];
-            std::fs::write(storage.model_path(&name), &data).unwrap();
+            std::fs::write(storage.model_path(&name).unwrap(), &data).unwrap();
         }
 
         // Also create a non-split model
-        std::fs::write(storage.model_path("Llama-3.3-70B-Q4_K_M.gguf"), b"single").unwrap();
+        std::fs::write(
+            storage.model_path("Llama-3.3-70B-Q4_K_M.gguf").unwrap(),
+            b"single",
+        )
+        .unwrap();
 
         let models = storage.list_models().unwrap();
 
@@ -889,7 +993,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         let storage = ModelStorage::with_dir(tmp.clone()).unwrap();
         // Create a fake .gguf file
-        std::fs::write(storage.model_path("test-Q4_K_M.gguf"), b"fake").unwrap();
+        std::fs::write(storage.model_path("test-Q4_K_M.gguf").unwrap(), b"fake").unwrap();
         // Create a non-gguf file (should be ignored)
         std::fs::write(tmp.join("readme.txt"), b"ignore").unwrap();
 

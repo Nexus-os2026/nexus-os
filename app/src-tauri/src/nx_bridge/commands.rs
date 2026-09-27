@@ -193,6 +193,9 @@ fn nx_sessions_dir() -> Result<std::path::PathBuf, String> {
 /// Save the current session.
 #[command]
 pub async fn nx_session_save(name: String, state: State<'_, NxState>) -> Result<String, String> {
+    // P0-002C5B: a session name is an identifier, never a path.
+    nexus_kernel::governed_path::validate_identifier(&name, 64)
+        .map_err(|_| "nx_session_save: invalid session name".to_string())?;
     let app = state.app.lock().await;
     // P0-002C5B: sessions live under the validated identity home.
     let sessions_dir = nx_sessions_dir()?;
