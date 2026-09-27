@@ -9,7 +9,7 @@ bounded checkpoints:
 |---|---|
 | **P0-002C5A** | Make every reachable E1–E5 surface fail closed unless an approved backend-owned authority mechanism already governs it; fix the computer-use EOF approval bug; stabilise the Darwin sealed-spawn fixture; record this inventory and the reachability guard. |
 | **P0-002C5B** | Governed recovery and the remaining straightforward filesystem migrations: every reachable surface deferred by C5A is migrated onto an existing Phase Zero primitive or fails closed (§5). |
-| **P0-002C5C** | A fresh whole-repository audit, repair of every reachable finding, the final recount and the final trust-surface guard (§10). The Final-Gate evidence is in `phase0-final-gate-dossier.md`. |
+| **P0-002C5C** | A fresh whole-repository audit, repair of every reachable finding it could bound (two remain unresolved, §10.8), the final recount and the final trust-surface guard (§10). The Final-Gate evidence is in `phase0-final-gate-dossier.md`. |
 
 The invariant C5 serves: **a path is not authority.** C5C states it in its
 general form: **a string is never authority**, including frontend, model and
@@ -763,7 +763,8 @@ Independent of class:
 - The MCP host, external tools and the A2A client are GOVERNED with
   caller-chosen destinations.
 - `execute_tool`, the nx agent loop and the browser bridge are DENIED.
-- None of the 18 startup items is unresolved.
+- None of the 18 startup items is unresolved as a command or dispatcher. The
+  configuration load reaches the two unresolved filesystem entries below.
 
 **Sites in the desktop closure** (at the recount → after the C5C repairs):
 
@@ -795,17 +796,18 @@ runs through a closed command, the executor or a named latent API. The
 filesystem recount counted such a site as DENIED. Neither convention hides a
 reachable effect.
 
-The two filesystem entries that remain classified E are:
+The two filesystem entries that remain unresolved (E) are:
 
 1. **`config_user_key`** (`kernel/src/config.rs`). `HOME`, `USER`,
    `USERNAME` and `HOSTNAME` are the configuration-encryption key material.
-   This is the Architect-deferred Final-Gate item A. C5C did not change it,
-   and records it in the dossier; it is not counted as an open C5C D/E.
+   The Architect deferred it to the Final Gate (dossier item A), so C5C did
+   not change it. It stays unresolved.
 2. **`EncryptionKey::from_file`** (`kernel/src/crypto.rs`). It reads the
    vault key file named by the configuration's `security.key_file`. Under the
    C5B rule, the path must be absolute and the interface cannot change the
-   security section, so only the operator chooses it. C5C counts it as FIXED
-   operator configuration and asks the Architect to confirm (dossier item E).
+   security section, so only the operator chooses it. C5C proposes classifying
+   it as operator configuration, but it stays unresolved until the Architect
+   decides (dossier item E).
 
 **Outside the desktop:**
 
@@ -830,11 +832,11 @@ The two filesystem entries that remain classified E are:
   unpackaged agent libraries.
 - **Benchmarks:** `benchmarks/` and `benchmarks/conductor-bench`.
 
-**Summary:** after the repairs, unresolved reachable D/E is 0, besides the
-Architect-deferred item A. The vault key file is counted as operator
-configuration, pending the Architect's confirmation (item E). Unguarded latent
-is 0. Every other site is governed, fixed backend state, denied or guarded
-latent.
+**Summary:** after the repairs, two reachable filesystem entries remain
+unresolved (E): the configuration key (item A, deferred to the Final Gate)
+and the vault key file (item E, awaiting the Architect's decision). No other
+reachable D/E remains. Unguarded latent is 0. Every other site is governed,
+fixed backend state, denied or guarded latent.
 
 ### 10.9 Final trust-surface guard
 

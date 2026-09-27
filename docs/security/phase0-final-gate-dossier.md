@@ -255,7 +255,8 @@ all `*_API_KEY` (guard
     override.
   - C5B requires it to be absolute, and the interface cannot change the
     security section.
-  - C5C counts it as operator configuration. **Architect confirmation
+  - C5C proposes treating it as operator configuration. Until the Architect
+    decides, it stays an unresolved E finding. **Architect confirmation
     requested**: that this is an approved operator override, alongside
     `NEXUS_DB_PATH` and `NEXUS_CONFIG_PATH`.
 
