@@ -2668,6 +2668,8 @@ fn p0_002c5c_benchmark_process_sites_stay_benchmark_only() {
 fn p0_002c5c_final_trust_surface_guard_is_complete() {
     let own = include_str!("tests.rs");
     let is_test = |source: &str, name: &str| {
+        // A Windows checkout may carry CRLF line endings.
+        let source = source.replace("\r\n", "\n");
         source.contains(&format!("#[test]\nfn {name}()"))
             || source.contains(&format!("#[test]\n    fn {name}()"))
     };

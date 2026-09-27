@@ -484,10 +484,27 @@ fn p0_002c5c_legacy_mixed_case_files_are_listed_but_never_selected_by_another_sp
         );
     }
     // Only an exact spelling is ever selected.
-    std::fs::write(dir.join("note-1.json"), "{}").unwrap();
+    std::fs::write(dir.join("note-2.json"), "{}").unwrap();
     assert_eq!(
-        identified_file(&state, "notes_get", &dir, "note-1"),
-        Ok(dir.join("note-1.json"))
+        identified_file(&state, "notes_get", &dir, "note-2"),
+        Ok(dir.join("note-2.json"))
+    );
+    // Beside a legacy file, the exact lowercase name is selected where the
+    // filesystem keeps both names apart. Where it folds case (the macOS and
+    // Windows defaults), writing the lowercase name reopens the legacy file,
+    // so the lookup keeps refusing.
+    let both = dir.join("both");
+    std::fs::create_dir(&both).unwrap();
+    std::fs::write(both.join("Note-1.json"), legacy_note).unwrap();
+    std::fs::write(both.join("note-1.json"), "{}").unwrap();
+    let expected = if std::fs::read_dir(&both).unwrap().count() == 2 {
+        Ok(both.join("note-1.json"))
+    } else {
+        Err("notes_get: stored name differs by case".to_string())
+    };
+    assert_eq!(
+        identified_file(&state, "notes_get", &both, "note-1"),
+        expected
     );
     // The legacy files are untouched.
     assert_eq!(
