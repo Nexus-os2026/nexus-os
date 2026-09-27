@@ -32,7 +32,7 @@ use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
 use nexus_kernel::cognitive::PlannedAction;
 use nexus_kernel::computer_control::{
     activate_emergency_kill_switch, analyze_stored_screenshot, capture_and_analyze_screen,
-    capture_and_store_screen, ComputerControlEngine, InputAction, InputControlStatus, ScreenRegion,
+    capture_and_store_screen, ComputerControlEngine, InputControlStatus, ScreenRegion,
 };
 use nexus_kernel::config::{
     load_config, save_config as save_nexus_config, AgentLlmConfig, HardwareConfig, ModelsConfig,
@@ -5273,11 +5273,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn computer_control_execute_action(
-        state: tauri::State<'_, AppState>,
-        action_json: String,
-    ) -> Result<String, String> {
-        super::computer_control_execute_action(state.inner(), action_json)
+    pub(crate) fn computer_control_execute_action() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "computer_control_execute_action",
+            crate::phase0_surface::Closure::OsInput,
+        ))
     }
 
     #[tauri::command]
@@ -5320,12 +5320,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn start_computer_action(
-        state: tauri::State<'_, AppState>,
-        description: String,
-        max_steps: u32,
-    ) -> Result<String, String> {
-        super::start_computer_action(state.inner(), description, max_steps)
+    pub(crate) fn start_computer_action() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "start_computer_action",
+            crate::phase0_surface::Closure::OsInput,
+        ))
     }
 
     #[tauri::command]

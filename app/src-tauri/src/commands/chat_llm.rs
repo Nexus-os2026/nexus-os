@@ -34,7 +34,7 @@ use nexus_kernel::audit::{AuditEvent, AuditTrail, EventType};
 use nexus_kernel::cognitive::PlannedAction;
 use nexus_kernel::computer_control::{
     activate_emergency_kill_switch, analyze_stored_screenshot, capture_and_analyze_screen,
-    capture_and_store_screen, ComputerControlEngine, InputAction, InputControlStatus, ScreenRegion,
+    capture_and_store_screen, ComputerControlEngine, InputControlStatus, ScreenRegion,
 };
 use nexus_kernel::config::{
     load_config, load_current_security_baseline, save_config as save_nexus_config, AgentLlmConfig,

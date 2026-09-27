@@ -154,6 +154,9 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("memory_load", Closure::AmbientResource),
     ("memory_list_agents", Closure::AmbientResource),
     ("mcp2_server_handle", Closure::AmbientResource),
+    // C5C: OS keyboard and mouse input from the interface or a model.
+    ("computer_control_execute_action", Closure::OsInput),
+    ("start_computer_action", Closure::OsInput),
 ];
 
 const LIB_RS: &str = include_str!("../lib.rs");
@@ -326,6 +329,7 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             breed_agents, get_agent_lineage, generate_all_genomes, evolve_population,
             force_evolve_agent, trigger_immune_scan, get_git_repo_status,
             voice_start_listening, voice_pipeline_health, transcribe_push_to_talk,
+            computer_control_execute_action, start_computer_action,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
@@ -370,6 +374,7 @@ fn closure_reasons_are_bounded_and_echo_no_input() {
         Closure::ExternalCliAgent,
         Closure::AgentExecution,
         Closure::AmbientResource,
+        Closure::OsInput,
     ] {
         let reason = closure.reason();
         assert!(reason.contains("Phase Zero"), "{reason}");
@@ -818,6 +823,12 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
     ("ImageGenActuator", "image generation actuator (process)"),
     ("TtsActuator", "speech synthesis actuator (process)"),
     ("SelfEvolutionActuator", "self-evolution actuator"),
+    // P0-002C5C: kernel computer-control OS input (xdotool / osascript
+    // keystrokes and clicks); both desktop commands that built it are closed.
+    (
+        "InputAction",
+        "OS keyboard and mouse input chosen by the interface or a model",
+    ),
     // P0-002C5B: file replay needs a live workspace grant, and the desktop
     // holds none for Time Machine, so it replays agent state and config only.
     (

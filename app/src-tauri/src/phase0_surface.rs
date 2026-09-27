@@ -39,6 +39,10 @@ pub(crate) enum Closure {
     /// working directory, the environment or a developer checkout path, for
     /// which no deterministic Nexus-owned installed location exists.
     AmbientResource,
+    /// C5C: keyboard and mouse input chosen by the interface or a model. No
+    /// approved mechanism authorizes OS input in Phase Zero, and the agent
+    /// executor already refuses screen and input actions.
+    OsInput,
 }
 
 impl Closure {
@@ -60,6 +64,9 @@ impl Closure {
             }
             Self::AmbientResource => {
                 "this feature depends on an ambient resource location and is unavailable in Phase Zero"
+            }
+            Self::OsInput => {
+                "keyboard and mouse input from the interface or a model is unavailable in Phase Zero"
             }
         }
     }
