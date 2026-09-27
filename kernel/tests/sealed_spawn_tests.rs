@@ -472,6 +472,66 @@ fn finalize(child: &mut ResourceLimitedChild) {
     assert!(!report.already_finalized);
 }
 
+// A helper child that exits by itself is finalized only after its exit is
+// observed (bounded), as production's executors and lifecycle do. Reaching EOF
+// on its stdout does not mean its root has exited: Darwin refuses SIGKILL for
+// a group whose root is still inside its exit window, and a single
+// terminate_and_reap then reports that EPERM by design (P0-002C5A).
+fn finalize_exited(child: &mut ResourceLimitedChild) -> std::process::ExitStatus {
+    let deadline = Instant::now() + CLEANUP;
+    let status = loop {
+        if let Some(status) = child.poll_exit().expect("helper exit observation") {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "helper did not exit");
+        thread::sleep(Duration::from_millis(5));
+    };
+    let report = child
+        .terminate_and_reap(deadline)
+        .expect("helper finalization after its observed exit");
+    assert!(!report.already_finalized);
+    assert_eq!(report.status, status);
+    status
+}
+
+// Regression for the fixture pattern above: self-exiting sealed and legacy
+// children, each read to EOF and then finalized exactly once after the
+// observed exit, never report a termination failure.
+#[test]
+fn self_exiting_children_finalize_after_their_observed_exit() {
+    let dirs = dirs();
+    let program = std::env::current_exe().unwrap();
+    for round in 0..24 {
+        let mut child = if round % 2 == 0 {
+            let environment = sealed_environment(&dirs.home, &dirs.temp, "exit");
+            let mut spec = sealed_spec(program.clone(), &dirs.cwd, environment);
+            spec.args = helper_args("sealed_exit");
+            ResourceLimiter::default().spawn_sealed(&spec).unwrap()
+        } else {
+            ResourceLimiter::default()
+                .spawn(&ResourceSpawnSpec {
+                    program: ResourceProgram::Executable {
+                        program: program.clone().into_os_string(),
+                        args: helper_args("sealed_exit"),
+                    },
+                    current_dir: dirs.cwd.clone(),
+                    stdin: ResourceStdin::Null,
+                    stdout: ResourceOutput::Piped,
+                    stderr: ResourceOutput::Null,
+                })
+                .unwrap()
+        };
+        let mut output = String::new();
+        child
+            .take_stdout()
+            .unwrap()
+            .read_to_string(&mut output)
+            .unwrap();
+        assert!(finalize_exited(&mut child).success(), "round {round}");
+        assert!(output.contains("C4C2|EXITED"), "round {round}: {output}");
+    }
+}
+
 // ── Helpers (ignored; exact-name only) ────────────────────────────────────
 
 #[test]
@@ -516,7 +576,7 @@ fn sealed_middle() {
         .unwrap()
         .read_to_string(&mut output)
         .unwrap();
-    child.terminate_and_reap(Instant::now() + CLEANUP).unwrap();
+    assert!(finalize_exited(&mut child).success());
     for line in output.lines().filter_map(marked) {
         println!("C4C2|{line}");
     }
@@ -551,7 +611,7 @@ fn launch_probe(home: &Path, temp: &Path, cwd: &Path) {
         .unwrap()
         .read_to_string(&mut output)
         .unwrap();
-    child.terminate_and_reap(Instant::now() + CLEANUP).unwrap();
+    assert!(finalize_exited(&mut child).success());
     for line in output.lines() {
         let (name, value) = line.split_once('=').expect("NAME=VALUE line");
         println!("C4C2|ENV_NAME|{name}");
@@ -609,6 +669,14 @@ fn sealed_report() {
         println!("C4C2|JOB|{flags}|{memory}|{active}");
     }
     println!("C4C2|DONE");
+    std::io::stdout().flush().unwrap();
+}
+
+// A child that prints one line and exits by itself.
+#[test]
+#[ignore]
+fn sealed_exit() {
+    println!("C4C2|EXITED");
     std::io::stdout().flush().unwrap();
 }
 
