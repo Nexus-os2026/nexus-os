@@ -2560,6 +2560,16 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
                 "{relative}: innerHTML assignment"
             );
         }
+        for forbidden in ["insertAdjacentHTML", "outerHTML =", "document.write"] {
+            assert!(!text.contains(forbidden), "{relative}: {forbidden}");
+        }
+        if text.contains("new Function(") {
+            // The one dynamic import names a fixed module; the dialog plugin
+            // is not installed, so it resolves to nothing.
+            assert_eq!(relative, "src/pages/KnowledgeGraph.tsx");
+            assert_eq!(text.matches("new Function(").count(), 1);
+            assert!(text.contains("importer(\"@tauri-apps/plugin-dialog\")"));
+        }
         // Links and window targets taken from data must be http(s).
         for (at, needle) in text.match_indices("href={") {
             let value = &text[at + needle.len()..];
