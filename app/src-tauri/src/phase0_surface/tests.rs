@@ -13,6 +13,10 @@
 //! removed from `CLOSED_COMMANDS` together with an Architect-approved
 //! authority mechanism, and the inventory
 //! (`docs/security/phase0-c5-authority-inventory.md`) is updated.
+//!
+//! P0-002C5B adds workspace-wide regression guards (at the end of this file)
+//! for its families: governed curl invocations, counted ambient state roots,
+//! counted identifier joins, and serialized records that choose no authority.
 
 use super::{closed, Closure};
 
@@ -763,6 +767,34 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
     ("ImageGenActuator", "image generation actuator (process)"),
     ("TtsActuator", "speech synthesis actuator (process)"),
     ("SelfEvolutionActuator", "self-evolution actuator"),
+    // P0-002C5B: file replay needs a live workspace grant, and the desktop
+    // holds none for Time Machine, so it replays agent state and config only.
+    (
+        "FileAuthority::new(",
+        "Time Machine file replay authority (no desktop grant binding)",
+    ),
+    (".undo_with(", "Time Machine file replay (C5B: latent)"),
+    (".redo_with(", "Time Machine file replay (C5B: latent)"),
+    (
+        "undo_checkpoint_with(",
+        "Time Machine file replay (C5B: latent)",
+    ),
+    (
+        "with_default_path()",
+        "computer-use learning stores falling back to a /tmp home",
+    ),
+    (
+        "poll_platform(",
+        "message polling (Telegram voice notes in shared temp)",
+    ),
+    (
+        "receive_model(",
+        "Nexus Link receive joins a peer-chosen file name",
+    ),
+    (
+        "RetentionBuffer::new(",
+        "audit archive defaulting to shared temp",
+    ),
 ];
 
 /// The only approved construction of the kernel action executor: the Phase
@@ -817,4 +849,827 @@ fn browser_bridge_is_never_started() {
     for source in [session, commands] {
         assert!(!source.contains(".start("), "browser bridge start");
     }
+}
+
+// ── P0-002C5B regression guards ─────────────────────────────────────────
+//
+// These scan the production Rust sources of the whole workspace (every
+// member except the benchmarks, which are outside the desktop closure), not
+// only the desktop crate: the C5B families live in the kernel, connectors and
+// shared crates. Comments and `#[cfg(test)]` / `#[cfg(any(test, ..))]` items
+// are removed first, so a guard counts only compiled production code.
+
+/// Directories that hold no production source: build output, dependencies,
+/// benchmarks, integration tests, examples, benches and fixtures. Dot
+/// directories are skipped as well.
+const NOT_PRODUCTION_DIRS: &[&str] = &[
+    "target",
+    "node_modules",
+    "dist",
+    "benchmarks",
+    "tests",
+    "examples",
+    "benches",
+    "fixtures",
+];
+
+/// (workspace-relative path, production text) of every production Rust
+/// source beneath a `src` directory of the workspace.
+fn workspace_production_sources() -> Vec<(String, String)> {
+    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<(String, String)>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !name.starts_with('.') && !NOT_PRODUCTION_DIRS.contains(&name.as_str()) {
+                    walk(root, &path, out);
+                }
+                continue;
+            }
+            let relative = path
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            let in_src = relative.split('/').any(|component| component == "src");
+            if in_src
+                && name.ends_with(".rs")
+                && !name.ends_with("tests.rs")
+                && !name.ends_with("_test.rs")
+                && name != "build.rs"
+            {
+                let text = std::fs::read_to_string(&path).unwrap();
+                out.push((relative, production_text(&text)));
+            }
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut out = Vec::new();
+    walk(&root, &root, &mut out);
+    assert!(out.len() > 500, "workspace sources not found");
+    out
+}
+
+/// End of the string, raw-string or char literal starting at `i`, if one
+/// starts there (a lifetime is not a literal).
+fn literal_end(b: &[u8], i: usize) -> Option<usize> {
+    let ident = |at: usize| b[at].is_ascii_alphanumeric() || b[at] == b'_';
+    match b[i] {
+        b'"' => {
+            let mut j = i + 1;
+            while j < b.len() {
+                match b[j] {
+                    b'\\' => j += 2,
+                    b'"' => return Some(j + 1),
+                    _ => j += 1,
+                }
+            }
+            Some(b.len())
+        }
+        b'r' if i == 0 || !ident(i - 1) || (b[i - 1] == b'b' && (i == 1 || !ident(i - 2))) => {
+            let mut j = i + 1;
+            while j < b.len() && b[j] == b'#' {
+                j += 1;
+            }
+            if j >= b.len() || b[j] != b'"' {
+                return None;
+            }
+            let hashes = j - i - 1;
+            let mut k = j + 1;
+            while k < b.len() {
+                if b[k] == b'"' && b[k + 1..].iter().take_while(|&&c| c == b'#').count() >= hashes {
+                    return Some(k + 1 + hashes);
+                }
+                k += 1;
+            }
+            Some(b.len())
+        }
+        b'\'' if i + 2 < b.len() => {
+            if b[i + 1] == b'\\' {
+                let close = b[i + 3..].iter().position(|&c| c == b'\'')?;
+                return Some(i + 3 + close + 1);
+            }
+            let width = match b[i + 1] {
+                0x00..=0x7f => 1,
+                0xc0..=0xdf => 2,
+                0xe0..=0xef => 3,
+                _ => 4,
+            };
+            (b.get(i + 1 + width) == Some(&b'\'')).then_some(i + 2 + width)
+        }
+        _ => None,
+    }
+}
+
+/// End of the comment starting at `i`, if one starts there. A line comment
+/// ends before its newline; block comments nest.
+fn comment_end(b: &[u8], i: usize) -> Option<usize> {
+    if b[i..].starts_with(b"//") {
+        return Some(
+            b[i..]
+                .iter()
+                .position(|&c| c == b'\n')
+                .map_or(b.len(), |at| i + at),
+        );
+    }
+    if !b[i..].starts_with(b"/*") {
+        return None;
+    }
+    let (mut depth, mut j) = (0usize, i);
+    while j < b.len() {
+        if b[j..].starts_with(b"/*") {
+            depth += 1;
+            j += 2;
+        } else if b[j..].starts_with(b"*/") {
+            depth -= 1;
+            j += 2;
+            if depth == 0 {
+                return Some(j);
+            }
+        } else {
+            j += 1;
+        }
+    }
+    Some(b.len())
+}
+
+/// End of what a `#[cfg(..)]` attribute ending at `i` applies to. An item
+/// (or statement) ends at its `;` outside any bracket or at the brace closing
+/// its block. A field, variant, match arm or argument also ends at its `,`,
+/// or just before the bracket closing the enclosing list.
+fn item_end(b: &[u8], mut i: usize) -> usize {
+    let first = b[i..]
+        .iter()
+        .position(|c| !c.is_ascii_whitespace())
+        .map_or(b.len(), |at| i + at);
+    let word: String = b[first..]
+        .iter()
+        .take_while(|c| c.is_ascii_alphanumeric() || **c == b'_')
+        .map(|&c| c as char)
+        .collect();
+    let item = b.get(first) == Some(&b'#')
+        || [
+            "mod",
+            "fn",
+            "pub",
+            "use",
+            "impl",
+            "struct",
+            "enum",
+            "const",
+            "static",
+            "type",
+            "trait",
+            "macro_rules",
+            "async",
+            "unsafe",
+            "extern",
+            "let",
+        ]
+        .contains(&word.as_str());
+    let (mut nesting, mut braces) = (0usize, 0usize);
+    while i < b.len() {
+        if let Some(end) = literal_end(b, i).or_else(|| comment_end(b, i)) {
+            i = end;
+            continue;
+        }
+        let outermost = nesting == 0 && braces == 0;
+        match b[i] {
+            b'(' | b'[' => nesting += 1,
+            b')' | b']' if outermost => return i,
+            b')' | b']' => nesting = nesting.saturating_sub(1),
+            b'{' => braces += 1,
+            b'}' if braces == 0 => return i,
+            b'}' => {
+                braces -= 1;
+                if braces == 0 && nesting == 0 {
+                    return i + 1;
+                }
+            }
+            b';' if outermost => return i + 1,
+            b',' if outermost && !item => return i + 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    b.len()
+}
+
+/// Production text of a Rust source: comments removed, and every item under
+/// `#[cfg(test)]` or `#[cfg(any(test, ..))]` removed. Literals are kept and
+/// are never read as delimiters or attributes.
+fn production_text(src: &str) -> String {
+    let b = src.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if let Some(end) = literal_end(b, i) {
+            out.extend_from_slice(&b[i..end]);
+            i = end;
+        } else if let Some(end) = comment_end(b, i) {
+            out.push(b' ');
+            i = end;
+        } else if b[i..].starts_with(b"#[cfg(test)]") || b[i..].starts_with(b"#[cfg(any(test") {
+            let attribute = i + b[i..].windows(2).position(|w| w == b")]").unwrap() + 2;
+            i = item_end(b, attribute);
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).expect("cuts fall on ASCII boundaries")
+}
+
+#[test]
+fn production_text_drops_comments_and_test_items_but_keeps_literals() {
+    let src = concat!(
+        "fn a() { let s = \"// not a comment #[cfg(test)]\"; } // tail\n",
+        "/* block /* nested */ */ fn b<'a>(x: &'a str) -> char { '}' }\n",
+        "#[cfg(test)]\nmod tests { fn t() { let _ = \"}\"; } }\n",
+        "#[cfg(any(test, feature = \"x\"))]\npub fn helper() -> [u8; 2] { [1, 2] }\n",
+        "#[cfg(test)]\nuse std::fmt;\n",
+        "fn c() -> &'static str { r#\"raw \" // kept\"# }\n",
+        "fn d() -> S { S { #[cfg(test)] probe: 1, kept_field: 2 } }\n",
+        "fn e(x: u8) { match x { #[cfg(test)] 0 => gone(), _ => kept_arm() } }\n",
+    );
+    let text = production_text(src);
+    assert!(text.contains("\"// not a comment #[cfg(test)]\""), "{text}");
+    assert!(!text.contains("tail") && !text.contains("nested"), "{text}");
+    assert!(
+        text.contains("fn b<'a>(x: &'a str) -> char { '}' }"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("mod tests") && !text.contains("helper"),
+        "{text}"
+    );
+    assert!(!text.contains("std::fmt"), "{text}");
+    assert!(text.contains("r#\"raw \" // kept\"#"), "{text}");
+    assert!(
+        !text.contains("probe") && text.contains("kept_field: 2 } }"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("gone") && text.contains("_ => kept_arm() } }"),
+        "{text}"
+    );
+}
+
+/// Every production curl invocation of the workspace, per file. Each one
+/// takes caller, model, configuration or provider values only as data: the
+/// file must start curl with `-q` and an http(s)-only protocol allowlist
+/// (the `CURL_HTTP_ONLY`/`CURL_HTTPS_ONLY` constants or literal `--proto`),
+/// put the URL after `--`, send bodies with `--data-raw` or the fixed
+/// `--data-binary @-` stdin form, and use no file-reading or config option.
+const CURL_SITES: &[(&str, usize)] = &[
+    ("app/src-tauri/src/commands/apps.rs", 1),
+    ("app/src-tauri/src/commands/chat_llm.rs", 2),
+    ("connectors/core/src/validation.rs", 1),
+    ("connectors/llm/src/model_hub.rs", 4),
+    ("connectors/llm/src/providers/mod.rs", 2),
+    ("connectors/llm/src/providers/ollama.rs", 3),
+    ("connectors/web/src/reader.rs", 1),
+    ("connectors/web/src/search.rs", 2),
+    (
+        "crates/nexus-capability-measurement/src/evaluation/nim_client.rs",
+        1,
+    ),
+    (
+        "crates/nexus-capability-measurement/src/evaluation/openrouter_client.rs",
+        1,
+    ),
+    ("crates/nexus-external-tools/src/adapter.rs", 1),
+    ("crates/nexus-mcp/src/tools.rs", 2),
+    ("crates/nexus-memory/src/embedding.rs", 1),
+    ("crates/nexus-perception/src/vision.rs", 1),
+    ("kernel/src/actuators/api.rs", 1),
+    ("kernel/src/actuators/image_gen.rs", 3),
+    ("kernel/src/actuators/tts.rs", 1),
+    ("kernel/src/actuators/web.rs", 2),
+    ("kernel/src/computer_control.rs", 2),
+    ("kernel/src/protocols/a2a_client.rs", 2),
+    ("protocols/src/mcp_client.rs", 1),
+];
+
+/// curl options that read a file, a config or form data, or upload a file.
+const CURL_FILE_OPTIONS: &[&str] = &[
+    "\"-d\"",
+    "\"--data\"",
+    "\"--data-ascii\"",
+    "\"--data-urlencode\"",
+    "\"-F\"",
+    "\"--form\"",
+    "\"-T\"",
+    "\"--upload-file\"",
+    "\"-K\"",
+    "\"--config\"",
+    "\"--url\"",
+];
+
+/// C5B URL / curl family: no caller value becomes curl syntax, a `file:`
+/// URL or an `@file` body anywhere in the workspace's production code.
+#[test]
+fn p0_002c5b_curl_invocations_keep_caller_values_out_of_curl_syntax() {
+    let mut found = Vec::new();
+    for (relative, text) in workspace_production_sources() {
+        let invocations =
+            text.matches("Command::new(\"curl\")").count() + text.matches("(\"curl\",").count();
+        if invocations == 0 {
+            continue;
+        }
+        found.push((relative.clone(), invocations));
+        for option in CURL_FILE_OPTIONS {
+            assert!(!text.contains(option), "{relative}: curl {option}");
+        }
+        assert_eq!(
+            text.matches("\"--data-binary\"").count(),
+            text.matches("\"@-\"").count(),
+            "{relative}: --data-binary must read only the fixed stdin marker"
+        );
+        let first_q = text.matches("\"-q\"").count() + text.matches("CURL_HTTP").count();
+        let allowlisted = text.matches("CURL_HTTP").count() + text.matches("\"--proto\"").count();
+        let terminated = text.matches("\"--\"").count();
+        for (what, count) in [
+            ("-q first", first_q),
+            ("protocol allowlist", allowlisted),
+            ("-- before the URL", terminated),
+        ] {
+            assert!(count >= invocations, "{relative}: {what}");
+        }
+    }
+    let expected: Vec<_> = CURL_SITES
+        .iter()
+        .map(|(file, count)| (file.to_string(), *count))
+        .collect();
+    assert_eq!(
+        found, expected,
+        "a new curl site must be governed and classified"
+    );
+}
+
+/// Ambient per-user roots: HOME and platform directories, the shared temp
+/// directory and the working directory.
+const STATE_ROOT_NEEDLES: &[&str] = &[
+    "var(\"HOME\")",
+    "var_os(\"HOME\")",
+    "home_dir()",
+    "dirs::",
+    "\"~/",
+    "temp_dir()",
+    "\"/tmp",
+    "PathBuf::from(\".\")",
+    "\".\".into()",
+];
+
+/// Every remaining production use of an ambient root, exactly counted, and
+/// why it grants no reachable authority. Desktop state derives from the
+/// validated identity home (`nexus_kernel::identity_home`) instead.
+const APPROVED_STATE_ROOTS: &[(&str, &str, usize, &str)] = &[
+    (
+        "app/src-tauri/src/oracle_runtime.rs",
+        "var_os(\"HOME\")",
+        1,
+        "validated identity-home policy (delegates to the kernel)",
+    ),
+    (
+        "app/src-tauri/src/oracle_runtime.rs",
+        "home_dir()",
+        1,
+        "Windows native profile only when HOME is absent",
+    ),
+    (
+        "app/src-tauri/src/oracle_runtime.rs",
+        "dirs::",
+        1,
+        "Windows native profile only when HOME is absent",
+    ),
+    (
+        "kernel/src/identity_home.rs",
+        "var_os(\"HOME\")",
+        1,
+        "the validated identity-home policy",
+    ),
+    (
+        "kernel/src/identity_home.rs",
+        "home_dir()",
+        1,
+        "Windows native profile only when HOME is absent",
+    ),
+    (
+        "kernel/src/identity_home.rs",
+        "dirs::",
+        1,
+        "Windows native profile only when HOME is absent",
+    ),
+    (
+        "kernel/src/config.rs",
+        "var_os(\"HOME\")",
+        1,
+        "final gate: configuration key derivation input",
+    ),
+    (
+        "kernel/src/hardware_security/tee_backend.rs",
+        "temp_dir()",
+        1,
+        "final gate: unreached TEE key directory",
+    ),
+    (
+        "agents/web-builder/src/checkpoint.rs",
+        "var(\"HOME\")",
+        2,
+        "latent legacy Builder checkpoints (E2)",
+    ),
+    (
+        "agents/web-builder/src/checkpoint.rs",
+        "\".\".into()",
+        2,
+        "latent legacy Builder checkpoints (E2)",
+    ),
+    (
+        "agents/web-builder/src/project.rs",
+        "var(\"HOME\")",
+        1,
+        "latent legacy Builder project listing (E2)",
+    ),
+    (
+        "agents/web-builder/src/project.rs",
+        "\".\".into()",
+        1,
+        "latent legacy Builder project listing (E2)",
+    ),
+    (
+        "connectors/llm/src/providers/codex_cli.rs",
+        "var(\"HOME\")",
+        1,
+        "latent Codex auth check (its only caller is closed)",
+    ),
+    (
+        "connectors/messaging/src/telegram.rs",
+        "temp_dir()",
+        1,
+        "latent: the desktop never polls the message gateway",
+    ),
+    (
+        "control/src/vision/loop.rs",
+        "temp_dir()",
+        1,
+        "latent: no desktop caller of the control vision loop",
+    ),
+    (
+        "crates/nexus-browser-agent/src/actions.rs",
+        "\"/tmp",
+        1,
+        "latent: the browser bridge is never started",
+    ),
+    (
+        "crates/nexus-computer-use/src/learning/memory.rs",
+        "var(\"HOME\")",
+        1,
+        "latent with_default_path (the desktop passes an identity-home path)",
+    ),
+    (
+        "crates/nexus-computer-use/src/learning/memory.rs",
+        "\"/tmp",
+        1,
+        "latent with_default_path (the desktop passes an identity-home path)",
+    ),
+    (
+        "crates/nexus-computer-use/src/learning/pattern.rs",
+        "var(\"HOME\")",
+        1,
+        "latent with_default_path (the desktop passes an identity-home path)",
+    ),
+    (
+        "crates/nexus-computer-use/src/learning/pattern.rs",
+        "\"/tmp",
+        1,
+        "latent with_default_path (the desktop passes an identity-home path)",
+    ),
+    (
+        "crates/nexus-swarm/src/providers/codex_cli.rs",
+        "home_dir()",
+        1,
+        "swarm Codex provider, never registered by the desktop",
+    ),
+    (
+        "crates/nexus-swarm/src/providers/codex_cli.rs",
+        "dirs::",
+        1,
+        "swarm Codex provider, never registered by the desktop",
+    ),
+    (
+        "crates/nexus-swarm/src/providers/codex_cli.rs",
+        "\"~/",
+        1,
+        "swarm Codex provider, never registered by the desktop",
+    ),
+    (
+        "crates/nexus-world-simulation/src/engine.rs",
+        "\"/tmp",
+        1,
+        "a configuration string the simulator never opens",
+    ),
+    (
+        "kernel/src/audit/retention.rs",
+        "\"/tmp",
+        1,
+        "latent audit archive (benchmarks only)",
+    ),
+    (
+        "nexus-code/src/app.rs",
+        "dirs::",
+        1,
+        "an absolute platform data directory or none",
+    ),
+    (
+        "nexus-code/src/config.rs",
+        "dirs::",
+        1,
+        "Nexus Code user config read from the platform config directory (C5C inventory)",
+    ),
+    (
+        "nexus-code/src/commands/memory_cmd.rs",
+        "dirs::",
+        4,
+        "latent Nexus Code slash command (nx chat is closed)",
+    ),
+    (
+        "nexus-code/src/commands/memory_cmd.rs",
+        "PathBuf::from(\".\")",
+        4,
+        "latent Nexus Code slash command (nx chat is closed)",
+    ),
+    (
+        "nexus-code/src/commands/session.rs",
+        "dirs::",
+        1,
+        "latent Nexus Code slash command (nx chat is closed)",
+    ),
+    (
+        "nexus-code/src/commands/session.rs",
+        "PathBuf::from(\".\")",
+        1,
+        "latent Nexus Code slash command (nx chat is closed)",
+    ),
+    (
+        "nexus-code/src/llm/providers/claude_cli.rs",
+        "PathBuf::from(\".\")",
+        1,
+        "Claude CLI provider, never registered by the desktop",
+    ),
+    (
+        "nexus-code/src/tools/glob.rs",
+        "\".\".into()",
+        2,
+        "latent nexus_code::tools",
+    ),
+    (
+        "nexus-code/src/tools/screen_analyze.rs",
+        "home_dir()",
+        1,
+        "latent nexus_code::tools",
+    ),
+    (
+        "nexus-code/src/tools/screen_analyze.rs",
+        "dirs::",
+        1,
+        "latent nexus_code::tools",
+    ),
+    (
+        "nexus-code/src/tools/screen_analyze.rs",
+        "temp_dir()",
+        1,
+        "latent nexus_code::tools",
+    ),
+    (
+        "nexus-code/src/tools/screen_capture.rs",
+        "home_dir()",
+        1,
+        "latent nexus_code::tools",
+    ),
+    (
+        "nexus-code/src/tools/screen_capture.rs",
+        "dirs::",
+        1,
+        "latent nexus_code::tools",
+    ),
+    (
+        "nexus-code/src/tools/screen_capture.rs",
+        "PathBuf::from(\".\")",
+        1,
+        "latent nexus_code::tools",
+    ),
+    (
+        "nexus-code/src/main.rs",
+        "\"/tmp",
+        2,
+        "the nx terminal binary, outside the desktop",
+    ),
+    (
+        "cli/src/lib.rs",
+        "var(\"HOME\")",
+        1,
+        "the nexus CLI, outside the desktop",
+    ),
+    (
+        "cli/src/lib.rs",
+        "\"/tmp",
+        1,
+        "the nexus CLI, outside the desktop",
+    ),
+    (
+        "cli/src/router.rs",
+        "var_os(\"HOME\")",
+        1,
+        "the nexus CLI, outside the desktop",
+    ),
+    (
+        "cli/src/router.rs",
+        "\"~/",
+        4,
+        "the nexus CLI, outside the desktop",
+    ),
+    (
+        "crates/nexus-ui-repair/src/driver/loop_.rs",
+        "var(\"HOME\")",
+        1,
+        "developer tool outside the desktop",
+    ),
+    (
+        "crates/nexus-ui-repair/src/driver/loop_.rs",
+        "\"/tmp",
+        1,
+        "developer tool outside the desktop",
+    ),
+    (
+        "crates/nexus-ui-repair/src/governance/acl.rs",
+        "var(\"HOME\")",
+        1,
+        "developer tool outside the desktop",
+    ),
+    (
+        "crates/nexus-ui-repair/src/governance/xvfb_session.rs",
+        "\"/tmp",
+        1,
+        "developer tool outside the desktop",
+    ),
+];
+
+/// C5B identity-home and private-temp families: no production code reads
+/// HOME, a platform directory, the shared temp directory or `.` as a state
+/// root except the counted, classified uses above.
+#[test]
+fn p0_002c5b_state_roots_take_no_home_cwd_or_shared_temp_fallback() {
+    for (relative, text) in workspace_production_sources() {
+        for needle in STATE_ROOT_NEEDLES {
+            let found = text.matches(needle).count();
+            let approved = APPROVED_STATE_ROOTS
+                .iter()
+                .find(|(file, approved, _, _)| *file == relative && approved == needle)
+                .map_or(0, |(_, _, count, _)| *count);
+            assert_eq!(found, approved, "{relative}: {needle}");
+        }
+    }
+}
+
+/// C5B identifier-join family: the migrated stores name files only through
+/// their grammars, and the pre-C5B raw joins stay gone.
+#[test]
+fn p0_002c5b_identifier_joins_stay_behind_their_grammars() {
+    let sources: std::collections::HashMap<_, _> =
+        workspace_production_sources().into_iter().collect();
+    let text = |file: &str| {
+        sources
+            .get(file)
+            .unwrap_or_else(|| panic!("{file} not found"))
+    };
+    // Joins that remain sit behind a grammar or an allowlist, each counted;
+    // the pre-C5B spellings that bypassed them stay gone.
+    for (file, spelling, count) in [
+        // identified_file, after validate_identifier.
+        (
+            "app/src-tauri/src/commands/apps.rs",
+            "join(format!(\"{id}.json\"))",
+            1,
+        ),
+        // read_messaging_token: an allowlisted &'static str platform.
+        (
+            "app/src-tauri/src/commands/apps.rs",
+            "join(format!(\"{platform}.json\"))",
+            1,
+        ),
+        // gmail/outlook only: an allowlist match or a &'static str.
+        (
+            "app/src-tauri/src/commands/apps.rs",
+            "join(format!(\"{provider}_tokens.json\"))",
+            3,
+        ),
+        // nx_session_save, after validate_identifier.
+        (
+            "app/src-tauri/src/nx_bridge/commands.rs",
+            "join(format!(\"{}.json\", name))",
+            1,
+        ),
+        // generate_model_config, after validate_hf_filename.
+        ("connectors/llm/src/model_hub.rs", "join(filename)", 1),
+        // ModelStorage::model_path, after validate_model_filename.
+        (
+            "crates/nexus-flash-infer/src/downloader.rs",
+            "base_dir.join(filename)",
+            1,
+        ),
+        ("connectors/llm/src/model_hub.rs", "replace('/', \"__\")", 0),
+        (
+            "connectors/llm/src/nexus_link.rs",
+            "models_dir).join(filename)",
+            0,
+        ),
+        ("app/src-tauri/src/lib.rs", "join(&filename_clone)", 0),
+        ("sdk/src/memory.rs", "format!(\"{agent_id}.json\")", 0),
+    ] {
+        assert_eq!(
+            text(file).matches(spelling).count(),
+            count,
+            "{file}: {spelling}"
+        );
+    }
+    for (file, required, at_least) in [
+        ("app/src-tauri/src/commands/apps.rs", "identified_file(", 6),
+        ("app/src-tauri/src/commands/apps.rs", "storage_stem(", 2),
+        (
+            "app/src-tauri/src/nx_bridge/commands.rs",
+            "validate_identifier(",
+            1,
+        ),
+        (
+            "connectors/llm/src/model_hub.rs",
+            "validate_hf_model_id(",
+            2,
+        ),
+        (
+            "connectors/llm/src/model_hub.rs",
+            "validate_hf_filename(",
+            2,
+        ),
+        (
+            "connectors/llm/src/nexus_link.rs",
+            "regular_file_beneath(",
+            1,
+        ),
+        (
+            "crates/nexus-flash-infer/src/downloader.rs",
+            "validate_model_filename(",
+            2,
+        ),
+        ("sdk/src/memory.rs", "Uuid::parse_str(", 1),
+    ] {
+        let found = text(file).matches(required).count();
+        assert!(found >= at_least, "{file}: {required} {found} < {at_least}");
+    }
+}
+
+/// C5B serialized-record and consent-policy families: a stored path chooses
+/// no policy, queue, key or replay target.
+#[test]
+fn p0_002c5b_serialized_records_choose_no_authority() {
+    for (relative, text) in workspace_production_sources() {
+        for needle in ["ConsentPolicyEngine::load(", "ApprovalQueue::file_backed("] {
+            assert!(!text.contains(needle), "{relative}: {needle}");
+        }
+    }
+    // The consent runtime refuses a manifest path before touching anything.
+    let consent = production_text(include_str!("../../../../kernel/src/consent.rs"));
+    let at = consent
+        .find("pub fn from_manifest(")
+        .expect("ConsentRuntime::from_manifest");
+    let open = at + consent[at..].find('{').unwrap();
+    let body = without_whitespace(&consent[open + 1..block_end(&consent, open) - 1]);
+    assert!(
+        body.starts_with("ifconsent_policy_path.is_some(){returnErr(AgentError::ManifestError(crate::manifest::CONSENT_POLICY_PATH_REFUSED.to_string(),));}"),
+        "{body}"
+    );
+    for manifest in [
+        "name = \"a\"\nversion = \"1\"\ncapabilities = [\"llm.query\"]\nfuel_budget = 10\nconsent_policy_path = \"/etc/nexus/consent.toml\"\n",
+        "name = \"a\"\nversion = \"1\"\ncapabilities = [\"llm.query\"]\nfuel_budget = 10\nconsent_policy_path = \"../consent.toml\"\n",
+    ] {
+        assert!(nexus_kernel::manifest::parse_manifest(manifest).is_err());
+    }
+    // Interface config saves cannot choose the vault key source.
+    let chat = production_text(include_str!("../commands/chat_llm.rs"));
+    let at = chat
+        .find("pub(crate) fn save_config(")
+        .expect("save_config");
+    let open = at + chat[at..].find('{').unwrap();
+    let body = without_whitespace(&chat[open + 1..block_end(&chat, open) - 1]);
+    let check = body
+        .find("security_unchanged(state,&current,&config.security)?;")
+        .expect("save_config checks the security section");
+    assert!(check < body.find("save_nexus_config(").unwrap(), "{body}");
+    // No production producer records Time Machine file entries.
+    let conductor = production_text(include_str!("../../../../agents/conductor/src/lib.rs"));
+    assert!(!conductor.contains("record_file_"));
 }
