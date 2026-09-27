@@ -124,6 +124,9 @@ pub struct BackupMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestoreResult {
     pub backup_id: String,
+    /// Name of the new directory, beneath the restore root, holding the
+    /// restored `data/` and `config/` trees.
+    pub restore_dir: String,
     pub restored_files: Vec<String>,
     pub warnings: Vec<String>,
 }
@@ -299,7 +302,9 @@ pub fn create_backup(
 
     // Append data files.
     for (src_path, archive_rel) in &files_to_backup {
-        if src_path.is_file() {
+        let is_file = std::fs::symlink_metadata(src_path)
+            .is_ok_and(|m| m.is_file() && !crate::governed_path::is_redirect(&m));
+        if is_file {
             let data = std::fs::read(src_path)?;
             let mut header = tar::Header::new_gnu();
             header.set_size(data.len() as u64);
@@ -361,8 +366,15 @@ fn collect_backup_files(
     for entry in entries {
         let entry = entry?;
         let path = entry.path();
+        // P0-002C5B: the file type is read without following links, so a
+        // symbolic link inside the data directory never pulls outside files
+        // into a backup; links are skipped.
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() || !(file_type.is_dir() || file_type.is_file()) {
+            continue;
+        }
 
-        if path.is_dir() {
+        if file_type.is_dir() {
             // Skip backup directory itself and temp files.
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if name == "backups" || name.starts_with('.') {
@@ -397,11 +409,55 @@ fn collect_backup_files(
 
 // ── Restore Backup ─────────────────────────────────────────────────────
 
-/// Restore a Nexus OS backup archive.
+/// Bounds on what one restore will extract.
+#[derive(Debug, Clone, Copy)]
+struct RestoreLimits {
+    entries: usize,
+    entry_bytes: u64,
+    total_bytes: u64,
+}
+
+const RESTORE_LIMITS: RestoreLimits = RestoreLimits {
+    entries: 65_536,
+    entry_bytes: 2 * 1024 * 1024 * 1024,
+    total_bytes: 8 * 1024 * 1024 * 1024,
+};
+
+/// Largest `backup-metadata.json` a restore will read.
+const MAX_METADATA_BYTES: u64 = 1024 * 1024;
+
+/// Restore a Nexus OS backup archive into a new directory beneath
+/// `restore_root`, which the backend selects and which must be an existing
+/// canonical directory (P0-002C5B).
+///
+/// An archive entry name never chooses a location outside that directory.
+/// Every entry is validated before anything is written:
+/// - it must be a regular file; symbolic links, hard links, devices, FIFOs,
+///   directories and every other entry type are refused;
+/// - it must be `backup-metadata.json`, `config/config.toml` or `data/<path>`,
+///   where the whole name is a portable relative path (no absolute, prefixed,
+///   drive, UNC, `..`, `.`, empty, backslash or alternate-data-stream form);
+/// - names may not repeat or alias each other, even by case, and the entry
+///   count and sizes are bounded.
+///
+/// The entries are then written into a fresh `restore-<uuid>` directory created
+/// exclusively beneath the root (owner-only on Unix), each file created
+/// exclusively, so nothing that already exists is followed or overwritten. On
+/// any failure that directory is removed. Moving restored data into place is
+/// left to the caller.
 pub fn restore_backup(
     archive_path: &Path,
-    data_dir: &Path,
+    restore_root: &Path,
     encryption_key: Option<&EncryptionKey>,
+) -> Result<RestoreResult, BackupError> {
+    restore_with_limits(archive_path, restore_root, encryption_key, RESTORE_LIMITS)
+}
+
+fn restore_with_limits(
+    archive_path: &Path,
+    restore_root: &Path,
+    encryption_key: Option<&EncryptionKey>,
+    limits: RestoreLimits,
 ) -> Result<RestoreResult, BackupError> {
     if !archive_path.exists() {
         return Err(BackupError::NotFound(format!(
@@ -409,6 +465,8 @@ pub fn restore_backup(
             archive_path.display()
         )));
     }
+    crate::governed_path::existing_root(restore_root)
+        .map_err(|_| restore_denied("restore root must be an existing canonical directory"))?;
 
     // Read the archive (decrypt if needed).
     let raw = std::fs::read(archive_path)?;
@@ -423,69 +481,168 @@ pub fn restore_backup(
         raw
     };
 
-    // Extract the archive from in-memory bytes.
-    let decoder = GzDecoder::new(archive_bytes.as_slice());
-    let mut archive = tar::Archive::new(decoder);
+    // First pass: validate every entry; nothing is written.
+    let (backup_id, restored_files) = plan_restore(&archive_bytes, limits)?;
 
-    let mut restored_files = Vec::new();
-    let mut warnings = Vec::new();
-    let mut backup_id = String::new();
-
-    let entries = archive
-        .entries()
-        .map_err(|e| BackupError::Archive(e.to_string()))?;
-
-    for entry_result in entries {
-        let mut entry = entry_result.map_err(|e| BackupError::Archive(e.to_string()))?;
-        let entry_path = entry
-            .path()
-            .map_err(|e| BackupError::Archive(e.to_string()))?
-            .to_path_buf();
-        let entry_str = entry_path.to_string_lossy().to_string();
-
-        if entry_str == "backup-metadata.json" {
-            let mut meta_json = Vec::new();
-            entry
-                .read_to_end(&mut meta_json)
-                .map_err(|e| BackupError::Archive(e.to_string()))?;
-            if let Ok(meta) = serde_json::from_slice::<BackupMetadata>(&meta_json) {
-                backup_id = meta.id;
-            }
-            continue;
-        }
-
-        // Strip "data/" prefix and write to data_dir, or "config/" prefix.
-        let dest = if let Some(rel) = entry_str.strip_prefix("data/") {
-            data_dir.join(rel)
-        } else if let Some(rel) = entry_str.strip_prefix("config/") {
-            let config_dir = crate::config::config_path()
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| data_dir.to_path_buf());
-            config_dir.join(rel)
-        } else {
-            warnings.push(format!("skipped unknown entry: {entry_str}"));
-            continue;
-        };
-
-        if let Some(parent) = dest.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-
-        let mut data = Vec::new();
-        entry
-            .read_to_end(&mut data)
-            .map_err(|e| BackupError::Archive(e.to_string()))?;
-        std::fs::write(&dest, &data)?;
-
-        restored_files.push(entry_str);
+    // Second pass: write into a fresh directory, created exclusively.
+    let restore_dir = format!("restore-{}", Uuid::new_v4());
+    let target_dir = restore_root.join(&restore_dir);
+    let mut builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(&target_dir)?;
+    if let Err(error) = write_restore(&archive_bytes, &target_dir, limits) {
+        let _ = std::fs::remove_dir_all(&target_dir);
+        return Err(error);
     }
 
     Ok(RestoreResult {
         backup_id,
+        restore_dir,
         restored_files,
-        warnings,
+        warnings: Vec::new(),
     })
+}
+
+fn restore_denied(reason: &str) -> BackupError {
+    BackupError::Restore(reason.to_string())
+}
+
+fn archive_error(e: std::io::Error) -> BackupError {
+    BackupError::Archive(e.to_string())
+}
+
+/// The validated name of a restorable entry, or `None` for the metadata entry.
+fn restorable_name<R: Read>(entry: &tar::Entry<'_, R>) -> Result<Option<String>, BackupError> {
+    if entry.header().entry_type() != tar::EntryType::Regular {
+        return Err(restore_denied("archive entry is not a regular file"));
+    }
+    let name = std::str::from_utf8(&entry.path_bytes())
+        .map_err(|_| restore_denied("archive entry name is not valid UTF-8"))?
+        .to_string();
+    if name == "backup-metadata.json" {
+        return Ok(None);
+    }
+    let allowed = name == "config/config.toml"
+        || name
+            .strip_prefix("data/")
+            .is_some_and(|rest| !rest.is_empty());
+    if !allowed || crate::governed_path::validate_relative(&name).is_err() {
+        return Err(restore_denied(
+            "archive entry name is not a permitted location",
+        ));
+    }
+    Ok(Some(name))
+}
+
+/// Validates every entry and returns the backup id and the entry names.
+fn plan_restore(
+    archive_bytes: &[u8],
+    limits: RestoreLimits,
+) -> Result<(String, Vec<String>), BackupError> {
+    let mut archive = tar::Archive::new(GzDecoder::new(archive_bytes));
+    let mut backup_id = String::new();
+    let mut names = Vec::new();
+    let mut files = std::collections::HashSet::new();
+    let mut dirs = std::collections::HashSet::new();
+    let mut total: u64 = 0;
+    let mut count = 0usize;
+
+    for entry in archive.entries().map_err(archive_error)? {
+        let mut entry = entry.map_err(archive_error)?;
+        count += 1;
+        if count > limits.entries {
+            return Err(restore_denied("archive has too many entries"));
+        }
+        let size = entry.size();
+        if size > limits.entry_bytes {
+            return Err(restore_denied("archive entry is too large"));
+        }
+        total = total.saturating_add(size);
+        if total > limits.total_bytes {
+            return Err(restore_denied("archive contents are too large"));
+        }
+        let Some(name) = restorable_name(&entry)? else {
+            if size > MAX_METADATA_BYTES {
+                return Err(restore_denied("backup metadata is too large"));
+            }
+            let mut meta_json = Vec::new();
+            entry.read_to_end(&mut meta_json).map_err(archive_error)?;
+            if let Ok(meta) = serde_json::from_slice::<BackupMetadata>(&meta_json) {
+                backup_id = meta.id;
+            }
+            continue;
+        };
+        // No duplicate names and no file that is also a directory, compared
+        // without case so that case-insensitive filesystems cannot alias them.
+        let folded = name.to_lowercase();
+        if files.contains(&folded) || dirs.contains(&folded) {
+            return Err(restore_denied("archive entry names collide"));
+        }
+        let mut prefix = String::new();
+        for component in folded.split('/').take(folded.split('/').count() - 1) {
+            if !prefix.is_empty() {
+                prefix.push('/');
+            }
+            prefix.push_str(component);
+            if files.contains(&prefix) {
+                return Err(restore_denied("archive entry names collide"));
+            }
+            dirs.insert(prefix.clone());
+        }
+        files.insert(folded);
+        names.push(name);
+    }
+    Ok((backup_id, names))
+}
+
+/// Writes every validated entry beneath `target_dir`, creating each directory
+/// and file exclusively.
+fn write_restore(
+    archive_bytes: &[u8],
+    target_dir: &Path,
+    limits: RestoreLimits,
+) -> Result<(), BackupError> {
+    let mut archive = tar::Archive::new(GzDecoder::new(archive_bytes));
+    for entry in archive.entries().map_err(archive_error)? {
+        let mut entry = entry.map_err(archive_error)?;
+        let Some(name) = restorable_name(&entry)? else {
+            continue;
+        };
+        let size = entry.size();
+        if size > limits.entry_bytes {
+            return Err(restore_denied("archive entry is too large"));
+        }
+        let mut path = target_dir.to_path_buf();
+        let components: Vec<&str> = name.split('/').collect();
+        for component in &components[..components.len() - 1] {
+            path.push(component);
+            match std::fs::create_dir(&path) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    let metadata = std::fs::symlink_metadata(&path)?;
+                    if crate::governed_path::is_redirect(&metadata) || !metadata.is_dir() {
+                        return Err(restore_denied("restore directory was redirected"));
+                    }
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+        path.push(components[components.len() - 1]);
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        let written = std::io::copy(&mut (&mut entry).take(size.saturating_add(1)), &mut file)
+            .map_err(archive_error)?;
+        if written != size {
+            return Err(restore_denied("archive entry size does not match its data"));
+        }
+    }
+    Ok(())
 }
 
 // ── Verify Backup ──────────────────────────────────────────────────────
@@ -701,8 +858,23 @@ mod tests {
 
         let archive_path = archives[0].path();
         std::fs::create_dir_all(&restore_dir).unwrap();
-        let result = restore_backup(&archive_path, &restore_dir, None).unwrap();
-        assert!(!result.restored_files.is_empty());
+        let restore_root = restore_dir.canonicalize().unwrap();
+        let result = restore_backup(&archive_path, &restore_root, None).unwrap();
+        assert_eq!(result.restored_files.len(), 3);
+        let restored = restore_root.join(&result.restore_dir).join("data");
+        assert_eq!(
+            std::fs::read(restored.join("agents.db")).unwrap(),
+            b"agent database contents"
+        );
+        assert_eq!(
+            std::fs::read(restored.join("agent-coder.toml")).unwrap(),
+            b"[agent]\nname = \"coder\"\n"
+        );
+        // The source data directory is never a restore target.
+        assert_eq!(
+            std::fs::read(data_dir.join("agents.db")).unwrap(),
+            b"agent database contents"
+        );
     }
 
     #[test]
@@ -736,13 +908,17 @@ mod tests {
             .collect();
         let archive_path = archives[0].path();
 
-        // Restore without key should fail.
-        let result = restore_backup(&archive_path, &restore_dir, None);
+        std::fs::create_dir_all(&restore_dir).unwrap();
+        let restore_root = restore_dir.canonicalize().unwrap();
+
+        // Restore without key should fail, and leave nothing behind.
+        let result = restore_backup(&archive_path, &restore_root, None);
         assert!(result.is_err());
+        assert_eq!(std::fs::read_dir(&restore_root).unwrap().count(), 0);
 
         // Restore with correct key should work.
-        let result = restore_backup(&archive_path, &restore_dir, Some(&key)).unwrap();
-        assert!(!result.restored_files.is_empty());
+        let result = restore_backup(&archive_path, &restore_root, Some(&key)).unwrap();
+        assert_eq!(result.restored_files.len(), 3);
     }
 
     #[test]
@@ -818,5 +994,295 @@ mod tests {
     fn list_backups_nonexistent_dir() {
         let backups = list_backups(Path::new("/nonexistent/path")).unwrap();
         assert!(backups.is_empty());
+    }
+    // ── P0-002C5B: hostile archives ────────────────────────────────────
+
+    /// Raw entry name, type, link target and data.
+    type RawEntry<'a> = (&'a [u8], tar::EntryType, &'a [u8], &'a [u8]);
+
+    /// A gzipped tar whose headers carry exactly the given raw names, types
+    /// and link targets, bypassing the builder's own path checks the way a
+    /// hostile archive would.
+    fn raw_archive(entries: &[RawEntry<'_>]) -> Vec<u8> {
+        let mut builder = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::default()));
+        for (name, kind, link, data) in entries {
+            let mut header = tar::Header::new_gnu();
+            {
+                let gnu = header.as_gnu_mut().unwrap();
+                gnu.name = [0; 100];
+                gnu.name[..name.len()].copy_from_slice(name);
+                gnu.linkname = [0; 100];
+                gnu.linkname[..link.len()].copy_from_slice(link);
+            }
+            header.set_entry_type(*kind);
+            header.set_size(data.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder.append(&header, *data).unwrap();
+        }
+        builder.into_inner().unwrap().finish().unwrap()
+    }
+
+    struct Restore {
+        _tmp: tempfile::TempDir,
+        base: PathBuf,
+        root: PathBuf,
+        archive: PathBuf,
+    }
+
+    impl Restore {
+        fn new(bytes: &[u8]) -> Self {
+            let tmp = tempfile::tempdir().unwrap();
+            let base = tmp.path().canonicalize().unwrap();
+            let root = base.join("restore-root");
+            std::fs::create_dir(&root).unwrap();
+            let archive = base.join("hostile.tar.gz");
+            std::fs::write(&archive, bytes).unwrap();
+            std::fs::write(base.join("victim.txt"), b"original").unwrap();
+            Self {
+                _tmp: tmp,
+                base,
+                root,
+                archive,
+            }
+        }
+
+        fn run(&self, limits: RestoreLimits) -> Result<RestoreResult, BackupError> {
+            restore_with_limits(&self.archive, &self.root, None, limits)
+        }
+
+        /// Nothing was written anywhere: the root is empty and the victim
+        /// beside it is untouched.
+        fn untouched(&self) -> bool {
+            std::fs::read_dir(&self.root).unwrap().count() == 0
+                && std::fs::read(self.base.join("victim.txt")).unwrap() == b"original"
+                && !self.base.join("escape.txt").exists()
+        }
+    }
+
+    const REGULAR: tar::EntryType = tar::EntryType::Regular;
+
+    #[test]
+    fn restore_rejects_escaping_and_ambiguous_entry_names() {
+        for name in [
+            b"../escape.txt".as_slice(),
+            b"data/../../escape.txt",
+            b"data/../victim.txt",
+            b"/etc/passwd",
+            b"/data/x.json",
+            b"data//x.json",
+            b"data/./x.json",
+            b"data/",
+            b"data",
+            b"data/x.json:stream",
+            b"data/C:x.json",
+            b"C:\\escape.txt",
+            b"C:/escape.txt",
+            b"\\\\server\\share\\escape.txt",
+            b"data\\..\\..\\escape.txt",
+            b"data/CON",
+            b"data/nul.json",
+            b"data/x.",
+            b"config/other.toml",
+            b"unknown/x.json",
+            b"",
+            b"data/\xff.json",
+        ] {
+            let r = Restore::new(&raw_archive(&[(name, REGULAR, b"", b"x")]));
+            assert!(
+                matches!(r.run(RESTORE_LIMITS), Err(BackupError::Restore(_))),
+                "{:?}",
+                String::from_utf8_lossy(name)
+            );
+            assert!(r.untouched(), "{:?}", String::from_utf8_lossy(name));
+        }
+    }
+
+    #[test]
+    fn restore_rejects_links_devices_and_special_entries() {
+        for (kind, link) in [
+            (tar::EntryType::Symlink, b"/etc/passwd".as_slice()),
+            (tar::EntryType::Symlink, b"../escape.txt"),
+            (tar::EntryType::Link, b"data/other.json"),
+            (tar::EntryType::Link, b"/etc/passwd"),
+            (tar::EntryType::Char, b""),
+            (tar::EntryType::Block, b""),
+            (tar::EntryType::Fifo, b""),
+            (tar::EntryType::Directory, b""),
+            (tar::EntryType::Continuous, b""),
+            (tar::EntryType::GNUSparse, b""),
+            (tar::EntryType::XGlobalHeader, b""),
+        ] {
+            let r = Restore::new(&raw_archive(&[
+                (b"data/ok.json", REGULAR, b"", b"{}"),
+                (b"data/x.json", kind, link, b""),
+            ]));
+            let result = r.run(RESTORE_LIMITS);
+            // tar parses a GNU sparse map itself and rejects this malformed
+            // one first; a well-formed sparse entry is refused as not regular.
+            if kind == tar::EntryType::GNUSparse {
+                assert!(
+                    matches!(
+                        result,
+                        Err(BackupError::Archive(_) | BackupError::Restore(_))
+                    ),
+                    "{kind:?}"
+                );
+            } else {
+                assert!(matches!(result, Err(BackupError::Restore(_))), "{kind:?}");
+            }
+            assert!(r.untouched(), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn restore_rejects_duplicate_and_aliasing_names() {
+        for pair in [
+            [b"data/a.json".as_slice(), b"data/a.json".as_slice()],
+            [b"data/A.json", b"data/a.json"],
+            [b"data/a", b"data/a/b.json"],
+            [b"data/a/b.json", b"data/A"],
+        ] {
+            let r = Restore::new(&raw_archive(&[
+                (pair[0], REGULAR, b"", b"1"),
+                (pair[1], REGULAR, b"", b"2"),
+            ]));
+            assert!(matches!(
+                r.run(RESTORE_LIMITS),
+                Err(BackupError::Restore(_))
+            ));
+            assert!(r.untouched());
+        }
+    }
+
+    #[test]
+    fn restore_is_bounded() {
+        let small = RestoreLimits {
+            entries: 2,
+            entry_bytes: 8,
+            total_bytes: 12,
+        };
+        for entries in [
+            vec![
+                (
+                    b"data/1.json".as_slice(),
+                    REGULAR,
+                    b"".as_slice(),
+                    b"1".as_slice(),
+                ),
+                (b"data/2.json", REGULAR, b"", b"2"),
+                (b"data/3.json", REGULAR, b"", b"3"),
+            ],
+            vec![(b"data/big.json", REGULAR, b"", b"123456789")],
+            vec![
+                (b"data/1.json", REGULAR, b"", b"1234567"),
+                (b"data/2.json", REGULAR, b"", b"1234567"),
+            ],
+        ] {
+            let r = Restore::new(&raw_archive(&entries));
+            assert!(matches!(r.run(small), Err(BackupError::Restore(_))));
+            assert!(r.untouched());
+        }
+    }
+
+    #[test]
+    fn restore_writes_only_into_a_fresh_directory_under_the_root() {
+        let r = Restore::new(&raw_archive(&[
+            (b"data/sub/a.json", REGULAR, b"", b"restored"),
+            (b"config/config.toml", REGULAR, b"", b"key = 1"),
+        ]));
+        let first = r.run(RESTORE_LIMITS).unwrap();
+        let second = r.run(RESTORE_LIMITS).unwrap();
+        assert_ne!(first.restore_dir, second.restore_dir);
+        for result in [&first, &second] {
+            assert!(result.restore_dir.starts_with("restore-"));
+            let dir = r.root.join(&result.restore_dir);
+            assert_eq!(
+                std::fs::read(dir.join("data").join("sub").join("a.json")).unwrap(),
+                b"restored"
+            );
+            assert_eq!(
+                std::fs::read(dir.join("config").join("config.toml")).unwrap(),
+                b"key = 1"
+            );
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir = r.root.join(&first.restore_dir);
+            assert_eq!(
+                std::fs::metadata(dir).unwrap().permissions().mode() & 0o777,
+                0o700
+            );
+        }
+    }
+
+    #[test]
+    fn restore_root_must_be_an_existing_canonical_directory() {
+        let r = Restore::new(&raw_archive(&[(b"data/a.json", REGULAR, b"", b"1")]));
+        for root in [
+            PathBuf::from("relative/root"),
+            r.base.join("missing"),
+            r.base.join("victim.txt"),
+            r.root.join("..").join("restore-root"),
+        ] {
+            assert!(restore_backup(&r.archive, &root, None).is_err(), "{root:?}");
+        }
+        assert!(r.untouched());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_redirected_restore_roots_and_data_are_never_followed() {
+        let r = Restore::new(&raw_archive(&[(b"data/a.json", REGULAR, b"", b"1")]));
+        let link = r.base.join("link-root");
+        std::os::unix::fs::symlink(&r.base, &link).unwrap();
+        assert!(restore_backup(&r.archive, &link, None).is_err());
+
+        // A link already inside the root cannot capture the fresh directory.
+        std::os::unix::fs::symlink(&r.base, r.root.join("data")).unwrap();
+        let result = r.run(RESTORE_LIMITS).unwrap();
+        assert!(r
+            .root
+            .join(&result.restore_dir)
+            .join("data/a.json")
+            .exists());
+        assert!(!r.base.join("a.json").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_reparse_restore_roots_are_never_followed() {
+        use std::os::windows::fs::symlink_dir;
+        let r = Restore::new(&raw_archive(&[(b"data/a.json", REGULAR, b"", b"1")]));
+        let link = r.base.join("link-root");
+        symlink_dir(&r.base, &link)
+            .expect("native Windows test requires symlink creation privilege");
+        assert!(restore_backup(&r.archive, &link, None).is_err());
+        assert!(!r.base.join("data").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_backups_do_not_follow_links_out_of_the_data_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().canonicalize().unwrap();
+        let data_dir = base.join("data");
+        setup_test_data(&data_dir);
+        let outside = base.join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("secret.json"), b"secret").unwrap();
+        std::os::unix::fs::symlink(outside.join("secret.json"), data_dir.join("link.json"))
+            .unwrap();
+        std::os::unix::fs::symlink(&outside, data_dir.join("linked-dir")).unwrap();
+
+        let config = BackupConfig {
+            output_dir: base.join("backups"),
+            include_config: false,
+            ..BackupConfig::default()
+        };
+        let meta = create_backup(&config, &data_dir, None).unwrap();
+        assert_eq!(meta.contents.len(), 3);
+        assert!(meta.contents.iter().all(|c| !c.contains("link")));
     }
 }
