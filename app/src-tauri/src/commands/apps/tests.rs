@@ -240,3 +240,192 @@ fn p0_002c5b_store_ids_have_one_spelling_and_email_stems_never_alias() {
         assert!(!stem.eq_ignore_ascii_case(&upper), "{spelling:?}");
     }
 }
+
+// ── P0-002C5C: OAuth loopback callbacks ──────────────────────────────
+
+const FLOW_STATE: &str = "4f9c2d7e-1b3a-4c5d-8e6f-7a8b9c0d1e2f";
+
+fn callback(target: &str) -> String {
+    format!("GET {target} HTTP/1.1\r\nHost: localhost:19823\r\n\r\n")
+}
+
+#[test]
+fn p0_002c5c_oauth_callbacks_count_only_with_this_flows_state() {
+    let ok = callback(&format!("/oauth/callback?code=abc&state={FLOW_STATE}"));
+    assert_eq!(
+        oauth_callback(&ok, FLOW_STATE),
+        OAuthCallback::Code("abc".into())
+    );
+    // Parameter order does not matter, and the code is percent-decoded.
+    let encoded = callback(&format!(
+        "/oauth/callback?state={FLOW_STATE}&scope=x&code=4%2F0Ab-c"
+    ));
+    assert_eq!(
+        oauth_callback(&encoded, FLOW_STATE),
+        OAuthCallback::Code("4/0Ab-c".into())
+    );
+    let refused = callback(&format!(
+        "/oauth/callback?error=access_denied&state={FLOW_STATE}"
+    ));
+    assert_eq!(oauth_callback(&refused, FLOW_STATE), OAuthCallback::Refused);
+
+    let other = "5a0d3e8f-2c4b-4d6e-9f70-8b9c0d1e2f3a";
+    for request in [
+        // No state, a wrong state, or an empty state.
+        callback("/oauth/callback?code=forged"),
+        callback(&format!("/oauth/callback?code=forged&state={other}")),
+        callback("/oauth/callback?code=forged&state="),
+        // A repeated state or code is ambiguous.
+        callback(&format!(
+            "/oauth/callback?code=forged&state={other}&state={FLOW_STATE}"
+        )),
+        callback(&format!("/oauth/callback?code=a&code=b&state={FLOW_STATE}")),
+        // No code, an empty code, or a code together with an error.
+        callback(&format!("/oauth/callback?state={FLOW_STATE}")),
+        callback(&format!("/oauth/callback?code=&state={FLOW_STATE}")),
+        callback(&format!(
+            "/oauth/callback?code=a&error=x&state={FLOW_STATE}"
+        )),
+        // A refusal for another flow.
+        callback(&format!(
+            "/oauth/callback?error=access_denied&state={other}"
+        )),
+        // The pre-C5C parser matched any `GET /?code=…`.
+        callback(&format!("/?code=forged&state={FLOW_STATE}")),
+        // Other paths and spellings of the path.
+        callback(&format!("/oauth/callbackx?code=a&state={FLOW_STATE}")),
+        callback(&format!("/oauth/./callback?code=a&state={FLOW_STATE}")),
+        callback(&format!("/OAUTH/CALLBACK?code=a&state={FLOW_STATE}")),
+        callback(&format!("/x/oauth/callback?code=a&state={FLOW_STATE}")),
+        // Other methods and malformed request lines.
+        format!("POST /oauth/callback?code=a&state={FLOW_STATE} HTTP/1.1\r\n\r\n"),
+        format!("GET /oauth/callback?code=a&state={FLOW_STATE}\r\n\r\n"),
+        format!("GET /oauth/callback?code=a&state={FLOW_STATE} HTTP/1.1 x\r\n\r\n"),
+        format!("GET  /oauth/callback?code=a&state={FLOW_STATE} HTTP/1.1\r\n\r\n"),
+        // The state may not arrive in a later header line.
+        format!("GET /oauth/callback?code=a HTTP/1.1\r\nX: &state={FLOW_STATE}\r\n\r\n"),
+        String::new(),
+    ] {
+        assert_eq!(
+            oauth_callback(&request, FLOW_STATE),
+            OAuthCallback::Unrelated,
+            "{request:?}"
+        );
+    }
+}
+
+#[test]
+fn p0_002c5c_oauth_client_ids_cannot_reshape_the_authorization_url() {
+    for id in [
+        "1234567890-abc123def.apps.googleusercontent.com",
+        "3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b",
+        "Iv1.8a61f9b3a7aba766",
+        "1234567890.1234567890",
+        "a_b",
+    ] {
+        assert_eq!(oauth_client_id(id.to_string()).as_deref(), Ok(id));
+    }
+    for id in [
+        String::new(),
+        "id&redirect_uri=https://attacker.example/".to_string(),
+        "id\" & calc & \"".to_string(),
+        "id%26x".to_string(),
+        "id with space".to_string(),
+        "id#frag".to_string(),
+        "id\n".to_string(),
+        "a".repeat(257),
+    ] {
+        assert!(oauth_client_id(id.clone()).is_err(), "{id:?}");
+    }
+}
+
+/// Send one request to the loopback listener and return the status line.
+fn send_callback(port: u16, request: &str) -> String {
+    use std::io::{Read as _, Write as _};
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    stream.write_all(request.as_bytes()).unwrap();
+    let mut response = String::new();
+    // The listener answers each connection and closes it.
+    let _ = stream.read_to_string(&mut response);
+    response.lines().next().unwrap_or_default().to_string()
+}
+
+#[test]
+fn p0_002c5c_a_forged_loopback_callback_neither_ends_the_flow_nor_supplies_a_code() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let client = std::thread::spawn(move || {
+        let forged = [
+            callback("/oauth/callback?code=forged"),
+            callback("/oauth/callback?code=forged&state=5a0d3e8f-2c4b-4d6e-9f70-8b9c0d1e2f3a"),
+            callback(&format!("/?code=forged&state={FLOW_STATE}")),
+            "garbage\r\n\r\n".to_string(),
+        ];
+        let statuses: Vec<String> = forged.iter().map(|r| send_callback(port, r)).collect();
+        let accepted = send_callback(
+            port,
+            &callback(&format!("/oauth/callback?code=real&state={FLOW_STATE}")),
+        );
+        (statuses, accepted)
+    });
+    let code = await_oauth_code(
+        &listener,
+        FLOW_STATE,
+        std::time::Instant::now() + std::time::Duration::from_secs(60),
+    );
+    let (statuses, accepted) = client.join().unwrap();
+    assert_eq!(code.as_deref(), Ok("real"));
+    for status in statuses {
+        assert_eq!(status, "HTTP/1.1 400 Bad Request");
+    }
+    assert_eq!(accepted, "HTTP/1.1 200 OK");
+}
+
+#[test]
+fn p0_002c5c_a_refusal_for_this_flow_ends_it_without_a_code() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let client = std::thread::spawn(move || {
+        send_callback(
+            port,
+            &callback(&format!(
+                "/oauth/callback?error=access_denied&state={FLOW_STATE}"
+            )),
+        )
+    });
+    let outcome = await_oauth_code(
+        &listener,
+        FLOW_STATE,
+        std::time::Instant::now() + std::time::Duration::from_secs(60),
+    );
+    assert_eq!(client.join().unwrap(), "HTTP/1.1 200 OK");
+    assert_eq!(
+        outcome,
+        Err("The provider did not grant access.".to_string())
+    );
+}
+
+#[test]
+fn p0_002c5c_the_oauth_wait_ends_at_its_deadline() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    // A connection that never sends a request cannot hold the flow open.
+    let silent = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    let started = std::time::Instant::now();
+    let outcome = await_oauth_code(
+        &listener,
+        FLOW_STATE,
+        started + std::time::Duration::from_millis(500),
+    );
+    let elapsed = started.elapsed();
+    drop(silent);
+    assert_eq!(
+        outcome,
+        Err("OAuth flow timed out or no auth code received".to_string())
+    );
+    assert!(
+        elapsed >= std::time::Duration::from_millis(500),
+        "{elapsed:?}"
+    );
+    assert!(elapsed < std::time::Duration::from_secs(30), "{elapsed:?}");
+}

@@ -650,6 +650,176 @@ pub(crate) fn email_delete(state: &AppState, id: String) -> Result<String, Strin
     Ok("ok".to_string())
 }
 
+// ── OAuth2 loopback callback (P0-002C5C) ──────────────────────────────
+//
+// A sign-in flow opens the provider's consent page and waits on a fixed
+// loopback port for the provider's redirect. Any local process, or any page
+// the browser renders, can also reach that port, so a request counts only if
+// it is `GET /oauth/callback?…` and carries this flow's unguessable `state`.
+// Anything else is answered and ignored: it neither ends the flow nor
+// supplies the authorization code.
+
+/// How long a sign-in flow waits for the provider's redirect.
+const OAUTH_CALLBACK_WINDOW: std::time::Duration = std::time::Duration::from_secs(120);
+/// How long one loopback connection may take to send its request line.
+const OAUTH_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+/// Largest request head read from one loopback connection.
+const OAUTH_MAX_REQUEST_BYTES: usize = 8 * 1024;
+/// Pause between polls of the nonblocking listener.
+const OAUTH_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// A configured client ID in the form providers issue: letters, digits, `.`,
+/// `-` and `_`. It can then add no parameter to the authorization URL and no
+/// quoting to the command that opens the browser.
+fn oauth_client_id(client_id: String) -> Result<String, String> {
+    let well_formed = !client_id.is_empty()
+        && client_id.len() <= 256
+        && client_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'));
+    if well_formed {
+        Ok(client_id)
+    } else {
+        Err("The configured OAuth client ID has an unexpected form.".to_string())
+    }
+}
+
+/// What one loopback request means for the waiting flow.
+#[derive(Debug, PartialEq, Eq)]
+enum OAuthCallback {
+    /// This flow's redirect, carrying an authorization code.
+    Code(String),
+    /// This flow's redirect, reporting that the provider refused.
+    Refused,
+    /// Anything else: another method or path, a missing, repeated or wrong
+    /// `state`, or no usable code.
+    Unrelated,
+}
+
+/// Classify a request by its request line alone.
+fn oauth_callback(request: &str, expected_state: &str) -> OAuthCallback {
+    let line = request.split("\r\n").next().unwrap_or_default();
+    let mut words = line.split(' ');
+    let (Some("GET"), Some(target), Some(version), None) =
+        (words.next(), words.next(), words.next(), words.next())
+    else {
+        return OAuthCallback::Unrelated;
+    };
+    let Some(("/oauth/callback", query)) = target.split_once('?') else {
+        return OAuthCallback::Unrelated;
+    };
+    if !version.starts_with("HTTP/") {
+        return OAuthCallback::Unrelated;
+    }
+    let Ok(parsed) = reqwest::Url::parse(&format!("http://127.0.0.1/?{query}")) else {
+        return OAuthCallback::Unrelated;
+    };
+    let (mut state, mut code, mut error) = (None, None, None);
+    for (key, value) in parsed.query_pairs() {
+        let slot = match key.as_ref() {
+            "state" => &mut state,
+            "code" => &mut code,
+            "error" => &mut error,
+            _ => continue,
+        };
+        if slot.replace(value.into_owned()).is_some() {
+            return OAuthCallback::Unrelated;
+        }
+    }
+    if state.as_deref() != Some(expected_state) {
+        return OAuthCallback::Unrelated;
+    }
+    match (code, error) {
+        (Some(code), None) if !code.is_empty() => OAuthCallback::Code(code),
+        (None, Some(_)) => OAuthCallback::Refused,
+        _ => OAuthCallback::Unrelated,
+    }
+}
+
+/// Read one request head, bounded in size and by the per-connection timeout.
+/// Only its request line is used.
+fn read_oauth_request(stream: &mut std::net::TcpStream, deadline: std::time::Instant) -> String {
+    use std::io::Read as IoRead;
+    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+    let timeout = OAUTH_REQUEST_TIMEOUT.min(remaining);
+    // Accepted sockets inherit nonblocking mode on some platforms.
+    if timeout.is_zero()
+        || stream.set_nonblocking(false).is_err()
+        || stream.set_read_timeout(Some(timeout)).is_err()
+        || stream
+            .set_write_timeout(Some(OAUTH_REQUEST_TIMEOUT))
+            .is_err()
+    {
+        return String::new();
+    }
+    let mut head = Vec::new();
+    let mut buf = [0u8; 1024];
+    // Read the whole head, so no unread request bytes turn the close into a reset.
+    while head.len() < OAUTH_MAX_REQUEST_BYTES && !head.windows(4).any(|w| w == b"\r\n\r\n") {
+        match stream.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => head.extend_from_slice(&buf[..n]),
+        }
+    }
+    head.truncate(OAUTH_MAX_REQUEST_BYTES);
+    String::from_utf8_lossy(&head).into_owned()
+}
+
+/// Wait on `listener` until `deadline` for this flow's provider redirect and
+/// return its authorization code.
+fn await_oauth_code(
+    listener: &std::net::TcpListener,
+    expected_state: &str,
+    deadline: std::time::Instant,
+) -> Result<String, String> {
+    use std::io::Write as IoWrite;
+    listener
+        .set_nonblocking(true)
+        .map_err(|e| format!("OAuth listener: {e}"))?;
+    loop {
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            return Err("OAuth flow timed out or no auth code received".to_string());
+        }
+        let mut stream = match listener.accept() {
+            Ok((stream, _)) => stream,
+            Err(_) => {
+                std::thread::sleep(OAUTH_POLL_INTERVAL.min(deadline - now));
+                continue;
+            }
+        };
+        let outcome = oauth_callback(&read_oauth_request(&mut stream, deadline), expected_state);
+        let (status, message) = match outcome {
+            OAuthCallback::Code(_) => (
+                "200 OK",
+                "&#10003; Connected! You can close this tab and return to Nexus OS.",
+            ),
+            OAuthCallback::Refused => (
+                "200 OK",
+                "Access was not granted. You can close this tab and return to Nexus OS.",
+            ),
+            OAuthCallback::Unrelated => (
+                "400 Bad Request",
+                "This is not the sign-in Nexus OS is waiting for.",
+            ),
+        };
+        let body = format!(
+            "<html><body style=\"font-family:system-ui;text-align:center;padding:60px;background:#0f172a;color:#e2e8f0\"><h1>{message}</h1></body></html>"
+        );
+        let response = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        // Best-effort: the page only tells the browser what happened.
+        let _ = stream.write_all(response.as_bytes());
+        match outcome {
+            OAuthCallback::Code(code) => return Ok(code),
+            OAuthCallback::Refused => return Err("The provider did not grant access.".to_string()),
+            OAuthCallback::Unrelated => {}
+        }
+    }
+}
+
 // ── Email OAuth2 (Gmail / Outlook via REST API) ───────────────────────
 
 pub(crate) fn email_oauth_dir() -> Result<PathBuf, String> {
@@ -716,6 +886,7 @@ pub(crate) fn email_start_oauth(state: &AppState, provider: String) -> Result<St
             provider.to_uppercase()
         ));
     }
+    let client_id = oauth_client_id(client_id)?;
 
     let csrf_token = uuid::Uuid::new_v4().to_string();
     let redirect_uri = "http://localhost:19823/oauth/callback";
@@ -735,64 +906,18 @@ pub(crate) fn email_start_oauth(state: &AppState, provider: String) -> Result<St
         _ => unreachable!(),
     };
 
+    // Listen before opening the browser, so the redirect cannot arrive first.
+    let listener = std::net::TcpListener::bind("127.0.0.1:19823")
+        .map_err(|e| format!("Cannot start OAuth listener: {e}"))?;
+
     // Best-effort: open browser for OAuth; user can manually navigate if this fails
     let _ = open::that(&auth_url);
 
-    // Start a local listener to catch the callback
-    let listener = std::net::TcpListener::bind("127.0.0.1:19823")
-        .map_err(|e| format!("Cannot start OAuth listener: {e}"))?;
-    listener
-        .set_nonblocking(false)
-        .map_err(|e| format!("set_nonblocking: {e}"))?;
-
-    // Wait for the callback (with timeout)
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
-    let mut auth_code = String::new();
-    while std::time::Instant::now() < deadline {
-        match listener.accept() {
-            Ok((mut stream, _)) => {
-                use std::io::{Read as IoRead, Write as IoWrite};
-                let mut buf = [0u8; 4096];
-                let n = stream.read(&mut buf).unwrap_or(0);
-                let request = String::from_utf8_lossy(&buf[..n]).to_string();
-
-                // Parse the code from GET /?code=XXX&state=YYY
-                if let Some(query_start) = request.find("GET /?") {
-                    let query = &request[query_start + 6..];
-                    if let Some(end) = query.find(' ') {
-                        let params = &query[..end];
-                        for param in params.split('&') {
-                            let parts: Vec<&str> = param.splitn(2, '=').collect();
-                            if parts.len() == 2 && parts[0] == "code" {
-                                auth_code = parts[1].to_string();
-                            }
-                        }
-                    }
-                }
-
-                // Send a nice response page
-                let body = "<html><body style=\"font-family:system-ui;text-align:center;padding:60px;background:#0f172a;color:#e2e8f0\">\
-                    <h1>&#10003; Connected!</h1>\
-                    <p>You can close this tab and return to Nexus OS.</p>\
-                    </body></html>";
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                // Best-effort: send success page to browser; OAuth code already captured
-                let _ = stream.write_all(response.as_bytes());
-                break;
-            }
-            Err(_) => {
-                std::thread::sleep(std::time::Duration::from_millis(200));
-            }
-        }
-    }
-
-    if auth_code.is_empty() {
-        return Err("OAuth flow timed out or no auth code received".to_string());
-    }
+    let auth_code = await_oauth_code(
+        &listener,
+        &csrf_token,
+        std::time::Instant::now() + OAUTH_CALLBACK_WINDOW,
+    )?;
 
     // Exchange code for tokens
     let client_secret = match provider.as_str() {
@@ -832,7 +957,8 @@ pub(crate) fn email_start_oauth(state: &AppState, provider: String) -> Result<St
     let token_json: serde_json::Value =
         serde_json::from_str(&token_resp).map_err(|e| format!("token parse: {e}"))?;
 
-    // Store tokens encrypted in local file
+    // Store the tokens in the per-user OAuth directory. They are not encrypted
+    // at rest (docs/security/phase0-final-gate-dossier.md).
     let token_path = email_oauth_dir()?.join(format!("{provider}_tokens.json"));
     let token_data = json!({
         "provider": provider,
@@ -1511,6 +1637,7 @@ pub(crate) fn integration_start_oauth(
             "No client ID for {provider_id}. Set {env_key} env var or configure in Settings."
         ));
     }
+    let client_id = oauth_client_id(client_id)?;
 
     let redirect_uri = "http://localhost:19824/oauth/callback";
     let csrf = uuid::Uuid::new_v4().to_string();
@@ -1531,51 +1658,18 @@ pub(crate) fn integration_start_oauth(
         _ => return Err(format!("OAuth not supported for {provider_id}. Use token-based auth.")),
     };
 
+    // Listen before opening the browser, so the redirect cannot arrive first.
+    let listener = std::net::TcpListener::bind("127.0.0.1:19824")
+        .map_err(|e| format!("Cannot start OAuth listener: {e}"))?;
+
     // Best-effort: open browser for OAuth; user can manually navigate if this fails
     let _ = open::that(&auth_url);
 
-    // Listen for callback on port 19824
-    let listener = std::net::TcpListener::bind("127.0.0.1:19824")
-        .map_err(|e| format!("Cannot start OAuth listener: {e}"))?;
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
-    let mut auth_code = String::new();
-
-    while std::time::Instant::now() < deadline {
-        match listener.accept() {
-            Ok((mut stream, _)) => {
-                use std::io::{Read as IoRead, Write as IoWrite};
-                let mut buf = [0u8; 4096];
-                let n = stream.read(&mut buf).unwrap_or(0);
-                let request = String::from_utf8_lossy(&buf[..n]).to_string();
-                if let Some(qs) = request.find("GET /?") {
-                    let query = &request[qs + 6..];
-                    if let Some(end) = query.find(' ') {
-                        for param in query[..end].split('&') {
-                            let parts: Vec<&str> = param.splitn(2, '=').collect();
-                            if parts.len() == 2 && parts[0] == "code" {
-                                auth_code = parts[1].to_string();
-                            }
-                        }
-                    }
-                }
-                let body = "<html><body style=\"font-family:system-ui;text-align:center;padding:60px;background:#0f172a;color:#e2e8f0\">\
-                    <h1>&#10003; Connected!</h1><p>Return to Nexus OS.</p></body></html>";
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                // Best-effort: send success page to browser; OAuth code already captured
-                let _ = stream.write_all(response.as_bytes());
-                break;
-            }
-            Err(_) => std::thread::sleep(std::time::Duration::from_millis(200)),
-        }
-    }
-
-    if auth_code.is_empty() {
-        return Err("OAuth timed out".to_string());
-    }
+    let auth_code = await_oauth_code(
+        &listener,
+        &csrf,
+        std::time::Instant::now() + OAUTH_CALLBACK_WINDOW,
+    )?;
 
     // Exchange code for token
     let secret_key = format!("NEXUS_{}_CLIENT_SECRET", provider_id.to_uppercase());
