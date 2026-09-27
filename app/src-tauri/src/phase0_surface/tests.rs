@@ -2324,3 +2324,138 @@ fn p0_002c5c_benchmark_process_sites_stay_benchmark_only() {
         }
     }
 }
+
+/// P0-002C5C: the final trust-surface guard. Every regression class named
+/// for the Phase Zero surface has at least one guard; removing or renaming a
+/// guard, a registry or a cross-crate closure test fails here.
+#[test]
+fn p0_002c5c_final_trust_surface_guard_is_complete() {
+    let own = include_str!("tests.rs");
+    let is_test = |source: &str, name: &str| {
+        source.contains(&format!("#[test]\nfn {name}()"))
+            || source.contains(&format!("#[test]\n    fn {name}()"))
+    };
+    let nexus_code = include_str!("../../../../nexus-code/tests/phase0_desktop_config.rs");
+    let kernel_loop = include_str!("../../../../kernel/src/cognitive/loop_runtime.rs");
+    let identity = include_str!("../../../../kernel/src/identity_home.rs");
+    let lib_tests = include_str!("../lib_tests.rs");
+    for (regression, source, guards) in [
+        (
+            "a closed command reopened",
+            own,
+            &[
+                "closed_commands_stay_registered_take_no_input_and_only_deny",
+                "closed_handlers_return_only_their_bounded_reason",
+                "closure_reasons_are_bounded_and_echo_no_input",
+            ][..],
+        ),
+        (
+            "a legacy Builder raw path or a latent actuator wired into the desktop",
+            own,
+            &["latent_unsafe_apis_have_no_desktop_production_caller"][..],
+        ),
+        (
+            "a CLI agent re-enabled",
+            own,
+            &["desktop_sources_start_no_external_cli_agent"][..],
+        ),
+        (
+            "working-directory Nexus Code configuration loaded by the desktop",
+            own,
+            &["desktop_nexus_code_takes_no_configuration_from_the_working_directory"][..],
+        ),
+        (
+            "working-directory Nexus Code configuration loaded by the desktop",
+            nexus_code,
+            &["desktop_entry_points_ignore_hostile_project_files_in_the_working_directory"][..],
+        ),
+        (
+            "an A2A or other delegation bypassing the executor",
+            own,
+            &[
+                "p0_002c5c_no_delegation_path_runs_around_the_executor",
+                "p0_002c5c_a2a_and_agent_actions_are_decided_by_the_production_executor",
+                "production_agent_executor_refuses_filesystem_and_process_actions",
+            ][..],
+        ),
+        (
+            "an A2A or other delegation bypassing the executor",
+            kernel_loop,
+            &["p0_002c5c_a2a_delegation_is_decided_by_the_executor"][..],
+        ),
+        (
+            "an unclassified or unbounded curl or benchmark process site",
+            own,
+            &[
+                "p0_002c5b_curl_invocations_keep_caller_values_out_of_curl_syntax",
+                "p0_002c5c_every_production_curl_site_is_bounded_in_time_and_size",
+                "p0_002c5c_benchmark_process_sites_stay_benchmark_only",
+            ][..],
+        ),
+        (
+            "a new ambient root",
+            own,
+            &[
+                "desktop_sources_hold_no_ambient_authority_roots",
+                "p0_002c5b_state_roots_take_no_home_cwd_or_shared_temp_fallback",
+            ][..],
+        ),
+        (
+            "an identifier-to-file join without a grammar or stem",
+            own,
+            &["p0_002c5b_identifier_joins_stay_behind_their_grammars"][..],
+        ),
+        (
+            "a manifest or persisted path becoming authority",
+            own,
+            &["p0_002c5b_serialized_records_choose_no_authority"][..],
+        ),
+        (
+            "a manifest or persisted path becoming authority",
+            lib_tests,
+            &[
+                "p0_002c5b_persisted_agents_naming_a_consent_policy_path_are_not_restored",
+                "p0_002c5c_persisted_agents_holding_unregistered_authority_are_not_restored",
+            ][..],
+        ),
+        (
+            "an operator path override becoming interface- or model-controlled",
+            own,
+            &["p0_002c5c_operator_overrides_stay_launch_configuration"][..],
+        ),
+        (
+            "an operator path override becoming interface- or model-controlled",
+            identity,
+            &["p0_002c5c_operator_overrides_are_absolute_or_no_location"][..],
+        ),
+        (
+            "notification text becoming a script",
+            own,
+            &["p0_002c5c_notification_text_never_becomes_a_script"][..],
+        ),
+        (
+            "a caller-asserted tool autonomy level",
+            own,
+            &["p0_002c5c_tool_calls_run_at_the_registered_agents_autonomy"][..],
+        ),
+    ] {
+        for guard in guards {
+            assert!(
+                is_test(source, guard),
+                "{regression}: guard {guard} is missing"
+            );
+        }
+    }
+    for registry in [
+        "const CLOSED_COMMANDS: &[(&str, Closure)]",
+        "const LATENT_UNSAFE_APIS: &[(&str, &str)]",
+        "const AMBIENT_ROOTS: &[&str]",
+        "const CURL_SITES: &[(&str, usize)]",
+        "const APPROVED_STATE_ROOTS: &[(&str, &str, usize, &str)]",
+        "const NEXUS_CODE_CLI_AGENT_ENTRY_POINTS: &[&str]",
+        "const OPERATOR_OVERRIDE_READS: &[(&str, &str, usize)]",
+        "const BENCHMARK_PROCESS_SITES: &[(&str, usize)]",
+    ] {
+        assert!(own.contains(registry), "registry {registry} is missing");
+    }
+}
