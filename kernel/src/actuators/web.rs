@@ -724,12 +724,17 @@ mod tests {
         assert!(GovernedWeb::check_egress("https://other.com/page", &ctx).is_err());
     }
 
+    /// P0-002C5C (Architect repair B): an explicit `https` allowlist entry no
+    /// longer admits plain `http`. This test used to assert the opposite
+    /// (`http_matches_https_allowlist`). The Architect ruled that downgrade a
+    /// policy defect, so the test now asserts the corrected policy. It has
+    /// not been weakened.
     #[test]
-    fn http_matches_https_allowlist() {
+    fn http_does_not_match_https_allowlist() {
         let ctx = make_context();
         assert!(
-            GovernedWeb::check_egress("http://example.com/path", &ctx).is_ok(),
-            "http://host must match https://host allowlist entry"
+            GovernedWeb::check_egress("http://example.com/path", &ctx).is_err(),
+            "http://host must not match an https://host allowlist entry"
         );
     }
 

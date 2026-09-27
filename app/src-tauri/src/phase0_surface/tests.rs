@@ -2734,6 +2734,7 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
     let kernel_loop = include_str!("../../../../kernel/src/cognitive/loop_runtime.rs");
     let identity = include_str!("../../../../kernel/src/identity_home.rs");
     let lib_tests = include_str!("../lib_tests.rs");
+    let egress = include_str!("../../../../kernel/src/firewall/egress.rs");
     for (regression, source, guards) in [
         (
             "a closed command reopened",
@@ -2847,6 +2848,16 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
             "screen observation, or enabling it, over desktop IPC",
             lib_tests,
             &["p0_002c5c_screen_observation_requests_are_denied_and_change_nothing"][..],
+        ),
+        (
+            "an egress entry admitting another scheme, port, host or path",
+            egress,
+            &[
+                "p0_002c5c_entries_admit_only_whole_hosts_and_path_segments",
+                "p0_002c5c_explicit_schemes_and_ports_are_enforced",
+                "p0_002c5c_legacy_scheme_less_entries_keep_their_documented_meaning",
+                "p0_002c5c_malformed_or_ambiguous_endpoints_admit_nothing",
+            ][..],
         ),
     ] {
         for guard in guards {

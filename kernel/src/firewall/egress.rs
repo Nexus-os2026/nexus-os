@@ -14,39 +14,172 @@ use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-/// Strip a leading `http://` or `https://` scheme from a URL.
+/// Whether the allowlist entry `entry` admits the request `url` (P0-002C5C;
+/// explicit transport restrictions by Architect decision). A URL prefix is
+/// not authority. Both sides are parsed and compared as a scheme, a
+/// normalized host, an effective port and whole leading path segments:
 ///
-/// Used by egress-allowlist comparisons so that an `http://host` candidate
-/// matches an `https://host` allowlist entry (planners sometimes emit one
-/// scheme while the manifest lists the other). Returns the input unchanged
-/// if neither prefix is present.
-pub fn strip_scheme(url: &str) -> &str {
-    if let Some(rest) = url.strip_prefix("https://") {
-        rest
-    } else if let Some(rest) = url.strip_prefix("http://") {
-        rest
-    } else {
-        url
+/// - **Request.** It must pass [`crate::governed_http::http_url`]: `http` or
+///   `https`, a host, no user information, no whitespace or control
+///   characters. Anything else is denied.
+/// - **Entry with a scheme** (`https://host[:port][/path]`). It admits only
+///   its own scheme: an `https` entry never admits `http`, and an `http`
+///   entry never admits `https`. The request's effective port (its explicit
+///   port, or its scheme's default) must equal the entry's, computed the
+///   same way, so `https://host` and `https://host:443` are the same entry.
+/// - **Legacy entry without a scheme** (`host[:port][/path]`). This is a
+///   compatibility form. It admits both `http` and `https`, as it did
+///   before. With a port, the request's effective port must equal that port.
+///   Without one, the request must use its own scheme's default port (80 for
+///   `http`, 443 for `https`). The form applies only to entries written
+///   without a scheme, so it never changes what a schemed entry admits.
+/// - **Host.** The normalized hosts must be equal: the parser folds ASCII
+///   case and canonicalizes IDNA and IPv4 forms. A longer host never matches.
+/// - **Path.** The entry's non-empty path segments must lead the request's:
+///   `/v1` admits `/v1` and `/v1/chat`, never `/v11`. Segments are compared
+///   exactly, so paths are case-sensitive. The request's query and fragment
+///   are not compared.
+/// - **Malformed entries admit nothing.** That covers:
+///   - an empty entry or a scheme other than `http` or `https`;
+///   - user information, a query or a fragment;
+///   - a backslash, whitespace or a control character;
+///   - a `.` or `..` path segment;
+///   - an authority that is not `host[:port]` with a numeric port.
+///
+///   None of these is repaired into a grant.
+pub fn endpoint_admits(entry: &str, url: &str) -> bool {
+    match (
+        AllowedEndpoint::parse(entry),
+        crate::governed_http::http_url(url),
+    ) {
+        (Some(entry), Ok(request)) => entry.admits(&request),
+        _ => false,
     }
 }
 
-/// Whether the allowlist entry `entry` admits `url` (P0-002C5C). Both are
-/// compared without their `http`/`https` scheme, as before. The entry must
-/// match whole: the URL either ends where the entry ends or continues with
-/// `/`, `?` or `#` (or the entry itself ends with `/`). A URL prefix is not
-/// authority, so `https://example.com` admits `https://example.com/page` but
-/// not `https://example.com.evil.net`, `https://example.community` or
-/// another port, and `https://api.example.com/v1` does not admit
-/// `https://api.example.com/v1beta`. An empty entry admits nothing.
-pub fn endpoint_admits(entry: &str, url: &str) -> bool {
-    let entry = strip_scheme(entry);
-    if entry.is_empty() {
-        return false;
+/// A parsed egress allowlist entry (see [`endpoint_admits`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AllowedEndpoint {
+    /// `http` or `https`, or `None` for a legacy entry without a scheme.
+    scheme: Option<&'static str>,
+    host: url::Host<String>,
+    /// The effective port. For a schemed entry it is the explicit port or
+    /// the scheme's default. For a legacy entry it is the explicit port, or
+    /// `None` when the request's own default port applies.
+    port: Option<u16>,
+    /// Non-empty leading path segments.
+    segments: Vec<String>,
+}
+
+impl AllowedEndpoint {
+    fn parse(entry: &str) -> Option<Self> {
+        if entry.is_empty()
+            || entry
+                .chars()
+                .any(|c| c.is_whitespace() || c.is_control() || matches!(c, '\\' | '@' | '?' | '#'))
+        {
+            return None;
+        }
+        let (scheme, rest) = match entry.split_once("://") {
+            Some((scheme, rest)) if scheme.eq_ignore_ascii_case("https") => (Some("https"), rest),
+            Some((scheme, rest)) if scheme.eq_ignore_ascii_case("http") => (Some("http"), rest),
+            Some(_) => return None,
+            None => (None, entry),
+        };
+        let (authority, path) = match rest.find('/') {
+            Some(at) => rest.split_at(at),
+            None => (rest, ""),
+        };
+        let explicit_port = authority_port(authority)?;
+        let segments: Vec<String> = path
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+            .map(str::to_string)
+            .collect();
+        if segments.iter().any(|segment| is_dot_segment(segment)) {
+            return None;
+        }
+        let parsed =
+            url::Url::parse(&format!("{}://{authority}/", scheme.unwrap_or("http"))).ok()?;
+        let host = parsed.host()?.to_owned();
+        let port = match scheme {
+            Some(_) => parsed.port_or_known_default(),
+            None => explicit_port,
+        };
+        Some(Self {
+            scheme,
+            host,
+            port,
+            segments,
+        })
     }
-    match strip_scheme(url).strip_prefix(entry) {
-        Some(rest) => entry.ends_with('/') || rest.is_empty() || rest.starts_with(['/', '?', '#']),
-        None => false,
+
+    fn admits(&self, request: &url::Url) -> bool {
+        let scheme = match self.scheme {
+            Some(scheme) => scheme == request.scheme(),
+            None => matches!(request.scheme(), "http" | "https"),
+        };
+        // The parser drops an explicit default port, so `port()` is `None`
+        // exactly when the request uses its scheme's default port.
+        let port = match self.port {
+            Some(port) => request.port_or_known_default() == Some(port),
+            None => request.port().is_none(),
+        };
+        let host = request
+            .host()
+            .is_some_and(|host| host.to_owned() == self.host);
+        let request_segments: Vec<&str> = request
+            .path_segments()
+            .map(|segments| segments.filter(|segment| !segment.is_empty()).collect())
+            .unwrap_or_default();
+        let path = self.segments.len() <= request_segments.len()
+            && self
+                .segments
+                .iter()
+                .zip(&request_segments)
+                .all(|(entry, request)| entry == request);
+        scheme && port && host && path
     }
+}
+
+/// The explicit port of a `host[:port]` authority: `Some(None)` without a
+/// port, `Some(Some(port))` with a numeric port, and `None` when the
+/// authority is not of that form (empty, empty host, empty or non-numeric
+/// port, or more than one colon outside an IPv6 literal).
+fn authority_port(authority: &str) -> Option<Option<u16>> {
+    let (host, port) = if let Some(literal) = authority.strip_prefix('[') {
+        let (address, after) = literal.split_once(']')?;
+        if address.is_empty() {
+            return None;
+        }
+        match after {
+            "" => (address, None),
+            _ => (address, Some(after.strip_prefix(':')?)),
+        }
+    } else {
+        match authority.split_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (authority, None),
+        }
+    };
+    if host.is_empty() {
+        return None;
+    }
+    match port {
+        None => Some(None),
+        Some(port) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => {
+            Some(Some(port.parse().ok()?))
+        }
+        Some(_) => None,
+    }
+}
+
+/// A `.` or `..` path segment, literal or percent-encoded.
+fn is_dot_segment(segment: &str) -> bool {
+    matches!(
+        segment.to_ascii_lowercase().as_str(),
+        "." | ".." | "%2e" | "%2e%2e" | ".%2e" | "%2e."
+    )
 }
 
 /// Default rate limit: 60 requests per minute per endpoint.
@@ -68,7 +201,8 @@ pub enum EgressDecision {
 /// Per-agent egress policy.
 #[derive(Debug, Clone)]
 struct AgentEgressPolicy {
-    /// URL prefixes that are allowed (e.g. `["https://api.example.com"]`).
+    /// Allowlist entries (e.g. `["https://api.example.com"]`), matched by
+    /// [`endpoint_admits`].
     allowed_endpoints: Vec<String>,
     /// Max requests per minute per endpoint.
     rate_limit_per_min: u32,
@@ -159,9 +293,8 @@ impl EgressGovernor {
             }
         };
 
-        // Find the matching allowed endpoint prefix.
-        // Scheme is stripped on both sides so an `http://host` candidate
-        // matches an `https://host` allowlist entry (and vice versa).
+        // Find the allowlist entry that admits the URL under its own scheme,
+        // host, port and path rules (`endpoint_admits`).
         let matched_prefix = policy
             .allowed_endpoints
             .iter()
@@ -265,7 +398,6 @@ mod tests {
             ("https://example.com", "https://example.com/"),
             ("https://example.com", "https://example.com/page?x=1#y"),
             ("https://example.com", "https://example.com?q=1"),
-            ("https://example.com", "http://example.com/downgrade"),
             ("https://example.com/", "https://example.com/a"),
             (
                 "https://api.example.com/v1",
@@ -276,6 +408,12 @@ mod tests {
             assert!(endpoint_admits(entry, url), "{entry} should admit {url}");
         }
         for (entry, url) in [
+            // This case used to be in the admitted list: the scheme was
+            // stripped from both sides, so an `https` entry admitted plain
+            // `http`. The Architect ruled that a policy defect (C5C repair
+            // B): an explicit scheme is a restriction. Moving the case here
+            // corrects the policy; it does not weaken the test.
+            ("https://example.com", "http://example.com/downgrade"),
             ("https://example.com", "https://example.com.evil.net/"),
             ("https://example.com", "https://example.community/"),
             ("https://example.com", "https://example.com:8443/"),
@@ -305,6 +443,220 @@ mod tests {
         assert!(matches!(
             governor.check_egress(agent, "https://api.example.com/x", &mut audit),
             EgressDecision::Allow
+        ));
+    }
+
+    /// P0-002C5C (Architect repair B): an explicit scheme and the effective
+    /// port are restrictions. An `https` entry never admits `http`, an
+    /// `http` entry never admits `https`, and implicit and explicit default
+    /// ports compare the same way.
+    #[test]
+    fn p0_002c5c_explicit_schemes_and_ports_are_enforced() {
+        for (entry, url) in [
+            ("https://example.test/v1", "https://example.test/v1"),
+            ("https://example.test/v1", "https://example.test/v1/x?q=1"),
+            ("https://example.test", "https://example.test:443/x"),
+            ("https://example.test:443", "https://example.test/x"),
+            ("http://example.test", "http://example.test:80/x"),
+            ("http://example.test:80", "http://example.test/x"),
+            ("http://example.test:8080", "http://example.test:8080/x"),
+            ("https://EXAMPLE.test/v1", "https://example.TEST/v1/x"),
+            ("HTTPS://example.test", "https://example.test/"),
+            ("https://127.0.0.1:8443", "https://127.0.0.1:8443/x"),
+            ("https://[::1]:8443/v1", "https://[::1]:8443/v1/x"),
+        ] {
+            assert!(endpoint_admits(entry, url), "{entry} should admit {url}");
+        }
+        for (entry, url) in [
+            // The downgrade is denied, and so is the silent upgrade.
+            ("https://example.test/v1", "http://example.test/v1"),
+            ("https://example.test", "http://example.test:443/"),
+            ("http://example.test", "https://example.test/"),
+            ("http://example.test", "https://example.test:80/"),
+            // Another effective port.
+            ("https://example.test", "https://example.test:8443/"),
+            ("https://example.test:8443", "https://example.test/"),
+            ("http://example.test", "http://example.test:443/"),
+            ("https://127.0.0.1:8443", "https://127.0.0.1:8444/"),
+            // Another host, or a longer one.
+            ("https://example.test", "https://example.test.evil/"),
+            ("https://example.test", "https://evil.example.test/"),
+            // A longer or differently cased path segment.
+            ("https://example.test/v1", "https://example.test/v11"),
+            ("https://example.test/v1", "https://example.test/v"),
+            ("https://example.test/V1", "https://example.test/v1"),
+            (
+                "https://example.test/v1",
+                "https://example.test/v1/../admin",
+            ),
+        ] {
+            assert!(!endpoint_admits(entry, url), "{entry} must not admit {url}");
+        }
+
+        let mut governor = EgressGovernor::new();
+        let agent = id();
+        governor.register_agent(agent, vec!["https://api.example.test".into()]);
+        let mut audit = AuditTrail::new();
+        assert!(matches!(
+            governor.check_egress(agent, "http://api.example.test/x", &mut audit),
+            EgressDecision::Deny { .. }
+        ));
+        assert!(matches!(
+            governor.check_egress(agent, "https://api.example.test/x", &mut audit),
+            EgressDecision::Allow
+        ));
+        assert_eq!(audit.events().len(), 2, "both decisions are audited");
+    }
+
+    /// P0-002C5C (Architect repair B): a legacy entry written without a
+    /// scheme keeps its documented compatibility meaning. It admits `http`
+    /// and `https` to its host, and its explicit port or the request's
+    /// default port, and it never widens a schemed entry.
+    #[test]
+    fn p0_002c5c_legacy_scheme_less_entries_keep_their_documented_meaning() {
+        for (entry, url) in [
+            ("example.test", "https://example.test/"),
+            ("example.test", "http://example.test/x"),
+            ("example.test", "https://example.test:443/x"),
+            ("example.test", "http://example.test:80/x"),
+            ("Example.TEST/v1", "https://example.test/v1/chat"),
+            ("example.test:8443", "https://example.test:8443/x"),
+            ("example.test:8443", "http://example.test:8443/x"),
+            ("127.0.0.1:11434", "http://127.0.0.1:11434/api/tags"),
+            ("[::1]:8080", "http://[::1]:8080/"),
+        ] {
+            assert!(endpoint_admits(entry, url), "{entry} should admit {url}");
+        }
+        for (entry, url) in [
+            ("example.test", "https://example.test:8443/"),
+            ("example.test", "http://example.test:443/"),
+            ("example.test", "https://example.test.evil/"),
+            ("example.test:8443", "https://example.test/"),
+            // An explicit port 80 stays port 80: it does not widen to 443.
+            ("example.test:80", "https://example.test/"),
+            ("example.test/v1", "https://example.test/v11"),
+            ("example.test", "ws://example.test/"),
+        ] {
+            assert!(!endpoint_admits(entry, url), "{entry} must not admit {url}");
+        }
+
+        // Each entry keeps its own meaning. A legacy entry for another host
+        // or path never lets the schemed entry admit plain `http`.
+        let mut governor = EgressGovernor::new();
+        let agent = id();
+        governor.register_agent(
+            agent,
+            vec![
+                "https://example.test".into(),
+                "other.test".into(),
+                "example.test/public".into(),
+            ],
+        );
+        let mut audit = AuditTrail::new();
+        for denied in ["http://example.test/private", "http://example.test/"] {
+            assert!(
+                matches!(
+                    governor.check_egress(agent, denied, &mut audit),
+                    EgressDecision::Deny { .. }
+                ),
+                "{denied}"
+            );
+        }
+        for allowed in [
+            "https://example.test/private",
+            "http://other.test/x",
+            "http://example.test/public/page",
+        ] {
+            assert!(
+                matches!(
+                    governor.check_egress(agent, allowed, &mut audit),
+                    EgressDecision::Allow
+                ),
+                "{allowed}"
+            );
+        }
+    }
+
+    /// P0-002C5C (Architect repair B): malformed, credential-bearing,
+    /// ambiguous or non-HTTP(S) entries and requests admit nothing. None is
+    /// repaired into a grant.
+    #[test]
+    fn p0_002c5c_malformed_or_ambiguous_endpoints_admit_nothing() {
+        // Requests.
+        for url in [
+            "",
+            "https://",
+            "https//example.test/",
+            "example.test/x",
+            "https://exa mple.test/",
+            "https://example.test/\n",
+            "https://user:secret@example.test/",
+            "https://example.test@evil.test/",
+            "ftp://example.test/",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "ws://example.test/",
+        ] {
+            for entry in ["https://example.test", "example.test"] {
+                assert!(
+                    !endpoint_admits(entry, url),
+                    "{entry} must not admit {url:?}"
+                );
+            }
+        }
+        // Entries.
+        for entry in [
+            "",
+            "https://",
+            "https:example.test",
+            "//example.test",
+            " example.test",
+            "example.test ",
+            "ftp://example.test",
+            "file:///",
+            "wss://example.test",
+            "https://user@example.test",
+            "https://user:secret@example.test",
+            "https://example.test?x=1",
+            "https://example.test#top",
+            "https://example.test\\evil.test",
+            "https://example.test:",
+            "https://example.test:https",
+            "https://example.test:99999",
+            "example.test:",
+            "example.test:http",
+            "example.test:1:2",
+            "[::1",
+            "[]:80",
+            "example.test/../admin",
+            "https://example.test/v1/%2e%2e/admin",
+            "https://example.test/./v1",
+        ] {
+            for url in [
+                "https://example.test/",
+                "http://example.test/",
+                "https://example.test/admin",
+            ] {
+                assert!(
+                    !endpoint_admits(entry, url),
+                    "{entry:?} must not admit {url}"
+                );
+            }
+        }
+        // A policy of malformed entries still denies by default.
+        let mut governor = EgressGovernor::new();
+        let agent = id();
+        governor.register_agent(
+            agent,
+            vec![
+                "https://user@example.test".into(),
+                "ftp://example.test".into(),
+            ],
+        );
+        let mut audit = AuditTrail::new();
+        assert!(matches!(
+            governor.check_egress(agent, "https://example.test/", &mut audit),
+            EgressDecision::Deny { .. }
         ));
     }
 
