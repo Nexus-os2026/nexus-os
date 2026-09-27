@@ -343,7 +343,12 @@ fn p0_002c5c_oauth_client_ids_cannot_reshape_the_authorization_url() {
 fn send_callback(port: u16, request: &str) -> String {
     use std::io::{Read as _, Write as _};
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
-    stream.write_all(request.as_bytes()).unwrap();
+    // A regression that stops answering must fail the test, not hang it.
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+        .unwrap();
+    // Best-effort: a listener that is gone may reset the connection.
+    let _ = stream.write_all(request.as_bytes());
     let mut response = String::new();
     // The listener answers each connection and closes it.
     let _ = stream.read_to_string(&mut response);
@@ -373,6 +378,8 @@ fn p0_002c5c_a_forged_loopback_callback_neither_ends_the_flow_nor_supplies_a_cod
         FLOW_STATE,
         std::time::Instant::now() + std::time::Duration::from_secs(60),
     );
+    // Close the listener, so a client still waiting on it is released.
+    drop(listener);
     let (statuses, accepted) = client.join().unwrap();
     assert_eq!(code.as_deref(), Ok("real"));
     for status in statuses {
