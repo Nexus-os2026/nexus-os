@@ -506,13 +506,24 @@ fn p0_002c4b_stop_racing_natural_exit_finalizes_exactly_once() {
         r.start(target(&f, &id), f.audit(), fake(&control)).unwrap();
         *control.exit.lock().unwrap() = Some(true);
         let result = r.stop(p, soon(), &f.audit());
+        // Every ordering is valid, as in the real-process race test: stop wins
+        // (Stopped), joins the monitor's in-flight finalization (Exited), or
+        // arrives after the monitor already finalized the natural exit and
+        // vacated the slot (NoOwnedServer). In each, the tree is finalized
+        // exactly once.
         assert!(
-            matches!(result, Ok(Finalized::Stopped | Finalized::Exited)),
+            matches!(
+                result,
+                Ok(Finalized::Stopped | Finalized::Exited | Finalized::NoOwnedServer)
+            ),
             "{result:?}"
         );
         assert_eq!(control.terminations.load(Ordering::SeqCst), 1);
         assert!(control.finalized.load(Ordering::SeqCst));
         assert_eq!(r.status(p), LifecycleStatus::Stopped);
+        // A later stop finds nothing to finalize again.
+        assert_eq!(r.stop(p, soon(), &f.audit()), Ok(Finalized::NoOwnedServer));
+        assert_eq!(control.terminations.load(Ordering::SeqCst), 1);
     }
 }
 
