@@ -714,8 +714,79 @@ pub(crate) fn get_config() -> Result<NexusConfig, String> {
     load_config().map_err(agent_error)
 }
 
-pub(crate) fn save_config(config: NexusConfig) -> Result<(), String> {
+/// Saves interface-editable settings. The encryption-at-rest section chooses
+/// where the vault master key comes from (an environment variable or a key
+/// file), so it is backend-owned (P0-002C5B): a request that would change it
+/// is refused and nothing is written.
+pub(crate) fn save_config(state: &AppState, config: NexusConfig) -> Result<(), String> {
+    let current = load_config()
+        .map(|current| current.security)
+        .unwrap_or_default();
+    security_unchanged(state, &current, &config.security)?;
     save_nexus_config(&config).map_err(agent_error)
+}
+
+fn security_unchanged(
+    state: &AppState,
+    current: &nexus_kernel::crypto::EncryptionConfig,
+    requested: &nexus_kernel::crypto::EncryptionConfig,
+) -> Result<(), String> {
+    if requested == current {
+        return Ok(());
+    }
+    state.log_event(
+        SYSTEM_UUID,
+        EventType::UserAction,
+        json!({
+            "action": "save_config",
+            "outcome": "denied",
+            "reason": "security_settings_backend_owned",
+        }),
+    );
+    Err("save_config: security settings are backend-owned".to_string())
+}
+
+#[cfg(test)]
+#[test]
+fn p0_002c5b_interface_saves_cannot_choose_the_vault_key_source() {
+    use nexus_kernel::crypto::EncryptionConfig;
+    let state = AppState::new_in_memory();
+    let current = EncryptionConfig::default();
+    assert_eq!(
+        security_unchanged(&state, &current, &current.clone()),
+        Ok(())
+    );
+    for requested in [
+        EncryptionConfig {
+            key_source: "file".into(),
+            key_file: Some("/marker/key-file".into()),
+            ..current.clone()
+        },
+        EncryptionConfig {
+            key_env: "PATH".into(),
+            ..current.clone()
+        },
+        EncryptionConfig {
+            enabled: true,
+            ..current.clone()
+        },
+    ] {
+        assert_eq!(
+            security_unchanged(&state, &current, &requested),
+            Err("save_config: security settings are backend-owned".to_string())
+        );
+    }
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    let logged = serde_json::to_string(
+        &audit
+            .events()
+            .iter()
+            .map(|e| &e.payload)
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    assert!(logged.contains("security_settings_backend_owned"));
+    assert!(!logged.contains("marker"));
 }
 
 // ── Track C #3: local STT subprocess bridge ──────────────────────────────────

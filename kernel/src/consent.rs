@@ -895,24 +895,26 @@ impl ConsentRuntime {
         }
     }
 
+    /// The consent runtime for an agent manifest. Consent policy is
+    /// backend-owned (P0-002C5B): a manifest or stored record cannot name a
+    /// policy file or an approval-queue location, so any
+    /// `consent_policy_path` is refused before the filesystem is touched and
+    /// the agent does not start.
     pub fn from_manifest(
         consent_policy_path: Option<&str>,
         requester_id: Option<&str>,
         default_requester: &str,
     ) -> Result<Self, AgentError> {
+        if consent_policy_path.is_some() {
+            return Err(AgentError::ManifestError(
+                crate::manifest::CONSENT_POLICY_PATH_REFUSED.to_string(),
+            ));
+        }
         let requester = requester_id
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| default_requester.to_string());
-
-        if let Some(path) = consent_policy_path {
-            let policy_engine = ConsentPolicyEngine::load(path)?;
-            let queue_path = Path::new(path).with_extension("consent-queue.json");
-            let approval_queue = ApprovalQueue::file_backed(queue_path)
-                .map_err(|error| AgentError::ManifestError(error.to_string()))?;
-            return Ok(Self::new(policy_engine, approval_queue, requester));
-        }
 
         Ok(Self::new(
             ConsentPolicyEngine::default(),

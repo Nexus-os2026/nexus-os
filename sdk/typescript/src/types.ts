@@ -7,6 +7,7 @@ export interface AgentManifest {
   fuel_budget: number;
   autonomy_level?: number | null;
   domain_tags?: string[];
+  /** Retired (P0-002C5B): consent policy is backend-owned; any value is refused. */
   consent_policy_path?: string | null;
   llm_model?: string | null;
   allowed_endpoints?: string[] | null;

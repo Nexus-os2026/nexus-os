@@ -116,10 +116,12 @@ impl EncryptionKey {
         Ok(Self { key })
     }
 
-    /// Load encryption key from a file (e.g. Docker/K8s secret mount).
+    /// Load encryption key from a file (e.g. Docker/K8s secret mount). A
+    /// failure names the error kind, never the key file's location.
     pub fn from_file(path: &Path) -> Result<Self, CryptoError> {
-        let contents =
-            std::fs::read(path).map_err(|e| CryptoError::Io(format!("{}: {e}", path.display())))?;
+        let contents = std::fs::read(path).map_err(|e| {
+            CryptoError::Io(format!("encryption key file unreadable: {}", e.kind()))
+        })?;
 
         if contents.len() == 32 {
             let mut key = [0u8; 32];
@@ -149,6 +151,13 @@ impl EncryptionKey {
                 let path = config.key_file.as_deref().ok_or_else(|| {
                     CryptoError::KeySourceUnavailable("encryption_key_file not configured".into())
                 })?;
+                // P0-002C5B: an operator-configured absolute path only; a
+                // relative one would resolve against the working directory.
+                if !Path::new(path).is_absolute() {
+                    return Err(CryptoError::KeySourceUnavailable(
+                        "encryption_key_file must be an absolute path".into(),
+                    ));
+                }
                 Self::from_file(Path::new(path))
             }
             other => Err(CryptoError::KeySourceUnavailable(format!(
@@ -540,5 +549,35 @@ mod tests {
 
         let garbage = b"NOT_NEXUS_HEADER_plus_some_more_data_here_to_pass_length";
         assert!(decrypt_data(&key, garbage).is_err());
+    }
+
+    #[test]
+    fn p0_002c5b_key_files_are_absolute_and_errors_omit_their_location() {
+        let refused = |path: &str| {
+            let config = EncryptionConfig {
+                enabled: true,
+                key_source: "file".into(),
+                key_env: default_key_env(),
+                key_file: Some(path.into()),
+            };
+            match EncryptionKey::from_config(&config) {
+                Err(CryptoError::KeySourceUnavailable(message)) => message,
+                Err(other) => panic!("{path:?}: {other}"),
+                Ok(_) => panic!("{path:?}: a key was loaded"),
+            }
+        };
+        for path in ["key.bin", "./key.bin", "../key.bin", "~/key.bin", ""] {
+            assert_eq!(
+                refused(path),
+                "encryption_key_file must be an absolute path",
+                "{path:?}"
+            );
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("marker-key-file");
+        match EncryptionKey::from_file(&missing) {
+            Err(error) => assert!(!error.to_string().contains("marker-key-file")),
+            Ok(_) => panic!("a missing key file loaded"),
+        }
     }
 }

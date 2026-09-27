@@ -3214,3 +3214,48 @@ fn p0_002c4d0_code_only(source: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+#[test]
+fn p0_002c5b_persisted_agents_naming_a_consent_policy_path_are_not_restored() {
+    let state = AppState::new_in_memory();
+    let dir = std::env::temp_dir().join(format!("nexus-c5b-consent-{}", Uuid::new_v4()));
+    std::fs::create_dir(&dir).unwrap();
+    let policy = dir.join("consent.toml");
+    std::fs::write(&policy, "").unwrap();
+    let manifest = |name: &str, consent: Option<&str>| {
+        json!({
+            "name": name,
+            "version": "1.0.0",
+            "capabilities": ["llm.query"],
+            "fuel_budget": 1000,
+            "autonomy_level": 1,
+            "consent_policy_path": consent,
+        })
+        .to_string()
+    };
+    let tainted = Uuid::new_v4();
+    let clean = Uuid::new_v4();
+    let policy_text = policy.to_string_lossy().into_owned();
+    for (id, json) in [
+        (
+            tainted,
+            manifest("tainted-agent", Some(policy_text.as_str())),
+        ),
+        (clean, manifest("clean-agent", None)),
+    ] {
+        state
+            .db
+            .save_agent(&id.to_string(), &json, "running", 1, "native")
+            .unwrap();
+    }
+
+    crate::commands::agents::restore_persisted_agents(&state);
+
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    assert!(supervisor.get_agent(tainted).is_none());
+    assert!(supervisor.get_agent(clean).is_some());
+    drop(supervisor);
+    // The named policy was neither read into a queue nor extended.
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

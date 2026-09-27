@@ -2196,7 +2196,7 @@ pub mod runtime {
     #[tauri::command]
     fn save_config(state: tauri::State<'_, AppState>, config: NexusConfig) -> Result<(), String> {
         state.check_rate(nexus_kernel::rate_limit::RateCategory::AdminOperation)?;
-        super::save_config(config)
+        super::save_config(state.inner(), config)
     }
 
     #[tauri::command]

@@ -18,7 +18,6 @@ version = "1.0.0"
 capabilities = ["web.search", "llm.query", "fs.read", "fs.write", "social.post"]
 fuel_budget = 500000
 autonomy_level = 3
-consent_policy_path = "/etc/nexus/consent.toml"
 requester_id = "orchestrator.main"
 schedule = "*/5 * * * *"
 llm_model = "claude-sonnet-4-5"

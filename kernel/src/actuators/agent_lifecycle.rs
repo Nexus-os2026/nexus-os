@@ -39,6 +39,12 @@ impl AgentLifecycleActuator {
         let manifest = serde_json::from_value::<AgentManifest>(value.clone()).map_err(|e| {
             ActuatorError::IoError(format!("agent_lifecycle: manifest_json is invalid: {e}"))
         })?;
+        // P0-002C5B: a model-written record cannot name a consent policy file.
+        if manifest.consent_policy_path.is_some() {
+            return Err(ActuatorError::CapabilityDenied(
+                crate::manifest::CONSENT_POLICY_PATH_REFUSED.to_string(),
+            ));
+        }
         Ok((manifest, value))
     }
 }
@@ -259,5 +265,36 @@ mod tests {
             )
             .unwrap_err();
         assert!(matches!(err, ActuatorError::CapabilityDenied(_)));
+    }
+
+    #[test]
+    fn p0_002c5b_sub_agents_cannot_name_a_consent_policy_path() {
+        let tmp = TempDir::new().unwrap();
+        let ctx = make_l4_context(tmp.path());
+        let err = AgentLifecycleActuator
+            .execute(
+                &PlannedAction::CreateSubAgent {
+                    manifest_json: r#"{
+                        "name":"sub-agent",
+                        "version":"1.0.0",
+                        "capabilities":["fs.read"],
+                        "fuel_budget":1000,
+                        "autonomy_level":4,
+                        "consent_policy_path":"/etc/nexus/consent.toml"
+                    }"#
+                    .to_string(),
+                },
+                &ctx,
+            )
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "capability denied: '{}'",
+                crate::manifest::CONSENT_POLICY_PATH_REFUSED
+            )
+        );
+        let db = NexusDatabase::open(&AgentLifecycleActuator::db_path(&ctx)).unwrap();
+        assert!(db.list_agents().unwrap().is_empty());
     }
 }

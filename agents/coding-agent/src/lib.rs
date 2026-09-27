@@ -1071,4 +1071,17 @@ mod tests {
             matches!(result, Err(AgentError::SupervisorError(message)) if message.contains("denied"))
         );
     }
+
+    #[test]
+    fn p0_002c5b_a_consent_policy_path_is_refused_not_read() {
+        let mut manifest = sample_manifest(1_000, &["fs.read"]);
+        manifest.consent_policy_path = Some("/etc/nexus/consent.toml".to_string());
+        let mut agent = CodingAgent::new(manifest, true).unwrap();
+        match agent.approve_request("request", "admin") {
+            Err(AgentError::ManifestError(message)) => {
+                assert!(message.starts_with("consent_policy_path is not accepted"))
+            }
+            other => panic!("{other:?}"),
+        }
+    }
 }

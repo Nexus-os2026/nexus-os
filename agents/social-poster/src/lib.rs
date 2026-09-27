@@ -729,4 +729,32 @@ mod tests {
         assert_eq!(config.topic, "AI news");
         assert_eq!(config.posts_per_day, 2);
     }
+
+    #[test]
+    fn p0_002c5b_a_consent_policy_path_is_refused_not_read() {
+        let config: SocialPosterConfig = serde_json::from_str(
+            r#"{"topic":"AI news","platforms":["x"],"style":"casual","posts_per_day":2}"#,
+        )
+        .unwrap();
+        let manifest = SocialPosterManifest {
+            name: "social-poster".to_string(),
+            version: "1.0.0".to_string(),
+            capabilities: vec!["social.post".to_string()],
+            fuel_budget: 1_000,
+            autonomy_level: Some(1),
+            consent_policy_path: Some("/etc/nexus/consent.toml".to_string()),
+            requester_id: None,
+            schedule: None,
+            llm_model: None,
+            config,
+        };
+        let db = Arc::new(nexus_persistence::NexusDatabase::in_memory().unwrap());
+        let mut agent = SocialPosterAgent::new(manifest, true, db).unwrap();
+        match agent.approve_request("request", "admin") {
+            Err(AgentError::ManifestError(message)) => {
+                assert_eq!(message, nexus_kernel::manifest::CONSENT_POLICY_PATH_REFUSED)
+            }
+            other => panic!("{other:?}"),
+        }
+    }
 }

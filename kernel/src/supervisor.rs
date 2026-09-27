@@ -2470,4 +2470,35 @@ priority = 50
             "audit trail should contain at least one safety-halt state transition"
         );
     }
+
+    #[test]
+    fn p0_002c5b_a_manifest_naming_a_consent_policy_path_never_registers() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = dir.path().join("consent.toml");
+        std::fs::write(&policy, "").unwrap();
+        let named = policy.to_string_lossy().into_owned();
+        for path in [
+            named.as_str(),
+            "relative/consent.toml",
+            "../../consent.toml",
+            "~/consent.toml",
+            "",
+        ] {
+            let mut sup = Supervisor::new();
+            let mut manifest = test_manifest();
+            manifest.consent_policy_path = Some(path.to_string());
+            let id = Uuid::new_v4();
+            match sup.start_agent_with_id(id, manifest) {
+                Err(AgentError::ManifestError(message)) => assert_eq!(
+                    message,
+                    crate::manifest::CONSENT_POLICY_PATH_REFUSED,
+                    "{path:?}"
+                ),
+                other => panic!("{path:?}: {other:?}"),
+            }
+            assert!(!sup.agents.contains_key(&id), "{path:?}");
+        }
+        // Nothing was read or created beside the named policy file.
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
 }

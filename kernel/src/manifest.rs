@@ -149,6 +149,11 @@ pub struct AgentManifest {
     pub capabilities: Vec<String>,
     pub fuel_budget: u64,
     pub autonomy_level: Option<u8>,
+    /// Retired (P0-002C5B): consent policy is backend-owned. Kept so stored
+    /// records still deserialize, but any value is refused by
+    /// [`parse_manifest`] and by
+    /// [`crate::consent::ConsentRuntime::from_manifest`], so such an agent
+    /// never registers.
     pub consent_policy_path: Option<String>,
     pub requester_id: Option<String>,
     pub schedule: Option<String>,
@@ -260,6 +265,10 @@ struct RawManifest {
     filesystem_permissions: Vec<FilesystemPermission>,
 }
 
+/// Why a manifest or stored record naming a consent policy file is refused.
+pub const CONSENT_POLICY_PATH_REFUSED: &str =
+    "consent_policy_path is not accepted: consent policy is backend-owned";
+
 pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
     let raw: RawManifest =
         toml::from_str(input).map_err(|e| AgentError::ManifestError(e.to_string()))?;
@@ -289,7 +298,11 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
     validate_fuel_budget(fuel_budget)?;
 
     let autonomy_level = parse_autonomy_level(raw.autonomy_level)?;
-    let consent_policy_path = parse_optional_non_empty(raw.consent_policy_path);
+    if raw.consent_policy_path.is_some() {
+        return Err(AgentError::ManifestError(
+            CONSENT_POLICY_PATH_REFUSED.to_string(),
+        ));
+    }
     let requester_id = parse_optional_non_empty(raw.requester_id);
     validate_fuel_period_id(raw.fuel_period_id.as_deref())?;
     validate_monthly_fuel_cap(raw.monthly_fuel_cap)?;
@@ -300,7 +313,7 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
         capabilities,
         fuel_budget,
         autonomy_level,
-        consent_policy_path,
+        consent_policy_path: None,
         requester_id,
         schedule: raw.schedule,
         default_goal: raw.default_goal,
@@ -408,7 +421,7 @@ fn validate_monthly_fuel_cap(monthly_fuel_cap: Option<u64>) -> Result<(), AgentE
 mod tests {
     use super::{
         parse_manifest, path_matches_pattern, AgentManifest, FilesystemPermission,
-        FsPermissionLevel,
+        FsPermissionLevel, CONSENT_POLICY_PATH_REFUSED,
     };
     use crate::errors::AgentError;
 
@@ -495,17 +508,37 @@ version = "0.1.0"
 capabilities = ["web.search"]
 fuel_budget = 100
 autonomy_level = 2
-consent_policy_path = "/tmp/consent.toml"
 requester_id = "agent.alpha"
 "#;
 
         let parsed = parse_manifest(toml).expect("manifest with autonomy level should parse");
         assert_eq!(parsed.autonomy_level, Some(2));
-        assert_eq!(
-            parsed.consent_policy_path,
-            Some("/tmp/consent.toml".to_string())
-        );
+        assert_eq!(parsed.consent_policy_path, None);
         assert_eq!(parsed.requester_id, Some("agent.alpha".to_string()));
+    }
+
+    #[test]
+    fn p0_002c5b_manifests_cannot_name_a_consent_policy_path() {
+        for path in [
+            "/tmp/consent.toml",
+            "/etc/nexus/consent.toml",
+            "relative/consent.toml",
+            "../../consent.toml",
+            "~/consent.toml",
+            "C:\\nexus\\consent.toml",
+            "",
+        ] {
+            let toml = format!(
+                "name = \"agent\"\nversion = \"0.1.0\"\ncapabilities = [\"web.search\"]\n\
+                 fuel_budget = 100\nconsent_policy_path = {path:?}\n"
+            );
+            match parse_manifest(&toml) {
+                Err(AgentError::ManifestError(message)) => {
+                    assert_eq!(message, CONSENT_POLICY_PATH_REFUSED, "{path:?}")
+                }
+                other => panic!("{path:?}: {other:?}"),
+            }
+        }
     }
 
     #[test]

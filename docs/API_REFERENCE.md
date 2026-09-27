@@ -50,7 +50,7 @@ pub struct AgentManifest {
     pub capabilities: Vec<String>,
     pub fuel_budget: u64,
     pub autonomy_level: Option<u8>,
-    pub consent_policy_path: Option<String>,
+    pub consent_policy_path: Option<String>, // retired (P0-002C5B): any value is refused
     pub requester_id: Option<String>,
     pub schedule: Option<String>,
     pub llm_model: Option<String>,
