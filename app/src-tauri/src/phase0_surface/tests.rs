@@ -1931,7 +1931,12 @@ fn p0_002c5b_serialized_records_choose_no_authority() {
     };
     assert_eq!(
         fn_body("pub(crate) fn save_config("),
-        "save_config_with(state,config,load_current_security_baseline,save_nexus_config,)"
+        "save_config_with(state,config,load_current_security_baseline,save_keeping_stored_credentials,)"
+    );
+    // P0-002C5C: the interface never reads a stored credential back.
+    assert_eq!(
+        fn_body("pub(crate) fn get_config("),
+        "load_config().map(redacted_config).map_err(agent_error)"
     );
     let body = fn_body("fn save_config_with<");
     assert!(!body.contains("unwrap_or"), "{body}");

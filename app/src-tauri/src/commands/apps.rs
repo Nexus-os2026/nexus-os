@@ -1373,6 +1373,18 @@ pub(crate) fn messaging_connect_platform(
     token_value: String,
 ) -> Result<String, String> {
     let known = messaging_platform(state, "messaging_connect", &platform)?;
+    // P0-002C5C: the interface sees a stored token only as the placeholder;
+    // connecting with it uses the stored token.
+    let token_value = if token_value == STORED_SECRET {
+        let stored = load_config().map_err(|e| format!("config: {e}"))?.messaging;
+        match known {
+            "telegram" => stored.telegram_bot_token,
+            "discord" => stored.discord_bot_token,
+            _ => stored.slack_bot_token,
+        }
+    } else {
+        token_value
+    };
     if known == "telegram" && !telegram_token_ok(&token_value) {
         return Err(deny(state, "messaging_connect", "invalid_token"));
     }

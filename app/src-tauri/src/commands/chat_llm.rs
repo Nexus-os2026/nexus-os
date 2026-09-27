@@ -710,8 +710,87 @@ pub(crate) fn set_auto_evolution_config(
     Ok(())
 }
 
+/// The configuration as the interface sees it: no stored credential is
+/// returned (P0-002C5C). Each non-empty one reads as [`STORED_SECRET`].
 pub(crate) fn get_config() -> Result<NexusConfig, String> {
-    load_config().map_err(agent_error)
+    load_config().map(redacted_config).map_err(agent_error)
+}
+
+/// Stands in for a stored credential in the configuration the interface
+/// sees (P0-002C5C). A save that carries it back keeps the stored value.
+pub(crate) const STORED_SECRET: &str = "********";
+
+/// The configuration's credential fields, apart from per-provider keys.
+fn credential_fields(config: &mut NexusConfig) -> [&mut String; 17] {
+    [
+        &mut config.llm.anthropic_api_key,
+        &mut config.llm.openai_api_key,
+        &mut config.llm.deepseek_api_key,
+        &mut config.llm.gemini_api_key,
+        &mut config.llm.nvidia_api_key,
+        &mut config.llm.openrouter_api_key,
+        &mut config.search.brave_api_key,
+        &mut config.social.x_api_key,
+        &mut config.social.x_api_secret,
+        &mut config.social.x_access_token,
+        &mut config.social.x_access_secret,
+        &mut config.social.facebook_page_token,
+        &mut config.social.instagram_access_token,
+        &mut config.messaging.telegram_bot_token,
+        &mut config.messaging.whatsapp_api_token,
+        &mut config.messaging.discord_bot_token,
+        &mut config.messaging.slack_bot_token,
+    ]
+}
+
+/// `config` with every non-empty credential replaced by [`STORED_SECRET`].
+pub(crate) fn redacted_config(mut config: NexusConfig) -> NexusConfig {
+    let mask = |field: &mut String| {
+        if !field.is_empty() {
+            *field = STORED_SECRET.to_string();
+        }
+    };
+    for field in credential_fields(&mut config) {
+        mask(field);
+    }
+    for provider in &mut config.llm.providers {
+        mask(&mut provider.api_key);
+    }
+    config
+}
+
+/// Put back the stored credential wherever the interface returned
+/// [`STORED_SECRET`]; a provider key is matched by provider id.
+pub(crate) fn keep_stored_credentials(config: &mut NexusConfig, stored: &NexusConfig) {
+    let mut stored = stored.clone();
+    for (field, stored_value) in credential_fields(config)
+        .into_iter()
+        .zip(credential_fields(&mut stored))
+    {
+        if field == STORED_SECRET {
+            *field = std::mem::take(stored_value);
+        }
+    }
+    for provider in &mut config.llm.providers {
+        if provider.api_key == STORED_SECRET {
+            provider.api_key = stored
+                .llm
+                .providers
+                .iter()
+                .find(|stored_provider| stored_provider.id == provider.id)
+                .map(|stored_provider| stored_provider.api_key.clone())
+                .unwrap_or_default();
+        }
+    }
+}
+
+/// Writes an interface configuration, keeping each stored credential the
+/// interface returned as [`STORED_SECRET`]. `save_config_with` has already
+/// required an existing configuration before this runs.
+fn save_keeping_stored_credentials(config: &NexusConfig) -> Result<(), AgentError> {
+    let mut config = config.clone();
+    keep_stored_credentials(&mut config, &load_config()?);
+    save_nexus_config(&config)
 }
 
 /// Saves interface-editable settings. The encryption-at-rest section chooses
@@ -723,7 +802,7 @@ pub(crate) fn save_config(state: &AppState, config: NexusConfig) -> Result<(), S
         state,
         config,
         load_current_security_baseline,
-        save_nexus_config,
+        save_keeping_stored_credentials,
     )
 }
 
@@ -781,6 +860,60 @@ fn audited_payloads(state: &AppState) -> String {
             .collect::<Vec<_>>(),
     )
     .unwrap()
+}
+
+/// P0-002C5C: the interface never reads a stored credential back, and a
+/// save that returns the placeholder keeps the stored credential.
+#[cfg(test)]
+#[test]
+fn p0_002c5c_the_interface_never_reads_stored_credentials() {
+    fn provider(id: &str, api_key: &str) -> nexus_kernel::config::LlmProviderEntry {
+        serde_json::from_value(json!({
+            "id": id,
+            "provider_type": "openai",
+            "display_name": id,
+            "api_key": api_key,
+        }))
+        .unwrap()
+    }
+    let mut stored = NexusConfig::default();
+    for (index, field) in credential_fields(&mut stored).into_iter().enumerate() {
+        *field = format!("secret-{index}");
+    }
+    stored.llm.providers = vec![provider("a", "secret-a"), provider("b", "")];
+    stored.llm.ollama_url = "http://localhost:11434".into();
+
+    let seen = redacted_config(stored.clone());
+    let text = serde_json::to_string(&seen).unwrap();
+    assert!(!text.contains("secret-"), "{text}");
+    let mut seen_fields = seen.clone();
+    for field in credential_fields(&mut seen_fields) {
+        assert_eq!(field, STORED_SECRET);
+    }
+    assert_eq!(seen.llm.providers[0].api_key, STORED_SECRET);
+    // An empty credential stays empty, and other settings are unchanged.
+    assert_eq!(seen.llm.providers[1].api_key, "");
+    assert_eq!(seen.llm.ollama_url, stored.llm.ollama_url);
+    assert!(redacted_config(NexusConfig::default())
+        .llm
+        .anthropic_api_key
+        .is_empty());
+
+    // Saving what the interface saw keeps every stored credential.
+    let mut returned = seen.clone();
+    keep_stored_credentials(&mut returned, &stored);
+    assert_eq!(returned, stored);
+
+    // A changed credential is saved as changed; a provider key is matched by
+    // provider id, and an unknown provider gains no stored key.
+    let mut edited = seen;
+    edited.search.brave_api_key = "new-brave".into();
+    edited.llm.providers.push(provider("c", STORED_SECRET));
+    keep_stored_credentials(&mut edited, &stored);
+    assert_eq!(edited.search.brave_api_key, "new-brave");
+    assert_eq!(edited.llm.providers[0].api_key, "secret-a");
+    assert_eq!(edited.llm.providers[2].api_key, "");
+    assert_eq!(edited.llm.anthropic_api_key, stored.llm.anthropic_api_key);
 }
 
 #[cfg(test)]
