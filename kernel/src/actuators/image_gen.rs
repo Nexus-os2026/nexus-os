@@ -13,6 +13,20 @@ use std::time::Duration;
 const FUEL_COST_IMAGE_GEN: f64 = 12.0;
 const POLL_ATTEMPTS: usize = 30;
 const POLL_INTERVAL_MS: u64 = 2_000;
+/// Largest provider response or downloaded image accepted, in bytes (64 MiB).
+const MAX_RESPONSE_BYTES: &str = "67108864";
+
+/// An http(s) URL for a provider request (P0-002C5B). Configured endpoints and
+/// URLs returned by a provider are checked alike, so neither can select
+/// `file:`, another protocol or a curl option.
+fn checked_url(url: &str) -> Result<url::Url, ActuatorError> {
+    crate::governed_http::http_url(url).map_err(|error| ActuatorError::IoError(error.to_string()))
+}
+
+fn checked_header(name: &str, value: &str) -> Result<String, ActuatorError> {
+    crate::governed_http::http_header(name, value)
+        .map_err(|error| ActuatorError::IoError(error.to_string()))
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct ImageGenActuator;
@@ -68,17 +82,29 @@ impl ImageGenActuator {
     ) -> Result<Value, ActuatorError> {
         let encoded = serde_json::to_string(body)
             .map_err(|error| ActuatorError::IoError(format!("encode image request: {error}")))?;
+        let url = checked_url(url)?;
         let mut command = Command::new("curl");
-        command.args(["-sS", "-L", "-X", "POST"]);
+        command
+            .args(crate::governed_http::CURL_HTTP_ONLY)
+            .args([
+                "-sS",
+                "-L",
+                "-m",
+                "300",
+                "--max-filesize",
+                MAX_RESPONSE_BYTES,
+            ])
+            .args(["-X", "POST"]);
         for (header_name, header_value) in headers {
             command
                 .arg("-H")
-                .arg(format!("{header_name}: {header_value}"));
+                .arg(checked_header(header_name, header_value)?);
         }
         let output = command
-            .arg("-d")
+            .arg("--data-raw")
             .arg(encoded)
-            .arg(url)
+            .arg("--")
+            .arg(url.as_str())
             .output()
             .map_err(|error| ActuatorError::IoError(format!("curl image request: {error}")))?;
         if !output.status.success() {
@@ -95,15 +121,24 @@ impl ImageGenActuator {
         url: &str,
         headers: &BTreeMap<String, String>,
     ) -> Result<Value, ActuatorError> {
+        let url = checked_url(url)?;
         let mut command = Command::new("curl");
-        command.args(["-sS", "-L"]);
+        command.args(crate::governed_http::CURL_HTTP_ONLY).args([
+            "-sS",
+            "-L",
+            "-m",
+            "60",
+            "--max-filesize",
+            MAX_RESPONSE_BYTES,
+        ]);
         for (header_name, header_value) in headers {
             command
                 .arg("-H")
-                .arg(format!("{header_name}: {header_value}"));
+                .arg(checked_header(header_name, header_value)?);
         }
         let output = command
-            .arg(url)
+            .arg("--")
+            .arg(url.as_str())
             .output()
             .map_err(|error| ActuatorError::IoError(format!("curl poll request: {error}")))?;
         if !output.status.success() {
@@ -117,8 +152,20 @@ impl ImageGenActuator {
     }
 
     fn download_to_path(url: &str, path: &Path) -> Result<(), ActuatorError> {
+        // The URL comes from the provider's response, so it is checked like
+        // any other untrusted URL.
+        let url = checked_url(url)?;
         let output = Command::new("curl")
-            .args(["-sS", "-L", url])
+            .args(crate::governed_http::CURL_HTTP_ONLY)
+            .args([
+                "-sS",
+                "-L",
+                "-m",
+                "300",
+                "--max-filesize",
+                MAX_RESPONSE_BYTES,
+            ])
+            .args(["--", url.as_str()])
             .output()
             .map_err(|error| ActuatorError::IoError(format!("download image: {error}")))?;
         if !output.status.success() {
@@ -391,5 +438,31 @@ mod tests {
                 .unwrap()
                 .join("images/out.png")
         );
+    }
+
+    #[test]
+    fn p0_002c5b_provider_urls_and_headers_are_checked_before_curl() {
+        let tempdir = TempDir::new().unwrap();
+        let target = tempdir.path().join("image.png");
+        let url_denied = "io error: URL must be an http or https URL with a host";
+        for url in [
+            "file:///etc/passwd",
+            "-o/tmp/x",
+            "@/etc/passwd",
+            "gopher://example.com/",
+            "https://a@example.com/",
+        ] {
+            let downloaded = ImageGenActuator::download_to_path(url, &target).unwrap_err();
+            assert_eq!(downloaded.to_string(), url_denied, "{url:?}");
+            let polled = ImageGenActuator::curl_get_json(url, &BTreeMap::new()).unwrap_err();
+            assert_eq!(polled.to_string(), url_denied, "{url:?}");
+            let posted =
+                ImageGenActuator::curl_json(url, &BTreeMap::new(), &json!({})).unwrap_err();
+            assert_eq!(posted.to_string(), url_denied, "{url:?}");
+        }
+        assert!(!target.exists());
+        let header = BTreeMap::from([("x-a".to_string(), "v\r\nx-b: 1".to_string())]);
+        let err = ImageGenActuator::curl_get_json("https://example.invalid/", &header).unwrap_err();
+        assert_eq!(err.to_string(), "io error: invalid HTTP header");
     }
 }

@@ -290,11 +290,19 @@ pub(crate) fn get_default_model() -> String {
     let ollama = OllamaProvider::new(&ollama_url);
     if ollama.health_check().unwrap_or(false) {
         // Fast model list with 500ms hard ceiling (curl_get_json uses 10s — too slow here)
-        if let Ok(output) = std::process::Command::new("curl")
-            .args(["-sS", "-m", "0.5"])
-            .arg(format!("{}/api/tags", ollama_url))
-            .output()
-        {
+        // P0-002C5B: the configured base URL is checked as an http(s) URL.
+        let tags = nexus_kernel::governed_http::http_url(&format!(
+            "{}/api/tags",
+            ollama_url.trim_end_matches('/')
+        ));
+        if let Ok(output) = tags.map_err(|_| ()).and_then(|tags| {
+            std::process::Command::new("curl")
+                .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+                .args(["-sS", "-m", "0.5", "--"])
+                .arg(tags.as_str())
+                .output()
+                .map_err(|_| ())
+        }) {
             if output.status.success() {
                 if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
                     // TODO: prefer larger models for planner default
@@ -1662,17 +1670,23 @@ pub(crate) fn delete_ollama_model(
     base_url: Option<String>,
 ) -> Result<(), String> {
     let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
-    let endpoint = format!("{}/api/delete", url.trim_end_matches('/'));
+    // P0-002C5B: the base URL is validated independently of the model name,
+    // which travels only inside the literal JSON body.
+    let endpoint =
+        nexus_kernel::governed_http::http_url(&format!("{}/api/delete", url.trim_end_matches('/')))
+            .map_err(|e| e.to_string())?;
     let body = json!({ "name": model_name });
     let encoded = serde_json::to_string(&body).map_err(|e| e.to_string())?;
 
     let output = Command::new("curl")
-        .args(["-sS", "-X", "DELETE"])
+        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+        .args(["-sS", "-m", "30", "-X", "DELETE"])
         .arg("-H")
         .arg("content-type: application/json")
-        .arg("-d")
+        .arg("--data-raw")
         .arg(&encoded)
-        .arg(&endpoint)
+        .arg("--")
+        .arg(endpoint.as_str())
         .output()
         .map_err(|e| format!("Failed to run curl: {e}"))?;
 

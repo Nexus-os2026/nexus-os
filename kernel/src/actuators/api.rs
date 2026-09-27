@@ -104,12 +104,22 @@ impl Actuator for GovernedApiClient {
         // Check body size
         Self::check_request_body(body)?;
 
+        // P0-002C5B: only an http(s) URL with a host and no userinfo, checked
+        // against the egress allowlist in the normalized spelling curl
+        // receives after `--`.
+        let target = crate::governed_http::http_url(url)
+            .map_err(|error| ActuatorError::EgressDenied(error.to_string()))?;
+
         // Egress check
-        Self::check_egress(url, context)?;
+        Self::check_egress(target.as_str(), context)?;
 
         // Build curl command
         let method_upper = method.to_uppercase();
-        let mut args = vec![
+        let mut args: Vec<String> = crate::governed_http::CURL_HTTP_ONLY
+            .iter()
+            .map(|arg| arg.to_string())
+            .collect();
+        args.extend([
             "-sS".to_string(),
             "-X".to_string(),
             method_upper.clone(),
@@ -117,7 +127,7 @@ impl Actuator for GovernedApiClient {
             REQUEST_TIMEOUT_SECS.to_string(),
             "--max-filesize".to_string(),
             MAX_RESPONSE_BODY.to_string(),
-        ];
+        ]);
 
         // Add custom headers, or default Content-Type if none provided
         let mut has_content_type = false;
@@ -132,7 +142,10 @@ impl Actuator for GovernedApiClient {
                     has_content_type = true;
                 }
                 args.push("-H".to_string());
-                args.push(format!("{key}: {value}"));
+                args.push(
+                    crate::governed_http::http_header(key, value)
+                        .map_err(|error| ActuatorError::EgressDenied(error.to_string()))?,
+                );
             }
         }
         if !has_content_type && body.is_some() {
@@ -140,12 +153,14 @@ impl Actuator for GovernedApiClient {
             args.push("Content-Type: application/json".to_string());
         }
 
+        // The body is sent literally: `--data-raw` never reads `@file`.
         if let Some(b) = body {
-            args.push("-d".to_string());
+            args.push("--data-raw".to_string());
             args.push(b.clone());
         }
 
-        args.push(url.clone());
+        args.push("--".to_string());
+        args.push(target.as_str().to_string());
 
         let output = std::process::Command::new("curl")
             .args(&args)
@@ -340,5 +355,42 @@ mod tests {
             Err(ActuatorError::IoError(_)) => {} // curl failed (expected in test)
             Err(other) => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    #[test]
+    fn p0_002c5b_hostile_urls_and_headers_are_refused_before_curl() {
+        let ctx = make_context();
+        let api = GovernedApiClient;
+        for url in [
+            "file:///etc/passwd",
+            "-K/etc/passwd",
+            "--config=/etc/passwd",
+            "@/etc/passwd",
+            "gopher://api.example.com/x",
+            // Passes a raw prefix match on the allowlist, but names evil.example.
+            "https://api.example.com@evil.example/steal",
+            "https://api.example.com /x",
+        ] {
+            let action = PlannedAction::ApiCall {
+                method: "POST".into(),
+                url: url.into(),
+                body: Some("@/etc/passwd".into()),
+                headers: None,
+            };
+            let err = api.execute(&action, &ctx).unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                "egress denied: URL must be an http or https URL with a host",
+                "{url:?}"
+            );
+        }
+        let action = PlannedAction::ApiCall {
+            method: "GET".into(),
+            url: "https://api.example.com/v1".into(),
+            body: None,
+            headers: Some([("X-A".to_string(), "v\r\nX-Injected: 1".to_string())].into()),
+        };
+        let err = api.execute(&action, &ctx).unwrap_err();
+        assert_eq!(err.to_string(), "egress denied: invalid HTTP header");
     }
 }

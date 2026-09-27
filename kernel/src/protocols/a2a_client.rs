@@ -113,9 +113,17 @@ impl A2aClient {
         let reservation = self.reserve_fuel("a2a_discover")?;
 
         let card_url = format!("{}/a2a/agent-card", base_url.trim_end_matches('/'));
+        // P0-002C5B: an untrusted base URL never becomes curl syntax.
+        let checked = crate::governed_http::http_url(&card_url).map_err(|error| {
+            A2aClientError::DiscoveryFailed {
+                url: card_url.clone(),
+                detail: error.to_string(),
+            }
+        })?;
 
         let output = std::process::Command::new("curl")
-            .args(["-s", "-m", "10", &card_url])
+            .args(crate::governed_http::CURL_HTTP_ONLY)
+            .args(["-s", "-m", "10", "--", checked.as_str()])
             .output()
             .map_err(|e| A2aClientError::DiscoveryFailed {
                 url: card_url.clone(),
@@ -480,18 +488,25 @@ impl A2aClient {
             detail: e.to_string(),
         })?;
 
+        let checked =
+            crate::governed_http::http_url(&url).map_err(|error| A2aClientError::SendFailed {
+                url: url.clone(),
+                detail: error.to_string(),
+            })?;
         let output = std::process::Command::new("curl")
+            .args(crate::governed_http::CURL_HTTP_ONLY)
             .args([
                 "-s",
                 "-m",
                 "30",
                 "-X",
                 "POST",
-                &url,
                 "-H",
                 "Content-Type: application/json",
-                "-d",
+                "--data-raw",
                 &body,
+                "--",
+                checked.as_str(),
             ])
             .output()
             .map_err(|e| A2aClientError::HttpError(e.to_string()))?;
@@ -689,5 +704,31 @@ mod tests {
         let client = A2aClient::with_consent(consent, agent_id);
         assert!(client.known_agents().is_empty());
         assert!(client.consent.is_some());
+    }
+
+    #[test]
+    fn p0_002c5b_hostile_agent_urls_never_reach_curl() {
+        let mut client = A2aClient::new();
+        let denied = crate::governed_http::HttpDenied::Url.to_string();
+        for base in [
+            "file:///etc",
+            "-K/etc/passwd",
+            "@/etc/passwd",
+            "gopher://example.com",
+            "https://a@example.com",
+        ] {
+            match client.discover_agent(base) {
+                Err(A2aClientError::DiscoveryFailed { detail, .. }) => {
+                    assert_eq!(detail, denied, "{base:?}")
+                }
+                other => panic!("{base:?}: {other:?}"),
+            }
+            match client.send_task(base, "@/etc/passwd") {
+                Err(A2aClientError::SendFailed { detail, .. }) => {
+                    assert_eq!(detail, denied, "{base:?}")
+                }
+                other => panic!("{base:?}: {other:?}"),
+            }
+        }
     }
 }

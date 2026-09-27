@@ -138,19 +138,24 @@ impl TtsActuator {
         let encoded = serde_json::to_string(&body)
             .map_err(|error| ActuatorError::IoError(format!("encode tts request: {error}")))?;
         let output = Command::new("curl")
+            .args(crate::governed_http::CURL_HTTPS_ONLY)
             .args([
                 "-sS",
                 "-L",
-                "https://api.openai.com/v1/audio/speech",
+                "-m",
+                "120",
+                "--max-filesize",
+                "67108864",
                 "-H",
                 &format!("Authorization: Bearer {api_key}"),
                 "-H",
                 "Content-Type: application/json",
-                "-d",
+                "--data-raw",
                 &encoded,
                 "-o",
             ])
             .arg(output_path)
+            .args(["--", "https://api.openai.com/v1/audio/speech"])
             .output()
             .map_err(|error| ActuatorError::IoError(format!("curl openai tts: {error}")))?;
         if !output.status.success() {

@@ -161,9 +161,20 @@ impl<T: LlmProvider + ?Sized> LlmProvider for Arc<T> {
     }
 }
 
+/// An endpoint built from a configured or caller-supplied base URL, checked
+/// as an http(s) URL before it reaches curl, which receives only its
+/// normalized spelling after `--` (P0-002C5B).
+pub(crate) fn checked_endpoint(endpoint: &str) -> Result<String, AgentError> {
+    nexus_kernel::governed_http::http_url(endpoint)
+        .map(|url| url.as_str().to_string())
+        .map_err(|error| AgentError::SupervisorError(format!("invalid endpoint: {error}")))
+}
+
 pub(crate) fn curl_get_status(endpoint: &str) -> Result<u16, AgentError> {
+    let endpoint = checked_endpoint(endpoint)?;
     eprintln!("[nexus-llm][governance] curl_get_status endpoint={endpoint}");
     let output = Command::new("curl")
+        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
         .args([
             "-sS",
             "-L",
@@ -173,8 +184,9 @@ pub(crate) fn curl_get_status(endpoint: &str) -> Result<u16, AgentError> {
             "/dev/null",
             "-w",
             "%{http_code}",
+            "--",
         ])
-        .arg(endpoint)
+        .arg(&endpoint)
         .output()
         .map_err(|error| AgentError::SupervisorError(format!("curl execution failed: {error}")))?;
     if !output.status.success() {
@@ -212,6 +224,7 @@ pub(crate) fn curl_post_json_with_timeout(
     body: &Value,
     timeout_secs: u32,
 ) -> Result<(u16, Value), AgentError> {
+    let endpoint = checked_endpoint(endpoint)?;
     eprintln!("[nexus-llm][governance] curl_post_json endpoint={endpoint} timeout={timeout_secs}s");
     let marker = "__NEXUS_STATUS__:";
     let encoded_body = serde_json::to_string(body).map_err(|error| {
@@ -220,18 +233,23 @@ pub(crate) fn curl_post_json_with_timeout(
 
     let timeout_str = timeout_secs.to_string();
     let mut command = Command::new("curl");
-    command.args(["-sS", "-L", "-m", &timeout_str]);
-    for (header_name, header_value) in headers {
-        command
-            .arg("-H")
-            .arg(format!("{header_name}: {header_value}"));
-    }
     command
-        .arg("-d")
+        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+        .args(["-sS", "-L", "-m", &timeout_str]);
+    for (header_name, header_value) in headers {
+        let header = nexus_kernel::governed_http::http_header(header_name, header_value)
+            .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
+        command.arg("-H").arg(header);
+    }
+    // The body is backend-serialized JSON on stdin: `@-` is a fixed stdin
+    // marker, never caller text.
+    command
+        .arg("--data-binary")
         .arg("@-")
         .arg("-w")
         .arg(format!("\n{marker}%{{http_code}}"))
-        .arg(endpoint)
+        .arg("--")
+        .arg(&endpoint)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -687,5 +705,41 @@ mod tests {
     fn test_nvidia_vision_model_list() {
         assert_eq!(super::nvidia::NVIDIA_VISION_MODELS.len(), 8);
         assert!(super::nvidia::NVIDIA_VISION_MODELS.contains(&"meta/llama-3.2-90b-vision-instruct"));
+    }
+
+    #[test]
+    fn p0_002c5b_endpoints_are_http_urls_before_curl_runs() {
+        use std::collections::BTreeMap;
+        for endpoint in [
+            "file:///etc/passwd",
+            "-K/etc/passwd",
+            "@/etc/passwd",
+            "gopher://example.com/",
+            "https://a@example.com/x",
+        ] {
+            assert!(super::checked_endpoint(endpoint).is_err(), "{endpoint:?}");
+            let status = super::curl_get_status(endpoint).unwrap_err().to_string();
+            assert!(
+                status.contains("invalid endpoint"),
+                "{endpoint:?}: {status}"
+            );
+            let posted =
+                super::curl_post_json_with_timeout(endpoint, &BTreeMap::new(), &json!({}), 1)
+                    .unwrap_err()
+                    .to_string();
+            assert!(
+                posted.contains("invalid endpoint"),
+                "{endpoint:?}: {posted}"
+            );
+        }
+        let header = BTreeMap::from([("x-a".to_string(), "v\r\nx-b: 1".to_string())]);
+        let err = super::curl_post_json_with_timeout("http://127.0.0.1:9/", &header, &json!({}), 1)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("invalid HTTP header"), "{err}");
+        assert_eq!(
+            super::checked_endpoint("http://127.0.0.1:11434/api/tags").unwrap(),
+            "http://127.0.0.1:11434/api/tags"
+        );
     }
 }

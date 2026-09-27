@@ -168,13 +168,25 @@ impl WebSearchConnector {
             url.push_str(&params.join("&"));
         }
 
+        let url = nexus_kernel::governed_http::http_url(&url)
+            .map_err(|error| AgentError::SupervisorError(format!("invalid URL: {error}")))?;
         let timeout_str = REQUEST_TIMEOUT_SECS.to_string();
         let mut cmd = Command::new("curl");
-        cmd.args(["-sS", "-L", "--max-time", &timeout_str]);
+        cmd.args(nexus_kernel::governed_http::CURL_HTTP_ONLY).args([
+            "-sS",
+            "-L",
+            "--max-time",
+            &timeout_str,
+            "--max-filesize",
+            "10485760",
+        ]);
         for (name, value) in &request.headers {
-            cmd.arg("-H").arg(format!("{name}: {value}"));
+            let header = nexus_kernel::governed_http::http_header(name, value)
+                .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
+            cmd.arg("-H").arg(header);
         }
-        cmd.arg(&url)
+        cmd.arg("--")
+            .arg(url.as_str())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -269,16 +281,22 @@ impl WebSearchConnector {
 
 /// Perform a GET request via curl subprocess. Safe in async tokio contexts.
 fn curl_get(url: &str) -> Result<String, AgentError> {
+    let url = nexus_kernel::governed_http::http_url(url)
+        .map_err(|error| AgentError::SupervisorError(format!("invalid URL: {error}")))?;
     let timeout_str = REQUEST_TIMEOUT_SECS.to_string();
     let output = Command::new("curl")
+        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
         .args([
             "-sS",
             "-L",
             "--max-time",
             &timeout_str,
+            "--max-filesize",
+            "10485760",
             "-A",
             USER_AGENT,
-            url,
+            "--",
+            url.as_str(),
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -470,6 +488,18 @@ mod tests {
                 .query
                 .contains(&("q".to_string(), "rust agents".to_string())));
             assert!(req.query.contains(&("count".to_string(), "7".to_string())));
+        }
+    }
+
+    #[test]
+    fn p0_002c5b_search_requests_are_http_urls_before_curl_runs() {
+        for url in [
+            "file:///etc/passwd",
+            "-K/etc/passwd",
+            "https://a@example.com/",
+        ] {
+            let err = super::curl_get(url).unwrap_err().to_string();
+            assert!(err.contains("invalid URL"), "{url:?}: {err}");
         }
     }
 }

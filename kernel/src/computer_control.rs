@@ -452,9 +452,28 @@ fn ollama_url() -> String {
     std::env::var("OLLAMA_URL").unwrap_or_else(|_| DEFAULT_OLLAMA_URL.to_string())
 }
 
+/// `{base}{path}` as a checked http(s) URL (P0-002C5B): a caller base URL
+/// never selects another protocol, a file or a curl option.
+fn ollama_endpoint(base: &str, path: &str) -> Result<String, String> {
+    crate::governed_http::http_url(&format!("{base}{path}"))
+        .map(|url| url.as_str().to_string())
+        .map_err(|e| format!("invalid Ollama URL: {e}"))
+}
+
 pub fn list_ollama_models(base_url: Option<&str>) -> Result<Vec<String>, String> {
     let base = base_url.unwrap_or(DEFAULT_OLLAMA_URL).trim_end_matches('/');
-    let output = run_command("curl", &["-sS", &format!("{base}/api/tags")])?;
+    let endpoint = ollama_endpoint(base, "/api/tags")?;
+    let mut args = crate::governed_http::CURL_HTTP_ONLY.to_vec();
+    args.extend([
+        "-sS",
+        "-m",
+        "10",
+        "--max-filesize",
+        "10485760",
+        "--",
+        &endpoint,
+    ]);
+    let output = run_command("curl", &args)?;
     if !output.status.success() {
         return Err("failed to query Ollama model list".to_string());
     }
@@ -510,20 +529,25 @@ pub fn query_vision_model(
     });
     let encoded = serde_json::to_string(&body)
         .map_err(|e| format!("failed to encode vision request: {e}"))?;
-    let output = run_command(
-        "curl",
-        &[
-            "-sS",
-            "-L",
-            "-X",
-            "POST",
-            "-H",
-            "content-type: application/json",
-            "-d",
-            &encoded,
-            &format!("{base}/api/chat"),
-        ],
-    )?;
+    let endpoint = ollama_endpoint(base, "/api/chat")?;
+    let mut args = crate::governed_http::CURL_HTTP_ONLY.to_vec();
+    args.extend([
+        "-sS",
+        "-L",
+        "-m",
+        "300",
+        "--max-filesize",
+        "10485760",
+        "-X",
+        "POST",
+        "-H",
+        "content-type: application/json",
+        "--data-raw",
+        &encoded,
+        "--",
+        &endpoint,
+    ]);
+    let output = run_command("curl", &args)?;
     if !output.status.success() {
         return Err("vision query request failed".to_string());
     }
@@ -1067,5 +1091,28 @@ mod tests {
     fn test_detect_vision_model_errors_when_none_available() {
         let result = detect_vision_model(Some("http://127.0.0.1:9"));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn p0_002c5b_vision_helpers_refuse_non_http_base_urls_before_curl() {
+        for base in [
+            "file:///etc/passwd#",
+            "-K/etc/passwd",
+            "@/etc/passwd",
+            "gopher://example.com",
+            "https://a@example.com",
+        ] {
+            let listed = list_ollama_models(Some(base)).unwrap_err();
+            assert!(
+                listed.starts_with("invalid Ollama URL"),
+                "{base:?}: {listed}"
+            );
+            let queried =
+                query_vision_model("describe", "", Some("llava"), Some(base)).unwrap_err();
+            assert!(
+                queried.starts_with("invalid Ollama URL"),
+                "{base:?}: {queried}"
+            );
+        }
     }
 }

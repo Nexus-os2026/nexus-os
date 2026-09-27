@@ -186,36 +186,59 @@ pub(crate) fn api_client_request(
     headers_json: String,
     body: String,
 ) -> Result<String, String> {
+    // P0-002C5B: the method, URL and headers are validated and the body is
+    // sent literally, so no caller value becomes curl syntax or a file read.
+    let method = nexus_kernel::governed_http::http_method(&method)
+        .map_err(|_| deny(state, "api_client_request", "unsupported_method"))?;
+    let target = nexus_kernel::governed_http::http_url(&url)
+        .map_err(|_| deny(state, "api_client_request", "invalid_url"))?;
+    let headers: Vec<(String, String)> = serde_json::from_str(&headers_json).unwrap_or_default();
+    let mut header_args = Vec::with_capacity(headers.len());
+    for (k, v) in &headers {
+        header_args.push(
+            nexus_kernel::governed_http::http_header(k, v)
+                .map_err(|_| deny(state, "api_client_request", "invalid_header"))?,
+        );
+    }
     state.log_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "api_client_request", "method": method, "url": url}),
+        json!({"action": "api_client_request", "method": method, "url": target.as_str()}),
     );
 
     let start = std::time::Instant::now();
 
-    let mut args: Vec<String> = vec![
-        "-sS".to_string(),
-        "-w".to_string(),
-        "\n__NEXUS_STATUS__%{http_code}\n__NEXUS_HEADERS__%{header_json}".to_string(),
-        "-X".to_string(),
-        method.clone(),
-    ];
-
-    // Parse headers
-    let headers: Vec<(String, String)> = serde_json::from_str(&headers_json).unwrap_or_default();
-    for (k, v) in &headers {
+    let mut args: Vec<String> = nexus_kernel::governed_http::CURL_HTTP_ONLY
+        .iter()
+        .map(|arg| arg.to_string())
+        .collect();
+    args.extend(
+        [
+            "-sS",
+            "--max-time",
+            "60",
+            "--max-filesize",
+            "10485760",
+            "-w",
+            "\n__NEXUS_STATUS__%{http_code}\n__NEXUS_HEADERS__%{header_json}",
+            "-X",
+            method,
+        ]
+        .map(String::from),
+    );
+    for header in header_args {
         args.push("-H".to_string());
-        args.push(format!("{k}: {v}"));
+        args.push(header);
     }
 
-    // Add body for methods that support it
+    // Add body for methods that support it, literally.
     if !body.is_empty() && method != "GET" && method != "HEAD" {
-        args.push("-d".to_string());
+        args.push("--data-raw".to_string());
         args.push(body);
     }
 
-    args.push(url.clone());
+    args.push("--".to_string());
+    args.push(target.as_str().to_string());
 
     let output = Command::new("curl")
         .args(&args)

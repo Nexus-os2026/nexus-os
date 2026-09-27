@@ -54,22 +54,38 @@ pub fn validate_telegram_token(token: &str) -> bool {
     body.contains("\"ok\":true")
 }
 
-fn http_status_with_headers(url: &str, headers: &[String]) -> Option<u16> {
+/// The curl invocation shared by the validators (P0-002C5B): an http(s) URL
+/// only, header lines without line breaks, and the URL after `--`.
+fn curl_command(url: &str, headers: &[String], args: &[&str]) -> Option<Command> {
+    let url = nexus_kernel::governed_http::http_url(url).ok()?;
     let mut command = Command::new("curl");
-    command.args([
-        "-sS",
-        "-L",
-        "-m",
-        "5",
-        "-o",
-        "/dev/null",
-        "-w",
-        "%{http_code}",
-    ]);
+    command
+        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+        .args(args);
     for header in headers {
+        let (name, value) = header.split_once(": ")?;
+        let header = nexus_kernel::governed_http::http_header(name, value).ok()?;
         command.arg("-H").arg(header);
     }
-    command.arg(url);
+    command.arg("--").arg(url.as_str());
+    Some(command)
+}
+
+fn http_status_with_headers(url: &str, headers: &[String]) -> Option<u16> {
+    let mut command = curl_command(
+        url,
+        headers,
+        &[
+            "-sS",
+            "-L",
+            "-m",
+            "5",
+            "-o",
+            "/dev/null",
+            "-w",
+            "%{http_code}",
+        ],
+    )?;
 
     let output = command.output().ok()?;
     if !output.status.success() {
@@ -80,12 +96,11 @@ fn http_status_with_headers(url: &str, headers: &[String]) -> Option<u16> {
 }
 
 fn http_get_body(url: &str, headers: &[String]) -> Option<String> {
-    let mut command = Command::new("curl");
-    command.args(["-sS", "-L", "-m", "5"]);
-    for header in headers {
-        command.arg("-H").arg(header);
-    }
-    command.arg(url);
+    let mut command = curl_command(
+        url,
+        headers,
+        &["-sS", "-L", "-m", "5", "--max-filesize", "1048576"],
+    )?;
 
     let output = command.output().ok()?;
     if !output.status.success() {
@@ -96,4 +111,35 @@ fn http_get_body(url: &str, headers: &[String]) -> Option<String> {
 
 fn is_success_status(status: u16) -> bool {
     (200..300).contains(&status)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::curl_command;
+
+    #[test]
+    fn p0_002c5b_validators_build_curl_only_for_http_urls_and_clean_headers() {
+        for url in [
+            "file:///etc/passwd",
+            "-K/etc/passwd",
+            "@/etc/passwd",
+            "https://a@example.com/",
+        ] {
+            assert!(curl_command(url, &[], &[]).is_none(), "{url:?}");
+        }
+        let injected = vec!["x-api-key: k\r\nX-Injected: 1".to_string()];
+        assert!(curl_command("https://example.com/", &injected, &[]).is_none());
+        let command = curl_command("https://example.com/v1", &["x-api-key: k".into()], &["-sS"])
+            .expect("valid request");
+        let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
+        assert_eq!(args.first().map(|a| a.as_ref()), Some("-q"));
+        assert_eq!(
+            args.iter()
+                .rev()
+                .take(2)
+                .map(|a| a.as_ref())
+                .collect::<Vec<_>>(),
+            ["https://example.com/v1", "--"]
+        );
+    }
 }

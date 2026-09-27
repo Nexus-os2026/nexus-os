@@ -167,18 +167,29 @@ impl MemoryEmbedder for OllamaEmbedder {
 
         // Use std::process::Command with curl for HTTP — no extra async deps needed,
         // consistent with how the codebase does lightweight HTTP calls.
+        // P0-002C5B: HTTP(S) only, no URL globbing, a literal body, and the
+        // configured URL after `--`.
         let output = std::process::Command::new("curl")
             .args([
+                "-q",
+                "--globoff",
+                "--proto",
+                "=http,https",
+                "--proto-redir",
+                "=http,https",
                 "-s",
                 "--max-time",
                 "30",
+                "--max-filesize",
+                "10485760",
                 "-X",
                 "POST",
-                &url,
                 "-H",
                 "Content-Type: application/json",
-                "-d",
+                "--data-raw",
                 &body,
+                "--",
+                &url,
             ])
             .output()
             .map_err(|e| EmbedError::ProviderUnavailable(format!("failed to run curl: {e}")))?;

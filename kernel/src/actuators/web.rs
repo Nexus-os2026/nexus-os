@@ -58,8 +58,12 @@ pub struct CurlWebBackend;
 fn searxng_url() -> Option<String> {
     let url = std::env::var("SEARXNG_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
     // Quick probe: if SearXNG isn't running, don't waste time on it
+    // P0-002C5B: the operator URL is checked; an invalid one disables search
+    // through SearXNG rather than reaching curl.
+    let health = crate::governed_http::http_url(&format!("{url}/healthz")).ok()?;
     if let Ok(output) = Command::new("curl")
-        .args(["-sS", "--max-time", "2", &format!("{url}/healthz")])
+        .args(crate::governed_http::CURL_HTTP_ONLY)
+        .args(["-sS", "--max-time", "2", "--", health.as_str()])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -235,7 +239,12 @@ impl Actuator for GovernedWeb {
                     return Err(ActuatorError::CapabilityDenied("web.read".into()));
                 }
 
-                Self::check_egress(url, context)?;
+                // P0-002C5B: only an http(s) URL with a host and no userinfo,
+                // checked against the allowlist in the normalized spelling the
+                // backend's curl request receives.
+                let target = crate::governed_http::http_url(url)
+                    .map_err(|error| ActuatorError::EgressDenied(error.to_string()))?;
+                Self::check_egress(target.as_str(), context)?;
 
                 let text = self
                     .backend
@@ -260,8 +269,12 @@ impl Actuator for GovernedWeb {
 /// Perform a blocking HTTP GET via curl subprocess.
 /// Safe to call from async context — spawns a child process.
 fn curl_get(url: &str) -> Result<String, ActuatorError> {
+    // P0-002C5B: HTTP(S) only, including redirects, with the URL after `--`.
+    let url = crate::governed_http::http_url(url)
+        .map_err(|error| ActuatorError::IoError(error.to_string()))?;
     let timeout_str = REQUEST_TIMEOUT_SECS.to_string();
     let output = Command::new("curl")
+        .args(crate::governed_http::CURL_HTTP_ONLY)
         .args([
             "-sS",
             "-L",
@@ -271,7 +284,8 @@ fn curl_get(url: &str) -> Result<String, ActuatorError> {
             &MAX_RESPONSE_BYTES.to_string(),
             "-A",
             USER_AGENT,
-            url,
+            "--",
+            url.as_str(),
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -814,5 +828,36 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].title, "AI News Today");
         assert_eq!(results[1].url, "https://example.com/rust");
+    }
+
+    #[test]
+    fn p0_002c5b_fetches_refuse_non_http_and_userinfo_urls_before_curl() {
+        let ctx = make_context();
+        let web = GovernedWeb::new();
+        for url in [
+            "file:///etc/passwd",
+            "file://example.com/etc/passwd",
+            "-K/etc/passwd",
+            "https://example.com@evil.com/x",
+            "gopher://example.com/",
+        ] {
+            let action = PlannedAction::WebFetch { url: url.into() };
+            let err = web.execute(&action, &ctx).unwrap_err();
+            assert!(
+                matches!(err, ActuatorError::EgressDenied(_)),
+                "{url:?}: {err}"
+            );
+        }
+        for url in [
+            "file:///etc/passwd",
+            "-K/etc/passwd",
+            "https://a@example.com/",
+        ] {
+            assert_eq!(
+                curl_get(url).unwrap_err().to_string(),
+                "io error: URL must be an http or https URL with a host",
+                "{url:?}"
+            );
+        }
     }
 }

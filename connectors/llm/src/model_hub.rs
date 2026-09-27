@@ -125,9 +125,12 @@ pub struct SystemCompatibility {
 
 /// Perform an HTTP GET request using curl and return the response body.
 fn http_get(url: &str) -> Result<String, String> {
+    // P0-002C5B: HTTPS only, including redirects, with the URL after `--`.
+    let url = nexus_kernel::governed_http::http_url(url).map_err(|e| e.to_string())?;
     let output = Command::new("curl")
-        .args(["-sS", "-L", "-m", "30"])
-        .arg(url)
+        .args(nexus_kernel::governed_http::CURL_HTTPS_ONLY)
+        .args(["-sS", "-L", "-m", "30", "--max-filesize", "33554432", "--"])
+        .arg(url.as_str())
         .output()
         .map_err(|e| format!("curl execution failed: {e}"))?;
 
@@ -370,17 +373,20 @@ pub fn download_model_file(
     let total_bytes = get_content_length(&url).unwrap_or(0);
 
     // Start curl download in the background: HTTPS only, including redirects,
-    // failing on HTTP errors, with the URL after `--`.
+    // failing on HTTP errors, with the URL after `--`. A stalled transfer is
+    // abandoned; total size is not bounded because model files are large.
     let mut child = Command::new("curl")
+        .args(nexus_kernel::governed_http::CURL_HTTPS_ONLY)
         .args([
-            "-q",
             "-sS",
             "-L",
             "--fail",
-            "--proto",
-            "=https",
-            "--proto-redir",
-            "=https",
+            "--connect-timeout",
+            "30",
+            "--speed-limit",
+            "1",
+            "--speed-time",
+            "120",
             "-o",
         ])
         .arg(&file_path_str)
@@ -446,19 +452,8 @@ pub fn download_model_file(
 /// Get Content-Length of a URL via a HEAD request.
 fn get_content_length(url: &str) -> Option<u64> {
     let output = Command::new("curl")
-        .args([
-            "-q",
-            "-sS",
-            "-L",
-            "-I",
-            "-m",
-            "10",
-            "--proto",
-            "=https",
-            "--proto-redir",
-            "=https",
-            "--",
-        ])
+        .args(nexus_kernel::governed_http::CURL_HTTPS_ONLY)
+        .args(["-sS", "-L", "-I", "-m", "10", "--"])
         .arg(url)
         .output()
         // Optional: curl may not be installed or HEAD request may fail
@@ -694,9 +689,11 @@ pub fn register_downloaded_model_with_ollama(
     });
 
     let result = Command::new("curl")
+        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
         .args([
-            "-q",
             "-sS",
+            "-m",
+            "600",
             "-X",
             "POST",
             "-H",
@@ -1079,5 +1076,21 @@ mod tests {
         let json = serde_json::to_string(&compat).expect("serialize");
         assert!(json.contains("Q4_K_M"));
         assert!(json.contains("16384"));
+    }
+
+    #[test]
+    fn p0_002c5b_hub_requests_are_http_urls_before_curl_runs() {
+        for url in [
+            "file:///etc/passwd",
+            "-K/etc/passwd",
+            "@/etc/passwd",
+            "https://a@huggingface.co/api/models",
+        ] {
+            let err = http_get(url).unwrap_err();
+            assert!(
+                err.contains("URL must be an http or https URL"),
+                "{url:?}: {err}"
+            );
+        }
     }
 }

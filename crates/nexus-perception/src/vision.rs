@@ -177,16 +177,27 @@ impl ApiVisionProvider {
         let encoded = serde_json::to_string(&body).map_err(|e| format!("json: {e}"))?;
 
         let marker = "__NX_P__:";
+        // P0-002C5B: HTTP(S) only, no URL globbing, the body on stdin through
+        // the fixed `@-` marker, and the configured endpoint after `--`.
         let mut child = std::process::Command::new("curl")
-            .args(["-sS", "-L", "-m", "60"])
+            .args([
+                "-q",
+                "--globoff",
+                "--proto",
+                "=http,https",
+                "--proto-redir",
+                "=http,https",
+            ])
+            .args(["-sS", "-L", "-m", "60", "--max-filesize", "10485760"])
             .arg("-H")
             .arg(format!("authorization: Bearer {}", self.api_key))
             .arg("-H")
             .arg("content-type: application/json")
-            .arg("-d")
+            .arg("--data-binary")
             .arg("@-")
             .arg("-w")
             .arg(format!("\n{marker}%{{http_code}}"))
+            .arg("--")
             .arg(&self.endpoint)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())

@@ -81,6 +81,10 @@ impl WebReaderConnector {
         if !agent.has_capability("web.read") {
             return Err(AgentError::CapabilityDenied("web.read".to_string()));
         }
+        // P0-002C5B: refuse non-http(s) targets before any fuel, robots or
+        // fetch work.
+        nexus_kernel::governed_http::http_url(url)
+            .map_err(|error| AgentError::SupervisorError(format!("invalid URL: {error}")))?;
 
         let fuel_cost = 25_u64;
         if !agent.consume_fuel(fuel_cost) {
@@ -181,16 +185,24 @@ impl WebReaderConnector {
 
 /// Perform a GET request via curl subprocess. Safe in async tokio contexts.
 fn curl_get(url: &str, timeout_secs: u64) -> Result<String, AgentError> {
+    // P0-002C5B: only http(s), including redirects, with the URL after `--`;
+    // `file:` and option-shaped values never reach curl.
+    let url = nexus_kernel::governed_http::http_url(url)
+        .map_err(|error| AgentError::SupervisorError(format!("invalid URL: {error}")))?;
     let timeout_str = timeout_secs.to_string();
     let output = Command::new("curl")
+        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
         .args([
             "-sS",
             "-L",
             "--max-time",
             &timeout_str,
+            "--max-filesize",
+            "10485760",
             "-A",
             USER_AGENT,
-            url,
+            "--",
+            url.as_str(),
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -460,6 +472,28 @@ mod tests {
                 .text
                 .contains("---BEGIN EXTERNAL DATA (WebContent)---"));
             assert!(content.text.contains("---END EXTERNAL DATA---"));
+        }
+    }
+
+    #[test]
+    fn p0_002c5b_non_http_targets_are_refused_before_robots_or_fetch() {
+        for url in [
+            "file://localhost/etc/passwd",
+            "file:///etc/passwd",
+            "-K/etc/passwd",
+            "gopher://example.com/",
+            "https://a@example.com/",
+        ] {
+            let mut connector = WebReaderConnector::new(None);
+            let mut context =
+                WebAgentContext::new(Uuid::new_v4(), capability_set(&["web.read"]), 500);
+            let err = connector
+                .fetch_and_extract(&mut context, url)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("invalid URL"), "{url:?}: {err}");
+            let err = super::curl_get(url, 1).unwrap_err().to_string();
+            assert!(err.contains("invalid URL"), "{url:?}: {err}");
         }
     }
 }

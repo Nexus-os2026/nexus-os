@@ -276,12 +276,15 @@ impl OllamaProvider {
 
         eprintln!("[nexus-llm][governance] ollama::chat_stream endpoint={endpoint} model={model}");
         let timeout_str = self.streaming_timeout_secs.to_string();
+        let endpoint = super::checked_endpoint(&endpoint)?;
         let mut child = Command::new("curl")
+            .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
             .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
             .arg("-H")
             .arg("content-type: application/json")
-            .arg("-d")
+            .arg("--data-binary")
             .arg("@-")
+            .arg("--")
             .arg(&endpoint)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -358,12 +361,15 @@ impl OllamaProvider {
             "[nexus-llm][governance] ollama::pull_model endpoint={endpoint} model={model_name}"
         );
         let timeout_str = self.streaming_timeout_secs.to_string();
+        let endpoint = super::checked_endpoint(&endpoint)?;
         let mut child = Command::new("curl")
+            .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
             .args(["-sS", "-N", "-X", "POST", "-m", &timeout_str])
             .arg("-H")
             .arg("content-type: application/json")
-            .arg("-d")
+            .arg("--data-raw")
             .arg(&encoded_body)
+            .arg("--")
             .arg(&endpoint)
             .stdout(std::process::Stdio::piped())
             .spawn()
@@ -410,12 +416,15 @@ fn curl_get_json(endpoint: &str) -> Result<(u16, Value), AgentError> {
     if !LOGGED_ONCE.swap(true, Ordering::Relaxed) {
         eprintln!("[nexus-llm][governance] ollama::curl_get_json endpoint={endpoint}");
     }
+    let endpoint = super::checked_endpoint(endpoint)?;
     let marker = "__NEXUS_STATUS__:";
     let output = Command::new("curl")
+        .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
         .args(["-sS", "-L", "-m", "10"])
         .arg("-w")
         .arg(format!("\n{marker}%{{http_code}}"))
-        .arg(endpoint)
+        .arg("--")
+        .arg(&endpoint)
         .output()
         .map_err(|e| AgentError::SupervisorError(format!("curl execution failed: {e}")))?;
 

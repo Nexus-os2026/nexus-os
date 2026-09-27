@@ -304,28 +304,37 @@ impl McpClient {
         let body = serde_json::to_string(request)
             .map_err(|e| format!("Failed to serialize request: {e}"))?;
 
+        // P0-002C5B: the server URL and auth header are validated, the body is
+        // sent literally, and the URL follows `--`.
+        let url = nexus_kernel::governed_http::http_url(&self.config.url)
+            .map_err(|e| format!("invalid MCP server URL: {e}"))?;
         let mut cmd = std::process::Command::new("curl");
-        cmd.arg("-s")
+        cmd.args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+            .args(["-s", "-m", "30", "--max-filesize", "10485760"])
             .arg("-X")
             .arg("POST")
-            .arg(&self.config.url)
             .arg("-H")
             .arg("Content-Type: application/json");
 
         // Add auth headers
         if let Some(ref auth) = self.config.auth {
-            match auth {
-                McpAuth::Bearer(token) => {
-                    cmd.arg("-H").arg(format!("Authorization: Bearer {token}"));
-                }
+            let header = match auth {
+                McpAuth::Bearer(token) => Some(nexus_kernel::governed_http::http_header(
+                    "Authorization",
+                    &format!("Bearer {token}"),
+                )),
                 McpAuth::ApiKey { header, key } => {
-                    cmd.arg("-H").arg(format!("{header}: {key}"));
+                    Some(nexus_kernel::governed_http::http_header(header, key))
                 }
-                McpAuth::None => {}
+                McpAuth::None => None,
+            };
+            if let Some(header) = header {
+                let header = header.map_err(|e| format!("invalid MCP auth header: {e}"))?;
+                cmd.arg("-H").arg(header);
             }
         }
 
-        cmd.arg("-d").arg(&body);
+        cmd.arg("--data-raw").arg(&body).arg("--").arg(url.as_str());
 
         let output = cmd
             .output()
@@ -1361,5 +1370,33 @@ mod tests {
         let governed = GovernedMcpHost::with_consent(100.0, consent, agent_id);
         assert!(governed.consent.is_some());
         assert_eq!(governed.fuel_remaining(), 100.0);
+    }
+
+    #[test]
+    fn p0_002c5b_hostile_server_urls_and_auth_headers_never_reach_curl() {
+        for url in [
+            "file:///etc/passwd",
+            "-K/etc/passwd",
+            "@/etc/passwd",
+            "gopher://example.com/",
+            "https://a@example.com/",
+        ] {
+            let mut client =
+                McpClient::new(create_server_config("x", url, McpTransport::Http, None));
+            let err = client.initialize().unwrap_err();
+            assert!(err.starts_with("invalid MCP server URL"), "{url:?}: {err}");
+        }
+        let auth = McpAuth::ApiKey {
+            header: "X-Key".into(),
+            key: "k\r\nX-Injected: 1".into(),
+        };
+        let mut client = McpClient::new(create_server_config(
+            "x",
+            "https://mcp.example.invalid/",
+            McpTransport::Http,
+            Some(auth),
+        ));
+        let err = client.initialize().unwrap_err();
+        assert!(err.starts_with("invalid MCP auth header"), "{err}");
     }
 }

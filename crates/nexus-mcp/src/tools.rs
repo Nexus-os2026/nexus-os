@@ -410,8 +410,24 @@ impl ToolRegistry {
                 let encoded = query.replace(' ', "+");
                 let url = format!("https://html.duckduckgo.com/html/?q={encoded}");
 
+                // P0-002C5B: HTTPS only, no URL globbing, URL after `--`.
                 let output = std::process::Command::new("curl")
-                    .args(["-s", "--max-time", "10", "-L", &url])
+                    .args([
+                        "-q",
+                        "--globoff",
+                        "--proto",
+                        "=https",
+                        "--proto-redir",
+                        "=https",
+                        "-s",
+                        "--max-time",
+                        "10",
+                        "--max-filesize",
+                        "10485760",
+                        "-L",
+                        "--",
+                        &url,
+                    ])
                     .output();
 
                 let text = match output {
@@ -530,13 +546,15 @@ impl ToolRegistry {
                     }
                 };
 
+                // P0-002C5B: HTTPS only, no URL globbing, URL after `--`.
                 let output = std::process::Command::new("curl")
                     .args([
-                        "-s", "--max-time", "15",
+                        "-q", "--globoff", "--proto", "=https", "--proto-redir", "=https",
+                        "-s", "--max-time", "15", "--max-filesize", "10485760",
                         "-H", &format!("Authorization: Bearer {token}"),
                         "-H", "Accept: application/vnd.github+json",
                         "-H", "User-Agent: nexus-os-mcp",
-                        &api_url,
+                        "--", &api_url,
                     ])
                     .output();
 

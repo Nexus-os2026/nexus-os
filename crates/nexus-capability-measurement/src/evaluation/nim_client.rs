@@ -68,16 +68,27 @@ impl NimClient {
         let encoded = serde_json::to_string(&body).map_err(|e| format!("json: {e}"))?;
 
         let marker = "__NX_CM__:";
+        // P0-002C5B: HTTPS only, no URL globbing, a literal body, and the
+        // fixed endpoint after `--`.
         let out = std::process::Command::new("curl")
-            .args(["-sS", "-L", "-m", "60"])
+            .args([
+                "-q",
+                "--globoff",
+                "--proto",
+                "=https",
+                "--proto-redir",
+                "=https",
+            ])
+            .args(["-sS", "-L", "-m", "60", "--max-filesize", "10485760"])
             .arg("-H")
             .arg(format!("authorization: Bearer {}", self.api_key))
             .arg("-H")
             .arg("content-type: application/json")
-            .arg("-d")
+            .arg("--data-raw")
             .arg(&encoded)
             .arg("-w")
             .arg(format!("\n{marker}%{{http_code}}"))
+            .arg("--")
             .arg(NIM_ENDPOINT)
             .output()
             .map_err(|e| format!("curl: {e}"))?;

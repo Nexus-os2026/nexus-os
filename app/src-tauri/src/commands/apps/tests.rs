@@ -134,3 +134,74 @@ fn url_path_values_are_checked_before_use() {
         assert!(!telegram_token_ok(token), "{token:?}");
     }
 }
+
+#[test]
+fn p0_002c5b_api_client_requests_never_become_curl_syntax() {
+    let state = AppState::new_in_memory();
+    let request = |method: &str, url: &str, headers: &str| {
+        api_client_request(
+            &state,
+            method.into(),
+            url.into(),
+            headers.into(),
+            "@/etc/passwd".into(),
+        )
+    };
+    for url in [
+        "file:///etc/passwd",
+        "-K/etc/passwd",
+        "--config=/etc/passwd",
+        "@/etc/passwd",
+        "gopher://example.com/",
+        "https://trusted.example@marker-host.example/",
+    ] {
+        assert_eq!(
+            request("POST", url, "[]").unwrap_err(),
+            "api_client_request: invalid url",
+            "{url:?}"
+        );
+    }
+    for method in ["-K", "TRACE", "GET /x HTTP/1.1", ""] {
+        assert_eq!(
+            request(method, "https://example.invalid/", "[]").unwrap_err(),
+            "api_client_request: unsupported method",
+            "{method:?}"
+        );
+    }
+    for headers in [
+        r#"[["@/etc/passwd","x"]]"#,
+        r#"[["X-A","v\r\nX-Injected: 1"]]"#,
+    ] {
+        assert_eq!(
+            request("GET", "https://example.invalid/", headers).unwrap_err(),
+            "api_client_request: invalid header",
+            "{headers:?}"
+        );
+    }
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    let logged = serde_json::to_string(
+        &audit
+            .events()
+            .iter()
+            .map(|e| &e.payload)
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    assert!(!logged.contains("marker-host"));
+    assert!(!logged.contains("/etc/passwd"));
+    for reason in ["invalid_url", "unsupported_method", "invalid_header"] {
+        assert!(logged.contains(reason), "{reason}");
+    }
+}
+
+#[test]
+fn p0_002c5b_ollama_deletes_need_an_http_base_url() {
+    for base in ["file:///etc", "-K/etc/passwd", "https://a@example.com"] {
+        assert!(
+            crate::commands::chat_llm::delete_ollama_model("llama3".into(), Some(base.into()))
+                .unwrap_err()
+                .contains("URL must be an http or https URL"),
+            "{base:?}"
+        );
+    }
+}
