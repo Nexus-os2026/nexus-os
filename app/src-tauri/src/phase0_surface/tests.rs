@@ -2240,3 +2240,87 @@ fn p0_002c5c_no_delegation_path_runs_around_the_executor() {
     assert!(agents
         .contains("ifletErr(error)=nexus_kernel::manifest::validate_stored_manifest(&manifest){"));
 }
+
+/// Benchmark-only process sites (P0-002C5C): ungoverned curl and `date`
+/// invocations in the conductor benchmark binaries. They are outside the
+/// production guards (`NOT_PRODUCTION_DIRS`), no other member depends on a
+/// benchmark crate, and the installers ship only the desktop.
+const BENCHMARK_PROCESS_SITES: &[(&str, usize)] = &[
+    ("benchmarks/conductor-bench/src/cloud_models_bench.rs", 2),
+    (
+        "benchmarks/conductor-bench/src/inference_consistency_bench.rs",
+        2,
+    ),
+    ("benchmarks/conductor-bench/src/local_vs_cloud_battle.rs", 3),
+    ("benchmarks/conductor-bench/src/nim_cloud_bench.rs", 2),
+    ("benchmarks/conductor-bench/src/real_agent_validation.rs", 1),
+];
+
+/// P0-002C5C: benchmark curl and `date` sites stay counted and
+/// benchmark-only: a new one, or a dependency on a benchmark crate from any
+/// other member, fails.
+#[test]
+fn p0_002c5c_benchmark_process_sites_stay_benchmark_only() {
+    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<(String, usize)>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                if path.file_name().is_some_and(|name| name != "target") {
+                    walk(root, &path, out);
+                }
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                let text = std::fs::read_to_string(&path).unwrap();
+                let sites = text.matches("Command::new(\"curl\")").count()
+                    + text.matches("(\"curl\",").count()
+                    + text.matches("Command::new(\"date\")").count();
+                if sites > 0 {
+                    let relative = path
+                        .strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    out.push((relative, sites));
+                }
+            }
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut found = Vec::new();
+    walk(&root, &root.join("benchmarks"), &mut found);
+    let expected: Vec<_> = BENCHMARK_PROCESS_SITES
+        .iter()
+        .map(|(file, count)| (file.to_string(), *count))
+        .collect();
+    assert_eq!(
+        found, expected,
+        "a benchmark process site must be classified"
+    );
+
+    let manifest = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    let members: Vec<&str> = manifest
+        .split("members")
+        .nth(1)
+        .and_then(|rest| rest.split(']').next())
+        .unwrap()
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .collect();
+    assert!(members.len() > 60, "{members:?}");
+    for member in members {
+        if member.starts_with("benchmarks") {
+            continue;
+        }
+        let cargo = std::fs::read_to_string(root.join(member).join("Cargo.toml")).unwrap();
+        for crate_name in ["nexus-benchmarks", "nexus-conductor-benchmark"] {
+            assert!(
+                !cargo.contains(crate_name),
+                "{member} depends on {crate_name}"
+            );
+        }
+    }
+}
