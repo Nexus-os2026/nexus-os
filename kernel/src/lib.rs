@@ -38,6 +38,7 @@ pub mod fuel_hardening;
 pub mod genesis;
 pub mod genome;
 pub mod governance_kpi;
+pub mod governed_path;
 pub mod hardware;
 pub mod hardware_security;
 pub mod identity;

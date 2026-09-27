@@ -578,14 +578,7 @@ pub(crate) fn time_machine_undo(state: &AppState) -> Result<String, String> {
     let files_restored: Vec<String> = cp
         .changes
         .iter()
-        .filter_map(|c| match c {
-            nexus_kernel::time_machine::ChangeEntry::FileWrite { path, .. }
-            | nexus_kernel::time_machine::ChangeEntry::FileCreate { path, .. }
-            | nexus_kernel::time_machine::ChangeEntry::FileDelete { path, .. } => {
-                Some(path.clone())
-            }
-            _ => None,
-        })
+        .filter_map(|c| c.file().map(|file| file.relative.clone()))
         .collect();
     let agents_affected: Vec<String> = non_file_actions
         .iter()
@@ -672,14 +665,7 @@ pub(crate) fn time_machine_undo_checkpoint(state: &AppState, id: String) -> Resu
         let current_files: Vec<String> = cp
             .changes
             .iter()
-            .filter_map(|c| match c {
-                nexus_kernel::time_machine::ChangeEntry::FileWrite { path, .. }
-                | nexus_kernel::time_machine::ChangeEntry::FileCreate { path, .. }
-                | nexus_kernel::time_machine::ChangeEntry::FileDelete { path, .. } => {
-                    Some(path.clone())
-                }
-                _ => None,
-            })
+            .filter_map(|c| c.file().map(|file| file.relative.clone()))
             .collect();
         let current_agents: Vec<String> = non_file_actions
             .iter()
@@ -730,14 +716,7 @@ pub(crate) fn time_machine_redo(state: &AppState) -> Result<String, String> {
     let files_restored: Vec<String> = cp
         .changes
         .iter()
-        .filter_map(|c| match c {
-            nexus_kernel::time_machine::ChangeEntry::FileWrite { path, .. }
-            | nexus_kernel::time_machine::ChangeEntry::FileCreate { path, .. }
-            | nexus_kernel::time_machine::ChangeEntry::FileDelete { path, .. } => {
-                Some(path.clone())
-            }
-            _ => None,
-        })
+        .filter_map(|c| c.file().map(|file| file.relative.clone()))
         .collect();
     let agents_affected: Vec<String> = non_file_actions
         .iter()
@@ -788,24 +767,27 @@ pub(crate) fn time_machine_get_diff(state: &AppState, id: String) -> Result<Stri
         .changes
         .iter()
         .map(|entry| match entry {
+            // P0-002C5B: file changes are shown by their path beneath the
+            // recorded grant root; no host path is recorded or returned.
             nexus_kernel::time_machine::ChangeEntry::FileWrite {
-                path,
+                file,
                 before,
                 after,
+                ..
             } => json!({
-                "path": path,
+                "path": file.relative,
                 "change_type": "modify",
                 "size_before": before.as_ref().map(|b| b.len()).unwrap_or(0),
                 "size_after": after.len(),
             }),
-            nexus_kernel::time_machine::ChangeEntry::FileCreate { path, after } => json!({
-                "path": path,
+            nexus_kernel::time_machine::ChangeEntry::FileCreate { file, after, .. } => json!({
+                "path": file.relative,
                 "change_type": "create",
                 "size_before": 0,
                 "size_after": after.len(),
             }),
-            nexus_kernel::time_machine::ChangeEntry::FileDelete { path, before } => json!({
-                "path": path,
+            nexus_kernel::time_machine::ChangeEntry::FileDelete { file, before, .. } => json!({
+                "path": file.relative,
                 "change_type": "delete",
                 "size_before": before.len(),
                 "size_after": 0,

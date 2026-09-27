@@ -462,7 +462,6 @@ pub(crate) fn apply_non_file_undo_actions(
                     }
                 }
             }
-            _ => {}
         }
     }
 }

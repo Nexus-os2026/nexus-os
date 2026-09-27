@@ -46,6 +46,7 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 readability = "0.3"
 htmd = "0.5"
 url = "2"
+tempfile = "3"
 nexus-persistence = { path = "../persistence" }
 keyring = { version = "3", default-features = false, features = ["linux-native", "apple-native", "windows-native"] }
 
@@ -60,6 +61,7 @@ windows-sys = { version = "=0.61.2", features = [
     "Win32_Foundation",
     "Win32_Globalization",
     "Win32_Security",
+    "Win32_Storage_FileSystem",
     "Win32_System_JobObjects",
     "Win32_System_Threading",
     "Win32_System_SystemInformation",

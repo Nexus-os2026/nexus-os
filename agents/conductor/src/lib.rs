@@ -666,8 +666,9 @@ impl<P: LlmProvider> Conductor<P> {
             }),
         );
 
-        // Create time machine checkpoint — records ALL file changes across all agents
-        let mut tm_builder = supervisor.time_machine_mut().begin_checkpoint(
+        // P0-002C5B: a raw output path is not Time Machine authority, so the
+        // Conductor records no file changes and this checkpoint stays empty.
+        let tm_builder = supervisor.time_machine_mut().begin_checkpoint(
             &format!("conductor: {}", request.prompt),
             Some(conductor_id.to_string()),
         );
@@ -734,15 +735,6 @@ impl<P: LlmProvider> Conductor<P> {
                                         .iter()
                                         .filter_map(|p| p.to_str().map(|s| s.to_string()))
                                         .collect();
-                                    // Record created files in time machine checkpoint
-                                    for path in &created_files {
-                                        if let Ok(content) = std::fs::read(path) {
-                                            tm_builder.record_file_create(
-                                                &path.display().to_string(),
-                                                content,
-                                            );
-                                        }
-                                    }
                                     assignment.status = TaskStatus::Completed;
                                     assignment.fuel_used = assignment.fuel_allocated / 3;
                                 }
@@ -773,15 +765,6 @@ impl<P: LlmProvider> Conductor<P> {
                                         .iter()
                                         .filter_map(|p| p.to_str().map(|s| s.to_string()))
                                         .collect();
-                                    // Record created files in time machine checkpoint
-                                    for path in &created_files {
-                                        if let Ok(content) = std::fs::read(path) {
-                                            tm_builder.record_file_create(
-                                                &path.display().to_string(),
-                                                content,
-                                            );
-                                        }
-                                    }
                                     assignment.status = TaskStatus::Completed;
                                     assignment.fuel_used = assignment.fuel_allocated / 3;
                                 }
@@ -812,15 +795,6 @@ impl<P: LlmProvider> Conductor<P> {
                                         .iter()
                                         .filter_map(|p| p.to_str().map(|s| s.to_string()))
                                         .collect();
-                                    // Record modified files in time machine checkpoint
-                                    for path in &modified_files {
-                                        if let Ok(content) = std::fs::read(path) {
-                                            tm_builder.record_file_create(
-                                                &path.display().to_string(),
-                                                content,
-                                            );
-                                        }
-                                    }
                                     assignment.status = TaskStatus::Completed;
                                     assignment.fuel_used = assignment.fuel_allocated / 3;
                                 }
@@ -850,14 +824,6 @@ impl<P: LlmProvider> Conductor<P> {
                                         .iter()
                                         .filter_map(|p| p.to_str().map(|s| s.to_string()))
                                         .collect();
-                                    for path in &created_files {
-                                        if let Ok(content) = std::fs::read(path) {
-                                            tm_builder.record_file_create(
-                                                &path.display().to_string(),
-                                                content,
-                                            );
-                                        }
-                                    }
                                     assignment.status = TaskStatus::Completed;
                                     assignment.fuel_used = assignment.fuel_allocated / 3;
                                 }
@@ -888,14 +854,6 @@ impl<P: LlmProvider> Conductor<P> {
                                         .iter()
                                         .filter_map(|p| p.to_str().map(|s| s.to_string()))
                                         .collect();
-                                    for path in &created_files {
-                                        if let Ok(content) = std::fs::read(path) {
-                                            tm_builder.record_file_create(
-                                                &path.display().to_string(),
-                                                content,
-                                            );
-                                        }
-                                    }
                                     assignment.status = TaskStatus::Completed;
                                     assignment.fuel_used = assignment.fuel_allocated / 3;
                                 }
