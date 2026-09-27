@@ -2114,3 +2114,49 @@ fn p0_002c5c_operator_overrides_stay_launch_configuration() {
         "ifletSome(path)=env::var_os(\"NEXUS_CONFIG_PATH\"){returncrate::identity_home::operator_override(path)"
     ));
 }
+
+/// P0-002C5C: a tool call runs at the registered agent's autonomy level,
+/// never at a higher level the caller claims, and must name a registered
+/// agent.
+#[test]
+fn p0_002c5c_tool_calls_run_at_the_registered_agents_autonomy() {
+    use crate::commands::crate_bridges::tool_call_autonomy;
+    let state = crate::AppState::new_in_memory();
+    let manifest = nexus_kernel::manifest::parse_manifest(
+        "name = \"c5c-tools\"\nversion = \"1.0.0\"\ncapabilities = [\"llm.query\"]\nfuel_budget = 100\nautonomy_level = 2\n",
+    )
+    .unwrap();
+    let agent = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(manifest)
+        .unwrap()
+        .to_string();
+    assert_eq!(tool_call_autonomy(&state, &agent, 5), Ok(2));
+    assert_eq!(tool_call_autonomy(&state, &agent, 1), Ok(1));
+    for unregistered in ["", "agent-1", &uuid::Uuid::new_v4().to_string()] {
+        assert_eq!(
+            tool_call_autonomy(&state, unregistered, 5),
+            Err("tools_execute: agent_id must name a registered agent".to_string())
+        );
+    }
+    // The webhook tool needs L4+: an L2 agent claiming L5 is refused.
+    let level = tool_call_autonomy(&state, &agent, 5).unwrap();
+    let refused = nexus_external_tools::tauri_commands::tools_execute(
+        &state.external_tools,
+        &agent,
+        level,
+        "webhook",
+        r#"{"url": "https://example.com/hook"}"#,
+    )
+    .unwrap_err();
+    assert!(refused.contains("requires L4+, agent is L2"), "{refused}");
+    // The command resolves the level before the engine sees it.
+    let bridges = without_whitespace(&production_text(include_str!(
+        "../commands/crate_bridges.rs"
+    )));
+    assert!(bridges.contains(
+        "letautonomy_level=tool_call_autonomy(&state,&agent_id,autonomy_level)?;tools_cmds::tools_execute(&state.external_tools,&agent_id,autonomy_level,"
+    ));
+}

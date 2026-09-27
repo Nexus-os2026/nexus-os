@@ -17,6 +17,9 @@ impl GitHubTool {
         match action {
             "list_repos" => {
                 let user = params.get("user").and_then(|v| v.as_str()).unwrap_or("me");
+                if user != "me" {
+                    super::url_identifier("user", user, super::github_login)?;
+                }
                 Ok(HttpRequest {
                     url: if user == "me" {
                         "https://api.github.com/user/repos".into()
@@ -34,6 +37,7 @@ impl GitHubTool {
                     .get("repo")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| ToolError::InvalidParameters("repo required".into()))?;
+                let repo = super::url_identifier("repo", repo, super::github_repo)?;
                 let title = params
                     .get("title")
                     .and_then(|v| v.as_str())
@@ -52,6 +56,7 @@ impl GitHubTool {
                     .get("repo")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| ToolError::InvalidParameters("repo required".into()))?;
+                let repo = super::url_identifier("repo", repo, super::github_repo)?;
                 let number = params
                     .get("number")
                     .and_then(|v| v.as_u64())

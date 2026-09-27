@@ -13,6 +13,7 @@ impl FileStorageTool {
             .get("bucket")
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::InvalidParameters("bucket required".into()))?;
+        let bucket = super::url_identifier("bucket", bucket, super::s3_bucket)?;
 
         let endpoint = std::env::var("S3_ENDPOINT")
             .unwrap_or_else(|_| format!("https://{bucket}.s3.amazonaws.com"));
@@ -32,6 +33,7 @@ impl FileStorageTool {
                     .get("key")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| ToolError::InvalidParameters("key required".into()))?;
+                let key = super::url_identifier("key", key, super::s3_key)?;
                 Ok(HttpRequest {
                     url: format!("{endpoint}/{key}"),
                     method: "GET".into(),
@@ -45,6 +47,7 @@ impl FileStorageTool {
                     .get("key")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| ToolError::InvalidParameters("key required".into()))?;
+                let key = super::url_identifier("key", key, super::s3_key)?;
                 Ok(HttpRequest {
                     url: format!("{endpoint}/{key}"),
                     method: if action == "upload" { "PUT" } else { "DELETE" }.into(),

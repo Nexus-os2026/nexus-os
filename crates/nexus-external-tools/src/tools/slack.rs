@@ -45,6 +45,7 @@ impl SlackTool {
                     .get("channel")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| ToolError::InvalidParameters("channel required".into()))?;
+                let channel = super::url_identifier("channel", channel, super::slack_channel_id)?;
                 Ok(HttpRequest {
                     url: format!("https://slack.com/api/conversations.history?channel={channel}"),
                     method: "GET".into(),

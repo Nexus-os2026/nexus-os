@@ -24,6 +24,7 @@ impl JiraTool {
                     .get("project")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| ToolError::InvalidParameters("project required".into()))?;
+                let project = super::url_identifier("project", project, super::jira_project_key)?;
                 Ok(HttpRequest {
                     url: format!(
                         "{base_url}/rest/api/3/search?jql=project={project}&maxResults=50"
@@ -51,6 +52,8 @@ impl JiraTool {
                     .get("issue_key")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| ToolError::InvalidParameters("issue_key required".into()))?;
+                let issue_key =
+                    super::url_identifier("issue_key", issue_key, super::jira_issue_key)?;
                 let data = params
                     .get("data")
                     .ok_or_else(|| ToolError::InvalidParameters("data required".into()))?;

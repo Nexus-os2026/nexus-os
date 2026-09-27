@@ -944,6 +944,22 @@ pub fn tools_list_available(
     tools_cmds::tools_list_available(&state.external_tools)
 }
 
+/// P0-002C5C: the autonomy level a tool call runs at is the registered
+/// agent's, lowered to the caller's claim but never raised by it. A
+/// caller-asserted level is not authority, so a call must name a registered
+/// agent.
+pub(crate) fn tool_call_autonomy(
+    state: &AppState,
+    agent_id: &str,
+    claimed: u8,
+) -> Result<u8, String> {
+    let unregistered = || "tools_execute: agent_id must name a registered agent".to_string();
+    let id = uuid::Uuid::parse_str(agent_id).map_err(|_| unregistered())?;
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    let agent = supervisor.get_agent(id).ok_or_else(unregistered)?;
+    Ok(claimed.min(agent.autonomy_level))
+}
+
 #[tauri::command]
 pub fn tools_execute(
     state: tauri::State<'_, AppState>,
@@ -952,6 +968,7 @@ pub fn tools_execute(
     tool_id: String,
     params_json: String,
 ) -> Result<nexus_external_tools::ToolCallResult, String> {
+    let autonomy_level = tool_call_autonomy(&state, &agent_id, autonomy_level)?;
     tools_cmds::tools_execute(
         &state.external_tools,
         &agent_id,
