@@ -38,6 +38,26 @@ fn invalid_identity_homes_leave_nexus_state_without_a_location() {
     // Nothing was created relative to the working directory.
     assert_eq!(std::fs::read_dir(cwd.path()).unwrap().count(), 0);
 
+    // P0-002C5C: an operator override is an absolute path or no location; a
+    // relative or empty one never resolves against the working directory.
+    let valid_home = tempfile::tempdir().unwrap();
+    std::env::set_var("HOME", valid_home.path());
+    for value in ["", "nexus.db", "./state/nexus.db", "../nexus.db"] {
+        std::env::set_var("NEXUS_DB_PATH", value);
+        std::env::set_var("NEXUS_CONFIG_PATH", value);
+        assert!(nexus_db_path().is_err(), "{value:?}");
+        assert!(config_path().is_err(), "{value:?}");
+        assert!(load_config().is_err(), "{value:?}");
+    }
+    let operator = valid_home.path().join("operator");
+    std::env::set_var("NEXUS_DB_PATH", operator.join("nexus.db"));
+    std::env::set_var("NEXUS_CONFIG_PATH", operator.join("config.toml"));
+    assert_eq!(nexus_db_path().unwrap(), operator.join("nexus.db"));
+    assert_eq!(config_path().unwrap(), operator.join("config.toml"));
+    std::env::remove_var("NEXUS_DB_PATH");
+    std::env::remove_var("NEXUS_CONFIG_PATH");
+    assert_eq!(std::fs::read_dir(cwd.path()).unwrap().count(), 0);
+
     // A valid home yields deterministic locations beneath it.
     let home = tempfile::tempdir().unwrap();
     let home_path = home.path().to_path_buf();

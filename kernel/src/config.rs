@@ -329,7 +329,9 @@ impl Default for NexusConfig {
 /// working directory (P0-002C5B).
 pub fn config_path() -> Result<PathBuf, AgentError> {
     if let Some(path) = env::var_os("NEXUS_CONFIG_PATH") {
-        return Ok(PathBuf::from(path));
+        return crate::identity_home::operator_override(path).map_err(|_| {
+            AgentError::SupervisorError("NEXUS_CONFIG_PATH must be an absolute path".into())
+        });
     }
     crate::identity_home::nexus_state_path("config.toml")
         .map_err(|error| AgentError::SupervisorError(error.to_string()))

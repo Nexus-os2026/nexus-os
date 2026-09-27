@@ -65,9 +65,23 @@ pub fn nexus_state_path(relative: &'static str) -> Result<PathBuf, IdentityHomeM
 /// database lives under the validated identity home.
 pub fn nexus_db_path() -> Result<PathBuf, IdentityHomeMissing> {
     if let Some(path) = std::env::var_os("NEXUS_DB_PATH") {
-        return Ok(PathBuf::from(path));
+        return operator_override(path);
     }
     nexus_state_path("nexus.db")
+}
+
+/// An operator state-location override (`NEXUS_DB_PATH`,
+/// `NEXUS_CONFIG_PATH`). It is process configuration set by the operator,
+/// never by the interface or a model, and relocates application state only.
+/// It must be a non-empty absolute path: an empty or relative value yields no
+/// location rather than one resolved against the working directory
+/// (P0-002C5C).
+pub fn operator_override(value: OsString) -> Result<PathBuf, IdentityHomeMissing> {
+    let path = PathBuf::from(value);
+    if path.as_os_str().is_empty() || !path.is_absolute() {
+        return Err(IdentityHomeMissing);
+    }
+    Ok(path)
 }
 
 #[cfg(test)]
@@ -125,5 +139,25 @@ mod tests {
             ),
             Ok(absolute("home"))
         );
+    }
+
+    #[test]
+    fn p0_002c5c_operator_overrides_are_absolute_or_no_location() {
+        let path = absolute("srv/nexus/nexus.db");
+        assert_eq!(operator_override(path.clone().into()), Ok(path));
+        for value in [
+            "",
+            ".",
+            "nexus.db",
+            "./nexus.db",
+            "../nexus.db",
+            "~/nexus.db",
+        ] {
+            assert_eq!(
+                operator_override(value.into()),
+                Err(IdentityHomeMissing),
+                "{value:?}"
+            );
+        }
     }
 }
