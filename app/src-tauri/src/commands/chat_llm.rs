@@ -862,6 +862,32 @@ fn audited_payloads(state: &AppState) -> String {
     .unwrap()
 }
 
+/// P0-002C5C: a chat model id never names a model file.
+#[cfg(test)]
+#[test]
+fn p0_002c5c_a_flash_model_id_never_names_a_file() {
+    let config = ProviderSelectionConfig::default();
+    for model in [
+        "flash//etc/passwd",
+        "flash/../../model.gguf",
+        "flash/model-Q4_K_M.gguf",
+        "flash/C:\\models\\m.gguf",
+    ] {
+        let error = match provider_from_prefixed_model(model, &config) {
+            Ok(_) => panic!("{model}: a provider was built"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error,
+            crate::phase0_surface::closed(
+                "flash model",
+                crate::phase0_surface::Closure::FileSelection
+            ),
+            "{model}"
+        );
+    }
+}
+
 /// P0-002C5C: the interface never reads a stored credential back, and a
 /// save that returns the placeholder keeps the stored credential.
 #[cfg(test)]
@@ -3191,26 +3217,13 @@ pub(crate) fn provider_from_prefixed_model(
             "openrouter" => Box::new(OpenRouterProvider::new(
                 prov_config.openrouter_api_key.clone(),
             )),
-            #[cfg(feature = "flash-infer")]
-            #[allow(unexpected_cfgs)]
+            // P0-002C5C: a `flash/<path>` model id named a file for the native
+            // model loader. A caller path is not authority; the flash session
+            // commands that chose model files are closed too (C5A, E1).
             "flash" => {
-                // model_name is the path to the GGUF file.
-                // Use auto-configured settings for the model.
-                Box::new(nexus_connectors_llm::providers::FlashProvider::new(
-                    model_name.to_string(),
-                    nexus_flash_infer::LoadConfig {
-                        model_path: model_name.to_string(),
-                        n_threads: Some(8),
-                        n_ctx: 2048,
-                        n_batch: 512,
-                        ..Default::default()
-                    },
-                    nexus_flash_infer::GenerationConfig {
-                        n_ctx: 2048,
-                        n_batch: 512,
-                        n_threads: Some(8),
-                        ..nexus_flash_infer::GenerationConfig::fast()
-                    },
+                return Err(crate::phase0_surface::closed(
+                    "flash model",
+                    crate::phase0_surface::Closure::FileSelection,
                 ))
             }
             _ => return Err(format!("Unknown provider prefix: {provider_prefix}")),
