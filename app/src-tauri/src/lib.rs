@@ -2316,23 +2316,35 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn detect_claude_code_cli() -> Result<super::ClaudeCodeCliStatus, String> {
-        Ok(super::detect_claude_code_cli())
+    pub(crate) fn detect_claude_code_cli() -> Result<super::ClaudeCodeCliStatus, String> {
+        Err(crate::phase0_surface::closed(
+            "detect_claude_code_cli",
+            crate::phase0_surface::Closure::ExternalCliAgent,
+        ))
     }
 
     #[tauri::command]
-    fn trigger_claude_code_login() -> Result<String, String> {
-        super::trigger_claude_code_login()
+    pub(crate) fn trigger_claude_code_login() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "trigger_claude_code_login",
+            crate::phase0_surface::Closure::ExternalCliAgent,
+        ))
     }
 
     #[tauri::command]
-    fn detect_codex_cli() -> Result<super::CodexCliCliStatus, String> {
-        Ok(super::detect_codex_cli_cmd())
+    pub(crate) fn detect_codex_cli() -> Result<super::CodexCliCliStatus, String> {
+        Err(crate::phase0_surface::closed(
+            "detect_codex_cli",
+            crate::phase0_surface::Closure::ExternalCliAgent,
+        ))
     }
 
     #[tauri::command]
-    fn trigger_codex_cli_login() -> Result<String, String> {
-        super::trigger_codex_cli_login()
+    pub(crate) fn trigger_codex_cli_login() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "trigger_codex_cli_login",
+            crate::phase0_surface::Closure::ExternalCliAgent,
+        ))
     }
 
     #[tauri::command]
@@ -3810,106 +3822,20 @@ pub mod runtime {
 
     // ─── CLI Authentication Commands ──────────────────────────────────────
 
-    /// Check whether a CLI provider is authenticated.
-    /// For codex: checks auth file on disk, falls back to exec probe.
-    /// For claude: runs `claude auth status --text`.
     #[tauri::command]
-    fn builder_check_cli_auth(cli: String) -> Result<bool, String> {
-        web_builder_agent::model_config::check_cli_auth(&cli)
+    pub(crate) fn builder_check_cli_auth() -> Result<bool, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_check_cli_auth",
+            crate::phase0_surface::Closure::ExternalCliAgent,
+        ))
     }
 
-    /// Spawn CLI login and poll for success. Emits events:
-    /// - cli-auth-progress { cli, message }
-    /// - cli-auth-success  { cli }
-    /// - cli-auth-failed   { cli, reason }
     #[tauri::command]
-    async fn builder_authenticate_cli(cli: String, window: tauri::Window) -> Result<(), String> {
-        let (bin, args): (&str, Vec<&str>) = match cli.as_str() {
-            "claude" => ("claude", vec!["auth", "login"]),
-            "codex" => ("codex", vec!["login"]),
-            other => return Err(format!("unknown cli: {other}")),
-        };
-
-        let cli_name = cli.clone();
-
-        // Emit progress
-        let emit_progress = |msg: &str| {
-            let _ = window.emit(
-                "cli-auth-progress",
-                serde_json::json!({ "cli": &cli_name, "message": msg }),
-            );
-        };
-
-        emit_progress(&format!("Starting {bin} login..."));
-
-        // Spawn the login process (it opens a browser for OAuth)
-        let mut child = std::process::Command::new(bin)
-            .args(&args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    format!("{bin} is not installed")
-                } else {
-                    format!("failed to start {bin}: {e}")
-                }
-            })?;
-
-        emit_progress("Opening browser for authentication...");
-
-        // Poll for auth success in a background task.
-        // For codex: check auth file first (instant), then `claude auth status` for claude.
-        // Polls every 3s for up to 60s, stops as soon as auth is detected.
-        let cli_poll = cli.clone();
-        let window_poll = window.clone();
-        tokio::spawn(async move {
-            let max_polls = 20; // 20 * 3s = 60s
-            for i in 0..max_polls {
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-
-                let ok = match cli_poll.as_str() {
-                    "codex" => {
-                        // Fast: check auth file on disk
-                        nexus_connectors_llm::providers::codex_cli::check_codex_auth_file()
-                    }
-                    "claude" => std::process::Command::new("claude")
-                        .args(["auth", "status", "--text"])
-                        .stdout(std::process::Stdio::piped())
-                        .stderr(std::process::Stdio::piped())
-                        .output()
-                        .map(|o| o.status.success())
-                        .unwrap_or(false),
-                    _ => return,
-                };
-
-                if ok {
-                    let _ = window_poll
-                        .emit("cli-auth-success", serde_json::json!({ "cli": &cli_poll }));
-                    return;
-                }
-
-                if i % 3 == 0 {
-                    let _ = window_poll.emit(
-                        "cli-auth-progress",
-                        serde_json::json!({
-                            "cli": &cli_poll,
-                            "message": format!("Waiting for browser authentication... ({}s)", (i + 1) * 3)
-                        }),
-                    );
-                }
-            }
-
-            let _ = window_poll.emit(
-                "cli-auth-failed",
-                serde_json::json!({ "cli": &cli_poll, "reason": "timeout" }),
-            );
-        });
-
-        // Wait for the login process to finish (it exits after auth completes or user cancels)
-        let _ = child.wait();
-
-        Ok(())
+    pub(crate) fn builder_authenticate_cli() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "builder_authenticate_cli",
+            crate::phase0_surface::Closure::ExternalCliAgent,
+        ))
     }
 
     #[tauri::command]

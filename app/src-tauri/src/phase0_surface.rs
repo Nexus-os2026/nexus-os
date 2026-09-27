@@ -30,6 +30,8 @@ pub(crate) enum Closure {
     ProcessExecution,
     /// E3: a caller's assertion is not proof of user approval.
     ApprovalRequired,
+    /// E3: external CLI agents run outside every Nexus authority boundary.
+    ExternalCliAgent,
     /// E4: agent actions holding filesystem or process authority (the process
     /// working directory is not an agent workspace).
     AgentExecution,
@@ -48,6 +50,7 @@ impl Closure {
             Self::ApprovalRequired => {
                 "approval required: a caller-asserted approval is not user approval, and backend-verified approval is unavailable in Phase Zero"
             }
+            Self::ExternalCliAgent => "external CLI agent providers are unavailable in Phase Zero",
             Self::AgentExecution => {
                 "agent filesystem and process actions are unavailable in Phase Zero"
             }

@@ -24,8 +24,8 @@ use nexus_swarm::events::{ProviderHealth, SwarmEvent};
 use nexus_swarm::oracle_bridge::{OracleBridge, SwarmOracleBridge};
 use nexus_swarm::provider::Provider;
 use nexus_swarm::providers::{
-    AnthropicProvider, CodexCliProvider, HuggingFaceProvider, OllamaSwarmProvider,
-    OpenAiSwarmProvider, OpenRouterSwarmProvider,
+    AnthropicProvider, HuggingFaceProvider, OllamaSwarmProvider, OpenAiSwarmProvider,
+    OpenRouterSwarmProvider,
 };
 use nexus_swarm::{
     Budget, CapabilityRegistry, PlannedSwarm, Router, SwarmCoordinator, SwarmDirector,
@@ -95,7 +95,7 @@ fn state() -> Arc<SwarmInner> {
         .get_or_init(|| {
             let providers_vec: Vec<Arc<dyn Provider>> = vec![
                 Arc::new(OllamaSwarmProvider::from_env()),
-                Arc::new(CodexCliProvider::new()),
+                // P0-002C5A: no external CLI agent (codex) is registered.
                 Arc::new(OpenAiSwarmProvider::new()),
                 Arc::new(AnthropicProvider::new()),
                 Arc::new(OpenRouterSwarmProvider::new()),

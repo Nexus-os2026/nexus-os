@@ -109,6 +109,12 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("mcp2_client_discover", Closure::ProcessExecution),
     ("mcp2_client_call", Closure::ProcessExecution),
     ("nx_agent_run", Closure::ProcessExecution),
+    ("detect_claude_code_cli", Closure::ExternalCliAgent),
+    ("detect_codex_cli", Closure::ExternalCliAgent),
+    ("trigger_claude_code_login", Closure::ExternalCliAgent),
+    ("trigger_codex_cli_login", Closure::ExternalCliAgent),
+    ("builder_check_cli_auth", Closure::ExternalCliAgent),
+    ("builder_authenticate_cli", Closure::ExternalCliAgent),
     // E4: agent execution rooted at the process working directory.
     ("nx_chat", Closure::AgentExecution),
     ("nx_tool", Closure::AgentExecution),
@@ -276,7 +282,9 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             builder_deploy_history, builder_deploy_diff, builder_deploy_rollback_to,
             builder_deploy_share_info, builder_deploy_drift, terminal_execute,
             terminal_execute_approved, factory_create_project, factory_build_project,
-            factory_test_project, factory_run_pipeline,
+            factory_test_project, factory_run_pipeline, detect_claude_code_cli,
+            detect_codex_cli, trigger_claude_code_login, trigger_codex_cli_login,
+            builder_check_cli_auth, builder_authenticate_cli,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
@@ -315,6 +323,7 @@ fn closure_reasons_are_bounded_and_echo_no_input() {
         Closure::LegacyBuilder,
         Closure::ProcessExecution,
         Closure::ApprovalRequired,
+        Closure::ExternalCliAgent,
         Closure::AgentExecution,
     ] {
         let reason = closure.reason();
@@ -420,4 +429,46 @@ fn production_agent_executor_refuses_filesystem_and_process_actions() {
         executor.execute(&agent, &PlannedAction::Noop, &mut audit, false),
         Ok("ok".to_string())
     );
+}
+
+fn production_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            if path.file_name().is_some_and(|name| name != "tests") {
+                production_sources(&path, out);
+            }
+        } else if path.extension().is_some_and(|ext| ext == "rs")
+            && !path
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with("tests.rs"))
+        {
+            out.push(path);
+        }
+    }
+}
+
+/// No desktop production source starts an external CLI agent or bypasses its
+/// permission checks, and the desktop swarm registers no external CLI agent
+/// provider. (The providers themselves fail closed in `nexus-connectors-llm`.)
+#[test]
+fn desktop_sources_start_no_external_cli_agent() {
+    let mut files = Vec::new();
+    production_sources(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut files,
+    );
+    assert!(files.len() > 20, "desktop sources not found");
+    for path in files {
+        let text = std::fs::read_to_string(&path).unwrap();
+        for forbidden in [
+            concat!("dangerously", "-skip-permissions"),
+            concat!("Command::new(\"", "claude\")"),
+            concat!("Command::new(\"", "codex\")"),
+        ] {
+            assert!(!text.contains(forbidden), "{}: {forbidden}", path.display());
+        }
+    }
+    let swarm = include_str!("../commands/swarm.rs");
+    assert!(!swarm.contains(concat!("CodexCli", "Provider")));
 }

@@ -2850,23 +2850,6 @@ pub struct ClaudeCodeCliStatus {
     pub binary_path: Option<String>,
 }
 
-/// Detect the local Claude Code CLI installation and auth status.
-pub(crate) fn detect_claude_code_cli() -> ClaudeCodeCliStatus {
-    let status = claude_code::detect_claude_code();
-    ClaudeCodeCliStatus {
-        installed: status.installed,
-        version: status.version,
-        authenticated: status.authenticated,
-        binary_path: status.binary_path,
-    }
-}
-
-/// Trigger Claude Code CLI login (opens browser for OAuth).
-/// NEXUS never sees or stores credentials.
-pub(crate) fn trigger_claude_code_login() -> Result<String, String> {
-    claude_code::trigger_login().map_err(|e| e.to_string())
-}
-
 /// Status of the Codex CLI, returned to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexCliCliStatus {
@@ -2876,24 +2859,6 @@ pub struct CodexCliCliStatus {
     pub binary_path: Option<String>,
     /// How the user authenticated: `"chatgpt"`, `"openai"`, `"apikey"`, or `null`.
     pub auth_mode: Option<String>,
-}
-
-/// Detect the local Codex CLI installation and auth status.
-pub(crate) fn detect_codex_cli_cmd() -> CodexCliCliStatus {
-    let status = codex_cli::detect_codex_cli();
-    CodexCliCliStatus {
-        installed: status.installed,
-        version: status.version,
-        authenticated: status.authenticated,
-        binary_path: status.binary_path,
-        auth_mode: status.auth_mode,
-    }
-}
-
-/// Trigger Codex CLI login (opens browser for ChatGPT OAuth).
-/// NEXUS never sees or stores credentials.
-pub(crate) fn trigger_codex_cli_login() -> Result<String, String> {
-    codex_cli::trigger_codex_login().map_err(|e| e.to_string())
 }
 
 // ── LLM Provider Settings Persistence ──────────────────────────────────
