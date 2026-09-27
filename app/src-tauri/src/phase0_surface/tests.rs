@@ -1100,6 +1100,13 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
         "nexus_computer_use::input",
         "computer-use OS input controllers",
     ),
+    ("KeyboardController", "computer-use OS keyboard input"),
+    ("MouseController", "computer-use OS mouse input"),
+    ("AppRegistry", "computer-use application launch registry"),
+    (
+        "GovernedControlEngine",
+        "computer-control engine (sh -c and OS input)",
+    ),
     (
         "ResourceLimiter::default().spawn(",
         "unsealed resource-limited spawn (the Builder uses spawn_sealed)",
