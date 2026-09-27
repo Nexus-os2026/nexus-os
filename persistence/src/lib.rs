@@ -978,16 +978,6 @@ impl NexusDatabase {
         Ok(db)
     }
 
-    pub fn default_db_path() -> std::path::PathBuf {
-        if let Ok(path) = std::env::var("NEXUS_DB_PATH") {
-            return std::path::PathBuf::from(path);
-        }
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("nexus.db")
-    }
-
     fn migrate(&self) -> Result<()> {
         {
             let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
@@ -4258,13 +4248,6 @@ mod tests {
             .unwrap();
         let worlds = db.list_simulation_worlds().unwrap();
         assert_eq!(worlds.len(), 2);
-    }
-
-    #[test]
-    fn test_default_db_path() {
-        let path = NexusDatabase::default_db_path();
-        assert!(path.ends_with("nexus.db"));
-        assert!(path.to_string_lossy().contains(".nexus"));
     }
 
     #[test]

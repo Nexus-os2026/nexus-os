@@ -42,6 +42,7 @@ pub mod governed_path;
 pub mod hardware;
 pub mod hardware_security;
 pub mod identity;
+pub mod identity_home;
 pub mod immune;
 pub mod kill_gates;
 pub mod lifecycle;

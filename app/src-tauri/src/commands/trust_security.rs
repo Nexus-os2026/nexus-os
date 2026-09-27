@@ -296,12 +296,11 @@ pub(crate) fn get_trust_overview(state: &AppState) -> Result<Vec<TrustOverviewAg
 
 // ── Computer Control Engine ──────────────────────────────────────────
 
-pub(crate) fn desktop_control_workspace() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home)
-        .join(".nexus")
-        .join("desktop-backend")
-        .join("computer-control")
+/// The desktop control artifact directory under the validated identity home
+/// (P0-002C5B). It is an application-owned location, not an agent workspace.
+pub(crate) fn desktop_control_workspace() -> Result<PathBuf, String> {
+    nexus_kernel::identity_home::nexus_state_path("desktop-backend/computer-control")
+        .map_err(|e| e.to_string())
 }
 
 pub(crate) fn show_desktop_notification(message: &str) {
@@ -343,7 +342,7 @@ pub(crate) fn run_backend_computer_action(
     max_steps: u32,
     cancelled: &Arc<AtomicBool>,
 ) -> Result<String, String> {
-    let workspace = desktop_control_workspace().join(session_id);
+    let workspace = desktop_control_workspace()?.join(session_id);
     std::fs::create_dir_all(&workspace)
         .map_err(|e| format!("failed to create {}: {e}", workspace.display()))?;
 
@@ -610,7 +609,7 @@ pub(crate) fn capture_screen(
     if !engine.is_enabled() {
         engine.enable();
     }
-    let workspace = desktop_control_workspace();
+    let workspace = desktop_control_workspace()?;
     let path = capture_and_store_screen(&workspace, region.as_ref(), "tauri-capture-screen")?;
     state.log_event(
         SYSTEM_UUID,
@@ -632,7 +631,7 @@ pub(crate) fn analyze_screen(state: &AppState, query: String) -> Result<String, 
     if !engine.is_enabled() {
         engine.enable();
     }
-    let workspace = desktop_control_workspace();
+    let workspace = desktop_control_workspace()?;
     let analysis = capture_and_analyze_screen(&workspace, &query, None)?;
     state.log_event(
         SYSTEM_UUID,

@@ -11,7 +11,9 @@ use std::sync::Mutex;
 /// File-backed schedule persistence.
 pub struct ScheduleStore {
     schedules: Mutex<Vec<ScheduleEntry>>,
-    file_path: PathBuf,
+    /// `None` when no backend location exists: the store then refuses to
+    /// persist rather than writing anywhere else (P0-002C5B).
+    file_path: Option<PathBuf>,
 }
 
 impl ScheduleStore {
@@ -32,7 +34,16 @@ impl ScheduleStore {
 
         Self {
             schedules: Mutex::new(schedules),
-            file_path,
+            file_path: Some(file_path),
+        }
+    }
+
+    /// A store with no backend location: nothing is loaded, and every
+    /// mutation fails because it cannot be persisted.
+    pub fn unavailable() -> Self {
+        Self {
+            schedules: Mutex::new(Vec::new()),
+            file_path: None,
         }
     }
 
@@ -147,9 +158,12 @@ impl ScheduleStore {
     }
 
     fn persist(&self, schedules: &[ScheduleEntry]) -> Result<(), SchedulerError> {
+        let file_path = self.file_path.as_ref().ok_or_else(|| {
+            SchedulerError::Io("schedule storage is unavailable: no valid identity home".into())
+        })?;
         let json = serde_json::to_string_pretty(schedules)
             .map_err(|e| SchedulerError::Serialization(e.to_string()))?;
-        std::fs::write(&self.file_path, json).map_err(|e| SchedulerError::Io(e.to_string()))
+        std::fs::write(file_path, json).map_err(|e| SchedulerError::Io(e.to_string()))
     }
 }
 
@@ -266,6 +280,13 @@ mod tests {
 
         store.record_run(&id, None).unwrap();
         assert!(!store.get(&id).unwrap().enabled);
+    }
+
+    #[test]
+    fn p0_002c5b_an_unavailable_store_refuses_to_persist() {
+        let store = ScheduleStore::unavailable();
+        assert!(store.list().is_empty());
+        assert!(store.add(sample_entry("nowhere")).is_err());
     }
 
     #[test]

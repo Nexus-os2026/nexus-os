@@ -126,10 +126,16 @@ impl ModelRegistry {
         }
     }
 
-    /// Create a registry using the default `~/.nexus/models/` directory.
+    /// Create a registry using `<identity home>/.nexus/models`. Without a valid
+    /// identity home the registry has no root: it discovers nothing, and no
+    /// caller may derive a path from it (P0-002C5B).
     pub fn default_dir() -> Self {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        Self::new(PathBuf::from(home).join(".nexus").join("models"))
+        Self::new(nexus_kernel::identity_home::nexus_state_path("models").unwrap_or_default())
+    }
+
+    /// Whether this registry has a usable (absolute) root.
+    pub fn has_root(&self) -> bool {
+        self.models_dir.is_absolute()
     }
 
     /// Root directory this registry scans.
@@ -148,6 +154,9 @@ impl ModelRegistry {
     /// Returns the number of models discovered.
     pub fn discover(&mut self) -> usize {
         self.available_models.clear();
+        if !self.has_root() {
+            return 0;
+        }
 
         let entries = match std::fs::read_dir(&self.models_dir) {
             Ok(entries) => entries,
@@ -452,6 +461,15 @@ impl ModelRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p0_002c5b_a_registry_without_an_absolute_root_discovers_nothing() {
+        for root in ["", ".", "relative/models"] {
+            let mut registry = ModelRegistry::new(PathBuf::from(root));
+            assert!(!registry.has_root(), "{root:?}");
+            assert_eq!(registry.discover(), 0, "{root:?}");
+        }
+    }
     use std::fs;
 
     fn make_test_dir(name: &str) -> PathBuf {

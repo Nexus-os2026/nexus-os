@@ -128,11 +128,17 @@ pub struct PolicyEngine {
     policy_dir: PathBuf,
 }
 
+/// Policies live under the validated identity home. With none the directory
+/// is empty and nothing loads; a literal `~` is never used (P0-002C5B).
+fn default_policy_dir() -> PathBuf {
+    crate::identity_home::nexus_state_path("policies").unwrap_or_default()
+}
+
 impl Default for PolicyEngine {
     fn default() -> Self {
         Self {
             policies: Vec::new(),
-            policy_dir: PathBuf::from("~/.nexus/policies"),
+            policy_dir: default_policy_dir(),
         }
     }
 }
@@ -150,7 +156,7 @@ impl PolicyEngine {
     pub fn with_policies(policies: Vec<Policy>) -> Self {
         let mut engine = Self {
             policies,
-            policy_dir: PathBuf::from("~/.nexus/policies"),
+            policy_dir: default_policy_dir(),
         };
         engine.sort_policies();
         engine

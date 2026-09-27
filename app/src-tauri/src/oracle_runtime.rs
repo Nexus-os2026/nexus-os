@@ -232,22 +232,19 @@ pub fn default_identity_path_for(file_name: &str) -> Result<PathBuf, OracleRunti
 }
 
 /// Select once, then validate. A malformed HOME must never select another root.
+/// P0-002C5B: the policy lives in `nexus_kernel::identity_home`, shared by
+/// every per-user store.
 fn resolve_identity_home_from(
     home: Option<OsString>,
     native_windows_home: Option<PathBuf>,
     allow_windows_fallback: bool,
 ) -> Result<PathBuf, OracleRuntimeError> {
-    let home = match home {
-        Some(home) => PathBuf::from(home),
-        None if allow_windows_fallback => {
-            native_windows_home.ok_or(OracleRuntimeError::HomeDirMissing)?
-        }
-        None => return Err(OracleRuntimeError::HomeDirMissing),
-    };
-    if home.as_os_str().is_empty() || !home.is_absolute() {
-        return Err(OracleRuntimeError::HomeDirMissing);
-    }
-    Ok(home)
+    nexus_kernel::identity_home::resolve_identity_home_from(
+        home,
+        native_windows_home,
+        allow_windows_fallback,
+    )
+    .map_err(|_| OracleRuntimeError::HomeDirMissing)
 }
 
 fn identity_path_in(home: &Path, file_name: &str) -> PathBuf {

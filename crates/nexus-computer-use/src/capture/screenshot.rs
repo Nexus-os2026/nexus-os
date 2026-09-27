@@ -168,16 +168,20 @@ pub async fn take_screenshot_with_backend(
     let id = uuid::Uuid::new_v4().to_string();
     let timestamp = chrono::Utc::now();
 
-    // Create a tempfile for the capture
-    let tmp = tempfile::Builder::new()
-        .prefix("nexus-capture-")
-        .suffix(".png")
-        .tempfile()
-        .map_err(|e| ComputerUseError::CaptureError(format!("Failed to create tempfile: {e}")))?;
-    let tmp_path = tmp.path().to_path_buf();
-
-    // We need to close the tempfile so the capture tool can write to it
-    drop(tmp);
+    // P0-002C5B: the capture tool writes inside a fresh private directory
+    // (owner-only on Unix, unpredictable name) that is removed when `scratch`
+    // drops, never at a released shared-temp name another process could claim.
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("nexus-capture-");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(std::fs::Permissions::from_mode(0o700));
+    }
+    let scratch = builder.tempdir().map_err(|e| {
+        ComputerUseError::CaptureError(format!("Failed to create a capture directory: {e}"))
+    })?;
+    let tmp_path = scratch.path().join("capture.png");
 
     info!(
         "Capturing screenshot with {} backend, id={}",
@@ -192,8 +196,8 @@ pub async fn take_screenshot_with_backend(
         ComputerUseError::CaptureError(format!("Failed to read capture output: {e}"))
     })?;
 
-    // Clean up tempfile
-    let _ = tokio::fs::remove_file(&tmp_path).await;
+    // The private directory and its capture are removed with `scratch`.
+    drop(scratch);
 
     if png_bytes.is_empty() {
         return Err(ComputerUseError::CaptureError(

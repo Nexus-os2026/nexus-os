@@ -323,24 +323,24 @@ impl Default for NexusConfig {
     }
 }
 
-pub fn config_path() -> PathBuf {
+/// The Nexus config file. `NEXUS_CONFIG_PATH` remains the recorded operator
+/// state-location override (see the C5 authority inventory); otherwise the
+/// file lives under the validated identity home, with no fallback to the
+/// working directory (P0-002C5B).
+pub fn config_path() -> Result<PathBuf, AgentError> {
     if let Some(path) = env::var_os("NEXUS_CONFIG_PATH") {
-        return PathBuf::from(path);
+        return Ok(PathBuf::from(path));
     }
-
-    let home = env::var_os("HOME")
-        .or_else(|| env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-    home.join(".nexus").join("config.toml")
+    crate::identity_home::nexus_state_path("config.toml")
+        .map_err(|error| AgentError::SupervisorError(error.to_string()))
 }
 
 pub fn load_config() -> Result<NexusConfig, AgentError> {
-    load_config_from_path(config_path().as_path())
+    load_config_from_path(config_path()?.as_path())
 }
 
 pub fn save_config(config: &NexusConfig) -> Result<(), AgentError> {
-    save_config_to_path(config_path().as_path(), config)
+    save_config_to_path(config_path()?.as_path(), config)
 }
 
 pub fn load_config_from_path(path: &Path) -> Result<NexusConfig, AgentError> {

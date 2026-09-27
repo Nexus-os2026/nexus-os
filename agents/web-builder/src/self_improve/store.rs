@@ -33,17 +33,19 @@ pub enum StoreError {
 
 // ─── Persistence ───────────────────────────────────────────────────────────
 
-/// Default store path.
-pub fn store_path() -> std::path::PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-    std::path::PathBuf::from(home)
-        .join(".nexus")
-        .join("builder_improvement_store.json")
+/// Default store path, under the validated identity home (P0-002C5B).
+pub fn store_path() -> Result<std::path::PathBuf, StoreError> {
+    nexus_kernel::identity_home::nexus_state_path("builder_improvement_store.json").map_err(|e| {
+        StoreError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            e.to_string(),
+        ))
+    })
 }
 
 /// Load the improvement store from disk. Returns default if file doesn't exist.
 pub fn load_store() -> Result<ImprovementStore, StoreError> {
-    load_store_from(&store_path())
+    load_store_from(&store_path()?)
 }
 
 /// Load from a specific path.
@@ -57,7 +59,7 @@ pub fn load_store_from(path: &std::path::Path) -> Result<ImprovementStore, Store
 
 /// Save the improvement store to disk.
 pub fn save_store(store: &ImprovementStore) -> Result<(), StoreError> {
-    save_store_to(store, &store_path())
+    save_store_to(store, &store_path()?)
 }
 
 /// Save to a specific path.

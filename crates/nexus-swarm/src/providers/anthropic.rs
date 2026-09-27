@@ -52,11 +52,12 @@ pub struct AnthropicSpendStore {
 }
 
 impl AnthropicSpendStore {
+    /// The ledger under the validated identity home. With none the path is
+    /// empty: reading reports no spend and every spend is refused, never
+    /// falling back to the working directory (P0-002C5B).
     pub fn default_path() -> PathBuf {
-        let base = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        base.join(".nexus")
-            .join("swarm")
-            .join("anthropic_spend.json")
+        nexus_kernel::identity_home::nexus_state_path("swarm/anthropic_spend.json")
+            .unwrap_or_default()
     }
 
     pub fn at(path: PathBuf) -> Self {
@@ -80,6 +81,9 @@ impl AnthropicSpendStore {
 
     /// Read the current ledger (0 if missing or unparseable).
     pub fn read(&self) -> SpendLedger {
+        if !self.path.is_absolute() {
+            return SpendLedger::default();
+        }
         let _g = self.guard.lock().ok();
         let Ok(mut f) = File::open(&self.path) else {
             return SpendLedger::default();
@@ -98,6 +102,12 @@ impl AnthropicSpendStore {
             .guard
             .lock()
             .map_err(|e| ProviderError::Io("anthropic".into(), format!("mutex poisoned: {e}")))?;
+        if !self.path.is_absolute() {
+            return Err(ProviderError::Io(
+                "anthropic".into(),
+                "spend ledger is unavailable: no valid identity home".into(),
+            ));
+        }
         self.ensure_dir()
             .map_err(|e| ProviderError::Io("anthropic".into(), e.to_string()))?;
         let mut f = OpenOptions::new()
@@ -448,6 +458,19 @@ fn _path_ref(_p: &Path) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p0_002c5b_a_ledger_without_an_absolute_path_refuses_spend() {
+        for path in ["", "anthropic_spend.json"] {
+            let store = AnthropicSpendStore::at(PathBuf::from(path));
+            assert_eq!(
+                store.read().cumulative_usd,
+                SpendLedger::default().cumulative_usd
+            );
+            assert!(store.try_add(0.01, 10.0).is_err(), "{path:?}");
+        }
+        assert!(!std::path::Path::new("anthropic_spend.json").exists());
+    }
     use tempfile::tempdir;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};

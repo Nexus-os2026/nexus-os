@@ -81,10 +81,12 @@ impl App {
             "You are Nexus Code, a governed terminal coding agent.",
         );
 
+        // P0-002C5B: an absolute data directory or none; never the working
+        // directory. With none, memory starts empty and is not saved.
         let memory_path = dirs::data_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("nexus-code")
-            .join("memory.json");
+            .filter(|dir| dir.is_absolute())
+            .map(|dir| dir.join("nexus-code").join("memory.json"))
+            .unwrap_or_default();
         let memory = crate::persistence::memory::MemoryStore::load(memory_path);
 
         let mcp_manager = crate::mcp::McpManager::new();

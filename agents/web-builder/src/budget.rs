@@ -105,13 +105,13 @@ impl Default for BudgetTracker {
 }
 
 impl BudgetTracker {
-    /// Create a tracker using the default path `~/.nexus/builder_budget.json`.
+    /// Create a tracker at `builder_budget.json` under the validated identity
+    /// home. With none the path is empty: loading yields defaults and saving
+    /// is refused, never falling back to the working directory (P0-002C5B).
     pub fn new() -> Self {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
         Self {
-            path: PathBuf::from(home)
-                .join(".nexus")
-                .join("builder_budget.json"),
+            path: nexus_kernel::identity_home::nexus_state_path("builder_budget.json")
+                .unwrap_or_default(),
         }
     }
 
@@ -123,6 +123,9 @@ impl BudgetTracker {
 
     /// Load budget data from disk, returning defaults if the file is absent.
     pub fn load(&self) -> BudgetData {
+        if !self.path.is_absolute() {
+            return BudgetData::default();
+        }
         match std::fs::read_to_string(&self.path) {
             Ok(contents) => serde_json::from_str(&contents).unwrap_or_default(),
             Err(_) => BudgetData::default(),
@@ -131,6 +134,9 @@ impl BudgetTracker {
 
     /// Persist budget data to disk, creating parent directories as needed.
     fn save(&self, data: &BudgetData) -> Result<(), String> {
+        if !self.path.is_absolute() {
+            return Err("budget storage is unavailable: no valid identity home".into());
+        }
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("failed to create budget dir: {e}"))?;
@@ -267,6 +273,22 @@ impl BudgetTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p0_002c5b_budget_storage_needs_an_absolute_path() {
+        for path in ["", "builder_budget.json", "relative/builder_budget.json"] {
+            let tracker = BudgetTracker::with_path(PathBuf::from(path));
+            assert_eq!(
+                tracker.load().budgets.len(),
+                BudgetData::default().budgets.len()
+            );
+            assert!(
+                tracker.set_initial_budget("openai", 10.0).is_err(),
+                "{path:?}"
+            );
+        }
+        assert!(!std::path::Path::new("builder_budget.json").exists());
+    }
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
 

@@ -220,7 +220,8 @@ fn cluster_leave() -> CliOutput {
 // ---------------------------------------------------------------------------
 
 fn open_registry() -> Result<nexus_marketplace::sqlite_registry::SqliteRegistry, String> {
-    let db_path = nexus_marketplace::sqlite_registry::SqliteRegistry::default_db_path();
+    let db_path = nexus_marketplace::sqlite_registry::SqliteRegistry::default_db_path()
+        .map_err(|e| format!("Failed to open marketplace database: {e}"))?;
     nexus_marketplace::sqlite_registry::SqliteRegistry::open(&db_path)
         .map_err(|e| format!("Failed to open marketplace database: {e}"))
 }

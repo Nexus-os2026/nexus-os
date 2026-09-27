@@ -16,7 +16,6 @@ use crate::manifest::AgentManifest;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use uuid::Uuid;
 
 // ── Tool definition types ───────────────────────────────────────────────────
@@ -614,14 +613,15 @@ impl McpServer {
                 let autonomy_level = format!("L{agent_autonomy}")
                     .parse::<AutonomyLevel>()
                     .unwrap_or(AutonomyLevel::L2);
+                // P0-002C5B: the sandbox lives under the validated identity
+                // home; with none the invocation fails, never falling back to
+                // a shared temporary directory.
+                let working_dir = crate::identity_home::nexus_state_path("mcp-sandbox")
+                    .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
                 let context = ActuatorContext {
                     agent_id: agent_id.to_string(),
                     agent_name: agent_manifest_name.clone(),
-                    working_dir: PathBuf::from(
-                        std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()),
-                    )
-                    .join(".nexus")
-                    .join("mcp-sandbox"),
+                    working_dir,
                     autonomy_level,
                     capabilities: agent_caps.iter().cloned().collect::<HashSet<String>>(),
                     fuel_remaining: agent_fuel as f64,

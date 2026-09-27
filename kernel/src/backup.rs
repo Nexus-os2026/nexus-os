@@ -208,22 +208,19 @@ impl Default for BackupScheduleConfig {
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
+/// The default backup directory beneath the validated identity home. With no
+/// valid identity home it is empty, which `create_backup` refuses rather than
+/// resolving against the working directory or a shared temporary directory
+/// (P0-002C5B).
 fn default_backup_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home)
-        .join(".local")
-        .join("share")
-        .join("nexus-os")
-        .join("backups")
-}
-
-/// Resolve the Nexus OS data directory (where databases live).
-pub fn nexus_data_dir() -> PathBuf {
-    if let Ok(path) = std::env::var("NEXUS_DATA_DIR") {
-        return PathBuf::from(path);
-    }
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home).join(".nexus")
+    crate::identity_home::identity_home()
+        .map(|home| {
+            home.join(".local")
+                .join("share")
+                .join("nexus-os")
+                .join("backups")
+        })
+        .unwrap_or_default()
 }
 
 fn sha256_file(path: &Path) -> Result<String, BackupError> {
@@ -241,6 +238,11 @@ pub fn create_backup(
     data_dir: &Path,
     encryption_key: Option<&EncryptionKey>,
 ) -> Result<BackupMetadata, BackupError> {
+    if !config.output_dir.is_absolute() {
+        return Err(BackupError::Io(
+            "backup output directory must be an absolute backend location".into(),
+        ));
+    }
     std::fs::create_dir_all(&config.output_dir)?;
 
     let backup_id = Uuid::new_v4().to_string();
@@ -261,7 +263,8 @@ pub fn create_backup(
 
     // Also back up config file.
     if config.include_config {
-        let config_path = crate::config::config_path();
+        let config_path =
+            crate::config::config_path().map_err(|error| BackupError::Io(error.to_string()))?;
         if config_path.exists() {
             files_to_backup.push((config_path.clone(), "config/config.toml".to_string()));
         }

@@ -1160,11 +1160,11 @@ pub(crate) fn database_contains_agent_name(db: &NexusDatabase, name: &str) -> bo
 }
 
 #[cfg_attr(test, allow(dead_code))]
-pub(crate) fn legacy_db_cleanup_flag_path(db_path: &std::path::Path) -> PathBuf {
+pub(crate) fn legacy_db_cleanup_flag_path(db_path: &std::path::Path) -> Option<PathBuf> {
     db_path
         .parent()
-        .unwrap_or_else(|| std::path::Path::new("."))
-        .join(LEGACY_DB_CLEANUP_FLAG)
+        .filter(|dir| dir.is_absolute())
+        .map(|dir| dir.join(LEGACY_DB_CLEANUP_FLAG))
 }
 
 pub(crate) fn cleanup_legacy_agent_db_if_needed(
@@ -1215,8 +1215,12 @@ pub(crate) fn maybe_cleanup_legacy_agent_db() {
         return;
     }
 
-    let db_path = NexusDatabase::default_db_path();
-    let flag_path = legacy_db_cleanup_flag_path(&db_path);
+    let Ok(db_path) = nexus_kernel::identity_home::nexus_db_path() else {
+        return;
+    };
+    let Some(flag_path) = legacy_db_cleanup_flag_path(&db_path) else {
+        return;
+    };
     cleanup_legacy_agent_db_if_needed(&db_path, &flag_path);
 }
 
@@ -2136,8 +2140,8 @@ pub(crate) async fn get_available_providers(
 
         // Scan local .gguf model files on disk
         let local_models: Vec<nexus_flash_infer::LocalModel> =
-            nexus_flash_infer::ModelStorage::new()
-                .and_then(|s| s.list_models())
+            crate::commands::flash::flash_storage()
+                .and_then(|s| s.list_models().map_err(|e| e.to_string()))
                 .unwrap_or_default();
         // Build name→path lookup from local models
         let local_model_names: Vec<String> = local_models.iter().map(|m| m.name.clone()).collect();

@@ -419,20 +419,21 @@ pub(crate) fn get_live_system_metrics(state: &AppState) -> Result<String, String
     let uptime = System::uptime();
     let process_count = sys.processes().len();
 
-    // Disk usage for ~/.nexus/ directory
-    let nexus_dir = std::env::var("HOME")
-        .map(|h| std::path::PathBuf::from(h).join(".nexus"))
-        .unwrap_or_default();
+    // Disk usage for the Nexus state directory under the validated identity
+    // home (P0-002C5B); links are not followed.
+    let nexus_dir = nexus_kernel::identity_home::nexus_state_dir().unwrap_or_default();
     let nexus_disk_bytes: u64 = if nexus_dir.exists() {
         fn dir_size(path: &std::path::Path) -> u64 {
             let mut total = 0u64;
             if let Ok(entries) = std::fs::read_dir(path) {
                 for entry in entries.flatten() {
-                    let p = entry.path();
-                    if p.is_dir() {
-                        total += dir_size(&p);
-                    } else if let Ok(meta) = p.metadata() {
-                        total += meta.len();
+                    let Ok(kind) = entry.file_type() else {
+                        continue;
+                    };
+                    if kind.is_dir() {
+                        total += dir_size(&entry.path());
+                    } else if kind.is_file() {
+                        total += entry.metadata().map(|meta| meta.len()).unwrap_or(0);
                     }
                 }
             }

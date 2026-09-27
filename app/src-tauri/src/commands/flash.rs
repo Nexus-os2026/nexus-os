@@ -535,14 +535,24 @@ pub async fn flash_export_benchmark_report(
 ) -> Result<String, String> {
     let report = nexus_flash_infer::generate_report(&results);
 
-    // Save to a temp file and return the path
-    let report_dir = std::env::temp_dir();
+    // P0-002C5B: reports go to a Nexus-owned directory under the validated
+    // identity home, under an unpredictable name created exclusively, never a
+    // predictable name in the shared temporary directory.
+    let report_dir =
+        nexus_kernel::identity_home::nexus_state_path("reports").map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&report_dir).map_err(|e| format!("create report dir: {e}"))?;
     let report_path = report_dir.join(format!(
-        "nexus-benchmark-{}.md",
-        chrono::Utc::now().format("%Y%m%d-%H%M%S")
+        "nexus-benchmark-{}-{}.md",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S"),
+        uuid::Uuid::new_v4().simple()
     ));
-
-    std::fs::write(&report_path, &report).map_err(|e| format!("write report: {e}"))?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&report_path)
+        .map_err(|e| format!("write report: {e}"))?;
+    std::io::Write::write_all(&mut file, report.as_bytes())
+        .map_err(|e| format!("write report: {e}"))?;
     Ok(report_path.to_string_lossy().into_owned())
 }
 
@@ -607,9 +617,15 @@ pub async fn flash_catalog_search(query: String) -> Result<serde_json::Value, St
 
 // ── Flash Inference — Download & Model Management ──────────────────
 
+/// Flash model storage beneath the validated identity home (P0-002C5B).
+pub(crate) fn flash_storage() -> Result<nexus_flash_infer::ModelStorage, String> {
+    let home = nexus_kernel::identity_home::identity_home().map_err(|e| e.to_string())?;
+    nexus_flash_infer::ModelStorage::for_home(&home).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn flash_list_local_models() -> Result<serde_json::Value, String> {
-    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    let storage = flash_storage()?;
     let models = storage.list_models().map_err(|e| e.to_string())?;
     serde_json::to_value(models).map_err(|e| format!("serialize: {e}"))
 }
@@ -620,7 +636,7 @@ pub async fn flash_download_model(
     filename: String,
     app_handle: tauri::AppHandle,
 ) -> Result<serde_json::Value, String> {
-    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    let storage = flash_storage()?;
     let downloader = nexus_flash_infer::ModelDownloader::new(storage);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<nexus_flash_infer::DownloadProgress>(64);
@@ -648,7 +664,7 @@ pub async fn flash_download_multi(
     filenames: Vec<String>,
     app_handle: tauri::AppHandle,
 ) -> Result<serde_json::Value, String> {
-    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    let storage = flash_storage()?;
     let downloader = nexus_flash_infer::ModelDownloader::new(storage);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<nexus_flash_infer::DownloadProgress>(64);
@@ -671,18 +687,18 @@ pub async fn flash_download_multi(
 
 #[tauri::command]
 pub async fn flash_delete_local_model(filename: String) -> Result<(), String> {
-    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    let storage = flash_storage()?;
     storage.delete_model(&filename).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn flash_available_disk_space() -> Result<u64, String> {
-    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    let storage = flash_storage()?;
     storage.available_disk_space().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn flash_get_model_dir() -> Result<String, String> {
-    let storage = nexus_flash_infer::ModelStorage::new().map_err(|e| e.to_string())?;
+    let storage = flash_storage()?;
     Ok(storage.base_dir().to_string_lossy().to_string())
 }

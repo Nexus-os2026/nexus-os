@@ -52,6 +52,11 @@ impl MemoryStore {
 
     /// Save memory to disk.
     pub fn save(&self) -> Result<(), crate::error::NxError> {
+        if !self.file_path.is_absolute() {
+            return Err(crate::error::NxError::ConfigError(
+                "memory storage is unavailable: no absolute data directory".into(),
+            ));
+        }
         if let Some(parent) = self.file_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -106,5 +111,19 @@ impl MemoryStore {
     /// Check if empty.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn p0_002c5b_memory_without_an_absolute_path_is_never_saved() {
+        for path in ["", "memory.json", "relative/memory.json"] {
+            let store = MemoryStore::load(std::path::PathBuf::from(path));
+            assert!(store.save().is_err(), "{path:?}");
+        }
+        assert!(!std::path::Path::new("memory.json").exists());
     }
 }

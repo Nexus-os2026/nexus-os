@@ -69,14 +69,19 @@ pub struct MemoryConfig {
 }
 
 impl Default for MemoryConfig {
+    /// Persistence defaults to the validated identity home. With none the
+    /// directory is empty and `save`/`load` refuse; nothing falls back to the
+    /// working directory (P0-002C5B).
     fn default() -> Self {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let persistence_dir = nexus_kernel::identity_home::nexus_state_path("memory")
+            .map(|dir| dir.to_string_lossy().into_owned())
+            .unwrap_or_default();
         Self {
             max_entries_per_agent: 1000,
             decay_enabled: true,
             decay_rate: 0.01,
             min_importance: 0.1,
-            persistence_dir: format!("{home}/.nexus/memory"),
+            persistence_dir,
         }
     }
 }
@@ -312,7 +317,7 @@ impl AgentMemory {
     /// Persist an agent's memories to `persistence_dir/{agent_id}.json`.
     pub fn save(&self, agent_id: &str) -> Result<(), String> {
         let entries = self.memories.get(agent_id).cloned().unwrap_or_default();
-        let dir = &self.config.persistence_dir;
+        let dir = self.persistence_root()?;
         std::fs::create_dir_all(dir).map_err(|e| format!("create dir: {e}"))?;
         let path = format!("{dir}/{agent_id}.json");
         let json = serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?;
@@ -321,12 +326,22 @@ impl AgentMemory {
 
     /// Load an agent's memories from disk, replacing any in-memory entries.
     pub fn load(&mut self, agent_id: &str) -> Result<(), String> {
-        let path = format!("{}/{agent_id}.json", self.config.persistence_dir);
+        let dir = self.persistence_root()?;
+        let path = format!("{dir}/{agent_id}.json");
         let data = std::fs::read_to_string(&path).map_err(|e| format!("read: {e}"))?;
         let entries: Vec<MemoryEntry> =
             serde_json::from_str(&data).map_err(|e| format!("parse: {e}"))?;
         self.memories.insert(agent_id.to_string(), entries);
         Ok(())
+    }
+
+    /// The persistence directory, which must be absolute.
+    fn persistence_root(&self) -> Result<&str, String> {
+        let dir = self.config.persistence_dir.as_str();
+        if !std::path::Path::new(dir).is_absolute() {
+            return Err("agent memory persistence is unavailable: no valid identity home".into());
+        }
+        Ok(dir)
     }
 
     /// Remove all memories for an agent (in-memory only, does not delete file).
@@ -397,6 +412,19 @@ fn recall_score(entry: &MemoryEntry, query_lower: &str, now: u64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p0_002c5b_persistence_needs_an_absolute_directory() {
+        for dir in ["", ".", "relative/memory", "~/.nexus/memory"] {
+            let mut memory = AgentMemory::new(MemoryConfig {
+                persistence_dir: dir.to_string(),
+                ..MemoryConfig::default()
+            });
+            assert!(memory.save("agent").is_err(), "{dir:?}");
+            assert!(memory.load("agent").is_err(), "{dir:?}");
+        }
+        assert!(!std::path::Path::new("agent.json").exists());
+    }
 
     fn test_config() -> MemoryConfig {
         MemoryConfig {

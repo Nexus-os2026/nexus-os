@@ -124,9 +124,11 @@ fn state() -> Arc<SwarmInner> {
             // does not survive process restart in that mode (matches
             // the publish_state fallback contract).
             let herald_db: Arc<nexus_persistence::NexusDatabase> =
-                match nexus_persistence::NexusDatabase::open(
-                    &nexus_persistence::NexusDatabase::default_db_path(),
-                ) {
+                match nexus_kernel::identity_home::nexus_db_path()
+                    .map_err(|e| e.to_string())
+                    .and_then(|path| {
+                        nexus_persistence::NexusDatabase::open(&path).map_err(|e| e.to_string())
+                    }) {
                     Ok(db) => Arc::new(db),
                     Err(e) => {
                         eprintln!(

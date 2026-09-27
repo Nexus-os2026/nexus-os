@@ -46,6 +46,7 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 readability = "0.3"
 htmd = "0.5"
 url = "2"
+dirs = "5"
 tempfile = "3"
 nexus-persistence = { path = "../persistence" }
 keyring = { version = "3", default-features = false, features = ["linux-native", "apple-native", "windows-native"] }

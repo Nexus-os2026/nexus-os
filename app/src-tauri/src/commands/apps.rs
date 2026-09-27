@@ -92,11 +92,9 @@ use tauri::Manager;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
+/// The Nexus state directory under the validated identity home (P0-002C5B).
 pub(crate) fn nexus_data_dir() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "cannot determine home directory".to_string())?;
-    Ok(PathBuf::from(home).join(".nexus"))
+    nexus_kernel::identity_home::nexus_state_dir().map_err(|e| e.to_string())
 }
 
 // ── API Client ────────────────────────────────────────────────────────

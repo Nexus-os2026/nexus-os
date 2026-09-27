@@ -1863,7 +1863,13 @@ async fn api_compliance_erase(
 
 fn open_marketplace_registry(
 ) -> Result<nexus_marketplace::sqlite_registry::SqliteRegistry, (StatusCode, Json<ErrorResponse>)> {
-    let db_path = nexus_marketplace::sqlite_registry::SqliteRegistry::default_db_path();
+    let db_path =
+        nexus_marketplace::sqlite_registry::SqliteRegistry::default_db_path().map_err(|e| {
+            error_json(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("marketplace: {e}"),
+            )
+        })?;
     nexus_marketplace::sqlite_registry::SqliteRegistry::open(&db_path).map_err(|e| {
         error_json(
             StatusCode::INTERNAL_SERVER_ERROR,

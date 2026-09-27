@@ -302,9 +302,21 @@ fn capture_screen_impl(region: Option<&ScreenRegion>) -> Result<Vec<u8>, String>
     Ok(vec![42; size])
 }
 
+/// A private scratch file for one capture (P0-002C5B): the capture tool writes
+/// inside a fresh owner-only directory with an unpredictable name, removed with
+/// its contents when the returned guard drops. No predictable shared-temp name
+/// is ever used.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn private_capture_file() -> Result<(tempfile::TempDir, std::path::PathBuf), String> {
+    let dir = crate::governed_path::private_temp_dir("nexus-capture-")
+        .map_err(|e| format!("failed to create a private capture directory: {e}"))?;
+    let path = dir.path().join("capture.png");
+    Ok((dir, path))
+}
+
 #[cfg(all(not(test), target_os = "linux"))]
 fn capture_screen_impl(region: Option<&ScreenRegion>) -> Result<Vec<u8>, String> {
-    let tmp = format!("/tmp/nexus-screen-{}.png", now_millis());
+    let (_scratch, tmp) = private_capture_file()?;
     let mut command = std::process::Command::new("import");
     if let Some(r) = region {
         command
@@ -325,15 +337,13 @@ fn capture_screen_impl(region: Option<&ScreenRegion>) -> Result<Vec<u8>, String>
         return Err(format!("screen capture failed: {stderr}"));
     }
 
-    let bytes = std::fs::read(&tmp).map_err(|e| format!("failed to read screenshot: {e}"))?;
-    // Best-effort: temp screenshot file cleanup is housekeeping; captured bytes are already in memory
-    let _ = std::fs::remove_file(&tmp);
-    Ok(bytes)
+    // The private directory, and the capture in it, are removed on return.
+    std::fs::read(&tmp).map_err(|e| format!("failed to read screenshot: {e}"))
 }
 
 #[cfg(all(not(test), target_os = "macos"))]
 fn capture_screen_impl(region: Option<&ScreenRegion>) -> Result<Vec<u8>, String> {
-    let tmp = format!("/tmp/nexus-screen-{}.png", now_millis());
+    let (_scratch, tmp) = private_capture_file()?;
     let mut command = std::process::Command::new("screencapture");
     if let Some(r) = region {
         command
@@ -350,10 +360,8 @@ fn capture_screen_impl(region: Option<&ScreenRegion>) -> Result<Vec<u8>, String>
         return Err(format!("screen capture failed: {stderr}"));
     }
 
-    let bytes = std::fs::read(&tmp).map_err(|e| format!("failed to read screenshot: {e}"))?;
-    // Best-effort: temp screenshot file cleanup is housekeeping; captured bytes are already in memory
-    let _ = std::fs::remove_file(&tmp);
-    Ok(bytes)
+    // The private directory, and the capture in it, are removed on return.
+    std::fs::read(&tmp).map_err(|e| format!("failed to read screenshot: {e}"))
 }
 
 #[cfg(all(not(test), not(any(target_os = "linux", target_os = "macos"))))]
@@ -384,17 +392,16 @@ fn capture_window_impl(window_title: &str) -> Result<Vec<u8>, String> {
         .ok_or_else(|| format!("no window found with title '{window_title}'"))?
         .to_string();
 
-    let tmp = format!("/tmp/nexus-window-{}.png", now_millis());
+    let (_scratch, tmp) = private_capture_file()?;
+    let tmp = tmp.to_string_lossy().into_owned();
     let output = run_command("import", &["-window", &window_id, &tmp])?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("window capture failed: {stderr}"));
     }
 
-    let bytes = std::fs::read(&tmp).map_err(|e| format!("failed to read screenshot: {e}"))?;
-    // Best-effort: temp window capture file cleanup is housekeeping; captured bytes are already in memory
-    let _ = std::fs::remove_file(&tmp);
-    Ok(bytes)
+    // The private directory, and the capture in it, are removed on return.
+    std::fs::read(&tmp).map_err(|e| format!("failed to read screenshot: {e}"))
 }
 
 #[cfg(all(not(test), target_os = "macos"))]
@@ -886,6 +893,27 @@ impl ComputerControlEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn p0_002c5b_captures_use_a_private_unpredictable_scratch_directory() {
+        use std::os::unix::fs::PermissionsExt;
+        let (first, path) = private_capture_file().unwrap();
+        let (second, other) = private_capture_file().unwrap();
+        assert_ne!(path, other);
+        assert!(path.starts_with(first.path()));
+        assert!(!path.to_string_lossy().contains("nexus-screen-"));
+        let mode = std::fs::metadata(first.path())
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o700);
+        std::fs::write(&path, b"png").unwrap();
+        let dir = first.path().to_path_buf();
+        drop(first);
+        assert!(!dir.exists());
+        drop(second);
+    }
     use tempfile::TempDir;
 
     #[test]

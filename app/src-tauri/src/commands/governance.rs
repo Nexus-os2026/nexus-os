@@ -336,14 +336,10 @@ pub(crate) fn policy_detect_conflicts() -> Result<serde_json::Value, String> {
     Ok(json!({ "conflicts": conflicts, "count": conflicts.len() }))
 }
 
+/// Policies under the validated identity home (P0-002C5B). With none the
+/// directory is empty and nothing is listed; a literal `~` is never used.
 pub(crate) fn dirs_policy_dir() -> std::path::PathBuf {
-    if let Some(home) = std::env::var_os("HOME") {
-        std::path::PathBuf::from(home)
-            .join(".nexus")
-            .join("policies")
-    } else {
-        std::path::PathBuf::from("~/.nexus/policies")
-    }
+    nexus_kernel::identity_home::nexus_state_path("policies").unwrap_or_default()
 }
 
 /// Check if setup has been completed (hardware detected).
@@ -816,7 +812,8 @@ pub struct MarketplaceCheckRow {
 
 pub(crate) fn open_marketplace_registry(
 ) -> Result<nexus_marketplace::sqlite_registry::SqliteRegistry, String> {
-    let db_path = nexus_marketplace::sqlite_registry::SqliteRegistry::default_db_path();
+    let db_path = nexus_marketplace::sqlite_registry::SqliteRegistry::default_db_path()
+        .map_err(|e| format!("Failed to open marketplace database: {e}"))?;
     nexus_marketplace::sqlite_registry::SqliteRegistry::open(&db_path)
         .map_err(|e| format!("Failed to open marketplace database: {e}"))
 }

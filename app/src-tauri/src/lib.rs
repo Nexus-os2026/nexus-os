@@ -1055,29 +1055,57 @@ impl Default for AppState {
     }
 }
 
+/// Schedules persist beside the database, in an absolute directory under the
+/// validated identity home (P0-002C5B). With none, or with an operator
+/// database override that has no absolute directory, the store refuses to
+/// persist instead of writing relative to the working directory.
+fn identity_schedule_store() -> nexus_kernel::scheduler::ScheduleStore {
+    match nexus_kernel::identity_home::nexus_db_path()
+        .ok()
+        .and_then(|path| path.parent().map(std::path::Path::to_path_buf))
+        .filter(|dir| dir.is_absolute())
+    {
+        Some(dir) => nexus_kernel::scheduler::ScheduleStore::new(&dir),
+        None => nexus_kernel::scheduler::ScheduleStore::unavailable(),
+    }
+}
+
 impl AppState {
     pub fn new() -> Self {
         #[cfg(not(test))]
         maybe_cleanup_legacy_agent_db();
 
+        // P0-002C5B: every per-user store below derives from the validated
+        // identity home. Without one the app does not start (the persistent
+        // oracle identity already requires it) instead of falling back to the
+        // working directory or a shared temporary directory.
+        let nexus_state = nexus_kernel::identity_home::nexus_state_dir()
+            .expect("Nexus OS needs a valid absolute HOME for its application state");
+
         let supervisor = Arc::new(Mutex::new(Supervisor::new()));
+        // P0-002C5B: the database lives under the validated identity home (or
+        // the recorded NEXUS_DB_PATH operator override); with neither, the
+        // existing in-memory fallback applies and nothing touches disk.
         let db = Arc::new(
-            NexusDatabase::open(&NexusDatabase::default_db_path()).unwrap_or_else(|e| {
-                eprintln!("persistence: falling back to in-memory DB: {e}");
-                NexusDatabase::in_memory().unwrap_or_else(|e2| {
-                    eprintln!("╔══════════════════════════════════════════╗");
-                    eprintln!("║  FATAL: Nexus OS failed to start         ║");
-                    eprintln!("╠══════════════════════════════════════════╣");
-                    eprintln!("║  Error: {e2}");
-                    eprintln!("║                                          ║");
-                    eprintln!("║  Please check:                           ║");
-                    eprintln!("║  1. Config file exists and is valid      ║");
-                    eprintln!("║  2. Required ports are available         ║");
-                    eprintln!("║  3. Sufficient disk space and memory     ║");
-                    eprintln!("╚══════════════════════════════════════════╝");
-                    std::process::exit(1);
-                })
-            }),
+            nexus_kernel::identity_home::nexus_db_path()
+                .map_err(|e| e.to_string())
+                .and_then(|path| NexusDatabase::open(&path).map_err(|e| e.to_string()))
+                .unwrap_or_else(|e| {
+                    eprintln!("persistence: falling back to in-memory DB: {e}");
+                    NexusDatabase::in_memory().unwrap_or_else(|e2| {
+                        eprintln!("╔══════════════════════════════════════════╗");
+                        eprintln!("║  FATAL: Nexus OS failed to start         ║");
+                        eprintln!("╠══════════════════════════════════════════╣");
+                        eprintln!("║  Error: {e2}");
+                        eprintln!("║                                          ║");
+                        eprintln!("║  Please check:                           ║");
+                        eprintln!("║  1. Config file exists and is valid      ║");
+                        eprintln!("║  2. Required ports are available         ║");
+                        eprintln!("║  3. Sufficient disk space and memory     ║");
+                        eprintln!("╚══════════════════════════════════════════╝");
+                        std::process::exit(1);
+                    })
+                }),
         );
         // Bug AK Commit 2: run the one-shot credential-vault
         // migration before any consumer reads `config.social.x_*`
@@ -1195,14 +1223,12 @@ impl AppState {
             build: Arc::new(Mutex::new(BuildManager::new())),
             learning: Arc::new(Mutex::new(LearningManager::new())),
             rag: Arc::new(Mutex::new(RagPipeline::new(RagConfig::default()))),
-            model_registry: Arc::new(Mutex::new(ModelRegistry::default_dir())),
+            model_registry: Arc::new(Mutex::new(ModelRegistry::new(nexus_state.join("models")))),
             nexus_link: Arc::new(Mutex::new({
                 let hostname = std::env::var("HOSTNAME")
                     .or_else(|_| std::env::var("COMPUTERNAME"))
                     .unwrap_or_else(|_| "nexus-device".to_string());
-                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-                let models_dir = std::path::Path::new(&home).join(".nexus").join("models");
-                NexusLink::new(&hostname, &models_dir.display().to_string())
+                NexusLink::new(&hostname, &nexus_state.join("models").display().to_string())
             })),
             evolution: Arc::new(Mutex::new(EvolutionEngine::new(EvolutionConfig::default()))),
             mcp_host: Arc::new(Mutex::new(McpHostManager::new())),
@@ -1212,7 +1238,10 @@ impl AppState {
             computer_control: Arc::new(Mutex::new(ComputerControlEngine::new())),
             neural_bridge: Arc::new(Mutex::new(NeuralBridge::new(NeuralBridgeConfig::default()))),
             economic_engine: Arc::new(Mutex::new(EconomicEngine::new(EconomicConfig::default()))),
-            agent_memory: Arc::new(Mutex::new(AgentMemory::new(MemoryConfig::default()))),
+            agent_memory: Arc::new(Mutex::new(AgentMemory::new(MemoryConfig {
+                persistence_dir: nexus_state.join("memory").to_string_lossy().into_owned(),
+                ..MemoryConfig::default()
+            }))),
             tracing_engine: Arc::new(Mutex::new(TracingEngine::new(1000))),
             payment_engine: Arc::new(Mutex::new(PaymentEngine::new(RevenueSplit::default()))),
             whisper: Arc::new(Mutex::new(WhisperTranscriber::new())),
@@ -1338,10 +1367,7 @@ impl AppState {
                 &nexus_integrations::IntegrationConfig::default(),
             )),
             metering_store: Arc::new(Mutex::new({
-                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-                let metering_path = std::path::Path::new(&home)
-                    .join(".nexus")
-                    .join("metering.db");
+                let metering_path = nexus_state.join("metering.db");
                 if let Some(parent) = metering_path.parent() {
                     // Best-effort: create parent directory for metering DB; fallback to in-memory below
                     let _ = std::fs::create_dir_all(parent);
@@ -1366,21 +1392,10 @@ impl AppState {
             metering_rates: Arc::new(nexus_metering::CostRates::default()),
             telemetry_config: Arc::new(Mutex::new(nexus_telemetry::TelemetryConfig::desktop())),
             a2a_client: Arc::new(Mutex::new(A2aClient::new())),
-            schedule_store: {
-                let ss = Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
-                    NexusDatabase::default_db_path()
-                        .parent()
-                        .unwrap_or(std::path::Path::new(".")),
-                ));
-                ss
-            },
+            schedule_store: Arc::new(identity_schedule_store()),
             schedule_runner: {
                 // Uses the same ScheduleStore path — ScheduleStore internally re-reads from disk
-                let runner_store = Arc::new(nexus_kernel::scheduler::ScheduleStore::new(
-                    NexusDatabase::default_db_path()
-                        .parent()
-                        .unwrap_or(std::path::Path::new(".")),
-                ));
+                let runner_store = Arc::new(identity_schedule_store());
                 let sched_executor = Arc::new(nexus_kernel::scheduler::ScheduledExecutor::new(
                     supervisor_for_runner,
                     Arc::new(Mutex::new(
@@ -1559,8 +1574,7 @@ impl AppState {
                 let hostname = std::env::var("HOSTNAME")
                     .or_else(|_| std::env::var("COMPUTERNAME"))
                     .unwrap_or_else(|_| "nexus-device".to_string());
-                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-                let models_dir = std::path::Path::new(&home).join(".nexus").join("models");
+                let models_dir = ModelRegistry::default_dir().models_dir().clone();
                 NexusLink::new(&hostname, &models_dir.display().to_string())
             })),
             evolution: Arc::new(Mutex::new(EvolutionEngine::new(EvolutionConfig::default()))),
@@ -4913,10 +4927,9 @@ pub mod runtime {
     /// Run analysis on all completed projects.
     #[tauri::command]
     fn builder_improvement_run_analysis() -> Result<String, String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-        let builds_dir = std::path::PathBuf::from(&home)
-            .join(".nexus")
-            .join("builds");
+        // P0-002C5B: the Builder storage root under the validated identity home.
+        let builds_dir =
+            nexus_kernel::identity_home::nexus_state_path("builds").map_err(|e| e.to_string())?;
 
         let mut store = web_builder_agent::self_improve::store::load_store()
             .map_err(|e| format!("load store: {e}"))?;
@@ -7670,8 +7683,7 @@ pub mod runtime {
             eprintln!("[COMPONENT STACK] {component_stack}");
         }
         // Also append to a log file for post-mortem debugging
-        if let Some(home) = dirs::home_dir() {
-            let log_dir = home.join(".nexus");
+        if let Ok(log_dir) = nexus_kernel::identity_home::nexus_state_dir() {
             let _ = std::fs::create_dir_all(&log_dir);
             if let Ok(mut file) = std::fs::OpenOptions::new()
                 .create(true)

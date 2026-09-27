@@ -54,21 +54,36 @@ pub struct LocalModel {
 /// Manages local model file storage.
 pub struct ModelStorage {
     base_dir: PathBuf,
-    /// When true, `list_models` also scans well-known directories like
-    /// `~/.nexus/models/` and `~/models/` in addition to `base_dir`.
-    scan_extra_dirs: bool,
+    /// Extra read-only directories `list_models` also scans, such as
+    /// `<home>/.nexus/models` and `<home>/models`.
+    extra_dirs: Vec<PathBuf>,
 }
 
 impl ModelStorage {
-    /// Create storage, ensuring the base directory exists.
-    /// Scans extra well-known directories when listing models.
-    pub fn new() -> Result<Self, FlashError> {
-        let base_dir = Self::default_model_dir()?;
+    /// Create storage beneath a home directory the caller has already
+    /// validated, ensuring the base directory exists (P0-002C5B). The
+    /// platform data directory is derived from that home, never from
+    /// `XDG_DATA_HOME`, `APPDATA` or another environment variable, and the
+    /// extra directories scanned when listing come from the same home.
+    pub fn for_home(home: &Path) -> Result<Self, FlashError> {
+        if home.as_os_str().is_empty() || !home.is_absolute() {
+            return Err(FlashError::DownloadError(
+                "model storage needs a valid absolute home directory".into(),
+            ));
+        }
+        let data = if cfg!(target_os = "macos") {
+            home.join("Library").join("Application Support")
+        } else if cfg!(target_os = "windows") {
+            home.join("AppData").join("Roaming")
+        } else {
+            home.join(".local").join("share")
+        };
+        let base_dir = data.join("nexus-os").join("models");
         std::fs::create_dir_all(&base_dir)
             .map_err(|e| FlashError::DownloadError(format!("cannot create model dir: {e}")))?;
         Ok(Self {
             base_dir,
-            scan_extra_dirs: true,
+            extra_dirs: vec![home.join(".nexus").join("models"), home.join("models")],
         })
     }
 
@@ -79,7 +94,7 @@ impl ModelStorage {
             .map_err(|e| FlashError::DownloadError(format!("cannot create model dir: {e}")))?;
         Ok(Self {
             base_dir,
-            scan_extra_dirs: false,
+            extra_dirs: Vec::new(),
         })
     }
 
@@ -99,15 +114,10 @@ impl ModelStorage {
         // Collect all directories to scan.
         let mut scan_dirs: Vec<PathBuf> = vec![self.base_dir.clone()];
 
-        // Also scan ~/.nexus/models/ and ~/models/ if they exist.
-        if self.scan_extra_dirs {
-            if let Ok(home) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
-                let home = PathBuf::from(home);
-                for extra in &[home.join(".nexus").join("models"), home.join("models")] {
-                    if extra.is_dir() && !scan_dirs.contains(extra) {
-                        scan_dirs.push(extra.clone());
-                    }
-                }
+        // Also scan the extra read-only directories if they exist.
+        for extra in &self.extra_dirs {
+            if extra.is_dir() && !scan_dirs.contains(extra) {
+                scan_dirs.push(extra.clone());
             }
         }
 
@@ -260,18 +270,6 @@ impl ModelStorage {
     pub fn total_models_size(&self) -> Result<u64, FlashError> {
         let models = self.list_models()?;
         Ok(models.iter().map(|m| m.file_size_bytes).sum())
-    }
-
-    fn default_model_dir() -> Result<PathBuf, FlashError> {
-        // Try platform-appropriate data directory first.
-        if let Some(data) = dirs_next(&["nexus-os", "models"]) {
-            return Ok(data);
-        }
-        // Fallback: ~/.nexus-os/models/
-        let home = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .map_err(|_| FlashError::DownloadError("cannot determine home dir".into()))?;
-        Ok(PathBuf::from(home).join(".nexus-os").join("models"))
     }
 }
 
@@ -662,36 +660,6 @@ fn file_modified_iso(meta: &std::fs::Metadata) -> String {
         .unwrap_or_default()
 }
 
-/// Platform-appropriate data directory.
-fn dirs_next(components: &[&str]) -> Option<PathBuf> {
-    // Linux: ~/.local/share/  macOS: ~/Library/Application Support/  Windows: %APPDATA%
-    // Optional: HOME/APPDATA/XDG env vars may not be set in sandboxed environments
-    let base = if cfg!(target_os = "macos") {
-        std::env::var("HOME")
-            .ok()
-            .map(|h| PathBuf::from(h).join("Library").join("Application Support"))
-    } else if cfg!(target_os = "windows") {
-        std::env::var("APPDATA").ok().map(PathBuf::from)
-    } else {
-        // XDG on Linux/BSD
-        std::env::var("XDG_DATA_HOME")
-            .ok()
-            .map(PathBuf::from)
-            .or_else(|| {
-                std::env::var("HOME")
-                    .ok()
-                    .map(|h| PathBuf::from(h).join(".local").join("share"))
-            })
-    };
-
-    base.map(|mut p| {
-        for c in components {
-            p = p.join(c);
-        }
-        p
-    })
-}
-
 /// Get available disk space for a path (best-effort, returns 0 on failure).
 ///
 /// Uses `df` on Unix-like systems as a safe alternative to `statvfs`.
@@ -740,6 +708,26 @@ fn available_space_bytes(path: &Path) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p0_002c5b_storage_derives_only_from_a_validated_home() {
+        for home in ["", ".", "relative/home", "~"] {
+            assert!(ModelStorage::for_home(Path::new(home)).is_err(), "{home:?}");
+        }
+        let home =
+            std::env::temp_dir().join(format!("nexus-flash-test-home-{}", std::process::id()));
+        std::fs::create_dir_all(&home).unwrap();
+        let storage = ModelStorage::for_home(&home).unwrap();
+        assert!(storage.base_dir().starts_with(&home));
+        assert!(storage
+            .base_dir()
+            .ends_with(Path::new("nexus-os").join("models")));
+        assert_eq!(
+            storage.extra_dirs,
+            vec![home.join(".nexus").join("models"), home.join("models")]
+        );
+        let _ = std::fs::remove_dir_all(&home);
+    }
 
     #[test]
     fn test_format_bytes() {

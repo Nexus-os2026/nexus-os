@@ -497,14 +497,13 @@ pub fn run_social_poster_from_manifest(
     dry_run: bool,
 ) -> Result<SocialPosterRunReport, AgentError> {
     let manifest = load_manifest(manifest_path)?;
-    let db =
-        Arc::new(
-            nexus_persistence::NexusDatabase::open(
-                &nexus_persistence::NexusDatabase::default_db_path(),
-            )
-            .or_else(|_| nexus_persistence::NexusDatabase::in_memory())
+    let db = Arc::new(
+        nexus_kernel::identity_home::nexus_db_path()
+            .ok()
+            .and_then(|path| nexus_persistence::NexusDatabase::open(&path).ok())
+            .map_or_else(nexus_persistence::NexusDatabase::in_memory, Ok)
             .map_err(|e| AgentError::SupervisorError(format!("open NexusDatabase: {e}")))?,
-        );
+    );
     let mut agent = SocialPosterAgent::new(manifest, dry_run, db)?;
     agent.run()
 }

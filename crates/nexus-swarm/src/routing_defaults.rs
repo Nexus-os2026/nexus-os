@@ -118,8 +118,9 @@ pub fn load_policies() -> Vec<RoutingPolicy> {
     map.into_values().collect()
 }
 
+/// The routing overlay under the validated identity home (P0-002C5B).
 fn override_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".nexus").join("swarm_routing.toml"))
+    nexus_kernel::identity_home::nexus_state_path("swarm_routing.toml").ok()
 }
 
 #[cfg(test)]

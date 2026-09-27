@@ -758,7 +758,10 @@ impl CognitiveRuntime {
     }
 
     fn persist_l6_cooldown(&self, agent_id: &str, cycle_count: u32, cooled_down: bool) {
-        let Ok(db) = NexusDatabase::open(&NexusDatabase::default_db_path()) else {
+        let Ok(db) = crate::identity_home::nexus_db_path()
+            .map_err(|_| ())
+            .and_then(|path| NexusDatabase::open(&path).map_err(|_| ()))
+        else {
             return;
         };
         // Optional: missing cooldown row means first run; use defaults
@@ -1071,7 +1074,10 @@ impl CognitiveRuntime {
                     "swarm" | "adversarial" => {}
                     _ => {}
                 }
-                if let Ok(db) = NexusDatabase::open(&NexusDatabase::default_db_path()) {
+                if let Ok(db) = crate::identity_home::nexus_db_path()
+                    .map_err(|_| ())
+                    .and_then(|path| NexusDatabase::open(&path).map_err(|_| ()))
+                {
                     // Best-effort: persist algorithm selection; planning proceeds regardless
                     let _ = db.save_algorithm_selection(
                         agent_id,

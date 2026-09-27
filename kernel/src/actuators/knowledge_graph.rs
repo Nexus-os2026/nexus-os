@@ -9,24 +9,33 @@ const FUEL_COST_GRAPH_QUERY: f64 = 2.0;
 
 #[derive(Debug, Clone)]
 pub struct KnowledgeGraphActuator {
-    db_path: PathBuf,
+    /// `None` when no valid identity home exists: the actuator then fails
+    /// rather than opening a database anywhere else (P0-002C5B).
+    db_path: Option<PathBuf>,
 }
 
 impl Default for KnowledgeGraphActuator {
     fn default() -> Self {
         Self {
-            db_path: NexusDatabase::default_db_path(),
+            db_path: crate::identity_home::nexus_db_path().ok(),
         }
     }
 }
 
 impl KnowledgeGraphActuator {
     pub fn new(db_path: PathBuf) -> Self {
-        Self { db_path }
+        Self {
+            db_path: Some(db_path),
+        }
     }
 
     fn db(&self) -> Result<NexusDatabase, ActuatorError> {
-        NexusDatabase::open(&self.db_path)
+        let path = self.db_path.as_ref().ok_or_else(|| {
+            ActuatorError::IoError(
+                "knowledge graph database is unavailable: no valid identity home".into(),
+            )
+        })?;
+        NexusDatabase::open(path)
             .map_err(|error| ActuatorError::IoError(format!("open knowledge graph db: {error}")))
     }
 }
@@ -116,6 +125,12 @@ impl Actuator for KnowledgeGraphActuator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p0_002c5b_without_an_identity_home_the_graph_database_is_unavailable() {
+        let actuator = KnowledgeGraphActuator { db_path: None };
+        assert!(actuator.db().is_err());
+    }
     use crate::autonomy::AutonomyLevel;
     use std::collections::HashSet;
     use tempfile::TempDir;

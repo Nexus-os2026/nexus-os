@@ -1057,7 +1057,8 @@ pub(crate) fn compliance_security_events(
 /* ================================================================== */
 
 pub(crate) fn file_manager_home() -> Result<String, String> {
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "cannot determine home directory".to_string())
+    // P0-002C5B: the validated identity home, never an unchecked HOME.
+    nexus_kernel::identity_home::identity_home()
+        .map(|home| home.to_string_lossy().into_owned())
+        .map_err(|e| e.to_string())
 }

@@ -184,14 +184,18 @@ pub async fn nx_tools(state: State<'_, NxState>) -> Result<Vec<serde_json::Value
     Ok(tools)
 }
 
+/// The Nexus Code session directory under the validated identity home, with
+/// no fallback to the working directory (P0-002C5B).
+fn nx_sessions_dir() -> Result<std::path::PathBuf, String> {
+    nexus_kernel::identity_home::nexus_state_path("nexus-code/sessions").map_err(|e| e.to_string())
+}
+
 /// Save the current session.
 #[command]
 pub async fn nx_session_save(name: String, state: State<'_, NxState>) -> Result<String, String> {
     let app = state.app.lock().await;
-    let sessions_dir = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("nexus-code")
-        .join("sessions");
+    // P0-002C5B: sessions live under the validated identity home.
+    let sessions_dir = nx_sessions_dir()?;
     std::fs::create_dir_all(&sessions_dir).map_err(|e| format!("{}", e))?;
 
     let session_file = sessions_dir.join(format!("{}.json", name));
@@ -218,10 +222,8 @@ pub async fn nx_session_save(name: String, state: State<'_, NxState>) -> Result<
 /// List saved sessions.
 #[command]
 pub async fn nx_session_list() -> Result<Vec<serde_json::Value>, String> {
-    let sessions_dir = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("nexus-code")
-        .join("sessions");
+    // P0-002C5B: sessions live under the validated identity home.
+    let sessions_dir = nx_sessions_dir()?;
 
     let mut sessions = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&sessions_dir) {
@@ -449,10 +451,18 @@ pub async fn nx_app_grants() -> Result<Vec<AppGrantInfo>, String> {
     Ok(grants)
 }
 
+/// The learned UI pattern library under the validated identity home, never a
+/// shared `/tmp` fallback (P0-002C5B).
+fn learned_patterns_library() -> Result<nexus_computer_use::learning::PatternLibrary, String> {
+    let path = nexus_kernel::identity_home::nexus_state_path("ui_patterns.json")
+        .map_err(|e| e.to_string())?;
+    Ok(nexus_computer_use::learning::PatternLibrary::new(path))
+}
+
 /// List learned UI patterns.
 #[command]
 pub async fn nx_learned_patterns() -> Result<Vec<PatternInfo>, String> {
-    let mut library = nexus_computer_use::learning::PatternLibrary::with_default_path();
+    let mut library = learned_patterns_library()?;
     library
         .load()
         .map_err(|e| format!("Failed to load patterns: {}", e))?;
@@ -477,10 +487,15 @@ pub async fn nx_learned_patterns() -> Result<Vec<PatternInfo>, String> {
 /// Learning statistics: pattern count, memory entries, total fuel, success rate.
 #[command]
 pub async fn nx_learning_stats() -> Result<LearningStats, String> {
-    let mut library = nexus_computer_use::learning::PatternLibrary::with_default_path();
+    let mut library = learned_patterns_library()?;
     library.load().ok();
 
-    let mut memory = nexus_computer_use::learning::ActionMemory::with_default_path();
+    // P0-002C5B: under the validated identity home, never a shared `/tmp`.
+    let mut memory = nexus_computer_use::learning::ActionMemory::new(
+        nexus_kernel::identity_home::nexus_state_path("agent_memory.json")
+            .map_err(|e| e.to_string())?,
+        1000,
+    );
     memory.load().ok();
 
     let entries = memory.entries();

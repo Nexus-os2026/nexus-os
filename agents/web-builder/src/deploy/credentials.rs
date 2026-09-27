@@ -35,11 +35,10 @@ struct StoredEntry {
     provider: String,
 }
 
-fn credentials_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home)
-        .join(".nexus")
-        .join("deploy_credentials.json")
+/// The credential store under the validated identity home (P0-002C5B).
+fn credentials_path() -> Result<PathBuf, DeployError> {
+    nexus_kernel::identity_home::nexus_state_path("deploy_credentials.json")
+        .map_err(|e| DeployError::Credential(e.to_string()))
 }
 
 /// Derive a machine-specific key for obfuscating stored credentials.
@@ -143,23 +142,24 @@ fn delete_from_path(path: &Path, provider: &str) -> Result<(), DeployError> {
 
 /// Store credentials for a provider. Overwrites any existing credentials.
 pub fn store_credentials(provider: &str, credentials: &Credentials) -> Result<(), DeployError> {
-    store_to_path(&credentials_path(), provider, credentials)
+    store_to_path(&credentials_path()?, provider, credentials)
 }
 
 /// Load credentials for a provider. Returns None if not stored.
 pub fn load_credentials(provider: &str) -> Result<Option<Credentials>, DeployError> {
-    load_from_path(&credentials_path(), provider)
+    load_from_path(&credentials_path()?, provider)
 }
 
 /// Delete stored credentials for a provider.
 pub fn delete_credentials(provider: &str) -> Result<(), DeployError> {
-    delete_from_path(&credentials_path(), provider)
+    delete_from_path(&credentials_path()?, provider)
 }
 
 /// Check if credentials exist for a provider (without loading the full token).
 pub fn has_credentials(provider: &str) -> bool {
-    let store = load_store_from(&credentials_path());
-    store.entries.contains_key(provider)
+    credentials_path()
+        .map(|path| load_store_from(&path).entries.contains_key(provider))
+        .unwrap_or(false)
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────

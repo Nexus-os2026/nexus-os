@@ -517,11 +517,10 @@ fn best_for_security(a: &AvailableModels) -> ModelChoice {
 
 // ─── Persistence ────────────────────────────────────────────────────────────
 
-fn config_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home)
-        .join(".nexus")
-        .join("builder_model_config.json")
+/// The model config under the validated identity home (P0-002C5B).
+fn config_path() -> Result<PathBuf, String> {
+    nexus_kernel::identity_home::nexus_state_path("builder_model_config.json")
+        .map_err(|e| e.to_string())
 }
 
 /// Strip display suffixes like " (via Codex CLI)" from persisted model_id values.
@@ -545,7 +544,10 @@ fn migrate_model_ids(mut config: BuildModelConfig) -> BuildModelConfig {
 /// Load model config from disk. If the file doesn't exist or is invalid,
 /// detect available models and generate smart defaults.
 pub fn load_config() -> BuildModelConfig {
-    let path = config_path();
+    let Ok(path) = config_path() else {
+        // No valid identity home: defaults, and nothing is read or written.
+        return generate_smart_defaults(&detect_available_models());
+    };
     match std::fs::read_to_string(&path) {
         Ok(contents) => match serde_json::from_str::<BuildModelConfig>(&contents) {
             Ok(cfg) => {
@@ -574,7 +576,7 @@ pub fn load_config() -> BuildModelConfig {
 
 /// Save model config to disk.
 pub fn save_config(config: &BuildModelConfig) -> Result<(), String> {
-    let path = config_path();
+    let path = config_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("failed to create config dir: {e}"))?;
     }

@@ -130,10 +130,10 @@ impl SqliteRegistry {
         Ok(registry)
     }
 
-    /// Default database path: `~/.nexus/marketplace.db`.
-    pub fn default_db_path() -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        PathBuf::from(home).join(".nexus").join("marketplace.db")
+    /// Default database path: `marketplace.db` under the validated identity
+    /// home, with no shared-temporary fallback (P0-002C5B).
+    pub fn default_db_path() -> Result<PathBuf, nexus_kernel::identity_home::IdentityHomeMissing> {
+        nexus_kernel::identity_home::nexus_state_path("marketplace.db")
     }
 
     /// Run schema migrations.  Idempotent — safe to call on every open.
