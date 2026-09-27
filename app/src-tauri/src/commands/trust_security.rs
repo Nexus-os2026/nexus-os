@@ -303,36 +303,74 @@ pub(crate) fn desktop_control_workspace() -> Result<PathBuf, String> {
         .map_err(|e| e.to_string())
 }
 
+/// A desktop-notification command line (P0-002C5C). The message is never
+/// part of a script: it is a separate argument after `--` for `notify-send`,
+/// an item of `argv` for a fixed AppleScript `run` handler (after the title,
+/// so option parsing has already stopped), and an environment value read by
+/// a fixed PowerShell script. No text a caller passes can become code.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct NotificationInvocation {
+    pub(crate) program: &'static str,
+    pub(crate) args: Vec<String>,
+    pub(crate) env: Option<(&'static str, String)>,
+}
+
+/// The environment variable that carries the message to PowerShell.
+pub(crate) const NOTIFICATION_TEXT_ENV: &str = "NEXUS_OS_NOTIFICATION_TEXT";
+
+/// The fixed PowerShell script: it reads the message only as data.
+pub(crate) const WINDOWS_NOTIFICATION_SCRIPT: &str = "Add-Type -AssemblyName PresentationFramework; [void][System.Windows.MessageBox]::Show($env:NEXUS_OS_NOTIFICATION_TEXT, 'Nexus OS')";
+
+pub(crate) fn notification_invocation(os: &str, message: &str) -> Option<NotificationInvocation> {
+    let fixed = |args: &[&str]| args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
+    match os {
+        "linux" => Some(NotificationInvocation {
+            program: "notify-send",
+            args: [fixed(&["--", "Nexus OS"]), vec![message.to_string()]].concat(),
+            env: None,
+        }),
+        "macos" => Some(NotificationInvocation {
+            program: "osascript",
+            args: [
+                fixed(&[
+                    "-e",
+                    "on run argv",
+                    "-e",
+                    "display notification (item 2 of argv) with title (item 1 of argv)",
+                    "-e",
+                    "end run",
+                    "Nexus OS",
+                ]),
+                vec![message.to_string()],
+            ]
+            .concat(),
+            env: None,
+        }),
+        "windows" => Some(NotificationInvocation {
+            program: "powershell",
+            args: fixed(&[
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                WINDOWS_NOTIFICATION_SCRIPT,
+            ]),
+            env: Some((NOTIFICATION_TEXT_ENV, message.to_string())),
+        }),
+        _ => None,
+    }
+}
+
 pub(crate) fn show_desktop_notification(message: &str) {
+    let Some(invocation) = notification_invocation(std::env::consts::OS, message) else {
+        return;
+    };
+    let mut command = Command::new(invocation.program);
+    command.args(&invocation.args);
+    if let Some((name, value)) = &invocation.env {
+        command.env(name, value);
+    }
     // Best-effort: desktop notification is informational; failure is non-fatal
-    #[cfg(target_os = "linux")]
-    let _ = Command::new("notify-send")
-        .arg("Nexus OS")
-        .arg(message)
-        .output();
-
-    // Best-effort: desktop notification is informational; failure is non-fatal
-    #[cfg(target_os = "macos")]
-    let _ = Command::new("osascript")
-        .arg("-e")
-        .arg(format!(
-            "display notification {:?} with title \"Nexus OS\"",
-            message
-        ))
-        .output();
-
-    // Best-effort: desktop notification is informational; failure is non-fatal
-    #[cfg(target_os = "windows")]
-    let _ = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-Command",
-            &format!(
-                "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show({:?}, 'Nexus OS')",
-                message
-            ),
-        ])
-        .output();
+    let _ = command.output();
 }
 
 pub(crate) fn computer_control_capture_screen(

@@ -1938,3 +1938,96 @@ fn p0_002c5b_serialized_records_choose_no_authority() {
     let conductor = production_text(include_str!("../../../../agents/conductor/src/lib.rs"));
     assert!(!conductor.contains("record_file_"));
 }
+
+// ── P0-002C5C final trust-surface guards ────────────────────────────────
+
+/// Desktop production sources, with comments and test items removed.
+fn desktop_production_texts() -> Vec<(String, String)> {
+    let mut files = Vec::new();
+    production_sources(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut files,
+    );
+    assert!(files.len() > 20, "desktop sources not found");
+    files
+        .into_iter()
+        .map(|path| {
+            let text = production_text(&std::fs::read_to_string(&path).unwrap());
+            (path.display().to_string(), text)
+        })
+        .collect()
+}
+
+/// P0-002C5C: notification text is data on every platform (an argument
+/// after option parsing, an AppleScript `argv` item, or an environment value
+/// read by a fixed PowerShell script), and every production caller passes a
+/// literal message.
+#[test]
+fn p0_002c5c_notification_text_never_becomes_a_script() {
+    use crate::commands::trust_security::{
+        notification_invocation, NOTIFICATION_TEXT_ENV, WINDOWS_NOTIFICATION_SCRIPT,
+    };
+    for message in [
+        "'); Remove-Item -Recurse -Force $HOME; ('",
+        "$(Start-Process calc)",
+        "\" & do shell script \"id\" & \"",
+        "--help",
+        "-u critical",
+        "line\nbreak",
+        "",
+    ] {
+        let linux = notification_invocation("linux", message).unwrap();
+        assert_eq!(linux.program, "notify-send");
+        assert_eq!(linux.args, ["--", "Nexus OS", message]);
+        assert_eq!(linux.env, None);
+        let macos = notification_invocation("macos", message).unwrap();
+        assert_eq!(macos.program, "osascript");
+        assert_eq!(
+            macos.args,
+            [
+                "-e",
+                "on run argv",
+                "-e",
+                "display notification (item 2 of argv) with title (item 1 of argv)",
+                "-e",
+                "end run",
+                "Nexus OS",
+                message
+            ]
+        );
+        assert_eq!(macos.env, None);
+        let windows = notification_invocation("windows", message).unwrap();
+        assert_eq!(windows.program, "powershell");
+        assert_eq!(
+            windows.args,
+            [
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                WINDOWS_NOTIFICATION_SCRIPT
+            ]
+        );
+        assert_eq!(
+            windows.env,
+            Some((NOTIFICATION_TEXT_ENV, message.to_string()))
+        );
+    }
+    assert!(WINDOWS_NOTIFICATION_SCRIPT.contains(&format!("$env:{NOTIFICATION_TEXT_ENV}")));
+    assert_eq!(notification_invocation("freebsd", "x"), None);
+
+    let mut callers = 0;
+    for (path, text) in desktop_production_texts() {
+        for (at, call) in text.match_indices("show_desktop_notification(") {
+            if text[..at].ends_with("fn ") {
+                continue;
+            }
+            let argument = text[at + call.len()..].trim_start();
+            assert!(
+                argument.starts_with('"'),
+                "{path}: notification text must be a literal"
+            );
+            callers += 1;
+        }
+    }
+    assert_eq!(callers, 1);
+}
