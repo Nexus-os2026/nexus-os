@@ -225,6 +225,31 @@ fn arbitrary_absolute_path_entries_cannot_undo_or_redo() {
 }
 
 #[test]
+fn absolute_entries_are_refused_even_when_they_name_the_recorded_file() {
+    // Only the grant-relative path is authority. An absolute spelling of the
+    // very object that was recorded, inside the root or through a hard link
+    // outside it, still cannot undo: its identity and content would match.
+    let f = Fixture::new();
+    let inside = f.root.join("a.txt");
+    let linked = f.base.join("outside").join("linked.txt");
+    for spelling in [&inside, &linked] {
+        let mut tm = TimeMachine::new(small_config());
+        f.created(&mut tm, "a.txt", b"original");
+        if spelling == &linked {
+            std::fs::hard_link(&inside, &linked).unwrap();
+        }
+        tamper_relative(&mut tm, &spelling.to_string_lossy());
+        assert!(
+            denied(tm.undo_with(Some(&f.authority()))),
+            "{}",
+            spelling.display()
+        );
+        assert!(inside.exists() && spelling.exists());
+        assert!(f.victim_intact());
+    }
+}
+
+#[test]
 fn parent_traversal_cannot_escape_the_grant_root() {
     let f = Fixture::new();
     for hostile in [

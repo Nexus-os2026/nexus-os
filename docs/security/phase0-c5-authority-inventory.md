@@ -235,8 +235,9 @@ content and absolute path are never recorded.
   - The desktop constructs no `FileAuthority`. The guard names `FileAuthority::new(`, `.undo_with(`, `.redo_with(` and `undo_checkpoint_with(`.
   - The Conductor no longer records file entries (guarded).
   - No UI command was added.
-- **Tests** (`kernel/src/time_machine/tests.rs`, 33):
+- **Tests** (`kernel/src/time_machine/tests.rs`, 34):
   - arbitrary absolute paths and `../` cannot undo or redo;
+  - an absolute spelling of the recorded file itself, inside the root or through a hard link outside it, is refused;
   - the wrong workspace, run or agent, a replaced root, a revoked grant and read-only grants all deny;
   - legacy raw-path entries do not deserialize;
   - serialized entries recreate no authority after a restart;
