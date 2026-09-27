@@ -1220,6 +1220,17 @@ mod tests {
         }
     }
 
+    /// `dir/<name>/../<name>` spelled from text: a non-canonical spelling of
+    /// an existing directory. It cannot come from `join`, because on Windows
+    /// pushing `..` onto the verbatim (`\\?\`) path `canonicalize` returns
+    /// normalizes the `..` away; the plain form keeps it.
+    fn dotted_spelling(dir: &Path, name: &str) -> PathBuf {
+        let text = dir.to_string_lossy();
+        let text = text.strip_prefix(r"\\?\").unwrap_or(&text);
+        let sep = std::path::MAIN_SEPARATOR;
+        PathBuf::from(format!("{text}{sep}{name}{sep}..{sep}{name}"))
+    }
+
     #[test]
     fn restore_root_must_be_an_existing_canonical_directory() {
         let r = Restore::new(&raw_archive(&[(b"data/a.json", REGULAR, b"", b"1")]));
@@ -1227,7 +1238,7 @@ mod tests {
             PathBuf::from("relative/root"),
             r.base.join("missing"),
             r.base.join("victim.txt"),
-            r.root.join("..").join("restore-root"),
+            dotted_spelling(&r.base, "restore-root"),
         ] {
             assert!(restore_backup(&r.archive, &root, None).is_err(), "{root:?}");
         }

@@ -167,7 +167,20 @@ fn roots_must_be_existing_canonical_directories() {
     std::fs::write(root.join("file"), b"x").unwrap();
     assert!(existing_root(&root.join("file")).is_err());
     std::fs::create_dir(root.join("child")).unwrap();
-    assert!(existing_root(&root.join("child").join("..").join("child")).is_err());
+    assert_eq!(existing_root(&root.join("child")), Ok(()));
+    let dotted = dotted_spelling(&root, "child");
+    assert!(existing_root(&dotted).is_err(), "{dotted:?}");
+}
+
+/// `dir/<name>/../<name>` spelled from text: a non-canonical spelling of an
+/// existing directory. It cannot come from `join`, because on Windows
+/// pushing `..` onto the verbatim (`\\?\`) path `canonicalize` returns
+/// normalizes the `..` away; the plain form keeps it.
+fn dotted_spelling(dir: &Path, name: &str) -> PathBuf {
+    let text = dir.to_string_lossy();
+    let text = text.strip_prefix(r"\\?\").unwrap_or(&text);
+    let sep = std::path::MAIN_SEPARATOR;
+    PathBuf::from(format!("{text}{sep}{name}{sep}..{sep}{name}"))
 }
 
 #[test]
