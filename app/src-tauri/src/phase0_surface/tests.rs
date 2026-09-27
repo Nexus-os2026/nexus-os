@@ -580,3 +580,137 @@ fn desktop_sources_hold_no_ambient_authority_roots() {
     assert!(body.starts_with("#[cfg(test)]{"), "{body}");
     assert!(body.ends_with("#[cfg(not(test))]{None}"), "{body}");
 }
+
+/// Latent unsafe implementations that stay compiled (in other crates) but have
+/// no desktop production caller: each needle must not appear in any desktop
+/// production source. Wiring one back in fails here until it gains approved
+/// authority and this registry and the inventory are updated.
+const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
+    (
+        "execute_typed_tool",
+        "typed tools run programs in a caller or process cwd",
+    ),
+    (
+        "Conductor::new(",
+        "legacy Builder build pipeline writing under a raw output dir",
+    ),
+    (
+        "web_builder_agent::checkpoint",
+        "legacy raw-path Builder checkpoints, rollback and delete",
+    ),
+    (
+        "web_builder_agent::llm_codegen",
+        "legacy Builder writers rooted at a raw output dir",
+    ),
+    (
+        "web_builder_agent::dev_server",
+        "legacy unsealed npm/npx launch",
+    ),
+    ("GenesisEngine", "genesis manifests under an ambient base"),
+    (
+        "restore_backup",
+        "archive entries choose restore targets (C5B)",
+    ),
+    (
+        "cc_cmds::execute_action",
+        "computer control runs sh -c on caller text",
+    ),
+    (
+        "mcp2_cmds::mcp_client_add_server",
+        "MCP stdio client registers a caller-chosen program",
+    ),
+    (
+        "mcp2_cmds::mcp_client_discover_tools",
+        "MCP stdio client spawns a caller-registered program",
+    ),
+    (
+        "mcp2_cmds::mcp_client_call_tool",
+        "MCP stdio client spawns a caller-registered program",
+    ),
+    (
+        "mcp2_cmds::mcp_server_handle_request",
+        "MCP tools read cwd-relative files",
+    ),
+    (
+        "memory_cmds::memory_save",
+        "agent memory persisted under a cwd-relative dir",
+    ),
+    (
+        "memory_cmds::memory_load",
+        "agent memory loaded from a cwd-relative dir",
+    ),
+    (
+        "memory_cmds::memory_list_agents",
+        "agent memory listed from a cwd-relative dir",
+    ),
+    (
+        "run_agent_loop",
+        "nexus-code and computer-use agent loops (cwd root, CLI agent, OS input)",
+    ),
+    (
+        "ContentPipeline",
+        "content pipeline writes files and runs git through the shell",
+    ),
+    (
+        "record_file_",
+        "Time Machine file entries replayed from raw paths (C5B)",
+    ),
+    (
+        "ActuatorRegistry::with_defaults",
+        "full actuator set including shell, code and docker",
+    ),
+];
+
+/// The only approved construction of the kernel action executor: the Phase
+/// Zero agent executor, which never receives a workspace root.
+const APPROVED_EXECUTOR: (&str, &str, usize) =
+    ("commands/cognitive.rs", "RegistryExecutor::new(", 1);
+
+#[test]
+fn latent_unsafe_apis_have_no_desktop_production_caller() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    production_sources(&root, &mut files);
+    let mut executors = 0;
+    for path in files {
+        let relative = path
+            .strip_prefix(&root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        let text = std::fs::read_to_string(&path).unwrap();
+        for (needle, why) in LATENT_UNSAFE_APIS {
+            assert!(!text.contains(needle), "{relative}: {needle} ({why})");
+        }
+        let found = text.matches(APPROVED_EXECUTOR.1).count();
+        if found > 0 {
+            assert_eq!(relative, APPROVED_EXECUTOR.0, "{relative}: executor");
+        }
+        executors += found;
+    }
+    assert_eq!(executors, APPROVED_EXECUTOR.2);
+    let executor = include_str!("../commands/cognitive.rs");
+    let at = executor
+        .find("fn phase0_agent_executor(")
+        .expect("production agent executor");
+    let open = at + executor[at..].find('{').unwrap();
+    let body: String = executor[open + 1..block_end(executor, open) - 1]
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or_default())
+        .collect();
+    let body = without_whitespace(&body);
+    assert!(
+        body.starts_with("Phase0AgentExecutor{inner:nexus_kernel::cognitive::RegistryExecutor::new(std::path::PathBuf::new(),"),
+        "{body}"
+    );
+}
+
+/// The browser agent's Python bridge is never started by its session code.
+#[test]
+fn browser_bridge_is_never_started() {
+    let session = include_str!("../../../../crates/nexus-browser-agent/src/session.rs");
+    let commands = include_str!("../../../../crates/nexus-browser-agent/src/tauri_commands.rs");
+    for source in [session, commands] {
+        assert!(!source.contains(".start("), "browser bridge start");
+    }
+}
