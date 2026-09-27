@@ -3215,6 +3215,58 @@ fn p0_002c4d0_code_only(source: &str) -> String {
         .join("\n")
 }
 
+/// P0-002C5C: a stored agent record is not authority. A record naming a
+/// capability outside the registry (such as `a2a.delegate`) or an undefined
+/// autonomy level is not restored; a record a validated manifest could have
+/// produced is.
+#[test]
+fn p0_002c5c_persisted_agents_holding_unregistered_authority_are_not_restored() {
+    let state = AppState::new_in_memory();
+    let manifest = |name: &str, capabilities: &[&str], autonomy: u8| {
+        json!({
+            "name": name,
+            "version": "1.0.0",
+            "capabilities": capabilities,
+            "fuel_budget": 1000,
+            "autonomy_level": autonomy,
+        })
+        .to_string()
+    };
+    let delegating = Uuid::new_v4();
+    let unknown = Uuid::new_v4();
+    let beyond = Uuid::new_v4();
+    let clean = Uuid::new_v4();
+    for (id, json) in [
+        (
+            delegating,
+            manifest("delegating-agent", &["llm.query", "a2a.delegate"], 5),
+        ),
+        (
+            unknown,
+            manifest("unknown-agent", &["llm.query", "root.all"], 1),
+        ),
+        (beyond, manifest("beyond-agent", &["llm.query"], 7)),
+        (clean, manifest("clean-agent", &["llm.query", "fs.read"], 6)),
+    ] {
+        state
+            .db
+            .save_agent(&id.to_string(), &json, "running", 1, "native")
+            .unwrap();
+    }
+
+    crate::commands::agents::restore_persisted_agents(&state);
+
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    for refused in [delegating, unknown, beyond] {
+        assert!(supervisor.get_agent(refused).is_none(), "{refused}");
+    }
+    let restored = supervisor.get_agent(clean).expect("clean agent restored");
+    assert_eq!(
+        restored.manifest.capabilities,
+        vec!["llm.query".to_string(), "fs.read".to_string()]
+    );
+}
+
 #[test]
 fn p0_002c5b_persisted_agents_naming_a_consent_policy_path_are_not_restored() {
     let state = AppState::new_in_memory();

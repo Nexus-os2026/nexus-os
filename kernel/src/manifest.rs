@@ -326,6 +326,29 @@ pub fn parse_manifest(input: &str) -> Result<AgentManifest, AgentError> {
     })
 }
 
+/// P0-002C5C: the authority a stored manifest may carry when it is restored.
+/// A stored record is not authority: it may name only registered
+/// capabilities and a defined autonomy level, and no consent policy path,
+/// as a manifest accepted by [`parse_manifest`] does. A capability outside
+/// the registry (for example `a2a.delegate`) is refused rather than dropped.
+pub fn validate_stored_manifest(manifest: &AgentManifest) -> Result<(), AgentError> {
+    let known: BTreeSet<&str> = CAPABILITY_REGISTRY.iter().copied().collect();
+    if let Some(capability) = manifest
+        .capabilities
+        .iter()
+        .find(|capability| !known.contains(capability.as_str()))
+    {
+        return Err(AgentError::CapabilityDenied(capability.clone()));
+    }
+    parse_autonomy_level(manifest.autonomy_level)?;
+    if manifest.consent_policy_path.is_some() {
+        return Err(AgentError::ManifestError(
+            CONSENT_POLICY_PATH_REFUSED.to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_name(name: &str) -> Result<(), AgentError> {
     let len = name.chars().count();
     if !(MIN_NAME_LEN..=MAX_NAME_LEN).contains(&len) {

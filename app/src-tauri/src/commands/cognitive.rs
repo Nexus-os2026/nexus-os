@@ -1516,7 +1516,7 @@ pub(crate) fn spawn_cognitive_loop(
 }
 
 // Shared synchronous entry used by the desktop driver and lock regressions.
-fn run_cognitive_cycle(
+pub(crate) fn run_cognitive_cycle(
     state: &AppState,
     agent_id: &str,
     planner: &nexus_kernel::cognitive::CognitivePlanner,

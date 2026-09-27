@@ -105,6 +105,12 @@ pub(crate) fn restore_persisted_agents(state: &AppState) {
         let Ok(manifest) = serde_json::from_str::<AgentManifest>(&row.manifest_json) else {
             continue;
         };
+        // P0-002C5C: a stored record is not authority. It is restored only
+        // with the capabilities and autonomy a validated manifest could hold.
+        if let Err(error) = nexus_kernel::manifest::validate_stored_manifest(&manifest) {
+            eprintln!("persistence: agent {} not restored: {error}", row.id);
+            continue;
+        }
         let Ok(agent_id) = Uuid::parse_str(&row.id) else {
             eprintln!("persistence: invalid restored agent id {}", row.id);
             continue;

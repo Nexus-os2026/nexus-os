@@ -15,7 +15,6 @@ use crate::audit::{AuditTrail, AuditWriter, EventType};
 use crate::autonomy::AutonomyLevel;
 use crate::capabilities::has_capability;
 use crate::errors::AgentError;
-use crate::protocols::a2a_client::A2aClient;
 use crate::supervisor::Supervisor;
 use arc_swap::ArcSwap;
 use nexus_persistence::{NexusDatabase, StateStore};
@@ -514,8 +513,6 @@ pub struct CognitiveRuntime {
     evolution: Mutex<EvolutionEngine>,
     /// Full Darwin pipeline combining all three.
     darwin: Mutex<PlanEvolutionEngine>,
-    /// A2A client for delegating tasks to external agents.
-    a2a_client: Mutex<A2aClient>,
     /// Lock-free status snapshots published at each phase transition.
     /// Readers use `get_agent_status_fast()` which briefly locks this map and
     /// does an atomic ArcSwap load. No callbacks run under the map guard.
@@ -550,7 +547,6 @@ impl CognitiveRuntime {
             swarm: Mutex::new(SwarmCoordinator::new(4)),
             evolution: Mutex::new(EvolutionEngine::new(0.3)),
             darwin: Mutex::new(PlanEvolutionEngine::default()),
-            a2a_client: Mutex::new(A2aClient::new()),
             status_snapshots: Mutex::new(HashMap::new()),
         }
     }
@@ -1258,203 +1254,156 @@ impl CognitiveRuntime {
                 // Adversarial challenge passed — proceed to execution
             }
 
-            // A2A delegation: if the action targets an external agent, delegate via A2A protocol
-            if let PlannedAction::A2aDelegation {
-                ref agent_url,
-                ref message,
-            } = step.action
+            // P0-002C5C: every planned action, A2A delegation included, is
+            // dispatched through the host's executor. The loop sends nothing
+            // itself, so an executor's policy (the desktop's Phase0AgentExecutor)
+            // decides every action and no delegation path reaches a transport or
+            // actuator around it.
+            // Execute the action
+            let mut action_clone = step.action.clone();
+
+            // Inject accumulated results from previous steps into LlmQuery context
+            if let PlannedAction::LlmQuery {
+                ref mut context, ..
+            } = action_clone
             {
-                let mut a2a = self.a2a_client.lock().unwrap_or_else(|p| p.into_inner());
-                match a2a.send_task(agent_url, message) {
+                for (action_type, result) in &prior_step_results {
+                    context.push(format!("[{} result]: {}", action_type, result));
+                }
+            }
+
+            eprintln!(
+                "[agent:{}] dispatching to executor: {} (step {}/{})",
+                agent_id,
+                action_clone.action_type(),
+                state.current_step_index + 1,
+                total_steps
+            );
+            let (step_executed, step_fuel, step_error) =
+                match executor.execute(agent_id, &action_clone, audit, requires_hitl) {
                     Ok(result) => {
-                        step.status = StepStatus::Succeeded;
-                        step.result = Some(
-                            result
-                                .result_text
-                                .unwrap_or_else(|| format!("task {} completed", result.id)),
+                        eprintln!(
+                            "[agent:{}] actuator result for {}: {} chars — {}",
+                            agent_id,
+                            action_clone.action_type(),
+                            result.len(),
+                            &result[..result.len().min(200)]
                         );
-                        step.fuel_cost = estimate_fuel_cost(&step.action);
+                        step.status = StepStatus::Succeeded;
+                        // LLM query results get full text (user needs to see
+                        // the reasoning). File reads get truncated preview.
+                        let is_llm = matches!(action_clone, PlannedAction::LlmQuery { .. });
+                        let max_preview = if is_llm { 2000 } else { 500 };
+                        let preview = if result.len() > max_preview {
+                            format!("{}...", &result[..max_preview])
+                        } else {
+                            result.clone()
+                        };
+                        step.result = Some(result);
+                        step.fuel_cost = estimate_fuel_cost(&action_clone);
                         state.total_fuel_consumed += step.fuel_cost;
                         state.consecutive_failures = 0;
                         state.steps_completed += 1;
                         state.current_step_index += 1;
-                        eprintln!(
-                            "A2A delegation to {} succeeded: task {}",
-                            agent_url, result.id
-                        );
+                        let fuel = step.fuel_cost;
+
                         self.emit_step_executed(agent_id, step);
+
+                        // Consume fuel from supervisor
+                        if let Ok(agent_uuid) = uuid::Uuid::parse_str(agent_id) {
+                            let fuel_units = fuel as u64;
+                            let mut sup = self.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+                            if let Some(handle) = sup.get_agent(agent_uuid) {
+                                let remaining = handle.remaining_fuel;
+                                if remaining >= fuel_units {
+                                    // Best-effort: deduct fuel from supervisor; step already succeeded
+                                    let _ = sup.record_llm_spend(
+                                        agent_uuid,
+                                        "cognitive",
+                                        0,
+                                        fuel_units as u32,
+                                        fuel_units,
+                                    );
+                                }
+                            }
+                        }
+
                         audit.append_event(
                             uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
                             EventType::UserAction,
                             json!({
-                                "event": "cognitive.a2a_delegation",
-                                "target": agent_url,
-                                "task_id": result.id,
+                                "event": "cognitive.step_executed",
+                                "action": action_clone.action_type(),
                                 "status": "succeeded",
+                                "fuel_cost": fuel,
+                                "result_preview": preview,
                             }),
                         )?;
+
+                        (true, fuel, None)
                     }
-                    Err(e) => {
+                    Err(error) => {
+                        eprintln!(
+                            "[agent:{}] executor FAILED for {}: {}",
+                            agent_id,
+                            action_clone.action_type(),
+                            &error[..error.len().min(300)]
+                        );
+                        if error.starts_with("human approval required:")
+                            || error.starts_with("Warden blocked action:")
+                        {
+                            state.phase = CognitivePhase::Blocked;
+                            return Ok(CycleResult {
+                                phase: CognitivePhase::Blocked,
+                                steps_executed: 0,
+                                fuel_consumed: 0.0,
+                                should_continue: true,
+                                blocked_reason: Some(error),
+                                success: true,
+                                failure_reason: None,
+                            });
+                        }
+
                         step.status = StepStatus::Failed;
-                        step.result = Some(format!("A2A delegation failed: {e}"));
+                        step.result = Some(error.clone());
                         state.consecutive_failures += 1;
-                        eprintln!("A2A delegation to {} failed: {}", agent_url, e);
+
                         self.emit_step_executed(agent_id, step);
+
+                        audit.append_event(
+                            uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
+                            EventType::UserAction,
+                            json!({
+                                "event": "cognitive.step_failed",
+                                "action": action_clone.action_type(),
+                                "error": error,
+                                "attempt": step.attempts,
+                            }),
+                        )?;
+
                         if step.attempts >= step.max_retries {
                             state.current_step_index += 1;
                         }
+
+                        (false, 0.0, Some(error))
                     }
-                }
-                act_result = Some((true, state.total_fuel_consumed, None));
-                // Skip general executor for A2A actions
-            } else {
-                // Execute the action
-                let mut action_clone = step.action.clone();
+                };
 
-                // Inject accumulated results from previous steps into LlmQuery context
-                if let PlannedAction::LlmQuery {
-                    ref mut context, ..
-                } = action_clone
-                {
-                    for (action_type, result) in &prior_step_results {
-                        context.push(format!("[{} result]: {}", action_type, result));
-                    }
-                }
+            // If more steps remain, return and continue next cycle
+            if state.current_step_index < state.steps.len() {
+                return Ok(CycleResult {
+                    phase: CognitivePhase::Act,
+                    steps_executed: if step_executed { 1 } else { 0 },
+                    fuel_consumed: step_fuel,
+                    should_continue: true,
+                    blocked_reason: step_error,
+                    success: true,
+                    failure_reason: None,
+                });
+            }
 
-                eprintln!(
-                    "[agent:{}] dispatching to executor: {} (step {}/{})",
-                    agent_id,
-                    action_clone.action_type(),
-                    state.current_step_index + 1,
-                    total_steps
-                );
-                let (step_executed, step_fuel, step_error) =
-                    match executor.execute(agent_id, &action_clone, audit, requires_hitl) {
-                        Ok(result) => {
-                            eprintln!(
-                                "[agent:{}] actuator result for {}: {} chars — {}",
-                                agent_id,
-                                action_clone.action_type(),
-                                result.len(),
-                                &result[..result.len().min(200)]
-                            );
-                            step.status = StepStatus::Succeeded;
-                            // LLM query results get full text (user needs to see
-                            // the reasoning). File reads get truncated preview.
-                            let is_llm = matches!(action_clone, PlannedAction::LlmQuery { .. });
-                            let max_preview = if is_llm { 2000 } else { 500 };
-                            let preview = if result.len() > max_preview {
-                                format!("{}...", &result[..max_preview])
-                            } else {
-                                result.clone()
-                            };
-                            step.result = Some(result);
-                            step.fuel_cost = estimate_fuel_cost(&action_clone);
-                            state.total_fuel_consumed += step.fuel_cost;
-                            state.consecutive_failures = 0;
-                            state.steps_completed += 1;
-                            state.current_step_index += 1;
-                            let fuel = step.fuel_cost;
-
-                            self.emit_step_executed(agent_id, step);
-
-                            // Consume fuel from supervisor
-                            if let Ok(agent_uuid) = uuid::Uuid::parse_str(agent_id) {
-                                let fuel_units = fuel as u64;
-                                let mut sup =
-                                    self.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-                                if let Some(handle) = sup.get_agent(agent_uuid) {
-                                    let remaining = handle.remaining_fuel;
-                                    if remaining >= fuel_units {
-                                        // Best-effort: deduct fuel from supervisor; step already succeeded
-                                        let _ = sup.record_llm_spend(
-                                            agent_uuid,
-                                            "cognitive",
-                                            0,
-                                            fuel_units as u32,
-                                            fuel_units,
-                                        );
-                                    }
-                                }
-                            }
-
-                            audit.append_event(
-                                uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
-                                EventType::UserAction,
-                                json!({
-                                    "event": "cognitive.step_executed",
-                                    "action": action_clone.action_type(),
-                                    "status": "succeeded",
-                                    "fuel_cost": fuel,
-                                    "result_preview": preview,
-                                }),
-                            )?;
-
-                            (true, fuel, None)
-                        }
-                        Err(error) => {
-                            eprintln!(
-                                "[agent:{}] executor FAILED for {}: {}",
-                                agent_id,
-                                action_clone.action_type(),
-                                &error[..error.len().min(300)]
-                            );
-                            if error.starts_with("human approval required:")
-                                || error.starts_with("Warden blocked action:")
-                            {
-                                state.phase = CognitivePhase::Blocked;
-                                return Ok(CycleResult {
-                                    phase: CognitivePhase::Blocked,
-                                    steps_executed: 0,
-                                    fuel_consumed: 0.0,
-                                    should_continue: true,
-                                    blocked_reason: Some(error),
-                                    success: true,
-                                    failure_reason: None,
-                                });
-                            }
-
-                            step.status = StepStatus::Failed;
-                            step.result = Some(error.clone());
-                            state.consecutive_failures += 1;
-
-                            self.emit_step_executed(agent_id, step);
-
-                            audit.append_event(
-                                uuid::Uuid::parse_str(agent_id).unwrap_or_default(),
-                                EventType::UserAction,
-                                json!({
-                                    "event": "cognitive.step_failed",
-                                    "action": action_clone.action_type(),
-                                    "error": error,
-                                    "attempt": step.attempts,
-                                }),
-                            )?;
-
-                            if step.attempts >= step.max_retries {
-                                state.current_step_index += 1;
-                            }
-
-                            (false, 0.0, Some(error))
-                        }
-                    };
-
-                // If more steps remain, return and continue next cycle
-                if state.current_step_index < state.steps.len() {
-                    return Ok(CycleResult {
-                        phase: CognitivePhase::Act,
-                        steps_executed: if step_executed { 1 } else { 0 },
-                        fuel_consumed: step_fuel,
-                        should_continue: true,
-                        blocked_reason: step_error,
-                        success: true,
-                        failure_reason: None,
-                    });
-                }
-
-                // All steps done — fall through to reflection/completion below
-                act_result = Some((step_executed, step_fuel, step_error));
-            } // end else (non-A2A action)
+            // All steps done — fall through to reflection/completion below
+            act_result = Some((step_executed, step_fuel, step_error));
         }
 
         // ── REFLECT (every reflection_interval cycles) ──
@@ -2406,6 +2355,88 @@ mod tests {
             assert!(!prompt.contains(cwd.as_ref()), "process cwd disclosed");
             assert!(!prompt.contains("Current working directory contents"));
         }
+    }
+
+    /// Records every action the loop hands to it, and refuses each one.
+    #[derive(Default)]
+    struct RefusingRecorder {
+        seen: Mutex<Vec<PlannedAction>>,
+    }
+
+    impl ActionExecutor for RefusingRecorder {
+        fn execute(
+            &self,
+            _agent_id: &str,
+            action: &PlannedAction,
+            _audit: &mut dyn AuditWriter,
+            _hitl_approved: bool,
+        ) -> Result<String, String> {
+            self.seen.lock().unwrap().push(action.clone());
+            Err("refused by the host executor".to_string())
+        }
+    }
+
+    /// P0-002C5C: the loop no longer sends A2A delegations itself. A
+    /// delegation, even by an agent holding `a2a.delegate`, is handed to the
+    /// host's executor like every other action, and nothing is sent when the
+    /// executor refuses it.
+    #[test]
+    fn p0_002c5c_a2a_delegation_is_decided_by_the_executor() {
+        let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        target.set_nonblocking(true).unwrap();
+        let agent_url = format!("http://{}", target.local_addr().unwrap());
+        let mut sup = Supervisor::new();
+        let id = sup
+            .start_agent(AgentManifest {
+                name: "delegating-agent".into(),
+                version: "1.0.0".into(),
+                capabilities: vec!["llm.query".into(), "a2a.delegate".into()],
+                fuel_budget: 10000,
+                autonomy_level: Some(5),
+                consent_policy_path: None,
+                requester_id: None,
+                schedule: None,
+                default_goal: None,
+                llm_model: None,
+                fuel_period_id: None,
+                monthly_fuel_cap: None,
+                allowed_endpoints: None,
+                domain_tags: vec![],
+                filesystem_permissions: vec![],
+            })
+            .unwrap()
+            .to_string();
+        let (runtime, _emitter) = make_runtime(Arc::new(Mutex::new(sup)));
+        runtime
+            .assign_goal(&id, AgentGoal::new("ask a partner agent".into(), 5))
+            .unwrap();
+        let planner = make_planner(&format!(
+            r#"[{{"action": {{"type": "A2aDelegation", "agent_url": "{agent_url}", "message": "summarize the weekly report"}}, "description": "delegate"}}]"#
+        ));
+        let executor = RefusingRecorder::default();
+        let mut audit = AuditTrail::new();
+        let result = runtime
+            .run_cycle(&id, &planner, &make_memory_mgr(), &executor, &mut audit)
+            .unwrap();
+
+        let seen = executor.seen.lock().unwrap();
+        assert!(
+            matches!(
+                seen.as_slice(),
+                [PlannedAction::A2aDelegation { agent_url: url, .. }] if *url == agent_url
+            ),
+            "{seen:?}"
+        );
+        assert_eq!(result.steps_executed, 0);
+        assert_eq!(
+            result.blocked_reason.as_deref(),
+            Some("refused by the host executor")
+        );
+        // Nothing reached the delegation target.
+        assert!(matches!(
+            target.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
     }
 
     #[test]

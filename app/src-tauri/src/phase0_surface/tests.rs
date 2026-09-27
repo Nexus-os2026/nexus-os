@@ -481,6 +481,110 @@ fn production_agent_executor_refuses_filesystem_and_process_actions() {
     );
 }
 
+/// P0-002C5C: agent-to-agent delegation has no path around the production
+/// executor. The cognitive loop hands every planned action, A2A delegation
+/// included, to `Phase0AgentExecutor`. For an agent holding the delegation,
+/// filesystem and process capabilities (`a2a.delegate` is outside the
+/// capability registry, so only a stored record could carry it), the
+/// executor refuses a delegation toward a local file (an A2A filesystem
+/// action), a delegation toward a peer (an A2A process action: the transport
+/// runs a client process), a file write and a shell command, and nothing is
+/// sent, read or created. A permitted action runs under the same policy.
+#[test]
+fn p0_002c5c_a2a_and_agent_actions_are_decided_by_the_production_executor() {
+    use nexus_kernel::cognitive::{
+        AgentGoal, AgentMemoryManager, CognitivePlanner, PlannedAction, PlannerLlm,
+    };
+
+    struct FixedPlan(String);
+    impl PlannerLlm for FixedPlan {
+        fn plan_query(&self, _: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    let state = crate::AppState::new_in_memory();
+    let mut manifest = nexus_kernel::manifest::parse_manifest(
+        r#"
+name = "c5c-delegator"
+version = "1.0.0"
+capabilities = ["llm.query", "fs.read", "fs.write", "process.exec"]
+fuel_budget = 10000
+autonomy_level = 5
+"#,
+    )
+    .unwrap();
+    manifest.capabilities.push("a2a.delegate".into());
+    let agent = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(manifest)
+        .unwrap()
+        .to_string();
+    let memory = std::sync::Arc::new(AgentMemoryManager::new(Box::new(crate::DbMemoryStore {
+        db: state.db.clone(),
+    })));
+    let executor = crate::phase0_agent_executor(&state, memory.clone());
+    let run = |action: &serde_json::Value| {
+        let plan = serde_json::json!([{"action": action, "description": "step"}]);
+        state
+            .cognitive_runtime
+            .assign_goal(&agent, AgentGoal::new("C5C dispatch".into(), 5))
+            .unwrap();
+        crate::run_cognitive_cycle(
+            &state,
+            &agent,
+            &CognitivePlanner::new(Box::new(FixedPlan(plan.to_string()))),
+            &memory,
+            &executor,
+        )
+        .unwrap()
+    };
+
+    let peer = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    peer.set_nonblocking(true).unwrap();
+    let peer_url = format!("http://{}/", peer.local_addr().unwrap());
+    let base = std::env::temp_dir().join(format!("nexus-c5c-a2a-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&base).unwrap();
+    let kept = base.join("kept.txt");
+    std::fs::write(&kept, "kept").unwrap();
+    let created = base.join("created.txt");
+    let (kept_path, created_path) = (
+        kept.to_string_lossy().into_owned(),
+        created.to_string_lossy().into_owned(),
+    );
+    let refused = [
+        serde_json::json!({"type": "A2aDelegation", "agent_url": format!("file://{kept_path}"), "message": "summarize the notes"}),
+        serde_json::json!({"type": "A2aDelegation", "agent_url": peer_url, "message": "summarize the notes"}),
+        serde_json::json!({"type": "FileWrite", "path": created_path, "content": "x"}),
+        serde_json::json!({"type": "ShellCommand", "command": "touch", "args": [created_path]}),
+    ];
+    for action in &refused {
+        let parsed: PlannedAction = serde_json::from_value(action.clone()).unwrap();
+        let result = run(action);
+        assert_eq!(result.steps_executed, 0, "{action}");
+        assert_eq!(
+            result.blocked_reason,
+            Some(closed(parsed.action_type(), Closure::AgentExecution)),
+            "{action}"
+        );
+    }
+    assert!(matches!(
+        peer.accept(),
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+    ));
+    assert!(!created.exists());
+    assert_eq!(std::fs::read_to_string(&kept).unwrap(), "kept");
+    std::fs::remove_dir_all(&base).unwrap();
+
+    let permitted = run(&serde_json::json!(
+        {"type": "MemoryStore", "key": "c5c", "value": "same policy", "memory_type": "episodic"}
+    ));
+    assert_eq!(permitted.steps_executed, 1, "{permitted:?}");
+    assert_eq!(permitted.blocked_reason, None);
+}
+
 fn production_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
