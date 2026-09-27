@@ -25,28 +25,60 @@ pub enum ThemeExtractError {
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
+/// Largest page read for theme extraction (P0-002C5C). Style blocks are
+/// looked for in the first part of the page; the rest is not read.
+const MAX_PAGE_BYTES: usize = 4 * 1024 * 1024;
+
 /// Extract a Theme from a URL by fetching its HTML/CSS and analyzing design tokens.
 ///
-/// HTTPS only. Returns a Theme with heuristically-mapped colors and fonts.
+/// HTTPS only, including every redirect. Returns a Theme with
+/// heuristically-mapped colors and fonts.
 pub async fn extract_theme_from_url(url: &str) -> Result<Theme, ThemeExtractError> {
     // Validate HTTPS
     if !url.starts_with("https://") {
         return Err(ThemeExtractError::NotHttps(url.into()));
     }
 
-    // Basic URL validation
-    if url.len() < 12 || !url.contains('.') {
-        return Err(ThemeExtractError::InvalidUrl(url.into()));
-    }
+    // P0-002C5C: a parsed https URL with a host, no userinfo and no
+    // whitespace or control characters, used in its normalized form.
+    let checked = nexus_kernel::governed_http::http_url(url)
+        .ok()
+        .filter(|checked| checked.scheme() == "https")
+        .ok_or_else(|| ThemeExtractError::InvalidUrl(url.into()))?;
 
-    // Fetch HTML
-    let client = reqwest::Client::builder()
+    let html = fetch_page(&page_client()?, checked.as_str(), MAX_PAGE_BYTES).await?;
+
+    // Extract CSS from <style> blocks
+    let css = extract_inline_css(&html);
+
+    extract_theme_from_css(&css, url)
+}
+
+/// The page client: a total timeout, and at most five redirects, each to an
+/// `https` URL.
+fn page_client() -> Result<reqwest::Client, ThemeExtractError> {
+    reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
-        .redirect(reqwest::redirect::Policy::limited(5))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 5 {
+                attempt.error("too many redirects")
+            } else if attempt.url().scheme() != "https" {
+                attempt.error("redirect away from https")
+            } else {
+                attempt.follow()
+            }
+        }))
         .build()
-        .map_err(|e| ThemeExtractError::FetchFailed(e.to_string()))?;
+        .map_err(|e| ThemeExtractError::FetchFailed(e.to_string()))
+}
 
-    let resp = client
+/// Read at most `max_bytes` of the page body.
+async fn fetch_page(
+    client: &reqwest::Client,
+    url: &str,
+    max_bytes: usize,
+) -> Result<String, ThemeExtractError> {
+    let mut resp = client
         .get(url)
         .header("User-Agent", "NexusBuilder/1.0")
         .send()
@@ -60,15 +92,19 @@ pub async fn extract_theme_from_url(url: &str) -> Result<Theme, ThemeExtractErro
         )));
     }
 
-    let html = resp
-        .text()
-        .await
-        .map_err(|e| ThemeExtractError::FetchFailed(e.to_string()))?;
-
-    // Extract CSS from <style> blocks
-    let css = extract_inline_css(&html);
-
-    extract_theme_from_css(&css, url)
+    let mut body = Vec::new();
+    while body.len() < max_bytes {
+        match resp
+            .chunk()
+            .await
+            .map_err(|e| ThemeExtractError::FetchFailed(e.to_string()))?
+        {
+            Some(chunk) => body.extend_from_slice(&chunk),
+            None => break,
+        }
+    }
+    body.truncate(max_bytes);
+    Ok(String::from_utf8_lossy(&body).into_owned())
 }
 
 /// Extract a Theme from raw CSS content (no network fetch).
@@ -229,6 +265,80 @@ mod tests {
             result.unwrap_err(),
             ThemeExtractError::NotHttps(_)
         ));
+    }
+
+    #[test]
+    fn p0_002c5c_theme_urls_are_parsed_https_urls_without_userinfo() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        for url in [
+            "http://example.com",
+            "ftp://example.com/x",
+            "javascript:alert(1)",
+        ] {
+            assert!(
+                matches!(
+                    rt.block_on(extract_theme_from_url(url)),
+                    Err(ThemeExtractError::NotHttps(_))
+                ),
+                "{url}"
+            );
+        }
+        for url in [
+            "https://",
+            "https://user:secret@example.com/",
+            "https://trusted.example@169.254.169.254/",
+            "https://exa mple.com/",
+            "https://example.com/\n",
+        ] {
+            assert!(
+                matches!(
+                    rt.block_on(extract_theme_from_url(url)),
+                    Err(ThemeExtractError::InvalidUrl(_))
+                ),
+                "{url}"
+            );
+        }
+    }
+
+    /// Answer one connection on a loopback port with `response`.
+    fn serve_once(response: Vec<u8>) -> (String, std::thread::JoinHandle<()>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut head = Vec::new();
+            let mut byte = [0u8; 1];
+            while !head.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                head.push(byte[0]);
+            }
+            let _ = stream.write_all(&response);
+        });
+        (url, handle)
+    }
+
+    #[test]
+    fn p0_002c5c_theme_pages_are_capped_and_redirects_stay_on_https() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let client = page_client().unwrap();
+
+        let mut page = b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".to_vec();
+        page.extend_from_slice(&[b'a'; 5000]);
+        let (url, server) = serve_once(page);
+        let body = rt.block_on(fetch_page(&client, &url, 1000)).unwrap();
+        server.join().unwrap();
+        assert_eq!(body, "a".repeat(1000));
+
+        let (url, server) = serve_once(
+            b"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:9/\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                .to_vec(),
+        );
+        let result = rt.block_on(fetch_page(&client, &url, 1000));
+        server.join().unwrap();
+        assert!(
+            matches!(result, Err(ThemeExtractError::FetchFailed(_))),
+            "{result:?}"
+        );
     }
 
     #[test]
