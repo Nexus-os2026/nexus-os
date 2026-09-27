@@ -304,7 +304,7 @@ mod tests {
         ));
         assert!(matches!(
             governor.check_egress(agent, "https://api.example.com/x", &mut audit),
-            EgressDecision::Allow { .. }
+            EgressDecision::Allow
         ));
     }
 
