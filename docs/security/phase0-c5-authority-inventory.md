@@ -1,16 +1,20 @@
 # Phase Zero C5 — Authority Inventory and Reachability Closure
 
-Status: P0-002C5B (governed recovery and the remaining straightforward
-filesystem migrations), on top of P0-002C5A (fail-closed reachable surface
-closure). C5 is split into bounded checkpoints:
+Status: P0-002C5C (final authority sweep and closure), on top of P0-002C5B
+(governed recovery and the remaining straightforward filesystem migrations)
+and P0-002C5A (fail-closed reachable surface closure). C5 is split into
+bounded checkpoints:
 
 | Checkpoint | Scope |
 |---|---|
 | **P0-002C5A** | Make every reachable E1–E5 surface fail closed unless an approved backend-owned authority mechanism already governs it; fix the computer-use EOF approval bug; stabilise the Darwin sealed-spawn fixture; record this inventory and the reachability guard. |
 | **P0-002C5B** | Governed recovery and the remaining straightforward filesystem migrations: every reachable surface deferred by C5A is migrated onto an existing Phase Zero primitive or fails closed (§5). |
-| P0-002C5C | Final authority inventory and guard closure. |
+| **P0-002C5C** | A fresh whole-repository audit, repair of every reachable finding, the final recount and the final trust-surface guard (§10). The Final-Gate evidence is in `phase0-final-gate-dossier.md`. |
 
-The invariant C5 serves: **a path is not authority.** No security-sensitive
+The invariant C5 serves: **a path is not authority.** C5C states it in its
+general form: **a string is never authority**, including frontend, model and
+serialized paths, the working directory, `HOME`, temp, environment variables,
+program names, URL prefixes, caller approval flags and persisted identifiers. No security-sensitive
 filesystem or process operation may obtain authority merely from a path or
 program string controlled by the frontend, a model, an agent, a serialized
 record, the process working directory, `HOME`, the environment or another
@@ -444,6 +448,10 @@ The `nexus-swarm` healthcheck binary is a developer tool, not part of the deskto
 
 ## 7. Final-gate review items (not fixed in C5A)
 
+C5C moved these items, with exact evidence and the items it found, into
+`docs/security/phase0-final-gate-dossier.md`. The list below is the C5A/C5B
+record.
+
 PHASE ZERO FINAL-GATE REVIEW REQUIRED:
 
 1. **Machine- or ambient-derived key material.**
@@ -514,6 +522,8 @@ These carry their own closure tests:
 - the swarm coder (`agents/coder`);
 - computer-use approval (`crates/nexus-computer-use`).
 
+P0-002C5C extends these guards into the final trust-surface guard (§10.9).
+
 **Maintainers.**
 
 - To re-open a closed command, or wire a latent API back in:
@@ -537,8 +547,18 @@ These carry their own closure tests:
 - The guards cover the approved surface: registered commands, named latent APIs, named ambient roots, counted curl sites, counted state roots, counted joins and the agent executor. They are not a complete call graph.
 - Point-in-time checks only. There is no protection against a hostile same-user process racing filesystem state.
 - Nothing here claims Phase Zero is complete.
+- **C5C adds none of the following:**
+  - a sandbox, a user-file broker, durable Builder authority, a new agent
+    runtime or a secret vault;
+  - a destination policy for interface-chosen requests;
+  - an out-of-band approval channel;
+  - a user gesture for screen capture;
+  - a CSP.
 
-### Remaining C5C debt
+  `docs/security/phase0-final-gate-dossier.md` records these as Final-Gate
+  items.
+
+### Remaining C5C debt (resolved in C5C, §10)
 
 - **The final authority inventory and recount:** the latent items in §6, the out-of-closure members and the benchmarks.
 - **Nexus Code configuration** read at nx bridge startup: `NEXUSCODE.md` and `.nxrc` from the working directory, and the user config from the platform config directory.
@@ -551,3 +571,274 @@ These carry their own closure tests:
   - The external-tools `email` and `database` tools fail closed.
   - Model downloads have no total-size bound.
 - **The desktop test-support state** (`AppState::new_in_memory`) still gives its schedule store the shared temp directory. It is compiled only for tests and the `test-support` feature.
+
+## 10. P0-002C5C: final authority sweep and closure
+
+### 10.1 Fresh audit
+
+The sweep started read-only at the authoritative C5B head `58e5a4c0` (tree
+`eb90cd84`). It covered every workspace member and five topics: filesystem
+and ambient roots, processes, network, recovery and records, and IPC and agent
+dispatch. Each finding was re-verified in source and traced to its IPC
+command, startup task or agent path. C5C repaired every reachable finding it
+could bound (§10.2) and then recounted the desktop closure at the C5C head
+(§10.8).
+
+### 10.2 Findings and repairs
+
+| Finding | Before C5C | Repair | Evidence |
+|---|---|---|---|
+| Desktop Nexus Code read `NEXUSCODE.md`, `.nxrc` and the platform config directory from the working directory (C5B debt) | reachable at nx bridge startup | `NxConfig::load_for_desktop`, `setup::diagnose_for_desktop`, `App::new_for_desktop`: defaults, an absolute backend file under the identity home, and the `NX_*` provider settings only. The standalone `nx` keeps its project files. | `nexus-code/tests/phase0_desktop_config.rs`; guard `desktop_nexus_code_takes_no_configuration_from_the_working_directory`; NC1, NC2 |
+| Interface- and model-chosen OS input: `computer_control_execute_action`, `start_computer_action` (xdotool text passed without `--`, so `type --file=` read files) | reachable | Both commands closed (`Closure::OsInput`); the backend action path removed; `InputAction` and `execute_input_action(` named latent | `CLOSED_COMMANDS`; latent guard |
+| `NEXUS_DB_PATH` / `NEXUS_CONFIG_PATH` accepted relative values (state in the working directory) | operator | `identity_home::operator_override`: non-empty and absolute, or no location | `kernel/tests/phase0_identity_home.rs`; NC8b |
+| Legacy-database cleanup read `NEXUS_DB_PATH` with `var`, so a non-UTF-8 override hid the operator database from the guard and the cleanup deleted it | startup | `var_os`, like `nexus_db_path` | guard `p0_002c5c_operator_overrides_stay_launch_configuration` |
+| OAuth loopback (email, integrations): `state` never checked, `GET /?` parsed instead of the redirect path, blocking `accept` so the deadline never fired | reachable (login CSRF from any local process or rendered page) | `await_oauth_code`: nonblocking poll to the deadline, bounded request head, only `GET /oauth/callback?` with the flow's single `state`, decoded code; client ids from a safe charset; bind before opening the browser | `commands::apps` tests; NX1 |
+| A2A delegation sent by the cognitive loop before and instead of the executor; restore trusted stored manifests, so a row could grant `a2a.delegate` | reachable through a stored record | The loop owns no A2A client and dispatches every action through the executor; Phase0AgentExecutor refuses delegation; `validate_stored_manifest` on restore | §10.4; NC3, NC4, NX4 |
+| Model downloads had no size bound (hub, flash); flash followed any redirect, never timed out a stall, and appended a 200 answer to a Range request | reachable | `MAX_MODEL_FILE_BYTES` (64 GiB) enforced on the bytes written; https-only redirects; stall timeout; restart on 200 | hub monitor and loopback flash tests; NC7a, NC7b |
+| 14 of the 35 production curl sites had no response-size bound (C5B had described all as bounded) | reachable | `--max-filesize` at each; guard requires time and size bounds | `p0_002c5c_every_production_curl_site_is_bounded_in_time_and_size`; NX3 |
+| Notification helper formatted its message into AppleScript and PowerShell with `{:?}` quoting (PowerShell does not honour it) | fixed literal caller only | `notification_invocation`: the message is an argument after `--`, an AppleScript `argv` item or an environment value read by a fixed script | `p0_002c5c_notification_text_never_becomes_a_script`; NC6 |
+| `browser_screenshot(output_path)` took a raw interface path for the (never started) browser bridge | dormant | Closed (`Closure::FileSelection`) | `CLOSED_COMMANDS` |
+| Nexus Link send: no connect timeout; a peer's length prefix allocated up to 4 GiB | reachable | `connect_peer` (connect, read and write timeouts); 16 MiB message cap | `nexus_link` test |
+| Theme extraction fetched a caller URL after a prefix check, followed redirects to any scheme, read the whole body | reachable | `governed_http::http_url`, https-only redirects, 4 MiB cap | `theme_extract` tests |
+| Ollama health probe stripped the scheme by prefix and connected to any IP:port | reachable | The base URL must pass `governed_http::http_url` | `providers::ollama` test |
+| Egress allowlists matched by string prefix (`example.com` admitted `example.com.evil.net`); agent fetches followed redirects past the allowlist; byte-offset text cuts could panic on remote UTF-8 | reachable from model output | `firewall::egress::endpoint_admits` in every matcher; no redirect following for agent fetches; `floor_char_boundary` cuts | egress, web actuator tests; NX2 |
+| `tools_execute` took the autonomy level from the caller; credential-bearing tools interpolated caller values into URLs | reachable | `tool_call_autonomy` (the registered agent's level, never raised by the claim); identifier grammars for GitHub, Slack, Jira and S3 values | `p0_002c5c_tool_calls_run_at_the_registered_agents_autonomy`; tools grammar test; NX5 |
+| Legacy mixed-case store files (from before C5B) were the same file as a new lowercase id on case-insensitive filesystems | reachable | `stored_file` and `nx_session_file` run `case_exact_entry`; listings keep legacy files | legacy compatibility tests; NX6 |
+| The webview rendered model replies, note text, the design preview and the crash message as HTML, and opened data-sourced links as given (`javascript:` included); with the `null` CSP, script there reaches every IPC command | reachable from model output and remote content | `app/src/lib/safeHtml.ts`: escape before markup, http(s)-only link and window targets; the design preview sandboxed | vitest `safeHtml.test.ts`; guard `p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed`; NX7–NX9 |
+| `sim_run` answered file and environment preconditions and simulated writes and deletes by probing the host for the caller's paths and names (an existence oracle) | reachable | The sandbox has no view of the host: files exist only if the scenario wrote them, and no variable is set | `sandbox::tests::p0_002c5c_simulations_reveal_nothing_about_the_host`; NX10 |
+| `swarm_approve` ran a model-planned swarm whose Herald node could publish a model-written post with the stored X credentials when the plan set `dry_run: false` | reachable (model choice released by an IPC approval) | `HeraldAdapter::drafts_only()` in the desktop registry | `p0_002c5c_a_drafts_only_herald_never_publishes`; delegation guard; NX11 |
+| `get_config` returned every stored credential still held in the configuration, in plaintext, to the interface | reachable | Credentials are returned as a placeholder; a save of the placeholder keeps the stored value; messaging connect resolves it | `p0_002c5c_the_interface_never_reads_stored_credentials`; serialized-records guard; NX12 |
+| The flash provider defaulted its model file to the relative `flash-local` (`test_llm_connection`, `LLM_PROVIDER=flash`) | reachable | Only an absolute configured path; otherwise the provider is unavailable | `connectors/llm/tests/phase0_flash_model_path.rs`; NX13 |
+| A chat model id `flash/<path>` (`send_chat`, and the same resolver in the cognitive and Builder routes) became a native model load of the caller's path, plus a `blockdev` run and reads of neighbouring `.gguf` files, in builds linked with real llama.cpp | reachable | The `flash` prefix returns the file-selection closure | `p0_002c5c_a_flash_model_id_never_names_a_file` |
+| `email_send_message` wrote the caller's recipient and subject into raw header lines (CR/LF added headers such as `Bcc`) | reachable | CR, LF and NUL refused before any token is read | `p0_002c5c_email_header_values_cannot_add_headers`; NX14 |
+| C4B exit-race test failed about 1 in 1,500 runs | test defect | Test accepts the valid finalized-before-stop ordering | stress evidence in the C5C report |
+
+### 10.3 Desktop Nexus Code configuration
+
+`app/src-tauri/src/nx_bridge/mod.rs` builds Nexus Code only through
+`NxConfig::load_for_desktop(nexus_state_path("nexus-code/config.toml"))`,
+`setup::diagnose_for_desktop()` and
+`App::new_for_desktop(config, nexus_state_path("nexus-code/memory.json"))`.
+None of them reads the working directory, a project or git ancestor, or the
+platform configuration directory, and a relative configuration file is
+ignored. The `_without_cli_agents` forms, which still read the working
+directory's `NEXUSCODE.md` and `.nxrc`, are now forbidden entry points for the
+desktop.
+
+### 10.4 A2A dispatch
+
+- `kernel/src/cognitive/loop_runtime.rs`: `run_cycle_with_evolution` has one
+  dispatch site, `executor.execute`, for every planned action. The runtime
+  holds no A2A client, so an `A2aDelegation` step reaches the host's executor
+  like any other action.
+- The desktop executor, `Phase0AgentExecutor`, refuses it with the closed
+  `AgentExecution` reason. The kernel registry does not handle it either.
+- `restore_persisted_agents` runs `validate_stored_manifest`: a stored record
+  may name only registered capabilities (`a2a.delegate` is not one), a defined
+  autonomy level and no consent policy path.
+- **Tests:**
+  - `p0_002c5c_a2a_and_agent_actions_are_decided_by_the_production_executor`
+    runs the real loop with the production executor, for an agent holding
+    delegation, filesystem and process capabilities. A delegation toward a
+    local file (an A2A filesystem action) and one toward a peer (an A2A
+    process action, since the transport runs a client process) are refused,
+    and so are a file write and a shell command. Nothing is sent, read or
+    created. A permitted action runs under the same policy.
+  - The kernel test shows a delegation reaching the host executor.
+  - The restore test refuses records naming `a2a.delegate`, unknown
+    capabilities or an undefined autonomy level.
+  - The structural guard `p0_002c5c_no_delegation_path_runs_around_the_executor`
+    pins the single dispatch site and keeps the swarm coder LLM-only.
+
+No inbound A2A path dispatches to local agents: the `nexus-a2a` bridge's
+`route_task` has no desktop caller. The `a2a_*` and `a2a_crate_*` IPC commands
+are interface-initiated A2A client calls of governed shape (Final-Gate egress,
+dossier item B).
+
+### 10.5 Latent APIs
+
+Each `LATENT_UNSAFE_APIS` entry was re-evaluated against IPC commands,
+startup, agent dispatch, schedulers, A2A and MCP paths and dynamic
+registries:
+
+- **Agent dispatch.** Every loop runs through `phase0_agent_executor`, and the
+  structural guard pins the kernel loop.
+- **Schedulers.** `ScheduledGoalExecutor` feeds the same loop. The kernel
+  scheduler task only echoes, and `ScheduleRunner` is never started.
+- **A2A.** It reaches the executor (§10.4).
+- **MCP.** The desktop builds the kernel `McpServer`, whose registry is the
+  full default actuator set, only to list tools. C5C names `.invoke_tool(` so
+  that invoking one would fail the guard.
+- **Dynamic registries.** External tools are HTTP-only and bound to a
+  registered agent. `mcp_host_*` refuses stdio, and `mcp2_*` is closed.
+
+No entry was removed, since nothing was migrated or deleted. C5C adds:
+
+- `InputAction` and `execute_input_action(` (kernel OS input);
+- `.invoke_tool(` (kernel MCP tool invocation);
+- `tauri_commands::screenshot(` (the browser bridge's raw-path screenshot);
+- `coder_agent::llm_codegen` (coder writers rooted at a raw output dir).
+
+After the recount (§10.8), C5C also named the APIs behind every latent site
+that no needle named:
+- 100 process and network sites (fc9a416b, aae835f5);
+- 110 filesystem sites (3e6a0506).
+
+Among them are the gaps the recounts found in earlier needles: needles that
+named a wrapper but not the API behind it, `enable_retention(`, the
+messaging `BridgeDaemon` polling loop, and `ProviderSelectionConfig::from_env()`.
+
+### 10.6 Out-of-desktop members
+
+The installers ship only the desktop app. See §10.8 for the recount, and
+dossier item J for the shipped non-desktop binaries: `crates/nexus-server`
+(a Final-Gate blocker), the protocols server, `nexus-cli` and `nx`. None is
+reachable from desktop IPC or agents. The desktop depends on the libraries of
+`nexus-code` and `protocols`, never on their binaries.
+
+### 10.7 Benchmarks
+
+`benchmarks/conductor-bench` runs curl (six sites) and `date` (four sites)
+without the production governance, from benchmark binaries only.
+`BENCHMARK_PROCESS_SITES` counts them per file, and
+`p0_002c5c_benchmark_process_sites_stay_benchmark_only` fails when a new site
+appears or when any non-benchmark member depends on a benchmark crate.
+
+### 10.8 Final recount
+
+**Method.** After the main repairs, three independent read-only recounts ran
+at `d5e068d8`:
+
+- the IPC command surface, agent dispatch and startup;
+- filesystem and ambient-root sites;
+- process and network sites.
+
+Each used a lexer-aware stripper (with a self-test) to keep production text
+only: tests, benches, examples, fixtures, build scripts and
+`#[cfg(test)]`/`#[cfg(any(test, ..))]` items are removed.
+
+- **Scope.** The desktop closure is the 56 workspace crates reachable from
+  `nexus-desktop-backend` through normal dependencies. Binary-target sources
+  in closure crates (`nx`, the protocols binaries, harness and healthcheck
+  binaries) count as outside the desktop.
+- **Reachability.** Every reachable claim, and every "no caller" claim, was
+  traced by hand from the 676 open commands, startup, and the actions the
+  Phase Zero executor permits.
+- **Re-verification.** Every UNRESOLVED claim was re-verified in source.
+- **Cross-checks.** The recounts reproduce `CURL_SITES` (35 sites in 21 files)
+  and `BENCHMARK_PROCESS_SITES` (10 in 5) exactly.
+- **After the recount.** The findings were repaired (the last rows of §10.2)
+  and the latent APIs named (§10.5). The tables give both states. Every Rust
+  change after `d5e068d8` is a repair listed there, or test and guard code.
+
+**IPC commands** (804 registered, 128 closed, 676 open):
+
+| Class of the open commands | Recount | After C5C repairs |
+|---|---:|---:|
+| NONE (no filesystem, process, network, input or secret effect) | 490 | 492 |
+| GOVERNED | 65 | 66 |
+| FIXED | 109 | 110 |
+| DENIED | 8 | 8 |
+| UNRESOLVED (D/E) | 4 | 0 |
+
+The four unresolved commands and how each was reclassified:
+- `sim_run` became NONE: it no longer probes the host.
+- `get_config` became NONE: it no longer returns credentials.
+- `swarm_approve` became GOVERNED: the Herald only drafts.
+- `test_llm_connection` became FIXED: it needs an absolute flash path.
+
+Independent of class:
+- 23 commands send a governed-shape request to a caller-chosen destination
+  (Final-Gate egress).
+- 17 act on an approval delivered over IPC (Final-Gate approval channel).
+
+**Dispatchers and startup.**
+- Every production cognitive loop, the AgentScheduler and hivemind subtasks
+  run through `phase0_agent_executor`, which is GOVERNED.
+- The team orchestrator and the scheduled executor are FIXED (LLM-only, or
+  echo). `ScheduleRunner` is never started.
+- The swarm is GOVERNED: its Herald only drafts.
+- The MCP host, external tools and the A2A client are GOVERNED with
+  caller-chosen destinations.
+- `execute_tool`, the nx agent loop and the browser bridge are DENIED.
+- None of the 18 startup items is unresolved.
+
+**Sites in the desktop closure:**
+
+| Bucket | Filesystem and ambient roots | Process and network |
+|---|---:|---:|
+| Reachable: GOVERNED | 105 | 46 |
+| Reachable: FIXED | 150 | 112 |
+| Reachable: DENIED | 87 | 0 |
+| Reachable: UNRESOLVED (D/E) | 2, see below | 0 |
+| Latent: GUARDED | 259 at the recount; 369 once C5C named the rest | 100 at the recount; 200 once named |
+| Latent: UNGUARDED | 110 at the recount; 0 | 100 at the recount; 0 |
+| Total | 713 | 358 |
+
+The process and network recount counted a site behind a refusal (a closed
+command or the executor) as latent. The filesystem recount counted it as
+DENIED. Neither convention hides a reachable effect.
+
+The two filesystem entries that remain classified E are:
+
+1. **`config_user_key`** (`kernel/src/config.rs`). `HOME`, `USER`,
+   `USERNAME` and `HOSTNAME` are the configuration-encryption key material.
+   This is the Architect-deferred Final-Gate item A. C5C did not change it,
+   and records it in the dossier; it is not counted as an open C5C D/E.
+2. **`EncryptionKey::from_file`** (`kernel/src/crypto.rs`). It reads the
+   vault key file named by the configuration's `security.key_file`. Under the
+   C5B rule, the path must be absolute and the interface cannot change the
+   security section, so only the operator chooses it. C5C counts it as FIXED
+   operator configuration and asks the Architect to confirm (dossier item E).
+
+**Outside the desktop:**
+
+| Category | Filesystem and ambient | Process and network |
+|---|---:|---:|
+| SHIPPED non-desktop binaries | 53 | 9 |
+| DEVELOPER-only | 43 | 4 |
+| BENCHMARK | 28 | 13 |
+| TEST-only | 0 | 0 |
+
+- **Shipped:**
+  - `nexus-cli`, with the coding-agent and self-improve libraries it links;
+  - `crates/nexus-server` (`deploy/Dockerfile`);
+  - protocols `nexus-server` (root `Dockerfile`);
+  - protocols `nexus-os` (`Makefile`, `install.sh`);
+  - `nx` (`nexus-code/Dockerfile`, `nexus-code/install.sh`).
+
+  Dossier item J classifies them. `crates/nexus-server` is a Final-Gate
+  blocker.
+- **Developer-only:** the UI-repair tools, the computer-use harness, the
+  swarm healthcheck, the social-poster and coding-agent binaries, and the
+  unpackaged agent libraries.
+- **Benchmarks:** `benchmarks/` and `benchmarks/conductor-bench`.
+
+**Summary:** unresolved reachable D/E is 0, besides the Architect-deferred
+item A. Unguarded latent is 0. Every other site is governed, fixed backend
+state, denied or guarded latent.
+
+### 10.9 Final trust-surface guard
+
+`app/src-tauri/src/phase0_surface/tests.rs` is the final trust-surface guard.
+`p0_002c5c_final_trust_surface_guard_is_complete` fails if any guard or
+registry below is removed or renamed. Each regression class is caught by
+these guards; the negative controls are those of the C5C validation report,
+each caught by an assertion, never a compile error.
+
+| Regression | Guards | Negative control |
+|---|---|---|
+| A closed C5A command reopened | `closed_commands_stay_registered_take_no_input_and_only_deny`, `closed_handlers_return_only_their_bounded_reason`, `closure_reasons_are_bounded_and_echo_no_input` | C5A validation |
+| A legacy Builder raw path reused | `latent_unsafe_apis_have_no_desktop_production_caller` (legacy Builder needles), `CLOSED_COMMANDS` (LegacyBuilder) | C5A validation |
+| An external CLI agent re-enabled | `desktop_sources_start_no_external_cli_agent` | C5A validation |
+| Desktop Nexus Code reading working-directory configuration | `desktop_nexus_code_takes_no_configuration_from_the_working_directory`, `nexus-code/tests/phase0_desktop_config.rs` | NC1, NC2 |
+| A2A or another delegation bypassing the executor | `p0_002c5c_no_delegation_path_runs_around_the_executor`, `p0_002c5c_a2a_and_agent_actions_are_decided_by_the_production_executor`, kernel `p0_002c5c_a2a_delegation_is_decided_by_the_executor`, `production_agent_executor_refuses_filesystem_and_process_actions` | NC3, NC4, NX11 |
+| An unclassified or unbounded production curl site | `p0_002c5b_curl_invocations_keep_caller_values_out_of_curl_syntax` (`CURL_SITES`), `p0_002c5c_every_production_curl_site_is_bounded_in_time_and_size`, `p0_002c5c_benchmark_process_sites_stay_benchmark_only` | NX3 |
+| A new ambient root | `desktop_sources_hold_no_ambient_authority_roots`, `p0_002c5b_state_roots_take_no_home_cwd_or_shared_temp_fallback` | C5B validation (identity-home and private-temp controls) |
+| An identifier-to-file join without a grammar or stem | `p0_002c5b_identifier_joins_stay_behind_their_grammars` (C5C counts include `stored_file` and `case_exact_entry`) | NX6 |
+| A manifest or persisted path becoming authority | `p0_002c5b_serialized_records_choose_no_authority`, `p0_002c5c_persisted_agents_holding_unregistered_authority_are_not_restored` | NX4, NX12 |
+| A latent actuator becoming desktop-reachable | `latent_unsafe_apis_have_no_desktop_production_caller` (every recounted latent API named) | NC5 |
+| An operator path override becoming IPC- or model-controlled | `p0_002c5c_operator_overrides_stay_launch_configuration`, kernel `p0_002c5c_operator_overrides_are_absolute_or_no_location` | NC8, NC8b |
+| Caller text becoming script, markup or a link in the webview | `p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed`, vitest `safeHtml.test.ts` | NX7, NX8, NX9 |
+| Notification text becoming a script | `p0_002c5c_notification_text_never_becomes_a_script` | NC6 |
+| A caller-asserted tool autonomy level | `p0_002c5c_tool_calls_run_at_the_registered_agents_autonomy` | NX5 |
