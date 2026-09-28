@@ -502,9 +502,17 @@ bundle). The desktop never reaches the binaries below.
     - `nexus-protocols` also builds a binary named `nexus-server`.
     - When one Cargo invocation builds both, the shared output path Cargo
       gives this package's tests may hold the protocols server.
-    - The tests run a file only if its dep-info names
+    - On Windows (MSVC) Cargo gives executables no hash, so the two packages
+      also share `deps\nexus_server.exe`. This package's build can be
+      overwritten there.
+    - The tests run a Cargo build only if its dep-info names
       `crates/nexus-server/src/main.rs` and its bytes carry the withdrawal
-      message. They never run the protocols server or a `PATH` lookup.
+      message.
+    - When no such build can be identified on Windows, the tests compile the
+      package's only source file with the `rustc` beside the `cargo` that
+      built them, check the result, and run that. On other platforms an
+      unidentified build fails the tests.
+    - They never run the protocols server or a `PATH` lookup.
   - **What shipped.** Nothing published this binary or an image built from
     `deploy/`.
     - CI and the release workflow compile it as a workspace member
