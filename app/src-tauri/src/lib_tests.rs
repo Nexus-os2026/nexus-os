@@ -3317,6 +3317,86 @@ fn p0_fg_self_improvement_acceptance_claims_no_hitl_approval() {
         .all(|entry| entry.proposal_id != over_budget.id));
 }
 
+/// P0-FINAL-GATE (item K, cross-stream request from stream 6): a parallel
+/// simulation request for a variant count outside 1..=10 is refused before
+/// the simulation model is built, the seed is parsed or any variant is
+/// started. No model is built or called, and nothing is audited. In-range
+/// requests run as before and do call the model.
+#[test]
+fn p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call() {
+    use crate::commands::consent::run_parallel_simulation_reports_with;
+    use nexus_kernel::cognitive::PlannerLlm;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct CountingLlm(Arc<AtomicUsize>);
+    impl PlannerLlm for CountingLlm {
+        fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            crate::commands::cognitive::TestSimulationPlannerLlm.plan_query(prompt)
+        }
+    }
+
+    let state = AppState::new_in_memory();
+    let built = Arc::new(AtomicUsize::new(0));
+    let queries = Arc::new(AtomicUsize::new(0));
+    let model = || {
+        let (built, queries) = (built.clone(), queries.clone());
+        move || -> Arc<dyn PlannerLlm> {
+            built.fetch_add(1, Ordering::SeqCst);
+            Arc::new(CountingLlm(queries))
+        }
+    };
+    let seed = "Macro outlook with rate pressure.";
+
+    for variants in [0, 11] {
+        assert_eq!(
+            run_parallel_simulation_reports_with(&state, seed.into(), variants, model())
+                .map(|reports| reports.len()),
+            Err("variant_count must be between 1 and 10".to_string()),
+            "{variants}"
+        );
+    }
+    assert_eq!(built.load(Ordering::SeqCst), 0, "no model is built");
+    assert_eq!(queries.load(Ordering::SeqCst), 0, "no model is called");
+    let events = state.db.load_audit_events(None, 100, 0).unwrap();
+    assert!(!events
+        .iter()
+        .any(|event| event.detail_json.contains("run_parallel_simulations")));
+
+    for variants in [1, 10] {
+        let reports =
+            run_parallel_simulation_reports_with(&state, seed.into(), variants, model()).unwrap();
+        assert_eq!(reports.len(), variants as usize);
+    }
+    assert_eq!(built.load(Ordering::SeqCst), 2);
+    assert!(queries.load(Ordering::SeqCst) > 0);
+}
+
+/// P0-FINAL-GATE (item K, cross-stream request from stream 6): an adversarial
+/// session outside 1..=50 rounds is refused before the arena is built or any
+/// round is allocated or run. The arena calls no model. In-range sessions run
+/// as before, with one result per round.
+#[test]
+fn p0_fg_adversarial_session_rounds_are_bounded_before_any_work() {
+    use crate::commands::consent::run_adversarial_session;
+    for rounds in [0, 51] {
+        assert_eq!(
+            run_adversarial_session("attacker".into(), "defender".into(), rounds),
+            Err("rounds must be between 1 and 50".to_string()),
+            "{rounds}"
+        );
+    }
+    for rounds in [1, 50] {
+        let session =
+            run_adversarial_session("attacker".into(), "defender".into(), rounds).unwrap();
+        assert_eq!(session["rounds"], json!(rounds));
+        assert_eq!(
+            session["results"].as_array().map(Vec::len),
+            Some(rounds as usize)
+        );
+    }
+}
+
 // ── Messaging Gateway Tests ──
 
 #[test]

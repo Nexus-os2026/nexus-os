@@ -1155,12 +1155,41 @@ pub(crate) fn list_simulations(state: &AppState) -> Result<Vec<SimulationSummary
         .collect()
 }
 
+/// Most variants one parallel-simulation request may run. P0-FINAL-GATE
+/// (item K): the literal 10 mirrors the kernel's authoritative bound,
+/// `nexus_kernel::simulation::runtime::MAX_PARALLEL_SIMULATION_VARIANTS`,
+/// which stream 6 adds; the coordinator reconciles the two at composition.
+const MAX_PARALLEL_SIMULATION_VARIANTS: u32 = 10;
+
+/// Most rounds one adversarial session may run. P0-FINAL-GATE (item K): the
+/// authoritative bound is the kernel arena's (`kernel/src/immune/arena.rs`,
+/// stream 6); this is the desktop's early check, so it does no work first.
+const MAX_ADVERSARIAL_ROUNDS: u32 = 50;
+
 pub(crate) fn run_parallel_simulation_reports(
     state: &AppState,
     seed_text: String,
     variant_count: u32,
 ) -> Result<Vec<PredictionReport>, String> {
-    let llm = build_simulation_llm();
+    run_parallel_simulation_reports_with(state, seed_text, variant_count, build_simulation_llm)
+}
+
+/// [`run_parallel_simulation_reports`] with the simulation model supplied by
+/// `simulation_llm`, which is built only for an in-range request.
+pub(crate) fn run_parallel_simulation_reports_with(
+    state: &AppState,
+    seed_text: String,
+    variant_count: u32,
+    simulation_llm: impl FnOnce() -> Arc<dyn nexus_kernel::cognitive::PlannerLlm>,
+) -> Result<Vec<PredictionReport>, String> {
+    // P0-FINAL-GATE (item K): an out-of-range variant count is refused before
+    // the model is built, the seed is parsed or any variant is started.
+    if !(1..=MAX_PARALLEL_SIMULATION_VARIANTS).contains(&variant_count) {
+        return Err(format!(
+            "variant_count must be between 1 and {MAX_PARALLEL_SIMULATION_VARIANTS}"
+        ));
+    }
+    let llm = simulation_llm();
     let seed = parse_seed(&seed_text, llm.as_ref()).map_err(|error| error.to_string())?;
     let reports =
         kernel_run_parallel_simulations(&seed, variant_count as usize, llm, state.db.clone())
@@ -1242,6 +1271,13 @@ pub(crate) fn run_adversarial_session(
     defender_id: String,
     rounds: u32,
 ) -> Result<serde_json::Value, String> {
+    // P0-FINAL-GATE (item K): an out-of-range round count is refused before
+    // the arena is built or any round is allocated or run.
+    if !(1..=MAX_ADVERSARIAL_ROUNDS).contains(&rounds) {
+        return Err(format!(
+            "rounds must be between 1 and {MAX_ADVERSARIAL_ROUNDS}"
+        ));
+    }
     let mut arena = nexus_kernel::immune::AdversarialArena::new();
     let session = arena.run_session(&attacker_id, &defender_id, rounds);
     serde_json::to_value(&session).map_err(|e| e.to_string())
