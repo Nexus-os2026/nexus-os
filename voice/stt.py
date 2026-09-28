@@ -37,29 +37,45 @@ class TranscriptionResult:
 
 
 def detect_gpu() -> bool:
+    """Report whether the Whisper backend can run on a CUDA device.
+
+    faster-whisper runs its models on CTranslate2, so CTranslate2's own CUDA
+    device count decides. On a host whose CUDA driver is unusable it reports
+    no device and writes nothing, and the model is loaded on the CPU.
+
+    torch is never imported here. Its CUDA runtime is not the one that runs
+    the model, and on such a host its probe prints a CUDA warning to stderr,
+    which breaks the CLI contract below (stderr carries one JSON error object,
+    or nothing on success).
+
+    Without CTranslate2 no faster-whisper model can load, and the answer only
+    picks the model tier handed to a Whisper command-line backend; that hint
+    still comes from `nvidia-smi -L`.
+    """
     try:
-        import torch  # type: ignore
-
-        if bool(torch.cuda.is_available()):
-            return True
+        import ctranslate2  # type: ignore
     except Exception:
-        pass
+        return _nvidia_smi_lists_gpu()
+    try:
+        return int(ctranslate2.get_cuda_device_count()) > 0
+    except Exception:
+        return False
 
-    if shutil.which("nvidia-smi"):
-        try:
-            result = subprocess.run(
-                ["nvidia-smi", "-L"],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=0.5,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                return True
-        except (subprocess.SubprocessError, OSError):
-            return False
 
-    return False
+def _nvidia_smi_lists_gpu() -> bool:
+    if not shutil.which("nvidia-smi"):
+        return False
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "-L"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=0.5,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
 
 
 def detect_apple_silicon() -> bool:
