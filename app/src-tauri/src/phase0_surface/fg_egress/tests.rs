@@ -694,11 +694,14 @@ fn assert_no_ollama_helper(chat_llm: &str, lib_rs: &str) {
     }
 }
 
-/// Final Gate item I: model downloads do not outlive the application. The
-/// normal-exit hook ends the downloads in flight (bounded, through their
-/// owned handles; see the `model_hub` tests) and reports a failure by counts
-/// only. A download's transfer is started only by the in-flight registry, so
-/// none escapes it.
+/// Final Gate item I: at a normal exit, model downloads do not outlive the
+/// application. The normal-exit hook ends the downloads in flight (bounded,
+/// through their owned handles; see the `model_hub` tests) and reports a
+/// failure by counts only. A download's transfer is started only by the
+/// in-flight registry, so none escapes it.
+///
+/// Non-claim: if the application crashes or is killed (SIGKILL, a forced end
+/// of task), the hook does not run and a transfer in flight can outlive it.
 #[test]
 fn p0_fg_the_application_exit_ends_in_flight_model_downloads() {
     let model_hub = include_str!("../../../../../connectors/llm/src/model_hub.rs");

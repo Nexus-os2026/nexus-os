@@ -474,6 +474,10 @@ trait Transfer {
 // `terminate_in_flight_downloads` ends every one: through the owned handle
 // only (kill, then reap), never by process id, name or port, within a bound,
 // reporting truthfully what it could not confirm. No download starts after it.
+//
+// Non-claim: this runs at the application's normal exit. If the process
+// crashes or is killed (SIGKILL, a forced end of task), no exit code runs and
+// a transfer in flight can outlive it, as any child process can.
 
 /// The total time `terminate_in_flight_downloads` waits for killed transfers
 /// to be reaped.
@@ -494,7 +498,7 @@ static IN_FLIGHT_DOWNLOADS: InFlightDownloads = InFlightDownloads::new();
 /// they stay registered, so a later call tries again. A second call after
 /// success finds nothing to do.
 pub fn terminate_in_flight_downloads() -> Result<usize, DownloadTermination> {
-    IN_FLIGHT_DOWNLOADS.terminate_all(std::time::Instant::now() + DOWNLOAD_TERMINATION_WAIT)
+    IN_FLIGHT_DOWNLOADS.terminate_for_exit()
 }
 
 /// Why `terminate_in_flight_downloads` could not confirm every transfer
@@ -639,6 +643,12 @@ impl InFlightDownloads {
             id,
             transfer,
         })
+    }
+
+    /// [`terminate_in_flight_downloads`] for this registry: one
+    /// [`DOWNLOAD_TERMINATION_WAIT`] from now.
+    fn terminate_for_exit(&self) -> Result<usize, DownloadTermination> {
+        self.terminate_all(std::time::Instant::now() + DOWNLOAD_TERMINATION_WAIT)
     }
 
     /// End every registered transfer by `deadline` and refuse new ones (see
@@ -1377,12 +1387,16 @@ mod tests {
         assert_eq!(registry.len(), 0);
     }
 
-    /// The application's exit cleanup, with nothing in flight, succeeds and
-    /// does nothing, twice.
+    /// The exit cleanup (as `terminate_in_flight_downloads` runs it, on a
+    /// registry of this test's own, so the process-wide one stays open for the
+    /// rest of the test binary), with nothing in flight, succeeds and does
+    /// nothing, twice.
     #[test]
     fn p0_fg_the_exit_cleanup_is_a_no_op_with_nothing_in_flight() {
-        assert_eq!(terminate_in_flight_downloads(), Ok(0));
-        assert_eq!(terminate_in_flight_downloads(), Ok(0));
+        let registry = InFlightDownloads::new();
+        assert_eq!(registry.terminate_for_exit(), Ok(0));
+        assert_eq!(registry.terminate_for_exit(), Ok(0));
+        assert_eq!(registry.len(), 0);
     }
 
     /// Final Gate item B: a downloaded model is registered with the Ollama
