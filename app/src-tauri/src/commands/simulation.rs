@@ -243,6 +243,11 @@ pub(crate) fn temporal_fork(
     agent_id: String,
     fork_count: Option<u32>,
 ) -> Result<String, String> {
+    // Refused before the configuration is read, a provider is built or the
+    // model is called.
+    if let Some(forks) = fork_count {
+        nexus_kernel::temporal::types::check_fork_count(forks).map_err(|e| e.to_string())?;
+    }
     let config = load_config().map_err(agent_error)?;
     let provider_config = build_provider_config(&config);
     let provider = select_provider(&provider_config).map_err(|e| e.to_string())?;
@@ -290,14 +295,18 @@ pub(crate) fn temporal_fork(
     let consciousness = cons_engine.get_agent_state_snapshot(&agent_id);
     drop(cons_engine);
 
-    // Optionally override fork count
+    // Optionally override fork count. The engine's limits are checked before
+    // they are stored and before the first model call.
     let mut engine = state
         .temporal_engine
         .lock()
         .unwrap_or_else(|p| p.into_inner());
+    let mut cfg = engine.config().clone();
     if let Some(fc) = fork_count {
-        let mut cfg = engine.config().clone();
         cfg.max_parallel_forks = fc;
+    }
+    cfg.validate().map_err(|e| e.to_string())?;
+    if fork_count.is_some() {
         engine.update_config(cfg);
     }
 
@@ -481,6 +490,9 @@ pub(crate) fn set_temporal_config(
         "UserChoice" => nexus_kernel::temporal::EvalStrategy::UserChoice,
         _ => return Err(format!("unknown eval strategy: {eval_strategy}")),
     };
+    // Refused before the engine is locked; the stored limits stay unchanged.
+    nexus_kernel::temporal::types::check_fork_count(max_forks).map_err(|e| e.to_string())?;
+    nexus_kernel::temporal::types::check_fork_budget(budget_tokens).map_err(|e| e.to_string())?;
 
     let mut engine = state
         .temporal_engine

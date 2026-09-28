@@ -19,6 +19,9 @@ pub enum TemporalError {
     /// A dilated session's iteration count is outside
     /// `1..=MAX_DILATED_ITERATIONS`.
     InvalidIterationCount(u32),
+    /// A temporal decision's token budget is outside
+    /// `1..=MAX_FORK_BUDGET_TOKENS`.
+    InvalidForkBudget(u64),
     /// Requested fork/decision not found.
     NotFound(String),
     /// Checkpoint operation failed.
@@ -36,7 +39,14 @@ impl fmt::Display for TemporalError {
                 write!(f, "token budget exhausted: used {used}, limit {limit}")
             }
             Self::LlmError(msg) => write!(f, "LLM error: {msg}"),
-            Self::InvalidForkCount(n) => write!(f, "invalid fork count: {n}"),
+            Self::InvalidForkCount(n) => write!(
+                f,
+                "invalid fork count: {n} (allowed: 1 to {MAX_TEMPORAL_FORKS})"
+            ),
+            Self::InvalidForkBudget(n) => write!(
+                f,
+                "invalid fork token budget: {n} (allowed: 1 to {MAX_FORK_BUDGET_TOKENS})"
+            ),
             Self::InvalidIterationCount(n) => write!(
                 f,
                 "invalid iteration count: {n} (allowed: 1 to {})",
@@ -310,6 +320,45 @@ impl Default for TemporalConfig {
     }
 }
 
+/// Most forks one temporal decision may explore.
+///
+/// Each fork is simulated through the model step by step, and when the
+/// model's reply is not JSON the engine synthesizes exactly this many forks,
+/// so the count is refused, never clamped, outside `1..=MAX_TEMPORAL_FORKS`.
+pub const MAX_TEMPORAL_FORKS: u32 = 10;
+
+/// Largest token budget one temporal decision may spend.
+pub const MAX_FORK_BUDGET_TOKENS: u64 = 200_000;
+
+/// Accept a fork count within `1..=MAX_TEMPORAL_FORKS`.
+pub fn check_fork_count(forks: u32) -> Result<u32, TemporalError> {
+    if (1..=MAX_TEMPORAL_FORKS).contains(&forks) {
+        Ok(forks)
+    } else {
+        Err(TemporalError::InvalidForkCount(forks))
+    }
+}
+
+/// Accept a token budget within `1..=MAX_FORK_BUDGET_TOKENS`. A zero budget
+/// could never complete a fork, so it is refused before any model call too.
+pub fn check_fork_budget(tokens: u64) -> Result<u64, TemporalError> {
+    if (1..=MAX_FORK_BUDGET_TOKENS).contains(&tokens) {
+        Ok(tokens)
+    } else {
+        Err(TemporalError::InvalidForkBudget(tokens))
+    }
+}
+
+impl TemporalConfig {
+    /// Refuse the limits the interface sets when they are out of bounds:
+    /// the fork count and the token budget.
+    pub fn validate(&self) -> Result<(), TemporalError> {
+        check_fork_count(self.max_parallel_forks)?;
+        check_fork_budget(self.fork_budget_tokens)?;
+        Ok(())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -403,6 +452,59 @@ mod tests {
         assert_eq!(cfg.max_depth_per_fork, 10);
         assert_eq!(cfg.fork_budget_tokens, 50_000);
         assert_eq!(cfg.evaluation_strategy, EvalStrategy::BestFinalScore);
+    }
+
+    #[test]
+    fn p0_fg_k_fork_limits_are_refused_outside_their_bounds() {
+        assert_eq!(MAX_TEMPORAL_FORKS, 10);
+        assert_eq!(MAX_FORK_BUDGET_TOKENS, 200_000);
+        TemporalConfig::default().validate().unwrap();
+
+        for forks in [0, MAX_TEMPORAL_FORKS + 1, u32::MAX] {
+            assert!(matches!(
+                check_fork_count(forks),
+                Err(TemporalError::InvalidForkCount(n)) if n == forks
+            ));
+            let cfg = TemporalConfig {
+                max_parallel_forks: forks,
+                ..TemporalConfig::default()
+            };
+            assert!(cfg.validate().is_err(), "{forks} forks");
+        }
+        for tokens in [0, MAX_FORK_BUDGET_TOKENS + 1, u64::MAX] {
+            assert!(matches!(
+                check_fork_budget(tokens),
+                Err(TemporalError::InvalidForkBudget(n)) if n == tokens
+            ));
+            let cfg = TemporalConfig {
+                fork_budget_tokens: tokens,
+                ..TemporalConfig::default()
+            };
+            assert!(cfg.validate().is_err(), "{tokens} tokens");
+        }
+        assert_eq!(
+            TemporalError::InvalidForkCount(11).to_string(),
+            "invalid fork count: 11 (allowed: 1 to 10)"
+        );
+        assert_eq!(
+            TemporalError::InvalidForkBudget(0).to_string(),
+            "invalid fork token budget: 0 (allowed: 1 to 200000)"
+        );
+    }
+
+    #[test]
+    fn p0_fg_k_fork_limit_bounds_are_inclusive() {
+        for (forks, tokens) in [(1, 1), (MAX_TEMPORAL_FORKS, MAX_FORK_BUDGET_TOKENS)] {
+            assert_eq!(check_fork_count(forks).unwrap(), forks);
+            assert_eq!(check_fork_budget(tokens).unwrap(), tokens);
+            TemporalConfig {
+                max_parallel_forks: forks,
+                fork_budget_tokens: tokens,
+                ..TemporalConfig::default()
+            }
+            .validate()
+            .unwrap();
+        }
     }
 
     #[test]
