@@ -353,4 +353,46 @@ mod guards {
             assert!(apps.contains(reader), "{reader}");
         }
     }
+
+    /// Final Gate item H: messaging tokens live in the configuration. Connect
+    /// accepts only the stored token and writes no token or socket-URL file;
+    /// the reader prefers the configuration and still reads a legacy file.
+    #[test]
+    fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
+        let apps = normalized(include_str!("../commands/apps.rs"));
+        let connect = compact(&body(&apps, "pub(crate) fn messaging_connect_platform("));
+        assert!(
+            in_order(
+                &connect,
+                &[
+                    "messaging_platform(state,\"messaging_connect\",&platform)?;",
+                    "iftoken_value!=STORED_SECRET{returnErr(deny(state,\"messaging_connect\",\"token_must_be_saved_first\"",
+                    "stored_messaging_token(known)?",
+                ],
+            ),
+            "{connect}"
+        );
+        for gone in [
+            "fs::write(",
+            "create_dir_all(",
+            "messaging_tokens",
+            "slack_ws_url",
+        ] {
+            assert!(!connect.contains(gone), "{gone}");
+        }
+        assert!(!apps.contains("slack_ws_url"));
+        assert!(!apps.contains("apps.connections.open"));
+        let read = compact(&body(&apps, "pub(crate) fn read_messaging_token("));
+        assert!(
+            in_order(
+                &read,
+                &[
+                    "stored_messaging_token(platform)",
+                    ".join(\"messaging_tokens\")"
+                ]
+            ),
+            "{read}"
+        );
+        assert!(!read.contains("fs::write("), "{read}");
+    }
 }

@@ -849,7 +849,28 @@ pub(crate) fn email_oauth_dir() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// The bot token the configuration stores for a supported platform, or an
+/// empty string when none is stored.
+fn stored_messaging_token(platform: &'static str) -> Result<String, String> {
+    let stored = load_config().map_err(|e| format!("config: {e}"))?.messaging;
+    Ok(match platform {
+        "telegram" => stored.telegram_bot_token,
+        "discord" => stored.discord_bot_token,
+        "slack" => stored.slack_bot_token,
+        _ => String::new(),
+    })
+}
+
+/// The bot token for a supported platform (Final Gate item H). The
+/// configuration is the token store: its token is used when it holds one.
+/// Otherwise a token file written by an earlier version is read as it is,
+/// never rewritten or removed.
 pub(crate) fn read_messaging_token(platform: &'static str) -> Result<String, String> {
+    if let Ok(token) = stored_messaging_token(platform) {
+        if !token.is_empty() {
+            return Ok(token);
+        }
+    }
     let path = nexus_data_dir()?
         .join("messaging_tokens")
         .join(format!("{platform}.json"));
@@ -1257,24 +1278,32 @@ pub(crate) fn email_disconnect(state: &AppState, provider: String) -> Result<Str
 
 // ── Messaging: Real Platform Connections ──────────────────────────────
 
+/// Connect a messaging platform with its stored bot token (Final Gate item
+/// H).
+///
+/// The configuration is the token store: a new token is saved there by the
+/// settings save, which needs the operator configuration key (item A).
+/// Connecting accepts only the stored token, which the interface sees as
+/// [`STORED_SECRET`]; any other value is refused before anything is read,
+/// written or sent. No token file is written: the plaintext copy under
+/// `messaging_tokens` and the cached Slack socket URL are gone.
 pub(crate) fn messaging_connect_platform(
     state: &AppState,
     platform: String,
     token_value: String,
 ) -> Result<String, String> {
     let known = messaging_platform(state, "messaging_connect", &platform)?;
-    // P0-002C5C: the interface sees a stored token only as the placeholder;
-    // connecting with it uses the stored token.
-    let token_value = if token_value == STORED_SECRET {
-        let stored = load_config().map_err(|e| format!("config: {e}"))?.messaging;
-        match known {
-            "telegram" => stored.telegram_bot_token,
-            "discord" => stored.discord_bot_token,
-            _ => stored.slack_bot_token,
-        }
-    } else {
-        token_value
-    };
+    if token_value != STORED_SECRET {
+        return Err(deny(
+            state,
+            "messaging_connect",
+            "token_must_be_saved_first",
+        ));
+    }
+    let token_value = stored_messaging_token(known)?;
+    if token_value.is_empty() {
+        return Err(deny(state, "messaging_connect", "no_stored_token"));
+    }
     if known == "telegram" && !telegram_token_ok(&token_value) {
         return Err(deny(state, "messaging_connect", "invalid_token"));
     }
@@ -1283,18 +1312,6 @@ pub(crate) fn messaging_connect_platform(
         EventType::UserAction,
         json!({"action": "messaging_connect", "platform": known}),
     );
-
-    // Store token in messaging tokens file
-    let msg_dir = nexus_data_dir()?.join("messaging_tokens");
-    if !msg_dir.exists() {
-        std::fs::create_dir_all(&msg_dir).map_err(|e| format!("mkdir: {e}"))?;
-    }
-    let token_path = msg_dir.join(format!("{known}.json"));
-    std::fs::write(
-        &token_path,
-        serde_json::to_string_pretty(&json!({"token": token_value, "platform": platform, "connected_at": chrono::Utc::now().to_rfc3339()})).map_err(|e| format!("json: {e}"))?,
-    )
-    .map_err(|e| format!("write: {e}"))?;
 
     // Test connectivity
     let test_result = block_on_async(async {
@@ -1337,26 +1354,9 @@ pub(crate) fn messaging_connect_platform(
                         .and_then(|v| v.as_str())
                         .unwrap_or("unknown");
 
-                    // Attempt Socket Mode WebSocket connection for real-time events
-                    // Requires an app-level token (xapp-*) — if using a bot token, falls back to polling
-                    if token_value.starts_with("xapp-") {
-                        let ws_resp = reqwest::Client::new()
-                            .post("https://slack.com/api/apps.connections.open")
-                            .bearer_auth(&token_value)
-                            .send()
-                            .await;
-                        if let Ok(ws_resp) = ws_resp {
-                            let ws_data: serde_json::Value =
-                                ws_resp.json().await.unwrap_or_default();
-                            if let Some(ws_url) = ws_data.get("url").and_then(|v| v.as_str()) {
-                                // Store WebSocket URL for the frontend to use
-                                let ws_path = msg_dir.join("slack_ws_url.txt");
-                                // Best-effort: cache WebSocket URL on disk for frontend access
-                                let _ = std::fs::write(&ws_path, ws_url);
-                            }
-                        }
-                    }
-
+                    // Final Gate item H: no Socket Mode URL is requested or
+                    // cached on disk; `realtime` only reports an app-level
+                    // (xapp-*) token.
                     Ok(json!({"connected": true, "team": team, "realtime": token_value.starts_with("xapp-")}).to_string())
                 } else {
                     Err(format!(

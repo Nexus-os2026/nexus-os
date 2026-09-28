@@ -544,3 +544,36 @@ fn p0_002c5c_email_header_values_cannot_add_headers() {
         Err("email_send: invalid header".to_string())
     );
 }
+
+/// Final Gate item H: messaging connect accepts only the token stored in the
+/// configuration. Any other value is refused and audited by reason class
+/// before anything is read, written or sent, so no plaintext token file can
+/// result from it.
+#[test]
+fn p0_fg_h_messaging_connect_takes_only_the_stored_token() {
+    let state = AppState::new_in_memory();
+    for platform in ["telegram", "discord", "slack"] {
+        for token in ["123:synthetic-token", "", "xapp-synthetic"] {
+            assert_eq!(
+                messaging_connect_platform(&state, platform.into(), token.into()),
+                Err("messaging_connect: token must be saved first".to_string()),
+                "{platform} {token:?}"
+            );
+        }
+    }
+    assert_eq!(
+        messaging_connect_platform(&state, "matrix".into(), STORED_SECRET.into()),
+        Err("messaging_connect: unsupported platform".to_string())
+    );
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    let logged = serde_json::to_string(
+        &audit
+            .events()
+            .iter()
+            .map(|event| &event.payload)
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    assert!(logged.contains("token_must_be_saved_first"), "{logged}");
+    assert!(!logged.contains("synthetic"), "{logged}");
+}
