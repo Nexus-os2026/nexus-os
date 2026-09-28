@@ -188,6 +188,32 @@ fn p0_fg_webview_conf_has_restrictive_csp_and_guarded_window() {
     );
 }
 
+/// The privileged document loads nothing from a third party: `index.html`
+/// names no remote URL (it used to pull a Google Fonts stylesheet, i.e. remote
+/// CSS applied to the approval screens, on every launch), and the CSP admits
+/// no remote font or style origin and no `asset:` source (the asset protocol
+/// is not compiled in: tauri's `protocol-asset` feature is off).
+#[test]
+fn p0_fg_webview_privileged_document_loads_no_third_party_resources() {
+    let index_html = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../index.html"));
+    for remote in ["http://", "https://", "//fonts.", "@import"] {
+        assert!(
+            !index_html.contains(remote),
+            "app/index.html must not reference a remote resource ({remote})"
+        );
+    }
+    let conf: serde_json::Value = serde_json::from_str(TAURI_CONF).expect("tauri.conf.json parses");
+    let csp = conf["app"]["security"]["csp"].as_str().expect("csp string");
+    for gone in ["googleapis", "gstatic", "asset:", "asset.localhost"] {
+        assert!(!csp.contains(gone), "CSP must not admit {gone}");
+    }
+    let cargo_toml = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
+    assert!(
+        !cargo_toml.contains("protocol-asset"),
+        "the asset protocol is not part of the app"
+    );
+}
+
 /// The app origin the navigation guard admits is resolved exactly as tauri
 /// 2.10.3 resolves the app window's URL: the configured `devUrl` only in dev
 /// mode (`tauri::is_dev()`, tauri's `cfg(dev)`), otherwise the `tauri`
