@@ -3,7 +3,6 @@ use crate::streaming::{
     new_usage_cell, StreamChunk, StreamUsage, StreamingLlmProvider, StreamingResponse, UsageCell,
 };
 use nexus_kernel::errors::AgentError;
-use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::env;
@@ -76,12 +75,9 @@ impl LlmProvider for ClaudeProvider {
         };
         let request = ClaudeProvider::new(Some(api_key)).build_request(prompt, max_tokens, model);
 
-        let client = Client::builder()
-            .timeout(Duration::from_secs(120))
-            .build()
-            .map_err(|error| {
-                AgentError::SupervisorError(format!("failed to build HTTP client: {error}"))
-            })?;
+        let client = super::credential_client(Duration::from_secs(120)).map_err(|error| {
+            AgentError::SupervisorError(format!("failed to build HTTP client: {error}"))
+        })?;
 
         // Retry loop for overloaded (529) and rate-limited (429) errors
         let mut delay_secs = 5u64;
@@ -214,12 +210,10 @@ impl StreamingLlmProvider for ClaudeProvider {
             body["system"] = Value::String(system_prompt.to_string());
         }
 
-        let client = Client::builder()
-            .timeout(Duration::from_secs(300)) // longer timeout for streaming
-            .build()
-            .map_err(|e| {
-                AgentError::SupervisorError(format!("failed to build HTTP client: {e}"))
-            })?;
+        // A longer timeout for streaming.
+        let client = super::credential_client(Duration::from_secs(300)).map_err(|e| {
+            AgentError::SupervisorError(format!("failed to build HTTP client: {e}"))
+        })?;
 
         // Retry loop for overloaded (529) and rate-limited (429) errors
         let mut delay_secs = 5u64;

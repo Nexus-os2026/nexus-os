@@ -452,6 +452,22 @@ fn post_json_bounded(
     Ok((status, json_response(text.trim())?))
 }
 
+/// A blocking client for requests that carry a credential header (Final
+/// Gate item C). It follows no redirect, so the credential reaches only the
+/// endpoint it was meant for: on a redirect to another host reqwest drops
+/// only `authorization`, `cookie`, `proxy-authorization` and
+/// `www-authenticate`, and would re-send `x-api-key` (and, on 307 and 308,
+/// the body) to the target. A redirect comes back as its status, which the
+/// callers report as a failed request.
+pub(crate) fn credential_client(
+    timeout: std::time::Duration,
+) -> reqwest::Result<reqwest::blocking::Client> {
+    reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+}
+
 /// Send one bounded request (see [`post_json_in_process`]) and read its
 /// status and at most `max_bytes` of body.
 fn send_bounded(
@@ -462,11 +478,8 @@ fn send_bounded(
     max_bytes: u64,
 ) -> Result<(u16, Vec<u8>), String> {
     use std::io::Read;
-    let client = reqwest::blocking::Client::builder()
-        .timeout(timeout)
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|error| request_error("could not start", error))?;
+    let client =
+        credential_client(timeout).map_err(|error| request_error("could not start", error))?;
     // The client's timeout bounds each wait (the headers, then every read)
     // separately; the request's own timeout bounds the whole exchange, from
     // connecting until the body has been read.
@@ -1132,6 +1145,63 @@ mod tests {
             server.join().unwrap();
         }
         assert_never_contacted(&target);
+    }
+
+    /// Final Gate item C: the reqwest providers that send a credential
+    /// header (Claude's `x-api-key`; Cohere's and the OpenAI-compatible
+    /// providers' bearer token) follow no redirect, so neither the credential
+    /// nor the prompt reaches a redirect target. reqwest itself would re-send
+    /// `x-api-key` to another host.
+    #[test]
+    fn p0_fg_credentialed_reqwest_providers_follow_no_redirect() {
+        use super::openai_compatible::{execute_openai_compatible_query, OpenAiCompatibleQuery};
+        let (target, target_url) = quiet_listener();
+        for code in [
+            "301 Moved Permanently",
+            "302 Found",
+            "307 Temporary Redirect",
+            "308 Permanent Redirect",
+        ] {
+            let answer = format!(
+                "HTTP/1.1 {code}\r\nLocation: {target_url}/collect\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            // The client the Claude and Cohere providers build.
+            let (base, server) = serve_once(answer.clone().into_bytes());
+            let response = super::credential_client(Duration::from_secs(10))
+                .unwrap()
+                .post(format!("{base}/v1/messages"))
+                .header("x-api-key", "fg-secret")
+                .body("{}")
+                .send()
+                .unwrap();
+            assert_eq!(response.status().as_u16().to_string(), code[..3], "{code}");
+            assert!(server.join().unwrap().contains("fg-secret"));
+
+            // An OpenAI-compatible provider, through its executor.
+            let (base, server) = serve_once(answer.into_bytes());
+            let endpoint = format!("{base}/v1/chat/completions");
+            let result = execute_openai_compatible_query(OpenAiCompatibleQuery {
+                provider_name: "groq",
+                missing_key_error: "no key",
+                api_key: Some("fg-secret".to_string()),
+                endpoint: &endpoint,
+                prompt: "p",
+                max_tokens: 1,
+                model: "m",
+                extra_headers: &[],
+            });
+            assert!(result.is_err(), "{code}: a redirect is not an answer");
+            server.join().unwrap();
+        }
+        assert_never_contacted(&target);
+        for (file, source) in [
+            ("claude.rs", include_str!("claude.rs")),
+            ("cohere.rs", include_str!("cohere.rs")),
+            ("openai_compatible.rs", include_str!("openai_compatible.rs")),
+        ] {
+            assert!(!source.contains("Client::builder()"), "{file}");
+            assert!(source.contains("super::credential_client("), "{file}");
+        }
     }
 
     /// The response read is bounded, whether it declares its length or not.
