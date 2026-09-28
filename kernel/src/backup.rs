@@ -272,9 +272,11 @@ pub fn create_backup(
 
     let contents: Vec<String> = files_to_backup.iter().map(|(_, rel)| rel.clone()).collect();
 
-    // Create tar.gz archive.
+    // Create tar.gz archive, owner-only from its first byte (Final Gate item
+    // H): it can hold the encrypted configuration and every other store it
+    // copies. On Windows the file keeps the directory's inherited access.
     let archive_file =
-        std::fs::File::create(&archive_path).map_err(|e| BackupError::Io(e.to_string()))?;
+        create_owner_only(&archive_path).map_err(|e| BackupError::Io(e.to_string()))?;
     let encoder = GzEncoder::new(archive_file, Compression::default());
     let mut tar_builder = tar::Builder::new(encoder);
 
@@ -358,6 +360,34 @@ pub fn create_backup(
     Ok(final_metadata)
 }
 
+/// Creates `path`, which must not exist, readable and writable by its owner
+/// only (0600 on Unix).
+fn create_owner_only(path: &Path) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
+}
+
+/// Credential stores directly under the data directory that a backup never
+/// copies (Final Gate item H): email and integration OAuth token files,
+/// messaging bot tokens, the legacy deploy credential store, OAuth client
+/// secrets and API Client collections. Copying them would persist their
+/// secrets again, in plaintext unless the archive is encrypted. The stores
+/// themselves are left as they are.
+const CREDENTIAL_STORES: &[&str] = &[
+    "email_oauth",
+    "integrations",
+    "messaging_tokens",
+    "deploy_credentials.json",
+    "oauth_settings.json",
+    "api_collections.json",
+];
+
 fn collect_backup_files(
     base: &Path,
     dir: &Path,
@@ -369,6 +399,14 @@ fn collect_backup_files(
     for entry in entries {
         let entry = entry?;
         let path = entry.path();
+        if dir == base
+            && entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| CREDENTIAL_STORES.contains(&name))
+        {
+            continue;
+        }
         // P0-002C5B: the file type is read without following links, so a
         // symbolic link inside the data directory never pulls outside files
         // into a backup; links are skipped.
@@ -984,6 +1022,82 @@ mod tests {
 
         let backups = list_backups(&backup_dir).unwrap();
         assert_eq!(backups.len(), 2);
+    }
+
+    /// Final Gate item H: a backup never copies a credential store, and the
+    /// archive is owner-only from its creation.
+    #[test]
+    fn p0_fg_h_backups_skip_credential_stores_and_are_owner_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        let backup_dir = tmp.path().join("backups");
+        setup_test_data(&data_dir);
+        for dir in ["email_oauth", "integrations", "messaging_tokens", "agents"] {
+            std::fs::create_dir_all(data_dir.join(dir)).unwrap();
+        }
+        for (relative, contents) in [
+            (
+                "email_oauth/gmail_tokens.json",
+                "{\"access_token\":\"synthetic\"}",
+            ),
+            (
+                "integrations/github_oauth.json",
+                "{\"token_response\":\"synthetic\"}",
+            ),
+            (
+                "messaging_tokens/telegram.json",
+                "{\"token\":\"synthetic\"}",
+            ),
+            ("deploy_credentials.json", "{\"entries\":{}}"),
+            (
+                "oauth_settings.json",
+                "{\"gmail_client_secret\":\"synthetic\"}",
+            ),
+            ("api_collections.json", "[]"),
+            // Same names below the top level are ordinary data.
+            ("agents/api_collections.json", "{\"kept\":true}"),
+            ("agents/genome.json", "{\"kept\":true}"),
+        ] {
+            std::fs::write(data_dir.join(relative), contents).unwrap();
+        }
+        let config = BackupConfig {
+            output_dir: backup_dir.clone(),
+            include_audit: true,
+            include_genomes: true,
+            include_config: false,
+            include_manifests: true,
+            encrypt: false,
+        };
+        let meta = create_backup(&config, &data_dir, None).unwrap();
+        let mut contents = meta.contents.clone();
+        contents.sort();
+        let separator = std::path::MAIN_SEPARATOR;
+        assert_eq!(
+            contents,
+            [
+                "data/agent-coder.toml".to_string(),
+                "data/agents.db".to_string(),
+                format!("data/agents{separator}api_collections.json"),
+                format!("data/agents{separator}genome.json"),
+                "data/audit.db".to_string(),
+            ]
+        );
+        // The stores are left as they are.
+        assert_eq!(
+            std::fs::read_to_string(data_dir.join("messaging_tokens/telegram.json")).unwrap(),
+            "{\"token\":\"synthetic\"}"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let archive = std::fs::read_dir(&backup_dir)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .find(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("gz"))
+                .unwrap();
+            let mode = archive.metadata().unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
     }
 
     #[test]
