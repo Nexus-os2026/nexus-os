@@ -1138,8 +1138,7 @@ impl AppState {
                 }
                 Err(e) => {
                     eprintln!(
-                        "kernel::startup: secrets migration FAILED: {e}; \
-                         consumers reading via facade() will panic"
+                        "kernel::startup: secrets vault unavailable: {e}; vault-backed operations are refused"
                     );
                 }
             }
