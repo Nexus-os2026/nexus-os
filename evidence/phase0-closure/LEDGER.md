@@ -1,0 +1,44 @@
+# State and continuation ledger
+
+Rule: before any push or dispatch, check this ledger and GitHub. An operation
+recorded here as done must never be repeated because a session was resumed.
+
+## Starting state (verified 2026-09-28)
+
+| Ref | SHA |
+|---|---|
+| `rebuild/phase0-trust-boundary` (authoritative) | `98fbb6a369daa9f3f3998a8555fec7cf67078664` |
+| `main` | `80640bba41e74c17abbf4eb71eafa88bd1ade8db` |
+| `implement/p0-fg1-j1-server-withdrawal` (FG1) | `1b049e15e27666f573af24bb4ac0a579dbf860c0` |
+| `implement/ci-fast-local-final-cloud` (CI) | `9bbe4d8abdc7668c8f31069324b22ab315922f03` |
+| `implement/p0-fg1-ci-composition` | `2b47bb09e13cdbee167372c21ad12c51273c5f81` |
+| `repair/p0-fg1-protocols-binary-name` (approved candidate) | `71c47acbf3f8ee8210109587b3229f8d89067b6b`, tree `824669d4bea9df5a24e8065081fedb109f0fd66f` |
+
+PR #15: open, draft, unmerged, auto-merge off, head `1b049e15`, base `main@80640bba`.
+
+## Operations performed
+
+1. **FG1 integration (done, once).** `rebuild/phase0-trust-boundary`
+   `98fbb6a3` -> `71c47acb` by `git merge --ff-only`, pushed normally to the
+   GitHub authoritative branch at 2026-09-28T16:36:17Z. Local and GitHub head
+   `71c47acb…`, tree `824669d4…`. The push triggered no workflow.
+2. **FG1 post-integration dispatch (sent once, never resend).**
+   `gh workflow run ci.yml --ref rebuild/phase0-trust-boundary --raw-field candidate_sha=71c47acb…`
+   at 2026-09-28T16:38:33.967Z, exit 0. Run `36452512718` (#108), attempt 1.
+   Result: in progress at the time of this entry.
+
+## Working branches (all rooted at `71c47acb`)
+
+- `implement/p0-final-gate-closure`: combined closure candidate (coordinator only).
+- `component/p0-closure-{webview,secrets,egress,standalone,approval,reliability}`:
+  local component branches, one per workstream; composed by ordinary merges.
+- `evidence/phase0-closure`: this branch.
+
+## Hosted validation budget
+
+- FG1 post-integration: 1 of 1 used (#108).
+- Technical closure candidate: 0 of 3 used.
+
+## Current activity
+
+- Six workstreams are in read-only reachability investigation.
