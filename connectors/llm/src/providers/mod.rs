@@ -385,7 +385,8 @@ const MAX_PROVIDER_RESPONSE_BYTES: u64 = 32 * 1024 * 1024;
 ///   and line-break checks; credential header values are marked sensitive;
 /// - no redirect is followed, so a credential reaches only the checked
 ///   endpoint (a redirect response is returned as its status);
-/// - `timeout_secs` bounds the whole exchange, and at most 32 MiB of
+/// - `timeout_secs` bounds the whole exchange, from connecting until the
+///   last response byte is read (as curl's `-m` did), and at most 32 MiB of
 ///   response is read;
 /// - TLS certificates are verified;
 /// - an error names what failed, never a header value or the URL.
@@ -466,8 +467,12 @@ fn send_bounded(
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|error| request_error("could not start", error))?;
+    // The client's timeout bounds each wait (the headers, then every read)
+    // separately; the request's own timeout bounds the whole exchange, from
+    // connecting until the body has been read.
     let response = client
         .post(endpoint)
+        .timeout(timeout)
         .headers(headers)
         .body(body)
         .send()
@@ -484,7 +489,20 @@ fn send_bounded(
     response
         .take(max_bytes + 1)
         .read_to_end(&mut raw)
-        .map_err(|error| format!("the response could not be read: {}", error.kind()))?;
+        .map_err(|error| {
+            // Only the kind is reported (an inner error could name the URL);
+            // the request's timeout surfaces here as a wrapped reqwest error.
+            let timed_out = error.kind() == std::io::ErrorKind::TimedOut
+                || error
+                    .get_ref()
+                    .and_then(|inner| inner.downcast_ref::<reqwest::Error>())
+                    .is_some_and(reqwest::Error::is_timeout);
+            if timed_out {
+                "the response could not be read (timed out)".to_string()
+            } else {
+                format!("the response could not be read: {}", error.kind())
+            }
+        })?;
     if raw.len() as u64 > max_bytes {
         return Err(too_large());
     }
@@ -1179,6 +1197,55 @@ mod tests {
             assert!(!error.contains("fg-secret"), "{error}");
             assert!(!error.contains("secret-path"), "{error}");
         }
+    }
+
+    /// The timeout bounds the whole exchange, not each read: a server that
+    /// answers at once and then drips its body (18 bytes, one every 300 ms,
+    /// 5.4 s in all) is abandoned at the 1 s timeout instead of being read to
+    /// the end.
+    #[test]
+    fn p0_fg_credentialed_posts_are_bounded_in_total_time() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(30)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0u8; 1];
+            while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                request.push(byte[0]);
+            }
+            let body = br#"{"dripped":"slow"}"#;
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            if stream.write_all(head.as_bytes()).is_err() {
+                return;
+            }
+            for byte in body {
+                std::thread::sleep(Duration::from_millis(300));
+                // The client has given up once a write fails.
+                if stream.write_all(&[*byte]).is_err() {
+                    return;
+                }
+            }
+        });
+        let result = super::post_json_bounded(
+            &format!("{base}/v1"),
+            &BTreeMap::new(),
+            &json!({}),
+            Duration::from_secs(1),
+            1024,
+        );
+        let error = result
+            .expect_err("a body that takes 5.4 s must not be read to its end within a 1 s timeout")
+            .to_string();
+        assert!(error.contains("timed out"), "{error}");
+        server.join().unwrap();
     }
 
     /// The migrated providers post their credential to a constant https
