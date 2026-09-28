@@ -2,7 +2,7 @@
 //!
 //! The behavioural tests run the executable built from this package, never a
 //! `nexus-server` found on `PATH`. The source guards pin the production entry
-//! point.
+//! point and the withdrawn deployment recipes under `deploy/`.
 //!
 //! `nexus-protocols` also builds a binary named `nexus-server`. When one Cargo
 //! invocation builds both (for example `cargo test --workspace`), the shared
@@ -612,6 +612,182 @@ fn p0_fg1_package_has_no_other_entry_or_module() {
         assert!(
             !lines.iter().any(|line| line.starts_with(forbidden)),
             "Cargo.toml must not declare `{forbidden}`"
+        );
+    }
+}
+
+// ── Withdrawn deployment recipes under deploy/ ──────────────────────────────
+
+fn deploy_dir() -> PathBuf {
+    manifest_dir().join("..").join("..").join("deploy")
+}
+
+/// Lines that are neither blank nor `#` comments.
+fn directive_lines(text: &str) -> Vec<&str> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect()
+}
+
+/// The J1 Dockerfile fails at its first step with the withdrawal message. It
+/// has one stage, no parser directive that could swap the frontend, and no
+/// package installation, source copy, build, entry point, port or health
+/// check.
+#[test]
+fn p0_fg1_docker_recipe_fails_before_any_build_step() {
+    let dockerfile = read(&deploy_dir().join("Dockerfile"));
+    for line in dockerfile.lines() {
+        let lower = line.trim().to_ascii_lowercase();
+        let directive = lower.trim_start_matches('#').trim_start();
+        assert!(
+            !(lower.starts_with('#')
+                && ["syntax", "escape", "check"]
+                    .iter()
+                    .any(|key| directive.starts_with(key) && directive.contains('='))),
+            "no Dockerfile parser directive is allowed: {line}"
+        );
+    }
+    assert_eq!(
+        directive_lines(&dockerfile),
+        [
+            "FROM debian:bookworm-slim",
+            "RUN echo \"nexus-server: deploy/Dockerfile is withdrawn during Phase Zero; \
+             no image is built\" >&2; exit 1",
+        ],
+        "deploy/Dockerfile must fail at its first step and build nothing"
+    );
+    let upper = directive_lines(&dockerfile).join("\n").to_ascii_uppercase();
+    for forbidden in [
+        "COPY",
+        "ADD ",
+        "CARGO",
+        "APT",
+        "ENTRYPOINT",
+        "CMD",
+        "EXPOSE",
+        "HEALTHCHECK",
+        "VOLUME",
+        "USER",
+        "WORKDIR",
+        "ONBUILD",
+        " AS ",
+    ] {
+        assert!(
+            !upper.contains(forbidden),
+            "deploy/Dockerfile must not use {forbidden}"
+        );
+    }
+}
+
+/// Both J1 Compose recipes are non-operational stubs: no service, port,
+/// build, image, volume, credential or restart policy, including the
+/// companion Ollama service they used to publish.
+#[test]
+fn p0_fg1_compose_recipes_define_no_services() {
+    for name in ["docker-compose.yml", "docker-compose.cpu.yml"] {
+        let compose = read(&deploy_dir().join(name));
+        for forbidden in [
+            "ports:",
+            "image:",
+            "build:",
+            "environment:",
+            "env_file:",
+            "restart:",
+            "volumes:",
+            "command:",
+            "entrypoint:",
+            "secrets:",
+            "configs:",
+            "extends:",
+            "include:",
+            "profiles:",
+            "network_mode:",
+            "ollama",
+            "11434",
+            "3000",
+        ] {
+            assert!(
+                !directive_lines(&compose)
+                    .iter()
+                    .any(|line| line.to_ascii_lowercase().contains(forbidden)),
+                "deploy/{name} must not define `{forbidden}`"
+            );
+        }
+        assert_eq!(
+            directive_lines(&compose),
+            [
+                "version: \"3.9\"",
+                "x-nexus-withdrawn: \"nexus-server: this Compose recipe is withdrawn during \
+                 Phase Zero; it defines no services\"",
+                "services: {}",
+            ],
+            "deploy/{name} must be the withdrawal stub"
+        );
+    }
+}
+
+/// The J1 Helm chart renders nothing: its only template is an unconditional
+/// `fail`, so no values override can produce a Deployment, Service, volume
+/// claim or hook. Because rendering fails, an upgrade of an existing release
+/// changes nothing (and deletes nothing).
+#[test]
+fn p0_fg1_helm_chart_fails_for_every_values_override() {
+    let chart = deploy_dir().join("helm").join("nexus-os");
+    assert_eq!(entries(&chart), ["Chart.yaml", "templates", "values.yaml"]);
+    assert_eq!(entries(&chart.join("templates")), ["withdrawn.yaml"]);
+
+    let template = read(&chart.join("templates").join("withdrawn.yaml"));
+    assert_eq!(
+        directive_lines(&template),
+        ["{{- fail \"nexus-os chart: withdrawn during Phase Zero; it renders no resources\" -}}"],
+        "the only template must fail unconditionally"
+    );
+
+    let values = read(&chart.join("values.yaml"));
+    assert!(
+        directive_lines(&values).is_empty(),
+        "values.yaml must define no values"
+    );
+
+    let manifest = read(&chart.join("Chart.yaml"));
+    let manifest_lines = directive_lines(&manifest);
+    assert!(manifest_lines.contains(&"deprecated: true"));
+    assert!(manifest_lines.contains(&"type: application"));
+    for forbidden in ["dependencies:", "kubeVersion:"] {
+        assert!(
+            !manifest_lines
+                .iter()
+                .any(|line| line.starts_with(forbidden)),
+            "Chart.yaml must not declare `{forbidden}`"
+        );
+    }
+}
+
+/// The deployment README says the recipes are withdrawn, says that existing
+/// deployments are not stopped by this, and gives no command that installs,
+/// builds, starts or reaches the server.
+#[test]
+fn p0_fg1_deploy_readme_withdraws_without_claiming_a_stop() {
+    let readme = read(&deploy_dir().join("README.md"));
+    assert!(readme.contains("These recipes are withdrawn"));
+    assert!(readme.contains("An existing deployment is not stopped"));
+    for forbidden in [
+        "docker-compose up",
+        "docker compose up",
+        "docker build",
+        "docker run",
+        "helm install",
+        "helm upgrade",
+        "port-forward",
+        "cargo build",
+        "cargo run",
+        "./target/",
+        "curl ",
+    ] {
+        assert!(
+            !readme.contains(forbidden),
+            "deploy/README.md must not instruct `{forbidden}`"
         );
     }
 }

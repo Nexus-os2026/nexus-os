@@ -1,9 +1,10 @@
 apiVersion: v2
 name: nexus-os
-description: Nexus OS - Governed AI Agent Operating System
+description: WITHDRAWN during Phase Zero - this chart renders no resources (see templates/withdrawn.yaml)
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "9.6.0"
+deprecated: true
 keywords:
   - ai-agents
   - governance

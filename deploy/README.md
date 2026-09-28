@@ -1,67 +1,33 @@
-# Nexus OS Server Deployment
+# Withdrawn: `crates/nexus-server` deployment
 
-## Quick Start with Docker Compose
+**These recipes are withdrawn during Phase Zero (P0-FG1).**
 
-### With GPU (NVIDIA):
-```bash
-cd deploy
-docker-compose up -d
-```
+The files in this directory built and ran `crates/nexus-server`. That
+headless server exposed an HTTP API, the `nexus-mcp` tools and an A2A endpoint
+on ports 3000–3002 of every network interface, with no authentication and a
+CORS policy that admitted any origin (Final-Gate dossier item J1). It is
+withdrawn, not repaired.
 
-### CPU only:
-```bash
-cd deploy
-docker-compose -f docker-compose.cpu.yml up -d
-```
+## What the recipes do now
 
-### Verify:
-```bash
-curl http://localhost:3000/health
-```
+| File | Behaviour |
+|---|---|
+| `crates/nexus-server` binary | Every invocation prints one fixed message and exits with status 69. It reads no arguments, environment, configuration or credentials, creates no files and opens no sockets. |
+| `Dockerfile` | Fails at its first step. It installs no packages, copies no source and builds no image. |
+| `docker-compose.yml`, `docker-compose.cpu.yml` | Define no services, ports, volumes, credentials or restart policies. The Ollama service they used to publish on port 11434 is removed too. |
+| `helm/nexus-os` | Its only template fails, so no install, upgrade or values override renders a resource. |
 
-## Kubernetes with Helm
+## What this does not do
 
-```bash
-cd deploy/helm
-helm install nexus-os ./nexus-os
-
-# With custom values:
-helm install nexus-os ./nexus-os \
-  --set server.port=8080 \
-  --set persistence.size=50Gi \
-  --set env.OPENAI_API_KEY=sk-...
-```
-
-## Headless Server (Binary)
-
-```bash
-cargo build --release -p nexus-server
-./target/release/nexus-server --port 3000 --mcp-port 3001 --a2a-port 3002
-```
-
-## Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `--port` | 3000 | HTTP API port |
-| `--mcp-port` | 3001 | MCP server port (0 to disable) |
-| `--a2a-port` | 3002 | A2A server port (0 to disable) |
-| `--data-dir` | ./nexus-data | Data directory |
-| `--log-level` | info | Log level |
-| `OLLAMA_HOST` | http://localhost:11434 | Ollama server URL |
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /health | Server health + version |
-| GET | /status | Agent count, uptime, providers |
-| GET | /api/v1/agents | List all agents |
-| POST | /api/v1/agents/{id}/run | Execute an agent task |
-| GET | /api/v1/agents/{id}/status | Agent execution status |
-| GET | /api/v1/audit | Query audit trail |
-| GET | /mcp/tools/list | MCP tool listing |
-| POST | /mcp/tools/invoke | MCP tool invocation |
-| POST | /mcp/handle | Raw JSON-RPC MCP endpoint |
-| POST | /a2a | A2A task submission |
-| GET | /a2a/agent-card | A2A agent discovery |
+- **An existing deployment is not stopped.** Containers, images, volumes and
+  Helm releases created from earlier versions of these files keep running
+  until whoever operates them stops them with the tooling that started them.
+  Nothing in this repository stops, removes or changes them.
+- A Helm upgrade with this chart fails before it changes anything. It does not
+  delete a release's resources or its data volume claim.
+- Credentials that an earlier deployment could use (for example a GitHub
+  token given to the server) are not revoked by this change.
+- The `nexus-mcp` tools are not made safe to expose on a network.
+- The protocols server (the root `Dockerfile`, `docker-compose.yml`, `helm/`
+  and `install.sh`) is a separate Final-Gate item and is not changed here.
+- No volume, model file or user data is deleted.
