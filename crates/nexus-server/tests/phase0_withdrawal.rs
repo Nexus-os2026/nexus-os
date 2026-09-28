@@ -12,6 +12,13 @@
 //! interface when started, so these tests execute a file only after checking
 //! that rustc's dep-info names this package's `src/main.rs` and that the file
 //! carries this package's withdrawal message.
+//!
+//! On Windows (MSVC) Cargo gives executables no hash, so the two packages
+//! also share `deps\nexus_server.exe` and this package's build can be
+//! overwritten. When no Cargo build of this package can be identified there,
+//! the tests compile this package's only source file, `src/main.rs`, with the
+//! `rustc` of the toolchain that built them, and run that. On other platforms
+//! Cargo keeps a hashed build per package, and an unidentified build fails.
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -41,16 +48,28 @@ fn resolve_withdrawn_binary() -> PathBuf {
         uplifted.is_absolute(),
         "Cargo must give an absolute path, never a PATH lookup"
     );
-    // Cargo builds each target into `deps/nexus_server-<hash>` and then copies
-    // it to the shared path above. The builds of this package's target are
-    // the ones whose dep-info names this package's `src/main.rs`; the one to
-    // run also carries the withdrawal message (the unit-test build does not).
-    let deps = uplifted
-        .parent()
-        .expect("the executable has a parent directory")
-        .join("deps");
-    let mut candidates: Vec<(SystemTime, PathBuf)> = fs::read_dir(&deps)
-        .unwrap_or_else(|e| panic!("cannot list {}: {e}", deps.display()))
+    if let Some(build) = cargo_build_of_this_package(&uplifted) {
+        return build;
+    }
+    if !cfg!(windows) {
+        panic!(
+            "no Cargo build of crates/nexus-server was identified next to {}; \
+             refusing to run any other file",
+            uplifted.display()
+        );
+    }
+    build_from_package_source()
+}
+
+/// Cargo builds each target into `deps/` (`nexus_server-<hash>`, or
+/// `nexus_server.exe` on Windows) and copies it to the shared path. This
+/// package's build is the one whose rustc dep-info names this package's
+/// `src/main.rs` and whose bytes carry the withdrawal message (the unit-test
+/// build of the target has no entry point, so it does not).
+fn cargo_build_of_this_package(uplifted: &Path) -> Option<PathBuf> {
+    let deps = uplifted.parent()?.join("deps");
+    let mut builds: Vec<(SystemTime, PathBuf)> = fs::read_dir(&deps)
+        .ok()?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| {
@@ -63,28 +82,22 @@ fn resolve_withdrawn_binary() -> PathBuf {
             (modified, path)
         })
         .collect();
-    candidates.sort();
-    let newest = candidates.pop().map(|(_, path)| path).unwrap_or_else(|| {
-        panic!(
-            "no executable built from crates/nexus-server was found in {}; \
-             refusing to run any other file",
-            deps.display()
-        )
-    });
+    builds.sort();
+    let newest = builds.pop()?.1;
     // Prefer Cargo's own path when it holds exactly that build.
-    if same_contents(&uplifted, &newest) {
-        uplifted
+    Some(if same_contents(uplifted, &newest) {
+        uplifted.to_path_buf()
     } else {
         newest
-    }
+    })
 }
 
 /// A `deps/` file named for this target that the platform can execute.
 fn is_target_artifact(path: &Path) -> bool {
     let named = path
-        .file_name()
+        .file_stem()
         .and_then(|n| n.to_str())
-        .is_some_and(|n| n.starts_with("nexus_server-"));
+        .is_some_and(|n| n == "nexus_server" || n.starts_with("nexus_server-"));
     let executable = if cfg!(windows) {
         path.extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("exe"))
@@ -92,6 +105,54 @@ fn is_target_artifact(path: &Path) -> bool {
         path.extension().is_none()
     };
     named && executable && path.is_file()
+}
+
+/// Windows only: compiles this package's only source file with the `rustc`
+/// that sits beside the `cargo` that built these tests (never a `PATH`
+/// lookup), into this target's test directory. The structural guards below
+/// pin the package to that one file, with no build script or feature.
+fn build_from_package_source() -> PathBuf {
+    let rustc = PathBuf::from(env!("CARGO"))
+        .with_file_name(format!("rustc{}", std::env::consts::EXE_SUFFIX));
+    assert!(rustc.is_absolute(), "rustc must be an absolute path");
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("p0-fg1-package-source-build");
+    if dir.exists() {
+        fs::remove_dir_all(&dir).expect("clear the previous source build");
+    }
+    fs::create_dir_all(&dir).expect("create the source build directory");
+    let out = dir.join(format!("nexus-server{}", std::env::consts::EXE_SUFFIX));
+    let output = Command::new(&rustc)
+        .current_dir(&dir)
+        .args(["--edition", &workspace_edition()])
+        .args(["--crate-name", "nexus_server", "--crate-type", "bin", "-o"])
+        .arg(&out)
+        .arg(manifest_dir().join("src").join("main.rs"))
+        .output()
+        .unwrap_or_else(|e| panic!("run {}: {e}", rustc.display()));
+    assert!(
+        output.status.success(),
+        "compiling src/main.rs failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        carries_withdrawal(&out),
+        "the source build must carry the withdrawal message"
+    );
+    out
+}
+
+/// The workspace's Rust edition, which this package inherits.
+fn workspace_edition() -> String {
+    let manifest = read(&manifest_dir().join("..").join("..").join("Cargo.toml"));
+    manifest
+        .lines()
+        .map(str::trim)
+        .skip_while(|line| *line != "[workspace.package]")
+        .skip(1)
+        .take_while(|line| !line.starts_with('['))
+        .find_map(|line| line.strip_prefix("edition = "))
+        .map(|edition| edition.trim_matches('"').to_string())
+        .expect("the workspace declares its edition")
 }
 
 /// Whether rustc's dep-info for this artifact names this package's entry
@@ -601,6 +662,10 @@ fn p0_fg1_package_has_no_other_entry_or_module() {
         lines.iter().filter(|line| line.starts_with("[[")).count(),
         1
     );
+    assert!(
+        lines.contains(&"edition.workspace = true"),
+        "the package inherits the workspace edition (the Windows source build uses it)"
+    );
     for forbidden in [
         "[lib]",
         "build =",
@@ -608,6 +673,7 @@ fn p0_fg1_package_has_no_other_entry_or_module() {
         "[[bench]]",
         "[[test]]",
         "autobins",
+        "[features]",
     ] {
         assert!(
             !lines.iter().any(|line| line.starts_with(forbidden)),
