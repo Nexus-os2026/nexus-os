@@ -156,16 +156,9 @@ pub(crate) fn mcp_host_remove_server(
     Ok(json!({ "removed": removed }).to_string())
 }
 
-pub(crate) fn mcp_host_connect(state: &AppState, server_id: String) -> Result<String, String> {
-    let mut manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
-    let tools = manager.connect_server(&server_id)?;
-    let result = json!({
-        "server_id": server_id,
-        "tools_discovered": tools.len(),
-        "tools": tools,
-    });
-    serde_json::to_string(&result).map_err(|e| e.to_string())
-}
+// Final Gate item B: connecting to a server entry, and calling its tools,
+// reached the URL the caller registered. Both commands are closed in
+// `lib.rs`. Entries can still be added, listed and removed; that sends nothing.
 
 pub(crate) fn mcp_host_disconnect(state: &AppState, server_id: String) -> Result<String, String> {
     let mut manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
@@ -177,24 +170,6 @@ pub(crate) fn mcp_host_list_tools(state: &AppState) -> Result<String, String> {
     let manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
     let tools = manager.list_all_tools();
     serde_json::to_string(&tools).map_err(|e| e.to_string())
-}
-
-pub(crate) fn mcp_host_call_tool(
-    state: &AppState,
-    tool_name: String,
-    arguments: String,
-) -> Result<String, String> {
-    let args: serde_json::Value =
-        serde_json::from_str(&arguments).map_err(|e| format!("Invalid arguments JSON: {e}"))?;
-
-    let mut manager = state.mcp_host.lock().unwrap_or_else(|p| p.into_inner());
-    let mut audit = state.audit.clone();
-    // Governed call — enforces mcp.call capability and audit logging.
-    // UI-initiated calls run as Uuid::nil with full capabilities.
-    let result = manager.call_tool(&tool_name, args, SYSTEM_UUID, &["mcp.call"], &mut audit)?;
-    drop(manager);
-
-    serde_json::to_string(&result).map_err(|e| e.to_string())
 }
 
 // ── Ghost Protocol commands ─────────────────────────────────────────────

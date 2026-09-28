@@ -135,63 +135,28 @@ fn url_path_values_are_checked_before_use() {
     }
 }
 
+/// Final Gate item B (replaces the C5B shape test of this command): the API
+/// client sent a request to a URL the caller chose and returned the response,
+/// and a URL is not an egress grant. The command is now closed. It reads no
+/// method, URL, header or body at all, so no caller value can become curl
+/// syntax, a request or an audit record, and this module runs no process.
 #[test]
-fn p0_002c5b_api_client_requests_never_become_curl_syntax() {
-    let state = AppState::new_in_memory();
-    let request = |method: &str, url: &str, headers: &str| {
-        api_client_request(
-            &state,
-            method.into(),
-            url.into(),
-            headers.into(),
-            "@/etc/passwd".into(),
-        )
-    };
-    for url in [
-        "file:///etc/passwd",
-        "-K/etc/passwd",
-        "--config=/etc/passwd",
-        "@/etc/passwd",
-        "gopher://example.com/",
-        "https://trusted.example@marker-host.example/",
-    ] {
-        assert_eq!(
-            request("POST", url, "[]").unwrap_err(),
-            "api_client_request: invalid url",
-            "{url:?}"
-        );
+fn p0_fg_api_client_requests_are_closed_and_run_nothing() {
+    let source = include_str!("../apps.rs");
+    for gone in ["fn api_client_request(", "Command::new(\"curl\")", "curl"] {
+        assert!(!source.contains(gone), "apps.rs still has {gone}");
     }
-    for method in ["-K", "TRACE", "GET /x HTTP/1.1", ""] {
-        assert_eq!(
-            request(method, "https://example.invalid/", "[]").unwrap_err(),
-            "api_client_request: unsupported method",
-            "{method:?}"
-        );
-    }
-    for headers in [
-        r#"[["@/etc/passwd","x"]]"#,
-        r#"[["X-A","v\r\nX-Injected: 1"]]"#,
-    ] {
-        assert_eq!(
-            request("GET", "https://example.invalid/", headers).unwrap_err(),
-            "api_client_request: invalid header",
-            "{headers:?}"
-        );
-    }
-    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
-    let logged = serde_json::to_string(
-        &audit
-            .events()
-            .iter()
-            .map(|e| &e.payload)
-            .collect::<Vec<_>>(),
-    )
-    .unwrap();
-    assert!(!logged.contains("marker-host"));
-    assert!(!logged.contains("/etc/passwd"));
-    for reason in ["invalid_url", "unsupported_method", "invalid_header"] {
-        assert!(logged.contains(reason), "{reason}");
-    }
+    #[cfg(all(
+        feature = "tauri-runtime",
+        any(target_os = "windows", target_os = "macos", target_os = "linux")
+    ))]
+    assert_eq!(
+        crate::runtime::api_client_request(),
+        Err(crate::phase0_surface::closed(
+            "api_client_request",
+            crate::phase0_surface::Closure::NetworkDestination,
+        ))
+    );
 }
 
 #[test]

@@ -50,7 +50,15 @@ pub(crate) enum Closure {
     ScreenObservation,
     // Final Gate items B, C, F and I: egress, credential transport, peers and
     // helper programs.
-
+    /// Final Gate item B: a network destination chosen by the interface or a
+    /// model. A syntactically valid URL, host name or `host:port` is not an
+    /// egress grant, and no backend-owned destination policy authorizes such
+    /// a route in Phase Zero.
+    NetworkDestination,
+    /// Final Gate item F: a model transfer to a Nexus Link peer. A peer
+    /// address is not authority, and Phase Zero has no pairing or peer
+    /// authentication.
+    PeerTransfer,
     // Final Gate items A and H: stored secrets.
 }
 
@@ -79,6 +87,12 @@ impl Closure {
             }
             Self::ScreenObservation => "governed screen observation is unavailable in Phase Zero",
             // Final Gate items B, C, F and I.
+            Self::NetworkDestination => {
+                "a network destination chosen by the interface or a model is not egress authority in Phase Zero"
+            }
+            Self::PeerTransfer => {
+                "peer model transfer is unavailable in Phase Zero: a peer address is not authority, and no peer is paired or authenticated"
+            }
 
             // Final Gate items A and H.
         }
