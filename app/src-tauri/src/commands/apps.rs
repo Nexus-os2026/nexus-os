@@ -1405,7 +1405,7 @@ fn messaging_connect_with(
     block_on_async(check_messaging_connectivity(known, &token_value, endpoints))
 }
 
-/// Where the connectivity check sends its one request.
+/// Where the connectivity check sends its one request, and its bounds.
 struct MessagingEndpoints<'a> {
     /// Base URL; the bot token goes in the path.
     telegram: &'a str,
@@ -1413,34 +1413,43 @@ struct MessagingEndpoints<'a> {
     slack: &'a str,
     /// `users/@me` URL; the token goes in the Authorization header.
     discord: &'a str,
+    /// Bound on the whole request, from connecting to the last body byte.
+    timeout: std::time::Duration,
+    /// Largest response body read; a longer one fails the check unread.
+    max_body_bytes: usize,
 }
 
 const MESSAGING_ENDPOINTS: MessagingEndpoints<'static> = MessagingEndpoints {
     telegram: "https://api.telegram.org",
     slack: "https://slack.com/api/auth.test",
     discord: "https://discord.com/api/v10/users/@me",
+    timeout: std::time::Duration::from_secs(10),
+    max_body_bytes: 64 * 1024,
 };
 
-/// Tests a stored bot token against its platform. A transport or body error
-/// is reported without its URL (`without_url`): Telegram carries the token in
-/// the URL path, and an error returns to the interface (Final Gate item H).
+/// Tests a stored bot token against its platform. The request is bounded in
+/// time and its response body in size. A transport or body error is reported
+/// without its URL (`without_url`): Telegram carries the token in the URL
+/// path, and an error returns to the interface (Final Gate item H).
 async fn check_messaging_connectivity(
     platform: &'static str,
     token_value: &str,
     endpoints: &MessagingEndpoints<'_>,
 ) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(endpoints.timeout)
+        .build()
+        .map_err(|e| format!("{platform} test: {}", e.without_url()))?;
+    let max = endpoints.max_body_bytes;
     match platform {
         "telegram" => {
             let url = format!("{}/bot{}/getMe", endpoints.telegram, token_value);
-            let resp = reqwest::Client::new()
+            let resp = client
                 .get(&url)
                 .send()
                 .await
                 .map_err(|e| format!("telegram test: {}", e.without_url()))?;
-            let body = resp
-                .text()
-                .await
-                .map_err(|e| format!("telegram body: {}", e.without_url()))?;
+            let body = capped_body(resp, max, "telegram body").await?;
             let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
             if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
                 let bot_name = data
@@ -1454,16 +1463,13 @@ async fn check_messaging_connectivity(
             }
         }
         "slack" => {
-            let resp = reqwest::Client::new()
+            let resp = client
                 .post(endpoints.slack)
                 .bearer_auth(token_value)
                 .send()
                 .await
                 .map_err(|e| format!("slack test: {}", e.without_url()))?;
-            let body = resp
-                .text()
-                .await
-                .map_err(|e| format!("slack body: {}", e.without_url()))?;
+            let body = capped_body(resp, max, "slack body").await?;
             let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
             if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
                 let team = data
@@ -1485,17 +1491,14 @@ async fn check_messaging_connectivity(
             }
         }
         "discord" => {
-            let resp = reqwest::Client::new()
+            let resp = client
                 .get(endpoints.discord)
                 .header("Authorization", format!("Bot {}", token_value))
                 .send()
                 .await
                 .map_err(|e| format!("discord test: {}", e.without_url()))?;
             let status = resp.status();
-            let body = resp
-                .text()
-                .await
-                .map_err(|e| format!("discord body: {}", e.without_url()))?;
+            let body = capped_body(resp, max, "discord body").await?;
             if status.is_success() {
                 let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
                 let name = data
@@ -1509,6 +1512,35 @@ async fn check_messaging_connectivity(
         }
         _ => Ok(json!({"connected": true}).to_string()),
     }
+}
+
+/// A connectivity response body of at most `max` bytes, as text. A longer
+/// body (declared or streamed) fails the check without the rest being read.
+/// Errors carry `context` and never the request URL.
+async fn capped_body(
+    mut resp: reqwest::Response,
+    max: usize,
+    context: &str,
+) -> Result<String, String> {
+    let too_large = || format!("{context}: response too large");
+    if resp
+        .content_length()
+        .is_some_and(|declared| declared > max as u64)
+    {
+        return Err(too_large());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| format!("{context}: {}", e.without_url()))?
+    {
+        if chunk.len() > max - body.len() {
+            return Err(too_large());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(String::from_utf8_lossy(&body).into_owned())
 }
 
 pub(crate) fn messaging_send(

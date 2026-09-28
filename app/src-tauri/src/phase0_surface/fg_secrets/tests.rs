@@ -398,10 +398,29 @@ fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
     );
     assert!(!read.contains("fs::write("), "{read}");
     // A connectivity error never carries the request URL, which holds the
-    // Telegram token.
+    // Telegram token. The request is bounded in time (one client, built with
+    // the endpoints' timeout) and every body is read through the size cap.
     let check = body(&apps, "async fn check_messaging_connectivity(");
     assert!(!check.contains("{e}"), "{check}");
-    assert_eq!(check.matches("e.without_url()").count(), 6, "{check}");
+    assert_eq!(check.matches("e.without_url()").count(), 4, "{check}");
+    let compact_check = compact(&check);
+    assert!(
+        compact_check
+            .starts_with("letclient=reqwest::Client::builder().timeout(endpoints.timeout).build()"),
+        "{check}"
+    );
+    assert_eq!(check.matches("reqwest::Client").count(), 1, "{check}");
+    assert_eq!(
+        compact_check.matches("capped_body(resp,max,").count(),
+        3,
+        "{check}"
+    );
+    for unbounded in [".text()", ".bytes()", ".json("] {
+        assert!(!check.contains(unbounded), "{unbounded}");
+    }
+    let capped = body(&apps, "async fn capped_body(");
+    assert!(!capped.contains("{e}"), "{capped}");
+    assert_eq!(capped.matches("e.without_url()").count(), 1, "{capped}");
 }
 
 /// Final Gate item H: API Client collections are checked for authentication

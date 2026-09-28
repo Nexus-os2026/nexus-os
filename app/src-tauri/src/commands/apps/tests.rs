@@ -597,6 +597,8 @@ fn p0_fg_h_messaging_connect_takes_only_the_stored_token() {
         telegram: &telegram,
         slack: &slack,
         discord: &discord,
+        timeout: std::time::Duration::from_secs(5),
+        max_body_bytes: 1024,
     };
     let connect = |platform: &str, token: &str| {
         messaging_connect_with(
@@ -721,6 +723,8 @@ fn p0_fg_h_messaging_connect_errors_never_carry_the_token() {
         telegram: &telegram,
         slack: &slack,
         discord: &discord,
+        timeout: std::time::Duration::from_secs(5),
+        max_body_bytes: 1024,
     };
     let token = "123456789:markerSecretToken";
     for platform in ["telegram", "slack", "discord"] {
@@ -731,4 +735,133 @@ fn p0_fg_h_messaging_connect_errors_never_carry_the_token() {
             assert!(!error.contains(leaked), "{platform}: {leaked}: {error}");
         }
     }
+}
+
+/// A loopback HTTP server standing in for a messaging platform, with the
+/// platform URLs that point at it. Every request is answered with `response`
+/// and the connection closed; with `None` no request is ever answered (each
+/// connection is held open until the test process ends).
+fn loopback_platform(response: Option<Vec<u8>>) -> [String; 3] {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        let mut held = Vec::new();
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let Some(response) = &response else {
+                held.push(stream);
+                continue;
+            };
+            let (mut request, mut buf) = (Vec::new(), [0_u8; 1024]);
+            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                match stream.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => request.extend_from_slice(&buf[..n]),
+                }
+            }
+            // The client may stop reading early; a failed write is fine.
+            let _ = stream.write_all(response);
+        }
+    });
+    [
+        base.clone(),
+        format!("{base}/api/auth.test"),
+        format!("{base}/api/v10/users/@me"),
+    ]
+}
+
+/// An HTTP/1.1 response with `body`, its length declared or (`declared`
+/// false) delimited by closing the connection.
+fn http_response(body: &str, declared: bool) -> Vec<u8> {
+    let length = if declared {
+        format!("Content-Length: {}\r\n", body.len())
+    } else {
+        String::new()
+    };
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n{length}Connection: close\r\n\r\n{body}"
+    )
+    .into_bytes()
+}
+
+/// Final Gate item H (stream 4 review): the connectivity check is bounded in
+/// time. A platform that accepts the connection and never answers fails the
+/// check once the request timeout passes, without the token in the error.
+#[test]
+fn p0_fg_h_messaging_connect_is_bounded_in_time() {
+    let urls = loopback_platform(None);
+    for platform in ["telegram", "slack", "discord"] {
+        let urls = urls.clone();
+        let (sent, received) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let endpoints = MessagingEndpoints {
+                telegram: &urls[0],
+                slack: &urls[1],
+                discord: &urls[2],
+                timeout: std::time::Duration::from_millis(200),
+                max_body_bytes: 1024,
+            };
+            let _ = sent.send(block_on_async(check_messaging_connectivity(
+                platform,
+                "123456789:markerSecretToken",
+                &endpoints,
+            )));
+        });
+        // Far beyond the 200 ms bound: an unbounded request never returns.
+        let error = received
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("the check ended within its time bound")
+            .expect_err("an unanswered request fails");
+        assert!(error.starts_with(&format!("{platform} test: ")), "{error}");
+        assert!(!error.contains("markerSecretToken"), "{error}");
+    }
+}
+
+/// Final Gate item H (stream 4 review): the connectivity check reads a
+/// bounded response body. A body over the bound, declared or streamed until
+/// the connection closes, fails the check without being read; a body within
+/// it is read and used.
+#[test]
+fn p0_fg_h_messaging_connect_reads_a_bounded_body() {
+    let max = 1024;
+    let oversized = "x".repeat(max + 1);
+    for declared in [true, false] {
+        let urls = loopback_platform(Some(http_response(&oversized, declared)));
+        let endpoints = MessagingEndpoints {
+            telegram: &urls[0],
+            slack: &urls[1],
+            discord: &urls[2],
+            timeout: std::time::Duration::from_secs(10),
+            max_body_bytes: max,
+        };
+        for platform in ["telegram", "slack", "discord"] {
+            assert_eq!(
+                block_on_async(check_messaging_connectivity(
+                    platform,
+                    "123456789:markerSecretToken",
+                    &endpoints
+                )),
+                Err(format!("{platform} body: response too large")),
+                "declared: {declared}"
+            );
+        }
+    }
+    let bot = r#"{"ok":true,"result":{"username":"synthetic_bot"}}"#;
+    let urls = loopback_platform(Some(http_response(bot, true)));
+    let endpoints = MessagingEndpoints {
+        telegram: &urls[0],
+        slack: &urls[1],
+        discord: &urls[2],
+        timeout: std::time::Duration::from_secs(10),
+        max_body_bytes: max,
+    };
+    assert_eq!(
+        block_on_async(check_messaging_connectivity(
+            "telegram",
+            "123456789:markerSecretToken",
+            &endpoints
+        )),
+        Ok(json!({"connected": true, "bot_name": "synthetic_bot"}).to_string())
+    );
 }
