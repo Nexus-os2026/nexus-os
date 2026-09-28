@@ -602,9 +602,22 @@ fn production_sources() -> Vec<(String, String)> {
 /// may name them (their definitions, their own libraries, and the withdrawn
 /// CLI library that the withdrawn CLI binary used to call).
 const ALIAS_NEEDLES: &[(&str, &[&str])] = &[
-    // J2, J3: the protocols gateway runtime.
+    // J2, J3: the protocols gateway runtime, and the gateway module and
+    // router constructor it serves (public API of the `nexus-protocols`
+    // library).
     ("server_runtime", &["protocols/src/lib.rs"]),
     ("run_from_args", &["protocols/src/server_runtime.rs"]),
+    (
+        "http_gateway",
+        &["protocols/src/lib.rs", "protocols/src/server_runtime.rs"],
+    ),
+    (
+        "build_router",
+        &[
+            "protocols/src/http_gateway.rs",
+            "protocols/src/server_runtime.rs",
+        ],
+    ),
     // J4: the CLI library, and the agent flows its binary ran (D1).
     ("nexus_cli", &[]),
     (
@@ -628,9 +641,11 @@ const ALIAS_NEEDLES: &[(&str, &[&str])] = &[
     ("run_tui(", &["nexus-code/src/tui/mod.rs"]),
 ];
 
-/// No production source reaches a withdrawn surface's entry APIs except the
-/// counted files above, so no other binary, example or library can become an
-/// alternate alias of a withdrawn surface.
+/// No production source names a listed entry API of a withdrawn surface
+/// outside the counted files above, so no other binary, example or library
+/// calls one of them to become an alternate alias. The needles are names,
+/// not a call graph: an entry API that is not listed here is not covered,
+/// and a new one needs a row.
 #[test]
 fn p0_fg_standalone_no_alias_reaches_a_withdrawn_entry() {
     let sources = production_sources();
