@@ -624,3 +624,38 @@ fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
         "api_client_save_collections: collections must be JSON"
     );
 }
+
+/// Final Gate item H (stream 3 report): a failed connectivity check never
+/// returns the stored bot token. Telegram carries it in the URL path, and a
+/// transport error's text used to include the URL. Each request goes to a
+/// loopback listener that closes every connection without answering, so it
+/// fails in transport with no external network.
+#[test]
+fn p0_fg_h_messaging_connect_errors_never_carry_the_token() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    // Detached: it accepts and drops connections until the test process ends,
+    // so no request can wait on an unanswered connection.
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            drop(stream);
+        }
+    });
+    let telegram = format!("http://127.0.0.1:{port}");
+    let slack = format!("http://127.0.0.1:{port}/api/auth.test");
+    let discord = format!("http://127.0.0.1:{port}/api/v10/users/@me");
+    let endpoints = MessagingEndpoints {
+        telegram: &telegram,
+        slack: &slack,
+        discord: &discord,
+    };
+    let token = "123456789:markerSecretToken";
+    for platform in ["telegram", "slack", "discord"] {
+        let error = block_on_async(check_messaging_connectivity(platform, token, &endpoints))
+            .expect_err("a closed connection is a transport error");
+        assert!(error.starts_with(&format!("{platform} ")), "{error}");
+        for leaked in ["markerSecretToken", "123456789", "127.0.0.1", "http"] {
+            assert!(!error.contains(leaked), "{platform}: {leaked}: {error}");
+        }
+    }
+}

@@ -1371,87 +1371,117 @@ pub(crate) fn messaging_connect_platform(
         json!({"action": "messaging_connect", "platform": known}),
     );
 
-    // Test connectivity
-    let test_result = block_on_async(async {
-        match platform.as_str() {
-            "telegram" => {
-                let url = format!("https://api.telegram.org/bot{}/getMe", token_value);
-                let resp = reqwest::Client::new()
-                    .get(&url)
-                    .send()
-                    .await
-                    .map_err(|e| format!("telegram test: {e}"))?;
-                let body = resp
-                    .text()
-                    .await
-                    .map_err(|e| format!("telegram body: {e}"))?;
-                let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
-                if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
-                    let bot_name = data
-                        .get("result")
-                        .and_then(|r| r.get("username"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    Ok(json!({"connected": true, "bot_name": bot_name}).to_string())
-                } else {
-                    Err("Invalid Telegram bot token".to_string())
-                }
-            }
-            "slack" => {
-                let resp = reqwest::Client::new()
-                    .post("https://slack.com/api/auth.test")
-                    .bearer_auth(&token_value)
-                    .send()
-                    .await
-                    .map_err(|e| format!("slack test: {e}"))?;
-                let body = resp.text().await.map_err(|e| format!("slack body: {e}"))?;
-                let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
-                if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
-                    let team = data
-                        .get("team")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
+    block_on_async(check_messaging_connectivity(
+        known,
+        &token_value,
+        &MESSAGING_ENDPOINTS,
+    ))
+}
 
-                    // Final Gate item H: no Socket Mode URL is requested or
-                    // cached on disk; `realtime` only reports an app-level
-                    // (xapp-*) token.
-                    Ok(json!({"connected": true, "team": team, "realtime": token_value.starts_with("xapp-")}).to_string())
-                } else {
-                    Err(format!(
-                        "Slack auth failed: {}",
-                        data.get("error")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown")
-                    ))
-                }
+/// Where the connectivity check sends its one request.
+struct MessagingEndpoints<'a> {
+    /// Base URL; the bot token goes in the path.
+    telegram: &'a str,
+    /// `auth.test` URL; the token goes in the Authorization header.
+    slack: &'a str,
+    /// `users/@me` URL; the token goes in the Authorization header.
+    discord: &'a str,
+}
+
+const MESSAGING_ENDPOINTS: MessagingEndpoints<'static> = MessagingEndpoints {
+    telegram: "https://api.telegram.org",
+    slack: "https://slack.com/api/auth.test",
+    discord: "https://discord.com/api/v10/users/@me",
+};
+
+/// Tests a stored bot token against its platform. A transport or body error
+/// is reported without its URL (`without_url`): Telegram carries the token in
+/// the URL path, and an error returns to the interface (Final Gate item H).
+async fn check_messaging_connectivity(
+    platform: &'static str,
+    token_value: &str,
+    endpoints: &MessagingEndpoints<'_>,
+) -> Result<String, String> {
+    match platform {
+        "telegram" => {
+            let url = format!("{}/bot{}/getMe", endpoints.telegram, token_value);
+            let resp = reqwest::Client::new()
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| format!("telegram test: {}", e.without_url()))?;
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| format!("telegram body: {}", e.without_url()))?;
+            let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+            if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+                let bot_name = data
+                    .get("result")
+                    .and_then(|r| r.get("username"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                Ok(json!({"connected": true, "bot_name": bot_name}).to_string())
+            } else {
+                Err("Invalid Telegram bot token".to_string())
             }
-            "discord" => {
-                let resp = reqwest::Client::new()
-                    .get("https://discord.com/api/v10/users/@me")
-                    .header("Authorization", format!("Bot {}", token_value))
-                    .send()
-                    .await
-                    .map_err(|e| format!("discord test: {e}"))?;
-                let status = resp.status();
-                let body = resp
-                    .text()
-                    .await
-                    .map_err(|e| format!("discord body: {e}"))?;
-                if status.is_success() {
-                    let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
-                    let name = data
-                        .get("username")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    Ok(json!({"connected": true, "bot_name": name}).to_string())
-                } else {
-                    Err(format!("Discord auth failed ({status})"))
-                }
-            }
-            _ => Ok(json!({"connected": true}).to_string()),
         }
-    })?;
-    Ok(test_result)
+        "slack" => {
+            let resp = reqwest::Client::new()
+                .post(endpoints.slack)
+                .bearer_auth(token_value)
+                .send()
+                .await
+                .map_err(|e| format!("slack test: {}", e.without_url()))?;
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| format!("slack body: {}", e.without_url()))?;
+            let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+            if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+                let team = data
+                    .get("team")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+
+                // Final Gate item H: no Socket Mode URL is requested or
+                // cached on disk; `realtime` only reports an app-level
+                // (xapp-*) token.
+                Ok(json!({"connected": true, "team": team, "realtime": token_value.starts_with("xapp-")}).to_string())
+            } else {
+                Err(format!(
+                    "Slack auth failed: {}",
+                    data.get("error")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                ))
+            }
+        }
+        "discord" => {
+            let resp = reqwest::Client::new()
+                .get(endpoints.discord)
+                .header("Authorization", format!("Bot {}", token_value))
+                .send()
+                .await
+                .map_err(|e| format!("discord test: {}", e.without_url()))?;
+            let status = resp.status();
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| format!("discord body: {}", e.without_url()))?;
+            if status.is_success() {
+                let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+                let name = data
+                    .get("username")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                Ok(json!({"connected": true, "bot_name": name}).to_string())
+            } else {
+                Err(format!("Discord auth failed ({status})"))
+            }
+        }
+        _ => Ok(json!({"connected": true}).to_string()),
+    }
 }
 
 pub(crate) fn messaging_send(

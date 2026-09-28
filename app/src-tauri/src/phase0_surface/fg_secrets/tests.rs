@@ -390,6 +390,11 @@ fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
         "{read}"
     );
     assert!(!read.contains("fs::write("), "{read}");
+    // A connectivity error never carries the request URL, which holds the
+    // Telegram token.
+    let check = body(&apps, "async fn check_messaging_connectivity(");
+    assert!(!check.contains("{e}"), "{check}");
+    assert_eq!(check.matches("e.without_url()").count(), 6, "{check}");
 }
 
 /// Final Gate item H: API Client collections are checked for authentication
