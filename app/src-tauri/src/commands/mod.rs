@@ -10,6 +10,7 @@ pub mod consent;
 pub mod crate_bridges;
 pub mod enterprise;
 pub mod flash;
+pub mod frontend_errors;
 pub mod governance;
 pub mod model_hub;
 pub mod oracle_runtime;

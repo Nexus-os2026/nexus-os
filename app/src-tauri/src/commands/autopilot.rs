@@ -199,7 +199,18 @@ pub(crate) fn voice_project_update_intent(
 
 // ── Stress Test ──
 
+/// Most personas one `stress_generate_personas` request may generate. The
+/// count comes from the interface, and every persona is allocated and then
+/// serialized into one response, so a count outside `1..=MAX_STRESS_PERSONAS`
+/// is refused, never clamped, before the simulator is locked.
+pub(crate) const MAX_STRESS_PERSONAS: u32 = 1_000;
+
 pub(crate) fn stress_generate_personas(state: &AppState, count: u32) -> Result<String, String> {
+    if !(1..=MAX_STRESS_PERSONAS).contains(&count) {
+        return Err(format!(
+            "persona count must be between 1 and {MAX_STRESS_PERSONAS}, got {count}"
+        ));
+    }
     let sim = state
         .stress_simulator
         .lock()
