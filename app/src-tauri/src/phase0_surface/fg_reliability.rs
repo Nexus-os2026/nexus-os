@@ -63,6 +63,136 @@ fn p0_fg_k_approved_limits_are_pinned() {
     assert_eq!(crate::MAX_FRONTEND_ERROR_FIELD_BYTES, 8 * 1024);
     assert_eq!(crate::MAX_FRONTEND_ERROR_LOG_BYTES, 4 * 1024 * 1024);
     assert_eq!(web_builder_agent::budget::MAX_BUILD_HISTORY, 1_000);
+    assert_eq!(nexus_kernel::immune::arena::MAX_ARENA_ROUNDS, 50);
+    assert_eq!(nexus_kernel::temporal::types::MAX_TEMPORAL_FORKS, 10);
+    assert_eq!(
+        nexus_kernel::temporal::types::MAX_FORK_BUDGET_TOKENS,
+        200_000
+    );
+}
+
+#[test]
+fn p0_fg_k_adversarial_rounds_are_refused_outside_their_bound() {
+    // Through the IPC command's own function (consent.rs), unchanged: the
+    // kernel refuses before allocating, and the refusal is the command's error.
+    for rounds in [0, 51, 10_000] {
+        let error = crate::run_adversarial_session("attacker".into(), "defender".into(), rounds)
+            .expect_err("an out-of-range round count must be refused");
+        assert_eq!(
+            error,
+            format!("arena rounds must be between 1 and 50, got {rounds}")
+        );
+    }
+    for rounds in [1, 50] {
+        let session =
+            crate::run_adversarial_session("attacker".into(), "defender".into(), rounds).unwrap();
+        assert_eq!(session["rounds"], rounds);
+        assert_eq!(
+            session["results"].as_array().map(Vec::len),
+            Some(rounds as usize)
+        );
+    }
+}
+
+#[test]
+fn p0_fg_k_temporal_fork_limits_are_refused_and_never_stored() {
+    let state = AppState::new_in_memory();
+    let stored = |state: &AppState| {
+        let engine = state.temporal_engine.lock().unwrap();
+        (
+            engine.config().max_parallel_forks,
+            engine.config().fork_budget_tokens,
+        )
+    };
+    let before = stored(&state);
+    for (forks, tokens) in [
+        (0, 50_000),
+        (11, 50_000),
+        (u32::MAX, 50_000),
+        (5, 0),
+        (5, 200_001),
+        (5, u64::MAX),
+    ] {
+        assert!(
+            crate::set_temporal_config(&state, forks, "BestFinalScore".into(), tokens).is_err(),
+            "{forks} forks, {tokens} tokens"
+        );
+        assert_eq!(stored(&state), before, "a refused config was stored");
+    }
+    // A fork-count override is refused before the configuration is read, a
+    // provider is built or the model is called, and is never stored.
+    for forks in [0, 11, u32::MAX] {
+        let error = crate::temporal_fork(&state, "request".into(), "agent".into(), Some(forks))
+            .expect_err("an out-of-range fork count must be refused");
+        assert_eq!(
+            error,
+            format!("invalid fork count: {forks} (allowed: 1 to 10)")
+        );
+        assert_eq!(stored(&state), before);
+    }
+    crate::set_temporal_config(&state, 10, "BestFinalScore".into(), 200_000).unwrap();
+    assert_eq!(stored(&state), (10, 200_000));
+    crate::set_temporal_config(&state, 1, "LowestRisk".into(), 1).unwrap();
+    assert_eq!(stored(&state), (1, 1));
+}
+
+#[test]
+fn p0_fg_k_an_older_loops_exit_keeps_a_newer_loops_cancellation_entry() {
+    use crate::commands::cognitive::CognitiveCancelGuard;
+    let state = AppState::new_in_memory();
+    let id = agent(&state, "fg-k-cancel");
+    let entry = |state: &AppState| {
+        state
+            .cognitive_cancellations
+            .lock()
+            .unwrap()
+            .get(&id)
+            .cloned()
+    };
+    let executor = crate::commands::cognitive::ScheduledGoalExecutor {
+        state: state.clone(),
+    };
+
+    let (older_flag, older) = CognitiveCancelGuard::register(&state, &id);
+    let (newer_flag, newer) = CognitiveCancelGuard::register(&state, &id);
+    assert!(Arc::ptr_eq(&entry(&state).unwrap(), &newer_flag));
+
+    // The older loop ends first: the newer loop's entry must stay, so Stop
+    // and the scheduler still see the loop that is running.
+    drop(older);
+    let current = entry(&state).expect("the newer loop's entry was erased");
+    assert!(Arc::ptr_eq(&current, &newer_flag));
+    assert!(!Arc::ptr_eq(&current, &older_flag));
+    assert!(executor.execute(&id, "scheduled goal").is_err());
+
+    // The newer loop ends: its own entry goes, and ticks run again.
+    drop(newer);
+    assert!(entry(&state).is_none());
+    executor.execute(&id, "scheduled goal").unwrap();
+
+    // Reverse order: the newer loop ends first, then the older one; the
+    // older guard finds no entry of its own and removes nothing.
+    let other = agent(&state, "fg-k-cancel-reverse");
+    let (_, older) = CognitiveCancelGuard::register(&state, &other);
+    let (_, newer) = CognitiveCancelGuard::register(&state, &other);
+    drop(newer);
+    let (third_flag, third) = CognitiveCancelGuard::register(&state, &other);
+    drop(older);
+    let current = state
+        .cognitive_cancellations
+        .lock()
+        .unwrap()
+        .get(&other)
+        .cloned()
+        .expect("a stale guard erased a later loop's entry");
+    assert!(Arc::ptr_eq(&current, &third_flag));
+    drop(third);
+    assert!(state
+        .cognitive_cancellations
+        .lock()
+        .unwrap()
+        .get(&other)
+        .is_none());
 }
 
 #[test]
