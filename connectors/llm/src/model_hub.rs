@@ -384,32 +384,36 @@ pub fn download_model_file(
     // Start curl download in the background: HTTPS only, including redirects,
     // failing on HTTP errors, with the URL after `--`. A stalled transfer is
     // abandoned, and curl stops a transfer that reaches the backend maximum.
+    // Final Gate item I: the in-flight registry starts the transfer and owns
+    // it until the download ends, so the application ends it at exit.
     let max_filesize = MAX_MODEL_FILE_BYTES.to_string();
-    let mut child = Command::new("curl")
-        .args(nexus_kernel::governed_http::CURL_HTTPS_ONLY)
-        .args([
-            "-sS",
-            "-L",
-            "--fail",
-            "--connect-timeout",
-            "30",
-            "--speed-limit",
-            "1",
-            "--speed-time",
-            "120",
-            "--max-filesize",
-            &max_filesize,
-            "-o",
-        ])
-        .arg(&file_path_str)
-        .arg("--")
-        .arg(&url)
-        .spawn()
-        .map_err(|e| format!("curl spawn failed: {e}"))?;
+    let mut transfer = IN_FLIGHT_DOWNLOADS.start(file_path.clone(), || {
+        Command::new("curl")
+            .args(nexus_kernel::governed_http::CURL_HTTPS_ONLY)
+            .args([
+                "-sS",
+                "-L",
+                "--fail",
+                "--connect-timeout",
+                "30",
+                "--speed-limit",
+                "1",
+                "--speed-time",
+                "120",
+                "--max-filesize",
+                &max_filesize,
+                "-o",
+            ])
+            .arg(&file_path_str)
+            .arg("--")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| format!("curl spawn failed: {e}"))
+    })?;
 
     // Monitor file size growth while curl runs, whatever size was declared.
     let final_size = watch_download(
-        &mut child,
+        &mut transfer,
         &file_path,
         MAX_MODEL_FILE_BYTES,
         std::time::Duration::from_millis(500),
@@ -461,15 +465,276 @@ trait Transfer {
     fn stop(&mut self);
 }
 
-impl Transfer for std::process::Child {
-    fn finished(&mut self) -> std::io::Result<Option<bool>> {
+// ─── In-flight downloads (Final Gate item I) ─────────────────────────────────
+//
+// A model download runs a curl child for as long as the transfer takes. It
+// used to be owned only by the thread watching it, so it outlived the
+// application: nothing stopped it at exit. Each child is now started and
+// owned by an in-flight registry until its download ends, and
+// `terminate_in_flight_downloads` ends every one: through the owned handle
+// only (kill, then reap), never by process id, name or port, within a bound,
+// reporting truthfully what it could not confirm. No download starts after it.
+
+/// The total time `terminate_in_flight_downloads` waits for killed transfers
+/// to be reaped.
+pub const DOWNLOAD_TERMINATION_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// How often a killed transfer is checked for its exit.
+const REAP_POLL: std::time::Duration = std::time::Duration::from_millis(10);
+
+/// The downloads this process runs, for the application's exit.
+static IN_FLIGHT_DOWNLOADS: InFlightDownloads = InFlightDownloads::new();
+
+/// End every in-flight model download for the application's exit, within
+/// [`DOWNLOAD_TERMINATION_WAIT`]; no download starts afterwards. Each
+/// transfer is killed and reaped through its owned handle only, and its
+/// partial file removed. A transfer that had already ended is reaped, not an
+/// error, and keeps its file only if it completed. `Ok` counts the transfers
+/// confirmed ended. The error counts those whose exit could not be confirmed;
+/// they stay registered, so a later call tries again. A second call after
+/// success finds nothing to do.
+pub fn terminate_in_flight_downloads() -> Result<usize, DownloadTermination> {
+    IN_FLIGHT_DOWNLOADS.terminate_all(std::time::Instant::now() + DOWNLOAD_TERMINATION_WAIT)
+}
+
+/// Why `terminate_in_flight_downloads` could not confirm every transfer
+/// ended. It carries counts only: no path, URL or process id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DownloadTermination {
+    /// Transfers confirmed ended.
+    pub ended: usize,
+    /// Transfers whose exit could not be confirmed.
+    pub not_confirmed: usize,
+}
+
+impl std::fmt::Display for DownloadTermination {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "model download cleanup not confirmed: {} of {} in-flight downloads may still be running",
+            self.not_confirmed,
+            self.ended + self.not_confirmed
+        )
+    }
+}
+
+/// The process behind an owned transfer: the curl child.
+trait TransferProcess: Send {
+    /// `Some(success)` once it has exited; a killed process never succeeds.
+    fn exit(&mut self) -> std::io::Result<Option<bool>>;
+    /// Send it the kill signal.
+    fn kill(&mut self) -> std::io::Result<()>;
+}
+
+impl TransferProcess for std::process::Child {
+    fn exit(&mut self) -> std::io::Result<Option<bool>> {
         Ok(self.try_wait()?.map(|status| status.success()))
     }
 
+    fn kill(&mut self) -> std::io::Result<()> {
+        std::process::Child::kill(self)
+    }
+}
+
+/// An owned transfer: its process and the file it writes.
+struct OwnedTransfer {
+    process: Box<dyn TransferProcess>,
+    file: PathBuf,
+}
+
+type SharedTransfer = std::sync::Arc<std::sync::Mutex<OwnedTransfer>>;
+
+/// The in-flight transfers, keyed by a private sequence number.
+struct InFlightDownloads {
+    state: std::sync::Mutex<InFlight>,
+}
+
+struct InFlight {
+    /// Set by the exit cleanup: nothing starts afterwards.
+    closed: bool,
+    next: u64,
+    transfers: std::collections::BTreeMap<u64, SharedTransfer>,
+}
+
+fn locked<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Where stopping an owned transfer stands.
+enum Stopping {
+    /// Its exit is confirmed: `true` when the transfer completed by itself.
+    Ended(bool),
+    /// It was sent the kill; its exit is not confirmed yet.
+    Killed,
+    /// It could not be killed, and its exit is not confirmed.
+    Failed,
+}
+
+/// Kill an owned transfer unless it has already ended. Its lock is held for
+/// the exit check and the kill only.
+fn kill_unless_ended(transfer: &std::sync::Mutex<OwnedTransfer>) -> Stopping {
+    let mut transfer = locked(transfer);
+    if let Ok(Some(success)) = transfer.process.exit() {
+        return Stopping::Ended(success);
+    }
+    match transfer.process.kill() {
+        Ok(()) => Stopping::Killed,
+        // It may have exited between the check and the kill: not a failure.
+        Err(_) => match transfer.process.exit() {
+            Ok(Some(success)) => Stopping::Ended(success),
+            _ => Stopping::Failed,
+        },
+    }
+}
+
+/// Wait until `deadline` for a killed transfer's exit: `Some(success)` once
+/// it is confirmed. Its lock is never held while waiting.
+fn reap_by(
+    transfer: &std::sync::Mutex<OwnedTransfer>,
+    deadline: std::time::Instant,
+) -> Option<bool> {
+    loop {
+        let exit = locked(transfer).process.exit();
+        match exit {
+            Ok(Some(success)) => return Some(success),
+            Ok(None) if std::time::Instant::now() < deadline => std::thread::sleep(REAP_POLL),
+            _ => return None,
+        }
+    }
+}
+
+impl InFlightDownloads {
+    const fn new() -> Self {
+        Self {
+            state: std::sync::Mutex::new(InFlight {
+                closed: false,
+                next: 0,
+                transfers: std::collections::BTreeMap::new(),
+            }),
+        }
+    }
+
+    /// Start a transfer with `spawn` and own it until the returned handle is
+    /// dropped. `spawn` runs under the registry lock, so a transfer is either
+    /// started and registered before the exit cleanup looks, or never
+    /// started: nothing starts once the cleanup ran.
+    fn start<P: TransferProcess + 'static>(
+        &self,
+        file: PathBuf,
+        spawn: impl FnOnce() -> Result<P, String>,
+    ) -> Result<RegisteredTransfer<'_>, String> {
+        let mut state = locked(&self.state);
+        if state.closed {
+            return Err("download refused: the application is exiting".to_string());
+        }
+        let process: Box<dyn TransferProcess> = Box::new(spawn()?);
+        let transfer = std::sync::Arc::new(std::sync::Mutex::new(OwnedTransfer { process, file }));
+        let id = state.next;
+        state.next += 1;
+        state.transfers.insert(id, std::sync::Arc::clone(&transfer));
+        Ok(RegisteredTransfer {
+            registry: self,
+            id,
+            transfer,
+        })
+    }
+
+    /// End every registered transfer by `deadline` and refuse new ones (see
+    /// [`terminate_in_flight_downloads`]). All are killed first, then reaped.
+    /// The registry lock is held only to close it and to copy or remove
+    /// entries, never while a transfer is stopped or a file removed.
+    fn terminate_all(&self, deadline: std::time::Instant) -> Result<usize, DownloadTermination> {
+        let transfers: Vec<(u64, SharedTransfer)> = {
+            let mut state = locked(&self.state);
+            state.closed = true;
+            state
+                .transfers
+                .iter()
+                .map(|(id, transfer)| (*id, std::sync::Arc::clone(transfer)))
+                .collect()
+        };
+        let (mut ended, mut not_confirmed) = (0, 0);
+        let mut killed = Vec::new();
+        for (id, transfer) in transfers {
+            match kill_unless_ended(&transfer) {
+                Stopping::Ended(completed) => {
+                    self.release(id, &transfer, completed);
+                    ended += 1;
+                }
+                Stopping::Killed => killed.push((id, transfer)),
+                Stopping::Failed => not_confirmed += 1,
+            }
+        }
+        for (id, transfer) in killed {
+            match reap_by(&transfer, deadline) {
+                Some(completed) => {
+                    self.release(id, &transfer, completed);
+                    ended += 1;
+                }
+                None => not_confirmed += 1,
+            }
+        }
+        if not_confirmed == 0 {
+            Ok(ended)
+        } else {
+            Err(DownloadTermination {
+                ended,
+                not_confirmed,
+            })
+        }
+    }
+
+    /// Forget a transfer whose exit is confirmed, removing its file unless it
+    /// completed: a stopped or failed transfer leaves only a partial file.
+    /// Best-effort; its watcher, if it still runs, removes it as well.
+    fn release(&self, id: u64, transfer: &std::sync::Mutex<OwnedTransfer>, completed: bool) {
+        if !completed {
+            let file = locked(transfer).file.clone();
+            let _ = std::fs::remove_file(file);
+        }
+        locked(&self.state).transfers.remove(&id);
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        locked(&self.state).transfers.len()
+    }
+}
+
+/// A download's transfer while its download runs. Dropping it releases the
+/// transfer from the registry once its exit is confirmed; a transfer that may
+/// still run stays registered, so `terminate_in_flight_downloads` still ends
+/// it.
+struct RegisteredTransfer<'a> {
+    registry: &'a InFlightDownloads,
+    id: u64,
+    transfer: SharedTransfer,
+}
+
+impl Transfer for RegisteredTransfer<'_> {
+    fn finished(&mut self) -> std::io::Result<Option<bool>> {
+        locked(&self.transfer).process.exit()
+    }
+
     fn stop(&mut self) {
-        // Best-effort: the child may already have exited.
-        let _ = self.kill();
-        let _ = self.wait();
+        // A transfer not confirmed stopped stays registered (see Drop).
+        if let Stopping::Killed = kill_unless_ended(&self.transfer) {
+            let _ = reap_by(
+                &self.transfer,
+                std::time::Instant::now() + DOWNLOAD_TERMINATION_WAIT,
+            );
+        }
+    }
+}
+
+impl Drop for RegisteredTransfer<'_> {
+    fn drop(&mut self) {
+        let ended = matches!(locked(&self.transfer).process.exit(), Ok(Some(_)));
+        if ended {
+            locked(&self.registry.state).transfers.remove(&self.id);
+        }
     }
 }
 
@@ -866,6 +1131,250 @@ mod tests {
         fn stop(&mut self) {
             self.stopped = true;
         }
+    }
+
+    // ── Final Gate item I: in-flight downloads are owned and ended ─────────
+
+    /// Set only in the environment of a stand-in transfer child.
+    const STAND_IN_ENV: &str = "NEXUS_FG_STAND_IN_TRANSFER";
+
+    /// Not a check. Started by these tests as a child with `STAND_IN_ENV` set,
+    /// this test binary stands in for a running transfer: it runs until it is
+    /// killed, or until the test holding its stdin is gone. Run as a normal
+    /// test, it returns at once.
+    #[test]
+    fn fg_stand_in_transfer() {
+        if std::env::var_os(STAND_IN_ENV).is_some() {
+            let _ = std::io::Read::read(&mut std::io::stdin(), &mut [0u8]);
+        }
+    }
+
+    /// This test binary as a transfer process, with no network and no
+    /// transfer program.
+    fn stand_in(args: &[&str]) -> std::process::Command {
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        command
+    }
+
+    /// A running transfer: it runs until it is killed.
+    fn running() -> Result<std::process::Child, String> {
+        stand_in(&[
+            "--exact",
+            "model_hub::tests::fg_stand_in_transfer",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(STAND_IN_ENV, "1")
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())
+    }
+
+    /// A transfer that has already ended, successfully (the test list) or not
+    /// (an unknown option).
+    fn ended(success: bool) -> Result<std::process::Child, String> {
+        let args: &[&str] = if success {
+            &["--list"]
+        } else {
+            &["--no-such-option"]
+        };
+        let mut child = stand_in(args)
+            .stdin(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        assert_eq!(child.wait().unwrap().success(), success);
+        Ok(child)
+    }
+
+    /// A process whose exit is never confirmed; `killable` says whether it
+    /// takes the kill.
+    struct Unconfirmed {
+        killable: bool,
+    }
+
+    impl TransferProcess for Unconfirmed {
+        fn exit(&mut self) -> std::io::Result<Option<bool>> {
+            Ok(None)
+        }
+
+        fn kill(&mut self) -> std::io::Result<()> {
+            if self.killable {
+                Ok(())
+            } else {
+                Err(std::io::Error::other("kill refused"))
+            }
+        }
+    }
+
+    /// A scratch directory with these partial download files.
+    fn partial_files<const N: usize>(names: [&str; N]) -> (PathBuf, [PathBuf; N]) {
+        let dir = std::env::temp_dir().join(format!("nexus-fg-download-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let files = names.map(|name| {
+            let file = dir.join(name);
+            std::fs::write(&file, b"partial").unwrap();
+            file
+        });
+        (dir, files)
+    }
+
+    fn deadline() -> std::time::Instant {
+        std::time::Instant::now() + std::time::Duration::from_secs(30)
+    }
+
+    /// Final Gate item I: ending the in-flight downloads kills and reaps
+    /// every running transfer through its owned handle, removes its partial
+    /// file, reports the count and empties the registry. A second call finds
+    /// nothing to do.
+    #[test]
+    fn p0_fg_terminating_in_flight_downloads_reaps_each_running_transfer() {
+        let registry = InFlightDownloads::new();
+        let (dir, [first, second]) = partial_files(["first.gguf", "second.gguf"]);
+        let mut a = registry.start(first.clone(), running).unwrap();
+        let mut b = registry.start(second.clone(), running).unwrap();
+        assert_eq!(registry.len(), 2);
+        assert_eq!(a.finished().unwrap(), None);
+
+        assert_eq!(registry.terminate_all(deadline()), Ok(2));
+        // Each was killed, so it did not exit successfully, and was reaped.
+        assert_eq!(a.finished().unwrap(), Some(false));
+        assert_eq!(b.finished().unwrap(), Some(false));
+        assert!(!first.exists() && !second.exists());
+        assert_eq!(registry.len(), 0);
+
+        assert_eq!(registry.terminate_all(deadline()), Ok(0));
+        drop((a, b));
+        assert_eq!(registry.len(), 0);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A transfer that had already ended is reaped and counted, not an
+    /// error. Only a completed one keeps its file.
+    #[test]
+    fn p0_fg_a_transfer_that_already_ended_is_not_a_termination_error() {
+        let registry = InFlightDownloads::new();
+        let (dir, [complete, failed]) = partial_files(["complete.gguf", "failed.gguf"]);
+        let handles = [
+            registry.start(complete.clone(), || ended(true)).unwrap(),
+            registry.start(failed.clone(), || ended(false)).unwrap(),
+        ];
+        assert_eq!(registry.terminate_all(deadline()), Ok(2));
+        assert!(complete.exists() && !failed.exists());
+        assert_eq!(registry.len(), 0);
+        drop(handles);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// An exit that cannot be confirmed is reported, never counted as ended:
+    /// the transfer stays registered and a later call reports it again.
+    #[test]
+    fn p0_fg_an_unconfirmed_exit_is_reported_and_stays_registered() {
+        let registry = InFlightDownloads::new();
+        let (dir, [first, second]) = partial_files(["first.gguf", "second.gguf"]);
+        let handles = [
+            registry
+                .start(first.clone(), || Ok(Unconfirmed { killable: true }))
+                .unwrap(),
+            registry
+                .start(second.clone(), || Ok(Unconfirmed { killable: false }))
+                .unwrap(),
+        ];
+        let unconfirmed = DownloadTermination {
+            ended: 0,
+            not_confirmed: 2,
+        };
+        // A deadline already reached: nothing is waited for.
+        assert_eq!(
+            registry.terminate_all(std::time::Instant::now()),
+            Err(unconfirmed)
+        );
+        assert_eq!(registry.len(), 2);
+        assert!(first.exists() && second.exists());
+        drop(handles);
+        assert_eq!(registry.len(), 2, "not released while they may run");
+        assert_eq!(
+            registry.terminate_all(std::time::Instant::now()),
+            Err(unconfirmed)
+        );
+        assert_eq!(
+            unconfirmed.to_string(),
+            "model download cleanup not confirmed: 2 of 2 in-flight downloads may still be running"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The watcher of a transfer ended at exit sees it end and removes the
+    /// partial file itself. (The registry removes its registered path too; a
+    /// separate watched path shows the watcher's removal.)
+    #[test]
+    fn p0_fg_the_watcher_of_an_ended_transfer_removes_its_partial_file() {
+        // Leaked, so a failing check never waits on a watcher that runs on.
+        let registry: &'static InFlightDownloads = Box::leak(Box::new(InFlightDownloads::new()));
+        let (dir, [registered, watched]) = partial_files(["registered.gguf", "watched.gguf"]);
+        let mut transfer = registry.start(registered.clone(), running).unwrap();
+        let watcher = std::thread::spawn({
+            let watched = watched.clone();
+            let tick = std::time::Duration::from_millis(1);
+            move || watch_download(&mut transfer, &watched, u64::MAX, tick, |_| {})
+        });
+        assert_eq!(registry.terminate_all(deadline()), Ok(1));
+        assert_eq!(
+            watcher.join().unwrap(),
+            Err("download failed: curl exited with error".to_string())
+        );
+        assert!(!watched.exists() && !registered.exists());
+        assert_eq!(registry.len(), 0);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A download that ends normally leaves the registry when its handle
+    /// goes, and keeps its file.
+    #[test]
+    fn p0_fg_a_download_that_ends_normally_leaves_the_registry() {
+        let registry = InFlightDownloads::new();
+        let (dir, [file]) = partial_files(["model.gguf"]);
+        let tick = std::time::Duration::from_millis(1);
+        let mut transfer = registry.start(file.clone(), || ended(true)).unwrap();
+        assert_eq!(
+            watch_download(&mut transfer, &file, u64::MAX, tick, |_| {}),
+            Ok(7)
+        );
+        assert_eq!(registry.len(), 1, "registered while its handle lives");
+        drop(transfer);
+        assert_eq!(registry.len(), 0);
+        assert!(file.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// No transfer starts once the downloads were ended for exit: its spawn
+    /// is never run.
+    #[test]
+    fn p0_fg_no_download_starts_after_the_exit_cleanup() {
+        let registry = InFlightDownloads::new();
+        assert_eq!(registry.terminate_all(deadline()), Ok(0));
+        let refused = registry.start(
+            PathBuf::from("never.gguf"),
+            || -> Result<Unconfirmed, String> {
+                panic!("a transfer was started after the exit cleanup")
+            },
+        );
+        assert_eq!(
+            refused.err(),
+            Some("download refused: the application is exiting".to_string())
+        );
+        assert_eq!(registry.len(), 0);
+    }
+
+    /// The application's exit cleanup, with nothing in flight, succeeds and
+    /// does nothing, twice.
+    #[test]
+    fn p0_fg_the_exit_cleanup_is_a_no_op_with_nothing_in_flight() {
+        assert_eq!(terminate_in_flight_downloads(), Ok(0));
+        assert_eq!(terminate_in_flight_downloads(), Ok(0));
     }
 
     /// P0-002C5C: the backend's model-file maximum is enforced on the bytes
