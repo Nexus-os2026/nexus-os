@@ -38,7 +38,7 @@ COPY tests/ tests/
 COPY benchmarks/ benchmarks/
 COPY app/src-tauri/ app/src-tauri/
 
-RUN cargo build --release --package nexus-protocols --bin nexus-server
+RUN cargo build --release --package nexus-protocols --bin nexus-protocols-server
 
 # ── Stage 2: React frontend ─────────────────────────────────────────
 FROM node:22-bookworm-slim AS frontend-builder
@@ -74,7 +74,7 @@ ENV NEXUS_HTTP_ADDR=0.0.0.0:8080 \
     NEXUS_FRONTEND_DIST=/opt/nexus/app/dist \
     NEXUS_CONFIG_PATH=/data/config
 
-COPY --from=backend-builder /build/target/release/nexus-server /usr/local/bin/nexus-server
+COPY --from=backend-builder /build/target/release/nexus-protocols-server /usr/local/bin/nexus-protocols-server
 COPY --from=frontend-builder /build/app/dist ./app/dist
 
 VOLUME ["/data"]
@@ -86,4 +86,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 USER nexus
 
-ENTRYPOINT ["nexus-server", "start"]
+ENTRYPOINT ["nexus-protocols-server", "start"]

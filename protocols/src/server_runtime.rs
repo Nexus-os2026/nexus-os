@@ -14,7 +14,7 @@ where
             Ok(())
         }
         Some(other) => Err(format!(
-            "unknown command '{other}'. Usage: nexus-server start"
+            "unknown command '{other}'. Usage: nexus-protocols-server start"
         )),
     }
 }
@@ -145,7 +145,7 @@ fn print_help() {
 Nexus OS Server — Governed AI Agent Runtime
 
 USAGE:
-    nexus-server start
+    nexus-protocols-server start
 
 ENVIRONMENT:
     NEXUS_MODE                  server | desktop | hybrid (default: server)

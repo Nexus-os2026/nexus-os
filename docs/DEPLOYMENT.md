@@ -172,13 +172,13 @@ For running without Docker or Kubernetes.
 ### Build
 
 ```bash
-cargo build --release -p nexus-protocols --bin nexus-server
+cargo build --release -p nexus-protocols --bin nexus-protocols-server
 ```
 
 ### Run
 
 ```bash
-./target/release/nexus-server start
+./target/release/nexus-protocols-server start
 ```
 
 ### `crates/nexus-server` (withdrawn)

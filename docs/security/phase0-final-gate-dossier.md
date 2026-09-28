@@ -499,11 +499,12 @@ bundle). The desktop never reaches the binaries below.
     - Deployment guards pin the Dockerfile, both Compose files, the chart,
       `deploy/README.md` and the J1 part of `docs/DEPLOYMENT.md`.
   - **Binary name collision.**
-    - `nexus-protocols` also builds a binary named `nexus-server`.
-    - When one Cargo invocation builds both, the shared output path Cargo
-      gives this package's tests may hold the protocols server.
+    - Before P0-FG1-R1, `nexus-protocols` also built a binary named
+      `nexus-server`.
+    - When one Cargo invocation built both, the shared output path Cargo
+      gives this package's tests could hold the protocols server.
     - On Windows (MSVC) Cargo gives executables no hash, so the two packages
-      also share `deps\nexus_server.exe`. This package's build can be
+      also shared `deps\nexus_server.exe`. This package's build could be
       overwritten there.
     - The tests run a Cargo build only if its dep-info names
       `crates/nexus-server/src/main.rs` and its bytes carry the withdrawal
@@ -518,6 +519,17 @@ bundle). The desktop never reaches the binaries below.
       withdrawal-only source file. It does not make direct-`rustc`
       substitutes a normal testing pattern, and it does not resolve the
       duplicate binary name, which stays build debt (item K).
+    - **Hosted failure (run #106).** The first complete hosted run of the
+      composed FG1 and CI candidate (`2b47bb09`) failed on Windows before any
+      test ran. Linking this package's binary stopped with `LNK1104: cannot
+      open file ...\target\debug\deps\nexus_server.exe`, the output path the
+      two binaries shared (item K).
+    - **Naming repair (P0-FG1-R1; hosted verification, review and integration
+      pending).** The protocols binary target is renamed
+      `nexus-protocols-server`; its source file is unchanged. J1 is then the
+      only workspace binary named `nexus-server`. The identification and the
+      Windows fallback above are unchanged and stay as defensive checks; the
+      fallback's narrow acceptance is not widened.
   - **What shipped.** Nothing published this binary or an image built from
     `deploy/`.
     - CI and the release workflow compile it as a workspace member
@@ -543,10 +555,12 @@ bundle). The desktop never reaches the binaries below.
       prints the withdrawal, that no supported deployment exists, and that
       existing deployments are not stopped automatically.
     - The FG1 documentation guard rejects a return of those instructions.
-    - The guide's protocols `nexus-server` instructions belong to J2/J3 and
-      are unchanged.
+    - The guide's protocols server instructions belong to J2/J3. P0-FG1-R1
+      changes only the binary name in them (`nexus-protocols-server`); their
+      J2/J3 disposition is unchanged and unresolved.
 - **protocols `nexus-server` (`protocols/src/bin/`, built by the root
-  `Dockerfile`, compose and helm).**
+  `Dockerfile`, compose and helm); renamed `nexus-protocols-server` by
+  P0-FG1-R1 (review and integration pending).**
   - `protocols/src/server_runtime.rs` binds `NEXUS_HTTP_ADDR`, default
     `0.0.0.0:8080`.
   - Routes sit behind EdDSA JWT verification against a per-process gateway
@@ -577,7 +591,8 @@ bundle). The desktop never reaches the binaries below.
 - **protocols `nexus-os`.** The `Makefile` target `nexus-os` builds it
   (`cargo build --release -p nexus-protocols --bin nexus-os`), and
   `install.sh` installs a `nexus-os` binary from release assets. It runs the
-  same server runtime as protocols `nexus-server`.
+  same server runtime as the protocols server (`nexus-server`;
+  `nexus-protocols-server` after P0-FG1-R1).
 - **Build note, not executed.** The root `Dockerfile` copies every workspace
   member except `nexus-code/`, which is a member, so its image build appears
   unable to load the workspace. `deploy/Dockerfile` had the same omission;
@@ -628,12 +643,23 @@ bundle). The desktop never reaches the binaries below.
     alive.
   - The ACL code and the test assertions are unchanged.
 - **Duplicate binary name `nexus-server`** (`crates/nexus-server` and
-  `nexus-protocols`). Build debt for the Final Gate.
-  - One Cargo invocation that builds both writes them to the same output
-    paths: `target/<profile>/nexus-server`, and on Windows also
+  `nexus-protocols`). Build debt for the Final Gate; naming repair on the
+  P0-FG1-R1 repair branch, verification and integration pending.
+  - Before P0-FG1-R1, one Cargo invocation that built both wrote them to the
+    same output paths: `target/<profile>/nexus-server`, and on Windows also
     `deps\nexus_server.exe`. Cargo warns that this may become a hard error.
-  - P0-FG1 works around it in its tests (item J). Renaming either binary is
-    left to a later decision.
+  - P0-FG1 works around it in its tests (item J).
+  - Hosted run #106 (candidate `2b47bb09`) failed on Windows at link time with
+    `LNK1104: cannot open file ...\deps\nexus_server.exe`, before any test
+    ran. FG1 runs #103–#105 printed the same collision warnings without that
+    error. Whether two links overlapped or another process held the file is
+    not established.
+  - **P0-FG1-R1 (Architect decision).** The protocols binary target is
+    renamed `nexus-protocols-server`; its source file is unchanged. A
+    target-identity test (`protocols/tests/binary_target_identity.rs`) checks
+    that `nexus-protocols` builds `nexus-protocols-server` and `nexus-os` and
+    no `nexus-server`. The item stays open until a complete hosted run on the
+    repaired candidate is green and the repair is reviewed and integrated.
 
 ## L. Screen observation from the interface
 

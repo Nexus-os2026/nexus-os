@@ -9,7 +9,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [[bin]]
-name = "nexus-server"
+name = "nexus-protocols-server"
 path = "src/bin/nexus-server.rs"
 
 [[bin]]

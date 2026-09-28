@@ -4,20 +4,23 @@
 //! `nexus-server` found on `PATH`. The source guards pin the production entry
 //! point and the withdrawn deployment recipes under `deploy/`.
 //!
-//! `nexus-protocols` also builds a binary named `nexus-server`. When one Cargo
-//! invocation builds both (for example `cargo test --workspace`), the shared
-//! output path Cargo gives this package's tests
-//! (`CARGO_BIN_EXE_nexus-server`) may hold the protocols server instead
-//! (an output filename collision). The protocols server listens on every
-//! interface when started, so these tests execute a file only after checking
-//! that rustc's dep-info names this package's `src/main.rs` and that the file
-//! carries this package's withdrawal message.
+//! Until P0-FG1-R1, `nexus-protocols` also built a binary named
+//! `nexus-server` (from `protocols/src/bin/nexus-server.rs`; that target is
+//! now `nexus-protocols-server`). When one Cargo invocation built both (for
+//! example `cargo test --workspace`), the shared output path Cargo gives this
+//! package's tests (`CARGO_BIN_EXE_nexus-server`) could hold the protocols
+//! server instead (an output filename collision). The protocols server
+//! listens on every interface when started. That is why these tests execute
+//! a file only after checking that rustc's dep-info names this package's
+//! `src/main.rs` and that the file carries this package's withdrawal message;
+//! the check is kept as a defence.
 //!
 //! On Windows (MSVC) Cargo gives executables no hash, so the two packages
-//! also share `deps\nexus_server.exe` and this package's build can be
-//! overwritten. When no Cargo build of this package can be identified there,
-//! the tests compile this package's only source file, `src/main.rs`, with the
-//! `rustc` of the toolchain that built them, and run that. On other platforms
+//! also shared `deps\nexus_server.exe` and this package's build could be
+//! overwritten. That is why, when no Cargo build of this package can be
+//! identified there, the tests compile this package's only source file,
+//! `src/main.rs`, with the `rustc` of the toolchain that built them, and run
+//! that; the narrowly accepted fallback is unchanged. On other platforms
 //! Cargo keeps a hashed build per package, and an unidentified build fails.
 
 use std::collections::BTreeMap;
@@ -62,7 +65,7 @@ fn resolve_withdrawn_binary() -> PathBuf {
 }
 
 /// Cargo builds each target into `deps/` (`nexus_server-<hash>`, or
-/// `nexus_server.exe` on Windows) and copies it to the shared path. This
+/// `nexus_server.exe` on Windows) and copies it to the uplifted path. This
 /// package's build is the one whose rustc dep-info names this package's
 /// `src/main.rs` and whose bytes carry the withdrawal message (the unit-test
 /// build of the target has no entry point, so it does not).
@@ -833,8 +836,8 @@ fn p0_fg1_helm_chart_fails_for_every_values_override() {
 /// The deployment documents say J1 is withdrawn, say that existing
 /// deployments are not stopped by this, and give no command that installs,
 /// builds, starts or reaches it: `deploy/README.md` and the J1 part of
-/// `docs/DEPLOYMENT.md`. (That guide's protocols `nexus-server` instructions
-/// are a separate item and are not checked here.)
+/// `docs/DEPLOYMENT.md`. (That guide's protocols server instructions, for
+/// `nexus-protocols-server`, are a separate item and are not checked here.)
 #[test]
 fn p0_fg1_deployment_docs_withdraw_without_claiming_a_stop() {
     // Line breaks in the Markdown source do not matter.

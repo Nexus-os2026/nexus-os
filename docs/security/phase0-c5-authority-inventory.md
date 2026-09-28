@@ -874,7 +874,8 @@ unresolved and one is an approved operator assumption:
 - **Shipped:**
   - `nexus-cli`, with the coding-agent and self-improve libraries it links;
   - `crates/nexus-server` (`deploy/Dockerfile`);
-  - protocols `nexus-server` (root `Dockerfile`);
+  - protocols `nexus-server` (root `Dockerfile`; P0-FG1-R1, repair pending,
+    renames it `nexus-protocols-server`);
   - protocols `nexus-os` (`Makefile`, `install.sh`);
   - `nx` (`nexus-code/Dockerfile`, `nexus-code/install.sh`).
 
