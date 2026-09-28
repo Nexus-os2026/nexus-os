@@ -570,3 +570,60 @@ fn p0_fg_perception_takes_no_key_and_sends_nothing() {
     let (_, body) = handler_shape(CRATE_BRIDGES_RS, "perception_init");
     assert!(!body.contains("init_provider"), "{body}");
 }
+
+/// Final Gate items B, C and G, through the desktop's tool state: a
+/// registered agent at the highest level cannot send a request to an address
+/// it chooses (`rest_api`, `webhook`), and nothing is contacted.
+#[test]
+fn p0_fg_desktop_tool_calls_reach_no_caller_chosen_destination() {
+    let (listener, base) = quiet_listener();
+    let port = listener.local_addr().unwrap().port();
+    let state = crate::AppState::new_in_memory();
+    let manifest = nexus_kernel::manifest::parse_manifest(
+        "name = \"fg-tools\"\nversion = \"1.0.0\"\ncapabilities = [\"llm.query\"]\nfuel_budget = 100\nautonomy_level = 5\n",
+    )
+    .unwrap();
+    let agent = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(manifest)
+        .unwrap()
+        .to_string();
+    let level = crate::commands::crate_bridges::tool_call_autonomy(&state, &agent, 5).unwrap();
+    for (tool, params) in [
+        (
+            "rest_api",
+            serde_json::json!({"url": format!("{base}/x"), "method": "GET"}),
+        ),
+        (
+            "rest_api",
+            serde_json::json!({"url": format!("http://127.1:{port}/x"), "method": "POST"}),
+        ),
+        (
+            "webhook",
+            serde_json::json!({"url": format!("{base}/hook")}),
+        ),
+    ] {
+        let error = nexus_external_tools::tauri_commands::tools_execute(
+            &state.external_tools,
+            &agent,
+            level,
+            tool,
+            &params.to_string(),
+        )
+        .unwrap_err();
+        assert!(
+            error.contains("destination the caller chose"),
+            "{tool}: {error}"
+        );
+    }
+    assert_never_contacted(&listener);
+    for tool in ["github", "slack", "jira"] {
+        assert!(
+            nexus_external_tools::execution::phase0_refusal(tool)
+                .is_some_and(|reason| reason.contains("operator credential")),
+            "{tool}"
+        );
+    }
+}
