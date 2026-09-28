@@ -42,4 +42,6 @@ PR #15: open, draft, unmerged, auto-merge off, head `1b049e15`, base `main@80640
 ## Current activity
 
 - FG1 post-integration evidence recorded; awaiting Architect review.
-- Six workstreams are in read-only reachability investigation.
+- Reconnaissance complete for all six workstreams (see FINDINGS-MAP.md).
+- Scaffold `63eb0d07` on `implement/p0-final-gate-closure`; component branches fast-forwarded to it.
+- Six workstreams implementing (phase 2).
