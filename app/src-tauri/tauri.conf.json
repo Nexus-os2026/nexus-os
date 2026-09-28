@@ -15,6 +15,8 @@
   "app": {
     "windows": [
       {
+        "label": "main",
+        "create": false,
         "title": "NexusOS — Governed Agent Operating System",
         "width": 1280,
         "height": 860,
@@ -23,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: http://asset.localhost; media-src 'self' asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost; frame-src 'self'; child-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
     }
   },
   "bundle": {

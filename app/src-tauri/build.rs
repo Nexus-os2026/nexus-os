@@ -11,6 +11,15 @@ mod contract;
 #[path = "src/builder_workspace/trusted_toolchain/packaging.rs"]
 mod packaging;
 
+// P0 item D: the exact list of registered application commands. Passing it to
+// the Tauri app ACL manifest makes an application command refused unless a
+// capability allows it, which `capabilities/app-commands.json` does only for
+// window `main` at the local app origin. The list is the single source of
+// truth shared with the fg_webview guard, which fails if it ever diverges from
+// the live `generate_handler!` registry.
+#[path = "src/webview_boundary/app_commands.rs"]
+mod app_commands;
+
 use std::path::PathBuf;
 
 const SWITCH: &str = "NEXUS_BUILDER_TOOLCHAIN";
@@ -18,6 +27,7 @@ const SWITCH: &str = "NEXUS_BUILDER_TOOLCHAIN";
 fn main() {
     println!("cargo::rerun-if-env-changed={SWITCH}");
     println!("cargo::rustc-check-cfg=cfg(nexus_packaged_toolchain)");
+    println!("cargo::rerun-if-changed=src/webview_boundary/app_commands.rs");
     let source = match std::env::var(SWITCH) {
         Err(std::env::VarError::NotPresent) => packaging::ABSENT.to_owned(),
         Ok(value) if value == "packaged" => packaged(),
@@ -29,7 +39,15 @@ fn main() {
     if std::fs::read_to_string(&out).ok().as_deref() != Some(source.as_str()) {
         std::fs::write(&out, source).expect("write Builder toolchain manifest");
     }
-    tauri_build::build();
+    // P0 item D: emit the app ACL manifest (autogenerates an `allow-<cmd>`
+    // permission per registered command). This turns on native origin
+    // enforcement for application commands; `capabilities/app-commands.json`
+    // grants them to window `main` at the local origin only.
+    tauri_build::try_build(
+        tauri_build::Attributes::new()
+            .app_manifest(tauri_build::AppManifest::new().commands(app_commands::APP_COMMANDS)),
+    )
+    .expect("failed to run tauri-build");
 }
 
 fn packaged() -> String {
