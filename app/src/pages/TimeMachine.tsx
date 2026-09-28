@@ -1154,7 +1154,7 @@ export default function TimeMachine() {
           <input
             type="number"
             min={1}
-            max={64}
+            max={10}
             value={temporalMaxForks}
             onChange={(e) => setTemporalMaxForks(Number(e.target.value))}
             style={{
@@ -1204,7 +1204,7 @@ export default function TimeMachine() {
           <input
             type="number"
             min={100}
-            max={1000000}
+            max={200000}
             step={1000}
             value={temporalBudgetTokens}
             onChange={(e) => setTemporalBudgetTokens(Number(e.target.value))}
