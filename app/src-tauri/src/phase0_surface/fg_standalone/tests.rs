@@ -870,7 +870,11 @@ const RECIPE_FILES: &[&str] = &[
 fn is_recipe(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower.starts_with("dockerfile")
+        || lower.ends_with(".dockerfile")
         || lower == "containerfile"
+        || lower == "vagrantfile"
+        || lower == "devcontainer.json"
+        || lower == ".devcontainer.json"
         || (lower.contains("compose") && (lower.ends_with(".yml") || lower.ends_with(".yaml")))
         || lower == "chart.yaml"
         || lower == "pkgbuild"
@@ -885,11 +889,23 @@ fn is_recipe(name: &str) -> bool {
         .any(|extension| lower.ends_with(extension))
 }
 
-/// No deployment, installation or packaging recipe exists beyond the
-/// inventoried, withdrawn ones, so no new container, chart, service unit,
-/// installer or package recipe can ship a standalone binary unreviewed.
-#[test]
-fn p0_fg_standalone_every_recipe_is_inventoried() {
+/// Whether a directory is skipped by the repository walk: version-control
+/// internals, build output and dependencies, the Builder toolchain that the
+/// packaging step assembles, and ignored agent state that can hold other
+/// checkouts of this repository (each guarded by its own copy of these
+/// tests). Every other directory is walked, dot directories included.
+fn skipped_by_repository_walk(name: &str, relative: &str) -> bool {
+    [".git", "target", "node_modules", "dist"].contains(&name)
+        || relative == "app/src-tauri/builder-toolchain"
+        || relative.starts_with("app/src-tauri/builder-toolchain.assembly-")
+        || relative == ".claude/worktrees"
+        || relative == ".codex"
+}
+
+/// Every file of the repository as a workspace-relative path, in sorted
+/// order: dot directories (`.github`, `.gitlab`, `.cargo`, `.claude` and any
+/// new one) are walked like the others; see [`skipped_by_repository_walk`].
+fn repository_files() -> Vec<String> {
     fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
         for path in sorted_dir(dir) {
             let name = path
@@ -903,27 +919,84 @@ fn p0_fg_standalone_every_recipe_is_inventoried() {
                 .to_string_lossy()
                 .replace('\\', "/");
             if path.is_dir() {
-                // Build output, dependencies, and the Builder toolchain that
-                // the packaging step assembles (ignored by Git).
-                let generated = ["target", "node_modules", "dist"].contains(&name.as_str())
-                    || relative == "app/src-tauri/builder-toolchain"
-                    || relative.starts_with("app/src-tauri/builder-toolchain.assembly-");
-                if !name.starts_with('.') && !generated {
+                if !skipped_by_repository_walk(&name, &relative) {
                     walk(root, &path, out);
                 }
-            } else if is_recipe(&name) {
+            } else {
                 out.push(relative);
             }
         }
     }
     let root = workspace_root();
     let root = root.canonicalize().unwrap_or(root);
-    let mut found = Vec::new();
-    walk(&root, &root, &mut found);
-    found.sort();
+    let mut out = Vec::new();
+    walk(&root, &root, &mut out);
+    assert!(out.len() > 1000, "repository files not found");
+    out.sort();
+    out
+}
+
+fn file_name(relative: &str) -> &str {
+    relative.rsplit('/').next().unwrap_or(relative)
+}
+
+/// No deployment, installation or packaging recipe exists beyond the
+/// inventoried, withdrawn ones, so no new container, chart, service unit,
+/// installer or package recipe can ship a standalone binary unreviewed. Dot
+/// directories are searched too.
+#[test]
+fn p0_fg_standalone_every_recipe_is_inventoried() {
+    let found: Vec<String> = repository_files()
+        .into_iter()
+        .filter(|relative| is_recipe(file_name(relative)))
+        .collect();
     let mut expected: Vec<String> = RECIPE_FILES.iter().map(|path| path.to_string()).collect();
     expected.sort();
     assert_eq!(found, expected, "every recipe must be inventoried");
+}
+
+/// Whether a file configures a continuous-integration pipeline (which could
+/// build, ship or publish a binary): GitHub workflows and actions, GitLab CI
+/// (including included files by the conventional names), and the pipeline
+/// files of other CI services.
+fn is_ci_config(relative: &str) -> bool {
+    let name = file_name(relative).to_ascii_lowercase();
+    let yaml = name.ends_with(".yml") || name.ends_with(".yaml");
+    (relative.starts_with(".github/workflows/") && yaml)
+        || name == "action.yml"
+        || name == "action.yaml"
+        || name.ends_with("gitlab-ci.yml")
+        || name.ends_with("gitlab-ci.yaml")
+        || (relative.starts_with(".gitlab/") && yaml)
+        || [
+            ".circleci/",
+            ".buildkite/",
+            ".woodpecker/",
+            ".tekton/",
+            ".drone/",
+            ".semaphore/",
+            ".cirrus/",
+        ]
+        .iter()
+        .any(|dir| relative.starts_with(dir))
+        || [
+            ".travis.yml",
+            "jenkinsfile",
+            "azure-pipelines.yml",
+            "azure-pipelines.yaml",
+            "bitbucket-pipelines.yml",
+            ".drone.yml",
+            ".woodpecker.yml",
+            "appveyor.yml",
+            ".appveyor.yml",
+            "cloudbuild.yml",
+            "cloudbuild.yaml",
+            "buildspec.yml",
+            "codemagic.yaml",
+            ".cirrus.yml",
+            "wercker.yml",
+        ]
+        .contains(&name.as_str())
 }
 
 /// Names of the withdrawn binaries, as a workflow would name them.
@@ -950,20 +1023,48 @@ const WITHDRAWN_BINARIES: &[&str] = &[
 /// No workflow builds, installs, uploads or publishes a withdrawn binary, a
 /// container image or a chart, and the release publishes only the desktop
 /// installers. (Workflows still compile and test the withdrawn packages.)
+/// Every CI configuration in the repository, dot directories included, is
+/// one this guard reads: the GitHub workflows and `.gitlab-ci.yml`, which
+/// includes no other file. A pipeline file of any other kind or place fails
+/// until it is reviewed.
 #[test]
 fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
     let root = workspace_root();
-    let mut workflows: Vec<PathBuf> = sorted_dir(&root.join(".github").join("workflows"))
+    let configs: Vec<String> = repository_files()
+        .into_iter()
+        .filter(|relative| is_ci_config(relative))
+        .collect();
+    let mut expected: Vec<String> = sorted_dir(&root.join(".github").join("workflows"))
         .into_iter()
         .filter(|path| {
             path.extension()
                 .is_some_and(|extension| extension == "yml" || extension == "yaml")
         })
+        .map(|path| {
+            format!(
+                ".github/workflows/{}",
+                path.file_name().expect("file name").to_string_lossy()
+            )
+        })
         .collect();
-    assert!(workflows.len() >= 5, "workflows not found");
-    workflows.push(root.join(".gitlab-ci.yml"));
-    for workflow in &workflows {
-        let text = read(workflow);
+    assert!(expected.len() >= 5, "workflows not found");
+    expected.push(".gitlab-ci.yml".to_string());
+    expected.sort();
+    assert_eq!(
+        configs, expected,
+        "every CI configuration must be one this guard reads"
+    );
+    let gitlab = read(&root.join(".gitlab-ci.yml"));
+    assert!(
+        !gitlab
+            .lines()
+            .map(str::trim_start)
+            .any(|line| line.starts_with("include:")),
+        ".gitlab-ci.yml must include no other file"
+    );
+    for config in &configs {
+        let workflow = root.join(config);
+        let text = read(&workflow);
         let name = workflow.display();
         for line in text
             .lines()
