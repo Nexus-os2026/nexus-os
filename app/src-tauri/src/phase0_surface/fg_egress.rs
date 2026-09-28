@@ -480,3 +480,65 @@ fn p0_fg_the_persisted_ollama_address_chooses_no_destination() {
     assert_eq!(selection.ollama_url, Some(authorized));
     assert!(!format!("{:?}", selection.ollama_url).contains("persisted"));
 }
+
+/// Final Gate item B (Architect decision D4): an agent's http(s) web fetch
+/// is refused, although the agent holds `web.read` and its manifest's
+/// `allowed_endpoints` admits the URL. That allowlist came from the
+/// interface at creation (or from a stored record), and neither is an egress
+/// grant. Nothing is contacted. A non-HTTP fetch keeps its C5A refusal, and
+/// web search, which reaches fixed or operator-configured hosts, still runs.
+#[test]
+fn p0_fg_agent_web_fetch_is_not_egress_authority() {
+    use nexus_kernel::cognitive::loop_runtime::ActionExecutor;
+    use nexus_kernel::cognitive::PlannedAction;
+    let (listener, base) = quiet_listener();
+    let state = crate::AppState::new_in_memory();
+    let manifest = nexus_kernel::manifest::parse_manifest(&format!(
+        "name = \"fg-fetcher\"\nversion = \"1.0.0\"\ncapabilities = [\"web.read\", \"web.search\", \"llm.query\"]\nfuel_budget = 1000\nautonomy_level = 3\nallowed_endpoints = [\"{base}\"]\n"
+    ))
+    .unwrap();
+    let agent = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(manifest)
+        .unwrap()
+        .to_string();
+    let memory = std::sync::Arc::new(nexus_kernel::cognitive::AgentMemoryManager::new(Box::new(
+        crate::DbMemoryStore {
+            db: state.db.clone(),
+        },
+    )));
+    let executor = crate::phase0_agent_executor(&state, memory);
+    let mut audit = state.audit.clone();
+    for url in [
+        format!("{base}/page"),
+        format!("{base}/"),
+        format!("  {}", base.to_uppercase()),
+        base.replacen("http://", "https://", 1),
+    ] {
+        let action = PlannedAction::WebFetch { url: url.clone() };
+        assert_eq!(
+            executor.execute(&agent, &action, &mut audit, true),
+            Err(closed("web_fetch", Closure::NetworkDestination)),
+            "{url}"
+        );
+    }
+    assert_never_contacted(&listener);
+    for url in [
+        "file:///etc/hosts",
+        "ftp://127.0.0.1/",
+        "javascript:alert(1)",
+    ] {
+        let action = PlannedAction::WebFetch { url: url.into() };
+        assert_eq!(
+            crate::phase0_agent_action_closure(&action),
+            Some(Closure::AgentExecution),
+            "{url}"
+        );
+    }
+    let search = PlannedAction::WebSearch {
+        query: "phase zero".into(),
+    };
+    assert_eq!(crate::phase0_agent_action_closure(&search), None);
+}

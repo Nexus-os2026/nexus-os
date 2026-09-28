@@ -1537,32 +1537,44 @@ pub(crate) fn run_cognitive_cycle(
     })
 }
 
-/// P0-002C5A: agent actions that need no filesystem, process or OS-input
-/// authority. Everything else, including any action variant added later, is
-/// refused by `Phase0AgentExecutor`. A fetch is web-only: a model-chosen
-/// `file:` (or any non-HTTP) URL would be a local path under another name.
-pub(crate) fn phase0_agent_action_permitted(
+/// Why `Phase0AgentExecutor` refuses an agent action, or `None` when it runs.
+///
+/// P0-002C5A: only actions that need no filesystem, process or OS-input
+/// authority run. Everything else, including any action variant added later,
+/// is refused (`Closure::AgentExecution`). A non-HTTP fetch URL (`file:` or
+/// any other scheme) would be a local path under another name.
+///
+/// Final Gate item B (Architect decision D4): an http(s) web fetch is refused
+/// too (`Closure::NetworkDestination`). Its URL is the model's choice, and
+/// the only thing that admitted it was the agent's `allowed_endpoints`, which
+/// comes from the interface at creation or from a stored record. Neither is
+/// an egress grant, and Phase Zero has no backend-issued agent allowlist.
+/// Web search stays: it reaches fixed or operator-configured hosts.
+pub(crate) fn phase0_agent_action_closure(
     action: &nexus_kernel::cognitive::PlannedAction,
-) -> bool {
+) -> Option<crate::phase0_surface::Closure> {
+    use crate::phase0_surface::Closure;
     use nexus_kernel::cognitive::PlannedAction;
     match action {
         PlannedAction::WebFetch { url } => {
             let url = url.trim_start().to_ascii_lowercase();
-            url.starts_with("https://") || url.starts_with("http://")
+            if url.starts_with("https://") || url.starts_with("http://") {
+                Some(Closure::NetworkDestination)
+            } else {
+                Some(Closure::AgentExecution)
+            }
         }
-        other => matches!(
-            other,
-            PlannedAction::LlmQuery { .. }
-                | PlannedAction::Noop
-                | PlannedAction::MemoryStore { .. }
-                | PlannedAction::MemoryRecall { .. }
-                | PlannedAction::SendNotification { .. }
-                | PlannedAction::AgentMessage { .. }
-                | PlannedAction::HitlRequest { .. }
-                | PlannedAction::WebSearch { .. }
-                | PlannedAction::KnowledgeGraphUpdate { .. }
-                | PlannedAction::KnowledgeGraphQuery { .. }
-        ),
+        PlannedAction::LlmQuery { .. }
+        | PlannedAction::Noop
+        | PlannedAction::MemoryStore { .. }
+        | PlannedAction::MemoryRecall { .. }
+        | PlannedAction::SendNotification { .. }
+        | PlannedAction::AgentMessage { .. }
+        | PlannedAction::HitlRequest { .. }
+        | PlannedAction::WebSearch { .. }
+        | PlannedAction::KnowledgeGraphUpdate { .. }
+        | PlannedAction::KnowledgeGraphQuery { .. } => None,
+        _ => Some(Closure::AgentExecution),
     }
 }
 
@@ -1588,11 +1600,8 @@ impl<E: nexus_kernel::cognitive::loop_runtime::ActionExecutor>
         audit: &mut dyn nexus_kernel::audit::AuditWriter,
         hitl_approved: bool,
     ) -> Result<String, String> {
-        if !phase0_agent_action_permitted(action) {
-            return Err(crate::phase0_surface::closed(
-                action.action_type(),
-                crate::phase0_surface::Closure::AgentExecution,
-            ));
+        if let Some(closure) = phase0_agent_action_closure(action) {
+            return Err(crate::phase0_surface::closed(action.action_type(), closure));
         }
         self.inner.execute(agent_id, action, audit, hitl_approved)
     }
