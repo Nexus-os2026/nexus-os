@@ -720,27 +720,11 @@ pub(crate) fn get_config() -> Result<NexusConfig, String> {
 /// sees (P0-002C5C). A save that carries it back keeps the stored value.
 pub(crate) const STORED_SECRET: &str = "********";
 
-/// The configuration's credential fields, apart from per-provider keys.
+/// The configuration's credential fields, apart from per-provider keys. The
+/// kernel owns the list (Final Gate item A), so redaction here and the
+/// kernel's new-credential check always cover the same fields.
 fn credential_fields(config: &mut NexusConfig) -> [&mut String; 17] {
-    [
-        &mut config.llm.anthropic_api_key,
-        &mut config.llm.openai_api_key,
-        &mut config.llm.deepseek_api_key,
-        &mut config.llm.gemini_api_key,
-        &mut config.llm.nvidia_api_key,
-        &mut config.llm.openrouter_api_key,
-        &mut config.search.brave_api_key,
-        &mut config.social.x_api_key,
-        &mut config.social.x_api_secret,
-        &mut config.social.x_access_token,
-        &mut config.social.x_access_secret,
-        &mut config.social.facebook_page_token,
-        &mut config.social.instagram_access_token,
-        &mut config.messaging.telegram_bot_token,
-        &mut config.messaging.whatsapp_api_token,
-        &mut config.messaging.discord_bot_token,
-        &mut config.messaging.slack_bot_token,
-    ]
+    nexus_kernel::config::credential_fields_mut(config)
 }
 
 /// `config` with every non-empty credential replaced by [`STORED_SECRET`].
@@ -784,13 +768,53 @@ pub(crate) fn keep_stored_credentials(config: &mut NexusConfig, stored: &NexusCo
     }
 }
 
+/// Why the interface configuration writer wrote nothing.
+#[derive(Debug)]
+enum InterfaceWriteError {
+    /// A bounded refusal: (audit reason class, bounded error).
+    Refused((&'static str, &'static str)),
+    Failed(AgentError),
+}
+
 /// Writes an interface configuration, keeping each stored credential the
 /// interface returned as [`STORED_SECRET`]. `save_config_with` has already
 /// required an existing configuration before this runs.
-fn save_keeping_stored_credentials(config: &NexusConfig) -> Result<(), AgentError> {
+fn save_keeping_stored_credentials(
+    config: &NexusConfig,
+) -> Result<nexus_kernel::config::SaveOutcome, InterfaceWriteError> {
+    let path = nexus_kernel::config::config_path().map_err(InterfaceWriteError::Failed)?;
+    write_keeping_stored_credentials(
+        &path,
+        config,
+        &nexus_kernel::config::ConfigKeyMaterial::from_launch_environment(),
+    )
+}
+
+/// [`save_keeping_stored_credentials`] for an explicit file and key material.
+/// The kernel writer refuses a new or changed credential without the operator
+/// configuration key, and never overwrites a configuration it cannot read
+/// (Final Gate item A).
+fn write_keeping_stored_credentials(
+    path: &std::path::Path,
+    config: &NexusConfig,
+    keys: &nexus_kernel::config::ConfigKeyMaterial,
+) -> Result<nexus_kernel::config::SaveOutcome, InterfaceWriteError> {
+    use nexus_kernel::config::{ConfigSaveError, ConfigWriteRefusal};
+    let stored = nexus_kernel::config::load_config_from_path_with(path, keys)
+        .map_err(InterfaceWriteError::Failed)?;
     let mut config = config.clone();
-    keep_stored_credentials(&mut config, &load_config()?);
-    save_nexus_config(&config)
+    keep_stored_credentials(&mut config, &stored);
+    nexus_kernel::config::save_config_checked_to_path(path, &config, keys).map_err(|error| {
+        match error {
+            ConfigSaveError::Refused(ConfigWriteRefusal::OperatorKeyRequired) => {
+                InterfaceWriteError::Refused(CONFIGURATION_KEY_REQUIRED)
+            }
+            ConfigSaveError::Refused(ConfigWriteRefusal::ExistingUnreadable) => {
+                InterfaceWriteError::Refused(EXISTING_CONFIGURATION_UNREADABLE)
+            }
+            ConfigSaveError::Failed(error) => InterfaceWriteError::Failed(error),
+        }
+    })
 }
 
 /// Saves interface-editable settings. The encryption-at-rest section chooses
@@ -812,11 +836,16 @@ pub(crate) fn save_config(state: &AppState, config: NexusConfig) -> Result<(), S
 /// first-run authority. A missing, empty or whitespace-only, unreadable,
 /// undecryptable or unparsable configuration, or no identity home, leaves no
 /// baseline, and the save is denied: no default ever stands in for it.
+///
+/// The production writer refuses a new or changed credential without the
+/// operator configuration key, and a configuration on disk it cannot read
+/// (Final Gate item A). Refusals and protection changes are audited by reason
+/// class only.
 fn save_config_with<E>(
     state: &AppState,
     config: NexusConfig,
     load_baseline: impl FnOnce() -> Result<nexus_kernel::crypto::EncryptionConfig, E>,
-    write: impl FnOnce(&NexusConfig) -> Result<(), AgentError>,
+    write: impl FnOnce(&NexusConfig) -> Result<nexus_kernel::config::SaveOutcome, InterfaceWriteError>,
 ) -> Result<(), String> {
     let current = match load_baseline() {
         Ok(current) => current,
@@ -825,7 +854,31 @@ fn save_config_with<E>(
     if config.security != current {
         return Err(deny_config_save(state, SECURITY_BACKEND_OWNED));
     }
-    write(&config).map_err(agent_error)
+    match write(&config) {
+        Ok(outcome) => {
+            record_protection_change(state, outcome);
+            Ok(())
+        }
+        Err(InterfaceWriteError::Refused(denial)) => Err(deny_config_save(state, denial)),
+        Err(InterfaceWriteError::Failed(error)) => Err(agent_error(error)),
+    }
+}
+
+/// Records a save that changed how the configuration file is protected
+/// (Final Gate item A): a credential save moved it to the operator key, or a
+/// first explicit save encrypted a legacy plaintext file. Reason class only.
+fn record_protection_change(state: &AppState, outcome: nexus_kernel::config::SaveOutcome) {
+    use nexus_kernel::config::SaveOutcome;
+    let protection = match outcome {
+        SaveOutcome::Written => return,
+        SaveOutcome::RekeyedToOperatorKey => "rekeyed_to_operator_key",
+        SaveOutcome::EncryptedLegacyPlaintext => "encrypted_legacy_plaintext",
+    };
+    state.log_event(
+        SYSTEM_UUID,
+        EventType::UserAction,
+        json!({"action": "save_config", "outcome": "written", "protection": protection}),
+    );
 }
 
 /// (audit reason class, bounded error) for a refused interface config save.
@@ -836,6 +889,14 @@ const BASELINE_UNAVAILABLE: (&str, &str) = (
 const SECURITY_BACKEND_OWNED: (&str, &str) = (
     "security_settings_backend_owned",
     "save_config: security settings are backend-owned",
+);
+const CONFIGURATION_KEY_REQUIRED: (&str, &str) = (
+    "configuration_key_required",
+    "save_config: a new or changed credential needs the operator configuration key (NEXUS_CONFIG_KEY); nothing was saved",
+);
+const EXISTING_CONFIGURATION_UNREADABLE: (&str, &str) = (
+    "existing_configuration_unreadable",
+    "save_config: the configuration on disk cannot be read, so it was not overwritten",
 );
 
 /// Records a refused save by reason class only (never a path, parse text,
@@ -974,7 +1035,7 @@ fn p0_002c5b_interface_saves_cannot_choose_the_vault_key_source() {
             || Ok::<_, AgentError>(current.security.clone()),
             |_| {
                 wrote.set(true);
-                Ok(())
+                Ok(nexus_kernel::config::SaveOutcome::Written)
             },
         );
         assert_eq!(result, Err(SECURITY_BACKEND_OWNED.1.to_string()));
@@ -988,7 +1049,7 @@ fn p0_002c5b_interface_saves_cannot_choose_the_vault_key_source() {
         || Ok::<_, AgentError>(current.security.clone()),
         |_| {
             wrote.set(wrote.get() + 1);
-            Ok(())
+            Ok(nexus_kernel::config::SaveOutcome::Written)
         },
     );
     assert_eq!(result, Ok(()));
@@ -1030,7 +1091,7 @@ fn p0_002c5b_an_unavailable_security_baseline_authorizes_no_save() {
                 || Err(failure),
                 |_| {
                     wrote.set(true);
-                    Ok(())
+                    Ok(nexus_kernel::config::SaveOutcome::Written)
                 },
             );
             assert_eq!(result, Err(BASELINE_UNAVAILABLE.1.to_string()));
@@ -1048,6 +1109,7 @@ fn p0_002c5b_an_unavailable_security_baseline_authorizes_no_save() {
 fn p0_002c5b_interface_updates_need_an_existing_loadable_config() {
     use nexus_kernel::config::{
         load_config_from_path, load_security_baseline_from_path, save_config_to_path,
+        ConfigKeyMaterial,
     };
     use nexus_kernel::crypto::EncryptionConfig;
     let state = AppState::new_in_memory();
@@ -1060,7 +1122,13 @@ fn p0_002c5b_interface_updates_need_an_existing_loadable_config() {
             &state,
             requested,
             || load_security_baseline_from_path(path),
-            |config| save_config_to_path(path, config),
+            |config| {
+                write_keeping_stored_credentials(
+                    path,
+                    config,
+                    &ConfigKeyMaterial::from_launch_environment(),
+                )
+            },
         )
     };
     let unavailable = Err(BASELINE_UNAVAILABLE.1.to_string());
@@ -1141,6 +1209,120 @@ fn p0_002c5b_interface_updates_need_an_existing_loadable_config() {
     ] {
         assert!(!logged.contains(leaked), "{leaked}");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Final Gate item A: through the real baseline loader and writer, an
+/// interface save that adds or changes a credential needs the operator
+/// configuration key, while a save that returns the placeholders does not.
+/// Key material is synthetic and injected; the process environment and the
+/// user's configuration are never used.
+#[cfg(test)]
+#[test]
+fn p0_fg_a_interface_credential_edits_need_the_operator_key() {
+    use nexus_kernel::config::{
+        load_config_from_path_with, load_security_baseline_from_path_with, ConfigKeyMaterial,
+        ConfigWriteRefusal,
+    };
+    let state = AppState::new_in_memory();
+    let dir = std::env::temp_dir().join(format!("nexus-fg-a-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    let ambient = [
+        Some("/home/synthetic-nexus"),
+        Some("synthetic-user"),
+        None,
+        None,
+    ];
+    let legacy = ConfigKeyMaterial::from_values(None, ambient);
+    let operator = ConfigKeyMaterial::from_values(Some("synthetic-operator-key"), ambient);
+    let save = |keys: &ConfigKeyMaterial, requested: NexusConfig| {
+        save_config_with(
+            &state,
+            requested,
+            || load_security_baseline_from_path_with(&path, keys),
+            |config| write_keeping_stored_credentials(&path, config, keys),
+        )
+    };
+
+    // A legacy plaintext configuration that holds a credential.
+    let mut stored = NexusConfig::default();
+    stored.search.brave_api_key = "synthetic-brave".into();
+    std::fs::write(&path, toml::to_string(&stored).unwrap()).unwrap();
+    let seen = redacted_config(load_config_from_path_with(&path, &legacy).unwrap());
+
+    // Returning the placeholder keeps the credential and needs no operator
+    // key. This first explicit save encrypts the plaintext file under the
+    // legacy key it was read with, and says so in the audit trail.
+    let mut settings = seen.clone();
+    settings.llm.default_model = "synthetic-model".into();
+    assert_eq!(save(&legacy, settings.clone()), Ok(()));
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(!text.contains("synthetic-brave"));
+    assert_eq!(
+        load_config_from_path_with(&path, &legacy)
+            .unwrap()
+            .search
+            .brave_api_key,
+        "synthetic-brave"
+    );
+
+    // A new or changed credential without the operator key: refused and
+    // audited, and the file is left exactly as it was.
+    let mut changed = settings.clone();
+    changed.search.brave_api_key = "synthetic-changed".into();
+    let mut added = settings.clone();
+    added.social.x_api_key = "synthetic-x".into();
+    for requested in [changed.clone(), added] {
+        assert_eq!(
+            save(&legacy, requested),
+            Err(CONFIGURATION_KEY_REQUIRED.1.to_string())
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    }
+
+    // With the operator key the change is written; the file moves to the
+    // operator key, which is audited.
+    assert_eq!(save(&operator, changed), Ok(()));
+    assert_eq!(
+        load_config_from_path_with(&path, &operator)
+            .unwrap()
+            .search
+            .brave_api_key,
+        "synthetic-changed"
+    );
+    // Returning the placeholders under the operator key writes nothing new.
+    let seen = redacted_config(load_config_from_path_with(&path, &operator).unwrap());
+    assert_eq!(save(&operator, seen.clone()), Ok(()));
+
+    // Without the operator key the configuration no longer opens: no
+    // baseline, no save, and nothing is overwritten.
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(save(&legacy, seen), Err(BASELINE_UNAVAILABLE.1.to_string()));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+
+    // Audited by reason class only, with the kernel's classes.
+    let logged = audited_payloads(&state);
+    assert!(logged.contains(CONFIGURATION_KEY_REQUIRED.0));
+    assert!(logged.contains("encrypted_legacy_plaintext"));
+    assert!(logged.contains("rekeyed_to_operator_key"));
+    for leaked in [
+        "synthetic-brave",
+        "synthetic-changed",
+        "synthetic-x",
+        "synthetic-operator-key",
+        "nexus-fg-a",
+    ] {
+        assert!(!logged.contains(leaked), "{leaked}");
+    }
+    assert_eq!(
+        CONFIGURATION_KEY_REQUIRED.0,
+        ConfigWriteRefusal::OperatorKeyRequired.reason_class()
+    );
+    assert_eq!(
+        EXISTING_CONFIGURATION_UNREADABLE.0,
+        ConfigWriteRefusal::ExistingUnreadable.reason_class()
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -1858,7 +1858,7 @@ const APPROVED_STATE_ROOTS: &[(&str, &str, usize, &str)] = &[
         "kernel/src/config.rs",
         "var_os(\"HOME\")",
         1,
-        "final gate: configuration key derivation input",
+        "legacy configuration key input: reads legacy files, never keys a new or changed credential (item A)",
     ),
     (
         "kernel/src/hardware_security/tee_backend.rs",
