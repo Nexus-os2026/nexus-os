@@ -244,5 +244,13 @@ jobs:
           "$RUNNER_TEMP/voice-venv/bin/python" -m pip install --upgrade pip
           "$RUNNER_TEMP/voice-venv/bin/python" -m pip install faster-whisper openwakeword silero-vad piper-tts pytest
 
+      # This lane intentionally matches the GPU-less GitHub-hosted Python
+      # validation environment (ci.yml test-python): the runner's GPU is hidden
+      # from CUDA for this step only. Without that, the runner's NVIDIA driver
+      # makes torch write a CUDA initialization warning to stderr, which the
+      # CLI stderr-contract tests reject. That GPU-host behaviour is a separate
+      # product issue, not fixed here.
       - name: Run Python voice tests
+        env:
+          CUDA_VISIBLE_DEVICES: ""
         run: cd voice && python -m pytest -v
