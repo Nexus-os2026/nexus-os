@@ -34,27 +34,21 @@ const MAX_LINK_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 /// How long connecting to a peer may take.
 const PEER_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
-/// Connect to a peer `host:port` within [`PEER_CONNECT_TIMEOUT`], trying each
-/// resolved address, with read and write timeouts on the stream.
-fn connect_peer(address: &str, io_timeout: std::time::Duration) -> Result<TcpStream, String> {
-    use std::net::ToSocketAddrs;
-    let addresses = address
-        .to_socket_addrs()
-        .map_err(|e| format!("Failed to resolve peer {address}: {e}"))?;
-    let mut last_error = format!("Peer {address} has no address");
-    for resolved in addresses {
-        match TcpStream::connect_timeout(&resolved, PEER_CONNECT_TIMEOUT) {
-            Ok(stream) => {
-                stream
-                    .set_read_timeout(Some(io_timeout))
-                    .and_then(|()| stream.set_write_timeout(Some(io_timeout)))
-                    .map_err(|e| format!("Failed to set timeout: {e}"))?;
-                return Ok(stream);
-            }
-            Err(e) => last_error = format!("Failed to connect to peer {address}: {e}"),
-        }
-    }
-    Err(last_error)
+/// Connect to exactly `address`, the socket address the peer policy admitted
+/// (Final Gate item F), within [`PEER_CONNECT_TIMEOUT`], with read and write
+/// timeouts on the stream. No name is resolved here or anywhere on the way:
+/// a DNS answer is not a peer grant.
+fn connect_peer(
+    address: std::net::SocketAddr,
+    io_timeout: std::time::Duration,
+) -> Result<TcpStream, String> {
+    let stream = TcpStream::connect_timeout(&address, PEER_CONNECT_TIMEOUT)
+        .map_err(|e| format!("Failed to connect to peer {address}: {e}"))?;
+    stream
+        .set_read_timeout(Some(io_timeout))
+        .and_then(|()| stream.set_write_timeout(Some(io_timeout)))
+        .map_err(|e| format!("Failed to set timeout: {e}"))?;
+    Ok(stream)
 }
 
 // ── Protocol types ──────────────────────────────────────────────────────────
@@ -130,7 +124,8 @@ pub struct NexusLink {
     encryption_key: Option<[u8; 32]>,
     /// Optional shared secret for HMAC-SHA256 challenge-response authentication.
     shared_secret: Option<String>,
-    /// Optional allowlist of peer addresses. If non-empty, only these peers can connect.
+    /// The peer policy: the IP socket addresses (`ip:port`, `[ipv6]:port`) a
+    /// transfer may reach. Empty admits no peer (Final Gate item F).
     allowed_peers: Vec<String>,
 }
 
@@ -150,24 +145,55 @@ impl NexusLink {
         }
     }
 
-    /// Set allowed peer addresses. If non-empty, only listed addresses can connect.
+    /// Set the peer policy: the IP socket addresses a transfer may reach. An
+    /// entry that is not an IP socket address admits nothing.
     pub fn set_allowed_peers(&mut self, peers: Vec<String>) {
         self.allowed_peers = peers;
     }
 
-    /// Governance: check if a peer address is permitted for connection.
-    fn check_peer_allowed(&self, address: &str) -> Result<(), String> {
+    /// Governance (Final Gate item F): the socket address a transfer may
+    /// connect to. A peer address is not authority, so:
+    /// - an empty peer policy admits no peer;
+    /// - a peer is named by its IP socket address and must equal a policy
+    ///   entry, compared as socket addresses (so `[::1]:9` and
+    ///   `[0:0:0:0:0:0:0:1]:9` are one peer, and `127.0.0.1:9` is not
+    ///   `[::ffff:127.0.0.1]:9`);
+    /// - a host name is never resolved, and neither a host without its port
+    ///   nor any other spelling is repaired into an address.
+    ///
+    /// The address returned is the only one the transfer connects to.
+    fn check_peer_allowed(&self, address: &str) -> Result<std::net::SocketAddr, String> {
         if self.allowed_peers.is_empty() {
-            return Ok(());
+            return Err(
+                "Governance denied: the peer policy is empty, so it admits no peer".to_string(),
+            );
         }
-        // Extract host part (strip port if present)
-        let host = address.split(':').next().unwrap_or(address);
-        if self.allowed_peers.iter().any(|p| p == address || p == host) {
+        let requested: std::net::SocketAddr = address.parse().map_err(|_| {
+            "Governance denied: a peer is named by its IP socket address; a host name is not resolved"
+                .to_string()
+        })?;
+        let admitted = self
+            .allowed_peers
+            .iter()
+            .filter_map(|entry| entry.parse::<std::net::SocketAddr>().ok())
+            .any(|allowed| allowed == requested);
+        if admitted {
+            Ok(requested)
+        } else {
+            Err("Governance denied: the peer address is not in the peer policy".to_string())
+        }
+    }
+
+    /// Governance (Final Gate item F): a transfer needs peer authentication
+    /// and wire encryption both configured. Without a shared secret the
+    /// handshake is skipped, and without a key every message is plaintext,
+    /// so such a transfer is refused before any connection is made. Phase
+    /// Zero builds no pairing: nothing in the desktop configures either.
+    fn require_authenticated_transport(&self) -> Result<(), String> {
+        if self.shared_secret.is_some() && self.encryption_key.is_some() {
             Ok(())
         } else {
-            Err(format!(
-                "Governance denied: peer address '{address}' not in allowed_peers list"
-            ))
+            Err("Governance denied: unauthenticated Nexus Link transfer is unavailable; no shared secret and encryption key are configured".to_string())
         }
     }
 
@@ -474,14 +500,13 @@ impl NexusLink {
         &self.known_peers
     }
 
-    /// Query a peer for its available models over TCP.
+    /// Query a peer for its available models over TCP: only a peer the
+    /// policy admits, over an authenticated, encrypted link.
     pub fn discover_peer_models(&self, peer: &PeerDevice) -> Result<Vec<SharedModelInfo>, String> {
-        self.check_peer_allowed(&peer.address)?;
-        eprintln!(
-            "[nexus-link][governance] tcp_connect peer={} op=discover_models",
-            peer.address
-        );
-        let mut stream = connect_peer(&peer.address, std::time::Duration::from_secs(10))?;
+        let address = self.check_peer_allowed(&peer.address)?;
+        self.require_authenticated_transport()?;
+        eprintln!("[nexus-link][governance] tcp_connect peer={address} op=discover_models");
+        let mut stream = connect_peer(address, std::time::Duration::from_secs(10))?;
 
         // Authenticate before exchanging messages
         self.authenticate_as_initiator(&mut stream)?;
@@ -498,7 +523,9 @@ impl NexusLink {
         }
     }
 
-    /// Send a model file to a peer device.
+    /// Send a model file to a peer device: only a regular file beneath the
+    /// models directory, only to a peer the policy admits, and only over an
+    /// authenticated, encrypted link. Each check runs before any connection.
     pub fn send_model(
         &self,
         peer_address: &str,
@@ -506,7 +533,6 @@ impl NexusLink {
         filename: &str,
         progress_callback: impl Fn(TransferProgress),
     ) -> Result<(), String> {
-        self.check_peer_allowed(peer_address)?;
         // P0-002C5B: the file is named only by a validated relative path
         // beneath the models directory (directly or inside the model's own
         // directory); every step must be a real directory and the target a
@@ -520,23 +546,21 @@ impl NexusLink {
                 )
             })
             .map_err(|_| "Model file not found beneath the models directory".to_string())?;
-        self.send_model_from_path(
-            &file_path,
-            peer_address,
-            model_id,
-            filename,
-            progress_callback,
-        )
+        // Final Gate item F: the peer policy and an authenticated transport.
+        let address = self.check_peer_allowed(peer_address)?;
+        self.require_authenticated_transport()?;
+        self.send_model_from_path(&file_path, address, model_id, filename, progress_callback)
     }
 
     fn send_model_from_path(
         &self,
         file_path: &std::path::Path,
-        peer_address: &str,
+        address: std::net::SocketAddr,
         model_id: &str,
         filename: &str,
         progress_callback: impl Fn(TransferProgress),
     ) -> Result<(), String> {
+        let peer_address = address.to_string();
         let metadata = std::fs::metadata(file_path)
             .map_err(|e| format!("Failed to read file metadata: {e}"))?;
         let total_bytes = metadata.len();
@@ -548,13 +572,13 @@ impl NexusLink {
             total_bytes,
             percent: 0.0,
             status: TransferStatus::Connecting,
-            peer_name: peer_address.to_string(),
+            peer_name: peer_address.clone(),
         });
 
         eprintln!(
             "[nexus-link][governance] tcp_connect peer={peer_address} op=send_model model_id={model_id}"
         );
-        let mut stream = connect_peer(peer_address, std::time::Duration::from_secs(30))?;
+        let mut stream = connect_peer(address, std::time::Duration::from_secs(30))?;
 
         // Authenticate before exchanging messages
         self.authenticate_as_initiator(&mut stream)?;
@@ -1323,7 +1347,8 @@ mod tests {
             while matches!(stream.read(&mut rest), Ok(n) if n > 0) {}
         });
         let link = NexusLink::new("client", "/tmp/models");
-        let mut stream = connect_peer(&address, std::time::Duration::from_secs(5)).unwrap();
+        let mut stream =
+            connect_peer(address.parse().unwrap(), std::time::Duration::from_secs(5)).unwrap();
         assert_eq!(
             stream.read_timeout().unwrap(),
             Some(std::time::Duration::from_secs(5))
@@ -1343,11 +1368,12 @@ mod tests {
         drop(stream);
         peer.join().unwrap();
 
-        for address in ["", "no-port", "127.0.0.1"] {
-            assert!(
-                connect_peer(address, std::time::Duration::from_secs(5)).is_err(),
-                "{address:?}"
-            );
+        // Final Gate item F: `connect_peer` takes only a socket address the
+        // peer policy admitted, so text that is not one never reaches it.
+        let mut link = NexusLink::new("client", "/tmp/models");
+        link.set_allowed_peers(vec![address.clone()]);
+        for malformed in ["", "no-port", "127.0.0.1"] {
+            assert!(link.check_peer_allowed(malformed).is_err(), "{malformed:?}");
         }
     }
 
@@ -1533,6 +1559,190 @@ mod tests {
                 "{model_id:?} {filename:?}: {error}"
             );
         }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    // ── Final Gate item F: the peer policy and an authenticated transport ──
+
+    /// A models directory holding one regular model file, and its base.
+    fn models_with_one_file() -> (std::path::PathBuf, String) {
+        let base = std::env::temp_dir().join(format!("nexus-fg-link-{}", uuid::Uuid::new_v4()));
+        let models = base.join("models");
+        std::fs::create_dir_all(&models).unwrap();
+        std::fs::write(models.join("model.gguf"), b"weights").unwrap();
+        let models = models.to_string_lossy().into_owned();
+        (base, models)
+    }
+
+    /// A loopback listener that must never be contacted, and its address.
+    fn quiet_peer() -> (std::net::TcpListener, String) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        (listener, address)
+    }
+
+    fn assert_never_contacted(listener: &std::net::TcpListener) {
+        assert!(matches!(
+            listener.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+    }
+
+    fn authenticated_link(models: &str) -> NexusLink {
+        let mut link = NexusLink::new("device", models);
+        link.set_shared_secret("fg-shared-secret");
+        link.set_encryption_key("fg-wire-key");
+        link
+    }
+
+    /// An empty peer policy admits no peer, even over an authenticated
+    /// link, and nothing is sent or discovered.
+    #[test]
+    fn p0_fg_an_empty_peer_policy_admits_no_peer() {
+        let (base, models) = models_with_one_file();
+        let (listener, address) = quiet_peer();
+        let link = authenticated_link(&models);
+        let error = link
+            .send_model(&address, "m", "model.gguf", |_| {})
+            .unwrap_err();
+        assert!(error.contains("peer policy is empty"), "{error}");
+        let peer = PeerDevice {
+            id: "peer".into(),
+            name: "peer".into(),
+            address: address.clone(),
+            last_seen: 0,
+            available_models: Vec::new(),
+        };
+        let error = link.discover_peer_models(&peer).unwrap_err();
+        assert!(error.contains("peer policy is empty"), "{error}");
+        assert_never_contacted(&listener);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// The policy compares IP socket addresses exactly. A host name, a
+    /// host without its port, another port, a mapped or shorthand spelling
+    /// and URL syntax name no admitted peer, and a policy entry that is not
+    /// a socket address admits nothing. No name is resolved.
+    #[test]
+    fn p0_fg_the_peer_policy_admits_only_exact_socket_addresses() {
+        let (base, models) = models_with_one_file();
+        let (listener, address) = quiet_peer();
+        let port = listener.local_addr().unwrap().port();
+        let mut link = authenticated_link(&models);
+
+        for policy in [
+            format!("localhost:{port}"),
+            format!("LOCALHOST:{port}"),
+            "127.0.0.1".to_string(),
+            format!("127.0.0.1:{}", port.wrapping_add(1)),
+            format!("[::ffff:127.0.0.1]:{port}"),
+            format!("127.0.0.1:{port} "),
+            format!("http://127.0.0.1:{port}"),
+            String::new(),
+        ] {
+            link.set_allowed_peers(vec![policy.clone()]);
+            let error = link
+                .send_model(&address, "m", "model.gguf", |_| {})
+                .unwrap_err();
+            assert!(error.contains("Governance denied"), "{policy:?}: {error}");
+        }
+
+        link.set_allowed_peers(vec![address.clone()]);
+        for alias in [
+            format!("localhost:{port}"),
+            format!("127.1:{port}"),
+            format!("[::ffff:127.0.0.1]:{port}"),
+            "127.0.0.1".to_string(),
+            format!("127.0.0.1:{port}/x"),
+            format!("http://127.0.0.1:{port}"),
+            format!(" 127.0.0.1:{port}"),
+        ] {
+            let error = link
+                .send_model(&alias, "m", "model.gguf", |_| {})
+                .unwrap_err();
+            assert!(error.contains("Governance denied"), "{alias:?}: {error}");
+        }
+        assert_never_contacted(&listener);
+
+        // Spellings of one socket address are one peer, and that address is
+        // the one a transfer would connect to.
+        link.set_allowed_peers(vec!["[::1]:9".to_string()]);
+        assert_eq!(
+            link.check_peer_allowed("[0:0:0:0:0:0:0:1]:9"),
+            Ok("[::1]:9".parse().unwrap())
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// Without both a shared secret and a wire key, an admitted peer is still
+    /// refused, before any connection.
+    #[test]
+    fn p0_fg_an_unauthenticated_transfer_is_refused_before_connecting() {
+        let (base, models) = models_with_one_file();
+        let (listener, address) = quiet_peer();
+        for (secret, key) in [(false, false), (true, false), (false, true)] {
+            let mut link = NexusLink::new("device", &models);
+            link.set_allowed_peers(vec![address.clone()]);
+            if secret {
+                link.set_shared_secret("fg-shared-secret");
+            }
+            if key {
+                link.set_encryption_key("fg-wire-key");
+            }
+            let error = link
+                .send_model(&address, "m", "model.gguf", |_| {})
+                .unwrap_err();
+            assert!(error.contains("unauthenticated"), "{secret} {key}: {error}");
+            let peer = PeerDevice {
+                id: "peer".into(),
+                name: "peer".into(),
+                address: address.clone(),
+                last_seen: 0,
+                available_models: Vec::new(),
+            };
+            let error = link.discover_peer_models(&peer).unwrap_err();
+            assert!(error.contains("unauthenticated"), "{secret} {key}: {error}");
+        }
+        assert_never_contacted(&listener);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// An admitted peer over an authenticated, encrypted link is reached at
+    /// exactly its policy address, and the transfer proceeds to the peer's
+    /// answer.
+    #[test]
+    fn p0_fg_an_admitted_authenticated_peer_is_reached_at_its_policy_address() {
+        let (base, models) = models_with_one_file();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let mut link = authenticated_link(&models);
+        link.set_allowed_peers(vec![address.clone()]);
+        let responder = authenticated_link(&models);
+        let peer = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                .unwrap();
+            responder.authenticate_as_responder(&mut stream).unwrap();
+            let request = responder.read_message(&mut stream).unwrap();
+            let reply = responder
+                .serialize_message(&LinkMessage::TransferRejected {
+                    reason: "test peer".into(),
+                })
+                .unwrap();
+            stream.write_all(&reply).unwrap();
+            request
+        });
+        let error = link
+            .send_model(&address, "m", "model.gguf", |_| {})
+            .unwrap_err();
+        assert_eq!(error, "Transfer rejected: test peer");
+        let request = peer.join().unwrap();
+        assert!(
+            matches!(&request, LinkMessage::TransferRequest { filename, .. } if filename == "model.gguf"),
+            "{request:?}"
+        );
         let _ = std::fs::remove_dir_all(&base);
     }
 }

@@ -173,11 +173,12 @@ pub(crate) fn checked_endpoint(endpoint: &str) -> Result<String, AgentError> {
 pub(crate) fn curl_get_status(endpoint: &str) -> Result<u16, AgentError> {
     let endpoint = checked_endpoint(endpoint)?;
     eprintln!("[nexus-llm][governance] curl_get_status endpoint={endpoint}");
+    // Final Gate item B: no redirect is followed; the checked address is the
+    // one contacted.
     let output = Command::new("curl")
         .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
         .args([
             "-sS",
-            "-L",
             "-m",
             "5",
             "--max-filesize",
@@ -220,31 +221,49 @@ pub(crate) fn curl_post_json(
     curl_post_json_with_timeout(endpoint, headers, body, 20)
 }
 
-pub(crate) fn curl_post_json_with_timeout(
+/// Header names that carry a credential (Final Gate item C). Such a header is
+/// never placed on a process command line, where other local processes can
+/// read it: [`curl_post_json_with_timeout`] refuses it, and
+/// [`post_json_in_process`] sends it from this process.
+const CREDENTIAL_HEADERS: [&str; 7] = [
+    "authorization",
+    "proxy-authorization",
+    "x-api-key",
+    "api-key",
+    "x-goog-api-key",
+    "x-subscription-token",
+    "cookie",
+];
+
+/// Whether `name` is a credential-bearing header, in any letter case.
+pub(crate) fn is_credential_header(name: &str) -> bool {
+    CREDENTIAL_HEADERS
+        .iter()
+        .any(|credential| credential.eq_ignore_ascii_case(name))
+}
+
+/// The curl invocation for a JSON POST whose body is written to stdin, not
+/// yet started. A credential-bearing header is refused before anything else
+/// (Final Gate item C), and no redirect is followed (item B): the checked
+/// address is the one contacted, and nothing is re-sent to a redirect target.
+fn curl_post_command(
     endpoint: &str,
     headers: &BTreeMap<String, String>,
-    body: &Value,
     timeout_secs: u32,
-) -> Result<(u16, Value), AgentError> {
+    status_marker: &str,
+) -> Result<Command, AgentError> {
+    if headers.keys().any(|name| is_credential_header(name)) {
+        return Err(AgentError::SupervisorError(
+            "a credential header is never passed on a process command line".to_string(),
+        ));
+    }
     let endpoint = checked_endpoint(endpoint)?;
     eprintln!("[nexus-llm][governance] curl_post_json endpoint={endpoint} timeout={timeout_secs}s");
-    let marker = "__NEXUS_STATUS__:";
-    let encoded_body = serde_json::to_string(body).map_err(|error| {
-        AgentError::SupervisorError(format!("failed to encode request body: {error}"))
-    })?;
-
     let timeout_str = timeout_secs.to_string();
     let mut command = Command::new("curl");
     command
         .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-        .args([
-            "-sS",
-            "-L",
-            "-m",
-            &timeout_str,
-            "--max-filesize",
-            "33554432",
-        ]);
+        .args(["-sS", "-m", &timeout_str, "--max-filesize", "33554432"]);
     for (header_name, header_value) in headers {
         let header = nexus_kernel::governed_http::http_header(header_name, header_value)
             .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
@@ -256,12 +275,26 @@ pub(crate) fn curl_post_json_with_timeout(
         .arg("--data-binary")
         .arg("@-")
         .arg("-w")
-        .arg(format!("\n{marker}%{{http_code}}"))
+        .arg(format!("\n{status_marker}%{{http_code}}"))
         .arg("--")
         .arg(&endpoint)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    Ok(command)
+}
+
+pub(crate) fn curl_post_json_with_timeout(
+    endpoint: &str,
+    headers: &BTreeMap<String, String>,
+    body: &Value,
+    timeout_secs: u32,
+) -> Result<(u16, Value), AgentError> {
+    let marker = "__NEXUS_STATUS__:";
+    let mut command = curl_post_command(endpoint, headers, timeout_secs, marker)?;
+    let encoded_body = serde_json::to_string(body).map_err(|error| {
+        AgentError::SupervisorError(format!("failed to encode request body: {error}"))
+    })?;
 
     let mut child = command
         .spawn()
@@ -270,9 +303,13 @@ pub(crate) fn curl_post_json_with_timeout(
     // Pipe body via stdin to avoid OS ARG_MAX limits with large payloads (e.g. base64 images)
     if let Some(mut stdin) = child.stdin.take() {
         use std::io::Write;
-        stdin.write_all(encoded_body.as_bytes()).map_err(|error| {
-            AgentError::SupervisorError(format!("failed to write body to curl stdin: {error}"))
-        })?;
+        if let Err(error) = stdin.write_all(encoded_body.as_bytes()) {
+            drop(stdin);
+            reap_child(&mut child);
+            return Err(AgentError::SupervisorError(format!(
+                "failed to write body to curl stdin: {error}"
+            )));
+        }
     }
 
     let output = child
@@ -303,26 +340,177 @@ pub(crate) fn curl_post_json_with_timeout(
     let status = status_raw.trim().parse::<u16>().map_err(|error| {
         AgentError::SupervisorError(format!("invalid HTTP status from curl: {error}"))
     })?;
-    let trimmed_body = body_raw.trim();
-    let response_json = if trimmed_body.is_empty() {
-        Value::Null
+    Ok((status, json_response(body_raw.trim())?))
+}
+
+/// Stop and reap a curl child that an early error leaves behind (Final Gate
+/// item I), so no request keeps running unowned and no child stays unreaped.
+/// Killing a child that already exited is not an error here; the caller
+/// reports its own failure either way.
+pub(crate) fn reap_child(child: &mut std::process::Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// A provider's JSON response body: `null` when empty, and otherwise JSON,
+/// or an error quoting at most the first 200 characters of the body.
+fn json_response(trimmed_body: &str) -> Result<Value, AgentError> {
+    if trimmed_body.is_empty() {
+        return Ok(Value::Null);
+    }
+    serde_json::from_str::<Value>(trimmed_body).map_err(|error| {
+        // Show first 200 chars of the raw response for debugging
+        let preview = if trimmed_body.len() > 200 {
+            format!(
+                "{}...",
+                &trimmed_body[..trimmed_body.floor_char_boundary(200)]
+            )
+        } else {
+            trimmed_body.to_string()
+        };
+        AgentError::SupervisorError(format!(
+            "failed to parse JSON response: {error}\nRaw response (first 200 chars): {preview}"
+        ))
+    })
+}
+
+/// The largest provider response read in process, as for curl (32 MiB).
+const MAX_PROVIDER_RESPONSE_BYTES: u64 = 32 * 1024 * 1024;
+
+/// Final Gate item C: POST backend-serialized JSON to a provider endpoint
+/// with credential-bearing headers, from this process. No credential is
+/// placed on a process command line. The request keeps the curl helper's
+/// bounds and adds none of its reach:
+/// - the endpoint passes the same http(s) check, and headers the same token
+///   and line-break checks; credential header values are marked sensitive;
+/// - no redirect is followed, so a credential reaches only the checked
+///   endpoint (a redirect response is returned as its status);
+/// - `timeout_secs` bounds the whole exchange, and at most 32 MiB of
+///   response is read;
+/// - TLS certificates are verified;
+/// - an error names what failed, never a header value or the URL.
+///
+/// The request runs on its own thread: the blocking client must not run on
+/// an async runtime's thread, and providers are called from those (the
+/// agent loop).
+pub(crate) fn post_json_in_process(
+    endpoint: &str,
+    headers: &BTreeMap<String, String>,
+    body: &Value,
+    timeout_secs: u32,
+) -> Result<(u16, Value), AgentError> {
+    post_json_bounded(
+        endpoint,
+        headers,
+        body,
+        std::time::Duration::from_secs(u64::from(timeout_secs)),
+        MAX_PROVIDER_RESPONSE_BYTES,
+    )
+}
+
+fn post_json_bounded(
+    endpoint: &str,
+    headers: &BTreeMap<String, String>,
+    body: &Value,
+    timeout: std::time::Duration,
+    max_bytes: u64,
+) -> Result<(u16, Value), AgentError> {
+    let endpoint = checked_endpoint(endpoint)?;
+    let invalid_header = || AgentError::SupervisorError("invalid HTTP header".to_string());
+    let mut header_map = reqwest::header::HeaderMap::new();
+    for (name, value) in headers {
+        nexus_kernel::governed_http::http_header(name, value)
+            .map_err(|error| AgentError::SupervisorError(error.to_string()))?;
+        let header_name = reqwest::header::HeaderName::from_bytes(name.as_bytes())
+            .map_err(|_| invalid_header())?;
+        let mut header_value =
+            reqwest::header::HeaderValue::from_str(value).map_err(|_| invalid_header())?;
+        header_value.set_sensitive(is_credential_header(name));
+        header_map.insert(header_name, header_value);
+    }
+    let encoded = serde_json::to_vec(body).map_err(|error| {
+        AgentError::SupervisorError(format!("failed to encode request body: {error}"))
+    })?;
+    eprintln!(
+        "[nexus-llm][governance] post_json endpoint={endpoint} timeout={}s",
+        timeout.as_secs()
+    );
+    let request = std::thread::Builder::new()
+        .name("nexus-llm-request".to_string())
+        .spawn(move || send_bounded(&endpoint, header_map, encoded, timeout, max_bytes))
+        .map_err(|error| {
+            AgentError::SupervisorError(format!("failed to start the request: {error}"))
+        })?;
+    let (status, raw) = request
+        .join()
+        .map_err(|_| AgentError::SupervisorError("the request ended without a result".to_string()))?
+        .map_err(AgentError::SupervisorError)?;
+    let text = String::from_utf8(raw).map_err(|error| {
+        AgentError::SupervisorError(format!("response was not valid UTF-8: {error}"))
+    })?;
+    Ok((status, json_response(text.trim())?))
+}
+
+/// Send one bounded request (see [`post_json_in_process`]) and read its
+/// status and at most `max_bytes` of body.
+fn send_bounded(
+    endpoint: &str,
+    headers: reqwest::header::HeaderMap,
+    body: Vec<u8>,
+    timeout: std::time::Duration,
+    max_bytes: u64,
+) -> Result<(u16, Vec<u8>), String> {
+    use std::io::Read;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|error| request_error("could not start", error))?;
+    let response = client
+        .post(endpoint)
+        .headers(headers)
+        .body(body)
+        .send()
+        .map_err(|error| request_error("failed", error))?;
+    let status = response.status().as_u16();
+    let too_large = || format!("the response is larger than {max_bytes} bytes");
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes)
+    {
+        return Err(too_large());
+    }
+    let mut raw = Vec::new();
+    response
+        .take(max_bytes + 1)
+        .read_to_end(&mut raw)
+        .map_err(|error| format!("the response could not be read: {}", error.kind()))?;
+    if raw.len() as u64 > max_bytes {
+        return Err(too_large());
+    }
+    Ok((status, raw))
+}
+
+/// A request failure without the URL (it is dropped from the error) and
+/// without any header, with the causes that explain it (a refused
+/// connection, a name that did not resolve, a certificate that did not
+/// verify).
+fn request_error(what: &str, error: reqwest::Error) -> String {
+    let kind = if error.is_timeout() {
+        " (timed out)"
+    } else if error.is_connect() {
+        " (could not connect)"
     } else {
-        serde_json::from_str::<Value>(trimmed_body).map_err(|error| {
-            // Show first 200 chars of the raw response for debugging
-            let preview = if trimmed_body.len() > 200 {
-                format!(
-                    "{}...",
-                    &trimmed_body[..trimmed_body.floor_char_boundary(200)]
-                )
-            } else {
-                trimmed_body.to_string()
-            };
-            AgentError::SupervisorError(format!(
-                "failed to parse JSON response: {error}\nRaw response (first 200 chars): {preview}"
-            ))
-        })?
+        ""
     };
-    Ok((status, response_json))
+    let error = error.without_url();
+    let mut message = format!("the request {what}{kind}: {error}");
+    let mut source = std::error::Error::source(&error);
+    while let Some(cause) = source {
+        message.push_str(&format!(": {cause}"));
+        source = cause.source();
+    }
+    message
 }
 
 #[cfg(test)]
@@ -753,5 +941,302 @@ mod tests {
             super::checked_endpoint("http://127.0.0.1:11434/api/tags").unwrap(),
             "http://127.0.0.1:11434/api/tags"
         );
+    }
+
+    // ── Final Gate item C: credentials never reach a process command line ──
+
+    use serde_json::Value;
+    use std::collections::BTreeMap;
+    use std::time::Duration;
+
+    /// A loopback listener that must never be contacted, and its URL.
+    fn quiet_listener() -> (std::net::TcpListener, String) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        (listener, base)
+    }
+
+    fn assert_never_contacted(listener: &std::net::TcpListener) {
+        assert!(matches!(
+            listener.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+    }
+
+    /// Answer one loopback request with `answer` (or, when it is empty, hold
+    /// the connection unanswered until the client gives up), and return the
+    /// request received: its head and body as text.
+    fn serve_once(answer: Vec<u8>) -> (String, std::thread::JoinHandle<String>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(30)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0u8; 1];
+            while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                request.push(byte[0]);
+            }
+            let head = String::from_utf8_lossy(&request).to_ascii_lowercase();
+            let length = head
+                .lines()
+                .find_map(|line| line.strip_prefix("content-length:"))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            let mut body = vec![0u8; length];
+            stream.read_exact(&mut body).unwrap();
+            request.extend_from_slice(&body);
+            if answer.is_empty() {
+                let mut rest = [0u8; 64];
+                while matches!(stream.read(&mut rest), Ok(n) if n > 0) {}
+            } else {
+                let _ = stream.write_all(&answer);
+            }
+            String::from_utf8_lossy(&request).into_owned()
+        });
+        (base, handle)
+    }
+
+    /// Final Gate item C: the curl helper refuses every credential-bearing
+    /// header, in any letter case, before a command exists, so no process
+    /// starts and nothing is contacted. The command it builds for other
+    /// headers follows no redirect and ends with the checked endpoint after
+    /// `--`.
+    #[test]
+    fn p0_fg_credential_headers_never_reach_a_process_command_line() {
+        let (listener, base) = quiet_listener();
+        let endpoint = format!("{base}/v1");
+        for name in [
+            "authorization",
+            "Authorization",
+            "PROXY-AUTHORIZATION",
+            "x-api-key",
+            "X-Api-Key",
+            "api-key",
+            "x-goog-api-key",
+            "X-Subscription-Token",
+            "cookie",
+        ] {
+            let headers = BTreeMap::from([(name.to_string(), "fg-secret-value".to_string())]);
+            let error = super::curl_post_json_with_timeout(&endpoint, &headers, &json!({}), 1)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("credential header"), "{name}: {error}");
+            assert!(!error.contains("fg-secret-value"), "{name}: {error}");
+            assert!(
+                super::curl_post_command(&endpoint, &headers, 1, "M").is_err(),
+                "{name}"
+            );
+        }
+        assert_never_contacted(&listener);
+
+        let headers =
+            BTreeMap::from([("content-type".to_string(), "application/json".to_string())]);
+        let command = super::curl_post_command(&endpoint, &headers, 7, "__M__:").unwrap();
+        assert_eq!(command.get_program(), "curl");
+        let args: Vec<String> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args[..6], nexus_kernel::governed_http::CURL_HTTP_ONLY);
+        for redirect in ["-L", "--location", "--location-trusted"] {
+            assert!(!args.iter().any(|arg| arg == redirect), "{args:?}");
+        }
+        assert!(args
+            .windows(2)
+            .any(|pair| pair[0] == "-H" && pair[1] == "content-type: application/json"));
+        assert_eq!(args[args.len() - 2..], ["--".to_string(), endpoint.clone()]);
+    }
+
+    /// Final Gate item C: a credentialed POST runs in this process: the
+    /// credential and the body reach the endpoint, and the status and JSON
+    /// come back.
+    #[test]
+    fn p0_fg_credentialed_posts_run_in_process() {
+        let body = r#"{"ok":true}"#;
+        let answer = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let (base, server) = serve_once(answer.into_bytes());
+        let headers = BTreeMap::from([
+            ("authorization".to_string(), "Bearer fg-secret".to_string()),
+            ("content-type".to_string(), "application/json".to_string()),
+        ]);
+        let (status, payload) = super::post_json_in_process(
+            &format!("{base}/v1/chat"),
+            &headers,
+            &json!({"model": "m"}),
+            10,
+        )
+        .unwrap();
+        assert_eq!((status, payload), (200, json!({"ok": true})));
+        let request = server.join().unwrap();
+        assert!(
+            request.starts_with("POST /v1/chat HTTP/1.1\r\n"),
+            "{request}"
+        );
+        assert!(
+            request
+                .to_ascii_lowercase()
+                .contains("authorization: bearer fg-secret"),
+            "{request}"
+        );
+        assert!(request.ends_with(r#"{"model":"m"}"#), "{request}");
+    }
+
+    /// No redirect is followed, so the credential reaches only the checked
+    /// endpoint; the redirect comes back as its status.
+    #[test]
+    fn p0_fg_credentialed_posts_follow_no_redirect() {
+        let (target, target_url) = quiet_listener();
+        for code in [
+            "301 Moved Permanently",
+            "302 Found",
+            "307 Temporary Redirect",
+            "308 Permanent Redirect",
+        ] {
+            let answer = format!(
+                "HTTP/1.1 {code}\r\nLocation: {target_url}/collect\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            let (base, server) = serve_once(answer.into_bytes());
+            let headers =
+                BTreeMap::from([("authorization".to_string(), "Bearer fg-secret".to_string())]);
+            let (status, payload) =
+                super::post_json_in_process(&format!("{base}/v1"), &headers, &json!({}), 10)
+                    .unwrap();
+            assert_eq!(status.to_string(), code[..3], "{code}");
+            assert_eq!(payload, Value::Null);
+            server.join().unwrap();
+        }
+        assert_never_contacted(&target);
+    }
+
+    /// The response read is bounded, whether it declares its length or not.
+    #[test]
+    fn p0_fg_credentialed_posts_read_a_bounded_response() {
+        let declared = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: 2048\r\nConnection: close\r\n\r\n{}",
+            "a".repeat(2048)
+        );
+        let chunk = "b".repeat(1000);
+        let streamed = format!(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n3e8\r\n{chunk}\r\n3e8\r\n{chunk}\r\n0\r\n\r\n"
+        );
+        for answer in [declared, streamed] {
+            let (base, server) = serve_once(answer.into_bytes());
+            let error = super::post_json_bounded(
+                &format!("{base}/v1"),
+                &BTreeMap::new(),
+                &json!({}),
+                Duration::from_secs(10),
+                1024,
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains("larger than 1024 bytes"), "{error}");
+            server.join().unwrap();
+        }
+    }
+
+    /// A stalled endpoint is abandoned at the timeout, and neither that nor
+    /// a refused connection names the credential or the URL.
+    #[test]
+    fn p0_fg_credentialed_post_failures_are_bounded_and_name_no_secret() {
+        let (base, server) = serve_once(Vec::new());
+        let headers = BTreeMap::from([("x-api-key".to_string(), "fg-secret".to_string())]);
+        let started = std::time::Instant::now();
+        let stalled = super::post_json_bounded(
+            &format!("{base}/v1/secret-path"),
+            &headers,
+            &json!({}),
+            Duration::from_secs(1),
+            1024,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(started.elapsed() < Duration::from_secs(30), "{stalled}");
+        assert!(stalled.contains("timed out"), "{stalled}");
+        server.join().unwrap();
+
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap();
+        let refused = super::post_json_in_process(
+            &format!("http://{closed}/v1/secret-path"),
+            &headers,
+            &json!({}),
+            5,
+        )
+        .unwrap_err()
+        .to_string();
+        for error in [&stalled, &refused] {
+            assert!(!error.contains("fg-secret"), "{error}");
+            assert!(!error.contains("secret-path"), "{error}");
+        }
+    }
+
+    /// The migrated providers post their credential to a constant https
+    /// endpoint, in process.
+    #[test]
+    fn p0_fg_credentialed_providers_post_to_constant_https_endpoints_in_process() {
+        let key = || Some("k".to_string());
+        for request in [
+            OpenAiProvider::new(key()).build_request("p", 1, "m"),
+            DeepSeekProvider::new(key()).build_request("p", 1, "m"),
+            GeminiProvider::new(key()).build_request("p", 1, "m"),
+            NvidiaProvider::new(key()).build_request("p", 1, "m"),
+        ] {
+            assert!(
+                request.endpoint.starts_with("https://"),
+                "{}",
+                request.endpoint
+            );
+            assert!(request
+                .headers
+                .keys()
+                .any(|name| super::is_credential_header(name)));
+        }
+        for (file, source) in [
+            ("openai.rs", include_str!("openai.rs")),
+            ("deepseek.rs", include_str!("deepseek.rs")),
+            ("gemini.rs", include_str!("gemini.rs")),
+            ("nvidia.rs", include_str!("nvidia.rs")),
+        ] {
+            assert!(!source.contains("curl_post_json"), "{file}");
+            assert!(source.contains("post_json_in_process("), "{file}");
+        }
+    }
+
+    /// Final Gate item I: every early error after a curl child starts stops
+    /// and reaps it (`reap_child`) instead of returning with the child still
+    /// running and unreaped. The pre-repair `?` returns are gone.
+    #[test]
+    fn p0_fg_curl_children_are_reaped_on_early_errors() {
+        let production = |source: &'static str| {
+            source
+                .split("#[cfg(test)]\nmod tests")
+                .next()
+                .unwrap()
+                .replace("\r\n", "\n")
+        };
+        let helpers = production(include_str!("mod.rs"));
+        let ollama = production(include_str!("ollama.rs"));
+        assert_eq!(helpers.matches("reap_child(&mut child);").count(), 1);
+        assert_eq!(ollama.matches("super::reap_child(&mut child);").count(), 5);
+        for gone in [
+            "\"no stdout from curl\".to_string()))?",
+            "read error during chat: {e}\")))?",
+            "read error during pull: {e}\")))?",
+            "failed to write request body to curl: {e}\"))\n            })?",
+            "failed to write body to curl stdin: {error}\"))\n        })?",
+        ] {
+            assert!(!ollama.contains(gone) && !helpers.contains(gone), "{gone}");
+        }
     }
 }

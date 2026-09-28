@@ -2278,9 +2278,15 @@ pub mod runtime {
         super::ensure_ollama(base_url)
     }
 
+    /// Final Gate item I: answering this ran the `ollama` program found on
+    /// `PATH`. Nexus runs no helper for it (`Closure::HelperLaunch`); whether
+    /// the service answers is `check_ollama`.
     #[tauri::command]
-    fn is_ollama_installed() -> bool {
-        super::is_ollama_installed()
+    pub(crate) fn is_ollama_installed() -> Result<bool, String> {
+        Err(crate::phase0_surface::closed(
+            "is_ollama_installed",
+            crate::phase0_surface::Closure::HelperLaunch,
+        ))
     }
 
     #[tauri::command]
@@ -2581,40 +2587,40 @@ pub mod runtime {
     }
 
     // ── A2A Client Commands ──
+    //
+    // Final Gate item B: the agent URL was the caller's choice, so these are
+    // closed (`Closure::NetworkDestination`); the known-agent list stays.
 
     #[tauri::command]
-    fn a2a_discover_agent(
-        state: tauri::State<'_, AppState>,
-        url: String,
-    ) -> Result<serde_json::Value, String> {
-        super::a2a_discover_agent(state.inner(), url)
+    pub(crate) fn a2a_discover_agent() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "a2a_discover_agent",
+            crate::phase0_surface::Closure::NetworkDestination,
+        ))
     }
 
     #[tauri::command]
-    fn a2a_send_task(
-        state: tauri::State<'_, AppState>,
-        agent_url: String,
-        message: String,
-    ) -> Result<serde_json::Value, String> {
-        super::a2a_send_task(state.inner(), agent_url, message)
+    pub(crate) fn a2a_send_task() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "a2a_send_task",
+            crate::phase0_surface::Closure::NetworkDestination,
+        ))
     }
 
     #[tauri::command]
-    fn a2a_get_task_status(
-        state: tauri::State<'_, AppState>,
-        agent_url: String,
-        task_id: String,
-    ) -> Result<serde_json::Value, String> {
-        super::a2a_get_task_status(state.inner(), agent_url, task_id)
+    pub(crate) fn a2a_get_task_status() -> Result<serde_json::Value, String> {
+        Err(crate::phase0_surface::closed(
+            "a2a_get_task_status",
+            crate::phase0_surface::Closure::NetworkDestination,
+        ))
     }
 
     #[tauri::command]
-    fn a2a_cancel_task(
-        state: tauri::State<'_, AppState>,
-        agent_url: String,
-        task_id: String,
-    ) -> Result<(), String> {
-        super::a2a_cancel_task(state.inner(), agent_url, task_id)
+    pub(crate) fn a2a_cancel_task() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "a2a_cancel_task",
+            crate::phase0_surface::Closure::NetworkDestination,
+        ))
     }
 
     #[tauri::command]
@@ -3189,57 +3195,15 @@ pub mod runtime {
         super::nexus_link_list_peers(state.inner())
     }
 
+    /// Final Gate item F: the peer address was the caller's choice, and no
+    /// peer is paired or authenticated, so model transfer is closed
+    /// (`Closure::PeerTransfer`). The peer list and status stay.
     #[tauri::command]
-    async fn nexus_link_send_model(
-        window: tauri::Window,
-        state: tauri::State<'_, AppState>,
-        peer_address: String,
-        model_id: String,
-        filename: String,
-    ) -> Result<String, String> {
-        // Clone what we need from state before spawning thread
-        let link_arc = state.nexus_link.clone();
-
-        let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
-
-        std::thread::spawn(move || {
-            let link = link_arc.lock().unwrap_or_else(|p| p.into_inner());
-
-            let last_emit = std::cell::Cell::new(
-                std::time::Instant::now()
-                    .checked_sub(std::time::Duration::from_secs(1))
-                    .unwrap_or_else(std::time::Instant::now),
-            );
-
-            let result = link.send_model(
-                &peer_address,
-                &model_id,
-                &filename,
-                |progress: nexus_connectors_llm::nexus_link::TransferProgress| {
-                    let now = std::time::Instant::now();
-                    let is_terminal = matches!(
-                        progress.status,
-                        nexus_connectors_llm::nexus_link::TransferStatus::Completed
-                            | nexus_connectors_llm::nexus_link::TransferStatus::Failed(_)
-                    );
-
-                    if is_terminal || now.duration_since(last_emit.get()).as_millis() >= 300 {
-                        // Best-effort: forward transfer progress to frontend; missed events are non-fatal
-                        let _ = window.emit("nexus-link-transfer-progress", &progress);
-                        last_emit.set(now);
-                    }
-                },
-            );
-
-            // Best-effort: send result back to async receiver; thread termination handled by recv
-            let _ = tx.send(result.map(|()| "completed".to_string()));
-        });
-
-        // Return immediately — progress is emitted via events
-        match rx.recv() {
-            Ok(result) => result,
-            Err(e) => Err(format!("Transfer thread failed: {e}")),
-        }
+    pub(crate) fn nexus_link_send_model() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "nexus_link_send_model",
+            crate::phase0_surface::Closure::PeerTransfer,
+        ))
     }
 
     // ── Evolution commands ───────────────────────────────────────────────
@@ -3559,12 +3523,15 @@ pub mod runtime {
         super::mcp_host_remove_server(state.inner(), server_id)
     }
 
+    /// Final Gate item B: the server URL was the caller's choice, so
+    /// connecting is closed (`Closure::NetworkDestination`). Adding, listing
+    /// and removing server entries sends nothing and stays.
     #[tauri::command]
-    fn mcp_host_connect(
-        state: tauri::State<'_, AppState>,
-        server_id: String,
-    ) -> Result<String, String> {
-        super::mcp_host_connect(state.inner(), server_id)
+    pub(crate) fn mcp_host_connect() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "mcp_host_connect",
+            crate::phase0_surface::Closure::NetworkDestination,
+        ))
     }
 
     #[tauri::command]
@@ -3580,13 +3547,14 @@ pub mod runtime {
         super::mcp_host_list_tools(state.inner())
     }
 
+    /// Final Gate item B: a tool call goes to a caller-chosen server
+    /// (`Closure::NetworkDestination`).
     #[tauri::command]
-    fn mcp_host_call_tool(
-        state: tauri::State<'_, AppState>,
-        tool_name: String,
-        arguments: String,
-    ) -> Result<String, String> {
-        super::mcp_host_call_tool(state.inner(), tool_name, arguments)
+    pub(crate) fn mcp_host_call_tool() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "mcp_host_call_tool",
+            crate::phase0_surface::Closure::NetworkDestination,
+        ))
     }
 
     // ── Ghost Protocol commands ─────────────────────────────────────────
@@ -4766,13 +4734,14 @@ pub mod runtime {
         ))
     }
 
-    /// Extract a theme from a URL (HTTPS only).
+    /// Final Gate item B: the page URL was the caller's choice, so fetching a
+    /// theme from it is closed (`Closure::NetworkDestination`).
     #[tauri::command]
-    async fn builder_theme_extract_from_url(url: String) -> Result<String, String> {
-        let theme = web_builder_agent::theme_extract::extract_theme_from_url(&url)
-            .await
-            .map_err(|e| format!("{e}"))?;
-        serde_json::to_string(&theme).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_theme_extract_from_url() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_theme_extract_from_url",
+            crate::phase0_surface::Closure::NetworkDestination,
+        ))
     }
 
     #[tauri::command]
@@ -5892,15 +5861,15 @@ pub mod runtime {
     }
 
     // ── API Client commands ──
+    /// Final Gate item B: the request URL was the caller's choice, and the
+    /// response came back to the caller, so the API client is closed
+    /// (`Closure::NetworkDestination`). Saved collections stay.
     #[tauri::command]
-    fn api_client_request(
-        state: tauri::State<'_, AppState>,
-        method: String,
-        url: String,
-        headers_json: String,
-        body: String,
-    ) -> Result<String, String> {
-        super::api_client_request(state.inner(), method, url, headers_json, body)
+    pub(crate) fn api_client_request() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "api_client_request",
+            crate::phase0_surface::Closure::NetworkDestination,
+        ))
     }
 
     // ── API Client Collections commands ──

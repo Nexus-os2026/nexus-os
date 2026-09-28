@@ -11,16 +11,18 @@ pub struct ToolExecutionEngine {
     registry: ToolRegistry,
     adapter: HttpAdapter,
     rate_limits: HashMap<String, (u64, u32)>,
-    policy: ToolGovernancePolicy,
 }
 
 impl ToolExecutionEngine {
-    pub fn new(registry: ToolRegistry, policy: ToolGovernancePolicy) -> Self {
+    /// `_policy` is the governance policy the interface displays. The engine
+    /// consulted only its URL denylist, for the tools whose destination the
+    /// caller chose; Phase Zero refuses those tools outright instead
+    /// ([`phase0_refusal`]), so the engine keeps no copy of it.
+    pub fn new(registry: ToolRegistry, _policy: ToolGovernancePolicy) -> Self {
         Self {
             registry,
             adapter: HttpAdapter::new(),
             rate_limits: HashMap::new(),
-            policy,
         }
     }
 
@@ -54,17 +56,16 @@ impl ToolExecutionEngine {
             )));
         }
 
-        self.check_rate_limit(&tool)?;
-
-        // URL denylist check for webhook/rest_api — fail-closed: missing URL is denied.
-        if tool.id == "webhook" || tool.id == "rest_api" {
-            let url = params.get("url").and_then(|v| v.as_str()).ok_or_else(|| {
-                ToolError::GovernanceDenied(
-                    "webhook/rest_api requires a 'url' parameter for denylist check".to_string(),
-                )
-            })?;
-            self.check_url_allowed(url)?;
+        // Phase Zero refusals come before any credential is read and before
+        // any request is built (see `phase0_refusal`).
+        if let Some(reason) = phase0_refusal(&tool.id) {
+            return Err(ToolError::GovernanceDenied(format!(
+                "{}: {reason}",
+                tool.id
+            )));
         }
+
+        self.check_rate_limit(&tool)?;
 
         let auth_token = tool
             .auth_env_var
@@ -108,18 +109,6 @@ impl ToolExecutionEngine {
         Ok(())
     }
 
-    fn check_url_allowed(&self, url: &str) -> Result<(), ToolError> {
-        let lower = url.to_lowercase();
-        for blocked in &self.policy.url_denylist {
-            if lower.contains(blocked) {
-                return Err(ToolError::UrlBlocked(format!(
-                    "URL contains blocked pattern: {blocked}"
-                )));
-            }
-        }
-        Ok(())
-    }
-
     fn record_call(&mut self, tool_id: &str) {
         let now = epoch_now();
         let entry = self.rate_limits.entry(tool_id.into()).or_insert((now, 0));
@@ -136,6 +125,34 @@ impl ToolExecutionEngine {
 
     pub fn registry_mut(&mut self) -> &mut ToolRegistry {
         &mut self.registry
+    }
+}
+
+/// Why Phase Zero refuses a tool whatever the calling agent's level, or
+/// `None` when the tool may run.
+///
+/// - `rest_api`, `webhook` and `file_storage` (Final Gate item B): the
+///   request goes to a host the caller chooses: a URL, or an S3 bucket name
+///   that becomes the host. A URL or host name is not an egress grant, and
+///   the substring denylist these tools had did not bound it (`127.1` and
+///   `[::1]` reached loopback).
+/// - `github`, `slack` and `jira` (items C and G): the request carries an
+///   operator token from the environment, which would be placed on curl's
+///   command line, and performs an operation the interface chose (an issue,
+///   a message, a ticket) on the operator's account, behind an autonomy
+///   level the interface also chose.
+///
+/// `web_search` (a fixed host, no credential) stays; `email` and `database`
+/// already fail closed when their request is built.
+pub fn phase0_refusal(tool_id: &str) -> Option<&'static str> {
+    match tool_id {
+        "rest_api" | "webhook" | "file_storage" => Some(
+            "unavailable in Phase Zero: the request would go to a destination the caller chose, and a URL or host name is not egress authority",
+        ),
+        "github" | "slack" | "jira" => Some(
+            "unavailable in Phase Zero: the request would put an operator credential on a process command line to act on the operator's account for an interface-chosen operation",
+        ),
+        _ => None,
     }
 }
 
@@ -253,13 +270,127 @@ mod tests {
         assert!(check.is_ok());
     }
 
+    /// A loopback listener that must never be contacted, and its port.
+    fn quiet_listener() -> (std::net::TcpListener, u16) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        (listener, port)
+    }
+
+    fn assert_never_contacted(listener: &std::net::TcpListener) {
+        assert!(matches!(
+            listener.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+    }
+
+    /// An engine whose every tool counts as available, as when the operator
+    /// has set each tool's environment token, without reading or setting any
+    /// environment variable here.
+    fn engine_with_every_tool_available() -> ToolExecutionEngine {
+        let mut registry = ToolRegistry::new();
+        for tool in ToolRegistry::default_registry().all_tools() {
+            let mut tool = tool.clone();
+            tool.available = true;
+            registry.register(tool);
+        }
+        ToolExecutionEngine::new(registry, ToolGovernancePolicy::default())
+    }
+
+    /// Final Gate item B (replaces the substring-denylist test): the tools
+    /// whose destination the caller chooses are refused at every level,
+    /// before any request, for every address. That covers the loopback and
+    /// metadata addresses the denylist blocked and the spellings it missed
+    /// (`127.1`, `[::1]`, `0x7f000001`).
     #[test]
-    fn test_url_denylist() {
-        let engine = make_engine();
-        assert!(engine.check_url_allowed("https://example.com").is_ok());
-        assert!(engine.check_url_allowed("http://localhost:8080").is_err());
-        assert!(engine
-            .check_url_allowed("http://169.254.169.254/metadata")
-            .is_err());
+    fn p0_fg_caller_destination_tools_are_refused() {
+        let (listener, port) = quiet_listener();
+        let mut engine = engine_with_every_tool_available();
+        for (tool, params) in [
+            (
+                "rest_api",
+                serde_json::json!({"url": format!("http://127.1:{port}/"), "method": "GET"}),
+            ),
+            (
+                "rest_api",
+                serde_json::json!({"url": format!("http://0x7f000001:{port}/x"), "method": "POST"}),
+            ),
+            (
+                "rest_api",
+                serde_json::json!({"url": "http://169.254.169.254/metadata", "method": "GET"}),
+            ),
+            (
+                "webhook",
+                serde_json::json!({"url": format!("http://127.1:{port}/hook")}),
+            ),
+            (
+                "webhook",
+                serde_json::json!({"url": "https://example.com/hook"}),
+            ),
+            (
+                "file_storage",
+                serde_json::json!({"action": "list", "bucket": "fg-attacker-bucket"}),
+            ),
+        ] {
+            let error = engine.execute("agent-1", 5, tool, params).unwrap_err();
+            assert!(
+                matches!(&error, ToolError::GovernanceDenied(reason)
+                    if reason.contains("destination the caller chose")),
+                "{tool}: {error}"
+            );
+        }
+        assert_never_contacted(&listener);
+        assert!(engine.rate_limits.is_empty(), "no call was recorded");
+    }
+
+    /// Final Gate items C and G: the tools that would carry an operator
+    /// token on curl's command line, for an operation the interface chose,
+    /// are refused at every level before the token is read.
+    #[test]
+    fn p0_fg_operator_credential_tools_are_refused() {
+        let mut engine = engine_with_every_tool_available();
+        for (tool, params) in [
+            (
+                "github",
+                serde_json::json!({"action": "create_issue", "repo": "o/r", "title": "t"}),
+            ),
+            (
+                "slack",
+                serde_json::json!({"action": "send_message", "channel": "C1", "text": "t"}),
+            ),
+            (
+                "jira",
+                serde_json::json!({"action": "create_issue", "project": "P", "summary": "s"}),
+            ),
+        ] {
+            let error = engine.execute("agent-1", 5, tool, params).unwrap_err();
+            assert!(
+                matches!(&error, ToolError::GovernanceDenied(reason)
+                    if reason.contains("operator credential")),
+                "{tool}: {error}"
+            );
+        }
+        assert!(engine.rate_limits.is_empty(), "no call was recorded");
+    }
+
+    /// The level check still comes first (the desktop guard pins "requires
+    /// L4+" for an L2 agent), and the fixed-host search tool is not refused.
+    #[test]
+    fn p0_fg_phase0_refusals_keep_the_level_check_first_and_spare_search() {
+        let mut engine = engine_with_every_tool_available();
+        let error = engine
+            .execute(
+                "agent-1",
+                2,
+                "webhook",
+                serde_json::json!({"url": "https://example.com"}),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("requires L4+"), "{error}");
+        assert_eq!(phase0_refusal("web_search"), None);
+        for tool in ["email", "database"] {
+            assert_eq!(phase0_refusal(tool), None, "{tool} fails closed on its own");
+        }
     }
 }

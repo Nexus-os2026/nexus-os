@@ -1681,7 +1681,6 @@ fn production_text_drops_comments_and_test_items_but_keeps_literals() {
 /// put the URL after `--`, send bodies with `--data-raw` or the fixed
 /// `--data-binary @-` stdin form, and use no file-reading or config option.
 const CURL_SITES: &[(&str, usize)] = &[
-    ("app/src-tauri/src/commands/apps.rs", 1),
     ("app/src-tauri/src/commands/chat_llm.rs", 2),
     ("connectors/core/src/validation.rs", 1),
     ("connectors/llm/src/model_hub.rs", 4),

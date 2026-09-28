@@ -303,38 +303,7 @@ impl McpClient {
         );
         let body = serde_json::to_string(request)
             .map_err(|e| format!("Failed to serialize request: {e}"))?;
-
-        // P0-002C5B: the server URL and auth header are validated, the body is
-        // sent literally, and the URL follows `--`.
-        let url = nexus_kernel::governed_http::http_url(&self.config.url)
-            .map_err(|e| format!("invalid MCP server URL: {e}"))?;
-        let mut cmd = std::process::Command::new("curl");
-        cmd.args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-            .args(["-s", "-m", "30", "--max-filesize", "10485760"])
-            .arg("-X")
-            .arg("POST")
-            .arg("-H")
-            .arg("Content-Type: application/json");
-
-        // Add auth headers
-        if let Some(ref auth) = self.config.auth {
-            let header = match auth {
-                McpAuth::Bearer(token) => Some(nexus_kernel::governed_http::http_header(
-                    "Authorization",
-                    &format!("Bearer {token}"),
-                )),
-                McpAuth::ApiKey { header, key } => {
-                    Some(nexus_kernel::governed_http::http_header(header, key))
-                }
-                McpAuth::None => None,
-            };
-            if let Some(header) = header {
-                let header = header.map_err(|e| format!("invalid MCP auth header: {e}"))?;
-                cmd.arg("-H").arg(header);
-            }
-        }
-
-        cmd.arg("--data-raw").arg(&body).arg("--").arg(url.as_str());
+        let mut cmd = self.http_command(&body)?;
 
         let output = cmd
             .output()
@@ -348,6 +317,40 @@ impl McpClient {
         let response_text = String::from_utf8_lossy(&output.stdout);
         serde_json::from_str(&response_text)
             .map_err(|e| format!("Failed to parse JSON-RPC response: {e}"))
+    }
+
+    /// The curl invocation for one JSON-RPC POST, not yet started.
+    ///
+    /// P0-002C5B: the server URL is validated, the body is sent literally,
+    /// and the URL follows `--`.
+    ///
+    /// Final Gate item C: a server that needs credentials is refused before
+    /// a command exists. A bearer token or API key would be a curl
+    /// command-line header, readable by other local processes, and Phase
+    /// Zero approves no other transport for this client.
+    fn http_command(&self, body: &str) -> Result<std::process::Command, String> {
+        if matches!(
+            self.config.auth,
+            Some(McpAuth::Bearer(_) | McpAuth::ApiKey { .. })
+        ) {
+            return Err(
+                "an MCP server that needs credentials is unavailable in Phase Zero: its token would be placed on a process command line".to_string(),
+            );
+        }
+        let url = nexus_kernel::governed_http::http_url(&self.config.url)
+            .map_err(|e| format!("invalid MCP server URL: {e}"))?;
+        let mut cmd = std::process::Command::new("curl");
+        cmd.args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
+            .args(["-s", "-m", "30", "--max-filesize", "10485760"])
+            .arg("-X")
+            .arg("POST")
+            .arg("-H")
+            .arg("Content-Type: application/json")
+            .arg("--data-raw")
+            .arg(body)
+            .arg("--")
+            .arg(url.as_str());
+        Ok(cmd)
     }
 }
 
@@ -1396,7 +1399,71 @@ mod tests {
             McpTransport::Http,
             Some(auth),
         ));
+        // Final Gate item C: a credential-bearing server entry, malformed or
+        // not, is refused before any command exists, so the injected header
+        // still never reaches curl.
         let err = client.initialize().unwrap_err();
-        assert!(err.starts_with("invalid MCP auth header"), "{err}");
+        assert!(err.contains("needs credentials"), "{err}");
+    }
+
+    /// Final Gate item C: no MCP credential reaches curl's command line. A
+    /// server entry with a bearer token or an API key is refused before a
+    /// command exists and before its address is contacted, also through the
+    /// host manager; an entry without credentials builds a command that
+    /// carries no credential header.
+    #[test]
+    fn p0_fg_mcp_credentials_never_reach_a_process_command_line() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let url = format!("http://{}/mcp", listener.local_addr().unwrap());
+        for auth in [
+            McpAuth::Bearer("fg-secret".into()),
+            McpAuth::ApiKey {
+                header: "X-Api-Key".into(),
+                key: "fg-secret".into(),
+            },
+        ] {
+            let mut client = McpClient::new(create_server_config(
+                "x",
+                &url,
+                McpTransport::Http,
+                Some(auth),
+            ));
+            let err = client.initialize().unwrap_err();
+            assert!(err.contains("needs credentials"), "{err}");
+            assert!(!err.contains("fg-secret"), "{err}");
+            assert!(client.http_command("{}").is_err());
+        }
+        let mut manager = McpHostManager::new();
+        let config = create_server_config(
+            "s",
+            &url,
+            McpTransport::Sse,
+            Some(McpAuth::Bearer("fg-secret".into())),
+        );
+        let id = config.id.clone();
+        manager.add_server(config).unwrap();
+        assert!(manager.connect_server(&id).is_err());
+        assert!(matches!(
+            listener.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+
+        for auth in [None, Some(McpAuth::None)] {
+            let client = McpClient::new(create_server_config("x", &url, McpTransport::Http, auth));
+            let cmd = client.http_command("{}").unwrap();
+            let args: Vec<String> = cmd
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+            assert!(
+                !args
+                    .iter()
+                    .any(|arg| arg.to_ascii_lowercase().contains("authorization")
+                        || arg.to_ascii_lowercase().contains("api-key")),
+                "{args:?}"
+            );
+            assert_eq!(args[args.len() - 2..], ["--".to_string(), url.clone()]);
+        }
     }
 }

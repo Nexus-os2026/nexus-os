@@ -217,136 +217,10 @@ fn telegram_token_ok(token: &str) -> bool {
 }
 
 // ── API Client ────────────────────────────────────────────────────────
-// User-initiated HTTP requests from the UI (governed Postman).  Agent
-// network access goes through kernel capability checks.  These commands
-// are scoped to the authenticated desktop user, not agent identities.
-
-pub(crate) fn api_client_request(
-    state: &AppState,
-    method: String,
-    url: String,
-    headers_json: String,
-    body: String,
-) -> Result<String, String> {
-    // P0-002C5B: the method, URL and headers are validated and the body is
-    // sent literally, so no caller value becomes curl syntax or a file read.
-    let method = nexus_kernel::governed_http::http_method(&method)
-        .map_err(|_| deny(state, "api_client_request", "unsupported_method"))?;
-    let target = nexus_kernel::governed_http::http_url(&url)
-        .map_err(|_| deny(state, "api_client_request", "invalid_url"))?;
-    let headers: Vec<(String, String)> = serde_json::from_str(&headers_json).unwrap_or_default();
-    let mut header_args = Vec::with_capacity(headers.len());
-    for (k, v) in &headers {
-        header_args.push(
-            nexus_kernel::governed_http::http_header(k, v)
-                .map_err(|_| deny(state, "api_client_request", "invalid_header"))?,
-        );
-    }
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::UserAction,
-        json!({"action": "api_client_request", "method": method, "url": target.as_str()}),
-    );
-
-    let start = std::time::Instant::now();
-
-    let mut args: Vec<String> = nexus_kernel::governed_http::CURL_HTTP_ONLY
-        .iter()
-        .map(|arg| arg.to_string())
-        .collect();
-    args.extend(
-        [
-            "-sS",
-            "--max-time",
-            "60",
-            "--max-filesize",
-            "10485760",
-            "-w",
-            "\n__NEXUS_STATUS__%{http_code}\n__NEXUS_HEADERS__%{header_json}",
-            "-X",
-            method,
-        ]
-        .map(String::from),
-    );
-    for header in header_args {
-        args.push("-H".to_string());
-        args.push(header);
-    }
-
-    // Add body for methods that support it, literally.
-    if !body.is_empty() && method != "GET" && method != "HEAD" {
-        args.push("--data-raw".to_string());
-        args.push(body);
-    }
-
-    args.push("--".to_string());
-    args.push(target.as_str().to_string());
-
-    let output = Command::new("curl")
-        .args(&args)
-        .output()
-        .map_err(|e| format!("Failed to run curl: {e}"))?;
-
-    let duration_ms = start.elapsed().as_millis() as u64;
-    let raw = String::from_utf8_lossy(&output.stdout).to_string();
-
-    // Parse status code from our -w format
-    let mut response_body = raw.clone();
-    let mut status_code: u16 = 0;
-    let mut resp_headers = json!({});
-
-    if let Some(status_pos) = raw.rfind("__NEXUS_STATUS__") {
-        response_body = raw[..status_pos].to_string();
-        let after_status = &raw[status_pos + 16..];
-        // Parse status code (first line after marker)
-        if let Some(newline) = after_status.find('\n') {
-            status_code = after_status[..newline].trim().parse().unwrap_or(0);
-            // Parse headers json after __NEXUS_HEADERS__
-            let header_part = &after_status[newline + 1..];
-            if let Some(hdr_pos) = header_part.find("__NEXUS_HEADERS__") {
-                let hdr_json = &header_part[hdr_pos + 17..];
-                resp_headers = serde_json::from_str(hdr_json.trim()).unwrap_or_else(|_| json!({}));
-            }
-        } else {
-            status_code = after_status.trim().parse().unwrap_or(0);
-        }
-    }
-
-    if !output.status.success() && status_code == 0 {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("curl failed: {stderr}"));
-    }
-
-    let status_text = match status_code {
-        200 => "OK",
-        201 => "Created",
-        204 => "No Content",
-        301 => "Moved Permanently",
-        302 => "Found",
-        304 => "Not Modified",
-        400 => "Bad Request",
-        401 => "Unauthorized",
-        403 => "Forbidden",
-        404 => "Not Found",
-        405 => "Method Not Allowed",
-        429 => "Too Many Requests",
-        500 => "Internal Server Error",
-        502 => "Bad Gateway",
-        503 => "Service Unavailable",
-        _ => "Unknown",
-    };
-
-    let size = response_body.len();
-    let result = json!({
-        "status": status_code,
-        "statusText": status_text,
-        "headers": resp_headers,
-        "body": response_body,
-        "duration": duration_ms,
-        "size": size,
-    });
-    serde_json::to_string(&result).map_err(|e| format!("json error: {e}"))
-}
+// Final Gate item B: the interface's HTTP client (`api_client_request`)
+// sent a request of governed shape to a URL the caller chose and returned
+// the response. A URL is not an egress grant, so the command is closed in
+// `lib.rs` and nothing here sends a request. Saved collections stay.
 
 // ── API Client Collections ────────────────────────────────────────────
 
@@ -1516,6 +1390,15 @@ pub(crate) fn messaging_connect_platform(
     Ok(test_result)
 }
 
+/// Final Gate item C (redaction): a messaging transport error without the
+/// request URL. reqwest names the URL in its errors, and a Telegram URL
+/// carries the stored bot token in its path, so an error returned to the
+/// interface as given would hand it the stored token. The URL is dropped
+/// from every messaging error, whatever the platform.
+pub(crate) fn messaging_transport_error(context: &str, error: reqwest::Error) -> String {
+    format!("{context}: {}", error.without_url())
+}
+
 pub(crate) fn messaging_send(
     state: &AppState,
     platform: String,
@@ -1546,8 +1429,11 @@ pub(crate) fn messaging_send(
                     .json(&json!({"chat_id": channel, "text": text}))
                     .send()
                     .await
-                    .map_err(|e| format!("telegram send: {e}"))?;
-                let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
+                    .map_err(|e| messaging_transport_error("telegram send", e))?;
+                let body = resp
+                    .text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))?;
                 Ok(body)
             }
             "slack" => {
@@ -1557,8 +1443,11 @@ pub(crate) fn messaging_send(
                     .json(&json!({"channel": channel, "text": text}))
                     .send()
                     .await
-                    .map_err(|e| format!("slack send: {e}"))?;
-                let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
+                    .map_err(|e| messaging_transport_error("slack send", e))?;
+                let body = resp
+                    .text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))?;
                 Ok(body)
             }
             "discord" => {
@@ -1569,8 +1458,11 @@ pub(crate) fn messaging_send(
                     .json(&json!({"content": text}))
                     .send()
                     .await
-                    .map_err(|e| format!("discord send: {e}"))?;
-                let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
+                    .map_err(|e| messaging_transport_error("discord send", e))?;
+                let body = resp
+                    .text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))?;
                 Ok(body)
             }
             _ => Err(format!("Unknown platform: {platform}")),
@@ -1612,8 +1504,10 @@ pub(crate) fn messaging_poll_messages(
                     .get(&url)
                     .send()
                     .await
-                    .map_err(|e| format!("telegram poll: {e}"))?;
-                resp.text().await.map_err(|e| format!("body: {e}"))
+                    .map_err(|e| messaging_transport_error("telegram poll", e))?;
+                resp.text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))
             }
             "slack" => {
                 let resp = reqwest::Client::new()
@@ -1622,8 +1516,10 @@ pub(crate) fn messaging_poll_messages(
                     .query(&[("channel", channel.as_str()), ("limit", "20")])
                     .send()
                     .await
-                    .map_err(|e| format!("slack poll: {e}"))?;
-                resp.text().await.map_err(|e| format!("body: {e}"))
+                    .map_err(|e| messaging_transport_error("slack poll", e))?;
+                resp.text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))
             }
             "discord" => {
                 let url = format!(
@@ -1635,8 +1531,10 @@ pub(crate) fn messaging_poll_messages(
                     .header("Authorization", format!("Bot {}", token))
                     .send()
                     .await
-                    .map_err(|e| format!("discord poll: {e}"))?;
-                resp.text().await.map_err(|e| format!("body: {e}"))
+                    .map_err(|e| messaging_transport_error("discord poll", e))?;
+                resp.text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))
             }
             _ => Err(format!("Unknown platform: {platform}")),
         }

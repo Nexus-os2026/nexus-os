@@ -735,14 +735,17 @@ pub fn sim_branch(
 
 // ── Perception Commands ───────────────────────────────────────────────────────
 
+/// Final Gate item C: the vision provider sent the interface's API key to
+/// curl as a command-line header, readable by other local processes, and no
+/// in-process transport is approved for this crate in Phase Zero. Setting up
+/// a provider is closed (`Closure::CredentialTransport`), so no key is taken
+/// and the perception commands report that perception is not initialized.
 #[tauri::command]
-pub fn perception_init(
-    state: tauri::State<'_, AppState>,
-    provider: String,
-    api_key: String,
-    model_id: String,
-) -> Result<String, String> {
-    perception_cmds::init_provider(&state.perception, &provider, &api_key, &model_id)
+pub fn perception_init() -> Result<String, String> {
+    Err(crate::phase0_surface::closed(
+        "perception_init",
+        crate::phase0_surface::Closure::CredentialTransport,
+    ))
 }
 
 #[tauri::command]
@@ -1323,30 +1326,32 @@ pub fn a2a_crate_list_skills(
     serde_json::to_value(&skills).map_err(|e| format!("serialize: {e}"))
 }
 
+// Final Gate item B: these three reached a caller-chosen agent URL through the
+// kernel A2A client (`Closure::NetworkDestination`). No desktop code routes a
+// task into the local bridge, so `a2a_crate_get_task` had no other result.
+
 #[tauri::command]
-pub fn a2a_crate_send_task(
-    state: tauri::State<'_, AppState>,
-    agent_url: String,
-    message: String,
-) -> Result<serde_json::Value, String> {
-    a2a_crate_cmds::a2a_crate_send_task(&state.a2a_crate, &agent_url, &message)
+pub fn a2a_crate_send_task() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "a2a_crate_send_task",
+        crate::phase0_surface::Closure::NetworkDestination,
+    ))
 }
 
 #[tauri::command]
-pub fn a2a_crate_get_task(
-    state: tauri::State<'_, AppState>,
-    task_id: String,
-    agent_url: Option<String>,
-) -> Result<serde_json::Value, String> {
-    a2a_crate_cmds::a2a_crate_get_task(&state.a2a_crate, &task_id, agent_url)
+pub fn a2a_crate_get_task() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "a2a_crate_get_task",
+        crate::phase0_surface::Closure::NetworkDestination,
+    ))
 }
 
 #[tauri::command]
-pub fn a2a_crate_discover_agent(
-    state: tauri::State<'_, AppState>,
-    url: String,
-) -> Result<serde_json::Value, String> {
-    a2a_crate_cmds::a2a_crate_discover_agent(&state.a2a_crate, &url)
+pub fn a2a_crate_discover_agent() -> Result<serde_json::Value, String> {
+    Err(crate::phase0_surface::closed(
+        "a2a_crate_discover_agent",
+        crate::phase0_surface::Closure::NetworkDestination,
+    ))
 }
 
 #[tauri::command]

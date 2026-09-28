@@ -1,5 +1,5 @@
 use super::openai_compatible::extract_tool_calls;
-use super::{curl_post_json_with_timeout, LlmProvider, LlmResponse, ProviderRequest};
+use super::{post_json_in_process, LlmProvider, LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -527,7 +527,7 @@ impl LlmProvider for NvidiaProvider {
         } else {
             120 // 2 min for normal models
         };
-        let (status, payload) = curl_post_json_with_timeout(
+        let (status, payload) = post_json_in_process(
             request.endpoint.as_str(),
             &request.headers,
             &request.body,

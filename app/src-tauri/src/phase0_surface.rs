@@ -50,7 +50,24 @@ pub(crate) enum Closure {
     ScreenObservation,
     // Final Gate items B, C, F and I: egress, credential transport, peers and
     // helper programs.
-
+    /// Final Gate item B: a network destination chosen by the interface or a
+    /// model. A syntactically valid URL, host name or `host:port` is not an
+    /// egress grant, and no backend-owned destination policy authorizes such
+    /// a route in Phase Zero.
+    NetworkDestination,
+    /// Final Gate item F: a model transfer to a Nexus Link peer. A peer
+    /// address is not authority, and Phase Zero has no pairing or peer
+    /// authentication.
+    PeerTransfer,
+    /// Final Gate item C: a request whose credential would be placed on a
+    /// process command line, where other local processes can read it, and
+    /// for which no in-process transport is approved in Phase Zero.
+    CredentialTransport,
+    /// Final Gate item I: starting a helper service, or running a helper
+    /// program found on `PATH` only to report on it. Nexus holds no approved
+    /// executable authority or lifecycle ownership for such a program in
+    /// Phase Zero; it connects only to a service started outside it.
+    HelperLaunch,
     // Final Gate items A and H: stored secrets.
 }
 
@@ -79,6 +96,18 @@ impl Closure {
             }
             Self::ScreenObservation => "governed screen observation is unavailable in Phase Zero",
             // Final Gate items B, C, F and I.
+            Self::NetworkDestination => {
+                "a network destination chosen by the interface or a model is not egress authority in Phase Zero"
+            }
+            Self::PeerTransfer => {
+                "peer model transfer is unavailable in Phase Zero: a peer address is not authority, and no peer is paired or authenticated"
+            }
+            Self::CredentialTransport => {
+                "this request would place a credential on a process command line and is unavailable in Phase Zero"
+            }
+            Self::HelperLaunch => {
+                "starting or running a helper program is unavailable in Phase Zero; Nexus only connects to a service started outside it"
+            }
 
             // Final Gate items A and H.
         }

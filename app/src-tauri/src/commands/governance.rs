@@ -351,8 +351,13 @@ pub(crate) fn is_setup_complete() -> bool {
 }
 
 pub(crate) fn run_setup_wizard(ollama_url: Option<String>) -> Result<SetupResult, String> {
+    // Final Gate item B: an address from the interface must name the
+    // authorized Ollama address, before anything is detected or saved. Only
+    // that address is persisted below; the persisted value is a record for
+    // display, and no request reads it.
+    let ollama_url = ollama_base_url_for("run_setup_wizard", ollama_url)?;
     let hw_info = detect_hardware()?;
-    let ollama_status = check_ollama(ollama_url.clone())?;
+    let ollama_status = check_ollama(Some(ollama_url))?;
 
     // Build and save config
     let mut config = load_config().map_err(|e| e.to_string())?;
@@ -562,52 +567,10 @@ pub(crate) fn get_agent_cards(state: &AppState) -> Result<Vec<AgentCardRow>, Str
 }
 
 // ── A2A Client Commands ──
-
-pub(crate) fn a2a_discover_agent(
-    state: &AppState,
-    url: String,
-) -> Result<serde_json::Value, String> {
-    let mut client = state.a2a_client.lock().unwrap_or_else(|p| p.into_inner());
-    let card = client
-        .discover_agent(&url)
-        .map_err(|e| format!("A2A discovery failed: {e}"))?;
-    serde_json::to_value(&card).map_err(|e| e.to_string())
-}
-
-pub(crate) fn a2a_send_task(
-    state: &AppState,
-    agent_url: String,
-    message: String,
-) -> Result<serde_json::Value, String> {
-    let mut client = state.a2a_client.lock().unwrap_or_else(|p| p.into_inner());
-    let result = client
-        .send_task(&agent_url, &message)
-        .map_err(|e| format!("A2A send failed: {e}"))?;
-    serde_json::to_value(&result).map_err(|e| e.to_string())
-}
-
-pub(crate) fn a2a_get_task_status(
-    state: &AppState,
-    agent_url: String,
-    task_id: String,
-) -> Result<serde_json::Value, String> {
-    let mut client = state.a2a_client.lock().unwrap_or_else(|p| p.into_inner());
-    let result = client
-        .get_task_status(&agent_url, &task_id)
-        .map_err(|e| format!("A2A status failed: {e}"))?;
-    serde_json::to_value(&result).map_err(|e| e.to_string())
-}
-
-pub(crate) fn a2a_cancel_task(
-    state: &AppState,
-    agent_url: String,
-    task_id: String,
-) -> Result<(), String> {
-    let mut client = state.a2a_client.lock().unwrap_or_else(|p| p.into_inner());
-    client
-        .cancel_task(&agent_url, &task_id)
-        .map_err(|e| format!("A2A cancel failed: {e}"))
-}
+//
+// Final Gate item B: discovery, sending, status and cancellation reached an
+// agent URL the caller chose, through a client built without a consent gate.
+// Those commands are closed in `lib.rs`; the known-agent list stays.
 
 pub(crate) fn a2a_known_agents(state: &AppState) -> Result<serde_json::Value, String> {
     let client = state.a2a_client.lock().unwrap_or_else(|p| p.into_inner());

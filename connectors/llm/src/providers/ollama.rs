@@ -54,9 +54,15 @@ impl OllamaProvider {
         self
     }
 
+    /// The operator's `OLLAMA_URL`, or else the fixed local address (Final
+    /// Gate item B). A set value that is not UTF-8 leaves no address (every
+    /// request then fails its http(s) check) rather than falling back to the
+    /// default; any other set value is used as given and checked per request.
     pub fn from_env() -> Self {
-        let base_url =
-            env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".to_string());
+        let base_url = match env::var_os("OLLAMA_URL") {
+            None => "http://localhost:11434".to_string(),
+            Some(value) => value.into_string().unwrap_or_default(),
+        };
         Self::new(base_url)
     }
 
@@ -291,24 +297,37 @@ impl OllamaProvider {
         // (base64-encoded images can exceed ARG_MAX).
         if let Some(mut stdin) = child.stdin.take() {
             use std::io::Write;
-            stdin.write_all(encoded.as_bytes()).map_err(|e| {
-                AgentError::SupervisorError(format!("failed to write request body to curl: {e}"))
-            })?;
+            if let Err(e) = stdin.write_all(encoded.as_bytes()) {
+                drop(stdin);
+                super::reap_child(&mut child);
+                return Err(AgentError::SupervisorError(format!(
+                    "failed to write request body to curl: {e}"
+                )));
+            }
             // stdin is dropped here, closing the pipe so curl proceeds
         }
 
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| AgentError::SupervisorError("no stdout from curl".to_string()))?;
+        let Some(stdout) = child.stdout.take() else {
+            super::reap_child(&mut child);
+            return Err(AgentError::SupervisorError(
+                "no stdout from curl".to_string(),
+            ));
+        };
 
         let reader = BufReader::new(stdout);
         let mut full_response = String::new();
         let mut on_token = on_token;
 
         for line in reader.lines() {
-            let line = line
-                .map_err(|e| AgentError::SupervisorError(format!("read error during chat: {e}")))?;
+            let line = match line {
+                Ok(line) => line,
+                Err(e) => {
+                    super::reap_child(&mut child);
+                    return Err(AgentError::SupervisorError(format!(
+                        "read error during chat: {e}"
+                    )));
+                }
+            };
             let trimmed = line.trim();
             if trimmed.is_empty() || !trimmed.starts_with("data: ") {
                 continue;
@@ -344,10 +363,20 @@ impl OllamaProvider {
 
     /// Pull a model from Ollama registry. Returns final status.
     /// The `on_progress` callback is called with (status, completed_bytes, total_bytes).
+    ///
+    /// Final Gate item B: the name must be a model of the service's default
+    /// registry ([`default_registry_model_name`]). A name that carries a
+    /// registry host would make the Ollama service fetch from a host the
+    /// caller chose, so it is refused before any request.
     pub fn pull_model<F>(&self, model_name: &str, mut on_progress: F) -> Result<String, AgentError>
     where
         F: FnMut(&str, u64, u64),
     {
+        if !default_registry_model_name(model_name) {
+            return Err(AgentError::SupervisorError(
+                "a pull names a model of Ollama's default registry, [namespace/]model[:tag]; a registry host or any other form is refused".to_string(),
+            ));
+        }
         let endpoint = format!("{}/api/pull", self.base_url.trim_end_matches('/'));
         let body = json!({ "name": model_name, "stream": true });
         let encoded_body = serde_json::to_string(&body)
@@ -372,17 +401,26 @@ impl OllamaProvider {
             .spawn()
             .map_err(|e| AgentError::SupervisorError(format!("curl spawn failed: {e}")))?;
 
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| AgentError::SupervisorError("no stdout from curl".to_string()))?;
+        let Some(stdout) = child.stdout.take() else {
+            super::reap_child(&mut child);
+            return Err(AgentError::SupervisorError(
+                "no stdout from curl".to_string(),
+            ));
+        };
 
         let reader = BufReader::new(stdout);
         let mut last_status = "unknown".to_string();
 
         for line in reader.lines() {
-            let line = line
-                .map_err(|e| AgentError::SupervisorError(format!("read error during pull: {e}")))?;
+            let line = match line {
+                Ok(line) => line,
+                Err(e) => {
+                    super::reap_child(&mut child);
+                    return Err(AgentError::SupervisorError(format!(
+                        "read error during pull: {e}"
+                    )));
+                }
+            };
             if line.trim().is_empty() {
                 continue;
             }
@@ -415,9 +453,11 @@ fn curl_get_json(endpoint: &str) -> Result<(u16, Value), AgentError> {
     }
     let endpoint = super::checked_endpoint(endpoint)?;
     let marker = "__NEXUS_STATUS__:";
+    // Final Gate item B: no redirect is followed. The authorized Ollama
+    // address was checked, not wherever it might redirect.
     let output = Command::new("curl")
         .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-        .args(["-sS", "-L", "-m", "10", "--max-filesize", "33554432"])
+        .args(["-sS", "-m", "10", "--max-filesize", "33554432"])
         .arg("-w")
         .arg(format!("\n{marker}%{{http_code}}"))
         .arg("--")
@@ -451,6 +491,47 @@ fn curl_get_json(endpoint: &str) -> Result<(u16, Value), AgentError> {
     };
 
     Ok((status, response_json))
+}
+
+/// Final Gate item B: whether `name` is a model of Ollama's default registry,
+/// `[namespace/]model[:tag]`. Ollama reads a registry host only from a third
+/// path segment or a `scheme://` prefix, so at most two segments are allowed,
+/// and a namespace that could be read as a host (one with a `.`, or
+/// `localhost`) is refused, which also refuses `hf.co`. Segments and tags use
+/// ASCII letters, digits, `.`, `-` and `_`; no `/` or `\` outside the one
+/// separator, no `:` outside the tag, no whitespace, at most 200 bytes.
+fn default_registry_model_name(name: &str) -> bool {
+    let word = |part: &str, max: usize| {
+        !part.is_empty()
+            && part.len() <= max
+            && part
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+    };
+    if name.is_empty() || name.len() > 200 {
+        return false;
+    }
+    let (path, tag) = match name.split_once(':') {
+        Some((path, tag)) => (path, Some(tag)),
+        None => (name, None),
+    };
+    if tag.is_some_and(|tag| !word(tag, 128)) {
+        return false;
+    }
+    let segments: Vec<&str> = path.split('/').collect();
+    let first_alphanumeric = |part: &str| part.as_bytes()[0].is_ascii_alphanumeric();
+    match segments.as_slice() {
+        [model] => word(model, 128) && first_alphanumeric(model),
+        [namespace, model] => {
+            word(namespace, 80)
+                && word(model, 128)
+                && first_alphanumeric(namespace)
+                && first_alphanumeric(model)
+                && !namespace.contains('.')
+                && !namespace.eq_ignore_ascii_case("localhost")
+        }
+        _ => false,
+    }
 }
 
 /// G3: Format a friendly error for the "Ollama returned 404 because the model
@@ -617,6 +698,77 @@ impl LlmProvider for OllamaProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Final Gate item B: a pull names a model of Ollama's default registry.
+    /// A registry host (three segments, a `scheme://`, a dotted or
+    /// `localhost` namespace, `hf.co`), a Windows separator, a second `:` or
+    /// any other form is refused.
+    #[test]
+    fn p0_fg_pulls_name_only_default_registry_models() {
+        for name in [
+            "llama3",
+            "qwen3.5:0.8b",
+            "llama3.2:3b-instruct-q4_K_M",
+            "nomic-embed-text:latest",
+            "library/llama3",
+            "jmorganca/test_model:v1.2",
+        ] {
+            assert!(default_registry_model_name(name), "{name}");
+        }
+        for name in [
+            "",
+            "hf.co/user/model",
+            "hf.co/model",
+            "registry.example/ns/model:tag",
+            "evil.example/model",
+            "localhost/model",
+            "LocalHost/model",
+            "localhost:5000/model",
+            "127.0.0.1:5000/model",
+            "https://registry.example/ns/model",
+            "http://ns/model",
+            "a/b/c",
+            "ns\\model",
+            "hf.co\\user\\model",
+            "model:tag:extra",
+            "model:",
+            ":tag",
+            "/model",
+            "ns/",
+            "-model",
+            "ns/.model",
+            "model name",
+            "model\n",
+            "../model",
+            &"m".repeat(201),
+        ] {
+            assert!(!default_registry_model_name(name), "{name:?}");
+        }
+    }
+
+    /// Final Gate item B: a refused pull name is refused before anything is
+    /// sent: the Ollama address is never contacted.
+    #[test]
+    fn p0_fg_a_refused_pull_name_contacts_nothing() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let provider = OllamaProvider::new(format!("http://{}", listener.local_addr().unwrap()));
+        for name in [
+            "hf.co/user/model",
+            "evil.example/ns/model",
+            "localhost:5000/m",
+        ] {
+            let error = provider.pull_model(name, |_, _, _| {}).unwrap_err();
+            assert!(
+                error.to_string().contains("default registry"),
+                "{name}: {error}"
+            );
+        }
+        assert!(matches!(
+            listener.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+    }
 
     #[test]
     fn p0_002c5c_the_health_probe_needs_a_governed_url_and_sends_nothing() {
