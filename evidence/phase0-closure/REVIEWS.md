@@ -67,3 +67,27 @@ command authority in the reviewed code.
 The live harness (uncommitted at review time) had already found that on Linux a
 server redirect can navigate the privileged document off-origin; S1 is
 repairing that.
+
+## S3 (items B, C argv, F, I), reviewed by S4 — range `63eb0d07..c028a625`
+
+Verdict: **NOT READY** (three blockers, each with a small local fix).
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| 1 | blocker | `messaging_connect_platform` returned reqwest errors that include the URL carrying the stored Telegram bot token. | Already fixed on the combined branch by S2 (`c9f82ff5`, all branches use `without_url()`), which the reviewer could not see from S3's branch. |
+| 2 | blocker | The in-process credentialed POST has no total time bound (client timeout bounds headers and each read separately; a dripping body returned after 5.4 s with a 1 s timeout). | S3: request-level total timeout, slow-drip test, corrected claims. |
+| 3 | blocker | Four new source guards split text before normalising CRLF and fail on a Windows checkout. | S3: normalise line endings first; prove with CRLF copies. |
+| 4 | should-fix | Model registration after a download posts to a hard-coded `localhost:11434`, not the authorized Ollama address. | S3: use the authorized address; guard it. |
+| 5 | note | Other credential-bearing reqwest providers follow redirects (Anthropic's `x-api-key` survives a cross-host 307/308). | S3: no-redirect policy for those clients, or a recorded non-claim. |
+| 6 | note | Messaging clients have no timeout and read unbounded bodies. | S3 for send/poll; the connect command (S2's) by the coordinator. |
+| 7 | note | I5 cleanup covers a normal exit only; Ollama pull/chat curl children are bounded (900 s) but not registered; a test closes the global registry. | Non-claim scoped to normal exit; local registry in tests. |
+| 8 | note | Remaining helpers are bare `curl` from PATH. | Architect request 1 (PATH as operator configuration). |
+| 9 | note | `tools_execute` reveals whether tool credential variables are set before refusing; a comment is inaccurate. | S3: refuse first if the level guard is preserved, else non-claim; fix the comment. |
+| 10-14 | note | Setup-wizard UX after the Ollama closure; curl-site guard scope; the desktop build's reqwest uses the OS trust store and system proxy (feature unification), not bundled roots; search redirects may downgrade to http; a progress callback lacks a panic guard. | Claims corrected; https-only redirects for search; others recorded. |
+
+Verified correct by the reviewer: the 14 closures; the Ollama address rule
+(normalisation and refusal cases); agent WebFetch and SearXNG; the six
+refused external tools; MCP credential refusal; unweakened C5B tests; Nexus
+Link policy; credentials off argv for the four providers; the credential
+curl-site classification; no `ollama serve`/`which`; curl reaping; in-region
+edits only.
