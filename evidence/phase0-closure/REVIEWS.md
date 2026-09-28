@@ -46,3 +46,24 @@ workspace-wide; behavioural tests run only identified absolute binary paths
 with cleared environments and bounded waits; J1 identification unchanged; no
 reactivation route (sidecar, npm bin, pyproject script, cargo alias, feature
 flag); Windows/macOS comparisons normalise line endings and separators.
+
+## S1 (item D), reviewed by S2 — range `63eb0d07..14bde0ed` plus the uncommitted live harness
+
+Verdict: **changes requested**. The application-command ACL is the right
+primary control; the reviewer found no path by which non-app content obtains
+command authority in the reviewed code.
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| 1 | blocker (for closing D) | The live native harness is uncommitted and not in CI, runs Linux dev mode only, and two checks pass even with the protection removed (wry 0.54.4 already refuses new windows without a handler; sandboxed frames never receive the key). | S1: commit the harness; every live check must fail with its protection removed (negative controls recorded) or be labelled a regression check only; a Windows cross-origin non-sandboxed subframe proving ACL rejection; production-origin coverage or a stated limitation; CI steps for Linux (Xvfb), Windows and macOS applied by the coordinator. |
+| 2 | should-fix | Comments and a commit message over-claim how subframes are refused. | Per-platform mechanisms stated; frontend `sandbox=""` named as load-bearing. |
+| 3 | should-fix | The navigation predicate admits more than the app origin (any `tauri://` host, `tauri.localhost` on any port, `data:`, any `about:`, debug loopback on any port). The live harness showed WebKitGTK follows a server redirect without consulting it. | Exact per-platform app origin; exact dev origin only in dev mode; `about:blank`/`about:srcdoc`; `blob:` kept; `data:` denied; variant tests. |
+| 4 | should-fix | Guards that formatting or additions can fool (CSP substring checks, ACL sampling, capability files not pinned, comment-blind wiring check, iframe parsing, import spellings). | Strengthen each guard. |
+| 5 | should-fix | Settings "Test" reports "Connected" for any value longer than four characters. | Say format only, not verified. |
+| 6 | note | The privileged document loads a Google Fonts stylesheet; the CSP allows both Google origins. | Coordinator decision: remove the remote stylesheet and the origins (system fonts), unless vendored. |
+| 7, 8 | note | Stale regeneration note; harness markers written under the real HOME; Cargo.lock edge and lib.rs module line outside the listed regions. | Temp dir for markers; lockfile edge (existing package) and module line accepted. |
+| 9, 10 | note | Tauri 2.10.3 exempts the IPC channel fetch command from the ACL (no channels used); feature losses documented. | Dossier non-claim. |
+
+The live harness (uncommitted at review time) had already found that on Linux a
+server redirect can navigate the privileged document off-origin; S1 is
+repairing that.
