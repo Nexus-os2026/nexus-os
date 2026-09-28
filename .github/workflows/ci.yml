@@ -3,11 +3,17 @@ name: NEXUS OS CI
 # Final GitHub-hosted validation gate: Linux, Windows, macOS, frontend and
 # Python, including the packaged Builder toolchain and governed launch.
 #
-# Run it explicitly, once, on the Architect-approved candidate:
+# Run it explicitly, once, on the Architect-approved candidate, from a branch
+# whose head is that candidate:
 #   gh workflow run ci.yml --ref <branch> -f candidate_sha=<full 40-char SHA>
-# Every job checks out exactly that commit and fails if it tested anything
-# else. Day-to-day development validation runs on the self-hosted runner
-# (ci-fast-local.yml); it does not replace this gate.
+# Every job first checks, before checkout, that the candidate is a full
+# lowercase SHA and equals both the commit the run was dispatched for
+# (GITHUB_SHA) and the workflow revision executing the gate
+# (GITHUB_WORKFLOW_SHA). A push to main uses the pushed commit the same way.
+# Every job then checks out exactly that commit and fails if it tested
+# anything else. These checks establish revision identity only; they do not
+# approve or integrate anything. Day-to-day development validation runs on
+# the self-hosted runner (ci-fast-local.yml); it does not replace this gate.
 on:
   push:
     branches:
@@ -26,15 +32,56 @@ jobs:
   test-linux:
     runs-on: ubuntu-latest
     steps:
+      # Selects the one candidate this run may test, before checkout. The raw
+      # dispatch input only reaches the shell as data, through the
+      # environment; it is never interpolated or evaluated.
+      - name: Select and validate the candidate commit
+        id: candidate
+        shell: bash
+        env:
+          RAW_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          reject() {
+            echo "::error::$1"
+            exit 1
+          }
+          case "${GITHUB_EVENT_NAME:-}" in
+            workflow_dispatch)
+              candidate="${RAW_CANDIDATE_SHA-}"
+              ;;
+            push)
+              if [[ "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
+                reject "push validation runs only for refs/heads/main"
+              fi
+              candidate="${GITHUB_SHA:-}"
+              ;;
+            *)
+              reject "unsupported event for the final validation gate"
+              ;;
+          esac
+          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+            reject "the candidate must be a full 40-character lowercase commit SHA"
+          fi
+          if [[ "$candidate" != "${GITHUB_SHA:-}" ]]; then
+            reject "the candidate is not the commit this run is for (GITHUB_SHA)"
+          fi
+          if [[ "$candidate" != "${GITHUB_WORKFLOW_SHA:-}" ]]; then
+            reject "the candidate is not the workflow revision running this gate (GITHUB_WORKFLOW_SHA)"
+          fi
+          echo "candidate_sha=$candidate" >> "$GITHUB_OUTPUT"
+          echo "Validated candidate: $candidate"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.candidate_sha || github.sha }}
+          ref: ${{ steps.candidate.outputs.candidate_sha }}
 
       - name: Verify the exact candidate commit
         shell: bash
         env:
-          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.candidate_sha }}
         run: |
           set -euo pipefail
           if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -46,9 +93,11 @@ jobs:
             echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
             exit 1
           fi
+          echo "Validated candidate: $CANDIDATE_SHA"
           echo "Tested commit: $tested"
           echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
           {
+            echo "Validated candidate: \`$CANDIDATE_SHA\`"
             echo "Tested commit: \`$tested\`"
             echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -125,15 +174,56 @@ jobs:
   test-frontend:
     runs-on: ubuntu-latest
     steps:
+      # Selects the one candidate this run may test, before checkout. The raw
+      # dispatch input only reaches the shell as data, through the
+      # environment; it is never interpolated or evaluated.
+      - name: Select and validate the candidate commit
+        id: candidate
+        shell: bash
+        env:
+          RAW_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          reject() {
+            echo "::error::$1"
+            exit 1
+          }
+          case "${GITHUB_EVENT_NAME:-}" in
+            workflow_dispatch)
+              candidate="${RAW_CANDIDATE_SHA-}"
+              ;;
+            push)
+              if [[ "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
+                reject "push validation runs only for refs/heads/main"
+              fi
+              candidate="${GITHUB_SHA:-}"
+              ;;
+            *)
+              reject "unsupported event for the final validation gate"
+              ;;
+          esac
+          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+            reject "the candidate must be a full 40-character lowercase commit SHA"
+          fi
+          if [[ "$candidate" != "${GITHUB_SHA:-}" ]]; then
+            reject "the candidate is not the commit this run is for (GITHUB_SHA)"
+          fi
+          if [[ "$candidate" != "${GITHUB_WORKFLOW_SHA:-}" ]]; then
+            reject "the candidate is not the workflow revision running this gate (GITHUB_WORKFLOW_SHA)"
+          fi
+          echo "candidate_sha=$candidate" >> "$GITHUB_OUTPUT"
+          echo "Validated candidate: $candidate"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.candidate_sha || github.sha }}
+          ref: ${{ steps.candidate.outputs.candidate_sha }}
 
       - name: Verify the exact candidate commit
         shell: bash
         env:
-          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.candidate_sha }}
         run: |
           set -euo pipefail
           if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -145,9 +235,11 @@ jobs:
             echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
             exit 1
           fi
+          echo "Validated candidate: $CANDIDATE_SHA"
           echo "Tested commit: $tested"
           echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
           {
+            echo "Validated candidate: \`$CANDIDATE_SHA\`"
             echo "Tested commit: \`$tested\`"
             echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -172,15 +264,56 @@ jobs:
   test-macos:
     runs-on: macos-latest
     steps:
+      # Selects the one candidate this run may test, before checkout. The raw
+      # dispatch input only reaches the shell as data, through the
+      # environment; it is never interpolated or evaluated.
+      - name: Select and validate the candidate commit
+        id: candidate
+        shell: bash
+        env:
+          RAW_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          reject() {
+            echo "::error::$1"
+            exit 1
+          }
+          case "${GITHUB_EVENT_NAME:-}" in
+            workflow_dispatch)
+              candidate="${RAW_CANDIDATE_SHA-}"
+              ;;
+            push)
+              if [[ "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
+                reject "push validation runs only for refs/heads/main"
+              fi
+              candidate="${GITHUB_SHA:-}"
+              ;;
+            *)
+              reject "unsupported event for the final validation gate"
+              ;;
+          esac
+          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+            reject "the candidate must be a full 40-character lowercase commit SHA"
+          fi
+          if [[ "$candidate" != "${GITHUB_SHA:-}" ]]; then
+            reject "the candidate is not the commit this run is for (GITHUB_SHA)"
+          fi
+          if [[ "$candidate" != "${GITHUB_WORKFLOW_SHA:-}" ]]; then
+            reject "the candidate is not the workflow revision running this gate (GITHUB_WORKFLOW_SHA)"
+          fi
+          echo "candidate_sha=$candidate" >> "$GITHUB_OUTPUT"
+          echo "Validated candidate: $candidate"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.candidate_sha || github.sha }}
+          ref: ${{ steps.candidate.outputs.candidate_sha }}
 
       - name: Verify the exact candidate commit
         shell: bash
         env:
-          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.candidate_sha }}
         run: |
           set -euo pipefail
           if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -192,9 +325,11 @@ jobs:
             echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
             exit 1
           fi
+          echo "Validated candidate: $CANDIDATE_SHA"
           echo "Tested commit: $tested"
           echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
           {
+            echo "Validated candidate: \`$CANDIDATE_SHA\`"
             echo "Tested commit: \`$tested\`"
             echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -246,15 +381,56 @@ jobs:
   test-windows:
     runs-on: windows-latest
     steps:
+      # Selects the one candidate this run may test, before checkout. The raw
+      # dispatch input only reaches the shell as data, through the
+      # environment; it is never interpolated or evaluated.
+      - name: Select and validate the candidate commit
+        id: candidate
+        shell: bash
+        env:
+          RAW_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          reject() {
+            echo "::error::$1"
+            exit 1
+          }
+          case "${GITHUB_EVENT_NAME:-}" in
+            workflow_dispatch)
+              candidate="${RAW_CANDIDATE_SHA-}"
+              ;;
+            push)
+              if [[ "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
+                reject "push validation runs only for refs/heads/main"
+              fi
+              candidate="${GITHUB_SHA:-}"
+              ;;
+            *)
+              reject "unsupported event for the final validation gate"
+              ;;
+          esac
+          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+            reject "the candidate must be a full 40-character lowercase commit SHA"
+          fi
+          if [[ "$candidate" != "${GITHUB_SHA:-}" ]]; then
+            reject "the candidate is not the commit this run is for (GITHUB_SHA)"
+          fi
+          if [[ "$candidate" != "${GITHUB_WORKFLOW_SHA:-}" ]]; then
+            reject "the candidate is not the workflow revision running this gate (GITHUB_WORKFLOW_SHA)"
+          fi
+          echo "candidate_sha=$candidate" >> "$GITHUB_OUTPUT"
+          echo "Validated candidate: $candidate"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.candidate_sha || github.sha }}
+          ref: ${{ steps.candidate.outputs.candidate_sha }}
 
       - name: Verify the exact candidate commit
         shell: bash
         env:
-          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.candidate_sha }}
         run: |
           set -euo pipefail
           if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -266,9 +442,11 @@ jobs:
             echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
             exit 1
           fi
+          echo "Validated candidate: $CANDIDATE_SHA"
           echo "Tested commit: $tested"
           echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
           {
+            echo "Validated candidate: \`$CANDIDATE_SHA\`"
             echo "Tested commit: \`$tested\`"
             echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -322,15 +500,56 @@ jobs:
   test-python:
     runs-on: ubuntu-latest
     steps:
+      # Selects the one candidate this run may test, before checkout. The raw
+      # dispatch input only reaches the shell as data, through the
+      # environment; it is never interpolated or evaluated.
+      - name: Select and validate the candidate commit
+        id: candidate
+        shell: bash
+        env:
+          RAW_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          reject() {
+            echo "::error::$1"
+            exit 1
+          }
+          case "${GITHUB_EVENT_NAME:-}" in
+            workflow_dispatch)
+              candidate="${RAW_CANDIDATE_SHA-}"
+              ;;
+            push)
+              if [[ "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
+                reject "push validation runs only for refs/heads/main"
+              fi
+              candidate="${GITHUB_SHA:-}"
+              ;;
+            *)
+              reject "unsupported event for the final validation gate"
+              ;;
+          esac
+          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+            reject "the candidate must be a full 40-character lowercase commit SHA"
+          fi
+          if [[ "$candidate" != "${GITHUB_SHA:-}" ]]; then
+            reject "the candidate is not the commit this run is for (GITHUB_SHA)"
+          fi
+          if [[ "$candidate" != "${GITHUB_WORKFLOW_SHA:-}" ]]; then
+            reject "the candidate is not the workflow revision running this gate (GITHUB_WORKFLOW_SHA)"
+          fi
+          echo "candidate_sha=$candidate" >> "$GITHUB_OUTPUT"
+          echo "Validated candidate: $candidate"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.candidate_sha || github.sha }}
+          ref: ${{ steps.candidate.outputs.candidate_sha }}
 
       - name: Verify the exact candidate commit
         shell: bash
         env:
-          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.candidate_sha }}
         run: |
           set -euo pipefail
           if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -342,9 +561,11 @@ jobs:
             echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
             exit 1
           fi
+          echo "Validated candidate: $CANDIDATE_SHA"
           echo "Tested commit: $tested"
           echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
           {
+            echo "Validated candidate: \`$CANDIDATE_SHA\`"
             echo "Tested commit: \`$tested\`"
             echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
