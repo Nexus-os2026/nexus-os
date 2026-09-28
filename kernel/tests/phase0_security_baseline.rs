@@ -1,6 +1,7 @@
 //! P0-002C5B: an interface configuration update has a security baseline only
-//! when a current configuration already exists and loads. Only backend
-//! bootstrap creates the first-run default.
+//! when a current configuration already exists and loads. Only a load of a
+//! missing configuration creates the first-run default; an empty file is
+//! refused, never replaced.
 //!
 //! This binary holds a single test because it points the process-wide
 //! configuration location (`NEXUS_CONFIG_PATH`) at an isolated temporary file.
