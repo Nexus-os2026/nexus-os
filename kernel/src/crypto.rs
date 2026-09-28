@@ -616,10 +616,11 @@ impl Default for EncryptionConfig {
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    static ENV_KEY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    /// Serializes tests that set or remove NEXUS_ENCRYPTION_KEY.
+    pub(crate) static ENV_KEY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn encrypt_decrypt_roundtrip() {

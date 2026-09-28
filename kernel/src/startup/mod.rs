@@ -150,6 +150,16 @@ mod tests {
     /// `kernel/src/secrets/tests.rs::migrate_config_to_vault_happy_path…`.
     #[test]
     fn run_migrations_clears_fields_and_records_report() {
+        // This test sets NEXUS_CONFIG_PATH and NEXUS_ENCRYPTION_KEY for the
+        // whole process: it takes the locks the secrets and crypto tests take
+        // for the same variables (always in this order), so no other test
+        // sees or clears them while it runs.
+        let _config_path = crate::secrets::tests::NEXUS_CONFIG_PATH_GUARD
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let _encryption_key = crate::crypto::tests::ENV_KEY_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         let db = Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
         let mut config = NexusConfig::default();
         // Force the master-key path to env so EncryptionKey::from_config

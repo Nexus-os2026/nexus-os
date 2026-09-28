@@ -26,7 +26,7 @@ pub mod global;
 pub mod migrate;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use crate::config::CredentialFacadeConfig;
 use backend_env::EnvBackend;
