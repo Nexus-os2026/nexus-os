@@ -181,12 +181,15 @@ cargo build --release -p nexus-protocols --bin nexus-server
 ./target/release/nexus-server start
 ```
 
-### CLI server (alternative)
+### `crates/nexus-server` (withdrawn)
 
-```bash
-cargo build --release -p nexus-server
-./target/release/nexus-server --port 3000 --mcp-port 3001 --a2a-port 3002
-```
+The package `crates/nexus-server`, formerly the "CLI server" alternative, is
+withdrawn during Phase Zero. Building or running it produces only a fixed
+withdrawal message and a non-zero exit status; it starts no server. The
+repository provides no supported deployment of it at this point.
+
+An existing deployment started from earlier instructions is not stopped
+automatically by this source change. Stop it with the tooling that started it.
 
 ---
 

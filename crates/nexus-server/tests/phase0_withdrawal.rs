@@ -830,11 +830,45 @@ fn p0_fg1_helm_chart_fails_for_every_values_override() {
     }
 }
 
-/// The deployment README says the recipes are withdrawn, says that existing
-/// deployments are not stopped by this, and gives no command that installs,
-/// builds, starts or reaches the server.
+/// The deployment documents say J1 is withdrawn, say that existing
+/// deployments are not stopped by this, and give no command that installs,
+/// builds, starts or reaches it: `deploy/README.md` and the J1 part of
+/// `docs/DEPLOYMENT.md`. (That guide's protocols `nexus-server` instructions
+/// are a separate item and are not checked here.)
 #[test]
-fn p0_fg1_deploy_readme_withdraws_without_claiming_a_stop() {
+fn p0_fg1_deployment_docs_withdraw_without_claiming_a_stop() {
+    // Line breaks in the Markdown source do not matter.
+    let guide = normalize_whitespace(&read(
+        &manifest_dir()
+            .join("..")
+            .join("..")
+            .join("docs")
+            .join("DEPLOYMENT.md"),
+    ));
+    for required in [
+        "### `crates/nexus-server` (withdrawn)",
+        "is withdrawn during Phase Zero",
+        "The repository provides no supported deployment of it",
+        "is not stopped automatically",
+    ] {
+        assert!(
+            guide.contains(required),
+            "docs/DEPLOYMENT.md must say `{required}`"
+        );
+    }
+    for forbidden in [
+        "-p nexus-server",
+        "--package nexus-server",
+        "--mcp-port",
+        "--a2a-port",
+        "CLI server (alternative)",
+    ] {
+        assert!(
+            !guide.contains(forbidden),
+            "docs/DEPLOYMENT.md must not instruct the withdrawn J1 server (`{forbidden}`)"
+        );
+    }
+
     let readme = read(&deploy_dir().join("README.md"));
     assert!(readme.contains("These recipes are withdrawn"));
     assert!(readme.contains("An existing deployment is not stopped"));
