@@ -8716,6 +8716,13 @@ pub mod runtime {
                 // (one overall deadline) before teardown. Exit is never held.
                 if let tauri::RunEvent::Exit = event {
                     super::builder_workspace::shutdown_dev_servers(&app.state::<AppState>());
+                    // Final Gate item I: end the model downloads this process
+                    // started (bounded; counts only, no URL or path).
+                    if let Err(error) =
+                        nexus_connectors_llm::model_hub::terminate_in_flight_downloads()
+                    {
+                        eprintln!("[shutdown] {error}");
+                    }
                 }
             });
     }

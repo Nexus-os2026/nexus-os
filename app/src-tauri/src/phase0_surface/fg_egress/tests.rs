@@ -674,6 +674,55 @@ fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
     }
 }
 
+/// Final Gate item I: model downloads do not outlive the application. The
+/// normal-exit hook ends the downloads in flight (bounded, through their
+/// owned handles; see the `model_hub` tests) and reports a failure by counts
+/// only. A download's transfer is started only by the in-flight registry, so
+/// none escapes it.
+#[test]
+fn p0_fg_the_application_exit_ends_in_flight_model_downloads() {
+    let needle = "if let tauri::RunEvent::Exit = event {";
+    assert_eq!(LIB_RS.matches(needle).count(), 1);
+    let open = LIB_RS.find(needle).unwrap() + needle.len() - 1;
+    assert_eq!(
+        without_whitespace(&production_text(&LIB_RS[open..block_end(LIB_RS, open)])),
+        without_whitespace(
+            "{
+                super::builder_workspace::shutdown_dev_servers(&app.state::<AppState>());
+                if let Err(error) = nexus_connectors_llm::model_hub::terminate_in_flight_downloads() {
+                    eprintln!(\"[shutdown] {error}\");
+                }
+            }"
+        ),
+        "the exit arm"
+    );
+
+    let model_hub = production_text(include_str!(
+        "../../../../../connectors/llm/src/model_hub.rs"
+    ));
+    assert_eq!(
+        model_hub.matches(".spawn()").count(),
+        1,
+        "one transfer spawn"
+    );
+    assert_eq!(model_hub.matches("impl Transfer for ").count(), 1);
+    assert!(model_hub.contains("impl Transfer for RegisteredTransfer<'_>"));
+    let download = model_hub
+        .split("pub fn download_model_file(")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("download_model_file");
+    let start = download
+        .find("IN_FLIGHT_DOWNLOADS.start(")
+        .expect("the registry starts the transfer");
+    let spawn = download.find(".spawn()").expect("the transfer spawn");
+    let started = start + download[start..].find("})?;").unwrap();
+    assert!(
+        start < spawn && spawn < started,
+        "spawned inside the registry"
+    );
+}
+
 /// Final Gate item C (redaction): a messaging transport error names no
 /// request URL, so a stored Telegram bot token, which travels in the URL
 /// path, never reaches the interface through an error. The failing request
