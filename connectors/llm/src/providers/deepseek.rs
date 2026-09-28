@@ -1,5 +1,5 @@
 use super::openai_compatible::extract_tool_calls;
-use super::{curl_post_json, LlmProvider, LlmResponse, ProviderRequest};
+use super::{post_json_in_process, LlmProvider, LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -71,8 +71,12 @@ impl LlmProvider for DeepSeekProvider {
         };
         let request = DeepSeekProvider::new(Some(api_key)).build_request(prompt, max_tokens, model);
 
-        let (status, payload) =
-            curl_post_json(request.endpoint.as_str(), &request.headers, &request.body)?;
+        let (status, payload) = post_json_in_process(
+            request.endpoint.as_str(),
+            &request.headers,
+            &request.body,
+            20,
+        )?;
         if !(200..300).contains(&status) {
             return Err(AgentError::SupervisorError(format!(
                 "deepseek request failed with status {status}"
