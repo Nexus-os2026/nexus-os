@@ -364,9 +364,67 @@ pub(crate) fn api_client_list_collections() -> Result<String, String> {
     }
 }
 
+/// Saves the API Client collections (Final Gate item H). The file is
+/// plaintext and no approved secret store exists, so collections that hold
+/// an authentication secret are refused and nothing is written; the file
+/// already stored is left as it was. Collections that are not JSON cannot be
+/// checked and are refused too.
 pub(crate) fn api_client_save_collections(data_json: String) -> Result<(), String> {
+    refuse_api_client_secrets(&data_json)?;
     let path = api_collections_path()?;
     std::fs::write(&path, data_json).map_err(|e| format!("write error: {e}"))
+}
+
+/// The API Client's authentication secret fields: the bearer token, the basic
+/// password and the API key value.
+const API_CLIENT_SECRET_FIELDS: &[&str] = &["authToken", "authPass", "authKeyValue"];
+
+/// Standard HTTP headers that carry credentials. Secrets typed into other
+/// headers, parameters, URLs or bodies are user content and are not detected.
+const API_CLIENT_CREDENTIAL_HEADERS: &[&str] = &["authorization", "proxy-authorization", "cookie"];
+
+/// Refuses collections that hold a non-empty authentication secret, with a
+/// bounded reason that echoes nothing.
+fn refuse_api_client_secrets(data_json: &str) -> Result<(), String> {
+    let collections: serde_json::Value = serde_json::from_str(data_json)
+        .map_err(|_| "api_client_save_collections: collections must be JSON".to_string())?;
+    if holds_api_client_secret(&collections) {
+        return Err(
+            "api_client_save_collections: authentication secrets are not stored in Phase Zero; clear the token, password and API key values to save"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+/// Whether any object in `value` holds a non-empty secret field, or a
+/// credential header entry (`{"key": "Authorization", "value": "..."}`) with
+/// a non-empty value.
+fn holds_api_client_secret(value: &serde_json::Value) -> bool {
+    let filled = |field: &serde_json::Value| match field {
+        serde_json::Value::Null => false,
+        serde_json::Value::String(text) => !text.is_empty(),
+        _ => true,
+    };
+    match value {
+        serde_json::Value::Object(map) => {
+            let credential_header = map
+                .get("key")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|key| {
+                    API_CLIENT_CREDENTIAL_HEADERS
+                        .contains(&key.trim().to_ascii_lowercase().as_str())
+                })
+                && map.get("value").is_some_and(filled);
+            credential_header
+                || map.iter().any(|(key, field)| {
+                    (API_CLIENT_SECRET_FIELDS.contains(&key.as_str()) && filled(field))
+                        || holds_api_client_secret(field)
+                })
+        }
+        serde_json::Value::Array(items) => items.iter().any(holds_api_client_secret),
+        _ => false,
+    }
 }
 
 // ── Learning Progress ────────────────────────────────────────────────

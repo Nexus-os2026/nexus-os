@@ -577,3 +577,50 @@ fn p0_fg_h_messaging_connect_takes_only_the_stored_token() {
     assert!(logged.contains("token_must_be_saved_first"), "{logged}");
     assert!(!logged.contains("synthetic"), "{logged}");
 }
+
+/// Final Gate item H: API Client collections holding an authentication
+/// secret are refused before the file is resolved or written; collections
+/// without one pass the check.
+#[test]
+fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
+    let request = |auth: serde_json::Value| {
+        let mut request = serde_json::json!({
+            "id": "r1", "name": "req", "method": "GET", "url": "https://example.test/",
+            "params": [], "headers": [{"key": "Accept", "value": "*/*", "enabled": true}],
+            "bodyType": "none", "bodyRaw": "", "bodyForm": [],
+            "authType": "none", "authToken": "", "authUser": "", "authPass": "",
+            "authKeyName": "", "authKeyValue": "", "authKeyIn": "header"
+        });
+        for (key, value) in auth.as_object().unwrap() {
+            request[key] = value.clone();
+        }
+        serde_json::json!([{"id": "c1", "name": "c", "icon": "", "collapsed": false,
+            "requests": [request]}])
+        .to_string()
+    };
+    let clean =
+        request(serde_json::json!({"authUser": "synthetic-user", "authKeyName": "x-api-key"}));
+    assert_eq!(refuse_api_client_secrets(&clean), Ok(()));
+    assert_eq!(refuse_api_client_secrets("[]"), Ok(()));
+    for auth in [
+        serde_json::json!({"authType": "bearer", "authToken": "synthetic-token"}),
+        serde_json::json!({"authType": "basic", "authPass": "synthetic-pass"}),
+        serde_json::json!({"authType": "api-key", "authKeyValue": "synthetic-key"}),
+        // Held even when another auth type is selected.
+        serde_json::json!({"authType": "none", "authToken": "synthetic-token"}),
+        serde_json::json!({"headers": [{"key": "Authorization", "value": "Bearer synthetic", "enabled": false}]}),
+        serde_json::json!({"headers": [{"key": " cookie ", "value": "session=synthetic", "enabled": true}]}),
+    ] {
+        let data = request(auth.clone());
+        let error = refuse_api_client_secrets(&data).unwrap_err();
+        assert!(error.contains("not stored in Phase Zero"), "{auth}");
+        assert!(!error.contains("synthetic"), "{error}");
+        // The command refuses before resolving or writing the file.
+        assert_eq!(api_client_save_collections(data), Err(error));
+    }
+    let not_json = refuse_api_client_secrets("authToken=synthetic").unwrap_err();
+    assert_eq!(
+        not_json,
+        "api_client_save_collections: collections must be JSON"
+    );
+}
