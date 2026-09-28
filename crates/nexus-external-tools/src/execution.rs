@@ -41,14 +41,6 @@ impl ToolExecutionEngine {
             .ok_or_else(|| ToolError::NotFound(tool_id.into()))?
             .clone();
 
-        if !tool.available {
-            return Err(ToolError::NotAvailable(format!(
-                "{} requires {} to be set",
-                tool.name,
-                tool.auth_env_var.as_deref().unwrap_or("authentication"),
-            )));
-        }
-
         if autonomy_level < tool.min_autonomy_level {
             return Err(ToolError::GovernanceDenied(format!(
                 "{} requires L{}+, agent is L{}",
@@ -57,11 +49,21 @@ impl ToolExecutionEngine {
         }
 
         // Phase Zero refusals come before any credential is read and before
-        // any request is built (see `phase0_refusal`).
+        // any request is built (see `phase0_refusal`), and before the
+        // availability check, so a refused tool's answer is the same whether
+        // or not its environment token is set.
         if let Some(reason) = phase0_refusal(&tool.id) {
             return Err(ToolError::GovernanceDenied(format!(
                 "{}: {reason}",
                 tool.id
+            )));
+        }
+
+        if !tool.available {
+            return Err(ToolError::NotAvailable(format!(
+                "{} requires {} to be set",
+                tool.name,
+                tool.auth_env_var.as_deref().unwrap_or("authentication"),
             )));
         }
 
@@ -142,8 +144,10 @@ impl ToolExecutionEngine {
 ///   a message, a ticket) on the operator's account, behind an autonomy
 ///   level the interface also chose.
 ///
-/// `web_search` (a fixed host, no credential) stays; `email` and `database`
-/// already fail closed when their request is built.
+/// `web_search` (a fixed host, no credential) stays. `email` and `database`
+/// are not listed here: their requests are built (an `smtp://` and a
+/// `local://` URL) and then refused by the adapter's `check_request`, which
+/// accepts only http(s) URLs with a host, before any process runs.
 pub fn phase0_refusal(tool_id: &str) -> Option<&'static str> {
     match tool_id {
         "rest_api" | "webhook" | "file_storage" => Some(
@@ -370,6 +374,67 @@ mod tests {
                     if reason.contains("operator credential")),
                 "{tool}: {error}"
             );
+        }
+        assert!(engine.rate_limits.is_empty(), "no call was recorded");
+    }
+
+    /// A refused tool's answer does not depend on whether its environment
+    /// token is set: the refusal comes before the availability check, so the
+    /// answer does not reveal the token's presence either.
+    #[test]
+    fn p0_fg_refused_tools_answer_the_same_with_or_without_their_token() {
+        let mut unset = ToolExecutionEngine::new(
+            {
+                let mut registry = ToolRegistry::new();
+                for tool in ToolRegistry::default_registry().all_tools() {
+                    let mut tool = tool.clone();
+                    tool.available = tool.auth_env_var.is_none();
+                    registry.register(tool);
+                }
+                registry
+            },
+            ToolGovernancePolicy::default(),
+        );
+        let mut set = engine_with_every_tool_available();
+        for tool in [
+            "github",
+            "slack",
+            "jira",
+            "file_storage",
+            "rest_api",
+            "webhook",
+        ] {
+            let params = serde_json::json!({"action": "list"});
+            let without = unset
+                .execute("agent-1", 5, tool, params.clone())
+                .unwrap_err();
+            let with = set.execute("agent-1", 5, tool, params).unwrap_err();
+            assert!(
+                matches!(&without, ToolError::GovernanceDenied(reason) if reason.contains("Phase Zero")),
+                "{tool}: {without}"
+            );
+            assert_eq!(without.to_string(), with.to_string(), "{tool}");
+        }
+    }
+
+    /// `email` and `database` build their requests and are then refused by
+    /// the adapter's URL check (smtp:// and local:// are not http(s)), before
+    /// any process runs.
+    #[test]
+    fn p0_fg_email_and_database_fail_in_the_adapter_check() {
+        let mut engine = engine_with_every_tool_available();
+        for (tool, params) in [
+            (
+                "email",
+                serde_json::json!({"to": "a@example.com", "subject": "s", "body": "b"}),
+            ),
+            (
+                "database",
+                serde_json::json!({"query": "SELECT 1", "database": "d"}),
+            ),
+        ] {
+            let error = engine.execute("agent-1", 5, tool, params).unwrap_err();
+            assert!(matches!(error, ToolError::UrlBlocked(_)), "{tool}: {error}");
         }
         assert!(engine.rate_limits.is_empty(), "no call was recorded");
     }
