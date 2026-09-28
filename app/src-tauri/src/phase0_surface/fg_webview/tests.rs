@@ -16,7 +16,7 @@
 //!   carries a non-null CSP and does not auto-create the unguarded window, and
 //!   the navigation predicate refuses non-app origins.
 
-use crate::webview_boundary::{navigation_allowed_parts, APP_COMMANDS};
+use crate::webview_boundary::APP_COMMANDS;
 
 const LIB_RS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
 const APP_CAPABILITY: &str = include_str!(concat!(
@@ -188,54 +188,227 @@ fn p0_fg_webview_conf_has_restrictive_csp_and_guarded_window() {
     );
 }
 
-/// The navigation predicate: only the app's own origin (and internal
-/// blank/sandboxed documents) may load; every remote origin is refused, and the
-/// loopback dev origin only in debug builds.
+/// The app origin the navigation guard admits is resolved exactly as tauri
+/// 2.10.3 resolves the app window's URL: the configured `devUrl` only in dev
+/// mode (`tauri::is_dev()`, tauri's `cfg(dev)`), otherwise the `tauri`
+/// protocol origin, which is `tauri://localhost` on Linux/macOS and
+/// `http://tauri.localhost` (`https://` with `useHttpsScheme`) on Windows. Every
+/// platform's value is checked on every platform.
+#[cfg(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
 #[test]
-fn p0_fg_webview_navigation_predicate_refuses_non_app_origins() {
-    // Allowed — the app document and internal/sandboxed documents.
-    assert!(navigation_allowed_parts("tauri", Some("localhost"), false));
-    assert!(navigation_allowed_parts(
-        "http",
-        Some("tauri.localhost"),
-        false
-    ));
-    assert!(navigation_allowed_parts(
-        "https",
-        Some("tauri.localhost"),
-        false
-    ));
-    assert!(navigation_allowed_parts("about", None, false)); // about:blank / about:srcdoc
-    assert!(navigation_allowed_parts("data", None, false));
-    assert!(navigation_allowed_parts("blob", None, false));
+fn p0_fg_webview_app_origin_is_resolved_like_tauri_resolves_the_app_url() {
+    use crate::webview_boundary::AppOrigin;
+    use tauri::utils::config::FrontendDist;
+    use tauri::Url;
 
-    // Dev server origin: debug only.
-    assert!(navigation_allowed_parts("http", Some("localhost"), true));
-    assert!(navigation_allowed_parts("http", Some("127.0.0.1"), true));
-    assert!(!navigation_allowed_parts("http", Some("localhost"), false));
-    assert!(!navigation_allowed_parts("http", Some("127.0.0.1"), false));
+    let ctx: tauri::Context<tauri::Wry> = tauri::generate_context!();
+    let config = ctx.config().clone();
+    let main = config
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "main")
+        .cloned()
+        .expect("main window config");
+    let origin = |u: &str| AppOrigin::of(&Url::parse(u).unwrap()).unwrap();
 
-    // Refused — remote origins and look-alikes, on every build.
-    for dev in [true, false] {
-        assert!(!navigation_allowed_parts(
-            "https",
-            Some("evil.example"),
-            dev
-        ));
-        assert!(!navigation_allowed_parts("http", Some("evil.example"), dev));
-        assert!(!navigation_allowed_parts(
-            "https",
-            Some("tauri.localhost.evil.example"),
-            dev
-        ));
-        assert!(!navigation_allowed_parts(
-            "https",
-            Some("evil.tauri.localhost"),
-            dev
-        ));
-        assert!(!navigation_allowed_parts("file", None, dev));
-        assert!(!navigation_allowed_parts("javascript", None, dev));
+    // Dev mode: the configured devUrl, on every platform.
+    for windows_os in [false, true] {
+        assert_eq!(
+            AppOrigin::resolve(&config, &main, true, windows_os),
+            Some(origin("http://localhost:1420"))
+        );
     }
+    // Production: the tauri protocol origin for the platform.
+    assert_eq!(
+        AppOrigin::resolve(&config, &main, false, false),
+        Some(origin("tauri://localhost"))
+    );
+    assert_eq!(
+        AppOrigin::resolve(&config, &main, false, true),
+        Some(origin("http://tauri.localhost"))
+    );
+    let mut https_main = main.clone();
+    https_main.use_https_scheme = true;
+    assert_eq!(
+        AppOrigin::resolve(&config, &https_main, false, true),
+        Some(origin("https://tauri.localhost"))
+    );
+    // useHttpsScheme only changes the Windows form.
+    assert_eq!(
+        AppOrigin::resolve(&config, &https_main, false, false),
+        Some(origin("tauri://localhost"))
+    );
+    // Dev mode without a devUrl falls back to the protocol origin.
+    let mut no_dev_url = config.clone();
+    no_dev_url.build.dev_url = None;
+    assert_eq!(
+        AppOrigin::resolve(&no_dev_url, &main, true, false),
+        Some(origin("tauri://localhost"))
+    );
+    assert_eq!(
+        AppOrigin::resolve(&no_dev_url, &main, true, true),
+        Some(origin("http://tauri.localhost"))
+    );
+    // A URL frontendDist would be the production app origin (tauri loads it);
+    // this app's frontendDist is a local directory (pinned by the conf guard).
+    let mut url_dist = config.clone();
+    url_dist.build.frontend_dist = Some(FrontendDist::Url(
+        Url::parse("https://frontend.example/").unwrap(),
+    ));
+    assert_eq!(
+        AppOrigin::resolve(&url_dist, &main, false, false),
+        Some(origin("https://frontend.example"))
+    );
+    assert_eq!(
+        AppOrigin::resolve(&url_dist, &main, true, false),
+        Some(origin("http://localhost:1420")),
+        "in dev mode tauri loads devUrl, not frontendDist"
+    );
+}
+
+/// The navigation guard admits exactly the app origin (scheme, host and port,
+/// no userinfo), `about:blank`, `about:srcdoc`, and `blob:` URLs created by the
+/// app origin — for each origin the app can run at — and refuses every
+/// scheme, host, port, userinfo, case and trailing-dot variant, `data:`, and
+/// the other profile's origin.
+#[cfg(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
+#[test]
+fn p0_fg_webview_navigation_admits_only_the_exact_app_origin() {
+    use crate::webview_boundary::{navigation_allowed, AppOrigin};
+    use tauri::Url;
+
+    fn check(app: &str, admitted: &[&str], refused: &[&str]) {
+        let app_origin = AppOrigin::of(&Url::parse(app).unwrap()).unwrap();
+        for u in admitted {
+            let url = Url::parse(u).unwrap_or_else(|e| panic!("{u}: {e}"));
+            assert!(
+                navigation_allowed(&url, &app_origin),
+                "app origin {app}: `{u}` must be admitted"
+            );
+        }
+        for u in refused {
+            let url = Url::parse(u).unwrap_or_else(|e| panic!("{u}: {e}"));
+            assert!(
+                !navigation_allowed(&url, &app_origin),
+                "app origin {app}: `{u}` must be refused"
+            );
+        }
+    }
+
+    // Refused whatever the app origin is.
+    let always_refused = [
+        "https://evil.example/",
+        "http://evil.example/",
+        "http://[::1]:1421/",
+        "http://127.0.0.1:1420/",
+        "http://[::1]:1420/",
+        "http://asset.localhost/",
+        "http://ipc.localhost/list_agents",
+        "http://evil.tauri.localhost/",
+        "https://tauri.localhost.evil.example/",
+        "asset://localhost/etc/passwd",
+        "ipc://localhost/list_agents",
+        "file:///etc/passwd",
+        "data:text/html,<script>1</script>",
+        "data:text/plain,hi",
+        "javascript:alert(1)",
+        "about:config",
+        "about:blank?x=1",
+        "about:blank#top",
+        "about:srcdoc#frag",
+        "blob:null/0b0e7a8e-0000-4000-8000-000000000000",
+        "blob:http://[::1]:1421/0b0e7a8e-0000-4000-8000-000000000000",
+        "blob:https://evil.example/0b0e7a8e-0000-4000-8000-000000000000",
+        "ws://localhost:1420/",
+        "ftp://localhost/",
+    ];
+    let internal = ["about:blank", "about:srcdoc"];
+
+    // Linux / macOS production origin.
+    let mut refused = always_refused.to_vec();
+    refused.extend([
+        "tauri://localhost:1420/",
+        "tauri://localhost:80/",
+        "tauri://evil/",
+        "tauri://localhost./",
+        "tauri://LOCALHOST/",
+        "tauri://user@localhost/",
+        "tauri://user:pw@localhost/",
+        "http://tauri.localhost/",
+        "https://tauri.localhost/",
+        "http://localhost:1420/",
+        "http://localhost/",
+        "blob:http://localhost:1420/0b0e7a8e-0000-4000-8000-000000000000",
+    ]);
+    let mut admitted = internal.to_vec();
+    admitted.extend([
+        "tauri://localhost",
+        "tauri://localhost/",
+        "tauri://localhost/index.html?view=agents#top",
+        "blob:tauri://localhost/0b0e7a8e-0000-4000-8000-000000000000",
+    ]);
+    check("tauri://localhost", &admitted, &refused);
+
+    // Windows production origin (http).
+    let mut refused = always_refused.to_vec();
+    refused.extend([
+        "http://tauri.localhost:8080/",
+        "http://tauri.localhost:1420/",
+        "https://tauri.localhost/",
+        "http://tauri.localhost./",
+        "http://user@tauri.localhost/",
+        "http://user:pw@tauri.localhost/",
+        "tauri://localhost/",
+        "http://localhost:1420/",
+        "http://localhost/",
+    ]);
+    let mut admitted = internal.to_vec();
+    admitted.extend([
+        "http://tauri.localhost",
+        "http://tauri.localhost/index.html",
+        // The default port and upper-case host are the same origin once the
+        // URL is normalised (special scheme).
+        "http://tauri.localhost:80/",
+        "http://TAURI.LOCALHOST/",
+        "blob:http://tauri.localhost/0b0e7a8e-0000-4000-8000-000000000000",
+    ]);
+    check("http://tauri.localhost", &admitted, &refused);
+
+    // Windows production origin with useHttpsScheme.
+    let mut refused = always_refused.to_vec();
+    refused.extend(["http://tauri.localhost/", "https://tauri.localhost:8443/"]);
+    let mut admitted = internal.to_vec();
+    admitted.extend(["https://tauri.localhost/", "https://tauri.localhost:443/"]);
+    check("https://tauri.localhost", &admitted, &refused);
+
+    // Dev mode: the devUrl origin only.
+    let mut refused = always_refused.to_vec();
+    refused.extend([
+        "http://localhost:1421/",
+        "http://localhost/",
+        "https://localhost:1420/",
+        "http://localhost.:1420/",
+        "http://user@localhost:1420/",
+        "http://user:pw@localhost:1420/",
+        "tauri://localhost/",
+        "http://tauri.localhost/",
+        "blob:tauri://localhost/0b0e7a8e-0000-4000-8000-000000000000",
+    ]);
+    let mut admitted = internal.to_vec();
+    admitted.extend([
+        "http://localhost:1420",
+        "http://localhost:1420/src/main.tsx?t=1#x",
+        "http://LOCALHOST:1420/",
+        "blob:http://localhost:1420/0b0e7a8e-0000-4000-8000-000000000000",
+    ]);
+    check("http://localhost:1420", &admitted, &refused);
 }
 
 /// The privileged window must be built with both boundary handlers wired: the
@@ -251,7 +424,7 @@ fn p0_fg_webview_main_window_wires_navigation_and_newwindow_guards() {
         "the main window must be built from its config in setup()"
     );
     assert!(
-        BOUNDARY_RS.contains(".on_navigation(navigation_allowed)"),
+        BOUNDARY_RS.contains(".on_navigation(move |url| navigation_allowed(url, &app_origin))"),
         "the main window must install the navigation guard"
     );
     assert!(
@@ -260,9 +433,13 @@ fn p0_fg_webview_main_window_wires_navigation_and_newwindow_guards() {
     );
     assert!(
         BOUNDARY_RS.contains(
-            "navigation_allowed_parts(url.scheme(), url.host_str(), cfg!(debug_assertions))"
+            "AppOrigin::resolve(app.config(), &config, tauri::is_dev(), cfg!(windows))"
         ),
-        "the navigation guard must delegate to the pure predicate with the build-profile dev flag"
+        "the guard's app origin must be resolved with tauri::is_dev(), the condition that selects devUrl"
+    );
+    assert!(
+        !BOUNDARY_RS.contains("debug_assertions"),
+        "the dev origin must not be keyed on the build profile"
     );
 }
 
