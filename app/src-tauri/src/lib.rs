@@ -1936,6 +1936,7 @@ pub use commands::chat_llm::*;
 pub use commands::cognitive::*;
 pub use commands::consent::*;
 pub use commands::enterprise::*;
+pub use commands::frontend_errors::*;
 pub use commands::governance::*;
 pub use commands::model_hub::*;
 pub use commands::oracle_runtime::*;
@@ -7688,32 +7689,9 @@ pub mod runtime {
 
     #[tauri::command]
     fn log_frontend_error(message: String, stack: String, component_stack: String) {
-        eprintln!("[FRONTEND ERROR] {message}");
-        if !stack.is_empty() {
-            eprintln!("[FRONTEND STACK] {stack}");
-        }
-        if !component_stack.is_empty() {
-            eprintln!("[COMPONENT STACK] {component_stack}");
-        }
-        // Also append to a log file for post-mortem debugging
-        if let Ok(log_dir) = nexus_kernel::identity_home::nexus_state_dir() {
-            let _ = std::fs::create_dir_all(&log_dir);
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(log_dir.join("frontend_errors.log"))
-            {
-                use std::io::Write;
-                let _ = writeln!(
-                    file,
-                    "[{}] {}\n{}\n{}\n---",
-                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-                    message,
-                    stack,
-                    component_stack
-                );
-            }
-        }
+        // P0-FG resource bound: every field and the log file are bounded
+        // (commands/frontend_errors.rs).
+        super::record_frontend_error(&message, &stack, &component_stack);
     }
 
     pub fn run() {
