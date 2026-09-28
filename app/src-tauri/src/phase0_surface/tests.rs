@@ -2987,6 +2987,35 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
             );
             previews += 1;
         }
+        // P0 item D: the navigation guard admits `blob:` URLs created by the
+        // app origin (downloads). Every Blob the frontend builds must declare
+        // its type, and never a type a browser renders as a scriptable
+        // document, so no object URL can put untrusted markup at the app
+        // origin.
+        for (at, _) in text.match_indices("new Blob(") {
+            let rest = &text[at..];
+            let end = rest
+                .find(");")
+                .unwrap_or_else(|| panic!("{relative}: end of a `new Blob(` statement"));
+            let args = &rest[..end];
+            assert!(
+                args.contains("type:"),
+                "{relative}: a Blob must declare its MIME type"
+            );
+            for scriptable in [
+                "text/html",
+                "image/svg",
+                "xhtml",
+                "text/xml",
+                "application/xml",
+                "text/xsl",
+            ] {
+                assert!(
+                    !args.contains(scriptable),
+                    "{relative}: a Blob must not be a scriptable document type ({scriptable})"
+                );
+            }
+        }
         if relative != "src/main.tsx" {
             assert!(
                 !text.contains("innerHTML ="),

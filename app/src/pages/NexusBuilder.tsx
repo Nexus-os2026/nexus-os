@@ -764,7 +764,11 @@ export default function NexusBuilder() {
 
   const doDownload = useCallback(() => {
     if (!html) return;
-    const b = new Blob([html], { type: "text/html" }); const u = URL.createObjectURL(b);
+    // P0 item D: an opaque type, so the Builder output is only ever saved as a
+    // file; a text/html object URL would render untrusted markup at the app
+    // origin if it were ever navigated to (the navigation guard admits blob:
+    // URLs created by the app origin, for downloads).
+    const b = new Blob([html], { type: "application/octet-stream" }); const u = URL.createObjectURL(b);
     const a = document.createElement("a"); a.href = u; a.download = "nexus-build.html";
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u);
   }, [html]);
