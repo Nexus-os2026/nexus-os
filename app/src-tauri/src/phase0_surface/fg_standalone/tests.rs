@@ -1020,6 +1020,35 @@ const WITHDRAWN_BINARIES: &[&str] = &[
     "real-agent-validation",
 ];
 
+/// The README's withdrawal section names exactly the withdrawn binaries (as
+/// code spans), and that list is the inventory's: users are told which
+/// binaries only deny, and no kept binary is named as withdrawn.
+#[test]
+fn p0_fg_standalone_readme_names_every_withdrawn_binary() {
+    let inventoried: BTreeSet<&str> = BINARY_TARGETS
+        .iter()
+        .filter(|(_, _, _, disposition)| *disposition == Withdrawn)
+        .map(|(_, name, _, _)| *name)
+        .collect();
+    let listed: BTreeSet<&str> = WITHDRAWN_BINARIES.iter().copied().collect();
+    assert_eq!(
+        listed, inventoried,
+        "the withdrawn names are the inventory's"
+    );
+
+    let readme = read(&workspace_root().join("README.md")).replace("\r\n", "\n");
+    let start = readme
+        .find("### Server Deployment (withdrawn)")
+        .expect("the README's withdrawal section");
+    let section = &readme[start..];
+    let section = &section[..section.find("\n## ").unwrap_or(section.len())];
+    let named: BTreeSet<&str> = section.split('`').skip(1).step_by(2).collect();
+    assert_eq!(
+        named, inventoried,
+        "the README's withdrawal section names exactly the withdrawn binaries"
+    );
+}
+
 /// No workflow builds, installs, uploads or publishes a withdrawn binary, a
 /// container image or a chart, and the release publishes only the desktop
 /// installers. (Workflows still compile and test the withdrawn packages.)
