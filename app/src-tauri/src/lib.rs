@@ -6202,30 +6202,7 @@ pub mod runtime {
         interval_seconds: Option<u64>,
         goal_override: Option<String>,
     ) -> Result<(), String> {
-        let interval = interval_seconds.unwrap_or(60);
-        // Build a cron expression from interval: "0 */N * * * *" (every N minutes) or
-        // use seconds-level scheduling for intervals < 60s.
-        let cron_expr = if interval < 60 {
-            format!("*/{interval} * * * * *") // every N seconds
-        } else {
-            let mins = (interval / 60).max(1);
-            format!("0 */{mins} * * * *") // every N minutes
-        };
-
-        let manifest = super::find_manifest(state.inner(), &agent_id);
-        let goal = goal_override
-            .or_else(|| manifest.as_ref().and_then(|m| m.default_goal.clone()))
-            .unwrap_or_else(|| "Execute autonomous task".to_string());
-        let description = super::find_manifest_description(state.inner(), &agent_id);
-
-        let full_goal = super::goal_with_manifest_context(&agent_id, &goal, description.as_deref());
-
-        state
-            .agent_scheduler
-            .register_agent(&agent_id, &cron_expr, &full_goal)
-            .map_err(super::agent_error)?;
-
-        Ok(())
+        super::start_autonomous_loop(state.inner(), agent_id, interval_seconds, goal_override)
     }
 
     /// Stop an autonomous agent loop (unregister from scheduler).

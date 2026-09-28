@@ -434,6 +434,107 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
         .contains("constTRANSCENDENT_CREATION:&str=\"transcendent_creation\";"));
 }
 
+/// P0-FINAL-GATE (item G): the goal, autonomous-loop and tool routes check
+/// for an L6 (transcendent) agent first:
+/// - `assign_agent_goal` refuses before the rate limit, the input check, the
+///   goal assignment and the audit event. `execute_agent_goal` only takes a
+///   snapshot before it calls `assign_agent_goal`, and every other goal
+///   route (scheduled, schedule-runner and hivemind) goes through
+///   `execute_agent_goal`;
+/// - `start_autonomous_loop` refuses before the manifest is read or the
+///   scheduler registers anything, and the command only delegates to it;
+/// - `tool_call_autonomy` refuses a registered L6 agent before it returns a
+///   level;
+/// - the shared check only reads.
+#[test]
+fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
+    let cognitive = include_str!("../../commands/cognitive.rs");
+    let check = "ifis_transcendent_agent(state,&agent_id){";
+
+    let (_, assign) = fn_shape(cognitive, "assign_agent_goal");
+    assert!(
+        assign.starts_with(&format!(
+            "{check}{}}}state.check_rate(",
+            denial("assign_agent_goal", "ApprovalRequired")
+        )),
+        "{assign}"
+    );
+    let (_, execute) = fn_shape(cognitive, "execute_agent_goal");
+    assert!(
+        execute.starts_with(concat!(
+            "letbefore_snapshot=capture_agent_snapshot(state,&agent_id);",
+            "letgoal_id=assign_agent_goal(",
+        )),
+        "{execute}"
+    );
+    // The runtime's goal assignment is reached only through
+    // `assign_agent_goal`.
+    let code = without_whitespace(&code_lines(cognitive));
+    assert_eq!(
+        code.matches(".assign_goal(").count(),
+        1,
+        "one goal assignment"
+    );
+    assert_eq!(
+        without_whitespace(&code_lines(include_str!("../../lib.rs")))
+            .matches(".assign_goal(")
+            .count(),
+        0
+    );
+
+    let (_, looping) = fn_shape(cognitive, "start_autonomous_loop");
+    assert!(
+        looping.starts_with(&format!(
+            "{check}{}}}letinterval=",
+            denial("start_autonomous_loop", "ApprovalRequired")
+        )),
+        "{looping}"
+    );
+    assert!(looping.ends_with(
+        ".register_agent(&agent_id,&cron_expr,&full_goal).map_err(agent_error)?;Ok(())"
+    ));
+    let (_, command) = fn_shape(include_str!("../../lib.rs"), "start_autonomous_loop");
+    assert_eq!(
+        command,
+        "super::start_autonomous_loop(state.inner(),agent_id,interval_seconds,goal_override)"
+    );
+
+    let (_, tools) = fn_shape(
+        include_str!("../../commands/crate_bridges.rs"),
+        "tool_call_autonomy",
+    );
+    assert!(
+        tools.ends_with(&format!(
+            "ifagent.autonomy_level==6{{{}}}Ok(claimed.min(agent.autonomy_level))",
+            denial("tools_execute", "ApprovalRequired")
+        )),
+        "{tools}"
+    );
+
+    let (params, helper) = fn_shape(
+        include_str!("../../commands/agents.rs"),
+        "is_transcendent_agent",
+    );
+    assert_eq!(params, "(state:&AppState,agent_id:&str)");
+    assert!(helper.contains(
+        "find_manifest(state,agent_id).is_some_and(|manifest|manifest.autonomy_level==Some(6));"
+    ));
+    assert!(helper.contains(".get_agent(id).is_some_and(|handle|handle.autonomy_level==6)"));
+    assert!(helper.ends_with("stored||registered"));
+    for write in [
+        "start_agent",
+        "restart_agent",
+        "stop_agent",
+        "save_agent",
+        "update_agent_state",
+        "delete_agent",
+        "log_event",
+        "register_agent",
+    ] {
+        assert!(!helper.contains(write), "is_transcendent_agent: {write}");
+    }
+}
+
 /// Entries of the desktop command registration, whitespace-free.
 fn registered_commands() -> Vec<String> {
     let lib = include_str!("../../lib.rs");

@@ -414,6 +414,24 @@ pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// P0-FINAL-GATE (item G): whether `agent_id` names an L6 (transcendent)
+/// agent, by its stored record or its registration. It only reads. The
+/// goal, autonomous-loop and tool routes refuse such an agent with it before
+/// they change anything.
+pub(crate) fn is_transcendent_agent(state: &AppState, agent_id: &str) -> bool {
+    let stored =
+        find_manifest(state, agent_id).is_some_and(|manifest| manifest.autonomy_level == Some(6));
+    let registered = Uuid::parse_str(agent_id).is_ok_and(|id| {
+        state
+            .supervisor
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_agent(id)
+            .is_some_and(|handle| handle.autonomy_level == 6)
+    });
+    stored || registered
+}
+
 pub(crate) fn stop_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
     // Unregister from scheduler before stopping

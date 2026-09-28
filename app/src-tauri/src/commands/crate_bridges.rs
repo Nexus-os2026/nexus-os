@@ -936,6 +936,15 @@ pub(crate) fn tool_call_autonomy(
     let id = uuid::Uuid::parse_str(agent_id).map_err(|_| unregistered())?;
     let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
     let agent = supervisor.get_agent(id).ok_or_else(unregistered)?;
+    // P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human
+    // approval the backend cannot verify, so no tool call runs for one, at
+    // any claimed level.
+    if agent.autonomy_level == 6 {
+        return Err(crate::phase0_surface::closed(
+            "tools_execute",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
+    }
     Ok(claimed.min(agent.autonomy_level))
 }
 

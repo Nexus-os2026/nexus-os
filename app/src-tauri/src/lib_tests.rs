@@ -775,6 +775,106 @@ fn p0_fg_transcendent_activation_is_refused_and_changes_nothing() {
     assert_eq!(start_agent(&state, below), Ok(()));
 }
 
+/// P0-FINAL-GATE (item G): the goal, autonomous-loop and tool routes refuse
+/// an L6 (transcendent) agent before anything changes, with the bounded
+/// `ApprovalRequired` reason:
+/// - `assign_agent_goal`, and `execute_agent_goal` through it;
+/// - `start_autonomous_loop`;
+/// - the level resolution of `tools_execute`, at any claimed level.
+///
+/// No goal, loop, task, schedule or audit event results, and no input is
+/// echoed. Both a registered L6 agent and a stored L6 record are refused.
+/// (No current route registers an L6 agent; the direct registration stands
+/// in for one.) An L5 agent is not refused.
+#[test]
+fn p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent() {
+    use crate::commands::cognitive::{assign_agent_goal, execute_agent_goal};
+    use crate::commands::crate_bridges::tool_call_autonomy;
+    use crate::phase0_surface::{closed, Closure};
+    let state = AppState::new_in_memory();
+    // The scheduler starts a task per registration; nothing here polls it.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+
+    let registered = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(
+            parse_agent_manifest_json(&build_transcendent_manifest("transcendent-goal")).unwrap(),
+        )
+        .unwrap()
+        .to_string();
+    let stored = Uuid::new_v4().to_string();
+    state
+        .db
+        .save_agent(
+            &stored,
+            &build_transcendent_manifest("transcendent-stored"),
+            "running",
+            6,
+            "native",
+        )
+        .unwrap();
+    let sovereign = create_agent(
+        &state,
+        json!({
+            "name": "sovereign-goal",
+            "version": "1.0.0",
+            "capabilities": ["llm.query"],
+            "fuel_budget": 1000,
+            "autonomy_level": 5,
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let audit_events = |state: &AppState| state.audit.lock().unwrap().events().len();
+    let before = audit_events(&state);
+    let refused = |surface| Err(closed(surface, Closure::ApprovalRequired));
+    let sentinel = "p0fg-goal-sentinel";
+    for agent in [&registered, &stored] {
+        assert_eq!(
+            assign_agent_goal(&state, agent.clone(), sentinel.into(), 5, None),
+            refused("assign_agent_goal")
+        );
+        assert_eq!(
+            execute_agent_goal(&state, agent.clone(), sentinel.into(), 5, None),
+            refused("assign_agent_goal")
+        );
+        assert_eq!(
+            super::start_autonomous_loop(&state, agent.clone(), Some(5), Some(sentinel.into())),
+            Err(closed("start_autonomous_loop", Closure::ApprovalRequired))
+        );
+        assert!(!state.cognitive_runtime.has_active_loop(agent));
+        assert!(state.db.load_tasks_by_agent(agent, 10).unwrap().is_empty());
+    }
+    for claimed in [0, 1, 5, 6, u8::MAX] {
+        assert_eq!(
+            tool_call_autonomy(&state, &registered, claimed),
+            Err(closed("tools_execute", Closure::ApprovalRequired))
+        );
+    }
+    // A stored L6 record is not registered, so no tool call can name it.
+    assert_eq!(
+        tool_call_autonomy(&state, &stored, 5),
+        Err("tools_execute: agent_id must name a registered agent".to_string())
+    );
+    assert!(state.agent_scheduler.list().is_empty());
+    assert_eq!(audit_events(&state), before);
+
+    // An L5 agent is not refused.
+    assign_agent_goal(&state, sovereign.clone(), "control goal".into(), 5, None).unwrap();
+    assert!(state.cognitive_runtime.has_active_loop(&sovereign));
+    super::start_autonomous_loop(&state, sovereign.clone(), Some(120), None).unwrap();
+    assert_eq!(state.agent_scheduler.list().len(), 1);
+    state.agent_scheduler.unregister_agent(&sovereign);
+    assert_eq!(tool_call_autonomy(&state, &sovereign, 6), Ok(5));
+}
+
 #[test]
 fn test_tauri_pause_and_resume() {
     let state = AppState::new_in_memory();
