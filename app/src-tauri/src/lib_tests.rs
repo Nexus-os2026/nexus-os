@@ -875,6 +875,127 @@ fn p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent() {
     assert_eq!(tool_call_autonomy(&state, &sovereign, 6), Ok(5));
 }
 
+/// P0-FINAL-GATE (item G): an enabled Warden review that no Warden can give
+/// fails closed. The prebuilt Warden is L6, so it is never registered. An
+/// enabled review then denies with the bounded `WARDEN_REVIEW_UNAVAILABLE`
+/// reason in each of these cases:
+/// - no Warden registered;
+/// - the prebuilt Warden's record stored by an earlier build and left
+///   unregistered by restore;
+/// - a Warden registered but stopped.
+///
+/// No model is resolved or queried, and no audit event or consent request
+/// is written. It used to allow the action as "Warden inactive". A disabled
+/// review (the default) is unchanged and allows, and a running Warden
+/// still reviews.
+#[test]
+fn p0_fg_enabled_warden_review_fails_closed_without_a_warden() {
+    use crate::commands::cognitive::{WardenReviewEngine, WARDEN_REVIEW_UNAVAILABLE};
+    use nexus_kernel::actuators::ActionReviewDecision;
+    use nexus_kernel::cognitive::PlannedAction;
+    let state = AppState::new_in_memory();
+    let engine = WardenReviewEngine {
+        state: state.clone(),
+    };
+    let action = PlannedAction::FileWrite {
+        path: "p0fg-warden.txt".into(),
+        content: "p0fg".into(),
+    };
+    let review = |enabled: bool| {
+        engine.review_with(
+            "p0fg-actor",
+            "p0fg-actor",
+            &action,
+            enabled,
+            || panic!("no model may be resolved"),
+            |_, _| panic!("no model may be queried"),
+        )
+    };
+    let unchanged = |state: &AppState| {
+        (
+            state.audit.lock().unwrap().events().len(),
+            state.db.load_pending_consent().unwrap().len(),
+        )
+    };
+    let unavailable = Ok(ActionReviewDecision::Deny {
+        reason: WARDEN_REVIEW_UNAVAILABLE.to_string(),
+    });
+
+    let before = unchanged(&state);
+    assert_eq!(
+        review(false),
+        Ok(ActionReviewDecision::Allow {
+            reason: "Warden governance review disabled".to_string(),
+        })
+    );
+    assert_eq!(review(true), unavailable);
+    assert_eq!(unchanged(&state), before);
+
+    let warden = list_prebuilt_manifest_paths()
+        .into_iter()
+        .find(|path| path.file_name().and_then(|name| name.to_str()) == Some("warden.json"))
+        .unwrap();
+    let warden_json = std::fs::read_to_string(warden).unwrap();
+    assert_eq!(
+        parse_agent_manifest_json(&warden_json)
+            .unwrap()
+            .autonomy_level,
+        Some(6)
+    );
+    state
+        .db
+        .save_agent(
+            &Uuid::new_v4().to_string(),
+            &warden_json,
+            "running",
+            6,
+            "native",
+        )
+        .unwrap();
+    crate::commands::agents::restore_persisted_agents(&state);
+    let before = unchanged(&state);
+    assert_eq!(review(true), unavailable);
+    assert_eq!(unchanged(&state), before);
+
+    let stand_in = create_agent(
+        &state,
+        json!({
+            "name": "nexus-warden",
+            "version": "1.0.0",
+            "capabilities": ["llm.query"],
+            "fuel_budget": 1000,
+            "autonomy_level": 2,
+            "llm_model": "p0fg-warden-model",
+        })
+        .to_string(),
+    )
+    .unwrap();
+    stop_agent(&state, stand_in.clone()).unwrap();
+    let before = unchanged(&state);
+    assert_eq!(review(true), unavailable);
+    assert_eq!(unchanged(&state), before);
+
+    // A running Warden still reviews: its model is queried and decides.
+    start_agent(&state, stand_in).unwrap();
+    let decision = engine.review_with(
+        "p0fg-actor",
+        "p0fg-actor",
+        &action,
+        true,
+        || panic!("the Warden names its model"),
+        |_, model| {
+            assert_eq!(model, "p0fg-warden-model");
+            Ok("YES safe fixture write".to_string())
+        },
+    );
+    assert_eq!(
+        decision,
+        Ok(ActionReviewDecision::Allow {
+            reason: "safe fixture write".to_string(),
+        })
+    );
+}
+
 #[test]
 fn test_tauri_pause_and_resume() {
     let state = AppState::new_in_memory();

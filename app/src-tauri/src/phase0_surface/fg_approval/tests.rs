@@ -535,6 +535,36 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
     }
 }
 
+/// P0-FINAL-GATE (item G): an enabled Warden review with no Warden able to
+/// run denies with the bounded reason. It used to allow the action as
+/// "Warden inactive", and the only prebuilt Warden is L6, which is never
+/// registered. A disabled review (the default) still allows.
+#[test]
+fn p0_fg_g_enabled_warden_review_without_a_warden_denies() {
+    let cognitive = include_str!("../../commands/cognitive.rs");
+    let (_, review) = fn_shape(cognitive, "review_with");
+    assert!(
+        review.starts_with(concat!(
+            "if!enabled{returnOk(nexus_kernel::actuators::ActionReviewDecision::Allow{",
+            "reason:\"Wardengovernancereviewdisabled\".to_string(),});}",
+        )),
+        "{review}"
+    );
+    let unavailable = concat!(
+        "else{returnOk(nexus_kernel::actuators::ActionReviewDecision::Deny{",
+        "reason:WARDEN_REVIEW_UNAVAILABLE.to_string(),});};",
+    );
+    let deny = position(&review, unavailable);
+    assert!(deny < position(&review, "default_model"), "{review}");
+    assert!(deny < position(&review, "query("), "{review}");
+    let code = without_whitespace(&code_lines(cognitive));
+    assert!(code.contains(concat!(
+        "pub(crate)constWARDEN_REVIEW_UNAVAILABLE:&str=",
+        "\"WardenreviewisunavailableinPhaseZero:noWardenagentcanrun\";",
+    )));
+    assert!(!code.contains("\"Wardeninactive\""));
+}
+
 /// Entries of the desktop command registration, whitespace-free.
 fn registered_commands() -> Vec<String> {
     let lib = include_str!("../../lib.rs");

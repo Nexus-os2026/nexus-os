@@ -1286,8 +1286,13 @@ impl nexus_kernel::scheduler::ScheduleGoalCallback for RunnerGoalCallback {
     }
 }
 
+/// P0-FINAL-GATE (item G): the bounded reason an enabled Warden review gives
+/// when no Warden agent can run.
+pub(crate) const WARDEN_REVIEW_UNAVAILABLE: &str =
+    "Warden review is unavailable in Phase Zero: no Warden agent can run";
+
 pub(crate) struct WardenReviewEngine {
-    state: AppState,
+    pub(crate) state: AppState,
 }
 
 impl nexus_kernel::actuators::ActionReviewEngine for WardenReviewEngine {
@@ -1318,7 +1323,7 @@ impl nexus_kernel::actuators::ActionReviewEngine for WardenReviewEngine {
 
 impl WardenReviewEngine {
     // Keep the network boundary injectable while exercising real review/audit/consent logic.
-    fn review_with(
+    pub(crate) fn review_with(
         &self,
         actor_agent_id: &str,
         actor_name: &str,
@@ -1359,8 +1364,13 @@ impl WardenReviewEngine {
                     })
                 })
             else {
-                return Ok(nexus_kernel::actuators::ActionReviewDecision::Allow {
-                    reason: "Warden inactive".to_string(),
+                // P0-FINAL-GATE (item G): an enabled review that no Warden
+                // can give is not an approval. The prebuilt Warden is L6 and
+                // is never registered in Phase Zero, so this fails closed with
+                // a bounded reason. No model is resolved or queried, and the
+                // engine audits and enqueues nothing.
+                return Ok(nexus_kernel::actuators::ActionReviewDecision::Deny {
+                    reason: WARDEN_REVIEW_UNAVAILABLE.to_string(),
                 });
             };
             (id, model, name)
