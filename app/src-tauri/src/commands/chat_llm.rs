@@ -794,6 +794,10 @@ fn save_keeping_stored_credentials(
 /// The kernel writer refuses a new or changed credential without the operator
 /// configuration key, and never overwrites a configuration it cannot read
 /// (Final Gate item A).
+///
+/// The Ollama endpoint (`llm.ollama_url`) is not interface-editable: the
+/// backend takes it only from `OLLAMA_URL` or the fixed default local
+/// address, so a save that changes it is refused and writes nothing.
 fn write_keeping_stored_credentials(
     path: &std::path::Path,
     config: &NexusConfig,
@@ -802,6 +806,9 @@ fn write_keeping_stored_credentials(
     use nexus_kernel::config::{ConfigSaveError, ConfigWriteRefusal};
     let stored = nexus_kernel::config::load_config_from_path_with(path, keys)
         .map_err(InterfaceWriteError::Failed)?;
+    if config.llm.ollama_url != stored.llm.ollama_url {
+        return Err(InterfaceWriteError::Refused(OLLAMA_ENDPOINT_BACKEND_OWNED));
+    }
     let mut config = config.clone();
     keep_stored_credentials(&mut config, &stored);
     nexus_kernel::config::save_config_checked_to_path(path, &config, keys).map_err(|error| {
@@ -897,6 +904,10 @@ const CONFIGURATION_KEY_REQUIRED: (&str, &str) = (
 const EXISTING_CONFIGURATION_UNREADABLE: (&str, &str) = (
     "existing_configuration_unreadable",
     "save_config: the configuration on disk cannot be read, so it was not overwritten",
+);
+const OLLAMA_ENDPOINT_BACKEND_OWNED: (&str, &str) = (
+    "ollama_endpoint_backend_owned",
+    "save_config: the Ollama endpoint comes only from OLLAMA_URL or the default local address; nothing was saved",
 );
 
 /// Records a refused save by reason class only (never a path, parse text,
@@ -1323,6 +1334,63 @@ fn p0_fg_a_interface_credential_edits_need_the_operator_key() {
         EXISTING_CONFIGURATION_UNREADABLE.0,
         ConfigWriteRefusal::ExistingUnreadable.reason_class()
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The interface cannot persist an Ollama endpoint: a save that changes
+/// `llm.ollama_url` is refused, audited and writes nothing, while a save that
+/// returns the stored value is written. Synthetic key material, temporary file.
+#[cfg(test)]
+#[test]
+fn p0_fg_interface_saves_cannot_change_the_ollama_endpoint() {
+    use nexus_kernel::config::{
+        load_config_from_path_with, load_security_baseline_from_path_with,
+        save_config_checked_to_path, ConfigKeyMaterial,
+    };
+    let state = AppState::new_in_memory();
+    let dir = std::env::temp_dir().join(format!("nexus-fg-ollama-{}", Uuid::new_v4()));
+    let path = dir.join("config.toml");
+    let keys =
+        ConfigKeyMaterial::from_values(None, [Some("/home/synthetic-nexus"), None, None, None]);
+    let save = |requested: NexusConfig| {
+        save_config_with(
+            &state,
+            requested,
+            || load_security_baseline_from_path_with(&path, &keys),
+            |config| write_keeping_stored_credentials(&path, config, &keys),
+        )
+    };
+    save_config_checked_to_path(&path, &NexusConfig::default(), &keys).unwrap();
+    let stored = load_config_from_path_with(&path, &keys).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    for endpoint in [
+        "http://ollama-marker.example:11434",
+        "http://127.0.0.1:1",
+        "",
+    ] {
+        let mut requested = stored.clone();
+        requested.llm.ollama_url = endpoint.into();
+        assert_eq!(
+            save(requested),
+            Err(OLLAMA_ENDPOINT_BACKEND_OWNED.1.to_string()),
+            "{endpoint:?}"
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    }
+    // An unchanged endpoint with another setting changed is written.
+    let mut settings = stored.clone();
+    settings.llm.default_model = "synthetic-model".into();
+    assert_eq!(save(settings), Ok(()));
+    assert_eq!(
+        load_config_from_path_with(&path, &keys)
+            .unwrap()
+            .llm
+            .ollama_url,
+        stored.llm.ollama_url
+    );
+    let logged = audited_payloads(&state);
+    assert!(logged.contains(OLLAMA_ENDPOINT_BACKEND_OWNED.0));
+    assert!(!logged.contains("ollama-marker"), "{logged}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

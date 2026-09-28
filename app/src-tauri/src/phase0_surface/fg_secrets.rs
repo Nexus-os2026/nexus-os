@@ -161,4 +161,24 @@ mod guards {
             );
         }
     }
+
+    /// The interface writer refuses a changed Ollama endpoint before anything
+    /// is merged or written.
+    #[test]
+    fn p0_fg_interface_saves_keep_the_ollama_endpoint_backend_owned() {
+        let chat = normalized(include_str!("../commands/chat_llm.rs"));
+        let write = compact(&body(&chat, "fn write_keeping_stored_credentials("));
+        assert!(
+            in_order(
+                &write,
+                &[
+                    "load_config_from_path_with(path,keys)",
+                    "ifconfig.llm.ollama_url!=stored.llm.ollama_url{returnErr(InterfaceWriteError::Refused(OLLAMA_ENDPOINT_BACKEND_OWNED));}",
+                    "keep_stored_credentials(",
+                    "save_config_checked_to_path(",
+                ],
+            ),
+            "{write}"
+        );
+    }
 }
