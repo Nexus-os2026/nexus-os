@@ -15,13 +15,13 @@
 
 use crate::webview_boundary::{navigation_allowed_parts, APP_COMMANDS};
 
+// Paths are relative to this file (src/phase0_surface/) rather than derived
+// from the crate manifest directory, so the ambient-root scanner in `tests.rs`
+// (which reads this module as source) sees no environment-derived path.
 const LIB_RS: &str = include_str!("../lib.rs");
-const APP_CAPABILITY: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/capabilities/app-commands.json"
-));
-const BUILD_RS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/build.rs"));
-const TAURI_CONF: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/tauri.conf.json"));
+const APP_CAPABILITY: &str = include_str!("../../capabilities/app-commands.json");
+const BUILD_RS: &str = include_str!("../../build.rs");
+const TAURI_CONF: &str = include_str!("../../tauri.conf.json");
 const BOUNDARY_RS: &str = include_str!("../webview_boundary.rs");
 
 /// The command names in the `generate_handler![..]` registry, read the same way
