@@ -303,9 +303,13 @@ pub(crate) fn curl_post_json_with_timeout(
     // Pipe body via stdin to avoid OS ARG_MAX limits with large payloads (e.g. base64 images)
     if let Some(mut stdin) = child.stdin.take() {
         use std::io::Write;
-        stdin.write_all(encoded_body.as_bytes()).map_err(|error| {
-            AgentError::SupervisorError(format!("failed to write body to curl stdin: {error}"))
-        })?;
+        if let Err(error) = stdin.write_all(encoded_body.as_bytes()) {
+            drop(stdin);
+            reap_child(&mut child);
+            return Err(AgentError::SupervisorError(format!(
+                "failed to write body to curl stdin: {error}"
+            )));
+        }
     }
 
     let output = child
@@ -337,6 +341,15 @@ pub(crate) fn curl_post_json_with_timeout(
         AgentError::SupervisorError(format!("invalid HTTP status from curl: {error}"))
     })?;
     Ok((status, json_response(body_raw.trim())?))
+}
+
+/// Stop and reap a curl child that an early error leaves behind (Final Gate
+/// item I), so no request keeps running unowned and no child stays unreaped.
+/// Killing a child that already exited is not an error here; the caller
+/// reports its own failure either way.
+pub(crate) fn reap_child(child: &mut std::process::Child) {
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 /// A provider's JSON response body: `null` when empty, and otherwise JSON,
@@ -1197,6 +1210,33 @@ mod tests {
         ] {
             assert!(!source.contains("curl_post_json"), "{file}");
             assert!(source.contains("post_json_in_process("), "{file}");
+        }
+    }
+
+    /// Final Gate item I: every early error after a curl child starts stops
+    /// and reaps it (`reap_child`) instead of returning with the child still
+    /// running and unreaped. The pre-repair `?` returns are gone.
+    #[test]
+    fn p0_fg_curl_children_are_reaped_on_early_errors() {
+        let production = |source: &'static str| {
+            source
+                .split("#[cfg(test)]\nmod tests")
+                .next()
+                .unwrap()
+                .replace("\r\n", "\n")
+        };
+        let helpers = production(include_str!("mod.rs"));
+        let ollama = production(include_str!("ollama.rs"));
+        assert_eq!(helpers.matches("reap_child(&mut child);").count(), 1);
+        assert_eq!(ollama.matches("super::reap_child(&mut child);").count(), 5);
+        for gone in [
+            "\"no stdout from curl\".to_string()))?",
+            "read error during chat: {e}\")))?",
+            "read error during pull: {e}\")))?",
+            "failed to write request body to curl: {e}\"))\n            })?",
+            "failed to write body to curl stdin: {error}\"))\n        })?",
+        ] {
+            assert!(!ollama.contains(gone) && !helpers.contains(gone), "{gone}");
         }
     }
 }

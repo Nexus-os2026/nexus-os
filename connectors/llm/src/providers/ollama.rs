@@ -297,24 +297,37 @@ impl OllamaProvider {
         // (base64-encoded images can exceed ARG_MAX).
         if let Some(mut stdin) = child.stdin.take() {
             use std::io::Write;
-            stdin.write_all(encoded.as_bytes()).map_err(|e| {
-                AgentError::SupervisorError(format!("failed to write request body to curl: {e}"))
-            })?;
+            if let Err(e) = stdin.write_all(encoded.as_bytes()) {
+                drop(stdin);
+                super::reap_child(&mut child);
+                return Err(AgentError::SupervisorError(format!(
+                    "failed to write request body to curl: {e}"
+                )));
+            }
             // stdin is dropped here, closing the pipe so curl proceeds
         }
 
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| AgentError::SupervisorError("no stdout from curl".to_string()))?;
+        let Some(stdout) = child.stdout.take() else {
+            super::reap_child(&mut child);
+            return Err(AgentError::SupervisorError(
+                "no stdout from curl".to_string(),
+            ));
+        };
 
         let reader = BufReader::new(stdout);
         let mut full_response = String::new();
         let mut on_token = on_token;
 
         for line in reader.lines() {
-            let line = line
-                .map_err(|e| AgentError::SupervisorError(format!("read error during chat: {e}")))?;
+            let line = match line {
+                Ok(line) => line,
+                Err(e) => {
+                    super::reap_child(&mut child);
+                    return Err(AgentError::SupervisorError(format!(
+                        "read error during chat: {e}"
+                    )));
+                }
+            };
             let trimmed = line.trim();
             if trimmed.is_empty() || !trimmed.starts_with("data: ") {
                 continue;
@@ -388,17 +401,26 @@ impl OllamaProvider {
             .spawn()
             .map_err(|e| AgentError::SupervisorError(format!("curl spawn failed: {e}")))?;
 
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| AgentError::SupervisorError("no stdout from curl".to_string()))?;
+        let Some(stdout) = child.stdout.take() else {
+            super::reap_child(&mut child);
+            return Err(AgentError::SupervisorError(
+                "no stdout from curl".to_string(),
+            ));
+        };
 
         let reader = BufReader::new(stdout);
         let mut last_status = "unknown".to_string();
 
         for line in reader.lines() {
-            let line = line
-                .map_err(|e| AgentError::SupervisorError(format!("read error during pull: {e}")))?;
+            let line = match line {
+                Ok(line) => line,
+                Err(e) => {
+                    super::reap_child(&mut child);
+                    return Err(AgentError::SupervisorError(format!(
+                        "read error during pull: {e}"
+                    )));
+                }
+            };
             if line.trim().is_empty() {
                 continue;
             }
