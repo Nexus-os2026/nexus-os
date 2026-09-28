@@ -6290,15 +6290,23 @@ pub mod runtime {
     }
 
     // ── Consent / HITL Approval commands ──
+    //
+    // P0-FINAL-GATE (item G): a name the caller supplies (approved_by,
+    // denied_by, reviewed_by) is not an approver identity, and no human
+    // approver is verified. These commands take no name; each resolution is
+    // recorded with the fixed DESKTOP_UI_RESOLVER label.
 
     #[tauri::command]
     fn approve_consent_request(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         consent_id: String,
-        approved_by: String,
     ) -> Result<(), String> {
-        let meta = super::approve_consent_request(state.inner(), consent_id.clone(), approved_by)?;
+        let meta = super::approve_consent_request(
+            state.inner(),
+            consent_id.clone(),
+            super::DESKTOP_UI_RESOLVER.to_string(),
+        )?;
         // Best-effort: notify frontend that consent was resolved
         let _ = window.emit(
             "consent-resolved",
@@ -6317,11 +6325,14 @@ pub mod runtime {
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         consent_id: String,
-        denied_by: String,
         reason: Option<String>,
     ) -> Result<(), String> {
-        let meta =
-            super::deny_consent_request(state.inner(), consent_id.clone(), denied_by, reason)?;
+        let meta = super::deny_consent_request(
+            state.inner(),
+            consent_id.clone(),
+            super::DESKTOP_UI_RESOLVER.to_string(),
+            reason,
+        )?;
         // Best-effort: notify frontend that consent was resolved
         let _ = window.emit(
             "consent-resolved",
@@ -6352,10 +6363,12 @@ pub mod runtime {
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         goal_id: String,
-        approved_by: String,
     ) -> Result<(), String> {
-        let (consent_ids, meta) =
-            super::batch_approve_consents(state.inner(), goal_id, approved_by)?;
+        let (consent_ids, meta) = super::batch_approve_consents(
+            state.inner(),
+            goal_id,
+            super::DESKTOP_UI_RESOLVER.to_string(),
+        )?;
         for consent_id in consent_ids {
             // Best-effort: notify frontend of each resolved consent
             let _ = window.emit(
@@ -6376,9 +6389,12 @@ pub mod runtime {
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         consent_id: String,
-        reviewed_by: String,
     ) -> Result<(), String> {
-        let meta = super::review_consent_batch(state.inner(), consent_id.clone(), reviewed_by)?;
+        let meta = super::review_consent_batch(
+            state.inner(),
+            consent_id.clone(),
+            super::DESKTOP_UI_RESOLVER.to_string(),
+        )?;
         // Best-effort: notify frontend that consent entered review-each mode
         let _ = window.emit(
             "consent-resolved",
@@ -6397,11 +6413,14 @@ pub mod runtime {
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         goal_id: String,
-        denied_by: String,
         reason: Option<String>,
     ) -> Result<(), String> {
-        let (consent_ids, meta) =
-            super::batch_deny_consents(state.inner(), goal_id, denied_by, reason)?;
+        let (consent_ids, meta) = super::batch_deny_consents(
+            state.inner(),
+            goal_id,
+            super::DESKTOP_UI_RESOLVER.to_string(),
+            reason,
+        )?;
         for consent_id in consent_ids {
             // Best-effort: notify frontend of each resolved consent
             let _ = window.emit(

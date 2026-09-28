@@ -99,6 +99,12 @@ use uuid::Uuid;
 /// can be denied but never approved.
 const TRANSCENDENT_CREATION: &str = "transcendent_creation";
 
+/// P0-FINAL-GATE (item G): the resolver recorded, in the consent row and the
+/// audit event, for a decision delivered by the desktop interface. A name the
+/// caller supplies is not an approver identity, and no human approver is
+/// verified, so the record says only where the decision came from.
+pub const DESKTOP_UI_RESOLVER: &str = "desktop-ui (unverified)";
+
 /// Notification payload emitted to the frontend when a consent request arrives.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsentNotification {
@@ -291,12 +297,10 @@ pub fn approve_consent_request(
         .resolve_consent(&consent_id, "approved", &approved_by)
         .map_err(|e| format!("db error: {e}"))?;
 
-    // 2. Approve in kernel consent runtime (best-effort — agent may not exist in supervisor)
-    if let Ok(agent_uuid) = Uuid::parse_str(&agent_id_str) {
-        let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-        // Best-effort: forward approval to kernel consent runtime; agent may not have a pending consent
-        let _ = supervisor.approve_consent(agent_uuid, &consent_id, &approved_by);
-    }
+    // 2. P0-FINAL-GATE (item G): the decision is not forwarded to the kernel
+    // consent runtime. That queue records approvals by approver identity, and
+    // this one has none: the resolver is a label, and an IPC call is not the
+    // human approval the queue exists to record.
     // Best-effort: unblock cognitive loop step waiting on this consent
     let _ = state.cognitive_runtime.approve_blocked_step(&agent_id_str);
     state.wake_blocked_consent_wait(&agent_id_str, &consent_id);

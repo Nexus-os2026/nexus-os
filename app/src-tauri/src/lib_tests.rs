@@ -3114,6 +3114,99 @@ fn test_consent_resolved_removes_from_pending() {
     );
 }
 
+/// P0-FINAL-GATE (item G): a decision delivered by the desktop interface is
+/// recorded with the fixed resolver label, in the consent row and the audit
+/// event, never with a name the caller chose. The IPC commands take no name
+/// and pass this label (pinned by `fg_approval`).
+#[test]
+fn p0_fg_desktop_consent_resolutions_record_the_interface_label() {
+    let resolver = super::DESKTOP_UI_RESOLVER;
+    assert_eq!(resolver, "desktop-ui (unverified)");
+    let state = AppState::new_in_memory();
+    enqueue_test_consent(&state, "c-label-approve", "a1", "fs.write", "Tier1");
+    enqueue_test_consent(&state, "c-label-deny", "a1", "fs.write", "Tier1");
+    approve_consent_request(&state, "c-label-approve".into(), resolver.to_string()).unwrap();
+    deny_consent_request(&state, "c-label-deny".into(), resolver.to_string(), None).unwrap();
+
+    let history = get_consent_history(&state, 10).unwrap();
+    for (id, status) in [("c-label-approve", "approved"), ("c-label-deny", "denied")] {
+        let row = history.iter().find(|row| row.consent_id == id).unwrap();
+        assert_eq!(row.status, status);
+        assert_eq!(row.resolved_by.as_deref(), Some(resolver));
+    }
+    let events = state.db.load_audit_events(None, 100, 0).unwrap();
+    for (action, field) in [
+        ("consent_approved", "approved_by"),
+        ("consent_denied", "denied_by"),
+    ] {
+        let event = events
+            .iter()
+            .find(|event| event.detail_json.contains(action))
+            .unwrap_or_else(|| panic!("{action} audited"));
+        let detail: serde_json::Value = serde_json::from_str(&event.detail_json).unwrap();
+        assert_eq!(detail[field], json!(resolver), "{}", event.detail_json);
+    }
+}
+
+/// P0-FINAL-GATE (item G): an approval delivered over desktop IPC never
+/// reaches the kernel consent runtime. That queue records approvals by
+/// approver identity, and the desktop has none to give. Even when a kernel
+/// policy would accept the interface label as an approver, and a desktop
+/// consent row carries the kernel request's own id, approving the row leaves
+/// the kernel request unapproved: the governed operation still requires
+/// approval afterwards.
+#[test]
+fn p0_fg_desktop_approvals_do_not_reach_the_kernel_consent_queue() {
+    use nexus_kernel::consent::{GovernedOperation, HitlTier};
+    use nexus_kernel::errors::AgentError;
+    let resolver = super::DESKTOP_UI_RESOLVER;
+    let state = AppState::new_in_memory();
+    let agent = create_agent(&state, build_manifest("kernel-consent-agent")).unwrap();
+    let id = Uuid::parse_str(&agent).unwrap();
+    let request = |state: &AppState| {
+        state.supervisor.lock().unwrap().require_consent(
+            id,
+            GovernedOperation::TerminalCommand,
+            b"p0-fg-probe",
+        )
+    };
+    {
+        let mut supervisor = state.supervisor.lock().unwrap();
+        let handle = supervisor.get_agent_mut(id).unwrap();
+        handle.consent_runtime.policy_engine_mut().set_policy(
+            GovernedOperation::TerminalCommand,
+            HitlTier::Tier2,
+            vec![resolver.to_string()],
+        );
+    }
+    let request_id = match request(&state) {
+        Err(AgentError::ApprovalRequired { request_id }) => request_id,
+        other => panic!("the kernel must require approval first: {other:?}"),
+    };
+
+    enqueue_test_consent(
+        &state,
+        &request_id,
+        &agent,
+        "cognitive.hitl_approval",
+        "Tier2",
+    );
+    approve_consent_request(&state, request_id.clone(), resolver.to_string()).unwrap();
+    let history = get_consent_history(&state, 10).unwrap();
+    let row = history
+        .iter()
+        .find(|row| row.consent_id == request_id)
+        .unwrap();
+    assert_eq!(row.status, "approved");
+
+    assert_eq!(
+        request(&state),
+        Err(AgentError::ApprovalRequired {
+            request_id: request_id.clone()
+        })
+    );
+}
+
 // ── Messaging Gateway Tests ──
 
 #[test]

@@ -482,3 +482,44 @@ fn p0_fg_g_caller_asserted_approval_commands_only_deny() {
         assert!(!advanced.contains(gone), "advanced: {gone}");
     }
 }
+
+/// P0-FINAL-GATE (item G): a name the caller supplies is not an approver
+/// identity. The five consent-resolution commands take no approved_by,
+/// denied_by or reviewed_by name. Each passes the fixed `DESKTOP_UI_RESOLVER`
+/// label, which the consent row and the audit event record. The approval is
+/// not forwarded to the kernel consent runtime, whose queue records approvals
+/// by approver identity.
+#[test]
+fn p0_fg_g_consent_decisions_record_no_caller_identity() {
+    let lib = include_str!("../lib.rs");
+    for command in [
+        "approve_consent_request",
+        "deny_consent_request",
+        "batch_approve_consents",
+        "review_consent_batch",
+        "batch_deny_consents",
+    ] {
+        let (params, body) = fn_shape(lib, command);
+        for name in ["approved_by", "denied_by", "reviewed_by", "_by:"] {
+            assert!(!params.contains(name), "{command} takes {name}: {params}");
+        }
+        assert!(
+            body.contains(&format!("super::{command}(")),
+            "{command}: {body}"
+        );
+        assert_eq!(
+            body.matches("super::DESKTOP_UI_RESOLVER.to_string()")
+                .count(),
+            1,
+            "{command} must record the interface label: {body}"
+        );
+    }
+
+    let consent = code_lines(include_str!("../commands/consent.rs"));
+    assert!(without_whitespace(&consent)
+        .contains("pubconstDESKTOP_UI_RESOLVER:&str=\"desktop-ui(unverified)\";"));
+    assert!(
+        !consent.contains(".approve_consent("),
+        "an IPC approval must not reach the kernel consent runtime"
+    );
+}
