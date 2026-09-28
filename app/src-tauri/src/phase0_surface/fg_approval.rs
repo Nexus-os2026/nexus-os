@@ -560,3 +560,159 @@ fn p0_fg_g_self_improvement_acceptance_is_recorded_truthfully() {
     assert!(!pipeline.contains("awaiting HITL approval"));
     assert!(!pipeline.contains("hitl_approved: true"));
 }
+
+/// Why the computer-use loop controller source would let end of input or a
+/// read error approve a step, or `None` if it would not.
+fn eof_approval_defect(controller: &str) -> Option<String> {
+    let controller = controller.replace("\r\n", "\n");
+    let (params, body) = fn_shape(&controller, "read_approval_decision");
+    if params != "(input:&mutimplBufRead)" {
+        return Some(format!("decision reader parameters: {params}"));
+    }
+    let first_line = concat!(
+        "letmutline=String::new();matchinput.read_line(&mutline){",
+        "Ok(0)=>{warn!(\"stdinclosedbeforeanapprovaldecision,aborting\");returnApprovalDecision::Abort;}",
+        "Ok(_)=>{}",
+        "Err(_)=>{warn!(\"Failedtoreadstdin,aborting\");returnApprovalDecision::Abort;}}",
+    );
+    if !body.starts_with(first_line) {
+        return Some(format!("EOF or a read error does not abort: {body}"));
+    }
+    if !body.contains("matchinput.read_line(&mutmod_line){Ok(0)|Err(_)=>ApprovalDecision::Abort,") {
+        return Some("EOF before a modify line does not abort".into());
+    }
+    if body.matches("ApprovalDecision::Approve").count() != 1
+        || !body.contains("\"\"|\"y\"|\"yes\"=>ApprovalDecision::Approve,")
+    {
+        return Some("approval is reachable other than by an entered line".into());
+    }
+    let (_, prompt) = fn_shape(&controller, "prompt_user_approval");
+    if !prompt.ends_with("read_approval_decision(&mutio::stdin().lock())") {
+        return Some("the step prompt does not decide through the reader".into());
+    }
+    // Standard input is read only inside the decision function.
+    if code_lines(&controller).matches("read_line(").count() != 2 {
+        return Some("standard input is read outside the decision function".into());
+    }
+    for test in [
+        "test_approval_eof_aborts_instead_of_approving",
+        "test_approval_read_error_aborts",
+        "test_approval_entered_blank_line_is_explicit_approval",
+        "test_approval_modify_requires_an_entered_replacement",
+    ] {
+        if !controller.contains(&format!("#[test]\n    fn {test}()")) {
+            return Some(format!("{test} is missing"));
+        }
+    }
+    None
+}
+
+/// P0-FINAL-GATE (item G): preserved from C5A (E6). The computer-use step
+/// approval reads a line from standard input. End of input (`read_line`
+/// returning `Ok(0)`: a closed, null or absent stdin) and a read error abort;
+/// they are never taken for pressing Enter, which approves. EOF before a
+/// modify line aborts as well. That module's own tests of these cases must
+/// stay present. The in-memory negative controls show that the check rejects
+/// each regression.
+#[test]
+fn p0_fg_g_eof_or_a_read_error_is_never_an_approval() {
+    let controller =
+        include_str!("../../../../crates/nexus-computer-use/src/agent/loop_controller.rs");
+    assert_eq!(eof_approval_defect(controller), None);
+
+    for (original, regression) in [
+        (
+            "            warn!(\"stdin closed before an approval decision, aborting\");\n            return ApprovalDecision::Abort;",
+            "            warn!(\"stdin closed before an approval decision, aborting\");\n            return ApprovalDecision::Approve;",
+        ),
+        (
+            "            warn!(\"Failed to read stdin, aborting\");\n            return ApprovalDecision::Abort;",
+            "            warn!(\"Failed to read stdin, aborting\");\n            return ApprovalDecision::Approve;",
+        ),
+        (
+            "                Ok(0) | Err(_) => ApprovalDecision::Abort,",
+            "                Ok(0) | Err(_) => ApprovalDecision::Modify(String::new()),",
+        ),
+        (
+            "fn test_approval_eof_aborts_instead_of_approving()",
+            "fn test_approval_eof_removed()",
+        ),
+    ] {
+        let source = controller.replace("\r\n", "\n");
+        assert_eq!(source.matches(original).count(), 1, "{original}");
+        let mutated = source.replace(original, regression);
+        assert!(
+            eof_approval_defect(&mutated).is_some(),
+            "the check must reject: {regression}"
+        );
+    }
+}
+
+/// Every source of the kernel actuators, read at compile time.
+macro_rules! actuator_sources {
+    ($($file:literal),* $(,)?) => {
+        [$((
+            $file,
+            include_str!(concat!("../../../../kernel/src/actuators/", $file)),
+        )),*]
+    };
+}
+
+/// Each line of the actuator sources that reads the HITL approval flag.
+fn hitl_flag_reads<'a>(sources: &[(&'a str, &str)]) -> Vec<(&'a str, String)> {
+    sources
+        .iter()
+        .flat_map(|(file, src)| {
+            src.lines()
+                .filter(|line| line.contains(".hitl_approved"))
+                .map(move |line| (*file, without_whitespace(line)))
+        })
+        .collect()
+}
+
+/// P0-FINAL-GATE (item G): a HITL approval is not authority for an actuator.
+/// The cognitive loop passes whether a step was HITL-approved into the
+/// actuator context. No actuator reads that flag; only the context's `Debug`
+/// output shows it. So an approval delivered over IPC changes no actuator's
+/// behaviour: `Phase0AgentExecutor` alone decides which actions run.
+#[test]
+fn p0_fg_g_no_actuator_reads_the_hitl_approval_flag() {
+    let actuators = actuator_sources!(
+        "agent_lifecycle.rs",
+        "api.rs",
+        "browser.rs",
+        "code_exec.rs",
+        "cognitive_param.rs",
+        "computer_use.rs",
+        "docker.rs",
+        "execution_platform.rs",
+        "filesystem.rs",
+        "governance_policy.rs",
+        "image_gen.rs",
+        "input.rs",
+        "knowledge_graph.rs",
+        "mod.rs",
+        "screen.rs",
+        "self_evolution.rs",
+        "shell.rs",
+        "tts.rs",
+        "types.rs",
+        "web.rs",
+    );
+    let debug_only = vec![(
+        "types.rs",
+        ".field(\"hitl_approved\",&self.hitl_approved)".to_string(),
+    )];
+    assert_eq!(hitl_flag_reads(&actuators), debug_only);
+
+    // Negative control, in memory: an actuator that branched on the flag
+    // would be caught.
+    let mut branching = actuators.to_vec();
+    let shell = format!(
+        "{}\nfn approved(context: &ActuatorContext) -> bool {{ context.hitl_approved }}\n",
+        actuators[16].1
+    );
+    assert_eq!(actuators[16].0, "shell.rs");
+    branching[16].1 = &shell;
+    assert_ne!(hitl_flag_reads(&branching), debug_only);
+}
