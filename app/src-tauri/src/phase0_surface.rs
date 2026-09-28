@@ -48,6 +48,10 @@ pub(crate) enum Closure {
     /// mechanism authorizes observing the screen in Phase Zero, and an IPC
     /// request is not proof of the user's consent.
     ScreenObservation,
+    // Final Gate items B, C, F and I: egress, credential transport, peers and
+    // helper programs.
+
+    // Final Gate items A and H: stored secrets.
 }
 
 impl Closure {
@@ -74,6 +78,9 @@ impl Closure {
                 "keyboard and mouse input from the interface or a model is unavailable in Phase Zero"
             }
             Self::ScreenObservation => "governed screen observation is unavailable in Phase Zero",
+            // Final Gate items B, C, F and I.
+
+            // Final Gate items A and H.
         }
     }
 }
@@ -85,3 +92,17 @@ pub(crate) fn closed(surface: &'static str, closure: Closure) -> String {
 
 #[cfg(test)]
 mod tests;
+
+// P0-FINAL-GATE-CLOSURE guards, one module per workstream.
+#[cfg(test)]
+mod fg_approval;
+#[cfg(test)]
+mod fg_egress;
+#[cfg(test)]
+mod fg_reliability;
+#[cfg(test)]
+mod fg_secrets;
+#[cfg(test)]
+mod fg_standalone;
+#[cfg(test)]
+mod fg_webview;
