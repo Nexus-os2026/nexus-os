@@ -173,54 +173,66 @@ fn p0_fg_c5_desktop_reaches_only_in_memory_measurement() {
     );
 }
 
-/// Every production source of the capability-measurement crate, read at
-/// compile time.
-macro_rules! measurement_sources {
-    ($($file:literal),* $(,)?) => {
-        [$((
-            $file,
-            include_str!(concat!(
-                "../../../../../crates/nexus-capability-measurement/src/",
-                $file
-            )),
-        )),*]
-    };
+/// A directory of the workspace, located from this crate's manifest.
+fn workspace_dir(relative: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(relative)
 }
 
-const MEASUREMENT_SOURCES: [(&str, &str); 32] = measurement_sources!(
-    "battery/difficulty.rs",
-    "battery/expected_chain.rs",
-    "battery/mod.rs",
-    "battery/test_problem.rs",
-    "darwin_bridge.rs",
-    "evaluation/ab_validation.rs",
-    "evaluation/agent_adapter.rs",
-    "evaluation/batch.rs",
-    "evaluation/comparator.rs",
-    "evaluation/mod.rs",
-    "evaluation/nim_client.rs",
-    "evaluation/openrouter_client.rs",
-    "evaluation/repeatability.rs",
-    "evaluation/runner.rs",
-    "evaluation/three_way.rs",
-    "evaluation/validation_run.rs",
-    "framework.rs",
-    "lib.rs",
-    "reporting/audit_trail.rs",
-    "reporting/cross_vector.rs",
-    "reporting/mod.rs",
-    "reporting/scorecard.rs",
-    "scoring/articulation.rs",
-    "scoring/asymmetric.rs",
-    "scoring/gaming_detection.rs",
-    "scoring/mod.rs",
-    "tauri_commands.rs",
-    "vectors/adaptation.rs",
-    "vectors/mod.rs",
-    "vectors/planning_coherence.rs",
-    "vectors/reasoning_depth.rs",
-    "vectors/tool_use_integrity.rs",
-);
+/// Every Rust source under `dir`, recursively, as (path relative to `dir`
+/// with `/` separators, contents), sorted by path. The sources are read at
+/// run time, so a file added later is checked without a list to update.
+fn rust_sources_under(dir: &std::path::Path) -> Vec<(String, String)> {
+    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<(String, String)>) {
+        let mut paths: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+            .unwrap_or_else(|e| panic!("read {}: {e}", dir.display()))
+            .map(|entry| entry.expect("directory entry").path())
+            .collect();
+        paths.sort();
+        for path in paths {
+            if path.is_dir() {
+                walk(root, &path, out);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                let relative = path
+                    .strip_prefix(root)
+                    .expect("inside the directory")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let text = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+                out.push((relative, text));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, dir, &mut out);
+    out
+}
+
+/// The sources under the workspace directory `relative`, which must include
+/// each of `expected` (so a wrong path cannot pass as an empty scan).
+fn sources_including(relative: &str, expected: &[&str]) -> Vec<(String, String)> {
+    let sources = rust_sources_under(&workspace_dir(relative));
+    for file in expected {
+        assert!(
+            sources.iter().any(|(path, _)| path == file),
+            "{relative}/{file} not found"
+        );
+    }
+    sources
+}
+
+/// Every production source of the capability-measurement crate, read at run
+/// time from its source directory. (P0-FINAL-GATE F7: this used to be a
+/// compile-time list of the 32 files the directory held, which a file added
+/// later would have escaped.)
+fn measurement_sources() -> Vec<(String, String)> {
+    sources_including(
+        "crates/nexus-capability-measurement/src",
+        &["lib.rs", "tauri_commands.rs", "evaluation/nim_client.rs"],
+    )
+}
 
 /// Production code of a capability-measurement source: this crate keeps its
 /// tests in one trailing `#[cfg(test)] mod tests` block per file, so the
@@ -248,8 +260,9 @@ fn measurement_production_code(file: &str, src: &str) -> String {
 /// endpoint; and no other provider's key variable is named at all.
 #[test]
 fn p0_fg_c5_measurement_clients_take_only_the_groq_key() {
+    let sources = measurement_sources();
     let mut env_reads = Vec::new();
-    for (file, src) in MEASUREMENT_SOURCES {
+    for (file, src) in &sources {
         let code = measurement_production_code(file, src);
         for other_provider in ["NVIDIA_NIM_API_KEY", "OPENROUTER_API_KEY"] {
             assert!(!code.contains(other_provider), "{file}: {other_provider}");
@@ -257,7 +270,7 @@ fn p0_fg_c5_measurement_clients_take_only_the_groq_key() {
         assert!(!code.contains("var_os("), "{file}: var_os");
         let reads = code.matches("env::var").count();
         if reads > 0 {
-            env_reads.push((file, reads));
+            env_reads.push((file.as_str(), reads));
         }
     }
     assert_eq!(
@@ -266,9 +279,9 @@ fn p0_fg_c5_measurement_clients_take_only_the_groq_key() {
         "the crate reads one environment variable, through the Groq key lookup"
     );
 
-    let client = MEASUREMENT_SOURCES
+    let client = sources
         .iter()
-        .find(|(file, _)| *file == "evaluation/nim_client.rs")
+        .find(|(file, _)| file == "evaluation/nim_client.rs")
         .map(|(file, src)| measurement_production_code(file, src))
         .unwrap();
     let (params, body) = fn_shape(&client, "groq_api_key");
@@ -867,24 +880,22 @@ fn p0_fg_g_eof_or_a_read_error_is_never_an_approval() {
     }
 }
 
-/// Every source of the kernel actuators, read at compile time.
-macro_rules! actuator_sources {
-    ($($file:literal),* $(,)?) => {
-        [$((
-            $file,
-            include_str!(concat!("../../../../../kernel/src/actuators/", $file)),
-        )),*]
-    };
+/// Every source of the kernel actuators, read at run time from their
+/// directory. (P0-FINAL-GATE F7: this used to be a compile-time list of the
+/// 20 files the directory held, which a file added later would have
+/// escaped.)
+fn actuator_sources() -> Vec<(String, String)> {
+    sources_including("kernel/src/actuators", &["mod.rs", "shell.rs", "types.rs"])
 }
 
 /// Each line of the actuator sources that reads the HITL approval flag.
-fn hitl_flag_reads<'a>(sources: &[(&'a str, &str)]) -> Vec<(&'a str, String)> {
+fn hitl_flag_reads(sources: &[(String, String)]) -> Vec<(String, String)> {
     sources
         .iter()
         .flat_map(|(file, src)| {
             src.lines()
                 .filter(|line| line.contains(".hitl_approved"))
-                .map(move |line| (*file, without_whitespace(line)))
+                .map(move |line| (file.clone(), without_whitespace(line)))
         })
         .collect()
 }
@@ -896,44 +907,61 @@ fn hitl_flag_reads<'a>(sources: &[(&'a str, &str)]) -> Vec<(&'a str, String)> {
 /// behaviour: `Phase0AgentExecutor` alone decides which actions run.
 #[test]
 fn p0_fg_g_no_actuator_reads_the_hitl_approval_flag() {
-    let actuators = actuator_sources!(
-        "agent_lifecycle.rs",
-        "api.rs",
-        "browser.rs",
-        "code_exec.rs",
-        "cognitive_param.rs",
-        "computer_use.rs",
-        "docker.rs",
-        "execution_platform.rs",
-        "filesystem.rs",
-        "governance_policy.rs",
-        "image_gen.rs",
-        "input.rs",
-        "knowledge_graph.rs",
-        "mod.rs",
-        "screen.rs",
-        "self_evolution.rs",
-        "shell.rs",
-        "tts.rs",
-        "types.rs",
-        "web.rs",
-    );
+    let actuators = actuator_sources();
     let debug_only = vec![(
-        "types.rs",
+        "types.rs".to_string(),
         ".field(\"hitl_approved\",&self.hitl_approved)".to_string(),
     )];
     assert_eq!(hitl_flag_reads(&actuators), debug_only);
 
     // Negative control, in memory: an actuator that branched on the flag
     // would be caught.
-    let mut branching = actuators.to_vec();
-    let shell = format!(
-        "{}\nfn approved(context: &ActuatorContext) -> bool {{ context.hitl_approved }}\n",
-        actuators[16].1
-    );
-    assert_eq!(actuators[16].0, "shell.rs");
-    branching[16].1 = &shell;
+    let branch = "\nfn approved(context: &ActuatorContext) -> bool { context.hitl_approved }\n";
+    let mut branching = actuators.clone();
+    let (_, shell) = branching
+        .iter_mut()
+        .find(|(file, _)| file == "shell.rs")
+        .unwrap();
+    shell.push_str(branch);
     assert_ne!(hitl_flag_reads(&branching), debug_only);
+}
+
+/// P0-FINAL-GATE F7: the C5 and actuator guards read their sources from the
+/// directories at run time. A file added later, at any depth, is read and
+/// checked, and only Rust sources are read. Shown on a scratch directory.
+#[test]
+fn p0_fg_source_lists_follow_their_directories() {
+    let dir = std::env::temp_dir().join(format!(
+        "p0-fg-source-list-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(dir.join("added/deeper")).unwrap();
+    std::fs::write(dir.join("first.rs"), "// first\n").unwrap();
+    std::fs::write(dir.join("added/deeper/later.rs"), "context.hitl_approved\n").unwrap();
+    std::fs::write(dir.join("notes.txt"), "context.hitl_approved\n").unwrap();
+    let sources = rust_sources_under(&dir);
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(
+        sources,
+        [
+            (
+                "added/deeper/later.rs".to_string(),
+                "context.hitl_approved\n".to_string()
+            ),
+            ("first.rs".to_string(), "// first\n".to_string()),
+        ]
+    );
+    assert_eq!(
+        hitl_flag_reads(&sources),
+        [(
+            "added/deeper/later.rs".to_string(),
+            "context.hitl_approved".to_string()
+        )]
+    );
 }
 
 /// P0-FINAL-GATE (item K, cross-stream request from stream 6): both
