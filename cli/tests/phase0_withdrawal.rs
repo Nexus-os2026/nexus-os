@@ -875,3 +875,67 @@ fn p0_j4_gitlab_release_build_job_publishes_nothing() {
         "the core test job still tests the nexus-cli package"
     );
 }
+
+// ── Withdrawn command-line documentation ────────────────────────────────────
+
+fn assert_doc(path: &str, required: &[&str], forbidden: &[&str]) {
+    // Line breaks in the Markdown source do not matter.
+    let text = normalize_whitespace(&read(&workspace_root().join(path)));
+    for phrase in required {
+        assert!(text.contains(phrase), "{path} must say `{phrase}`");
+    }
+    for phrase in forbidden {
+        assert!(
+            !text.contains(phrase),
+            "{path} must not instruct the withdrawn CLI (`{phrase}`)"
+        );
+    }
+}
+
+/// The user guide and the social poster's README say that `nexus-cli` is
+/// withdrawn, that existing installations are not removed or stopped, and
+/// give no command that builds, installs or runs it; the desktop installers
+/// stay.
+#[test]
+fn p0_j4_user_docs_withdraw_the_cli_without_claiming_a_stop() {
+    assert_doc(
+        "docs/USER_GUIDE.md",
+        &[
+            "Install the NexusOS desktop app with the installer for your platform",
+            "## Command-line interface (withdrawn)",
+            "`nexus-cli` (the `nexus` command) is withdrawn during Phase Zero",
+            "The repository provides no supported installation of it",
+            "is not removed or stopped by this change",
+        ],
+        &[
+            "cargo build --release -p nexus-cli",
+            "target/release/nexus-cli",
+            "nexus-cli.exe",
+            "`nexus setup",
+            "`nexus agent create",
+            "`nexus agent start",
+            "`nexus agent logs",
+            "`nexus agent audit",
+            "`nexus voice",
+            "nexus --help",
+            "Install binary to your PATH",
+            "desktop app or CLI",
+            "CLI:",
+        ],
+    );
+    assert_doc(
+        "agents/social-poster/README.md",
+        &[
+            "## Running it (withdrawn)",
+            "The repository provides no supported way to run this agent from the command line \
+             at this point",
+        ],
+        &[
+            "`nexus setup`",
+            "`nexus agent create",
+            "`nexus agent start",
+            "`nexus agent logs",
+            "--dry-run`",
+        ],
+    );
+}

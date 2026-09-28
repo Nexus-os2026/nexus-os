@@ -771,3 +771,24 @@ fn p0_j5_install_and_benchmark_scripts_do_nothing() {
         }
     }
 }
+
+// ── Withdrawn benchmark documentation ───────────────────────────────────────
+
+/// The benchmark notes say how the retired runs worked and that they are
+/// withdrawn, and give no `nx` command to reproduce them.
+#[test]
+fn p0_j5_benchmark_docs_withdraw_nx() {
+    let text = normalize_whitespace(&read(&manifest_dir().join("BENCHMARKS.md")));
+    for phrase in [
+        "## Reproducing (withdrawn)",
+        "The repository provides no supported way to reproduce these runs at this point",
+    ] {
+        assert!(text.contains(phrase), "BENCHMARKS.md must say `{phrase}`");
+    }
+    for phrase in ["nx bench run", "nx bench compare", "wget "] {
+        assert!(
+            !text.contains(phrase),
+            "BENCHMARKS.md must not instruct the withdrawn terminal (`{phrase}`)"
+        );
+    }
+}

@@ -897,3 +897,105 @@ fn p0_j3_install_script_downloads_and_installs_nothing() {
         );
     }
 }
+
+// ── Withdrawn deployment documentation ──────────────────────────────────────
+
+fn assert_doc(path: &str, required: &[&str], forbidden: &[&str]) {
+    // Line breaks and blockquote markers in the Markdown source do not
+    // matter.
+    let text = read(&workspace_root().join(path))
+        .lines()
+        .map(|line| line.trim_start().trim_start_matches('>'))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let text = normalize_whitespace(&text);
+    for phrase in required {
+        assert!(text.contains(phrase), "{path} must say `{phrase}`");
+    }
+    for phrase in forbidden {
+        assert!(
+            !text.contains(phrase),
+            "{path} must not instruct the withdrawn server (`{phrase}`)"
+        );
+    }
+}
+
+/// The deployment guide, the README, the J1 deployment notes and the
+/// SWE-bench harness say that the protocols server is withdrawn, say that
+/// existing deployments are not stopped, and give no command that builds,
+/// installs, deploys, starts or reaches it. (J1's own guard checks its part
+/// of the deployment guide.)
+#[test]
+fn p0_j2_j3_deployment_docs_withdraw_without_claiming_a_stop() {
+    assert_doc(
+        "docs/DEPLOYMENT.md",
+        &[
+            "### Protocols server (`nexus-protocols-server`, `nexus-os`) (withdrawn)",
+            "are withdrawn during Phase Zero",
+            "The repository provides no supported deployment of the protocols server at this \
+             point",
+            "### Other standalone binaries (withdrawn)",
+            "is not stopped automatically by this source change, and nothing is deleted",
+        ],
+        &[
+            "docker compose up",
+            "docker-compose up",
+            "docker compose --profile",
+            "docker pull",
+            "docker save",
+            "docker load",
+            "docker run",
+            "docker build",
+            "helm install ",
+            "helm upgrade ",
+            "helm package",
+            "port-forward",
+            "kubectl",
+            "cargo build",
+            "cargo run",
+            "./target/",
+            "--bin ",
+            "nexus-os start",
+            "nexus-protocols-server start",
+            "curl ",
+            "JWT_SECRET",
+            "NEXUS_HTTP_ADDR",
+            "existingSecret",
+            "/mcp/tools/invoke",
+        ],
+    );
+    assert_doc(
+        "README.md",
+        &[
+            "### Server Deployment (withdrawn)",
+            "are withdrawn during Phase Zero",
+            "The repository provides no supported server deployment at this point",
+            "An existing deployment is not stopped automatically",
+        ],
+        &[
+            "docker compose up",
+            "docker-compose up",
+            "docker compose --profile",
+            "curl http://localhost:8080",
+            "helm install",
+            "for Kubernetes/Helm, air-gapped, and HA deployment",
+        ],
+    );
+    assert_doc(
+        "deploy/README.md",
+        &["It is withdrawn separately, in the same way; see `docs/DEPLOYMENT.md`."],
+        &["is not changed here"],
+    );
+    assert_doc(
+        "eval/swebench/README.md",
+        &[
+            "**Withdrawn during Phase Zero.**",
+            "the repository provides no Nexus OS endpoint for this harness at this point",
+        ],
+        &[
+            "cargo run -p nexus-protocols",
+            "--port 3000",
+            "OR: launch the desktop app",
+        ],
+    );
+}
