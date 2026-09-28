@@ -648,40 +648,64 @@ fn p0_fg_g_caller_asserted_approval_commands_only_deny() {
 }
 
 /// P0-FINAL-GATE (item G): a name the caller supplies is not an approver
-/// identity. The five consent-resolution commands take no approved_by,
-/// denied_by or reviewed_by name. Each passes the fixed `DESKTOP_UI_RESOLVER`
-/// label, which the consent row and the audit event record. The approval is
-/// not forwarded to the kernel consent runtime, whose queue records approvals
-/// by approver identity.
+/// identity. Neither the five consent-resolution commands nor the consent
+/// functions behind them take an approved_by, denied_by or reviewed_by
+/// name. Each function records the fixed `DESKTOP_UI_RESOLVER` label itself,
+/// in the consent row and the audit event, so the label cannot be changed
+/// through a wrapper. The approval is not forwarded to the kernel consent
+/// runtime, whose queue records approvals by approver identity. (Before F6
+/// the functions took the name and the commands passed the label; this
+/// guard pinned the label in the commands.)
 #[test]
 fn p0_fg_g_consent_decisions_record_no_caller_identity() {
     let lib = include_str!("../../lib.rs");
-    for command in [
-        "approve_consent_request",
-        "deny_consent_request",
-        "batch_approve_consents",
-        "review_consent_batch",
-        "batch_deny_consents",
+    let consent_src = include_str!("../../commands/consent.rs");
+    for (command, status, audit_field) in [
+        ("approve_consent_request", "approved", "approved_by"),
+        ("deny_consent_request", "denied", "denied_by"),
+        ("batch_approve_consents", "approved", "approved_by"),
+        ("review_consent_batch", "review_each", "reviewed_by"),
+        ("batch_deny_consents", "denied", "denied_by"),
     ] {
         let (params, body) = fn_shape(lib, command);
-        for name in ["approved_by", "denied_by", "reviewed_by", "_by:"] {
+        for name in [
+            "approved_by",
+            "denied_by",
+            "reviewed_by",
+            "_by:",
+            "RESOLVER",
+        ] {
             assert!(!params.contains(name), "{command} takes {name}: {params}");
+            assert!(!body.contains(name), "{command} passes {name}: {body}");
         }
         assert!(
-            body.contains(&format!("super::{command}(")),
+            body.contains(&format!("super::{command}(state.inner(),")),
             "{command}: {body}"
         );
+
+        let (params, body) = fn_shape(consent_src, command);
+        assert!(!params.contains("_by"), "{command} takes a name: {params}");
         assert_eq!(
-            body.matches("super::DESKTOP_UI_RESOLVER.to_string()")
-                .count(),
+            body.matches(".resolve_consent(").count(),
             1,
-            "{command} must record the interface label: {body}"
+            "{command}: {body}"
+        );
+        assert!(
+            body.contains(&format!("\"{status}\",DESKTOP_UI_RESOLVER)")),
+            "{command} must resolve with the interface label: {body}"
+        );
+        assert!(
+            body.contains(&format!("\"{audit_field}\":DESKTOP_UI_RESOLVER,")),
+            "{command} must audit the interface label: {body}"
         );
     }
 
-    let consent = code_lines(include_str!("../../commands/consent.rs"));
+    let consent = code_lines(consent_src);
     assert!(without_whitespace(&consent)
         .contains("pubconstDESKTOP_UI_RESOLVER:&str=\"desktop-ui(unverified)\";"));
+    for name in ["approved_by:", "denied_by:", "reviewed_by:"] {
+        assert!(!consent.contains(name), "consent takes {name}");
+    }
     assert!(
         !consent.contains(".approve_consent("),
         "an IPC approval must not reach the kernel consent runtime"

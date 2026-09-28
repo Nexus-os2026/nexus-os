@@ -102,7 +102,9 @@ const TRANSCENDENT_CREATION: &str = "transcendent_creation";
 /// P0-FINAL-GATE (item G): the resolver recorded, in the consent row and the
 /// audit event, for a decision delivered by the desktop interface. A name the
 /// caller supplies is not an approver identity, and no human approver is
-/// verified, so the record says only where the decision came from.
+/// verified, so the record says only where the decision came from. The
+/// resolution functions below take no resolver name and use this label
+/// themselves, so no caller can record another.
 pub const DESKTOP_UI_RESOLVER: &str = "desktop-ui (unverified)";
 
 /// Notification payload emitted to the frontend when a consent request arrives.
@@ -260,7 +262,6 @@ pub struct ConsentResolutionMeta {
 pub fn approve_consent_request(
     state: &AppState,
     consent_id: String,
-    approved_by: String,
 ) -> Result<ConsentResolutionMeta, String> {
     // Look up agent_id from pending consents in DB
     let pending = state
@@ -294,7 +295,7 @@ pub fn approve_consent_request(
     // 1. Resolve in database
     state
         .db
-        .resolve_consent(&consent_id, "approved", &approved_by)
+        .resolve_consent(&consent_id, "approved", DESKTOP_UI_RESOLVER)
         .map_err(|e| format!("db error: {e}"))?;
 
     // 2. P0-FINAL-GATE (item G): the decision is not forwarded to the kernel
@@ -321,7 +322,7 @@ pub fn approve_consent_request(
         json!({
             "action": "consent_approved",
             "consent_id": consent_id,
-            "approved_by": approved_by,
+            "approved_by": DESKTOP_UI_RESOLVER,
         }),
     );
 
@@ -334,7 +335,6 @@ pub fn approve_consent_request(
 pub(crate) fn deny_consent_request(
     state: &AppState,
     consent_id: String,
-    denied_by: String,
     reason: Option<String>,
 ) -> Result<ConsentResolutionMeta, String> {
     // Look up agent_id from pending consents in DB
@@ -358,7 +358,7 @@ pub(crate) fn deny_consent_request(
     // 1. Resolve in database
     state
         .db
-        .resolve_consent(&consent_id, "denied", &denied_by)
+        .resolve_consent(&consent_id, "denied", DESKTOP_UI_RESOLVER)
         .map_err(|e| format!("db error: {e}"))?;
 
     if consent_row.operation_type == TRANSCENDENT_CREATION
@@ -376,7 +376,7 @@ pub(crate) fn deny_consent_request(
     if let Ok(agent_uuid) = Uuid::parse_str(&agent_id_str) {
         let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
         // Best-effort: forward denial to kernel consent runtime; agent may not have a pending consent
-        let _ = supervisor.deny_consent(agent_uuid, &consent_id, &denied_by);
+        let _ = supervisor.deny_consent(agent_uuid, &consent_id, DESKTOP_UI_RESOLVER);
     }
     let deny_reason = reason
         .clone()
@@ -394,7 +394,7 @@ pub(crate) fn deny_consent_request(
         json!({
             "action": "consent_denied",
             "consent_id": consent_id,
-            "denied_by": denied_by,
+            "denied_by": DESKTOP_UI_RESOLVER,
             "reason": reason,
         }),
     );
@@ -408,7 +408,6 @@ pub(crate) fn deny_consent_request(
 pub(crate) fn batch_approve_consents(
     state: &AppState,
     goal_id: String,
-    approved_by: String,
 ) -> Result<(Vec<String>, ConsentResolutionMeta), String> {
     let consent_rows = consent_rows_for_goal(state, &goal_id)?;
     if consent_rows.is_empty() {
@@ -447,7 +446,7 @@ pub(crate) fn batch_approve_consents(
     for row in &consent_rows {
         state
             .db
-            .resolve_consent(&row.id, "approved", &approved_by)
+            .resolve_consent(&row.id, "approved", DESKTOP_UI_RESOLVER)
             .map_err(|e| format!("db error: {e}"))?;
         resolved_ids.push(row.id.clone());
     }
@@ -471,7 +470,7 @@ pub(crate) fn batch_approve_consents(
             "action": "consent_batch_approved",
             "goal_id": goal_id,
             "consent_ids": resolved_ids.clone(),
-            "approved_by": approved_by,
+            "approved_by": DESKTOP_UI_RESOLVER,
             "approved_steps": approval_count,
         }),
     );
@@ -488,7 +487,6 @@ pub(crate) fn batch_approve_consents(
 pub(crate) fn review_consent_batch(
     state: &AppState,
     consent_id: String,
-    reviewed_by: String,
 ) -> Result<ConsentResolutionMeta, String> {
     let pending = state
         .db
@@ -509,7 +507,7 @@ pub(crate) fn review_consent_batch(
 
     state
         .db
-        .resolve_consent(&consent_id, "review_each", &reviewed_by)
+        .resolve_consent(&consent_id, "review_each", DESKTOP_UI_RESOLVER)
         .map_err(|e| format!("db error: {e}"))?;
     // Best-effort: enable review-each mode so subsequent steps require individual approval
     let _ = state
@@ -523,7 +521,7 @@ pub(crate) fn review_consent_batch(
         json!({
             "action": "consent_batch_review_each",
             "consent_id": consent_id,
-            "reviewed_by": reviewed_by,
+            "reviewed_by": DESKTOP_UI_RESOLVER,
         }),
     );
 
@@ -536,7 +534,6 @@ pub(crate) fn review_consent_batch(
 pub(crate) fn batch_deny_consents(
     state: &AppState,
     goal_id: String,
-    denied_by: String,
     reason: Option<String>,
 ) -> Result<(Vec<String>, ConsentResolutionMeta), String> {
     let consent_rows = consent_rows_for_goal(state, &goal_id)?;
@@ -562,7 +559,7 @@ pub(crate) fn batch_deny_consents(
     for row in &consent_rows {
         state
             .db
-            .resolve_consent(&row.id, "denied", &denied_by)
+            .resolve_consent(&row.id, "denied", DESKTOP_UI_RESOLVER)
             .map_err(|e| format!("db error: {e}"))?;
         resolved_ids.push(row.id.clone());
     }
@@ -582,7 +579,7 @@ pub(crate) fn batch_deny_consents(
             "action": "consent_batch_denied",
             "goal_id": goal_id,
             "consent_ids": resolved_ids.clone(),
-            "denied_by": denied_by,
+            "denied_by": DESKTOP_UI_RESOLVER,
             "reason": reason,
         }),
     );

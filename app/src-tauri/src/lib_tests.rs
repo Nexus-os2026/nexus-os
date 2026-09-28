@@ -2787,7 +2787,7 @@ fn enqueue_test_consent_json(
 fn test_approve_consent_request() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-approve-1", "a1", "fs.write", "Tier1");
-    let result = approve_consent_request(&state, "c-approve-1".into(), "admin".into());
+    let result = approve_consent_request(&state, "c-approve-1".into());
     assert!(result.is_ok());
     // Verify it's no longer pending
     let pending = list_pending_consents(&state).unwrap_or_else(|e| {
@@ -2851,12 +2851,12 @@ fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
 
     for id in ["c-transcendent-create", "c-transcendent-activate"] {
         assert_eq!(
-            approve_consent_request(&state, id.into(), "admin".into()).map(|_| ()),
+            approve_consent_request(&state, id.into()).map(|_| ()),
             Err(closed("approve_consent_request", Closure::ApprovalRequired))
         );
     }
     assert_eq!(
-        batch_approve_consents(&state, "goal-transcendent".into(), "admin".into()).map(|_| ()),
+        batch_approve_consents(&state, "goal-transcendent".into()).map(|_| ()),
         Err(closed("batch_approve_consents", Closure::ApprovalRequired))
     );
 
@@ -2885,7 +2885,7 @@ fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
     }
 
     // Denial still resolves the request and removes the unapproved placeholder.
-    deny_consent_request(&state, "c-transcendent-create".into(), "admin".into(), None).unwrap();
+    deny_consent_request(&state, "c-transcendent-create".into(), None).unwrap();
     assert!(state
         .db
         .list_agents()
@@ -2916,12 +2916,10 @@ fn test_approve_consent_request_wakes_blocked_wait() {
             }
         });
 
-        approve_consent_request(&state, "c-approve-wake".into(), "admin".into()).unwrap_or_else(
-            |e| {
-                eprintln!("operation failed: {e}");
-                std::process::exit(1)
-            },
-        );
+        approve_consent_request(&state, "c-approve-wake".into()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
         tokio::time::timeout(std::time::Duration::from_millis(100), waiter)
             .await
@@ -2940,12 +2938,7 @@ fn test_approve_consent_request_wakes_blocked_wait() {
 fn test_deny_consent_request() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-deny-1", "a2", "process.exec", "Tier2");
-    let result = deny_consent_request(
-        &state,
-        "c-deny-1".into(),
-        "admin".into(),
-        Some("too risky".into()),
-    );
+    let result = deny_consent_request(&state, "c-deny-1".into(), Some("too risky".into()));
     assert!(result.is_ok());
     let pending = list_pending_consents(&state).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
@@ -3001,7 +2994,6 @@ fn test_deny_transcendent_creation_cleans_up_pending_agent() {
     deny_consent_request(
         &state,
         "c-transcendent-deny".into(),
-        "admin".into(),
         Some("not today".into()),
     )
     .unwrap_or_else(|e| {
@@ -3037,16 +3029,11 @@ fn test_deny_consent_request_wakes_blocked_wait() {
             }
         });
 
-        deny_consent_request(
-            &state,
-            "c-deny-wake".into(),
-            "admin".into(),
-            Some("too risky".into()),
-        )
-        .unwrap_or_else(|e| {
-            eprintln!("operation failed: {e}");
-            std::process::exit(1)
-        });
+        deny_consent_request(&state, "c-deny-wake".into(), Some("too risky".into()))
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
 
         tokio::time::timeout(std::time::Duration::from_millis(100), waiter)
             .await
@@ -3069,7 +3056,7 @@ fn test_list_pending_consents_returns_only_pending() {
     enqueue_test_consent(&state, "c-lp-3", "a2", "web.search", "Tier0");
 
     // Resolve one
-    approve_consent_request(&state, "c-lp-1".into(), "admin".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-lp-1".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -3093,15 +3080,15 @@ fn test_get_consent_history_returns_all() {
     enqueue_test_consent(&state, "c-hist-5", "a3", "llm.query", "Tier0");
 
     // Resolve 3 of them
-    approve_consent_request(&state, "c-hist-1".into(), "admin".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-hist-1".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
-    deny_consent_request(&state, "c-hist-2".into(), "admin".into(), None).unwrap_or_else(|e| {
+    deny_consent_request(&state, "c-hist-2".into(), None).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
-    approve_consent_request(&state, "c-hist-3".into(), "user".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-hist-3".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -3135,14 +3122,14 @@ fn test_auto_timeout_risk_level_mapping() {
 #[test]
 fn test_approve_nonexistent_consent_fails() {
     let state = AppState::new_in_memory();
-    let result = approve_consent_request(&state, "nonexistent-id".into(), "admin".into());
+    let result = approve_consent_request(&state, "nonexistent-id".into());
     assert!(result.is_err());
 }
 
 #[test]
 fn test_deny_nonexistent_consent_fails() {
     let state = AppState::new_in_memory();
-    let result = deny_consent_request(&state, "nonexistent-id".into(), "admin".into(), None);
+    let result = deny_consent_request(&state, "nonexistent-id".into(), None);
     assert!(result.is_err());
 }
 
@@ -3262,8 +3249,8 @@ fn test_batch_approve_consents_resolves_goal_rows() {
         json!({"summary": "other", "goal_id": "goal-other"}),
     );
 
-    let (resolved, meta) = batch_approve_consents(&state, "goal-batch".into(), "user".into())
-        .unwrap_or_else(|e| {
+    let (resolved, meta) =
+        batch_approve_consents(&state, "goal-batch".into()).unwrap_or_else(|e| {
             eprintln!("operation failed: {e}");
             std::process::exit(1)
         });
@@ -3291,11 +3278,10 @@ fn test_review_consent_batch_resolves_pending_request() {
         json!({"summary": "batch", "goal_id": "goal-review", "review_each_available": true}),
     );
 
-    let meta = review_consent_batch(&state, "c-review-batch-1".into(), "user".into())
-        .unwrap_or_else(|e| {
-            eprintln!("operation failed: {e}");
-            std::process::exit(1)
-        });
+    let meta = review_consent_batch(&state, "c-review-batch-1".into()).unwrap_or_else(|e| {
+        eprintln!("operation failed: {e}");
+        std::process::exit(1)
+    });
     assert_eq!(meta.agent_id, "a1");
 
     let pending = list_pending_consents(&state).unwrap_or_else(|e| {
@@ -3333,16 +3319,11 @@ fn test_batch_deny_consents_resolves_goal_rows() {
         json!({"summary": "single", "goal_id": "goal-deny"}),
     );
 
-    let (resolved, meta) = batch_deny_consents(
-        &state,
-        "goal-deny".into(),
-        "user".into(),
-        Some("deny all".into()),
-    )
-    .unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
+    let (resolved, meta) = batch_deny_consents(&state, "goal-deny".into(), Some("deny all".into()))
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
     assert_eq!(resolved.len(), 2);
     assert_eq!(meta.agent_id, "a1");
     assert_eq!(meta.source_surface, "unknown");
@@ -3358,7 +3339,7 @@ fn test_batch_deny_consents_resolves_goal_rows() {
 fn test_consent_audit_events_on_approve() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-audit-a", "a1", "fs.write", "Tier1");
-    approve_consent_request(&state, "c-audit-a".into(), "admin".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-audit-a".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -3381,16 +3362,12 @@ fn test_consent_audit_events_on_approve() {
 fn test_consent_audit_events_on_deny() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-audit-d", "a1", "process.exec", "Tier2");
-    deny_consent_request(
-        &state,
-        "c-audit-d".into(),
-        "admin".into(),
-        Some("unauthorized".into()),
-    )
-    .unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
+    deny_consent_request(&state, "c-audit-d".into(), Some("unauthorized".into())).unwrap_or_else(
+        |e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        },
+    );
     let events = state
         .db
         .load_audit_events(None, 100, 0)
@@ -3409,12 +3386,12 @@ fn test_consent_audit_events_on_deny() {
 fn test_approve_already_resolved_fails() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-double", "a1", "fs.write", "Tier1");
-    approve_consent_request(&state, "c-double".into(), "admin".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-double".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
     // Second approve should fail (no longer pending)
-    let result = approve_consent_request(&state, "c-double".into(), "admin".into());
+    let result = approve_consent_request(&state, "c-double".into());
     assert!(result.is_err());
 }
 
@@ -3435,7 +3412,7 @@ fn test_consent_history_limit() {
 fn test_deny_with_no_reason() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-no-reason", "a1", "fs.write", "Tier1");
-    let result = deny_consent_request(&state, "c-no-reason".into(), "admin".into(), None);
+    let result = deny_consent_request(&state, "c-no-reason".into(), None);
     assert!(result.is_ok());
 }
 
@@ -3464,7 +3441,7 @@ fn test_consent_resolved_removes_from_pending() {
         2
     );
 
-    approve_consent_request(&state, "c-resolve-1".into(), "user".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-resolve-1".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -3478,7 +3455,7 @@ fn test_consent_resolved_removes_from_pending() {
         1
     );
 
-    deny_consent_request(&state, "c-resolve-2".into(), "user".into(), None).unwrap_or_else(|e| {
+    deny_consent_request(&state, "c-resolve-2".into(), None).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -3495,8 +3472,9 @@ fn test_consent_resolved_removes_from_pending() {
 
 /// P0-FINAL-GATE (item G): a decision delivered by the desktop interface is
 /// recorded with the fixed resolver label, in the consent row and the audit
-/// event, never with a name the caller chose. The IPC commands take no name
-/// and pass this label (pinned by `fg_approval`).
+/// event, never with a name the caller chose. None of the five resolution
+/// functions takes a name: each records this label itself (pinned by
+/// `fg_approval`), so no command wrapper can pass another.
 #[test]
 fn p0_fg_desktop_consent_resolutions_record_the_interface_label() {
     let resolver = super::DESKTOP_UI_RESOLVER;
@@ -3504,11 +3482,34 @@ fn p0_fg_desktop_consent_resolutions_record_the_interface_label() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-label-approve", "a1", "fs.write", "Tier1");
     enqueue_test_consent(&state, "c-label-deny", "a1", "fs.write", "Tier1");
-    approve_consent_request(&state, "c-label-approve".into(), resolver.to_string()).unwrap();
-    deny_consent_request(&state, "c-label-deny".into(), resolver.to_string(), None).unwrap();
+    for (id, goal) in [
+        ("c-label-batch-approve", "goal-label-approve"),
+        ("c-label-review", "goal-label-review"),
+        ("c-label-batch-deny", "goal-label-deny"),
+    ] {
+        enqueue_test_consent_json(
+            &state,
+            id,
+            "a1",
+            "cognitive.hitl_batch",
+            "Tier1",
+            json!({"summary": "batch", "goal_id": goal, "review_each_available": true}),
+        );
+    }
+    approve_consent_request(&state, "c-label-approve".into()).unwrap();
+    deny_consent_request(&state, "c-label-deny".into(), None).unwrap();
+    batch_approve_consents(&state, "goal-label-approve".into()).unwrap();
+    review_consent_batch(&state, "c-label-review".into()).unwrap();
+    batch_deny_consents(&state, "goal-label-deny".into(), None).unwrap();
 
     let history = get_consent_history(&state, 10).unwrap();
-    for (id, status) in [("c-label-approve", "approved"), ("c-label-deny", "denied")] {
+    for (id, status) in [
+        ("c-label-approve", "approved"),
+        ("c-label-deny", "denied"),
+        ("c-label-batch-approve", "approved"),
+        ("c-label-review", "review_each"),
+        ("c-label-batch-deny", "denied"),
+    ] {
         let row = history.iter().find(|row| row.consent_id == id).unwrap();
         assert_eq!(row.status, status);
         assert_eq!(row.resolved_by.as_deref(), Some(resolver));
@@ -3517,6 +3518,9 @@ fn p0_fg_desktop_consent_resolutions_record_the_interface_label() {
     for (action, field) in [
         ("consent_approved", "approved_by"),
         ("consent_denied", "denied_by"),
+        ("consent_batch_approved", "approved_by"),
+        ("consent_batch_review_each", "reviewed_by"),
+        ("consent_batch_denied", "denied_by"),
     ] {
         let event = events
             .iter()
@@ -3570,7 +3574,7 @@ fn p0_fg_desktop_approvals_do_not_reach_the_kernel_consent_queue() {
         "cognitive.hitl_approval",
         "Tier2",
     );
-    approve_consent_request(&state, request_id.clone(), resolver.to_string()).unwrap();
+    approve_consent_request(&state, request_id.clone()).unwrap();
     let history = get_consent_history(&state, 10).unwrap();
     let row = history
         .iter()
