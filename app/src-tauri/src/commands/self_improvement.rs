@@ -229,7 +229,7 @@ pub(crate) fn self_improve_run_cycle(state: &AppState) -> Result<serde_json::Val
 
     Ok(json!({
         "result": "ProposalGenerated",
-        "message": "Proposal generated — awaiting HITL approval",
+        "message": "Proposal generated — awaiting review (accepting it records it; nothing is applied)",
         "proposal_id": proposal.id.to_string(),
         "domain": format!("{:?}", proposal.domain),
         "description": proposal.description,
@@ -237,81 +237,88 @@ pub(crate) fn self_improve_run_cycle(state: &AppState) -> Result<serde_json::Val
     }))
 }
 
+/// Accept a proposal in the interface and record it.
+///
+/// P0-FINAL-GATE (item G): an IPC call is not the Tier3 human approval that
+/// invariant #9 (`HitlApprovalRequired`) demands, and this pipeline applies
+/// nothing. The proposal is therefore recorded as accepted in the interface
+/// and nothing more: it is not marked HITL-approved, validated or applied,
+/// it gets no checkpoint and no canary, and the audit event says so. The
+/// other nine invariants are still checked, and a proposal that breaks one
+/// is refused.
 pub(crate) fn self_improve_approve_proposal(
     state: &AppState,
     proposal_id: String,
 ) -> Result<serde_json::Value, String> {
-    let mut si = state
-        .self_improve_state
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-
     let pid = uuid::Uuid::parse_str(&proposal_id).map_err(|e| format!("invalid id: {e}"))?;
 
-    let proposal = si
-        .proposals
-        .iter()
-        .find(|p| p.id == pid)
-        .ok_or_else(|| format!("proposal {proposal_id} not found"))?
-        .clone();
+    let (proposal, improvement) = {
+        let mut si = state
+            .self_improve_state
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
 
-    // Check all 10 invariants
-    let inv_state = InvariantCheckState {
-        audit_chain_valid: true,
-        test_suite_passing: true,
-        hitl_approved: true,
-        fuel_remaining: si.config.fuel_budget,
-        fuel_budget: si.config.fuel_budget,
+        let proposal = si
+            .proposals
+            .iter()
+            .find(|p| p.id == pid)
+            .ok_or_else(|| format!("proposal {proposal_id} not found"))?
+            .clone();
+
+        // No HITL approval is claimed: none can be given over IPC.
+        let inv_state = InvariantCheckState {
+            audit_chain_valid: true,
+            test_suite_passing: true,
+            hitl_approved: false,
+            fuel_remaining: si.config.fuel_budget,
+            fuel_budget: si.config.fuel_budget,
+        };
+        let violations: Vec<String> = HardInvariant::all()
+            .iter()
+            .filter(|invariant| **invariant != HardInvariant::HitlApprovalRequired)
+            .filter_map(|invariant| invariant.check(&proposal, &inv_state).err())
+            .map(|violation| violation.to_string())
+            .collect();
+        if !violations.is_empty() {
+            return Err(format!("Invariant violations: {}", violations.join("; ")));
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        // The record of the interface's acceptance. Nothing was validated
+        // with a HITL approval or applied, so the status stays `Proposed`,
+        // with no checkpoint and no canary; `applied_at` holds the time of
+        // the record.
+        let improvement = AppliedImprovement {
+            id: uuid::Uuid::new_v4(),
+            proposal_id: pid,
+            checkpoint_id: uuid::Uuid::nil(),
+            applied_at: now,
+            status: ImprovementStatus::Proposed,
+            canary_deadline: 0,
+        };
+        si.history.push(improvement.clone());
+        si.proposals.retain(|p| p.id != pid);
+        (proposal, improvement)
     };
 
-    nexus_self_improve::invariants::validate_all_invariants(&proposal, &inv_state).map_err(
-        |violations| {
-            let reasons: Vec<String> = violations.iter().map(|v| v.to_string()).collect();
-            format!("Invariant violations: {}", reasons.join("; "))
-        },
-    )?;
-
-    // Create validated proposal
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
-    let validated = ValidatedProposal {
-        proposal: proposal.clone(),
-        validation_timestamp: now,
-        invariants_passed: 10,
-        tests_passed: 0,
-        simulation_risk_score: 0.1,
-        hitl_signature: format!("hitl:approved:{proposal_id}"),
-    };
-
-    // Apply: record in history
-    let improvement = AppliedImprovement {
-        id: uuid::Uuid::new_v4(),
-        proposal_id: pid,
-        checkpoint_id: uuid::Uuid::new_v4(),
-        applied_at: now,
-        status: ImprovementStatus::Monitoring,
-        canary_deadline: now + si.config.canary_duration_minutes * 60,
-    };
-
-    si.history.push(improvement.clone());
-
-    // Remove from pending proposals
-    si.proposals.retain(|p| p.id != pid);
-
-    // Log to audit trail
+    // Audit after the pipeline state is released.
     {
         let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
         let _ = audit.append_event(
             SYSTEM_UUID,
             nexus_kernel::audit::EventType::StateChange,
             json!({
-                "type": "self_improvement_applied",
+                "type": "self_improvement_recorded",
                 "proposal_id": proposal_id,
-                "domain": format!("{:?}", validated.proposal.domain),
-                "description": validated.proposal.description,
+                "domain": format!("{:?}", proposal.domain),
+                "description": proposal.description,
+                "resolved_by": crate::commands::consent::DESKTOP_UI_RESOLVER,
+                "hitl_approved": false,
+                "applied": false,
             }),
         );
     }

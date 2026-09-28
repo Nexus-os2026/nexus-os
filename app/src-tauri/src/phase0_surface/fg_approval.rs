@@ -523,3 +523,40 @@ fn p0_fg_g_consent_decisions_record_no_caller_identity() {
         "an IPC approval must not reach the kernel consent runtime"
     );
 }
+
+/// P0-FINAL-GATE (item G): accepting a self-improvement proposal claims no
+/// HITL approval. The pipeline neither sets `hitl_approved` nor builds a
+/// validated proposal or a HITL signature. It checks every invariant except
+/// #9, which it cannot satisfy. It records the proposal as `Proposed`, never
+/// validated, applied or monitored, with no checkpoint, and audits it as
+/// recorded, not applied.
+#[test]
+fn p0_fg_g_self_improvement_acceptance_is_recorded_truthfully() {
+    let pipeline = include_str!("../commands/self_improvement.rs");
+    let (_, accept) = fn_shape(pipeline, "self_improve_approve_proposal");
+    assert!(accept.contains("hitl_approved:false,"), "{accept}");
+    assert!(accept.contains(".filter(|invariant|**invariant!=HardInvariant::HitlApprovalRequired)"));
+    assert!(accept.contains("status:ImprovementStatus::Proposed,"));
+    assert!(accept.contains("checkpoint_id:uuid::Uuid::nil(),"));
+    assert!(accept.contains("\"type\":\"self_improvement_recorded\""));
+    assert!(accept.contains("\"hitl_approved\":false"));
+    assert!(accept.contains("\"applied\":false"));
+    for claim in [
+        "hitl_approved:true",
+        "ValidatedProposal",
+        "hitl_signature",
+        "validate_all_invariants",
+        "ImprovementStatus::Monitoring",
+        "ImprovementStatus::Applied",
+        "ImprovementStatus::Validated",
+        "self_improvement_applied",
+    ] {
+        assert!(
+            !accept.contains(claim),
+            "self_improve_approve_proposal: {claim}"
+        );
+    }
+    let pipeline = code_lines(pipeline);
+    assert!(!pipeline.contains("awaiting HITL approval"));
+    assert!(!pipeline.contains("hitl_approved: true"));
+}

@@ -3207,6 +3207,116 @@ fn p0_fg_desktop_approvals_do_not_reach_the_kernel_consent_queue() {
     );
 }
 
+/// P0-FINAL-GATE (item G): accepting a self-improvement proposal in the
+/// interface is an IPC call, not the Tier3 HITL approval that invariant #9
+/// requires, and the pipeline applies nothing. The proposal is recorded as
+/// accepted and nothing more: its status stays `Proposed`, with no
+/// checkpoint and no canary, and the audit event says it was neither
+/// HITL-approved nor applied. It used to be recorded as validated with a
+/// fabricated `hitl:approved` signature, audited as applied, and put under
+/// canary "monitoring". A proposal that breaks another invariant is still
+/// refused, and nothing is recorded for it.
+#[test]
+fn p0_fg_self_improvement_acceptance_claims_no_hitl_approval() {
+    use crate::commands::self_improvement::self_improve_approve_proposal;
+    use nexus_self_improve::types::{
+        ImprovementProposal, ImprovementStatus, ProposedChange, RollbackPlan, RollbackStep,
+    };
+    let proposal = |fuel_cost: u64| {
+        let change = ProposedChange::ConfigChange {
+            key: "agent.response_timeout_ms".into(),
+            old_value: json!(5000),
+            new_value: json!(6000),
+            justification: "p0-fg latency".into(),
+        };
+        ImprovementProposal {
+            id: Uuid::new_v4(),
+            opportunity_id: Uuid::new_v4(),
+            domain: change.domain(),
+            description: "p0-fg proposal".into(),
+            change,
+            rollback_plan: RollbackPlan {
+                checkpoint_id: Uuid::new_v4(),
+                steps: vec![RollbackStep {
+                    description: "revert".into(),
+                    action: json!({"revert": true}),
+                }],
+                estimated_rollback_time_ms: 100,
+                automatic: true,
+            },
+            expected_tests: vec![],
+            proof: None,
+            generated_by: "test".into(),
+            fuel_cost,
+        }
+    };
+    let state = AppState::new_in_memory();
+    let accepted = proposal(100);
+    let over_budget = proposal(u64::MAX);
+    state
+        .self_improve_state
+        .lock()
+        .unwrap()
+        .proposals
+        .extend([accepted.clone(), over_budget.clone()]);
+
+    let recorded = self_improve_approve_proposal(&state, accepted.id.to_string()).unwrap();
+    assert_eq!(recorded["status"], json!("Proposed"));
+    assert_eq!(recorded["checkpoint_id"], json!(Uuid::nil()));
+    assert_eq!(recorded["canary_deadline"], json!(0));
+    {
+        let si = state.self_improve_state.lock().unwrap();
+        assert!(si.proposals.iter().all(|p| p.id != accepted.id));
+        let entry = si
+            .history
+            .iter()
+            .find(|entry| entry.proposal_id == accepted.id)
+            .unwrap();
+        assert_eq!(entry.status, ImprovementStatus::Proposed);
+    }
+    let events = state.audit.lock().unwrap().events().to_vec();
+    let event = events
+        .iter()
+        .find(|event| event.payload["proposal_id"] == json!(accepted.id.to_string()))
+        .expect("the acceptance is audited");
+    assert_eq!(event.payload["type"], json!("self_improvement_recorded"));
+    assert_eq!(event.payload["hitl_approved"], json!(false));
+    assert_eq!(event.payload["applied"], json!(false));
+    assert_eq!(
+        event.payload["resolved_by"],
+        json!(super::DESKTOP_UI_RESOLVER)
+    );
+    for claim in [
+        "self_improvement_applied",
+        "hitl:approved",
+        "hitl_signature",
+    ] {
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.payload.to_string().contains(claim)),
+            "{claim}"
+        );
+    }
+
+    // Only the broken invariant is reported: #9 is not claimed, so it is not
+    // part of the check.
+    let refused = self_improve_approve_proposal(&state, over_budget.id.to_string()).unwrap_err();
+    assert_eq!(
+        refused,
+        format!(
+            "Invariant violations: Invariant violation #5 Fuel limits enforced: proposal costs {} fuel but only 5000 remaining",
+            u64::MAX
+        )
+    );
+    let si = state.self_improve_state.lock().unwrap();
+    assert!(si.proposals.iter().any(|p| p.id == over_budget.id));
+    assert!(si
+        .history
+        .iter()
+        .all(|entry| entry.proposal_id != over_budget.id));
+}
+
 // ── Messaging Gateway Tests ──
 
 #[test]
