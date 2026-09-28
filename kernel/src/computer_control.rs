@@ -1039,6 +1039,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_status_reflects_kill_switch() {
         reset_emergency_kill_switch();
         let mut engine = ComputerControlEngine::new();

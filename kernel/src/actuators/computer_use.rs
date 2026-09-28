@@ -355,6 +355,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn verify_max_steps_limit() {
         let tmp = TempDir::new().unwrap();
         let ctx = ctx(&tmp);
@@ -364,6 +365,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn verify_screenshot_taken_before_and_after_each_action() {
         let tmp = TempDir::new().unwrap();
         let ctx = ctx(&tmp);
@@ -377,6 +379,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn verify_time_machine_checkpoint_created() {
         let tmp = TempDir::new().unwrap();
         let ctx = ctx(&tmp);
