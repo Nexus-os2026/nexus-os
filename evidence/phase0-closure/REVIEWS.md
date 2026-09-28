@@ -11,7 +11,7 @@ Verdict: **NOT READY**.
 
 | # | Severity | Finding | Disposition |
 |---|---|---|---|
-| 1 | blocker | Startup `load_prebuilt_agents` registers the 12 prebuilt autonomy-6 manifests (fresh install, or after a row is deleted); `execute_agent_goal` then runs them and `tool_call_autonomy` grants 6. Confirmed in a scratch probe. The "L6 unavailable" claim does not hold. | Repair assigned to S5: no autonomy-6 manifest registered at startup, consistent across restarts; refuse registered autonomy 6 in goal assignment, the autonomous loop and tool-call autonomy; behavioural test of the real startup order; claims corrected. |
+| 1 | blocker (repaired, re-review pending) | Startup `load_prebuilt_agents` registers the 12 prebuilt autonomy-6 manifests (fresh install, or after a row is deleted); `execute_agent_goal` then runs them and `tool_call_autonomy` grants 6. Confirmed in a scratch probe. The "L6 unavailable" claim does not hold. | Repair assigned to S5: no autonomy-6 manifest registered at startup, consistent across restarts; refuse registered autonomy 6 in goal assignment, the autonomous loop and tool-call autonomy; behavioural test of the real startup order; claims corrected. |
 | 2 | should-fix | Warden review: with L6 unavailable the Warden never runs, and an inactive Warden means Allow, so `governance.enable_warden_review = true` silently allows. | Coordinator decision: when review is enabled (default off) and no Warden can run, fail closed with a bounded reason. Repair assigned to S5. |
 | 3 | should-fix | `fg_approval.rs` guard code sits where the production scanners read it. | Move to `fg_approval/tests.rs` (layout used by S1-S4 and now S6). |
 | 4 | should-fix | The self-improvement report counts recorded acceptances as applied improvements. | Repair assigned to S5 (desktop side). |
@@ -113,3 +113,20 @@ atomic writes; bounded, descriptor-bound key-file validation with identity
 re-check; read-only vault verification before use; OAuth, deploy and Supabase
 closures; messaging connect using only the stored token; backups skipping the
 six stores with owner-only archives; all hunks within granted regions.
+
+### S5 repairs (`3f712633..bd5ba357`, composed at `0d08a380`)
+
+- F1: no autonomy-6 prebuilt manifest is loaded at startup (first run and
+  every restart register the same 42 agents; earlier L6 rows stay untouched);
+  goal assignment, the autonomous loop and tool-call autonomy refuse an L6
+  agent before any state change; behavioural startup-order test.
+- F2: Warden review enabled with no runnable Warden denies with a bounded
+  reason; disabled review unchanged.
+- F3: guards moved to `fg_approval/tests.rs`. F4: the self-improvement report
+  counts only applied changes; `cycles_run` counts runs. F6: the consent
+  resolver label is fixed inside the consent module. F7: guard sources are
+  read from their directories.
+- Negative controls recorded by S5 for every behavioural test.
+- Coordinator composition commit `910063d0`: the consent module checks the
+  kernel's simulation and arena limits (no desktop copies); `093c5642`
+  registers the S5 closures and guards. Re-review assigned to S6.
