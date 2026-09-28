@@ -1158,7 +1158,33 @@ pub(crate) struct ScheduledGoalExecutor {
 
 impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
     fn execute(&self, agent_id: &str, default_goal: &str) -> Result<(), String> {
+        /// Returned (and audited by the scheduler) for a skipped tick.
+        const LOOP_ACTIVE: &str =
+            "scheduled run skipped: the agent's cognitive loop is still running";
+
         let agent_uuid = Uuid::parse_str(agent_id).map_err(|e| format!("invalid agent id: {e}"))?;
+        // P0-FG resource bound: a scheduled tick never starts a second loop
+        // beside the agent's running one. A desktop loop holds its
+        // cancellation entry from spawn until it exits on any path. Nothing
+        // is assigned, restarted or persisted for a skipped tick.
+        let loop_running = self
+            .state
+            .cognitive_cancellations
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .keys()
+            .any(|key| key == agent_id || Uuid::parse_str(key).ok() == Some(agent_uuid));
+        if loop_running {
+            self.state.log_event(
+                agent_uuid,
+                EventType::StateChange,
+                json!({
+                    "action": "scheduled_execution_skipped",
+                    "reason": "agent_loop_active",
+                }),
+            );
+            return Err(LOOP_ACTIVE.to_string());
+        }
         let agent_name = {
             let supervisor = self
                 .state
