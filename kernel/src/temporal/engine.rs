@@ -84,6 +84,11 @@ impl TemporalEngine {
     where
         F: FnMut(&str) -> Result<(String, u32), TemporalError>,
     {
+        // P0-FG resource bound: a config outside the approved fork and token
+        // limits is refused before any model call, allocation or history
+        // change, whichever path stored it (`new` and `update_config` accept
+        // any config).
+        self.config.validate()?;
         let start = Instant::now();
         let fork_count = self.calculate_fork_count(consciousness);
 
@@ -513,6 +518,111 @@ mod tests {
 
         let result = engine.fork_and_evaluate("task", &agent, &cons, mock_llm);
         assert!(matches!(result, Err(TemporalError::BudgetExhausted { .. })));
+    }
+
+    /// A model stand-in that counts calls. Generation always answers with one
+    /// JSON approach, so even an unchecked huge fork count cannot make the
+    /// engine synthesize approaches.
+    fn counting_llm(
+        calls: &mut u32,
+    ) -> impl FnMut(&str) -> Result<(String, u32), TemporalError> + '_ {
+        move |prompt: &str| {
+            *calls += 1;
+            if prompt.contains("Generate") {
+                Ok((
+                    r#"[{"name":"A","strategy":"s","steps":["s1"],"risk":0.2}]"#.into(),
+                    10,
+                ))
+            } else {
+                Ok((
+                    r#"{"outcome":"ok","score":7.0,"side_effects":[],"reversible":true}"#.into(),
+                    10,
+                ))
+            }
+        }
+    }
+
+    #[test]
+    fn p0_fg_k_an_invalid_config_is_refused_before_any_model_call() {
+        let agent = test_manifest();
+        let mut cons = ConsciousnessState::new("a");
+        cons.confidence = 0.2; // low confidence: the configured fork count is used
+        cons.urgency = 0.3;
+        for (config, expected) in [
+            (
+                TemporalConfig {
+                    max_parallel_forks: 11,
+                    ..TemporalConfig::default()
+                },
+                TemporalError::InvalidForkCount(11),
+            ),
+            (
+                TemporalConfig {
+                    max_parallel_forks: u32::MAX,
+                    ..TemporalConfig::default()
+                },
+                TemporalError::InvalidForkCount(u32::MAX),
+            ),
+            (
+                TemporalConfig {
+                    fork_budget_tokens: 0,
+                    ..TemporalConfig::default()
+                },
+                TemporalError::InvalidForkBudget(0),
+            ),
+            (
+                TemporalConfig {
+                    fork_budget_tokens: 200_001,
+                    ..TemporalConfig::default()
+                },
+                TemporalError::InvalidForkBudget(200_001),
+            ),
+            (
+                TemporalConfig {
+                    fork_budget_tokens: u64::MAX,
+                    ..TemporalConfig::default()
+                },
+                TemporalError::InvalidForkBudget(u64::MAX),
+            ),
+        ] {
+            // Stored unchecked: `new` accepts any config, and so does
+            // `update_config` (checked here too).
+            let mut engine = TemporalEngine::new(config.clone());
+            let mut updated = TemporalEngine::default();
+            updated.update_config(config.clone());
+            for engine in [&mut engine, &mut updated] {
+                let mut calls = 0;
+                let result =
+                    engine.fork_and_evaluate("task", &agent, &cons, counting_llm(&mut calls));
+                assert_eq!(
+                    result.unwrap_err().to_string(),
+                    expected.to_string(),
+                    "{config:?}"
+                );
+                assert_eq!(calls, 0, "the model was called for {config:?}");
+                assert!(engine.history().is_empty(), "a refused fork was recorded");
+            }
+        }
+    }
+
+    #[test]
+    fn p0_fg_k_a_config_at_the_bounds_still_forks() {
+        let agent = test_manifest();
+        let mut cons = ConsciousnessState::new("a");
+        cons.confidence = 0.2;
+        cons.urgency = 0.3;
+        let mut engine = TemporalEngine::new(TemporalConfig {
+            max_parallel_forks: 10,
+            fork_budget_tokens: 200_000,
+            ..TemporalConfig::default()
+        });
+        let mut calls = 0;
+        let decision = engine
+            .fork_and_evaluate("task", &agent, &cons, counting_llm(&mut calls))
+            .unwrap();
+        assert!(calls > 0);
+        assert_eq!(decision.forks.len(), 1);
+        assert_eq!(engine.history().len(), 1);
     }
 
     #[test]
