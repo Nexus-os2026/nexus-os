@@ -192,37 +192,16 @@ pub fn cm_three_way_comparison(
 
 // ── A/B Validation Commands ──────────────────────────────────────────────────
 
+// P0-FINAL-GATE C5: the A/B route read a provider key from the process
+// environment through a fallback chain and built clients for a fixed Groq
+// endpoint, so an NVIDIA NIM or OpenRouter key could be addressed to Groq. It
+// is closed before any argument, credential, client or provider is used.
 #[tauri::command]
-pub fn cm_run_ab_validation(
-    state: tauri::State<'_, AppState>,
-    agent_ids: Vec<String>,
-) -> Result<nexus_capability_measurement::ABComparisonResult, String> {
-    let entries: Vec<(String, u8)> = if agent_ids.is_empty() {
-        // Discover real prebuilt agents instead of generating dummies
-        let sup = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-        let real: Vec<(String, u8)> = sup
-            .health_check()
-            .iter()
-            .take(5)
-            .map(|status| {
-                let level = sup
-                    .get_agent(status.id)
-                    .map(|h| h.autonomy_level)
-                    .unwrap_or(3);
-                (status.id.to_string(), level)
-            })
-            .collect();
-        if real.is_empty() {
-            return Err("No agents found. Ensure agents are loaded from agents/prebuilt/.".into());
-        }
-        real
-    } else {
-        agent_ids.into_iter().map(|id| (id, 3u8)).collect()
-    };
-    nexus_capability_measurement::tauri_commands::run_ab_validation(
-        &state.capability_measurement,
-        &entries,
-    )
+pub fn cm_run_ab_validation() -> Result<nexus_capability_measurement::ABComparisonResult, String> {
+    Err(crate::phase0_surface::closed(
+        "cm_run_ab_validation",
+        crate::phase0_surface::Closure::AmbientResource,
+    ))
 }
 
 // ── Predictive Router Commands ────────────────────────────────────────────────
@@ -960,6 +939,15 @@ pub(crate) fn tool_call_autonomy(
     let id = uuid::Uuid::parse_str(agent_id).map_err(|_| unregistered())?;
     let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
     let agent = supervisor.get_agent(id).ok_or_else(unregistered)?;
+    // P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human
+    // approval the backend cannot verify, so no tool call runs for one, at
+    // any claimed level.
+    if agent.autonomy_level == 6 {
+        return Err(crate::phase0_surface::closed(
+            "tools_execute",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
+    }
     Ok(claimed.min(agent.autonomy_level))
 }
 

@@ -602,7 +602,6 @@ fn warden_denial_scenario(rounds: usize) {
         deny_consent_request(
             &state,
             consent.id.clone(),
-            "test-user".into(),
             Some("Do not write the fixture".into()),
         )
         .unwrap();

@@ -275,12 +275,8 @@ fn test_full_agent_flow() {
         .expect("cognitive status should exist");
     assert_eq!(blocked_status.phase, CognitivePhase::Blocked);
 
-    approve_consent_request(
-        &state,
-        consent_row.id.clone(),
-        "integration-test".to_string(),
-    )
-    .expect("approve_consent_request should succeed");
+    approve_consent_request(&state, consent_row.id.clone())
+        .expect("approve_consent_request should succeed");
 
     let loop_result = match rx.recv_timeout(Duration::from_secs(20)) {
         Ok(result) => result,

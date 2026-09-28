@@ -111,6 +111,17 @@ pub(crate) fn restore_persisted_agents(state: &AppState) {
             eprintln!("persistence: agent {} not restored: {error}", row.id);
             continue;
         }
+        // P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human
+        // approval the backend cannot verify, so no L6 record is registered:
+        // not one approved over IPC before this closure, and not a request
+        // that was never approved. The stored record is left as it is.
+        if manifest.autonomy_level == Some(6) {
+            eprintln!(
+                "persistence: agent {} not restored: transcendent (L6) agents are unavailable in Phase Zero",
+                row.id
+            );
+            continue;
+        }
         let Ok(agent_id) = Uuid::parse_str(&row.id) else {
             eprintln!("persistence: invalid restored agent id {}", row.id);
             continue;
@@ -266,75 +277,6 @@ pub(crate) fn jarvis_status(state: &AppState) -> Result<VoiceRuntimeState, Strin
     Ok(voice.clone())
 }
 
-pub(crate) fn enqueue_transcendent_review(
-    state: &AppState,
-    agent_id: &str,
-    agent_name: &str,
-    manifest_json: Option<&str>,
-    mode: &str,
-) -> Result<String, String> {
-    let existing = state
-        .db
-        .load_pending_consent()
-        .map_err(|e| format!("db error: {e}"))?
-        .into_iter()
-        .find(|row| {
-            row.agent_id == agent_id
-                && row.operation_type == "transcendent_creation"
-                // Optional: skip rows with unparseable JSON in filter predicate
-                && serde_json::from_str::<serde_json::Value>(&row.operation_json)
-                    .ok()
-                    .and_then(|value| {
-                        value
-                            .get("mode")
-                            .and_then(|mode_value| mode_value.as_str())
-                            .map(str::to_string)
-                    })
-                    .as_deref()
-                    == Some(mode)
-        });
-    if let Some(existing) = existing {
-        return Ok(existing.id);
-    }
-
-    let consent_id = Uuid::new_v4().to_string();
-    let summary = match mode {
-        "activate_existing" => format!("Activate L6 Transcendent agent '{agent_name}'"),
-        _ => format!("Create L6 Transcendent agent '{agent_name}'"),
-    };
-    let side_effects = vec![
-        "Maximum-autonomy L6 activation".to_string(),
-        "Mandatory 60-second review before approval".to_string(),
-        "Triple-audited self-modification and hardcoded cooldown protections".to_string(),
-    ];
-    let operation_json = json!({
-        "summary": summary,
-        "side_effects": side_effects,
-        "fuel_cost": 0.0,
-        "min_review_seconds": 60,
-        "mode": mode,
-        "manifest_json": manifest_json,
-        "source_surface": "agents",
-    });
-    let now = chrono::Utc::now().to_rfc3339();
-    state
-        .db
-        .enqueue_consent(&nexus_persistence::ConsentRow {
-            id: consent_id.clone(),
-            agent_id: agent_id.to_string(),
-            operation_type: "transcendent_creation".to_string(),
-            operation_json: operation_json.to_string(),
-            hitl_tier: "Tier3".to_string(),
-            status: "pending".to_string(),
-            created_at: now,
-            resolved_at: None,
-            resolved_by: None,
-        })
-        .map_err(|e| format!("db error: {e}"))?;
-
-    Ok(consent_id)
-}
-
 pub(crate) fn create_agent_immediately(
     state: &AppState,
     manifest: AgentManifest,
@@ -413,46 +355,15 @@ pub(crate) fn create_agent_immediately(
 
 pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, String> {
     let manifest = parse_agent_manifest_json(manifest_json.as_str())?;
+    // P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human
+    // approval the backend cannot verify, and an approval delivered over IPC
+    // is not one. Creating an L6 agent is refused before any agent record,
+    // meta entry, supervisor entry or consent request is written.
     if manifest.autonomy_level == Some(6) {
-        let pending_agent_id = Uuid::new_v4().to_string();
-        {
-            let mut meta_guard = match state.meta.lock() {
-                Ok(guard) => guard,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            meta_guard.insert(
-                Uuid::parse_str(&pending_agent_id).unwrap_or(SYSTEM_UUID),
-                AgentMeta {
-                    name: manifest.name.clone(),
-                    last_action: "awaiting transcendent review".to_string(),
-                },
-            );
-        }
-        // Best-effort: persist pending agent for UI display; approval flow continues regardless
-        let _ = state.db.save_agent(
-            &pending_agent_id,
-            &manifest_json,
-            "pending_approval",
-            6,
-            "native",
-        );
-        let consent_id = enqueue_transcendent_review(
-            state,
-            &pending_agent_id,
-            &manifest.name,
-            Some(&manifest_json),
-            "create_new",
-        )?;
-        state.log_event(
-            SYSTEM_UUID,
-            EventType::UserAction,
-            json!({
-                "event": "transcendent_creation_requested",
-                "consent_id": consent_id,
-                "agent_name": manifest.name,
-            }),
-        );
-        return Ok(format!("approval-requested:{consent_id}"));
+        return Err(crate::phase0_surface::closed(
+            "create_agent",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
     }
 
     create_agent_immediately(state, manifest, manifest_json)
@@ -461,31 +372,24 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
 pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
     let agent_id = parsed.to_string();
-    if let Some(manifest) = find_manifest(state, &agent_id) {
-        if manifest.autonomy_level == Some(6) {
-            let consent_id = enqueue_transcendent_review(
-                state,
-                &agent_id,
-                &manifest.name,
-                None,
-                "activate_existing",
-            )?;
-            update_last_action(state, parsed, "awaiting transcendent review");
-            state.log_event(
-                parsed,
-                EventType::UserAction,
-                json!({
-                    "event": "transcendent_activation_requested",
-                    "consent_id": consent_id,
-                }),
-            );
-            return Ok(());
-        }
-    }
+    // P0-FINAL-GATE (item G): starting an L6 (transcendent) agent is refused
+    // for the same reason, before its state is changed, whether the stored
+    // record or the registered agent says L6.
+    let stored_transcendent =
+        find_manifest(state, &agent_id).is_some_and(|manifest| manifest.autonomy_level == Some(6));
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
+    let registered_transcendent = supervisor
+        .get_agent(parsed)
+        .is_some_and(|handle| handle.autonomy_level == 6);
+    if stored_transcendent || registered_transcendent {
+        return Err(crate::phase0_surface::closed(
+            "start_agent",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
+    }
     supervisor.restart_agent(parsed).map_err(agent_error)?;
     drop(supervisor);
     // Best-effort: persist state to DB; in-memory supervisor is already updated
@@ -508,6 +412,24 @@ pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
         json!({"event": "start_agent", "status": "ok"}),
     );
     Ok(())
+}
+
+/// P0-FINAL-GATE (item G): whether `agent_id` names an L6 (transcendent)
+/// agent, by its stored record or its registration. It only reads. The
+/// goal, autonomous-loop and tool routes refuse such an agent with it before
+/// they change anything.
+pub(crate) fn is_transcendent_agent(state: &AppState, agent_id: &str) -> bool {
+    let stored =
+        find_manifest(state, agent_id).is_some_and(|manifest| manifest.autonomy_level == Some(6));
+    let registered = Uuid::parse_str(agent_id).is_ok_and(|id| {
+        state
+            .supervisor
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_agent(id)
+            .is_some_and(|handle| handle.autonomy_level == 6)
+    });
+    stored || registered
 }
 
 pub(crate) fn stop_agent(state: &AppState, agent_id: String) -> Result<(), String> {

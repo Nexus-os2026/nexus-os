@@ -1465,6 +1465,10 @@ impl AppState {
     }
 
     /// Heavy agent loading deferred from `new()` so the GUI thread is not blocked.
+    ///
+    /// P0-FINAL-GATE (item G): stored records are restored first, then the
+    /// prebuilt manifests are loaded. Neither step registers an L6
+    /// (transcendent) agent, on the first run or any later one.
     fn load_agents_deferred(&self) {
         restore_persisted_agents(self);
         self.load_prebuilt_agents();
@@ -6168,30 +6172,7 @@ pub mod runtime {
         interval_seconds: Option<u64>,
         goal_override: Option<String>,
     ) -> Result<(), String> {
-        let interval = interval_seconds.unwrap_or(60);
-        // Build a cron expression from interval: "0 */N * * * *" (every N minutes) or
-        // use seconds-level scheduling for intervals < 60s.
-        let cron_expr = if interval < 60 {
-            format!("*/{interval} * * * * *") // every N seconds
-        } else {
-            let mins = (interval / 60).max(1);
-            format!("0 */{mins} * * * *") // every N minutes
-        };
-
-        let manifest = super::find_manifest(state.inner(), &agent_id);
-        let goal = goal_override
-            .or_else(|| manifest.as_ref().and_then(|m| m.default_goal.clone()))
-            .unwrap_or_else(|| "Execute autonomous task".to_string());
-        let description = super::find_manifest_description(state.inner(), &agent_id);
-
-        let full_goal = super::goal_with_manifest_context(&agent_id, &goal, description.as_deref());
-
-        state
-            .agent_scheduler
-            .register_agent(&agent_id, &cron_expr, &full_goal)
-            .map_err(super::agent_error)?;
-
-        Ok(())
+        super::start_autonomous_loop(state.inner(), agent_id, interval_seconds, goal_override)
     }
 
     /// Stop an autonomous agent loop (unregister from scheduler).
@@ -6260,15 +6241,20 @@ pub mod runtime {
     }
 
     // ── Consent / HITL Approval commands ──
+    //
+    // P0-FINAL-GATE (item G): a name the caller supplies (approved_by,
+    // denied_by, reviewed_by) is not an approver identity, and no human
+    // approver is verified. These commands take no name, and neither do the
+    // consent functions they call: each resolution is recorded with the fixed
+    // DESKTOP_UI_RESOLVER label inside the consent module.
 
     #[tauri::command]
     fn approve_consent_request(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         consent_id: String,
-        approved_by: String,
     ) -> Result<(), String> {
-        let meta = super::approve_consent_request(state.inner(), consent_id.clone(), approved_by)?;
+        let meta = super::approve_consent_request(state.inner(), consent_id.clone())?;
         // Best-effort: notify frontend that consent was resolved
         let _ = window.emit(
             "consent-resolved",
@@ -6287,11 +6273,9 @@ pub mod runtime {
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         consent_id: String,
-        denied_by: String,
         reason: Option<String>,
     ) -> Result<(), String> {
-        let meta =
-            super::deny_consent_request(state.inner(), consent_id.clone(), denied_by, reason)?;
+        let meta = super::deny_consent_request(state.inner(), consent_id.clone(), reason)?;
         // Best-effort: notify frontend that consent was resolved
         let _ = window.emit(
             "consent-resolved",
@@ -6322,10 +6306,8 @@ pub mod runtime {
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         goal_id: String,
-        approved_by: String,
     ) -> Result<(), String> {
-        let (consent_ids, meta) =
-            super::batch_approve_consents(state.inner(), goal_id, approved_by)?;
+        let (consent_ids, meta) = super::batch_approve_consents(state.inner(), goal_id)?;
         for consent_id in consent_ids {
             // Best-effort: notify frontend of each resolved consent
             let _ = window.emit(
@@ -6346,9 +6328,8 @@ pub mod runtime {
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         consent_id: String,
-        reviewed_by: String,
     ) -> Result<(), String> {
-        let meta = super::review_consent_batch(state.inner(), consent_id.clone(), reviewed_by)?;
+        let meta = super::review_consent_batch(state.inner(), consent_id.clone())?;
         // Best-effort: notify frontend that consent entered review-each mode
         let _ = window.emit(
             "consent-resolved",
@@ -6367,11 +6348,9 @@ pub mod runtime {
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         goal_id: String,
-        denied_by: String,
         reason: Option<String>,
     ) -> Result<(), String> {
-        let (consent_ids, meta) =
-            super::batch_deny_consents(state.inner(), goal_id, denied_by, reason)?;
+        let (consent_ids, meta) = super::batch_deny_consents(state.inner(), goal_id, reason)?;
         for consent_id in consent_ids {
             // Best-effort: notify frontend of each resolved consent
             let _ = window.emit(
@@ -6768,12 +6747,14 @@ pub mod runtime {
         ))
     }
 
+    // P0-FINAL-GATE (item G): the call itself was taken as the approval of a
+    // self-rewrite patch. It is not human approval; the command only denies.
     #[tauri::command]
-    fn self_rewrite_apply_patch(
-        state: tauri::State<'_, AppState>,
-        patch_id: String,
-    ) -> Result<(), String> {
-        super::self_rewrite_apply_patch(state.inner(), patch_id)
+    pub(crate) fn self_rewrite_apply_patch() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "self_rewrite_apply_patch",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ))
     }
 
     #[tauri::command]

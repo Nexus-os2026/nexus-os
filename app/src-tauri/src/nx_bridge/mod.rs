@@ -12,17 +12,10 @@ pub mod commands;
 pub struct NxState {
     /// The nx application instance (governance kernel + providers + tools).
     pub app: Arc<Mutex<nexus_code::app::App>>,
-    /// Pending consent requests waiting for frontend response.
-    pub pending_consents: Arc<Mutex<std::collections::HashMap<String, ConsentPending>>>,
     /// Whether an agent loop is currently running.
     pub is_running: Arc<std::sync::atomic::AtomicBool>,
     /// Cancellation token for the current agent loop.
     pub cancel_token: Arc<Mutex<Option<tokio_util::sync::CancellationToken>>>,
-}
-
-/// A consent request waiting for the user's decision.
-pub struct ConsentPending {
-    pub response_tx: tokio::sync::oneshot::Sender<bool>,
 }
 
 /// Default model for each provider.
@@ -112,7 +105,6 @@ pub fn init_nx_state() -> Result<NxState, String> {
 
     Ok(NxState {
         app: Arc::new(Mutex::new(app)),
-        pending_consents: Arc::new(Mutex::new(std::collections::HashMap::new())),
         is_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         cancel_token: Arc::new(Mutex::new(None)),
     })

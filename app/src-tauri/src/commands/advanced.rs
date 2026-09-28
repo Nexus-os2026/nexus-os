@@ -389,27 +389,6 @@ pub(crate) fn self_rewrite_preview_patch(
     Ok(serde_json::json!(diff))
 }
 
-pub(crate) fn self_rewrite_apply_patch(state: &AppState, patch_id: String) -> Result<(), String> {
-    let pid = Uuid::parse_str(&patch_id).map_err(|e| e.to_string())?;
-    let mut patches = state
-        .self_rewrite_patches
-        .lock()
-        .unwrap_or_else(|p| p.into_inner());
-    let patch = patches
-        .iter_mut()
-        .find(|p| p.id == pid)
-        .ok_or_else(|| format!("patch {patch_id} not found"))?;
-
-    // Mark as approved (HITL confirmed by the frontend dialog)
-    patch.status = nexus_kernel::self_rewrite::PatchStatus::Approved;
-
-    let mut patcher = nexus_kernel::self_rewrite::HotPatcher::new();
-    match patcher.apply_patch(patch.clone(), 1.0, 1.0) {
-        Ok(_applied) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
 pub(crate) fn self_rewrite_get_history() -> Result<serde_json::Value, String> {
     let rollback = nexus_kernel::self_rewrite::RollbackEngine::new();
     let history = rollback.get_rollback_history();

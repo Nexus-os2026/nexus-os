@@ -377,26 +377,35 @@ fn test_stop_computer_action_updates_status_surface() {
     assert!(!status.enabled);
 }
 
+/// P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human approval
+/// the backend cannot verify. Creating one used to enqueue a review that any
+/// caller could approve over IPC at once (the "60-second review" was only a
+/// frontend countdown); it is now refused before any agent record, meta
+/// entry, supervisor entry or consent request is written. Creation below L6,
+/// which never had an approval step, is unchanged.
 #[test]
-fn test_tauri_create_l6_agent_requests_review() {
+fn p0_fg_transcendent_creation_is_refused_and_changes_nothing() {
+    use crate::phase0_surface::{closed, Closure};
     let state = AppState::new_in_memory();
-    let created = create_agent(&state, build_transcendent_manifest("transcendent-pending"));
-    assert!(created.is_ok());
-    let created = created.unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    assert!(created.starts_with("approval-requested:"));
+    let stored = state.db.list_agents().unwrap().len();
+    let registered = state.supervisor.lock().unwrap().health_check().len();
+    let named = state.meta.lock().unwrap().len();
 
-    let pending = state.db.load_pending_consent().unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].operation_type, "transcendent_creation");
-    assert!(pending[0]
-        .operation_json
-        .contains("\"min_review_seconds\":60"));
+    assert_eq!(
+        create_agent(&state, build_transcendent_manifest("transcendent-pending")),
+        Err(closed("create_agent", Closure::ApprovalRequired))
+    );
+    assert!(state.db.load_pending_consent().unwrap().is_empty());
+    assert_eq!(state.db.list_agents().unwrap().len(), stored);
+    assert_eq!(
+        state.supervisor.lock().unwrap().health_check().len(),
+        registered
+    );
+    assert_eq!(state.meta.lock().unwrap().len(), named);
+
+    let created = create_agent(&state, build_manifest("below-transcendent")).unwrap();
+    assert!(Uuid::parse_str(&created).is_ok());
+    assert!(state.db.load_pending_consent().unwrap().is_empty());
 }
 
 #[test]
@@ -502,15 +511,78 @@ fn test_prebuilt_manifest_count_is_nonzero() {
     assert!(!paths.is_empty());
 }
 
+/// The prebuilt manifests at autonomy level 6, by agent name.
+const TRANSCENDENT_PREBUILT: [&str; 12] = [
+    "nexus-arbiter",
+    "nexus-architect-prime",
+    "nexus-ascendant",
+    "nexus-continuum",
+    "nexus-genesis-prime",
+    "nexus-legion",
+    "nexus-mirror",
+    "nexus-oracle-omega",
+    "nexus-oracle-supreme",
+    "nexus-prime",
+    "nexus-warden",
+    "nexus-weaver",
+];
+
+/// (name, autonomy level, manifest JSON) of every prebuilt manifest.
+fn prebuilt_manifests() -> Vec<(String, Option<u8>, String)> {
+    list_prebuilt_manifest_paths()
+        .iter()
+        .map(|path| {
+            let json = std::fs::read_to_string(path).unwrap();
+            let manifest = parse_agent_manifest_json(&json).unwrap();
+            (manifest.name, manifest.autonomy_level, json)
+        })
+        .collect()
+}
+
+/// How many prebuilt manifests are below L6, after checking that the L6 ones
+/// are exactly `TRANSCENDENT_PREBUILT`.
+fn prebuilt_count_below_l6() -> usize {
+    let manifests = prebuilt_manifests();
+    let mut transcendent: Vec<&str> = manifests
+        .iter()
+        .filter(|(_, level, _)| *level == Some(6))
+        .map(|(name, _, _)| name.as_str())
+        .collect();
+    transcendent.sort_unstable();
+    assert_eq!(transcendent, TRANSCENDENT_PREBUILT);
+    manifests.len() - TRANSCENDENT_PREBUILT.len()
+}
+
+/// (name, autonomy level) of every agent registered with the supervisor,
+/// sorted.
+fn registered_agents(state: &AppState) -> Vec<(String, u8)> {
+    let supervisor = state.supervisor.lock().unwrap();
+    let mut agents: Vec<(String, u8)> = supervisor
+        .health_check()
+        .into_iter()
+        .filter_map(|status| supervisor.get_agent(status.id))
+        .map(|handle| (handle.manifest.name.clone(), handle.autonomy_level))
+        .collect();
+    agents.sort();
+    agents
+}
+
+/// Every prebuilt manifest below L6 is stored and registered. None of the
+/// twelve L6 manifests is (P0-FINAL-GATE item G). This test used to be
+/// `test_load_prebuilt_agents_registers_every_manifest`. It asserted that
+/// every manifest was stored, the L6 ones included, and so pinned the
+/// loader's registration of L6 agents.
 #[test]
-fn test_load_prebuilt_agents_registers_every_manifest() {
+fn test_load_prebuilt_agents_loads_every_manifest_below_l6() {
     let state = AppState::new_in_memory();
     state.load_prebuilt_agents();
-    let agents = state.db.list_agents().unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    assert_eq!(agents.len(), list_prebuilt_manifest_paths().len());
+    let below = prebuilt_count_below_l6();
+    let rows = state.db.list_agents().unwrap();
+    assert_eq!(rows.len(), below);
+    assert!(rows.iter().all(|row| row.autonomy_level < 6));
+    let registered = registered_agents(&state);
+    assert_eq!(registered.len(), below);
+    assert!(registered.iter().all(|(_, level)| *level < 6));
 }
 
 #[test]
@@ -522,7 +594,8 @@ fn test_load_prebuilt_agents_skips_duplicate_names() {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
-    assert_eq!(agents.len(), list_prebuilt_manifest_paths().len());
+    // The L6 manifests are never loaded (P0-FINAL-GATE item G).
+    assert_eq!(agents.len(), prebuilt_count_below_l6());
 }
 
 #[test]
@@ -534,7 +607,8 @@ fn test_list_agents_includes_stopped_prebuilt_agents_from_persistence() {
         eprintln!("list_agents should succeed: {e}");
         std::process::exit(1)
     });
-    let manifest_count = list_prebuilt_manifest_paths().len();
+    // The L6 manifests are never loaded (P0-FINAL-GATE item G).
+    let manifest_count = prebuilt_count_below_l6();
 
     assert_eq!(agents.len(), manifest_count);
     assert!(agents.iter().all(|agent| !agent.id.trim().is_empty()));
@@ -550,58 +624,376 @@ fn test_get_preinstalled_agents_keeps_persisted_agent_ids() {
         eprintln!("preinstalled agent query should succeed: {e}");
         std::process::exit(1)
     });
-    let manifest_count = list_prebuilt_manifest_paths().len();
+    // The L6 manifests are never loaded (P0-FINAL-GATE item G).
+    let manifest_count = prebuilt_count_below_l6();
 
     assert_eq!(agents.len(), manifest_count);
     assert!(agents.iter().all(|agent| !agent.agent_id.trim().is_empty()));
     assert!(agents.iter().any(|agent| agent.name == "nexus-oracle"));
 }
 
+/// P0-FINAL-GATE (item G): the real startup order, restore then the prebuilt
+/// load, registers no L6 (transcendent) agent on any run:
+/// - a first run over an empty store;
+/// - a restart over that store, after an earlier build also stored the
+///   twelve L6 prebuilt records there (some running, some stopped);
+/// - a further restart.
+///
+/// The L6 records stay exactly as stored, and every run registers the same
+/// agents.
 #[test]
-fn test_start_l6_agent_requests_review_instead_of_restarting() {
+fn p0_fg_startup_registers_no_transcendent_agent_on_any_run() {
+    let below = prebuilt_count_below_l6();
+    let copy_store = |rows: Vec<nexus_persistence::AgentRow>| {
+        let state = AppState::new_in_memory();
+        for row in rows {
+            state
+                .db
+                .save_agent(
+                    &row.id,
+                    &row.manifest_json,
+                    &row.state,
+                    row.autonomy_level,
+                    &row.execution_mode,
+                )
+                .unwrap();
+        }
+        state
+    };
+
+    let first = AppState::new_in_memory();
+    first.load_agents_deferred();
+    let registered = registered_agents(&first);
+    assert_eq!(registered.len(), below);
+    assert!(registered.iter().all(|(_, level)| *level < 6));
+    let stored = first.db.list_agents().unwrap();
+    assert_eq!(stored.len(), below);
+    assert!(stored.iter().all(|row| row.autonomy_level < 6));
+
+    let second = copy_store(stored);
+    let mut transcendent_ids = Vec::new();
+    for (index, (_, _, json)) in prebuilt_manifests()
+        .into_iter()
+        .filter(|(_, level, _)| *level == Some(6))
+        .enumerate()
+    {
+        let id = Uuid::new_v4().to_string();
+        let stored_state = if index % 2 == 0 { "running" } else { "stopped" };
+        second
+            .db
+            .save_agent(&id, &json, stored_state, 6, "native")
+            .unwrap();
+        transcendent_ids.push(id);
+    }
+    let transcendent_rows = |state: &AppState| {
+        let mut rows: Vec<_> = state
+            .db
+            .list_agents()
+            .unwrap()
+            .into_iter()
+            .filter(|row| transcendent_ids.contains(&row.id))
+            .map(|row| {
+                (
+                    row.id,
+                    row.manifest_json,
+                    row.state,
+                    row.was_running,
+                    row.autonomy_level,
+                    row.execution_mode,
+                    row.updated_at,
+                )
+            })
+            .collect();
+        rows.sort();
+        rows
+    };
+    let before = transcendent_rows(&second);
+    assert_eq!(before.len(), TRANSCENDENT_PREBUILT.len());
+    assert!(before.iter().any(|row| row.3), "a running L6 record");
+    second.load_agents_deferred();
+    assert_eq!(registered_agents(&second), registered);
+    assert_eq!(transcendent_rows(&second), before);
+
+    let third = copy_store(second.db.list_agents().unwrap());
+    let before = transcendent_rows(&third);
+    third.load_agents_deferred();
+    assert_eq!(registered_agents(&third), registered);
+    assert_eq!(transcendent_rows(&third), before);
+}
+
+/// P0-FINAL-GATE (item G): starting an L6 (transcendent) agent used to
+/// enqueue an activation review that any caller could approve over IPC. It
+/// is now refused before the agent's state changes, and no review is
+/// enqueued. The refusal holds whether the stored record or the registered
+/// agent says L6. (No current route registers an L6 agent: creation refuses
+/// it, restore skips it and the prebuilt load skips L6 manifests. See
+/// `p0_fg_startup_registers_no_transcendent_agent_on_any_run`. The direct
+/// registration below stands in for an L6 agent that some other route
+/// might register.)
+#[test]
+fn p0_fg_transcendent_activation_is_refused_and_changes_nothing() {
+    use crate::phase0_surface::{closed, Closure};
     let state = AppState::new_in_memory();
     let created = create_agent_immediately(
         &state,
-        parse_agent_manifest_json(&build_transcendent_manifest("transcendent-start"))
-            .unwrap_or_else(|e| {
-                eprintln!("manifest parse failed: {e}");
-                std::process::exit(1)
-            }),
+        parse_agent_manifest_json(&build_transcendent_manifest("transcendent-start")).unwrap(),
         build_transcendent_manifest("transcendent-start"),
     )
-    .unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
+    .unwrap();
+    let id = Uuid::parse_str(&created).unwrap();
+    let registered_state = |state: &AppState| {
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .health_check()
+            .into_iter()
+            .find(|status| status.id == id)
+            .map(|status| status.state)
+    };
+    stop_agent(&state, created.clone()).unwrap();
+    let stopped = registered_state(&state);
+    assert_eq!(stopped, Some(nexus_kernel::lifecycle::AgentState::Stopped));
 
-    stop_agent(&state, created.clone()).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    start_agent(&state, created.clone()).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-
-    let pending = state.db.load_pending_consent().unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    assert_eq!(pending.len(), 1);
-    assert!(pending[0].operation_json.contains("activate_existing"));
-
-    let listed = list_agents(&state).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    let agent = listed
-        .iter()
-        .find(|row| row.id == created)
-        .unwrap_or_else(|| {
-            eprintln!("unexpected None");
-            std::process::exit(1)
-        });
+    let refused = Err(closed("start_agent", Closure::ApprovalRequired));
+    assert_eq!(start_agent(&state, created.clone()), refused);
+    assert!(state.db.load_pending_consent().unwrap().is_empty());
+    assert_eq!(registered_state(&state), stopped);
+    let listed = list_agents(&state).unwrap();
+    let agent = listed.iter().find(|row| row.id == created).unwrap();
     assert_eq!(agent.status, "Stopped");
+
+    // Without the stored record, the registered L6 agent is refused as well.
+    state.db.delete_agent(&created).unwrap();
+    assert_eq!(start_agent(&state, created.clone()), refused);
+    assert_eq!(registered_state(&state), stopped);
+    assert!(state.db.load_pending_consent().unwrap().is_empty());
+
+    // Starting an agent below L6 is unchanged.
+    let below = create_agent(&state, build_manifest("below-transcendent")).unwrap();
+    stop_agent(&state, below.clone()).unwrap();
+    assert_eq!(start_agent(&state, below), Ok(()));
+}
+
+/// P0-FINAL-GATE (item G): the goal, autonomous-loop and tool routes refuse
+/// an L6 (transcendent) agent before anything changes, with the bounded
+/// `ApprovalRequired` reason:
+/// - `assign_agent_goal`, and `execute_agent_goal` through it;
+/// - `start_autonomous_loop`;
+/// - the level resolution of `tools_execute`, at any claimed level.
+///
+/// No goal, loop, task, schedule or audit event results, and no input is
+/// echoed. Both a registered L6 agent and a stored L6 record are refused.
+/// (No current route registers an L6 agent; the direct registration stands
+/// in for one.) An L5 agent is not refused.
+#[test]
+fn p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent() {
+    use crate::commands::cognitive::{assign_agent_goal, execute_agent_goal};
+    use crate::commands::crate_bridges::tool_call_autonomy;
+    use crate::phase0_surface::{closed, Closure};
+    let state = AppState::new_in_memory();
+    // The scheduler starts a task per registration; nothing here polls it.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+
+    let registered = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(
+            parse_agent_manifest_json(&build_transcendent_manifest("transcendent-goal")).unwrap(),
+        )
+        .unwrap()
+        .to_string();
+    let stored = Uuid::new_v4().to_string();
+    state
+        .db
+        .save_agent(
+            &stored,
+            &build_transcendent_manifest("transcendent-stored"),
+            "running",
+            6,
+            "native",
+        )
+        .unwrap();
+    let sovereign = create_agent(
+        &state,
+        json!({
+            "name": "sovereign-goal",
+            "version": "1.0.0",
+            "capabilities": ["llm.query"],
+            "fuel_budget": 1000,
+            "autonomy_level": 5,
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let audit_events = |state: &AppState| state.audit.lock().unwrap().events().len();
+    let before = audit_events(&state);
+    let refused = |surface| Err(closed(surface, Closure::ApprovalRequired));
+    let sentinel = "p0fg-goal-sentinel";
+    for agent in [&registered, &stored] {
+        assert_eq!(
+            assign_agent_goal(&state, agent.clone(), sentinel.into(), 5, None),
+            refused("assign_agent_goal")
+        );
+        assert_eq!(
+            execute_agent_goal(&state, agent.clone(), sentinel.into(), 5, None),
+            refused("assign_agent_goal")
+        );
+        assert_eq!(
+            super::start_autonomous_loop(&state, agent.clone(), Some(5), Some(sentinel.into())),
+            Err(closed("start_autonomous_loop", Closure::ApprovalRequired))
+        );
+        assert!(!state.cognitive_runtime.has_active_loop(agent));
+        assert!(state.db.load_tasks_by_agent(agent, 10).unwrap().is_empty());
+    }
+    for claimed in [0, 1, 5, 6, u8::MAX] {
+        assert_eq!(
+            tool_call_autonomy(&state, &registered, claimed),
+            Err(closed("tools_execute", Closure::ApprovalRequired))
+        );
+    }
+    // A stored L6 record is not registered, so no tool call can name it.
+    assert_eq!(
+        tool_call_autonomy(&state, &stored, 5),
+        Err("tools_execute: agent_id must name a registered agent".to_string())
+    );
+    assert!(state.agent_scheduler.list().is_empty());
+    assert_eq!(audit_events(&state), before);
+
+    // An L5 agent is not refused.
+    assign_agent_goal(&state, sovereign.clone(), "control goal".into(), 5, None).unwrap();
+    assert!(state.cognitive_runtime.has_active_loop(&sovereign));
+    super::start_autonomous_loop(&state, sovereign.clone(), Some(120), None).unwrap();
+    assert_eq!(state.agent_scheduler.list().len(), 1);
+    state.agent_scheduler.unregister_agent(&sovereign);
+    assert_eq!(tool_call_autonomy(&state, &sovereign, 6), Ok(5));
+}
+
+/// P0-FINAL-GATE (item G): an enabled Warden review that no Warden can give
+/// fails closed. The prebuilt Warden is L6, so it is never registered. An
+/// enabled review then denies with the bounded `WARDEN_REVIEW_UNAVAILABLE`
+/// reason in each of these cases:
+/// - no Warden registered;
+/// - the prebuilt Warden's record stored by an earlier build and left
+///   unregistered by restore;
+/// - a Warden registered but stopped.
+///
+/// No model is resolved or queried, and no audit event or consent request
+/// is written. It used to allow the action as "Warden inactive". A disabled
+/// review (the default) is unchanged and allows, and a running Warden
+/// still reviews.
+#[test]
+fn p0_fg_enabled_warden_review_fails_closed_without_a_warden() {
+    use crate::commands::cognitive::{WardenReviewEngine, WARDEN_REVIEW_UNAVAILABLE};
+    use nexus_kernel::actuators::ActionReviewDecision;
+    use nexus_kernel::cognitive::PlannedAction;
+    let state = AppState::new_in_memory();
+    let engine = WardenReviewEngine {
+        state: state.clone(),
+    };
+    let action = PlannedAction::FileWrite {
+        path: "p0fg-warden.txt".into(),
+        content: "p0fg".into(),
+    };
+    let review = |enabled: bool| {
+        engine.review_with(
+            "p0fg-actor",
+            "p0fg-actor",
+            &action,
+            enabled,
+            || panic!("no model may be resolved"),
+            |_, _| panic!("no model may be queried"),
+        )
+    };
+    let unchanged = |state: &AppState| {
+        (
+            state.audit.lock().unwrap().events().len(),
+            state.db.load_pending_consent().unwrap().len(),
+        )
+    };
+    let unavailable = Ok(ActionReviewDecision::Deny {
+        reason: WARDEN_REVIEW_UNAVAILABLE.to_string(),
+    });
+
+    let before = unchanged(&state);
+    assert_eq!(
+        review(false),
+        Ok(ActionReviewDecision::Allow {
+            reason: "Warden governance review disabled".to_string(),
+        })
+    );
+    assert_eq!(review(true), unavailable);
+    assert_eq!(unchanged(&state), before);
+
+    let warden = list_prebuilt_manifest_paths()
+        .into_iter()
+        .find(|path| path.file_name().and_then(|name| name.to_str()) == Some("warden.json"))
+        .unwrap();
+    let warden_json = std::fs::read_to_string(warden).unwrap();
+    assert_eq!(
+        parse_agent_manifest_json(&warden_json)
+            .unwrap()
+            .autonomy_level,
+        Some(6)
+    );
+    state
+        .db
+        .save_agent(
+            &Uuid::new_v4().to_string(),
+            &warden_json,
+            "running",
+            6,
+            "native",
+        )
+        .unwrap();
+    crate::commands::agents::restore_persisted_agents(&state);
+    let before = unchanged(&state);
+    assert_eq!(review(true), unavailable);
+    assert_eq!(unchanged(&state), before);
+
+    let stand_in = create_agent(
+        &state,
+        json!({
+            "name": "nexus-warden",
+            "version": "1.0.0",
+            "capabilities": ["llm.query"],
+            "fuel_budget": 1000,
+            "autonomy_level": 2,
+            "llm_model": "p0fg-warden-model",
+        })
+        .to_string(),
+    )
+    .unwrap();
+    stop_agent(&state, stand_in.clone()).unwrap();
+    let before = unchanged(&state);
+    assert_eq!(review(true), unavailable);
+    assert_eq!(unchanged(&state), before);
+
+    // A running Warden still reviews: its model is queried and decides.
+    start_agent(&state, stand_in).unwrap();
+    let decision = engine.review_with(
+        "p0fg-actor",
+        "p0fg-actor",
+        &action,
+        true,
+        || panic!("the Warden names its model"),
+        |_, model| {
+            assert_eq!(model, "p0fg-warden-model");
+            Ok("YES safe fixture write".to_string())
+        },
+    );
+    assert_eq!(
+        decision,
+        Ok(ActionReviewDecision::Allow {
+            reason: "safe fixture write".to_string(),
+        })
+    );
 }
 
 #[test]
@@ -2395,7 +2787,7 @@ fn enqueue_test_consent_json(
 fn test_approve_consent_request() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-approve-1", "a1", "fs.write", "Tier1");
-    let result = approve_consent_request(&state, "c-approve-1".into(), "admin".into());
+    let result = approve_consent_request(&state, "c-approve-1".into());
     assert!(result.is_ok());
     // Verify it's no longer pending
     let pending = list_pending_consents(&state).unwrap_or_else(|e| {
@@ -2405,8 +2797,14 @@ fn test_approve_consent_request() {
     assert!(pending.iter().all(|p| p.consent_id != "c-approve-1"));
 }
 
+/// P0-FINAL-GATE (item G): approving a transcendent request (one enqueued
+/// before this closure) used to create or restart an L6 agent on any caller's
+/// word. It is now refused before the request is resolved: nothing is
+/// created, started, resolved or audited as approved, and a batch approval
+/// cannot resolve it either. The request can still be denied.
 #[test]
-fn test_approve_transcendent_creation_creates_agent() {
+fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
+    use crate::phase0_surface::{closed, Closure};
     let state = AppState::new_in_memory();
     let pending_agent_id = Uuid::new_v4().to_string();
     let manifest_json = build_transcendent_manifest("approved-transcendent");
@@ -2419,51 +2817,82 @@ fn test_approve_transcendent_creation_creates_agent() {
             6,
             "native",
         )
-        .unwrap_or_else(|e| {
-            eprintln!("operation failed: {e}");
-            std::process::exit(1)
-        });
-    state
-        .db
-        .enqueue_consent(&nexus_persistence::ConsentRow {
-            id: "c-transcendent-create".to_string(),
-            agent_id: pending_agent_id.clone(),
-            operation_type: "transcendent_creation".to_string(),
-            operation_json: json!({
-                "summary": "Create L6 Transcendent agent 'approved-transcendent'",
-                "side_effects": ["Maximum-autonomy L6 activation"],
-                "fuel_cost": 0.0,
-                "min_review_seconds": 60,
-                "mode": "create_new",
-                "manifest_json": manifest_json,
-            })
-            .to_string(),
-            hitl_tier: "Tier3".to_string(),
-            status: "pending".to_string(),
-            created_at: chrono::Utc::now().to_rfc3339(),
-            resolved_at: None,
-            resolved_by: None,
+        .unwrap();
+    let request = |mode: &str, goal: Option<&str>| {
+        json!({
+            "summary": "Create L6 Transcendent agent 'approved-transcendent'",
+            "side_effects": ["Maximum-autonomy L6 activation"],
+            "fuel_cost": 0.0,
+            "min_review_seconds": 60,
+            "mode": mode,
+            "manifest_json": manifest_json,
+            "goal_id": goal,
         })
-        .unwrap_or_else(|e| {
-            eprintln!("operation failed: {e}");
-            std::process::exit(1)
-        });
+    };
+    for (id, mode, goal) in [
+        ("c-transcendent-create", "create_new", None),
+        (
+            "c-transcendent-activate",
+            "activate_existing",
+            Some("goal-transcendent"),
+        ),
+    ] {
+        enqueue_test_consent_json(
+            &state,
+            id,
+            &pending_agent_id,
+            "transcendent_creation",
+            "Tier3",
+            request(mode, goal),
+        );
+    }
+    let stored = state.db.list_agents().unwrap().len();
+    let registered = state.supervisor.lock().unwrap().health_check().len();
 
-    approve_consent_request(&state, "c-transcendent-create".into(), "admin".into()).unwrap_or_else(
-        |e| {
-            eprintln!("operation failed: {e}");
-            std::process::exit(1)
-        },
+    for id in ["c-transcendent-create", "c-transcendent-activate"] {
+        assert_eq!(
+            approve_consent_request(&state, id.into()).map(|_| ()),
+            Err(closed("approve_consent_request", Closure::ApprovalRequired))
+        );
+    }
+    assert_eq!(
+        batch_approve_consents(&state, "goal-transcendent".into()).map(|_| ()),
+        Err(closed("batch_approve_consents", Closure::ApprovalRequired))
     );
 
-    let agents = state.db.list_agents().unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    assert!(agents.iter().all(|row| row.id != pending_agent_id));
-    assert!(agents
+    let pending = state.db.load_pending_consent().unwrap();
+    assert_eq!(pending.len(), 2);
+    assert!(pending
         .iter()
-        .any(|row| row.manifest_json.contains("approved-transcendent")));
+        .all(|row| row.status == "pending" && row.resolved_by.is_none()));
+    assert_eq!(state.db.list_agents().unwrap().len(), stored);
+    assert_eq!(
+        state.supervisor.lock().unwrap().health_check().len(),
+        registered
+    );
+    let events = state.db.load_audit_events(None, 200, 0).unwrap();
+    for approval in [
+        "consent_approved",
+        "consent_batch_approved",
+        "transcendent_creation_approved",
+    ] {
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.detail_json.contains(approval)),
+            "{approval}"
+        );
+    }
+
+    // Denial still resolves the request and removes the unapproved placeholder.
+    deny_consent_request(&state, "c-transcendent-create".into(), None).unwrap();
+    assert!(state
+        .db
+        .list_agents()
+        .unwrap()
+        .iter()
+        .all(|row| row.id != pending_agent_id));
+    assert_eq!(state.db.load_pending_consent().unwrap().len(), 1);
 }
 
 #[test]
@@ -2487,12 +2916,10 @@ fn test_approve_consent_request_wakes_blocked_wait() {
             }
         });
 
-        approve_consent_request(&state, "c-approve-wake".into(), "admin".into()).unwrap_or_else(
-            |e| {
-                eprintln!("operation failed: {e}");
-                std::process::exit(1)
-            },
-        );
+        approve_consent_request(&state, "c-approve-wake".into()).unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
 
         tokio::time::timeout(std::time::Duration::from_millis(100), waiter)
             .await
@@ -2511,12 +2938,7 @@ fn test_approve_consent_request_wakes_blocked_wait() {
 fn test_deny_consent_request() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-deny-1", "a2", "process.exec", "Tier2");
-    let result = deny_consent_request(
-        &state,
-        "c-deny-1".into(),
-        "admin".into(),
-        Some("too risky".into()),
-    );
+    let result = deny_consent_request(&state, "c-deny-1".into(), Some("too risky".into()));
     assert!(result.is_ok());
     let pending = list_pending_consents(&state).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
@@ -2572,7 +2994,6 @@ fn test_deny_transcendent_creation_cleans_up_pending_agent() {
     deny_consent_request(
         &state,
         "c-transcendent-deny".into(),
-        "admin".into(),
         Some("not today".into()),
     )
     .unwrap_or_else(|e| {
@@ -2608,16 +3029,11 @@ fn test_deny_consent_request_wakes_blocked_wait() {
             }
         });
 
-        deny_consent_request(
-            &state,
-            "c-deny-wake".into(),
-            "admin".into(),
-            Some("too risky".into()),
-        )
-        .unwrap_or_else(|e| {
-            eprintln!("operation failed: {e}");
-            std::process::exit(1)
-        });
+        deny_consent_request(&state, "c-deny-wake".into(), Some("too risky".into()))
+            .unwrap_or_else(|e| {
+                eprintln!("operation failed: {e}");
+                std::process::exit(1)
+            });
 
         tokio::time::timeout(std::time::Duration::from_millis(100), waiter)
             .await
@@ -2640,7 +3056,7 @@ fn test_list_pending_consents_returns_only_pending() {
     enqueue_test_consent(&state, "c-lp-3", "a2", "web.search", "Tier0");
 
     // Resolve one
-    approve_consent_request(&state, "c-lp-1".into(), "admin".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-lp-1".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -2664,15 +3080,15 @@ fn test_get_consent_history_returns_all() {
     enqueue_test_consent(&state, "c-hist-5", "a3", "llm.query", "Tier0");
 
     // Resolve 3 of them
-    approve_consent_request(&state, "c-hist-1".into(), "admin".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-hist-1".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
-    deny_consent_request(&state, "c-hist-2".into(), "admin".into(), None).unwrap_or_else(|e| {
+    deny_consent_request(&state, "c-hist-2".into(), None).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
-    approve_consent_request(&state, "c-hist-3".into(), "user".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-hist-3".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -2706,14 +3122,14 @@ fn test_auto_timeout_risk_level_mapping() {
 #[test]
 fn test_approve_nonexistent_consent_fails() {
     let state = AppState::new_in_memory();
-    let result = approve_consent_request(&state, "nonexistent-id".into(), "admin".into());
+    let result = approve_consent_request(&state, "nonexistent-id".into());
     assert!(result.is_err());
 }
 
 #[test]
 fn test_deny_nonexistent_consent_fails() {
     let state = AppState::new_in_memory();
-    let result = deny_consent_request(&state, "nonexistent-id".into(), "admin".into(), None);
+    let result = deny_consent_request(&state, "nonexistent-id".into(), None);
     assert!(result.is_err());
 }
 
@@ -2833,8 +3249,8 @@ fn test_batch_approve_consents_resolves_goal_rows() {
         json!({"summary": "other", "goal_id": "goal-other"}),
     );
 
-    let (resolved, meta) = batch_approve_consents(&state, "goal-batch".into(), "user".into())
-        .unwrap_or_else(|e| {
+    let (resolved, meta) =
+        batch_approve_consents(&state, "goal-batch".into()).unwrap_or_else(|e| {
             eprintln!("operation failed: {e}");
             std::process::exit(1)
         });
@@ -2862,11 +3278,10 @@ fn test_review_consent_batch_resolves_pending_request() {
         json!({"summary": "batch", "goal_id": "goal-review", "review_each_available": true}),
     );
 
-    let meta = review_consent_batch(&state, "c-review-batch-1".into(), "user".into())
-        .unwrap_or_else(|e| {
-            eprintln!("operation failed: {e}");
-            std::process::exit(1)
-        });
+    let meta = review_consent_batch(&state, "c-review-batch-1".into()).unwrap_or_else(|e| {
+        eprintln!("operation failed: {e}");
+        std::process::exit(1)
+    });
     assert_eq!(meta.agent_id, "a1");
 
     let pending = list_pending_consents(&state).unwrap_or_else(|e| {
@@ -2904,16 +3319,11 @@ fn test_batch_deny_consents_resolves_goal_rows() {
         json!({"summary": "single", "goal_id": "goal-deny"}),
     );
 
-    let (resolved, meta) = batch_deny_consents(
-        &state,
-        "goal-deny".into(),
-        "user".into(),
-        Some("deny all".into()),
-    )
-    .unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
+    let (resolved, meta) = batch_deny_consents(&state, "goal-deny".into(), Some("deny all".into()))
+        .unwrap_or_else(|e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        });
     assert_eq!(resolved.len(), 2);
     assert_eq!(meta.agent_id, "a1");
     assert_eq!(meta.source_surface, "unknown");
@@ -2929,7 +3339,7 @@ fn test_batch_deny_consents_resolves_goal_rows() {
 fn test_consent_audit_events_on_approve() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-audit-a", "a1", "fs.write", "Tier1");
-    approve_consent_request(&state, "c-audit-a".into(), "admin".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-audit-a".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -2952,16 +3362,12 @@ fn test_consent_audit_events_on_approve() {
 fn test_consent_audit_events_on_deny() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-audit-d", "a1", "process.exec", "Tier2");
-    deny_consent_request(
-        &state,
-        "c-audit-d".into(),
-        "admin".into(),
-        Some("unauthorized".into()),
-    )
-    .unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
+    deny_consent_request(&state, "c-audit-d".into(), Some("unauthorized".into())).unwrap_or_else(
+        |e| {
+            eprintln!("operation failed: {e}");
+            std::process::exit(1)
+        },
+    );
     let events = state
         .db
         .load_audit_events(None, 100, 0)
@@ -2980,12 +3386,12 @@ fn test_consent_audit_events_on_deny() {
 fn test_approve_already_resolved_fails() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-double", "a1", "fs.write", "Tier1");
-    approve_consent_request(&state, "c-double".into(), "admin".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-double".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
     // Second approve should fail (no longer pending)
-    let result = approve_consent_request(&state, "c-double".into(), "admin".into());
+    let result = approve_consent_request(&state, "c-double".into());
     assert!(result.is_err());
 }
 
@@ -3006,7 +3412,7 @@ fn test_consent_history_limit() {
 fn test_deny_with_no_reason() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-no-reason", "a1", "fs.write", "Tier1");
-    let result = deny_consent_request(&state, "c-no-reason".into(), "admin".into(), None);
+    let result = deny_consent_request(&state, "c-no-reason".into(), None);
     assert!(result.is_ok());
 }
 
@@ -3035,7 +3441,7 @@ fn test_consent_resolved_removes_from_pending() {
         2
     );
 
-    approve_consent_request(&state, "c-resolve-1".into(), "user".into()).unwrap_or_else(|e| {
+    approve_consent_request(&state, "c-resolve-1".into()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -3049,7 +3455,7 @@ fn test_consent_resolved_removes_from_pending() {
         1
     );
 
-    deny_consent_request(&state, "c-resolve-2".into(), "user".into(), None).unwrap_or_else(|e| {
+    deny_consent_request(&state, "c-resolve-2".into(), None).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
@@ -3062,6 +3468,409 @@ fn test_consent_resolved_removes_from_pending() {
             .len(),
         0
     );
+}
+
+/// P0-FINAL-GATE (item G): a decision delivered by the desktop interface is
+/// recorded with the fixed resolver label, in the consent row and the audit
+/// event, never with a name the caller chose. None of the five resolution
+/// functions takes a name: each records this label itself (pinned by
+/// `fg_approval`), so no command wrapper can pass another.
+#[test]
+fn p0_fg_desktop_consent_resolutions_record_the_interface_label() {
+    let resolver = super::DESKTOP_UI_RESOLVER;
+    assert_eq!(resolver, "desktop-ui (unverified)");
+    let state = AppState::new_in_memory();
+    enqueue_test_consent(&state, "c-label-approve", "a1", "fs.write", "Tier1");
+    enqueue_test_consent(&state, "c-label-deny", "a1", "fs.write", "Tier1");
+    for (id, goal) in [
+        ("c-label-batch-approve", "goal-label-approve"),
+        ("c-label-review", "goal-label-review"),
+        ("c-label-batch-deny", "goal-label-deny"),
+    ] {
+        enqueue_test_consent_json(
+            &state,
+            id,
+            "a1",
+            "cognitive.hitl_batch",
+            "Tier1",
+            json!({"summary": "batch", "goal_id": goal, "review_each_available": true}),
+        );
+    }
+    approve_consent_request(&state, "c-label-approve".into()).unwrap();
+    deny_consent_request(&state, "c-label-deny".into(), None).unwrap();
+    batch_approve_consents(&state, "goal-label-approve".into()).unwrap();
+    review_consent_batch(&state, "c-label-review".into()).unwrap();
+    batch_deny_consents(&state, "goal-label-deny".into(), None).unwrap();
+
+    let history = get_consent_history(&state, 10).unwrap();
+    for (id, status) in [
+        ("c-label-approve", "approved"),
+        ("c-label-deny", "denied"),
+        ("c-label-batch-approve", "approved"),
+        ("c-label-review", "review_each"),
+        ("c-label-batch-deny", "denied"),
+    ] {
+        let row = history.iter().find(|row| row.consent_id == id).unwrap();
+        assert_eq!(row.status, status);
+        assert_eq!(row.resolved_by.as_deref(), Some(resolver));
+    }
+    let events = state.db.load_audit_events(None, 100, 0).unwrap();
+    for (action, field) in [
+        ("consent_approved", "approved_by"),
+        ("consent_denied", "denied_by"),
+        ("consent_batch_approved", "approved_by"),
+        ("consent_batch_review_each", "reviewed_by"),
+        ("consent_batch_denied", "denied_by"),
+    ] {
+        let event = events
+            .iter()
+            .find(|event| event.detail_json.contains(action))
+            .unwrap_or_else(|| panic!("{action} audited"));
+        let detail: serde_json::Value = serde_json::from_str(&event.detail_json).unwrap();
+        assert_eq!(detail[field], json!(resolver), "{}", event.detail_json);
+    }
+}
+
+/// P0-FINAL-GATE (item G): an approval delivered over desktop IPC never
+/// reaches the kernel consent runtime. That queue records approvals by
+/// approver identity, and the desktop has none to give. Even when a kernel
+/// policy would accept the interface label as an approver, and a desktop
+/// consent row carries the kernel request's own id, approving the row leaves
+/// the kernel request unapproved: the governed operation still requires
+/// approval afterwards.
+#[test]
+fn p0_fg_desktop_approvals_do_not_reach_the_kernel_consent_queue() {
+    use nexus_kernel::consent::{GovernedOperation, HitlTier};
+    use nexus_kernel::errors::AgentError;
+    let resolver = super::DESKTOP_UI_RESOLVER;
+    let state = AppState::new_in_memory();
+    let agent = create_agent(&state, build_manifest("kernel-consent-agent")).unwrap();
+    let id = Uuid::parse_str(&agent).unwrap();
+    let request = |state: &AppState| {
+        state.supervisor.lock().unwrap().require_consent(
+            id,
+            GovernedOperation::TerminalCommand,
+            b"p0-fg-probe",
+        )
+    };
+    {
+        let mut supervisor = state.supervisor.lock().unwrap();
+        let handle = supervisor.get_agent_mut(id).unwrap();
+        handle.consent_runtime.policy_engine_mut().set_policy(
+            GovernedOperation::TerminalCommand,
+            HitlTier::Tier2,
+            vec![resolver.to_string()],
+        );
+    }
+    let request_id = match request(&state) {
+        Err(AgentError::ApprovalRequired { request_id }) => request_id,
+        other => panic!("the kernel must require approval first: {other:?}"),
+    };
+
+    enqueue_test_consent(
+        &state,
+        &request_id,
+        &agent,
+        "cognitive.hitl_approval",
+        "Tier2",
+    );
+    approve_consent_request(&state, request_id.clone()).unwrap();
+    let history = get_consent_history(&state, 10).unwrap();
+    let row = history
+        .iter()
+        .find(|row| row.consent_id == request_id)
+        .unwrap();
+    assert_eq!(row.status, "approved");
+
+    assert_eq!(
+        request(&state),
+        Err(AgentError::ApprovalRequired {
+            request_id: request_id.clone()
+        })
+    );
+}
+
+/// P0-FINAL-GATE (item G): accepting a self-improvement proposal in the
+/// interface is an IPC call, not the Tier3 HITL approval that invariant #9
+/// requires, and the pipeline applies nothing. The proposal is recorded as
+/// accepted and nothing more: its status stays `Proposed`, with no
+/// checkpoint and no canary, and the audit event says it was neither
+/// HITL-approved nor applied. It used to be recorded as validated with a
+/// fabricated `hitl:approved` signature, audited as applied, and put under
+/// canary "monitoring". A proposal that breaks another invariant is still
+/// refused, and nothing is recorded for it.
+#[test]
+fn p0_fg_self_improvement_acceptance_claims_no_hitl_approval() {
+    use crate::commands::self_improvement::self_improve_approve_proposal;
+    use nexus_self_improve::types::{
+        ImprovementProposal, ImprovementStatus, ProposedChange, RollbackPlan, RollbackStep,
+    };
+    let proposal = |fuel_cost: u64| {
+        let change = ProposedChange::ConfigChange {
+            key: "agent.response_timeout_ms".into(),
+            old_value: json!(5000),
+            new_value: json!(6000),
+            justification: "p0-fg latency".into(),
+        };
+        ImprovementProposal {
+            id: Uuid::new_v4(),
+            opportunity_id: Uuid::new_v4(),
+            domain: change.domain(),
+            description: "p0-fg proposal".into(),
+            change,
+            rollback_plan: RollbackPlan {
+                checkpoint_id: Uuid::new_v4(),
+                steps: vec![RollbackStep {
+                    description: "revert".into(),
+                    action: json!({"revert": true}),
+                }],
+                estimated_rollback_time_ms: 100,
+                automatic: true,
+            },
+            expected_tests: vec![],
+            proof: None,
+            generated_by: "test".into(),
+            fuel_cost,
+        }
+    };
+    let state = AppState::new_in_memory();
+    let accepted = proposal(100);
+    let over_budget = proposal(u64::MAX);
+    state
+        .self_improve_state
+        .lock()
+        .unwrap()
+        .proposals
+        .extend([accepted.clone(), over_budget.clone()]);
+
+    let recorded = self_improve_approve_proposal(&state, accepted.id.to_string()).unwrap();
+    assert_eq!(recorded["status"], json!("Proposed"));
+    assert_eq!(recorded["checkpoint_id"], json!(Uuid::nil()));
+    assert_eq!(recorded["canary_deadline"], json!(0));
+    {
+        let si = state.self_improve_state.lock().unwrap();
+        assert!(si.proposals.iter().all(|p| p.id != accepted.id));
+        let entry = si
+            .history
+            .iter()
+            .find(|entry| entry.proposal_id == accepted.id)
+            .unwrap();
+        assert_eq!(entry.status, ImprovementStatus::Proposed);
+    }
+    let events = state.audit.lock().unwrap().events().to_vec();
+    let event = events
+        .iter()
+        .find(|event| event.payload["proposal_id"] == json!(accepted.id.to_string()))
+        .expect("the acceptance is audited");
+    assert_eq!(event.payload["type"], json!("self_improvement_recorded"));
+    assert_eq!(event.payload["hitl_approved"], json!(false));
+    assert_eq!(event.payload["applied"], json!(false));
+    assert_eq!(
+        event.payload["resolved_by"],
+        json!(super::DESKTOP_UI_RESOLVER)
+    );
+    for claim in [
+        "self_improvement_applied",
+        "hitl:approved",
+        "hitl_signature",
+    ] {
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.payload.to_string().contains(claim)),
+            "{claim}"
+        );
+    }
+
+    // Only the broken invariant is reported: #9 is not claimed, so it is not
+    // part of the check.
+    let refused = self_improve_approve_proposal(&state, over_budget.id.to_string()).unwrap_err();
+    assert_eq!(
+        refused,
+        format!(
+            "Invariant violations: Invariant violation #5 Fuel limits enforced: proposal costs {} fuel but only 5000 remaining",
+            u64::MAX
+        )
+    );
+    let si = state.self_improve_state.lock().unwrap();
+    assert!(si.proposals.iter().any(|p| p.id == over_budget.id));
+    assert!(si
+        .history
+        .iter()
+        .all(|entry| entry.proposal_id != over_budget.id));
+}
+
+/// P0-FINAL-GATE (item G): the self-improvement report counts only applied
+/// changes. An accepted proposal is recorded as `Proposed` and nothing is
+/// applied. So after two acceptances the report shows no improvement
+/// applied, listed or active, and no fuel consumed. `cycles_run` counts the
+/// cycles actually run. (The report used to count every accepted proposal
+/// as applied, give `cycles_run` as the number of history entries and
+/// report the fuel budget as consumed.) A history entry whose status says it
+/// was applied is still counted, so the report is filtered, not emptied.
+#[test]
+fn p0_fg_self_improvement_report_counts_no_recorded_acceptance_as_applied() {
+    use crate::commands::self_improvement::{
+        self_improve_approve_proposal, self_improve_get_report, self_improve_run_cycle,
+    };
+    use nexus_self_improve::types::{
+        AppliedImprovement, ImprovementProposal, ImprovementStatus, ProposedChange, RollbackPlan,
+        RollbackStep,
+    };
+    let proposal = || {
+        let change = ProposedChange::ConfigChange {
+            key: "agent.response_timeout_ms".into(),
+            old_value: json!(5000),
+            new_value: json!(6000),
+            justification: "p0-fg report".into(),
+        };
+        ImprovementProposal {
+            id: Uuid::new_v4(),
+            opportunity_id: Uuid::new_v4(),
+            domain: change.domain(),
+            description: "p0-fg report proposal".into(),
+            change,
+            rollback_plan: RollbackPlan {
+                checkpoint_id: Uuid::new_v4(),
+                steps: vec![RollbackStep {
+                    description: "revert".into(),
+                    action: json!({"revert": true}),
+                }],
+                estimated_rollback_time_ms: 100,
+                automatic: true,
+            },
+            expected_tests: vec![],
+            proof: None,
+            generated_by: "test".into(),
+            fuel_cost: 100,
+        }
+    };
+    let state = AppState::new_in_memory();
+    let accepted = [proposal(), proposal()];
+    state
+        .self_improve_state
+        .lock()
+        .unwrap()
+        .proposals
+        .extend(accepted.clone());
+    for proposal in &accepted {
+        self_improve_approve_proposal(&state, proposal.id.to_string()).unwrap();
+    }
+    assert_eq!(state.self_improve_state.lock().unwrap().history.len(), 2);
+
+    let report = self_improve_get_report(&state, 30).unwrap();
+    assert_eq!(report["improvements_applied"], json!(0));
+    assert_eq!(report["improvements_committed"], json!(0));
+    assert_eq!(report["top_improvements"], json!([]));
+    assert_eq!(report["domains_active"], json!([]));
+    assert_eq!(report["cycles_run"], json!(0));
+    assert_eq!(report["fuel_consumed"], json!(0));
+
+    self_improve_run_cycle(&state).unwrap();
+    let report = self_improve_get_report(&state, 30).unwrap();
+    assert_eq!(report["cycles_run"], json!(1));
+    assert_eq!(report["improvements_applied"], json!(0));
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    state
+        .self_improve_state
+        .lock()
+        .unwrap()
+        .history
+        .push(AppliedImprovement {
+            id: Uuid::new_v4(),
+            proposal_id: Uuid::new_v4(),
+            checkpoint_id: Uuid::new_v4(),
+            applied_at: now,
+            status: ImprovementStatus::Committed,
+            canary_deadline: 0,
+        });
+    let report = self_improve_get_report(&state, 30).unwrap();
+    assert_eq!(report["improvements_applied"], json!(1));
+    assert_eq!(report["improvements_committed"], json!(1));
+}
+
+/// P0-FINAL-GATE (item K, cross-stream request from stream 6): a parallel
+/// simulation request for a variant count outside 1..=10 is refused before
+/// the simulation model is built, the seed is parsed or any variant is
+/// started. No model is built or called, and nothing is audited. In-range
+/// requests run as before and do call the model.
+#[test]
+fn p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call() {
+    use crate::commands::consent::run_parallel_simulation_reports_with;
+    use nexus_kernel::cognitive::PlannerLlm;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct CountingLlm(Arc<AtomicUsize>);
+    impl PlannerLlm for CountingLlm {
+        fn plan_query(&self, prompt: &str) -> Result<String, nexus_kernel::errors::AgentError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            crate::commands::cognitive::TestSimulationPlannerLlm.plan_query(prompt)
+        }
+    }
+
+    let state = AppState::new_in_memory();
+    let built = Arc::new(AtomicUsize::new(0));
+    let queries = Arc::new(AtomicUsize::new(0));
+    let model = || {
+        let (built, queries) = (built.clone(), queries.clone());
+        move || -> Arc<dyn PlannerLlm> {
+            built.fetch_add(1, Ordering::SeqCst);
+            Arc::new(CountingLlm(queries))
+        }
+    };
+    let seed = "Macro outlook with rate pressure.";
+
+    for variants in [0, 11] {
+        assert_eq!(
+            run_parallel_simulation_reports_with(&state, seed.into(), variants, model())
+                .map(|reports| reports.len()),
+            Err("variant_count must be between 1 and 10".to_string()),
+            "{variants}"
+        );
+    }
+    assert_eq!(built.load(Ordering::SeqCst), 0, "no model is built");
+    assert_eq!(queries.load(Ordering::SeqCst), 0, "no model is called");
+    let events = state.db.load_audit_events(None, 100, 0).unwrap();
+    assert!(!events
+        .iter()
+        .any(|event| event.detail_json.contains("run_parallel_simulations")));
+
+    for variants in [1, 10] {
+        let reports =
+            run_parallel_simulation_reports_with(&state, seed.into(), variants, model()).unwrap();
+        assert_eq!(reports.len(), variants as usize);
+    }
+    assert_eq!(built.load(Ordering::SeqCst), 2);
+    assert!(queries.load(Ordering::SeqCst) > 0);
+}
+
+/// P0-FINAL-GATE (item K, cross-stream request from stream 6): an adversarial
+/// session outside 1..=50 rounds is refused before the arena is built or any
+/// round is allocated or run. The arena calls no model. In-range sessions run
+/// as before, with one result per round.
+#[test]
+fn p0_fg_adversarial_session_rounds_are_bounded_before_any_work() {
+    use crate::commands::consent::run_adversarial_session;
+    for rounds in [0, 51] {
+        assert_eq!(
+            run_adversarial_session("attacker".into(), "defender".into(), rounds),
+            Err("rounds must be between 1 and 50".to_string()),
+            "{rounds}"
+        );
+    }
+    for rounds in [1, 50] {
+        let session =
+            run_adversarial_session("attacker".into(), "defender".into(), rounds).unwrap();
+        assert_eq!(session["rounds"], json!(rounds));
+        assert_eq!(
+            session["results"].as_array().map(Vec::len),
+            Some(rounds as usize)
+        );
+    }
 }
 
 // ── Messaging Gateway Tests ──
@@ -3218,7 +4027,9 @@ fn p0_002c4d0_code_only(source: &str) -> String {
 /// P0-002C5C: a stored agent record is not authority. A record naming a
 /// capability outside the registry (such as `a2a.delegate`) or an undefined
 /// autonomy level is not restored; a record a validated manifest could have
-/// produced is.
+/// produced is. (Since the Final Gate the highest restorable level is L5: an
+/// L6 record is never registered, see
+/// `p0_fg_stored_transcendent_records_are_not_registered_and_stay_stored`.)
 #[test]
 fn p0_002c5c_persisted_agents_holding_unregistered_authority_are_not_restored() {
     let state = AppState::new_in_memory();
@@ -3246,7 +4057,7 @@ fn p0_002c5c_persisted_agents_holding_unregistered_authority_are_not_restored() 
             manifest("unknown-agent", &["llm.query", "root.all"], 1),
         ),
         (beyond, manifest("beyond-agent", &["llm.query"], 7)),
-        (clean, manifest("clean-agent", &["llm.query", "fs.read"], 6)),
+        (clean, manifest("clean-agent", &["llm.query", "fs.read"], 5)),
     ] {
         state
             .db
@@ -3265,6 +4076,90 @@ fn p0_002c5c_persisted_agents_holding_unregistered_authority_are_not_restored() 
         restored.manifest.capabilities,
         vec!["llm.query".to_string(), "fs.read".to_string()]
     );
+}
+
+/// P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human approval
+/// the backend cannot verify, so restore registers no L6 record: not one
+/// approved over IPC before the closure (running or stopped), and not a
+/// creation request that was never approved (its `pending_approval`
+/// placeholder used to come back as a registered L6 agent after a restart).
+/// The stored records are left exactly as they were. An L5 record is
+/// restored as before.
+#[test]
+fn p0_fg_stored_transcendent_records_are_not_registered_and_stay_stored() {
+    let state = AppState::new_in_memory();
+    let manifest = |name: &str, autonomy: u8| {
+        json!({
+            "name": name,
+            "version": "1.0.0",
+            "capabilities": ["llm.query"],
+            "fuel_budget": 1000,
+            "autonomy_level": autonomy,
+        })
+        .to_string()
+    };
+    let running = Uuid::new_v4();
+    let stopped = Uuid::new_v4();
+    let placeholder = Uuid::new_v4();
+    let below = Uuid::new_v4();
+    for (id, json, stored_state, level) in [
+        (running, manifest("approved-transcendent", 6), "running", 6),
+        (stopped, manifest("stopped-transcendent", 6), "stopped", 6),
+        (
+            placeholder,
+            manifest("requested-transcendent", 6),
+            "pending_approval",
+            6,
+        ),
+        (below, manifest("sovereign-agent", 5), "running", 5),
+    ] {
+        state
+            .db
+            .save_agent(&id.to_string(), &json, stored_state, level, "native")
+            .unwrap();
+    }
+    let snapshot = |state: &AppState, id: Uuid| {
+        state
+            .db
+            .list_agents()
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id.to_string())
+            .map(|row| {
+                (
+                    row.manifest_json,
+                    row.state,
+                    row.was_running,
+                    row.autonomy_level,
+                    row.execution_mode,
+                    row.updated_at,
+                )
+            })
+            .expect("stored record")
+    };
+    let before: Vec<_> = [running, stopped, placeholder]
+        .into_iter()
+        .map(|id| snapshot(&state, id))
+        .collect();
+
+    crate::commands::agents::restore_persisted_agents(&state);
+
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    for refused in [running, stopped, placeholder] {
+        assert!(supervisor.get_agent(refused).is_none(), "{refused}");
+    }
+    assert!(supervisor.get_agent(below).is_some());
+    assert!(supervisor.health_check().iter().all(|status| supervisor
+        .get_agent(status.id)
+        .unwrap()
+        .autonomy_level
+        < 6));
+    drop(supervisor);
+    let after: Vec<_> = [running, stopped, placeholder]
+        .into_iter()
+        .map(|id| snapshot(&state, id))
+        .collect();
+    assert_eq!(after, before);
 }
 
 #[test]

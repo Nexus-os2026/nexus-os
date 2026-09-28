@@ -1538,6 +1538,19 @@ impl AppState {
                     continue;
                 }
             };
+            // P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a
+            // human approval the backend cannot verify, so an L6 prebuilt
+            // manifest is not loaded on any run: it is not registered, stored,
+            // named or published, as `create_agent` writes nothing for L6. A
+            // record an earlier build stored stays as it is; restore
+            // registers none.
+            if manifest.autonomy_level == Some(6) {
+                eprintln!(
+                    "prebuilt: {} not loaded: transcendent (L6) agents are unavailable in Phase Zero",
+                    manifest.name
+                );
+                continue;
+            }
             let manifest_description = parse_manifest_description(&manifest_json);
 
             if existing_names.contains(&manifest.name)

@@ -94,6 +94,19 @@ use uuid::Uuid;
 
 // ── Consent / HITL Approval Commands ──
 
+/// Operation type of an L6 (transcendent) creation or activation request.
+/// P0-FINAL-GATE (item G): no longer enqueued; one stored before the closure
+/// can be denied but never approved.
+const TRANSCENDENT_CREATION: &str = "transcendent_creation";
+
+/// P0-FINAL-GATE (item G): the resolver recorded, in the consent row and the
+/// audit event, for a decision delivered by the desktop interface. A name the
+/// caller supplies is not an approver identity, and no human approver is
+/// verified, so the record says only where the decision came from. The
+/// resolution functions below take no resolver name and use this label
+/// themselves, so no caller can record another.
+pub const DESKTOP_UI_RESOLVER: &str = "desktop-ui (unverified)";
+
 /// Notification payload emitted to the frontend when a consent request arrives.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsentNotification {
@@ -249,7 +262,6 @@ pub struct ConsentResolutionMeta {
 pub fn approve_consent_request(
     state: &AppState,
     consent_id: String,
-    approved_by: String,
 ) -> Result<ConsentResolutionMeta, String> {
     // Look up agent_id from pending consents in DB
     let pending = state
@@ -260,6 +272,17 @@ pub fn approve_consent_request(
         .iter()
         .find(|r| r.id == consent_id)
         .ok_or_else(|| format!("consent request '{consent_id}' not found or already resolved"))?;
+    // P0-FINAL-GATE (item G): creating or starting an L6 (transcendent) agent
+    // needs a human approval the backend cannot verify, and this IPC call is
+    // not one. A transcendent request (from before this closure) is refused
+    // before it is resolved or any agent is created or started; it stays
+    // pending and can still be denied.
+    if consent_row.operation_type == TRANSCENDENT_CREATION {
+        return Err(crate::phase0_surface::closed(
+            "approve_consent_request",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
+    }
     let agent_id_str = consent_row.agent_id.clone();
     let op_json: serde_json::Value =
         serde_json::from_str(&consent_row.operation_json).unwrap_or(json!({}));
@@ -272,54 +295,13 @@ pub fn approve_consent_request(
     // 1. Resolve in database
     state
         .db
-        .resolve_consent(&consent_id, "approved", &approved_by)
+        .resolve_consent(&consent_id, "approved", DESKTOP_UI_RESOLVER)
         .map_err(|e| format!("db error: {e}"))?;
 
-    if consent_row.operation_type == "transcendent_creation" {
-        match op_json
-            .get("mode")
-            .and_then(|value| value.as_str())
-            .unwrap_or("create_new")
-        {
-            "activate_existing" => {
-                let parsed = parse_agent_id(&agent_id_str)?;
-                let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-                supervisor.restart_agent(parsed).map_err(agent_error)?;
-                // Best-effort: persist state to DB; in-memory supervisor already updated
-                let _ = state.db.update_agent_state(&agent_id_str, "running");
-                update_last_action(state, parsed, "started");
-            }
-            _ => {
-                let manifest_json = op_json
-                    .get("manifest_json")
-                    .and_then(|value| value.as_str())
-                    .ok_or_else(|| {
-                        "approved transcendent creation missing manifest_json payload".to_string()
-                    })?;
-                let manifest = parse_agent_manifest_json(manifest_json)?;
-                let created_id =
-                    create_agent_immediately(state, manifest, manifest_json.to_string())?;
-                // Best-effort: remove pending placeholder; new agent already created
-                let _ = state.db.delete_agent(&agent_id_str);
-                state.log_event(
-                    SYSTEM_UUID,
-                    EventType::UserAction,
-                    json!({
-                        "action": "transcendent_creation_approved",
-                        "consent_id": consent_id,
-                        "created_agent_id": created_id,
-                    }),
-                );
-            }
-        }
-    }
-
-    // 2. Approve in kernel consent runtime (best-effort — agent may not exist in supervisor)
-    if let Ok(agent_uuid) = Uuid::parse_str(&agent_id_str) {
-        let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-        // Best-effort: forward approval to kernel consent runtime; agent may not have a pending consent
-        let _ = supervisor.approve_consent(agent_uuid, &consent_id, &approved_by);
-    }
+    // 2. P0-FINAL-GATE (item G): the decision is not forwarded to the kernel
+    // consent runtime. That queue records approvals by approver identity, and
+    // this one has none: the resolver is a label, and an IPC call is not the
+    // human approval the queue exists to record.
     // Best-effort: unblock cognitive loop step waiting on this consent
     let _ = state.cognitive_runtime.approve_blocked_step(&agent_id_str);
     state.wake_blocked_consent_wait(&agent_id_str, &consent_id);
@@ -340,7 +322,7 @@ pub fn approve_consent_request(
         json!({
             "action": "consent_approved",
             "consent_id": consent_id,
-            "approved_by": approved_by,
+            "approved_by": DESKTOP_UI_RESOLVER,
         }),
     );
 
@@ -353,7 +335,6 @@ pub fn approve_consent_request(
 pub(crate) fn deny_consent_request(
     state: &AppState,
     consent_id: String,
-    denied_by: String,
     reason: Option<String>,
 ) -> Result<ConsentResolutionMeta, String> {
     // Look up agent_id from pending consents in DB
@@ -377,10 +358,10 @@ pub(crate) fn deny_consent_request(
     // 1. Resolve in database
     state
         .db
-        .resolve_consent(&consent_id, "denied", &denied_by)
+        .resolve_consent(&consent_id, "denied", DESKTOP_UI_RESOLVER)
         .map_err(|e| format!("db error: {e}"))?;
 
-    if consent_row.operation_type == "transcendent_creation"
+    if consent_row.operation_type == TRANSCENDENT_CREATION
         && op_json
             .get("mode")
             .and_then(|value| value.as_str())
@@ -395,7 +376,7 @@ pub(crate) fn deny_consent_request(
     if let Ok(agent_uuid) = Uuid::parse_str(&agent_id_str) {
         let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
         // Best-effort: forward denial to kernel consent runtime; agent may not have a pending consent
-        let _ = supervisor.deny_consent(agent_uuid, &consent_id, &denied_by);
+        let _ = supervisor.deny_consent(agent_uuid, &consent_id, DESKTOP_UI_RESOLVER);
     }
     let deny_reason = reason
         .clone()
@@ -413,7 +394,7 @@ pub(crate) fn deny_consent_request(
         json!({
             "action": "consent_denied",
             "consent_id": consent_id,
-            "denied_by": denied_by,
+            "denied_by": DESKTOP_UI_RESOLVER,
             "reason": reason,
         }),
     );
@@ -427,12 +408,22 @@ pub(crate) fn deny_consent_request(
 pub(crate) fn batch_approve_consents(
     state: &AppState,
     goal_id: String,
-    approved_by: String,
 ) -> Result<(Vec<String>, ConsentResolutionMeta), String> {
     let consent_rows = consent_rows_for_goal(state, &goal_id)?;
     if consent_rows.is_empty() {
         return Err(format!(
             "no pending consent requests found for goal '{goal_id}'"
+        ));
+    }
+    // P0-FINAL-GATE (item G): a batch approval cannot resolve a transcendent
+    // request either; nothing in the batch is resolved.
+    if consent_rows
+        .iter()
+        .any(|row| row.operation_type == TRANSCENDENT_CREATION)
+    {
+        return Err(crate::phase0_surface::closed(
+            "batch_approve_consents",
+            crate::phase0_surface::Closure::ApprovalRequired,
         ));
     }
 
@@ -455,7 +446,7 @@ pub(crate) fn batch_approve_consents(
     for row in &consent_rows {
         state
             .db
-            .resolve_consent(&row.id, "approved", &approved_by)
+            .resolve_consent(&row.id, "approved", DESKTOP_UI_RESOLVER)
             .map_err(|e| format!("db error: {e}"))?;
         resolved_ids.push(row.id.clone());
     }
@@ -479,7 +470,7 @@ pub(crate) fn batch_approve_consents(
             "action": "consent_batch_approved",
             "goal_id": goal_id,
             "consent_ids": resolved_ids.clone(),
-            "approved_by": approved_by,
+            "approved_by": DESKTOP_UI_RESOLVER,
             "approved_steps": approval_count,
         }),
     );
@@ -496,7 +487,6 @@ pub(crate) fn batch_approve_consents(
 pub(crate) fn review_consent_batch(
     state: &AppState,
     consent_id: String,
-    reviewed_by: String,
 ) -> Result<ConsentResolutionMeta, String> {
     let pending = state
         .db
@@ -517,7 +507,7 @@ pub(crate) fn review_consent_batch(
 
     state
         .db
-        .resolve_consent(&consent_id, "review_each", &reviewed_by)
+        .resolve_consent(&consent_id, "review_each", DESKTOP_UI_RESOLVER)
         .map_err(|e| format!("db error: {e}"))?;
     // Best-effort: enable review-each mode so subsequent steps require individual approval
     let _ = state
@@ -531,7 +521,7 @@ pub(crate) fn review_consent_batch(
         json!({
             "action": "consent_batch_review_each",
             "consent_id": consent_id,
-            "reviewed_by": reviewed_by,
+            "reviewed_by": DESKTOP_UI_RESOLVER,
         }),
     );
 
@@ -544,7 +534,6 @@ pub(crate) fn review_consent_batch(
 pub(crate) fn batch_deny_consents(
     state: &AppState,
     goal_id: String,
-    denied_by: String,
     reason: Option<String>,
 ) -> Result<(Vec<String>, ConsentResolutionMeta), String> {
     let consent_rows = consent_rows_for_goal(state, &goal_id)?;
@@ -570,7 +559,7 @@ pub(crate) fn batch_deny_consents(
     for row in &consent_rows {
         state
             .db
-            .resolve_consent(&row.id, "denied", &denied_by)
+            .resolve_consent(&row.id, "denied", DESKTOP_UI_RESOLVER)
             .map_err(|e| format!("db error: {e}"))?;
         resolved_ids.push(row.id.clone());
     }
@@ -590,7 +579,7 @@ pub(crate) fn batch_deny_consents(
             "action": "consent_batch_denied",
             "goal_id": goal_id,
             "consent_ids": resolved_ids.clone(),
-            "denied_by": denied_by,
+            "denied_by": DESKTOP_UI_RESOLVER,
             "reason": reason,
         }),
     );
@@ -1163,12 +1152,41 @@ pub(crate) fn list_simulations(state: &AppState) -> Result<Vec<SimulationSummary
         .collect()
 }
 
+/// Most variants one parallel-simulation request may run. P0-FINAL-GATE
+/// (item K): the literal 10 mirrors the kernel's authoritative bound,
+/// `nexus_kernel::simulation::runtime::MAX_PARALLEL_SIMULATION_VARIANTS`,
+/// which stream 6 adds; the coordinator reconciles the two at composition.
+const MAX_PARALLEL_SIMULATION_VARIANTS: u32 = 10;
+
+/// Most rounds one adversarial session may run. P0-FINAL-GATE (item K): the
+/// authoritative bound is the kernel arena's (`kernel/src/immune/arena.rs`,
+/// stream 6); this is the desktop's early check, so it does no work first.
+const MAX_ADVERSARIAL_ROUNDS: u32 = 50;
+
 pub(crate) fn run_parallel_simulation_reports(
     state: &AppState,
     seed_text: String,
     variant_count: u32,
 ) -> Result<Vec<PredictionReport>, String> {
-    let llm = build_simulation_llm();
+    run_parallel_simulation_reports_with(state, seed_text, variant_count, build_simulation_llm)
+}
+
+/// [`run_parallel_simulation_reports`] with the simulation model supplied by
+/// `simulation_llm`, which is built only for an in-range request.
+pub(crate) fn run_parallel_simulation_reports_with(
+    state: &AppState,
+    seed_text: String,
+    variant_count: u32,
+    simulation_llm: impl FnOnce() -> Arc<dyn nexus_kernel::cognitive::PlannerLlm>,
+) -> Result<Vec<PredictionReport>, String> {
+    // P0-FINAL-GATE (item K): an out-of-range variant count is refused before
+    // the model is built, the seed is parsed or any variant is started.
+    if !(1..=MAX_PARALLEL_SIMULATION_VARIANTS).contains(&variant_count) {
+        return Err(format!(
+            "variant_count must be between 1 and {MAX_PARALLEL_SIMULATION_VARIANTS}"
+        ));
+    }
+    let llm = simulation_llm();
     let seed = parse_seed(&seed_text, llm.as_ref()).map_err(|error| error.to_string())?;
     let reports =
         kernel_run_parallel_simulations(&seed, variant_count as usize, llm, state.db.clone())
@@ -1250,6 +1268,13 @@ pub(crate) fn run_adversarial_session(
     defender_id: String,
     rounds: u32,
 ) -> Result<serde_json::Value, String> {
+    // P0-FINAL-GATE (item K): an out-of-range round count is refused before
+    // the arena is built or any round is allocated or run.
+    if !(1..=MAX_ADVERSARIAL_ROUNDS).contains(&rounds) {
+        return Err(format!(
+            "rounds must be between 1 and {MAX_ADVERSARIAL_ROUNDS}"
+        ));
+    }
     let mut arena = nexus_kernel::immune::AdversarialArena::new();
     let session = arena.run_session(&attacker_id, &defender_id, rounds);
     serde_json::to_value(&session).map_err(|e| e.to_string())

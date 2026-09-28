@@ -101,6 +101,16 @@ pub(crate) fn assign_agent_goal(
     priority: u8,
     model_override: Option<String>,
 ) -> Result<String, String> {
+    // P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human
+    // approval the backend cannot verify, so a goal for one is refused before
+    // the rate limit, the input check, the assignment or the audit event.
+    // `execute_agent_goal`, and every caller of it, reaches this check first.
+    if is_transcendent_agent(state, &agent_id) {
+        return Err(crate::phase0_surface::closed(
+            "assign_agent_goal",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
+    }
     state.check_rate(nexus_kernel::rate_limit::RateCategory::AgentExecute)?;
     state.validate_input(&goal_description)?;
     let effective_goal_description = goal_with_manifest_context(
@@ -122,6 +132,50 @@ pub(crate) fn assign_agent_goal(
         json!({"action": "assign_agent_goal", "agent_id": agent_id, "goal_id": goal_id}),
     );
     Ok(goal_id)
+}
+
+/// Start an autonomous agent loop: register the agent with the scheduler to
+/// run its default goal (or `goal_override`) every `interval_seconds`
+/// (default 60).
+///
+/// P0-FINAL-GATE (item G): an L6 (transcendent) agent is refused before
+/// anything is read from its manifest or registered with the scheduler.
+pub(crate) fn start_autonomous_loop(
+    state: &AppState,
+    agent_id: String,
+    interval_seconds: Option<u64>,
+    goal_override: Option<String>,
+) -> Result<(), String> {
+    if is_transcendent_agent(state, &agent_id) {
+        return Err(crate::phase0_surface::closed(
+            "start_autonomous_loop",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
+    }
+    let interval = interval_seconds.unwrap_or(60);
+    // Build a cron expression from interval: "0 */N * * * *" (every N minutes) or
+    // use seconds-level scheduling for intervals < 60s.
+    let cron_expr = if interval < 60 {
+        format!("*/{interval} * * * * *") // every N seconds
+    } else {
+        let mins = (interval / 60).max(1);
+        format!("0 */{mins} * * * *") // every N minutes
+    };
+
+    let manifest = find_manifest(state, &agent_id);
+    let goal = goal_override
+        .or_else(|| manifest.as_ref().and_then(|m| m.default_goal.clone()))
+        .unwrap_or_else(|| "Execute autonomous task".to_string());
+    let description = find_manifest_description(state, &agent_id);
+
+    let full_goal = goal_with_manifest_context(&agent_id, &goal, description.as_deref());
+
+    state
+        .agent_scheduler
+        .register_agent(&agent_id, &cron_expr, &full_goal)
+        .map_err(agent_error)?;
+
+    Ok(())
 }
 
 /// Normalize a raw model override value into `Option<String>`.
@@ -1258,8 +1312,13 @@ impl nexus_kernel::scheduler::ScheduleGoalCallback for RunnerGoalCallback {
     }
 }
 
+/// P0-FINAL-GATE (item G): the bounded reason an enabled Warden review gives
+/// when no Warden agent can run.
+pub(crate) const WARDEN_REVIEW_UNAVAILABLE: &str =
+    "Warden review is unavailable in Phase Zero: no Warden agent can run";
+
 pub(crate) struct WardenReviewEngine {
-    state: AppState,
+    pub(crate) state: AppState,
 }
 
 impl nexus_kernel::actuators::ActionReviewEngine for WardenReviewEngine {
@@ -1290,7 +1349,7 @@ impl nexus_kernel::actuators::ActionReviewEngine for WardenReviewEngine {
 
 impl WardenReviewEngine {
     // Keep the network boundary injectable while exercising real review/audit/consent logic.
-    fn review_with(
+    pub(crate) fn review_with(
         &self,
         actor_agent_id: &str,
         actor_name: &str,
@@ -1331,8 +1390,13 @@ impl WardenReviewEngine {
                     })
                 })
             else {
-                return Ok(nexus_kernel::actuators::ActionReviewDecision::Allow {
-                    reason: "Warden inactive".to_string(),
+                // P0-FINAL-GATE (item G): an enabled review that no Warden
+                // can give is not an approval. The prebuilt Warden is L6 and
+                // is never registered in Phase Zero, so this fails closed with
+                // a bounded reason. No model is resolved or queried, and the
+                // engine audits and enqueues nothing.
+                return Ok(nexus_kernel::actuators::ActionReviewDecision::Deny {
+                    reason: WARDEN_REVIEW_UNAVAILABLE.to_string(),
                 });
             };
             (id, model, name)
