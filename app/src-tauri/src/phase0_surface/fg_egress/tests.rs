@@ -749,6 +749,43 @@ fn assert_downloads_end_at_exit(lib_rs: &str, model_hub: &str) {
     );
 }
 
+/// Final Gate item B: a downloaded model is registered with Ollama only at
+/// the authorized Ollama address (the operator's `OLLAMA_URL` or the fixed
+/// default), and not at all when that address is unavailable. `model_hub.rs`
+/// names no Ollama address of its own (its registration test posts to a
+/// loopback stand-in).
+#[test]
+fn p0_fg_model_registration_uses_the_authorized_ollama_address() {
+    let model_hub = include_str!("../../../../../connectors/llm/src/model_hub.rs");
+    assert_model_registration_is_authorized(LIB_RS, model_hub);
+    assert_model_registration_is_authorized(&crlf(LIB_RS), &crlf(model_hub));
+}
+
+/// The guard above, for either line ending.
+fn assert_model_registration_is_authorized(lib_rs: &str, model_hub: &str) {
+    let model_hub = production_text(&lf(model_hub));
+    assert!(
+        !model_hub.contains("11434"),
+        "model_hub.rs names an address"
+    );
+    assert!(
+        !model_hub.contains("localhost"),
+        "model_hub.rs names a host"
+    );
+    let lib_rs = without_whitespace(&production_text(&lf(lib_rs)));
+    assert_eq!(
+        lib_rs
+            .matches("register_downloaded_model_with_ollama(")
+            .count(),
+        1
+    );
+    assert!(lib_rs.contains(&without_whitespace(
+        "if let Ok(ollama_base) = super::authorized_ollama_base_url() {
+            let _ = super::model_hub::register_downloaded_model_with_ollama(
+                &ollama_base,"
+    )));
+}
+
 /// Final Gate item C (redaction): a messaging transport error names no
 /// request URL, so a stored Telegram bot token, which travels in the URL
 /// path, never reaches the interface through an error. The failing request
