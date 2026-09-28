@@ -45,3 +45,8 @@ PR #15: open, draft, unmerged, auto-merge off, head `1b049e15`, base `main@80640
 - Reconnaissance complete for all six workstreams (see FINDINGS-MAP.md).
 - Scaffold `63eb0d07` on `implement/p0-final-gate-closure`; component branches fast-forwarded to it.
 - Six workstreams implementing (phase 2).
+- 2026-09-28 ~17:40Z: a usage limit stopped all six workstream agents mid-implementation.
+  No build, fast-local or hosted run was active. Partial work stayed in each component
+  worktree (egress 2 commits, standalone 3, approval 1, reliability 2, plus uncommitted
+  changes); nothing was pushed. At 18:18Z each agent was resumed on its own worktree
+  after verifying its working tree. Hosted budget unchanged: closure candidate 0 of 3.
