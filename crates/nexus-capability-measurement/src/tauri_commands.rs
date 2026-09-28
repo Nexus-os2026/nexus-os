@@ -1,8 +1,10 @@
 //! Frontend integration types and handler logic for Tauri commands.
 //!
 //! This module provides the request/response types and state management
-//! without depending on Tauri. The actual `#[tauri::command]` wrappers live
-//! in `app/src-tauri/src/main.rs` and delegate to functions here.
+//! without depending on Tauri. The desktop's `#[tauri::command]` wrappers live
+//! in `app/src-tauri/src/commands/crate_bridges.rs` and delegate to functions
+//! here. In Phase Zero no desktop command reaches the real-inference runners
+//! (`run_batch_evaluation`, `run_ab_validation`); their route is closed.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -287,20 +289,17 @@ pub fn evaluate_single_response(
     })
 }
 
-/// Run batch evaluation with real LLM inference. Requires GROQ_API_KEY or
-/// NVIDIA_NIM_API_KEY. Returns error if no API key is configured.
+/// Run batch evaluation with real LLM inference through the Groq-endpoint
+/// client. Requires GROQ_API_KEY; no other provider's key is used (P0-FINAL-GATE
+/// C5). Returns an error if it is not configured.
 pub fn run_batch_evaluation(
     state: &MeasurementState,
     agent_entries: &[(String, u8)],
 ) -> Result<crate::evaluation::batch::BatchResult, String> {
-    let api_key = std::env::var("GROQ_API_KEY")
-        .or_else(|_| std::env::var("NVIDIA_NIM_API_KEY"))
-        .or_else(|_| std::env::var("OPENROUTER_API_KEY"))
-        .map_err(|_| {
-            "Real inference requires GROQ_API_KEY, NVIDIA_NIM_API_KEY, or OPENROUTER_API_KEY. \
-             Configure one to run real validation."
-                .to_string()
-        })?;
+    let api_key = crate::evaluation::nim_client::groq_api_key_from_env().ok_or_else(|| {
+        "Real inference requires GROQ_API_KEY (the evaluation client posts only to Groq)."
+            .to_string()
+    })?;
     let client = std::sync::Arc::new(crate::evaluation::nim_client::NimClient::new(
         api_key,
         "llama-3.1-8b-instant".into(),
@@ -394,19 +393,16 @@ pub fn upload_to_darwin(
 }
 
 /// Run A/B validation: baseline (fixed model) vs routed (predictive model selection).
-/// Requires GROQ_API_KEY or NVIDIA_NIM_API_KEY for real LLM inference.
+/// Both runs use the Groq-endpoint client, so this requires GROQ_API_KEY; no
+/// other provider's key is used (P0-FINAL-GATE C5).
 pub fn run_ab_validation(
     state: &MeasurementState,
     agent_entries: &[(String, u8)],
 ) -> Result<crate::evaluation::ab_validation::ABComparisonResult, String> {
-    let api_key = std::env::var("GROQ_API_KEY")
-        .or_else(|_| std::env::var("NVIDIA_NIM_API_KEY"))
-        .or_else(|_| std::env::var("OPENROUTER_API_KEY"))
-        .map_err(|_| {
-            "Real A/B validation requires GROQ_API_KEY, NVIDIA_NIM_API_KEY, or OPENROUTER_API_KEY. \
-             Configure one to compare real LLM performance."
-                .to_string()
-        })?;
+    let api_key = crate::evaluation::nim_client::groq_api_key_from_env().ok_or_else(|| {
+        "Real A/B validation requires GROQ_API_KEY (the evaluation client posts only to Groq)."
+            .to_string()
+    })?;
 
     // Baseline: small model (simulates unrouted fixed assignment)
     let baseline_client = std::sync::Arc::new(crate::evaluation::nim_client::NimClient::new(

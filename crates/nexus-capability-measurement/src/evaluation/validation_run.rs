@@ -230,7 +230,8 @@ pub fn execute_validation_run(
 }
 
 /// Execute a validation run using REAL Groq API calls with LLM-as-judge scoring.
-/// Requires GROQ_API_KEY environment variable.
+/// Requires the GROQ_API_KEY environment variable; no other provider's key is
+/// used, because `NimClient` posts only to the Groq endpoint (P0-FINAL-GATE C5).
 ///
 /// Uses `llama-3.1-8b-instant` for agent responses and `llama-3.3-70b-versatile`
 /// as the judge model (stronger model evaluates weaker model's output).
@@ -240,35 +241,23 @@ pub fn execute_validation_run_real(
     agents_dir: &Path,
 ) -> Result<ValidationRunOutput, String> {
     use crate::evaluation::comparator::ResponseComparator;
-    use crate::evaluation::nim_client::NimClient;
+    use crate::evaluation::nim_client::{groq_api_key_from_env, NimClient};
     use std::sync::Arc;
 
     let started_at = epoch_secs();
     let start = std::time::Instant::now();
 
-    let api_key = std::env::var("GROQ_API_KEY")
-        .or_else(|_| std::env::var("OPENROUTER_API_KEY"))
-        .map_err(|_| "Neither GROQ_API_KEY nor OPENROUTER_API_KEY is set".to_string())?;
-
-    let use_openrouter = std::env::var("GROQ_API_KEY").is_err();
+    let api_key = groq_api_key_from_env().ok_or_else(|| {
+        "GROQ_API_KEY is not set (the evaluation client posts only to Groq)".to_string()
+    })?;
 
     // Agent model — fast, cheap
-    let agent_client: std::sync::Arc<NimClient> = if use_openrouter {
-        // OpenRouter uses same OpenAI-compatible format — NimClient works with endpoint swap
-        NimClient::shared(
-            api_key.clone(),
-            "meta-llama/llama-3.3-70b-instruct:free".into(),
-        )
-    } else {
-        NimClient::shared(api_key.clone(), "llama-3.1-8b-instant".into())
-    };
+    let agent_client: std::sync::Arc<NimClient> =
+        NimClient::shared(api_key.clone(), "llama-3.1-8b-instant".into());
 
     // Judge model — stronger, for LLM-as-judge scoring
-    let judge_client: std::sync::Arc<NimClient> = if use_openrouter {
-        NimClient::shared(api_key, "meta-llama/llama-3.3-70b-instruct".into())
-    } else {
-        NimClient::shared(api_key, "llama-3.3-70b-versatile".into())
-    };
+    let judge_client: std::sync::Arc<NimClient> =
+        NimClient::shared(api_key, "llama-3.3-70b-versatile".into());
 
     let all_agents = discover_agents(agents_dir);
     let agents: Vec<&AgentManifestEntry> = if config.agent_ids.is_empty() {
