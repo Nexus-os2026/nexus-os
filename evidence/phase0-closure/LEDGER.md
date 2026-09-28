@@ -50,3 +50,22 @@ PR #15: open, draft, unmerged, auto-merge off, head `1b049e15`, base `main@80640
   worktree (egress 2 commits, standalone 3, approval 1, reliability 2, plus uncommitted
   changes); nothing was pushed. At 18:18Z each agent was resumed on its own worktree
   after verifying its working tree. Hosted budget unchanged: closure candidate 0 of 3.
+
+## Component status (2026-09-28 ~19:30Z; all component branches local)
+
+| Stream | Items | Component head | State |
+|---|---|---|---|
+| S1 webview | D | `14bde0ed` (+ live native harness in progress) | phase 2 done; follow-up in progress |
+| S2 secrets | A, E, H | `dbeb892f` (+ follow-up `c9f82ff5`…) | phase 2 done; follow-up in progress |
+| S3 egress | B, C (argv), F, I | `693873a0` (+ I5 in progress) | phase 2 done; follow-up in progress |
+| S4 standalone | J2-J5 | `9b19d6c5` | done; composed at `f3c91e0a` |
+| S5 approval | G, C5 | `3f712633` | internal review: NOT READY (repairs to assign) |
+| S6 reliability | K, DEP | `8b364856` (+ engine check, guard move) | follow-ups done; small addendum in progress |
+
+Internal adversarial reviews (see REVIEWS.md): S4 reviewed S5 (done), S5
+reviewing S4, S4 reviewing S3, S3 to review S2, S2 to review S1; S6's
+reviewer to be assigned.
+
+Combined candidate `implement/p0-final-gate-closure`: `f3c91e0a` (scaffold +
+S4), local only. A merge-tree preview of all six component heads onto it
+reports no textual conflicts.

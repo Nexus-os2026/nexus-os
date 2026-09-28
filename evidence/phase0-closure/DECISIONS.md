@@ -48,3 +48,20 @@ review. "Architect decision" items are not accepted by the implementer.
 7. K: `executes_python_code` kept as monitored debt (not observed failing in
    43 hosted Windows logs); the host GPU driver mismatch is an Owner matter.
 8. Python voice dependencies are unpinned and download models during tests.
+
+## Coordinator decisions added during implementation
+
+- G: prebuilt autonomy-6 manifests are not registered at startup either, and
+  registered autonomy 6 is refused where a goal or tool call would run
+  (internal review S4->S5, finding 1).
+- G: Warden review enabled with no runnable Warden fails closed with a
+  bounded reason instead of allowing (the setting defaults to off).
+- I: in-flight model downloads are owned child processes, terminated and
+  reaped at application exit with truthful failure reporting (I5); no
+  cleanup by PID, name or port.
+- Guards: every `fg_*` guard module keeps its guard code in
+  `fg_<name>/tests.rs`, which the production-source scanners already skip;
+  the scanners are not changed.
+- K: the arena keeps S6's `ArenaRun` compatibility type (refusals surface as
+  errors to its callers); the desktop uses the kernel's limits directly after
+  composition. Presented to the Architect as a design note.
