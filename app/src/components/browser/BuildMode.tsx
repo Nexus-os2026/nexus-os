@@ -354,7 +354,10 @@ export function BuildMode({ onActivity }: BuildModeProps): JSX.Element {
                 className="build-preview-iframe"
                 srcDoc={previewHtml}
                 title="Build Preview"
-                sandbox="allow-scripts"
+                /* P0 item D: empty sandbox — generated markup renders without
+                   scripts and in an opaque origin, so it cannot reach the
+                   privileged window's IPC. */
+                sandbox=""
               />
             ) : (
               <div className="build-preview-placeholder">

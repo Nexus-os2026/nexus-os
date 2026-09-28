@@ -38,37 +38,20 @@ export interface CollabSyncHandle {
 /**
  * Initialize Yjs collaboration sync.
  *
- * Connects to the host's WebSocket server and sets up shared CRDT types
- * for content, tokens, and comments. Returns a handle for cleanup.
+ * P0 item D: unavailable in Phase Zero. This would open an unauthenticated,
+ * plaintext WebSocket to a caller-supplied server directly from the privileged
+ * app origin. There is no governed transport for it, the restrictive CSP's
+ * `connect-src` does not permit it, and no code path reaches it today. It fails
+ * closed rather than connecting; a `WebsocketProvider` is never constructed.
  */
 export function initCollabSync(
-  serverUrl: string,
-  roomName: string,
-  identity: CollaboratorIdentity
+  _serverUrl: string,
+  _roomName: string,
+  _identity: CollaboratorIdentity
 ): CollabSyncHandle {
-  const ydoc = new Y.Doc();
-  const provider = new WebsocketProvider(serverUrl, roomName, ydoc);
-
-  // Set local awareness (presence)
-  provider.awareness.setLocalState({
-    user: identity,
-    selectedSection: null,
-    activePanel: null,
-  } satisfies PresenceState);
-
-  // Shared CRDT types
-  const sections = ydoc.getMap<Y.Map<string>>("sections");
-  const tokens = ydoc.getMap<string>("tokens");
-  const comments = ydoc.getArray<any>("comments");
-
-  const destroy = () => {
-    provider.awareness.setLocalState(null);
-    provider.disconnect();
-    provider.destroy();
-    ydoc.destroy();
-  };
-
-  return { ydoc, provider, sections, tokens, comments, destroy };
+  throw new Error(
+    "Nexus Builder real-time collaboration is unavailable in Phase Zero"
+  );
 }
 
 // ─── Presence Helpers ─────────────────────────────────────────────────────

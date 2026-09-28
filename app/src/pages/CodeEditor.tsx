@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RequiresLlm from "../components/RequiresLlm";
-import Editor, { type OnMount } from "@monaco-editor/react";
+// P0 item D: the Monaco editor is not imported. `@monaco-editor/react` loads
+// Monaco at runtime by injecting a `<script>` from cdn.jsdelivr.net into the
+// privileged app document (remote code in the app origin), and Monaco 0.55.1
+// also embeds a DOMPurify with known advisories. The code editor surface is
+// unavailable in Phase Zero; the CSP's `script-src 'self'` would block the CDN
+// script in any case.
 import {
   getGitRepoStatus,
   hasDesktopRuntime,
@@ -237,7 +242,6 @@ export default function CodeEditor(): JSX.Element {
   const [fsError, setFsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const termRef = useRef<HTMLDivElement>(null);
   const termLineId = useRef(2);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -432,11 +436,6 @@ export default function CodeEditor(): JSX.Element {
       if (next.length === 0) setActiveTab("");
       return next;
     });
-  }
-
-  function handleEditorChange(value: string | undefined): void {
-    if (!value || !activeTab) return;
-    setFiles((prev) => prev.map((f) => (f.id === activeTab ? { ...f, content: value, dirty: true } : f)));
   }
 
   function handleCreateFile(): void {
@@ -699,12 +698,6 @@ export default function CodeEditor(): JSX.Element {
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
-  /* ---- Editor mount ---- */
-  const handleEditorMount: OnMount = (editor) => {
-    editorRef.current = editor;
-    editor.focus();
-  };
-
   /* ---- Toggle directory ---- */
   function toggleDir(path: string): void {
     setExpandedDirs((prev) => {
@@ -900,58 +893,15 @@ export default function CodeEditor(): JSX.Element {
               {/* Main editor */}
               <div className="ce-monaco-wrap">
                 {activeFile ? (
-                  <Editor
-                    height="100%"
-                    language={activeFile.language}
-                    value={activeFile.content}
-                    theme="nexus-dark"
-                    onChange={handleEditorChange}
-                    onMount={handleEditorMount}
-                    beforeMount={(monaco) => {
-                      monaco.editor.defineTheme("nexus-dark", {
-                        base: "vs-dark",
-                        inherit: true,
-                        rules: [
-                          { token: "comment", foreground: "6b7280", fontStyle: "italic" },
-                          { token: "keyword", foreground: "c084fc" },
-                          { token: "string", foreground: "34d399" },
-                          { token: "number", foreground: "f59e0b" },
-                          { token: "type", foreground: "22d3ee" },
-                          { token: "function", foreground: "60a5fa" },
-                          { token: "variable", foreground: "e2e8f0" },
-                          { token: "operator", foreground: "94a3b8" },
-                        ],
-                        colors: {
-                          "editor.background": "#0b1120",
-                          "editor.foreground": "#e2e8f0",
-                          "editor.lineHighlightBackground": "#1e293b",
-                          "editor.selectionBackground": "#334155",
-                          "editorCursor.foreground": "var(--nexus-accent)",
-                          "editorLineNumber.foreground": "#475569",
-                          "editorLineNumber.activeForeground": "#94a3b8",
-                          "editor.selectionHighlightBackground": "#334155aa",
-                          "editorIndentGuide.background": "#1e293b",
-                          "editorIndentGuide.activeBackground": "#334155",
-                          "editorBracketMatch.background": "var(--nexus-accent)22",
-                          "editorBracketMatch.border": "var(--nexus-accent)44",
-                        },
-                      });
-                    }}
-                    options={{
-                      fontSize: 14,
-                      fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                      fontLigatures: true,
-                      minimap: { enabled: true, scale: 1 },
-                      scrollBeyondLastLine: false,
-                      smoothScrolling: true,
-                      cursorBlinking: "smooth",
-                      cursorSmoothCaretAnimation: "on",
-                      renderLineHighlight: "all",
-                      bracketPairColorization: { enabled: true },
-                      padding: { top: 12 },
-                      wordWrap: "on",
-                    }}
-                  />
+                  /* P0 item D: bounded notice instead of the Monaco editor. */
+                  <div className="ce-empty" data-testid="code-editor-unavailable">
+                    <div className="ce-empty-icon"><Keyboard size={32} /></div>
+                    <p className="ce-empty-text">Code editor unavailable in Phase Zero</p>
+                    <p className="ce-empty-hint">
+                      The embedded editor loaded remote script into the app window, so it is
+                      disabled until a locally bundled, reviewed editor is approved.
+                    </p>
+                  </div>
                 ) : (
                   <div className="ce-empty">
                     <div className="ce-empty-icon"><Keyboard size={32} /></div>

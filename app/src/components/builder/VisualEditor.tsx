@@ -203,23 +203,24 @@ export default function VisualEditor({
               borderRadius: 6, overflow: "hidden", background: "#fff",
               transition: "max-width 0.3s ease, border-color 0.2s ease",
             }}>
-              {isHtmlMode ? (
-                <iframe
-                  ref={iframeRef as React.RefObject<HTMLIFrameElement>}
-                  srcDoc={iframeSrcDoc}
-                  sandbox="allow-scripts"
-                  style={{ width: "100%", height: "100%", border: "none" }}
-                  title="Preview"
-                />
-              ) : (
-                <iframe
-                  ref={iframeRef as React.RefObject<HTMLIFrameElement>}
-                  src={iframeSrc}
-                  sandbox="allow-scripts allow-same-origin"
-                  style={{ width: "100%", height: "100%", border: "none" }}
-                  title="Preview"
-                />
-              )}
+              {/*
+                P0 item D: previews are sandboxed with an empty sandbox (no
+                scripts, opaque origin) so generated markup can never run script
+                in, or reach the IPC of, the privileged window. The React
+                "dev-server" preview (an allow-same-origin iframe pointing at a
+                loopback Vite server) is removed entirely: a loopback origin must
+                not be embedded in the app window. Because scripts do not run in
+                the preview, the click-to-edit visual bridge is inactive in
+                Phase Zero (editing is still available through the token panel
+                and prompt-driven iteration).
+              */}
+              <iframe
+                ref={iframeRef as React.RefObject<HTMLIFrameElement>}
+                srcDoc={iframeSrcDoc}
+                sandbox=""
+                style={{ width: "100%", height: "100%", border: "none" }}
+                title="Preview"
+              />
             </div>
           ) : devServerLoading ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100%", gap: 12 }}>

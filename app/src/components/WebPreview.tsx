@@ -239,7 +239,8 @@ export function WebPreview({ projectDir, reloadKey }: WebPreviewProps) {
           >
             <iframe
               srcDoc={htmlContent}
-              sandbox="allow-scripts"
+              /* P0 item D: empty sandbox — no scripts, opaque origin, no IPC reach. */
+              sandbox=""
               title="Website Preview"
               style={{
                 width: "100%",

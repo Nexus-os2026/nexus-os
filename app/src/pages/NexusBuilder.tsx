@@ -1499,7 +1499,8 @@ export default function NexusBuilder() {
                   />
                 ) : (
                   <div style={{ width: "100%", maxWidth: vpMax, height: "100%", margin: "0 auto", border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden", background: "#fff", transition: "max-width 0.3s ease" }}>
-                    <iframe ref={iframeRef} srcDoc={html} sandbox="allow-scripts" style={{ width: "100%", height: "100%", border: "none" }} title="Preview" />
+                    {/* P0 item D: empty sandbox — no scripts, opaque origin, no IPC reach. */}
+                    <iframe ref={iframeRef} srcDoc={html} sandbox="" style={{ width: "100%", height: "100%", border: "none" }} title="Preview" />
                   </div>
                 )
               ) : (

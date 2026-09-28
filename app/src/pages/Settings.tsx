@@ -210,42 +210,15 @@ export function Settings({
     },
   ];
 
-  async function testKey(id: string, value: string): Promise<void> {
-    if (!value || value.trim().length < 4) {
-      setStatuses((prev) => ({ ...prev, [id]: "error" }));
-      return;
-    }
-    setStatuses((prev) => ({ ...prev, [id]: "testing" }));
-    try {
-      if (id === "openai") {
-        const res = await fetch("https://api.openai.com/v1/models", {
-          method: "GET",
-          headers: { Authorization: `Bearer ${value.trim()}` },
-        });
-        setStatuses((prev) => ({ ...prev, [id]: res.ok ? "ok" : "error" }));
-      } else if (id === "anthropic") {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "x-api-key": value.trim(),
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
-        });
-        setStatuses((prev) => ({ ...prev, [id]: (res.ok || res.status === 400) ? "ok" : "error" }));
-      } else {
-        // For other keys (Brave, X, GitHub), validate length heuristic as fallback
-        setStatuses((prev) => ({ ...prev, [id]: value.trim().length > 4 ? "ok" : "error" }));
-      }
-    } catch {
-      // Network error — check Ollama (localhost) separately
-      if (id === "openai" || id === "anthropic") {
-        setStatuses((prev) => ({ ...prev, [id]: "error" }));
-      } else {
-        setStatuses((prev) => ({ ...prev, [id]: value.trim().length > 4 ? "ok" : "error" }));
-      }
-    }
+  function testKey(id: string, value: string): void {
+    // P0 item D / item C: the interface no longer sends the API key to the
+    // provider from the webview. That was a direct `fetch` to api.openai.com /
+    // api.anthropic.com carrying the secret straight from the privileged
+    // origin (credential egress), and the restrictive CSP's `connect-src` no
+    // longer permits it. A live provider check must go through a governed
+    // backend path; until one exists, this is a local format check only.
+    const ok = !!value && value.trim().length > 4;
+    setStatuses((prev) => ({ ...prev, [id]: ok ? "ok" : "error" }));
   }
 
   function statusLabel(s: ServiceStatus): JSX.Element {

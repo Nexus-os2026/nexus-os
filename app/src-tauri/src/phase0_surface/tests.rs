@@ -2953,20 +2953,37 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
         if count > 0 {
             sinks.push((relative.clone(), count));
         }
-        for (at, _) in text.match_indices("srcDoc=") {
-            let open = text[..at]
-                .rfind("<iframe")
-                .expect("srcDoc outside an iframe");
-            let close = at + text[at..].find("/>").expect("iframe element end");
-            let element = &text[open..close];
+        // Every iframe — whether `srcDoc` or `src` — must be sandboxed without
+        // scripts and without same-origin, and must render inline `srcDoc`
+        // content rather than loading a remote or loopback `src` URL. Under
+        // item D a preview then has an opaque origin and no script, so it can
+        // neither run in nor reach the IPC of the privileged window. (Before
+        // this closure a remote page was embedded with `allow-scripts
+        // allow-same-origin allow-popups`, and a loopback dev server with
+        // `allow-same-origin`; both are removed.)
+        for (at, _) in text.match_indices("<iframe") {
+            let close = at + text[at..].find("/>").expect("iframe element end") + 2;
+            let element = &text[at..close];
             let sandbox = element
                 .split("sandbox=\"")
                 .nth(1)
                 .and_then(|rest| rest.split('"').next())
-                .unwrap_or_else(|| panic!("{relative}: srcDoc iframe without sandbox"));
+                .unwrap_or_else(|| panic!("{relative}: iframe without a sandbox attribute"));
             assert!(
-                !(sandbox.contains("allow-scripts") && sandbox.contains("allow-same-origin")),
-                "{relative}: sandboxed preview may run script with the app's origin"
+                !sandbox.contains("allow-scripts"),
+                "{relative}: iframe sandbox must not allow scripts in Phase Zero"
+            );
+            assert!(
+                !sandbox.contains("allow-same-origin"),
+                "{relative}: iframe sandbox must not grant the app origin"
+            );
+            assert!(
+                element.contains("srcDoc"),
+                "{relative}: iframe must render inline srcDoc content"
+            );
+            assert!(
+                !element.contains("src="),
+                "{relative}: iframe must not load a remote or loopback src URL"
             );
             previews += 1;
         }
@@ -2978,6 +2995,25 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
         }
         for forbidden in ["insertAdjacentHTML", "outerHTML =", "document.write"] {
             assert!(!text.contains(forbidden), "{relative}: {forbidden}");
+        }
+        // P0 item D closures enforced across the frontend: no Monaco editor (it
+        // injected a remote CDN script into the app origin), no collaboration
+        // WebSocket, and no direct remote fetch carrying secrets from the
+        // privileged origin. (Import/comment mentions are allowed; only the
+        // live constructs are forbidden.)
+        assert!(
+            !text.contains("from \"@monaco-editor"),
+            "{relative}: the Monaco editor is unavailable in Phase Zero (remote script)"
+        );
+        assert!(
+            !text.contains("new WebsocketProvider("),
+            "{relative}: the collaboration WebSocket is disabled in Phase Zero"
+        );
+        for remote_fetch in ["fetch(\"http", "fetch('http", "fetch(`http"] {
+            assert!(
+                !text.contains(remote_fetch),
+                "{relative}: no direct remote fetch from the webview ({remote_fetch})"
+            );
         }
         if text.contains("new Function(") {
             // The one dynamic import names a fixed module; the dialog plugin
