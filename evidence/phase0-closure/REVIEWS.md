@@ -91,3 +91,25 @@ refused external tools; MCP credential refusal; unweakened C5B tests; Nexus
 Link policy; credentials off argv for the four providers; the credential
 curl-site classification; no `ollama serve`/`which`; curl reaping; in-region
 edits only.
+
+## S2 (items A, E, H), reviewed by S6 — range `63eb0d07..b087dbca`
+
+Verdict: **no blocker in S2's changes; acceptable as composed** (`26843f7f`).
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| 1 | blocker-class, pre-existing | Messaging send/poll returned reqwest errors carrying the Telegram token URL. | Fixed on the combined branch by S3 (`messaging_transport_error`, guarded). |
+| 2 | should-fix | Refusal tests would write into the real `~/.nexus` (and contact services) if a fix regressed or during a negative control. | S2: path-injected helpers or a child process with a temporary HOME. |
+| 3 | should-fix | A hand-written plaintext `config.toml` is copied verbatim into an unencrypted backup. | S2: copy only an encrypted envelope or into an encrypted archive; otherwise skip and report. |
+| 4 | should-fix | Non-interface configuration saves discard the save outcome, so plaintext encryption under the ambient key or re-keying happens without report or audit. | S2: report and audit every outcome other than a plain write. |
+| 5, 6 | note | Registry entries and the setup-wizard Ollama path. | Resolved in composition. |
+| 7, 9, 12, 13, 15 | note | Unguarded credential-field completeness; operator/ambient key derivation collision; case-sensitive API Client secret detection; corrupt vault rows reported as a wrong key; env-lock hygiene in tests. | Cheap hardening assigned to S2. |
+| 8, 10, 11, 14, 16, 17 | note | Userinfo in URLs; first-run and lost-update races; unbounded config/token reads; `key_env` behaviour change; backup exclusion by name; CLI outcome (CLI withdrawn). | Dossier non-claims. |
+
+Verified correct by the reviewer: legacy derivations byte-identical with
+pinned vectors; the credential gate (new, changed, moved, whitespace-only,
+cleared-then-re-added); files never overwritten when unreadable; owner-only
+atomic writes; bounded, descriptor-bound key-file validation with identity
+re-check; read-only vault verification before use; OAuth, deploy and Supabase
+closures; messaging connect using only the stored token; backups skipping the
+six stores with owner-only archives; all hunks within granted regions.
