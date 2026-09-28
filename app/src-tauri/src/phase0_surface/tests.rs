@@ -191,6 +191,12 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     // P0-FINAL-GATE item I: no helper program is started or run to report on
     // it.
     ("is_ollama_installed", Closure::HelperLaunch),
+    // P0-FINAL-GATE items A and H: the surface's only effect was to store a
+    // credential or token outside an approved secret store.
+    ("builder_deploy_store_credentials", Closure::SecretStorage),
+    ("builder_backend_connect", Closure::SecretStorage),
+    ("email_start_oauth", Closure::SecretStorage),
+    ("integration_start_oauth", Closure::SecretStorage),
 ];
 
 const LIB_RS: &str = include_str!("../lib.rs");
@@ -368,6 +374,8 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             api_client_request, a2a_discover_agent, a2a_send_task, a2a_get_task_status,
             a2a_cancel_task, mcp_host_connect, mcp_host_call_tool,
             builder_theme_extract_from_url, nexus_link_send_model, is_ollama_installed,
+            builder_deploy_store_credentials, builder_backend_connect, email_start_oauth,
+            integration_start_oauth,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
@@ -429,6 +437,7 @@ fn closure_reasons_are_bounded_and_echo_no_input() {
         Closure::PeerTransfer,
         Closure::CredentialTransport,
         Closure::HelperLaunch,
+        Closure::SecretStorage,
     ] {
         let reason = closure.reason();
         assert!(reason.contains("Phase Zero"), "{reason}");
@@ -2795,6 +2804,8 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
     let lib_tests = include_str!("../lib_tests.rs");
     let egress = include_str!("../../../../kernel/src/firewall/egress.rs");
     let fg_egress = include_str!("fg_egress/tests.rs");
+    let fg_secrets = include_str!("fg_secrets/tests.rs");
+    let kernel_config = include_str!("../../../../kernel/src/config.rs");
     for (regression, source, guards) in [
         (
             "a closed command reopened",
@@ -2957,6 +2968,30 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
             "an egress closure reason that echoes input",
             fg_egress,
             &["p0_fg_egress_closure_reasons_are_bounded_and_echo_no_input"][..],
+        ),
+        (
+            "a new or changed credential under an ambient key, an unvalidated vault key source, or a token persisted outside an approved secret store",
+            fg_secrets,
+            &[
+                "p0_fg_a_configuration_writes_check_key_material_before_writing",
+                "p0_fg_a_desktop_config_key_material_comes_from_the_launch_environment",
+                "p0_fg_interface_saves_keep_the_ollama_endpoint_backend_owned",
+                "p0_fg_e_vault_key_sources_are_validated_on_what_is_read",
+                "p0_fg_secret_storage_closure_reason_is_bounded",
+                "p0_fg_a_deploy_credentials_are_never_newly_stored",
+                "p0_fg_h_sign_in_flows_persist_no_token",
+                "p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files",
+                "p0_fg_h_api_client_collections_are_checked_before_writing",
+            ][..],
+        ),
+        (
+            "a new or changed credential under an ambient key, an unvalidated vault key source, or a token persisted outside an approved secret store",
+            kernel_config,
+            &[
+                "p0_fg_a_new_or_changed_credentials_need_the_operator_key",
+                "p0_fg_a_legacy_ciphertext_still_reads_and_is_never_rewritten",
+                "p0_fg_a_an_unreadable_configuration_is_never_overwritten",
+            ][..],
         ),
     ] {
         for guard in guards {
