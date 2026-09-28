@@ -876,7 +876,8 @@ fn p0_j3_make_target_builds_nothing() {
 #[test]
 fn p0_j3_install_script_downloads_and_installs_nothing() {
     let script = read(&workspace_root().join("install.sh"));
-    assert!(script.starts_with("#!/usr/bin/env bash\n"));
+    // `lines()` drops a `\r`, so a CRLF checkout (Windows) reads the same.
+    assert_eq!(script.lines().next(), Some("#!/usr/bin/env bash"));
     assert_eq!(
         directive_lines(&script),
         [

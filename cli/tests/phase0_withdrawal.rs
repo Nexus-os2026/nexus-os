@@ -754,7 +754,7 @@ fn p0_j4_packaging_scripts_build_nothing() {
     for (script, shebang, expected) in [
         (
             "scripts/build_linux_deb.sh",
-            Some("#!/usr/bin/env bash\n"),
+            Some("#!/usr/bin/env bash"),
             [
                 "echo \"build_linux_deb.sh: withdrawn during Phase Zero; nothing is built or \
                  packaged\" >&2",
@@ -763,7 +763,7 @@ fn p0_j4_packaging_scripts_build_nothing() {
         ),
         (
             "scripts/build_macos_release.sh",
-            Some("#!/usr/bin/env bash\n"),
+            Some("#!/usr/bin/env bash"),
             [
                 "echo \"build_macos_release.sh: withdrawn during Phase Zero; nothing is built or \
                  packaged\" >&2",
@@ -782,7 +782,8 @@ fn p0_j4_packaging_scripts_build_nothing() {
     ] {
         let text = read(&workspace_root().join(script));
         if let Some(shebang) = shebang {
-            assert!(text.starts_with(shebang), "{script}: shebang");
+            // `lines()` drops a `\r`, so a CRLF checkout (Windows) reads the same.
+            assert_eq!(text.lines().next(), Some(shebang), "{script}: shebang");
         }
         assert_eq!(
             directive_lines(&text),

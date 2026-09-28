@@ -751,8 +751,10 @@ fn p0_j5_install_and_benchmark_scripts_do_nothing() {
         ),
     ] {
         let text = read(&manifest_dir().join(script));
-        assert!(
-            text.starts_with("#!/usr/bin/env bash\n"),
+        // `lines()` drops a `\r`, so a CRLF checkout (Windows) reads the same.
+        assert_eq!(
+            text.lines().next(),
+            Some("#!/usr/bin/env bash"),
             "{script}: shebang"
         );
         assert_eq!(
