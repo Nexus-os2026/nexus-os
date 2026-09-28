@@ -813,26 +813,155 @@ fn p0_fg_messaging_errors_never_carry_the_bot_token() {
     assert_messaging_errors_are_redacted(&crlf(apps));
 }
 
-/// The source side of the guard above, for either line ending.
+/// The source side of the guard above, for either line ending: every
+/// request error goes through `messaging_transport_error`, and every client
+/// and body read through the bounded helpers, which redact the same way.
 fn assert_messaging_errors_are_redacted(apps: &str) {
     let apps = lf(apps);
+    let helpers = apps
+        .find("pub(crate) fn messaging_transport_error(")
+        .unwrap();
     let start = apps.find("pub(crate) fn messaging_send(").unwrap();
     let end = apps[start..]
         .find("pub(crate) fn messaging_poll_messages(")
         .map(|at| start + at)
         .unwrap();
     let poll_end = apps[end..].find("\n}\n").map(|at| end + at).unwrap();
+    let helper_text = &apps[helpers..start];
+    assert_eq!(
+        helper_text.matches("messaging_transport_error(").count(),
+        3,
+        "the definition, the client and the body read"
+    );
+    assert!(
+        !helper_text.contains("{e}\"))"),
+        "a helper formats a raw error"
+    );
     for (name, body) in [
         ("messaging_send", &apps[start..end]),
         ("messaging_poll_messages", &apps[end..poll_end]),
     ] {
         assert_eq!(
             body.matches("messaging_transport_error(").count(),
-            6,
+            3,
             "{name}"
         );
+        assert_eq!(body.matches("messaging_client()?").count(), 3, "{name}");
+        assert_eq!(
+            body.matches("messaging_body(resp).await").count(),
+            3,
+            "{name}"
+        );
+        for unbounded in ["reqwest::Client::new()", ".text()"] {
+            assert!(!body.contains(unbounded), "{name}: {unbounded}");
+        }
         assert!(!body.contains("{e}\"))"), "{name} formats a raw error");
     }
+}
+
+/// Answer one loopback request with `head` and then `body`, all at once or,
+/// with `drip`, one byte per interval until the client gives up.
+fn serve_answer(
+    head: String,
+    body: Vec<u8>,
+    drip: Option<std::time::Duration>,
+) -> (String, std::thread::JoinHandle<()>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+            .unwrap();
+        let mut request = Vec::new();
+        let mut byte = [0u8; 1];
+        while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+            request.push(byte[0]);
+        }
+        if stream.write_all(head.as_bytes()).is_err() {
+            return;
+        }
+        match drip {
+            None => {
+                let _ = stream.write_all(&body);
+            }
+            Some(interval) => {
+                for byte in body {
+                    std::thread::sleep(interval);
+                    if stream.write_all(&[byte]).is_err() {
+                        return;
+                    }
+                }
+            }
+        }
+    });
+    (base, server)
+}
+
+/// Final Gate resource bound: messaging sends and polls are bounded in total
+/// time and in the response they read, and a timeout says so without naming
+/// the URL. (Loopback stand-ins answer; no platform is contacted.)
+#[test]
+fn p0_fg_messaging_requests_are_bounded_in_time_and_size() {
+    use crate::commands::apps::{
+        messaging_body_bounded, messaging_client, messaging_client_with, messaging_transport_error,
+        MAX_MESSAGING_RESPONSE_BYTES, MESSAGING_REQUEST_TIMEOUT,
+    };
+    assert_eq!(
+        MESSAGING_REQUEST_TIMEOUT,
+        std::time::Duration::from_secs(30)
+    );
+    assert_eq!(MAX_MESSAGING_RESPONSE_BYTES, 4 * 1024 * 1024);
+
+    let chunk = "b".repeat(1000);
+    for (head, body) in [
+        (
+            "HTTP/1.1 200 OK\r\nContent-Length: 2048\r\nConnection: close\r\n\r\n".to_string(),
+            "a".repeat(2048),
+        ),
+        (
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+                .to_string(),
+            format!("3e8\r\n{chunk}\r\n3e8\r\n{chunk}\r\n0\r\n\r\n"),
+        ),
+    ] {
+        let (base, server) = serve_answer(head, body.into_bytes(), None);
+        let result = crate::block_on_async(async {
+            let response = messaging_client()?
+                .get(format!("{base}/bot1:fg-secret/getUpdates"))
+                .send()
+                .await
+                .map_err(|e| messaging_transport_error("poll", e))?;
+            messaging_body_bounded(response, 1024).await
+        });
+        assert_eq!(
+            result,
+            Err("body: the response is larger than 1024 bytes".to_string())
+        );
+        server.join().unwrap();
+    }
+
+    // An answer that drips its 18-byte body over 5.4 s is abandoned at a
+    // 1 s timeout.
+    let body = br#"{"ok":true,"r":[]}"#.to_vec();
+    let head = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    let (base, server) = serve_answer(head, body, Some(std::time::Duration::from_millis(300)));
+    let result = crate::block_on_async(async {
+        let response = messaging_client_with(std::time::Duration::from_secs(1))?
+            .get(format!("{base}/bot1:fg-secret/getUpdates"))
+            .send()
+            .await
+            .map_err(|e| messaging_transport_error("poll", e))?;
+        messaging_body_bounded(response, 1024).await
+    });
+    let error = result.expect_err("a 5.4 s body must not be read within a 1 s timeout");
+    assert!(error.contains("timed out"), "{error}");
+    assert!(!error.contains("fg-secret"), "{error}");
+    server.join().unwrap();
 }
 
 // ── Final Gate item C: credential-bearing process arguments ──────────────
