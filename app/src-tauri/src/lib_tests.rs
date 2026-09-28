@@ -377,26 +377,35 @@ fn test_stop_computer_action_updates_status_surface() {
     assert!(!status.enabled);
 }
 
+/// P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human approval
+/// the backend cannot verify. Creating one used to enqueue a review that any
+/// caller could approve over IPC at once (the "60-second review" was only a
+/// frontend countdown); it is now refused before any agent record, meta
+/// entry, supervisor entry or consent request is written. Creation below L6,
+/// which never had an approval step, is unchanged.
 #[test]
-fn test_tauri_create_l6_agent_requests_review() {
+fn p0_fg_transcendent_creation_is_refused_and_changes_nothing() {
+    use crate::phase0_surface::{closed, Closure};
     let state = AppState::new_in_memory();
-    let created = create_agent(&state, build_transcendent_manifest("transcendent-pending"));
-    assert!(created.is_ok());
-    let created = created.unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    assert!(created.starts_with("approval-requested:"));
+    let stored = state.db.list_agents().unwrap().len();
+    let registered = state.supervisor.lock().unwrap().health_check().len();
+    let named = state.meta.lock().unwrap().len();
 
-    let pending = state.db.load_pending_consent().unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].operation_type, "transcendent_creation");
-    assert!(pending[0]
-        .operation_json
-        .contains("\"min_review_seconds\":60"));
+    assert_eq!(
+        create_agent(&state, build_transcendent_manifest("transcendent-pending")),
+        Err(closed("create_agent", Closure::ApprovalRequired))
+    );
+    assert!(state.db.load_pending_consent().unwrap().is_empty());
+    assert_eq!(state.db.list_agents().unwrap().len(), stored);
+    assert_eq!(
+        state.supervisor.lock().unwrap().health_check().len(),
+        registered
+    );
+    assert_eq!(state.meta.lock().unwrap().len(), named);
+
+    let created = create_agent(&state, build_manifest("below-transcendent")).unwrap();
+    assert!(Uuid::parse_str(&created).is_ok());
+    assert!(state.db.load_pending_consent().unwrap().is_empty());
 }
 
 #[test]
@@ -557,51 +566,55 @@ fn test_get_preinstalled_agents_keeps_persisted_agent_ids() {
     assert!(agents.iter().any(|agent| agent.name == "nexus-oracle"));
 }
 
+/// P0-FINAL-GATE (item G): starting an L6 (transcendent) agent used to
+/// enqueue an activation review that any caller could approve over IPC. It
+/// is now refused before the agent's state changes, and no review is
+/// enqueued. The refusal holds whether the stored record or the registered
+/// agent says L6. (An L6 agent can no longer be created or restored; the
+/// registration below stands in for one registered before this closure.)
 #[test]
-fn test_start_l6_agent_requests_review_instead_of_restarting() {
+fn p0_fg_transcendent_activation_is_refused_and_changes_nothing() {
+    use crate::phase0_surface::{closed, Closure};
     let state = AppState::new_in_memory();
     let created = create_agent_immediately(
         &state,
-        parse_agent_manifest_json(&build_transcendent_manifest("transcendent-start"))
-            .unwrap_or_else(|e| {
-                eprintln!("manifest parse failed: {e}");
-                std::process::exit(1)
-            }),
+        parse_agent_manifest_json(&build_transcendent_manifest("transcendent-start")).unwrap(),
         build_transcendent_manifest("transcendent-start"),
     )
-    .unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
+    .unwrap();
+    let id = Uuid::parse_str(&created).unwrap();
+    let registered_state = |state: &AppState| {
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .health_check()
+            .into_iter()
+            .find(|status| status.id == id)
+            .map(|status| status.state)
+    };
+    stop_agent(&state, created.clone()).unwrap();
+    let stopped = registered_state(&state);
+    assert_eq!(stopped, Some(nexus_kernel::lifecycle::AgentState::Stopped));
 
-    stop_agent(&state, created.clone()).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    start_agent(&state, created.clone()).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-
-    let pending = state.db.load_pending_consent().unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    assert_eq!(pending.len(), 1);
-    assert!(pending[0].operation_json.contains("activate_existing"));
-
-    let listed = list_agents(&state).unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    let agent = listed
-        .iter()
-        .find(|row| row.id == created)
-        .unwrap_or_else(|| {
-            eprintln!("unexpected None");
-            std::process::exit(1)
-        });
+    let refused = Err(closed("start_agent", Closure::ApprovalRequired));
+    assert_eq!(start_agent(&state, created.clone()), refused);
+    assert!(state.db.load_pending_consent().unwrap().is_empty());
+    assert_eq!(registered_state(&state), stopped);
+    let listed = list_agents(&state).unwrap();
+    let agent = listed.iter().find(|row| row.id == created).unwrap();
     assert_eq!(agent.status, "Stopped");
+
+    // Without the stored record, the registered L6 agent is refused as well.
+    state.db.delete_agent(&created).unwrap();
+    assert_eq!(start_agent(&state, created.clone()), refused);
+    assert_eq!(registered_state(&state), stopped);
+    assert!(state.db.load_pending_consent().unwrap().is_empty());
+
+    // Starting an agent below L6 is unchanged.
+    let below = create_agent(&state, build_manifest("below-transcendent")).unwrap();
+    stop_agent(&state, below.clone()).unwrap();
+    assert_eq!(start_agent(&state, below), Ok(()));
 }
 
 #[test]
@@ -2405,8 +2418,14 @@ fn test_approve_consent_request() {
     assert!(pending.iter().all(|p| p.consent_id != "c-approve-1"));
 }
 
+/// P0-FINAL-GATE (item G): approving a transcendent request (one enqueued
+/// before this closure) used to create or restart an L6 agent on any caller's
+/// word. It is now refused before the request is resolved: nothing is
+/// created, started, resolved or audited as approved, and a batch approval
+/// cannot resolve it either. The request can still be denied.
 #[test]
-fn test_approve_transcendent_creation_creates_agent() {
+fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
+    use crate::phase0_surface::{closed, Closure};
     let state = AppState::new_in_memory();
     let pending_agent_id = Uuid::new_v4().to_string();
     let manifest_json = build_transcendent_manifest("approved-transcendent");
@@ -2419,51 +2438,82 @@ fn test_approve_transcendent_creation_creates_agent() {
             6,
             "native",
         )
-        .unwrap_or_else(|e| {
-            eprintln!("operation failed: {e}");
-            std::process::exit(1)
-        });
-    state
-        .db
-        .enqueue_consent(&nexus_persistence::ConsentRow {
-            id: "c-transcendent-create".to_string(),
-            agent_id: pending_agent_id.clone(),
-            operation_type: "transcendent_creation".to_string(),
-            operation_json: json!({
-                "summary": "Create L6 Transcendent agent 'approved-transcendent'",
-                "side_effects": ["Maximum-autonomy L6 activation"],
-                "fuel_cost": 0.0,
-                "min_review_seconds": 60,
-                "mode": "create_new",
-                "manifest_json": manifest_json,
-            })
-            .to_string(),
-            hitl_tier: "Tier3".to_string(),
-            status: "pending".to_string(),
-            created_at: chrono::Utc::now().to_rfc3339(),
-            resolved_at: None,
-            resolved_by: None,
+        .unwrap();
+    let request = |mode: &str, goal: Option<&str>| {
+        json!({
+            "summary": "Create L6 Transcendent agent 'approved-transcendent'",
+            "side_effects": ["Maximum-autonomy L6 activation"],
+            "fuel_cost": 0.0,
+            "min_review_seconds": 60,
+            "mode": mode,
+            "manifest_json": manifest_json,
+            "goal_id": goal,
         })
-        .unwrap_or_else(|e| {
-            eprintln!("operation failed: {e}");
-            std::process::exit(1)
-        });
+    };
+    for (id, mode, goal) in [
+        ("c-transcendent-create", "create_new", None),
+        (
+            "c-transcendent-activate",
+            "activate_existing",
+            Some("goal-transcendent"),
+        ),
+    ] {
+        enqueue_test_consent_json(
+            &state,
+            id,
+            &pending_agent_id,
+            "transcendent_creation",
+            "Tier3",
+            request(mode, goal),
+        );
+    }
+    let stored = state.db.list_agents().unwrap().len();
+    let registered = state.supervisor.lock().unwrap().health_check().len();
 
-    approve_consent_request(&state, "c-transcendent-create".into(), "admin".into()).unwrap_or_else(
-        |e| {
-            eprintln!("operation failed: {e}");
-            std::process::exit(1)
-        },
+    for id in ["c-transcendent-create", "c-transcendent-activate"] {
+        assert_eq!(
+            approve_consent_request(&state, id.into(), "admin".into()).map(|_| ()),
+            Err(closed("approve_consent_request", Closure::ApprovalRequired))
+        );
+    }
+    assert_eq!(
+        batch_approve_consents(&state, "goal-transcendent".into(), "admin".into()).map(|_| ()),
+        Err(closed("batch_approve_consents", Closure::ApprovalRequired))
     );
 
-    let agents = state.db.list_agents().unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    assert!(agents.iter().all(|row| row.id != pending_agent_id));
-    assert!(agents
+    let pending = state.db.load_pending_consent().unwrap();
+    assert_eq!(pending.len(), 2);
+    assert!(pending
         .iter()
-        .any(|row| row.manifest_json.contains("approved-transcendent")));
+        .all(|row| row.status == "pending" && row.resolved_by.is_none()));
+    assert_eq!(state.db.list_agents().unwrap().len(), stored);
+    assert_eq!(
+        state.supervisor.lock().unwrap().health_check().len(),
+        registered
+    );
+    let events = state.db.load_audit_events(None, 200, 0).unwrap();
+    for approval in [
+        "consent_approved",
+        "consent_batch_approved",
+        "transcendent_creation_approved",
+    ] {
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.detail_json.contains(approval)),
+            "{approval}"
+        );
+    }
+
+    // Denial still resolves the request and removes the unapproved placeholder.
+    deny_consent_request(&state, "c-transcendent-create".into(), "admin".into(), None).unwrap();
+    assert!(state
+        .db
+        .list_agents()
+        .unwrap()
+        .iter()
+        .all(|row| row.id != pending_agent_id));
+    assert_eq!(state.db.load_pending_consent().unwrap().len(), 1);
 }
 
 #[test]
@@ -3218,7 +3268,9 @@ fn p0_002c4d0_code_only(source: &str) -> String {
 /// P0-002C5C: a stored agent record is not authority. A record naming a
 /// capability outside the registry (such as `a2a.delegate`) or an undefined
 /// autonomy level is not restored; a record a validated manifest could have
-/// produced is.
+/// produced is. (Since the Final Gate the highest restorable level is L5: an
+/// L6 record is never registered, see
+/// `p0_fg_stored_transcendent_records_are_not_registered_and_stay_stored`.)
 #[test]
 fn p0_002c5c_persisted_agents_holding_unregistered_authority_are_not_restored() {
     let state = AppState::new_in_memory();
@@ -3246,7 +3298,7 @@ fn p0_002c5c_persisted_agents_holding_unregistered_authority_are_not_restored() 
             manifest("unknown-agent", &["llm.query", "root.all"], 1),
         ),
         (beyond, manifest("beyond-agent", &["llm.query"], 7)),
-        (clean, manifest("clean-agent", &["llm.query", "fs.read"], 6)),
+        (clean, manifest("clean-agent", &["llm.query", "fs.read"], 5)),
     ] {
         state
             .db
@@ -3265,6 +3317,90 @@ fn p0_002c5c_persisted_agents_holding_unregistered_authority_are_not_restored() 
         restored.manifest.capabilities,
         vec!["llm.query".to_string(), "fs.read".to_string()]
     );
+}
+
+/// P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human approval
+/// the backend cannot verify, so restore registers no L6 record: not one
+/// approved over IPC before the closure (running or stopped), and not a
+/// creation request that was never approved (its `pending_approval`
+/// placeholder used to come back as a registered L6 agent after a restart).
+/// The stored records are left exactly as they were. An L5 record is
+/// restored as before.
+#[test]
+fn p0_fg_stored_transcendent_records_are_not_registered_and_stay_stored() {
+    let state = AppState::new_in_memory();
+    let manifest = |name: &str, autonomy: u8| {
+        json!({
+            "name": name,
+            "version": "1.0.0",
+            "capabilities": ["llm.query"],
+            "fuel_budget": 1000,
+            "autonomy_level": autonomy,
+        })
+        .to_string()
+    };
+    let running = Uuid::new_v4();
+    let stopped = Uuid::new_v4();
+    let placeholder = Uuid::new_v4();
+    let below = Uuid::new_v4();
+    for (id, json, stored_state, level) in [
+        (running, manifest("approved-transcendent", 6), "running", 6),
+        (stopped, manifest("stopped-transcendent", 6), "stopped", 6),
+        (
+            placeholder,
+            manifest("requested-transcendent", 6),
+            "pending_approval",
+            6,
+        ),
+        (below, manifest("sovereign-agent", 5), "running", 5),
+    ] {
+        state
+            .db
+            .save_agent(&id.to_string(), &json, stored_state, level, "native")
+            .unwrap();
+    }
+    let snapshot = |state: &AppState, id: Uuid| {
+        state
+            .db
+            .list_agents()
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id.to_string())
+            .map(|row| {
+                (
+                    row.manifest_json,
+                    row.state,
+                    row.was_running,
+                    row.autonomy_level,
+                    row.execution_mode,
+                    row.updated_at,
+                )
+            })
+            .expect("stored record")
+    };
+    let before: Vec<_> = [running, stopped, placeholder]
+        .into_iter()
+        .map(|id| snapshot(&state, id))
+        .collect();
+
+    crate::commands::agents::restore_persisted_agents(&state);
+
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    for refused in [running, stopped, placeholder] {
+        assert!(supervisor.get_agent(refused).is_none(), "{refused}");
+    }
+    assert!(supervisor.get_agent(below).is_some());
+    assert!(supervisor.health_check().iter().all(|status| supervisor
+        .get_agent(status.id)
+        .unwrap()
+        .autonomy_level
+        < 6));
+    drop(supervisor);
+    let after: Vec<_> = [running, stopped, placeholder]
+        .into_iter()
+        .map(|id| snapshot(&state, id))
+        .collect();
+    assert_eq!(after, before);
 }
 
 #[test]

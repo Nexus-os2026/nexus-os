@@ -285,3 +285,118 @@ fn p0_fg_c5_measurement_clients_take_only_the_groq_key() {
     assert!(client
         .contains("constNIM_ENDPOINT:&str=\"https://api.groq.com/openai/v1/chat/completions\";"));
 }
+
+// ── G: approval channels ─────────────────────────────────────────────────────
+
+/// The whitespace-free denial `surface` returns for `closure`.
+fn denial(surface: &str, closure: &str) -> String {
+    format!(
+        "returnErr(crate::phase0_surface::closed(\"{surface}\",crate::phase0_surface::Closure::{closure}));"
+    )
+}
+
+/// Byte offset of the first `needle` in `body`, which must contain it.
+fn position(body: &str, needle: &str) -> usize {
+    body.find(needle)
+        .unwrap_or_else(|| panic!("{needle} not found in {body}"))
+}
+
+/// P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human approval
+/// the backend cannot verify, so L6 is unavailable. Each route that created,
+/// started or registered one refuses first, with the bounded
+/// `ApprovalRequired` reason, before any state changes:
+/// - `create_agent` refuses level 6 right after parsing, before anything is
+///   written;
+/// - `start_agent` refuses before the agent is restarted, stored or audited;
+/// - restore registers no level-6 record and writes nothing to it;
+/// - `approve_consent_request` and `batch_approve_consents` refuse a
+///   transcendent request before resolving anything, and nothing in the
+///   consent module creates or starts an agent;
+/// - nothing enqueues a transcendent request any more.
+#[test]
+fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
+    let agents = include_str!("../commands/agents.rs");
+    let consent = include_str!("../commands/consent.rs");
+
+    let (_, create) = fn_shape(agents, "create_agent");
+    assert!(
+        create.starts_with(&format!(
+            "letmanifest=parse_agent_manifest_json(manifest_json.as_str())?;ifmanifest.autonomy_level==Some(6){{{}}}",
+            denial("create_agent", "ApprovalRequired")
+        )),
+        "{create}"
+    );
+    assert!(create.ends_with("create_agent_immediately(state,manifest,manifest_json)"));
+
+    let (_, start) = fn_shape(agents, "start_agent");
+    let refusal = position(&start, &denial("start_agent", "ApprovalRequired"));
+    assert!(start.contains(
+        "letstored_transcendent=find_manifest(state,&agent_id).is_some_and(|manifest|manifest.autonomy_level==Some(6));"
+    ));
+    assert!(start.contains(".get_agent(parsed).is_some_and(|handle|handle.autonomy_level==6);"));
+    assert!(start.contains("ifstored_transcendent||registered_transcendent{"));
+    for later in [
+        "restart_agent(",
+        "update_agent_state(",
+        "persist_agent_fuel_ledger(",
+        "register_manifest_schedule(",
+        "update_last_action(",
+        "log_event(",
+    ] {
+        assert!(refusal < position(&start, later), "start_agent: {later}");
+    }
+
+    let (_, restore) = fn_shape(agents, "restore_persisted_agents");
+    let skip = position(&restore, "ifmanifest.autonomy_level==Some(6){");
+    assert!(restore[skip..].contains("continue;"));
+    assert!(skip < position(&restore, "start_agent_with_id("));
+    assert!(skip > position(&restore, "validate_stored_manifest(&manifest)"));
+
+    for (surface, name) in [
+        ("approve_consent_request", "approve_consent_request"),
+        ("batch_approve_consents", "batch_approve_consents"),
+    ] {
+        let (_, body) = fn_shape(consent, name);
+        let refusal = position(&body, &denial(surface, "ApprovalRequired"));
+        assert!(
+            refusal < position(&body, "resolve_consent("),
+            "{name}: refused after resolving"
+        );
+        assert!(body.contains("TRANSCENDENT_CREATION"), "{name}");
+    }
+    let consent_code = code_lines(consent);
+    for forbidden in [
+        "create_agent_immediately(",
+        "restart_agent(",
+        "start_agent(",
+    ] {
+        assert!(!consent_code.contains(forbidden), "consent: {forbidden}");
+    }
+
+    // Nothing enqueues a transcendent request: the operation type is named
+    // only by the consent module's refusal constant.
+    for (file, src) in [
+        ("commands/agents.rs", agents),
+        ("commands/consent.rs", consent),
+        (
+            "commands/cognitive.rs",
+            include_str!("../commands/cognitive.rs"),
+        ),
+        (
+            "commands/chat_llm.rs",
+            include_str!("../commands/chat_llm.rs"),
+        ),
+        ("lib.rs", include_str!("../lib.rs")),
+    ] {
+        let code = code_lines(src);
+        let expected = usize::from(file == "commands/consent.rs");
+        assert_eq!(
+            code.matches("\"transcendent_creation\"").count(),
+            expected,
+            "{file}"
+        );
+        assert!(!code.contains("enqueue_transcendent_review"), "{file}");
+    }
+    assert!(without_whitespace(&code_lines(consent))
+        .contains("constTRANSCENDENT_CREATION:&str=\"transcendent_creation\";"));
+}

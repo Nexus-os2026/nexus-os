@@ -94,6 +94,11 @@ use uuid::Uuid;
 
 // ── Consent / HITL Approval Commands ──
 
+/// Operation type of an L6 (transcendent) creation or activation request.
+/// P0-FINAL-GATE (item G): no longer enqueued; one stored before the closure
+/// can be denied but never approved.
+const TRANSCENDENT_CREATION: &str = "transcendent_creation";
+
 /// Notification payload emitted to the frontend when a consent request arrives.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsentNotification {
@@ -260,6 +265,17 @@ pub fn approve_consent_request(
         .iter()
         .find(|r| r.id == consent_id)
         .ok_or_else(|| format!("consent request '{consent_id}' not found or already resolved"))?;
+    // P0-FINAL-GATE (item G): creating or starting an L6 (transcendent) agent
+    // needs a human approval the backend cannot verify, and this IPC call is
+    // not one. A transcendent request (from before this closure) is refused
+    // before it is resolved or any agent is created or started; it stays
+    // pending and can still be denied.
+    if consent_row.operation_type == TRANSCENDENT_CREATION {
+        return Err(crate::phase0_surface::closed(
+            "approve_consent_request",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
+    }
     let agent_id_str = consent_row.agent_id.clone();
     let op_json: serde_json::Value =
         serde_json::from_str(&consent_row.operation_json).unwrap_or(json!({}));
@@ -274,45 +290,6 @@ pub fn approve_consent_request(
         .db
         .resolve_consent(&consent_id, "approved", &approved_by)
         .map_err(|e| format!("db error: {e}"))?;
-
-    if consent_row.operation_type == "transcendent_creation" {
-        match op_json
-            .get("mode")
-            .and_then(|value| value.as_str())
-            .unwrap_or("create_new")
-        {
-            "activate_existing" => {
-                let parsed = parse_agent_id(&agent_id_str)?;
-                let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-                supervisor.restart_agent(parsed).map_err(agent_error)?;
-                // Best-effort: persist state to DB; in-memory supervisor already updated
-                let _ = state.db.update_agent_state(&agent_id_str, "running");
-                update_last_action(state, parsed, "started");
-            }
-            _ => {
-                let manifest_json = op_json
-                    .get("manifest_json")
-                    .and_then(|value| value.as_str())
-                    .ok_or_else(|| {
-                        "approved transcendent creation missing manifest_json payload".to_string()
-                    })?;
-                let manifest = parse_agent_manifest_json(manifest_json)?;
-                let created_id =
-                    create_agent_immediately(state, manifest, manifest_json.to_string())?;
-                // Best-effort: remove pending placeholder; new agent already created
-                let _ = state.db.delete_agent(&agent_id_str);
-                state.log_event(
-                    SYSTEM_UUID,
-                    EventType::UserAction,
-                    json!({
-                        "action": "transcendent_creation_approved",
-                        "consent_id": consent_id,
-                        "created_agent_id": created_id,
-                    }),
-                );
-            }
-        }
-    }
 
     // 2. Approve in kernel consent runtime (best-effort — agent may not exist in supervisor)
     if let Ok(agent_uuid) = Uuid::parse_str(&agent_id_str) {
@@ -380,7 +357,7 @@ pub(crate) fn deny_consent_request(
         .resolve_consent(&consent_id, "denied", &denied_by)
         .map_err(|e| format!("db error: {e}"))?;
 
-    if consent_row.operation_type == "transcendent_creation"
+    if consent_row.operation_type == TRANSCENDENT_CREATION
         && op_json
             .get("mode")
             .and_then(|value| value.as_str())
@@ -433,6 +410,17 @@ pub(crate) fn batch_approve_consents(
     if consent_rows.is_empty() {
         return Err(format!(
             "no pending consent requests found for goal '{goal_id}'"
+        ));
+    }
+    // P0-FINAL-GATE (item G): a batch approval cannot resolve a transcendent
+    // request either; nothing in the batch is resolved.
+    if consent_rows
+        .iter()
+        .any(|row| row.operation_type == TRANSCENDENT_CREATION)
+    {
+        return Err(crate::phase0_surface::closed(
+            "batch_approve_consents",
+            crate::phase0_surface::Closure::ApprovalRequired,
         ));
     }
 
