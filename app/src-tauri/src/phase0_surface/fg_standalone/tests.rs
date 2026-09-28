@@ -547,6 +547,58 @@ fn p0_fg_standalone_every_example_target_is_inventoried() {
     assert_eq!(found, expected, "every example target must be inventoried");
 }
 
+// ── Build scripts of the withdrawn packages ─────────────────────────────────
+
+/// The one build script of a package with a withdrawn entry point, comments
+/// aside: `protocols/build.rs` asks Cargo to rebuild when the web interface
+/// (`app/dist`) changes, and does nothing else.
+const PROTOCOLS_BUILD_SCRIPT: &str = "use std::env; use std::path::PathBuf; \
+    fn main() { let manifest_dir = PathBuf::from(match env::var(\"CARGO_MANIFEST_DIR\") { \
+    Ok(d) => d, Err(e) => { eprintln!(\"CARGO_MANIFEST_DIR not set: {e}\"); \
+    std::process::exit(1); } }); \
+    let frontend_dist = manifest_dir.join(\"../app/dist\"); \
+    println!(\"cargo:rerun-if-changed={}\", frontend_dist.display()); }";
+
+/// The packages with a withdrawn entry point run no other build script:
+/// `protocols/build.rs` is exactly the script above (its only Cargo directive
+/// is `rerun-if-changed`), no other such package has a `build.rs`, and none
+/// names a build script with a `build` key.
+#[test]
+fn p0_fg_standalone_withdrawn_packages_run_no_other_build_script() {
+    let packages: BTreeSet<&str> = BINARY_TARGETS
+        .iter()
+        .filter(|(_, _, _, disposition)| *disposition == Withdrawn)
+        .map(|(member, _, _, _)| *member)
+        .collect();
+    assert_eq!(
+        packages.len(),
+        8,
+        "packages with a withdrawn entry point: {packages:?}"
+    );
+    for member in packages {
+        let package = workspace_root().join(member);
+        let manifest = read(&package.join("Cargo.toml"));
+        assert_eq!(
+            package_value(&manifest, "build"),
+            None,
+            "{member}: no `build` key may name a build script"
+        );
+        let script = package.join("build.rs");
+        if member == "protocols" {
+            let code = normalize_whitespace(&strip_rust_comments(&read(&script)));
+            assert_eq!(
+                code,
+                normalize_whitespace(PROTOCOLS_BUILD_SCRIPT),
+                "protocols/build.rs must stay exactly the rerun-if-changed script"
+            );
+            assert_eq!(code.matches("cargo:").count(), 1, "one Cargo directive");
+            assert!(code.contains("\"cargo:rerun-if-changed={}\""));
+        } else {
+            assert!(!script.exists(), "{member}: no build script");
+        }
+    }
+}
+
 // ── No alternate alias ──────────────────────────────────────────────────────
 
 /// Directories that hold no production source, and the test-only guard
