@@ -391,3 +391,33 @@ fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
     );
     assert!(!read.contains("fs::write("), "{read}");
 }
+
+/// Final Gate item H: API Client collections are checked for authentication
+/// secrets before the file is resolved or written.
+#[test]
+fn p0_fg_h_api_client_collections_are_checked_before_writing() {
+    let apps = normalized(include_str!("../../commands/apps.rs"));
+    let save = compact(&body(&apps, "pub(crate) fn api_client_save_collections("));
+    assert!(
+        in_order(
+            &save,
+            &[
+                "refuse_api_client_secrets(&data_json)?;",
+                "api_collections_path()?",
+                "std::fs::write(",
+            ],
+        ),
+        "{save}"
+    );
+    assert!(
+        save.starts_with("refuse_api_client_secrets(&data_json)?;"),
+        "{save}"
+    );
+    let fields = compact(&apps);
+    assert!(
+        fields.contains(
+            "constAPI_CLIENT_SECRET_FIELDS:&[&str]=&[\"authToken\",\"authPass\",\"authKeyValue\"];"
+        ),
+        "secret field list"
+    );
+}
