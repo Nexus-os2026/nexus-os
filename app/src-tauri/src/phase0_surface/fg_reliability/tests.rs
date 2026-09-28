@@ -73,8 +73,9 @@ fn p0_fg_k_approved_limits_are_pinned() {
 
 #[test]
 fn p0_fg_k_adversarial_rounds_are_refused_outside_their_bound() {
-    // Through the IPC command's own function (consent.rs), unchanged: the
-    // kernel refuses before allocating, and the refusal is the command's error.
+    // Through the IPC command's own function (consent.rs), which checks the
+    // kernel's bound first (`check_rounds`) and then runs `try_run_session`:
+    // the refusal is the kernel's text and the command's error.
     for rounds in [0, 51, 10_000] {
         let error = crate::run_adversarial_session("attacker".into(), "defender".into(), rounds)
             .expect_err("an out-of-range round count must be refused");

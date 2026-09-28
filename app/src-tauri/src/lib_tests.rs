@@ -3858,7 +3858,9 @@ fn p0_fg_adversarial_session_rounds_are_bounded_before_any_work() {
     for rounds in [0, 51] {
         assert_eq!(
             run_adversarial_session("attacker".into(), "defender".into(), rounds),
-            Err("rounds must be between 1 and 50".to_string()),
+            Err(format!(
+                "arena rounds must be between 1 and 50, got {rounds}"
+            )),
             "{rounds}"
         );
     }

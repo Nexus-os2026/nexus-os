@@ -966,16 +966,20 @@ fn p0_fg_source_lists_follow_their_directories() {
 
 /// P0-FINAL-GATE (item K, cross-stream request from stream 6): both
 /// resource-heavy consent-module commands check their caller-chosen amount
-/// first. A parallel simulation refuses a variant count outside 1..=10 before
-/// the model is built or the seed parsed. An adversarial session refuses a
-/// round count outside 1..=50 before the arena is built. (The kernel holds the
-/// authoritative bounds; these are the desktop's early checks.)
+/// first, against the kernel's authoritative bounds. A parallel simulation
+/// refuses a variant count outside 1..=10 before the model is built or the
+/// seed parsed. An adversarial session refuses a round count outside 1..=50
+/// (the kernel arena's `check_rounds`) before the arena is built. The desktop
+/// keeps no copy of either limit.
 #[test]
 fn p0_fg_k_simulation_and_arena_bounds_precede_any_work() {
     let consent = include_str!("../../commands/consent.rs");
     let constants = without_whitespace(&code_lines(consent));
-    assert!(constants.contains("constMAX_PARALLEL_SIMULATION_VARIANTS:u32=10;"));
-    assert!(constants.contains("constMAX_ADVERSARIAL_ROUNDS:u32=50;"));
+    assert!(constants
+        .contains("usenexus_kernel::simulation::runtime::MAX_PARALLEL_SIMULATION_VARIANTS;"));
+    assert!(constants.contains("usenexus_kernel::immune::arena::check_rounds;"));
+    assert!(!constants.contains("constMAX_PARALLEL_SIMULATION_VARIANTS"));
+    assert!(!constants.contains("constMAX_ADVERSARIAL_ROUNDS"));
 
     let (_, reports) = fn_shape(consent, "run_parallel_simulation_reports");
     assert_eq!(
@@ -985,7 +989,7 @@ fn p0_fg_k_simulation_and_arena_bounds_precede_any_work() {
     let (_, bounded) = fn_shape(consent, "run_parallel_simulation_reports_with");
     assert!(
         bounded.starts_with(concat!(
-            "if!(1..=MAX_PARALLEL_SIMULATION_VARIANTS).contains(&variant_count){",
+            "if!(1..=MAX_PARALLEL_SIMULATION_VARIANTSasu32).contains(&variant_count){",
             "returnErr(format!(\"variant_countmustbebetween1and{MAX_PARALLEL_SIMULATION_VARIANTS}\"));}",
             "letllm=simulation_llm();letseed=parse_seed(",
         )),
@@ -995,9 +999,9 @@ fn p0_fg_k_simulation_and_arena_bounds_precede_any_work() {
     let (_, arena) = fn_shape(consent, "run_adversarial_session");
     assert!(
         arena.starts_with(concat!(
-            "if!(1..=MAX_ADVERSARIAL_ROUNDS).contains(&rounds){",
-            "returnErr(format!(\"roundsmustbebetween1and{MAX_ADVERSARIAL_ROUNDS}\"));}",
+            "letrounds=check_rounds(rounds).map_err(|error|error.to_string())?;",
             "letmutarena=nexus_kernel::immune::AdversarialArena::new();",
+            "letsession=arena.try_run_session(&attacker_id,&defender_id,rounds)",
         )),
         "{arena}"
     );

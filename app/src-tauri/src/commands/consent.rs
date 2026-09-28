@@ -47,6 +47,7 @@ use nexus_kernel::genome::{
     JsonAgentManifest as GenomeJsonManifest,
 };
 use nexus_kernel::hardware::{recommend_agent_configs, HardwareProfile};
+use nexus_kernel::immune::arena::check_rounds;
 use nexus_kernel::lifecycle::AgentState;
 use nexus_kernel::manifest::{parse_manifest, AgentManifest};
 use nexus_kernel::neural_bridge::{ContextQuery, ContextSource, NeuralBridge, NeuralBridgeConfig};
@@ -56,6 +57,7 @@ use nexus_kernel::permissions::{
 };
 use nexus_kernel::protocols::a2a_client::A2aClient;
 use nexus_kernel::redaction::RedactionEngine;
+use nexus_kernel::simulation::runtime::MAX_PARALLEL_SIMULATION_VARIANTS;
 use nexus_kernel::simulation::{
     compare_reports, estimate_simulation_fuel, generate_personas, parse_seed,
     run_parallel_simulations as kernel_run_parallel_simulations, PersistedSimulationState,
@@ -1152,17 +1154,6 @@ pub(crate) fn list_simulations(state: &AppState) -> Result<Vec<SimulationSummary
         .collect()
 }
 
-/// Most variants one parallel-simulation request may run. P0-FINAL-GATE
-/// (item K): the literal 10 mirrors the kernel's authoritative bound,
-/// `nexus_kernel::simulation::runtime::MAX_PARALLEL_SIMULATION_VARIANTS`,
-/// which stream 6 adds; the coordinator reconciles the two at composition.
-const MAX_PARALLEL_SIMULATION_VARIANTS: u32 = 10;
-
-/// Most rounds one adversarial session may run. P0-FINAL-GATE (item K): the
-/// authoritative bound is the kernel arena's (`kernel/src/immune/arena.rs`,
-/// stream 6); this is the desktop's early check, so it does no work first.
-const MAX_ADVERSARIAL_ROUNDS: u32 = 50;
-
 pub(crate) fn run_parallel_simulation_reports(
     state: &AppState,
     seed_text: String,
@@ -1180,8 +1171,10 @@ pub(crate) fn run_parallel_simulation_reports_with(
     simulation_llm: impl FnOnce() -> Arc<dyn nexus_kernel::cognitive::PlannerLlm>,
 ) -> Result<Vec<PredictionReport>, String> {
     // P0-FINAL-GATE (item K): an out-of-range variant count is refused before
-    // the model is built, the seed is parsed or any variant is started.
-    if !(1..=MAX_PARALLEL_SIMULATION_VARIANTS).contains(&variant_count) {
+    // the model is built, the seed is parsed or any variant is started. The
+    // bound is the kernel's (`MAX_PARALLEL_SIMULATION_VARIANTS`), which
+    // `run_parallel_simulations` enforces again.
+    if !(1..=MAX_PARALLEL_SIMULATION_VARIANTS as u32).contains(&variant_count) {
         return Err(format!(
             "variant_count must be between 1 and {MAX_PARALLEL_SIMULATION_VARIANTS}"
         ));
@@ -1268,15 +1261,14 @@ pub(crate) fn run_adversarial_session(
     defender_id: String,
     rounds: u32,
 ) -> Result<serde_json::Value, String> {
-    // P0-FINAL-GATE (item K): an out-of-range round count is refused before
-    // the arena is built or any round is allocated or run.
-    if !(1..=MAX_ADVERSARIAL_ROUNDS).contains(&rounds) {
-        return Err(format!(
-            "rounds must be between 1 and {MAX_ADVERSARIAL_ROUNDS}"
-        ));
-    }
+    // P0-FINAL-GATE (item K): an out-of-range round count is refused by the
+    // kernel's own check (`1..=MAX_ARENA_ROUNDS`) before the arena is built or
+    // any round is allocated or run; the arena checks again.
+    let rounds = check_rounds(rounds).map_err(|error| error.to_string())?;
     let mut arena = nexus_kernel::immune::AdversarialArena::new();
-    let session = arena.run_session(&attacker_id, &defender_id, rounds);
+    let session = arena
+        .try_run_session(&attacker_id, &defender_id, rounds)
+        .map_err(|error| error.to_string())?;
     serde_json::to_value(&session).map_err(|e| e.to_string())
 }
 
