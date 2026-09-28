@@ -183,7 +183,10 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("a2a_crate_discover_agent", Closure::NetworkDestination),
     ("mcp_host_connect", Closure::NetworkDestination),
     ("mcp_host_call_tool", Closure::NetworkDestination),
-    ("builder_theme_extract_from_url", Closure::NetworkDestination),
+    (
+        "builder_theme_extract_from_url",
+        Closure::NetworkDestination,
+    ),
     ("nexus_link_send_model", Closure::PeerTransfer),
     // P0-FINAL-GATE item C: a credential would be placed on a process command
     // line.
@@ -1389,9 +1392,15 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
     ),
     // P0-FINAL-GATE items B, C, F and I: clients whose destination, peer or
     // helper the caller or PATH would choose.
-    (".discover_agent(", "A2A discovery of a caller-chosen agent URL"),
+    (
+        ".discover_agent(",
+        "A2A discovery of a caller-chosen agent URL",
+    ),
     (".send_task(", "A2A task sent to a caller-chosen agent URL"),
-    (".get_task_status(", "A2A status from a caller-chosen agent URL"),
+    (
+        ".get_task_status(",
+        "A2A status from a caller-chosen agent URL",
+    ),
     (".cancel_task(", "A2A cancel at a caller-chosen agent URL"),
     (
         "a2a_crate_cmds::a2a_crate_send_task",
@@ -1409,8 +1418,14 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
         ".connect_server(",
         "MCP host connection to a caller-registered URL",
     ),
-    (".call_tool(", "MCP host tool call to a caller-registered server"),
-    ("extract_theme_from_url", "theme fetch from a caller-chosen URL"),
+    (
+        ".call_tool(",
+        "MCP host tool call to a caller-registered server",
+    ),
+    (
+        "extract_theme_from_url",
+        "theme fetch from a caller-chosen URL",
+    ),
     (".send_model(", "Nexus Link model transfer to a peer"),
     ("discover_peer_models(", "Nexus Link peer model listing"),
     (
