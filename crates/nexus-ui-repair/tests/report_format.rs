@@ -6,6 +6,7 @@
 //! by the ACL gate in `ReportWriter::write`.
 
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard, PoisonError, TryLockError};
 
 use nexus_ui_repair::governance::acl::Acl;
 use nexus_ui_repair::specialists::report_writer::{
@@ -15,19 +16,35 @@ use nexus_ui_repair::specialists::report_writer::{
 use nexus_ui_repair::Error;
 use tempfile::tempdir;
 
-/// Guard that restores the original `HOME` when dropped. Shares a
-/// process-wide resource with `tests/acl.rs`, so tests in this binary
-/// must not run in parallel with anything that also touches `HOME`.
-/// (Cargo gives each `tests/` file its own binary, so this is fine.)
+/// Serializes every change to the process-wide `HOME` in this test binary.
+///
+/// Cargo builds each `tests/*.rs` file as its own process, which keeps
+/// `tests/acl.rs` out of this binary. It does not keep this binary's own
+/// tests apart: they run in parallel threads of one process. Without this
+/// lock, one test could restore or remove `HOME` while another was building
+/// `Acl::default_scout()` from it. Only the `HOME` change is serialized; the
+/// tests otherwise still run in parallel.
+static HOME_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+/// Sets `HOME` for as long as it lives and holds `HOME_ENV_LOCK` the whole
+/// time. `Drop` restores the original `HOME` while the lock is still held:
+/// the lock field is released only after `drop` returns.
 struct HomeGuard {
     original: Option<String>,
+    _lock: MutexGuard<'static, ()>,
 }
 
 impl HomeGuard {
     fn set(new_home: &std::path::Path) -> Self {
+        // A test that panicked while holding the lock already restored `HOME`
+        // in `Drop`, so the lock is still safe to take after it is poisoned.
+        let lock = HOME_ENV_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
         let original = std::env::var("HOME").ok();
         std::env::set_var("HOME", new_home);
-        Self { original }
+        Self {
+            original,
+            _lock: lock,
+        }
     }
 }
 
@@ -94,6 +111,25 @@ fn build_sandboxed_writer() -> (ReportWriter, Acl, tempfile::TempDir, HomeGuard,
     let acl = Acl::default_scout();
     let writer = ReportWriter::new(reports.clone());
     (writer, acl, home_dir, guard, reports)
+}
+
+/// While a `HomeGuard` is alive it holds `HOME_ENV_LOCK`, so no other test
+/// in this binary can change `HOME` underneath it.
+#[test]
+fn home_guard_holds_the_home_lock_while_alive() {
+    let home_dir = tempdir().expect("create temp HOME");
+    let guard = HomeGuard::set(home_dir.path());
+
+    assert!(
+        matches!(HOME_ENV_LOCK.try_lock(), Err(TryLockError::WouldBlock)),
+        "HOME_ENV_LOCK must be held while a HomeGuard is alive"
+    );
+    assert_eq!(
+        std::env::var_os("HOME").as_deref(),
+        Some(home_dir.path().as_os_str()),
+        "HOME must stay this guard's value while it is alive"
+    );
+    drop(guard);
 }
 
 #[test]
