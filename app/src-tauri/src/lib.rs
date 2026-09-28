@@ -6798,12 +6798,14 @@ pub mod runtime {
         ))
     }
 
+    // P0-FINAL-GATE (item G): the call itself was taken as the approval of a
+    // self-rewrite patch. It is not human approval; the command only denies.
     #[tauri::command]
-    fn self_rewrite_apply_patch(
-        state: tauri::State<'_, AppState>,
-        patch_id: String,
-    ) -> Result<(), String> {
-        super::self_rewrite_apply_patch(state.inner(), patch_id)
+    pub(crate) fn self_rewrite_apply_patch() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "self_rewrite_apply_patch",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ))
     }
 
     #[tauri::command]

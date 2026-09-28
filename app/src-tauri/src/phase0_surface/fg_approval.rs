@@ -400,3 +400,85 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
     assert!(without_whitespace(&code_lines(consent))
         .contains("constTRANSCENDENT_CREATION:&str=\"transcendent_creation\";"));
 }
+
+/// Entries of the desktop command registration, whitespace-free.
+fn registered_commands() -> Vec<String> {
+    let lib = include_str!("../lib.rs");
+    let start = lib
+        .find("generate_handler![")
+        .expect("command registration")
+        + "generate_handler![".len();
+    let end = start + lib[start..].find(']').expect("end of registration");
+    lib[start..end]
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or_default())
+        .flat_map(|line| line.split(','))
+        .map(without_whitespace)
+        .filter(|entry| !entry.is_empty())
+        .collect()
+}
+
+/// P0-FINAL-GATE (item G): three commands took a caller's boolean, or the
+/// call itself, as a human approval:
+/// - `nx_consent_respond(granted)` and `nx_agent_approve(approved)` answered
+///   consent requests that only the closed nx agent loops produced;
+/// - `self_rewrite_apply_patch` marked a patch approved because the frontend
+///   had called it.
+///
+/// Each now takes no input and only returns the bounded `ApprovalRequired`
+/// reason. Each stays registered exactly once, and no pending-consent channel
+/// is left for a boolean to answer.
+#[cfg(all(
+    feature = "tauri-runtime",
+    any(target_os = "windows", target_os = "macos", target_os = "linux")
+))]
+#[test]
+fn p0_fg_g_caller_asserted_approval_commands_only_deny() {
+    let approval = |command| Err(closed(command, Closure::ApprovalRequired));
+    assert_eq!(
+        crate::nx_bridge::commands::nx_consent_respond(),
+        approval("nx_consent_respond")
+    );
+    assert_eq!(
+        crate::nx_bridge::commands::nx_agent_approve(),
+        approval("nx_agent_approve")
+    );
+    assert_eq!(
+        crate::runtime::self_rewrite_apply_patch(),
+        approval("self_rewrite_apply_patch")
+    );
+
+    let nx = include_str!("../nx_bridge/commands.rs");
+    let lib = include_str!("../lib.rs");
+    let registered = registered_commands();
+    for (src, module, name) in [
+        (nx, "nx_bridge::commands::", "nx_consent_respond"),
+        (nx, "nx_bridge::commands::", "nx_agent_approve"),
+        (lib, "", "self_rewrite_apply_patch"),
+    ] {
+        let (params, body) = fn_shape(src, name);
+        assert_eq!(params, "()", "{name} must take no input");
+        assert_eq!(
+            body,
+            format!(
+                "Err(crate::phase0_surface::closed(\"{name}\",crate::phase0_surface::Closure::ApprovalRequired))"
+            ),
+            "{name} must only deny"
+        );
+        let entry = format!("{module}{name}");
+        assert_eq!(
+            registered.iter().filter(|e| **e == entry).count(),
+            1,
+            "{entry} must stay registered once"
+        );
+    }
+
+    let bridge = code_lines(include_str!("../nx_bridge/mod.rs")) + &code_lines(nx);
+    for gone in ["pending_consents", "ConsentPending", "oneshot"] {
+        assert!(!bridge.contains(gone), "nx bridge: {gone}");
+    }
+    let advanced = code_lines(include_str!("../commands/advanced.rs"));
+    for gone in ["fn self_rewrite_apply_patch(", "PatchStatus::Approved"] {
+        assert!(!advanced.contains(gone), "advanced: {gone}");
+    }
+}

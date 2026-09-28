@@ -102,23 +102,14 @@ pub async fn nx_chat_cancel(state: State<'_, NxState>) -> Result<(), String> {
     Ok(())
 }
 
-/// Respond to a consent request from the frontend.
+// P0-FINAL-GATE (item G): a caller's `granted` boolean is not human approval.
+// The consent requests it answered came only from the closed nx agent loops.
 #[command]
-pub async fn nx_consent_respond(
-    request_id: String,
-    granted: bool,
-    state: State<'_, NxState>,
-) -> Result<(), String> {
-    let mut consents = state.pending_consents.lock().await;
-    if let Some(pending) = consents.remove(&request_id) {
-        pending
-            .response_tx
-            .send(granted)
-            .map_err(|_| "Consent channel closed".to_string())?;
-        Ok(())
-    } else {
-        Err(format!("No pending consent with ID: {}", request_id))
-    }
+pub fn nx_consent_respond() -> Result<(), String> {
+    Err(crate::phase0_surface::closed(
+        "nx_consent_respond",
+        crate::phase0_surface::Closure::ApprovalRequired,
+    ))
 }
 
 #[command]
@@ -425,24 +416,14 @@ pub fn nx_agent_run() -> Result<AgentRunResult, String> {
     ))
 }
 
-/// Approve or deny a pending HITL consent request during an agent run.
+// P0-FINAL-GATE (item G): a caller's `approved` boolean is not human approval.
+// The approval requests it answered came only from the closed nx agent run.
 #[command]
-pub async fn nx_agent_approve(
-    request_id: String,
-    approved: bool,
-    state: State<'_, NxState>,
-) -> Result<(), String> {
-    // Re-use the existing consent infrastructure
-    let mut consents = state.pending_consents.lock().await;
-    if let Some(pending) = consents.remove(&request_id) {
-        pending
-            .response_tx
-            .send(approved)
-            .map_err(|_| "Approval channel closed".to_string())?;
-        Ok(())
-    } else {
-        Err(format!("No pending approval with ID: {}", request_id))
-    }
+pub fn nx_agent_approve() -> Result<(), String> {
+    Err(crate::phase0_surface::closed(
+        "nx_agent_approve",
+        crate::phase0_surface::Closure::ApprovalRequired,
+    ))
 }
 
 /// List current app grants with categories.
