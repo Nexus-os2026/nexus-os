@@ -1,19 +1,32 @@
 //! Encryption at rest for Nexus OS data stores.
 //!
-//! Uses AES-256-GCM with keys derived via Argon2id from a user-provided
-//! password or master secret.  Keys are zeroized on drop to prevent
-//! leaking sensitive material in memory.
+//! AES-256-GCM. A key comes from one of these sources:
+//! - [`EncryptionKey::derive`]: Argon2id over a password and a salt.
+//! - `NEXUS_ENCRYPTION_KEY` ([`EncryptionKey::from_env`]): 64 hexadecimal
+//!   characters are the raw 256-bit key; any other value is hashed once with
+//!   SHA-256.
+//! - A vault key file ([`EncryptionKey::from_file`]): exactly 32 bytes are the
+//!   raw key; any other contents are hashed once with SHA-256.
+//!
+//! The environment and file sources apply no salt and no stretching, and
+//! Nexus measures no key strength: it refuses only an empty or
+//! whitespace-only value (Final Gate item A), so a short or guessable value
+//! gives a correspondingly weak key. Keys are zeroized on drop.
 
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Nonce};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 const NONCE_LEN: usize = 12;
 const SALT_LEN: usize = 16;
 const ENCRYPTED_HEADER: &[u8] = b"NEXUS_ENC_V1";
+/// The only environment variable the vault key is read from.
+const DEFAULT_KEY_ENV: &str = "NEXUS_ENCRYPTION_KEY";
+/// Largest vault key file accepted, in bytes (Final Gate item E).
+pub const MAX_KEY_FILE_BYTES: u64 = 4096;
 
 /// Public access to the header length for other modules (e.g. backup).
 pub const ENCRYPTED_HEADER_LEN: usize = 12; // b"NEXUS_ENC_V1".len()
@@ -86,14 +99,25 @@ impl EncryptionKey {
 
     /// Load encryption key from the `NEXUS_ENCRYPTION_KEY` environment variable.
     ///
-    /// The env var is expected to contain a hex-encoded 32-byte key or a
-    /// passphrase (hashed with SHA-256 to produce the key bytes).
+    /// 64 hexadecimal characters are the raw 256-bit key; any other value is
+    /// hashed once with SHA-256. An unset, empty or whitespace-only value is
+    /// refused (Final Gate item A): it would give a constant key.
     pub fn from_env() -> Result<Self, CryptoError> {
-        let raw = std::env::var("NEXUS_ENCRYPTION_KEY").map_err(|_| {
+        let raw = Zeroizing::new(std::env::var(DEFAULT_KEY_ENV).map_err(|_| {
             CryptoError::KeySourceUnavailable(
                 "NEXUS_ENCRYPTION_KEY environment variable not set".into(),
             )
-        })?;
+        })?);
+        Self::from_env_value(&raw)
+    }
+
+    /// [`EncryptionKey::from_env`] for a value already read.
+    fn from_env_value(raw: &str) -> Result<Self, CryptoError> {
+        if raw.trim().is_empty() {
+            return Err(CryptoError::KeySourceUnavailable(
+                "NEXUS_ENCRYPTION_KEY is empty".into(),
+            ));
+        }
 
         // If it looks like a 64-char hex string, decode as raw key bytes.
         if raw.len() == 64 && raw.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -116,26 +140,44 @@ impl EncryptionKey {
         Ok(Self { key })
     }
 
-    /// Load encryption key from a file (e.g. Docker/K8s secret mount). A
-    /// failure names the error kind, never the key file's location.
+    /// Load the vault key from an operator-controlled key file (Final Gate
+    /// item E).
+    ///
+    /// The file is opened once. The checks apply to the file actually opened
+    /// and read, never to a path resolved again:
+    /// - the last path component must not be a symbolic link;
+    /// - it must be a regular file owned by the user running Nexus OS, with
+    ///   no access for group or others;
+    /// - it must hold 1 to [`MAX_KEY_FILE_BYTES`] bytes, not all whitespace,
+    ///   and must not change while it is read.
+    ///
+    /// Exactly 32 bytes are the raw key; any other contents are hashed once
+    /// with SHA-256, as before. Intermediate directories, their permissions
+    /// and macOS extended ACLs are not examined. Key files are supported on
+    /// Linux and macOS only: elsewhere, where ownership and access cannot be
+    /// checked this way, the source is refused.
+    ///
+    /// A failure names a bounded reason, never the key file's location or
+    /// contents.
     pub fn from_file(path: &Path) -> Result<Self, CryptoError> {
-        let contents = std::fs::read(path).map_err(|e| {
-            CryptoError::Io(format!("encryption key file unreadable: {}", e.kind()))
-        })?;
-
-        if contents.len() == 32 {
-            let mut key = [0u8; 32];
-            key.copy_from_slice(&contents);
-            return Ok(Self { key });
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            let file = key_file::open(path).map_err(KeyFileRejection::into_error)?;
+            Self::from_opened_key_file(&file)
         }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = path;
+            Err(KeyFileRejection::UnsupportedPlatform.into_error())
+        }
+    }
 
-        // Treat file contents as a passphrase.
-        let mut hasher = Sha256::new();
-        hasher.update(&contents);
-        let digest = hasher.finalize();
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&digest);
-        Ok(Self { key })
+    /// [`EncryptionKey::from_file`] for a key file already opened by
+    /// `key_file::open`: checks, reads and derives from that same file.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn from_opened_key_file(file: &std::fs::File) -> Result<Self, CryptoError> {
+        let contents = key_file::read(file).map_err(KeyFileRejection::into_error)?;
+        key_from_file_contents(&contents).map_err(KeyFileRejection::into_error)
     }
 
     /// Load key using the configured source.
@@ -146,7 +188,17 @@ impl EncryptionKey {
             ));
         }
         match config.key_source.as_str() {
-            "env" => Self::from_env(),
+            "env" => {
+                // Final Gate item A: the variable read is the variable
+                // configured. Another name is refused rather than silently
+                // replaced by NEXUS_ENCRYPTION_KEY.
+                if config.key_env != DEFAULT_KEY_ENV {
+                    return Err(CryptoError::KeySourceUnavailable(
+                        "key_env must be NEXUS_ENCRYPTION_KEY".into(),
+                    ));
+                }
+                Self::from_env()
+            }
             "file" => {
                 let path = config.key_file.as_deref().ok_or_else(|| {
                     CryptoError::KeySourceUnavailable("encryption_key_file not configured".into())
@@ -194,6 +246,174 @@ impl EncryptionKey {
         hk.expand(info, &mut out)
             .expect("32 bytes < 255 * HashLen for SHA-256");
         out
+    }
+}
+
+// ── Vault key file (Final Gate item E) ─────────────────────────────────
+
+/// Why a vault key file was refused. The reasons carry no path and no
+/// contents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyFileRejection {
+    /// It could not be opened or read.
+    Unavailable,
+    /// The last path component is a symbolic link.
+    Redirected,
+    /// It is a directory, a FIFO, a device or another non-regular file.
+    NotRegularFile,
+    /// It is owned by another user.
+    ForeignOwner,
+    /// Group or other users have some access to it.
+    AccessibleToOthers,
+    /// It is empty or holds only whitespace.
+    Empty,
+    /// It is larger than [`MAX_KEY_FILE_BYTES`].
+    TooLarge,
+    /// It changed while it was read.
+    Changed,
+    /// This platform does not support key files.
+    UnsupportedPlatform,
+}
+
+impl KeyFileRejection {
+    pub const fn reason(self) -> &'static str {
+        match self {
+            Self::Unavailable => "the key file could not be opened or read",
+            Self::Redirected => "the key file is a symbolic link",
+            Self::NotRegularFile => "the key file is not a regular file",
+            Self::ForeignOwner => "the key file is not owned by the user running Nexus OS",
+            Self::AccessibleToOthers => {
+                "the key file is accessible to group or other users (use mode 0600 or 0400)"
+            }
+            Self::Empty => "the key file is empty or holds only whitespace",
+            Self::TooLarge => "the key file is larger than 4096 bytes",
+            Self::Changed => "the key file changed while it was read",
+            Self::UnsupportedPlatform => {
+                "key files are supported on Linux and macOS only; use key_source = \"env\""
+            }
+        }
+    }
+
+    fn into_error(self) -> CryptoError {
+        CryptoError::KeySourceUnavailable(format!(
+            "encryption key file rejected: {}",
+            self.reason()
+        ))
+    }
+}
+
+/// The key a key file's contents give: exactly 32 bytes are the raw key, any
+/// other contents are hashed once with SHA-256. Contents that are empty or
+/// all whitespace are refused.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn key_from_file_contents(contents: &[u8]) -> Result<EncryptionKey, KeyFileRejection> {
+    if contents.iter().all(u8::is_ascii_whitespace) {
+        return Err(KeyFileRejection::Empty);
+    }
+    let mut key = [0u8; 32];
+    if contents.len() == 32 {
+        key.copy_from_slice(contents);
+    } else {
+        key.copy_from_slice(&Sha256::digest(contents));
+    }
+    Ok(EncryptionKey { key })
+}
+
+/// The checks on the opened file's own metadata: a regular file owned by
+/// `euid`, with no access for group or others, of 1 to
+/// [`MAX_KEY_FILE_BYTES`] bytes.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn check_opened_key_file(
+    regular: bool,
+    owner: u32,
+    euid: u32,
+    mode: u32,
+    len: u64,
+) -> Result<(), KeyFileRejection> {
+    if !regular {
+        return Err(KeyFileRejection::NotRegularFile);
+    }
+    if owner != euid {
+        return Err(KeyFileRejection::ForeignOwner);
+    }
+    if mode & 0o077 != 0 {
+        return Err(KeyFileRejection::AccessibleToOthers);
+    }
+    if len == 0 {
+        return Err(KeyFileRejection::Empty);
+    }
+    if len > MAX_KEY_FILE_BYTES {
+        return Err(KeyFileRejection::TooLarge);
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod key_file {
+    use super::{check_opened_key_file, KeyFileRejection, MAX_KEY_FILE_BYTES};
+    use std::fs::{File, Metadata, OpenOptions};
+    use std::io::Read;
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    use std::path::Path;
+    use zeroize::Zeroizing;
+
+    /// Opens the key file once. A symbolic link as the last component is
+    /// refused (`O_NOFOLLOW`), and opening a FIFO or a device never blocks or
+    /// acquires a terminal (`O_NONBLOCK`, `O_NOCTTY`); its type is refused
+    /// from the opened descriptor.
+    pub(super) fn open(path: &Path) -> Result<File, KeyFileRejection> {
+        OpenOptions::new()
+            .read(true)
+            .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK | nix::libc::O_NOCTTY)
+            .open(path)
+            .map_err(|error| {
+                if error.raw_os_error() == Some(nix::libc::ELOOP) {
+                    KeyFileRejection::Redirected
+                } else {
+                    KeyFileRejection::Unavailable
+                }
+            })
+    }
+
+    /// The contents of the opened file, after checking that same file. The
+    /// read is bounded, and the file must be unchanged afterwards.
+    pub(super) fn read(file: &File) -> Result<Zeroizing<Vec<u8>>, KeyFileRejection> {
+        let before = file.metadata().map_err(|_| KeyFileRejection::Unavailable)?;
+        // SAFETY: geteuid has no preconditions and cannot fail.
+        let euid = unsafe { nix::libc::geteuid() };
+        check_opened_key_file(
+            before.file_type().is_file(),
+            before.uid(),
+            euid,
+            before.mode(),
+            before.len(),
+        )?;
+        let mut contents = Zeroizing::new(Vec::with_capacity(MAX_KEY_FILE_BYTES as usize + 1));
+        file.take(MAX_KEY_FILE_BYTES + 1)
+            .read_to_end(&mut contents)
+            .map_err(|_| KeyFileRejection::Unavailable)?;
+        let after = file.metadata().map_err(|_| KeyFileRejection::Unavailable)?;
+        if contents.len() as u64 != before.len() || !unchanged(&before, &after) {
+            return Err(KeyFileRejection::Changed);
+        }
+        Ok(contents)
+    }
+
+    /// Whether the file's identity, size, contents time, mode and owner are
+    /// the same in both snapshots.
+    pub(super) fn unchanged(before: &Metadata, after: &Metadata) -> bool {
+        let state = |m: &Metadata| {
+            (
+                m.dev(),
+                m.ino(),
+                m.len(),
+                m.mtime(),
+                m.mtime_nsec(),
+                m.mode(),
+                m.uid(),
+            )
+        };
+        state(before) == state(after)
     }
 }
 
@@ -396,10 +616,11 @@ impl Default for EncryptionConfig {
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    static ENV_KEY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    /// Serializes tests that set or remove NEXUS_ENCRYPTION_KEY.
+    pub(crate) static ENV_KEY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn encrypt_decrypt_roundtrip() {
@@ -579,5 +800,370 @@ mod tests {
             Err(error) => assert!(!error.to_string().contains("marker-key-file")),
             Ok(_) => panic!("a missing key file loaded"),
         }
+    }
+
+    /// Final Gate item A: empty or whitespace-only vault key material would
+    /// give a constant key and is refused; the accepted forms keep their
+    /// derivations.
+    #[test]
+    fn p0_fg_a_empty_vault_environment_keys_are_refused() {
+        for value in ["", " ", "\t\r\n"] {
+            match EncryptionKey::from_env_value(value) {
+                Err(CryptoError::KeySourceUnavailable(message)) => {
+                    assert_eq!(message, "NEXUS_ENCRYPTION_KEY is empty", "{value:?}")
+                }
+                Err(other) => panic!("{value:?}: {other}"),
+                Ok(_) => panic!("{value:?}: a key was derived"),
+            }
+        }
+        let hex = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        assert_eq!(
+            EncryptionKey::from_env_value(hex).unwrap().key.to_vec(),
+            hex_bytes(hex)
+        );
+        // SHA-256("synthetic passphrase\n"), computed with sha256sum.
+        assert_eq!(
+            EncryptionKey::from_env_value("synthetic passphrase\n")
+                .unwrap()
+                .key
+                .to_vec(),
+            hex_bytes(PASSPHRASE_VECTOR)
+        );
+    }
+
+    /// Final Gate item A: the configured variable is the variable read.
+    #[test]
+    fn p0_fg_a_a_key_env_other_than_nexus_encryption_key_is_refused() {
+        for key_env in ["OTHER_KEY", "", "nexus_encryption_key"] {
+            let config = EncryptionConfig {
+                enabled: true,
+                key_source: "env".into(),
+                key_env: key_env.into(),
+                key_file: None,
+            };
+            match EncryptionKey::from_config(&config) {
+                Err(CryptoError::KeySourceUnavailable(message)) => {
+                    assert_eq!(
+                        message, "key_env must be NEXUS_ENCRYPTION_KEY",
+                        "{key_env:?}"
+                    )
+                }
+                Err(other) => panic!("{key_env:?}: {other}"),
+                Ok(_) => panic!("{key_env:?}: a key was loaded"),
+            }
+        }
+    }
+
+    /// SHA-256("synthetic passphrase\n").
+    const PASSPHRASE_VECTOR: &str =
+        "bc257a67d8a3fdef45bae7c9c88fc7defa64762353cdbefdf86f467ae58d1ffa";
+
+    fn hex_bytes(hex: &str) -> Vec<u8> {
+        (0..hex.len())
+            .step_by(2)
+            .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
+            .collect()
+    }
+
+    /// Final Gate item E: the vault key file is validated on the file that is
+    /// opened and read.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    mod key_files {
+        use super::{hex_bytes, PASSPHRASE_VECTOR};
+        use crate::crypto::{
+            check_opened_key_file, key_file, CryptoError, EncryptionConfig, EncryptionKey,
+            KeyFileRejection, MAX_KEY_FILE_BYTES,
+        };
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        use std::path::{Path, PathBuf};
+
+        /// A key file with exactly `mode`, created by this test (so owned by
+        /// the user running it).
+        fn key_file_at(dir: &Path, name: &str, contents: &[u8], mode: u32) -> PathBuf {
+            let path = dir.join(name);
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&path)
+                .unwrap();
+            file.write_all(contents).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+            path
+        }
+
+        fn rejection(path: &Path) -> String {
+            match EncryptionKey::from_file(path) {
+                Err(CryptoError::KeySourceUnavailable(message)) => message,
+                Err(other) => panic!("unexpected error: {other}"),
+                Ok(_) => panic!("a key was loaded"),
+            }
+        }
+
+        fn rejected(reason: KeyFileRejection) -> String {
+            format!("encryption key file rejected: {}", reason.reason())
+        }
+
+        #[test]
+        fn p0_fg_e_a_private_regular_key_file_keeps_its_derivation() {
+            let dir = tempfile::tempdir().unwrap();
+            let raw: Vec<u8> = (0..32).collect();
+            for mode in [0o600, 0o400] {
+                let path = key_file_at(dir.path(), &format!("raw-{mode:o}"), &raw, mode);
+                assert_eq!(EncryptionKey::from_file(&path).unwrap().key.to_vec(), raw);
+            }
+            let path = key_file_at(dir.path(), "passphrase", b"synthetic passphrase\n", 0o600);
+            assert_eq!(
+                EncryptionKey::from_file(&path).unwrap().key.to_vec(),
+                hex_bytes(PASSPHRASE_VECTOR)
+            );
+            // Through the configured file source as well.
+            let config = EncryptionConfig {
+                enabled: true,
+                key_source: "file".into(),
+                key_env: "NEXUS_ENCRYPTION_KEY".into(),
+                key_file: Some(path.to_str().unwrap().into()),
+            };
+            assert_eq!(
+                EncryptionKey::from_config(&config).unwrap().key.to_vec(),
+                hex_bytes(PASSPHRASE_VECTOR)
+            );
+        }
+
+        #[test]
+        fn p0_fg_e_key_files_accessible_to_others_are_refused() {
+            let dir = tempfile::tempdir().unwrap();
+            for mode in [0o640, 0o644, 0o604, 0o660, 0o606, 0o610, 0o601, 0o620] {
+                let path =
+                    key_file_at(dir.path(), &format!("key-{mode:o}"), b"synthetic key", mode);
+                assert_eq!(
+                    rejection(&path),
+                    rejected(KeyFileRejection::AccessibleToOthers),
+                    "{mode:o}"
+                );
+            }
+        }
+
+        #[test]
+        fn p0_fg_e_a_symlinked_key_file_is_refused() {
+            let dir = tempfile::tempdir().unwrap();
+            let target = key_file_at(dir.path(), "target", b"synthetic key", 0o600);
+            assert!(EncryptionKey::from_file(&target).is_ok());
+            let link = dir.path().join("link");
+            std::os::unix::fs::symlink(&target, &link).unwrap();
+            assert_eq!(rejection(&link), rejected(KeyFileRejection::Redirected));
+            // A dangling link and a link to a directory are refused alike.
+            let dangling = dir.path().join("dangling");
+            std::os::unix::fs::symlink(dir.path().join("absent"), &dangling).unwrap();
+            assert_eq!(rejection(&dangling), rejected(KeyFileRejection::Redirected));
+            let to_dir = dir.path().join("to-dir");
+            std::os::unix::fs::symlink(dir.path(), &to_dir).unwrap();
+            assert_eq!(rejection(&to_dir), rejected(KeyFileRejection::Redirected));
+            // Non-claim: only the last component is checked, so a key file
+            // reached through a symlinked directory is opened.
+            let real_dir = dir.path().join("real");
+            std::fs::create_dir(&real_dir).unwrap();
+            key_file_at(&real_dir, "key", b"synthetic key", 0o600);
+            let dir_link = dir.path().join("dir-link");
+            std::os::unix::fs::symlink(&real_dir, &dir_link).unwrap();
+            assert!(EncryptionKey::from_file(&dir_link.join("key")).is_ok());
+        }
+
+        #[test]
+        fn p0_fg_e_non_regular_key_sources_are_refused_without_blocking() {
+            let dir = tempfile::tempdir().unwrap();
+            assert_eq!(
+                rejection(dir.path()),
+                rejected(KeyFileRejection::NotRegularFile)
+            );
+            assert_eq!(
+                rejection(Path::new("/dev/null")),
+                rejected(KeyFileRejection::NotRegularFile)
+            );
+            // A FIFO with no writer: opening it must neither block nor be
+            // accepted. The result arrives through a channel with a deadline,
+            // so a regression fails instead of hanging.
+            let fifo = dir.path().join("fifo");
+            let name = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
+            // SAFETY: `name` is a valid NUL-terminated path for mkfifo.
+            assert_eq!(unsafe { nix::libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let opened = fifo.clone();
+            std::thread::spawn(move || {
+                let _ = sender.send(EncryptionKey::from_file(&opened).map(|_| ()));
+            });
+            let result = receiver
+                .recv_timeout(std::time::Duration::from_secs(30))
+                .expect("opening a FIFO key file blocked");
+            assert_eq!(
+                result.unwrap_err(),
+                CryptoError::KeySourceUnavailable(rejected(KeyFileRejection::NotRegularFile))
+            );
+        }
+
+        #[test]
+        fn p0_fg_e_empty_whitespace_and_oversized_key_files_are_refused() {
+            let dir = tempfile::tempdir().unwrap();
+            for (name, contents) in [
+                ("empty", &b""[..]),
+                ("newline", &b"\n"[..]),
+                ("blank", &b" \t\r\n"[..]),
+            ] {
+                let path = key_file_at(dir.path(), name, contents, 0o600);
+                assert_eq!(
+                    rejection(&path),
+                    rejected(KeyFileRejection::Empty),
+                    "{name}"
+                );
+            }
+            // A sparse file one byte over the bound is refused before any read.
+            let path = key_file_at(dir.path(), "large", b"", 0o600);
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_len(MAX_KEY_FILE_BYTES + 1)
+                .unwrap();
+            assert_eq!(rejection(&path), rejected(KeyFileRejection::TooLarge));
+            // Exactly the bound is a passphrase file.
+            let bound = vec![b'k'; MAX_KEY_FILE_BYTES as usize];
+            let path = key_file_at(dir.path(), "bound", &bound, 0o600);
+            assert!(EncryptionKey::from_file(&path).is_ok());
+        }
+
+        #[test]
+        fn p0_fg_e_the_key_comes_from_the_file_that_was_opened() {
+            let dir = tempfile::tempdir().unwrap();
+            let raw: Vec<u8> = (0..32).collect();
+            let path = key_file_at(dir.path(), "key", &raw, 0o600);
+            // After the open, the path is replaced by another valid key file:
+            // the opened file is still the one read.
+            let opened = key_file::open(&path).unwrap();
+            let other = key_file_at(dir.path(), "other", &[7u8; 32], 0o600);
+            std::fs::rename(&other, &path).unwrap();
+            let key = EncryptionKey::from_opened_key_file(&opened).unwrap();
+            assert_eq!(key.key.to_vec(), raw);
+            // The same after the path becomes a symlink.
+            let path = key_file_at(dir.path(), "second", &raw, 0o600);
+            let opened = key_file::open(&path).unwrap();
+            std::fs::remove_file(&path).unwrap();
+            std::os::unix::fs::symlink(dir.path().join("key"), &path).unwrap();
+            let key = EncryptionKey::from_opened_key_file(&opened).unwrap();
+            assert_eq!(key.key.to_vec(), raw);
+            // A file that changes after it was opened but before it is read
+            // is checked and read as it is then.
+            let path = key_file_at(dir.path(), "third", &raw, 0o600);
+            let opened = key_file::open(&path).unwrap();
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap()
+                .write_all(b"appended")
+                .unwrap();
+            let mut expected = raw.clone();
+            expected.extend_from_slice(b"appended");
+            let key = EncryptionKey::from_opened_key_file(&opened).unwrap();
+            assert_eq!(key.key.to_vec(), sha256(&expected));
+        }
+
+        /// A change of size, contents time, mode or owner between the checks
+        /// and the end of the read is detected.
+        #[test]
+        fn p0_fg_e_a_key_file_changed_during_the_read_is_detected() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = key_file_at(dir.path(), "key", b"synthetic key", 0o600);
+            let before = std::fs::metadata(&path).unwrap();
+            assert!(key_file::unchanged(
+                &before,
+                &std::fs::metadata(&path).unwrap()
+            ));
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .unwrap()
+                .write_all(b"x")
+                .unwrap();
+            assert!(!key_file::unchanged(
+                &before,
+                &std::fs::metadata(&path).unwrap()
+            ));
+            let before = std::fs::metadata(&path).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400)).unwrap();
+            assert!(!key_file::unchanged(
+                &before,
+                &std::fs::metadata(&path).unwrap()
+            ));
+        }
+
+        fn sha256(bytes: &[u8]) -> Vec<u8> {
+            use sha2::Digest;
+            sha2::Sha256::digest(bytes).to_vec()
+        }
+
+        #[test]
+        fn p0_fg_e_opened_key_file_checks_cover_owner_mode_type_and_size() {
+            let regular = |owner, mode, len| check_opened_key_file(true, owner, 1000, mode, len);
+            assert_eq!(regular(1000, 0o100600, 32), Ok(()));
+            assert_eq!(regular(1000, 0o100400, 1), Ok(()));
+            assert_eq!(
+                regular(1001, 0o100600, 32),
+                Err(KeyFileRejection::ForeignOwner)
+            );
+            assert_eq!(
+                regular(0, 0o100600, 32),
+                Err(KeyFileRejection::ForeignOwner)
+            );
+            assert_eq!(
+                regular(1000, 0o100640, 32),
+                Err(KeyFileRejection::AccessibleToOthers)
+            );
+            assert_eq!(regular(1000, 0o100600, 0), Err(KeyFileRejection::Empty));
+            assert_eq!(
+                regular(1000, 0o100600, MAX_KEY_FILE_BYTES + 1),
+                Err(KeyFileRejection::TooLarge)
+            );
+            assert_eq!(
+                check_opened_key_file(false, 1000, 1000, 0o100600, 32),
+                Err(KeyFileRejection::NotRegularFile)
+            );
+        }
+
+        #[test]
+        fn p0_fg_e_rejections_never_name_or_quote_the_key_file() {
+            let dir = tempfile::tempdir().unwrap();
+            let secret = b"marker-secret-contents";
+            let path = key_file_at(dir.path(), "marker-key-file", secret, 0o644);
+            let link = dir.path().join("marker-link");
+            std::os::unix::fs::symlink(&path, &link).unwrap();
+            for candidate in [path.as_path(), link.as_path(), dir.path()] {
+                let message = rejection(candidate);
+                for marker in ["marker-key-file", "marker-link", "marker-secret", "/tmp"] {
+                    assert!(!message.contains(marker), "{marker}: {message}");
+                }
+            }
+        }
+    }
+
+    /// Final Gate item E: where ownership and access cannot be checked this
+    /// way, a key file is refused.
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[test]
+    fn p0_fg_e_key_files_are_refused_on_this_platform() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("key");
+        std::fs::write(&path, [7u8; 32]).unwrap();
+        let expected = CryptoError::KeySourceUnavailable(format!(
+            "encryption key file rejected: {}",
+            KeyFileRejection::UnsupportedPlatform.reason()
+        ));
+        assert_eq!(EncryptionKey::from_file(&path).unwrap_err(), expected);
+        let config = EncryptionConfig {
+            enabled: true,
+            key_source: "file".into(),
+            key_env: default_key_env(),
+            key_file: Some(path.to_str().unwrap().into()),
+        };
+        assert_eq!(EncryptionKey::from_config(&config).unwrap_err(), expected);
     }
 }

@@ -69,6 +69,10 @@ pub(crate) enum Closure {
     /// Phase Zero; it connects only to a service started outside it.
     HelperLaunch,
     // Final Gate items A and H: stored secrets.
+    /// Final Gate items A and H: the surface's only effect is to store a
+    /// credential or token, and no approved secret store exists for it in
+    /// Phase Zero. Stored values stay readable; nothing new is stored.
+    SecretStorage,
 }
 
 impl Closure {
@@ -110,6 +114,9 @@ impl Closure {
             }
 
             // Final Gate items A and H.
+            Self::SecretStorage => {
+                "storing a credential or token outside an approved secret store is unavailable in Phase Zero"
+            }
         }
     }
 }

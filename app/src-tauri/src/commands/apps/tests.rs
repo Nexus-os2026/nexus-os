@@ -509,3 +509,118 @@ fn p0_002c5c_email_header_values_cannot_add_headers() {
         Err("email_send: invalid header".to_string())
     );
 }
+
+/// Final Gate item H: messaging connect accepts only the token stored in the
+/// configuration. Any other value is refused and audited by reason class
+/// before anything is read, written or sent, so no plaintext token file can
+/// result from it.
+#[test]
+fn p0_fg_h_messaging_connect_takes_only_the_stored_token() {
+    let state = AppState::new_in_memory();
+    for platform in ["telegram", "discord", "slack"] {
+        for token in ["123:synthetic-token", "", "xapp-synthetic"] {
+            assert_eq!(
+                messaging_connect_platform(&state, platform.into(), token.into()),
+                Err("messaging_connect: token must be saved first".to_string()),
+                "{platform} {token:?}"
+            );
+        }
+    }
+    assert_eq!(
+        messaging_connect_platform(&state, "matrix".into(), STORED_SECRET.into()),
+        Err("messaging_connect: unsupported platform".to_string())
+    );
+    let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    let logged = serde_json::to_string(
+        &audit
+            .events()
+            .iter()
+            .map(|event| &event.payload)
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    assert!(logged.contains("token_must_be_saved_first"), "{logged}");
+    assert!(!logged.contains("synthetic"), "{logged}");
+}
+
+/// Final Gate item H: API Client collections holding an authentication
+/// secret are refused before the file is resolved or written; collections
+/// without one pass the check.
+#[test]
+fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
+    let request = |auth: serde_json::Value| {
+        let mut request = serde_json::json!({
+            "id": "r1", "name": "req", "method": "GET", "url": "https://example.test/",
+            "params": [], "headers": [{"key": "Accept", "value": "*/*", "enabled": true}],
+            "bodyType": "none", "bodyRaw": "", "bodyForm": [],
+            "authType": "none", "authToken": "", "authUser": "", "authPass": "",
+            "authKeyName": "", "authKeyValue": "", "authKeyIn": "header"
+        });
+        for (key, value) in auth.as_object().unwrap() {
+            request[key] = value.clone();
+        }
+        serde_json::json!([{"id": "c1", "name": "c", "icon": "", "collapsed": false,
+            "requests": [request]}])
+        .to_string()
+    };
+    let clean =
+        request(serde_json::json!({"authUser": "synthetic-user", "authKeyName": "x-api-key"}));
+    assert_eq!(refuse_api_client_secrets(&clean), Ok(()));
+    assert_eq!(refuse_api_client_secrets("[]"), Ok(()));
+    for auth in [
+        serde_json::json!({"authType": "bearer", "authToken": "synthetic-token"}),
+        serde_json::json!({"authType": "basic", "authPass": "synthetic-pass"}),
+        serde_json::json!({"authType": "api-key", "authKeyValue": "synthetic-key"}),
+        // Held even when another auth type is selected.
+        serde_json::json!({"authType": "none", "authToken": "synthetic-token"}),
+        serde_json::json!({"headers": [{"key": "Authorization", "value": "Bearer synthetic", "enabled": false}]}),
+        serde_json::json!({"headers": [{"key": " cookie ", "value": "session=synthetic", "enabled": true}]}),
+    ] {
+        let data = request(auth.clone());
+        let error = refuse_api_client_secrets(&data).unwrap_err();
+        assert!(error.contains("not stored in Phase Zero"), "{auth}");
+        assert!(!error.contains("synthetic"), "{error}");
+        // The command refuses before resolving or writing the file.
+        assert_eq!(api_client_save_collections(data), Err(error));
+    }
+    let not_json = refuse_api_client_secrets("authToken=synthetic").unwrap_err();
+    assert_eq!(
+        not_json,
+        "api_client_save_collections: collections must be JSON"
+    );
+}
+
+/// Final Gate item H (stream 3 report): a failed connectivity check never
+/// returns the stored bot token. Telegram carries it in the URL path, and a
+/// transport error's text used to include the URL. Each request goes to a
+/// loopback listener that closes every connection without answering, so it
+/// fails in transport with no external network.
+#[test]
+fn p0_fg_h_messaging_connect_errors_never_carry_the_token() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    // Detached: it accepts and drops connections until the test process ends,
+    // so no request can wait on an unanswered connection.
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            drop(stream);
+        }
+    });
+    let telegram = format!("http://127.0.0.1:{port}");
+    let slack = format!("http://127.0.0.1:{port}/api/auth.test");
+    let discord = format!("http://127.0.0.1:{port}/api/v10/users/@me");
+    let endpoints = MessagingEndpoints {
+        telegram: &telegram,
+        slack: &slack,
+        discord: &discord,
+    };
+    let token = "123456789:markerSecretToken";
+    for platform in ["telegram", "slack", "discord"] {
+        let error = block_on_async(check_messaging_connectivity(platform, token, &endpoints))
+            .expect_err("a closed connection is a transport error");
+        assert!(error.starts_with(&format!("{platform} ")), "{error}");
+        for leaked in ["markerSecretToken", "123456789", "127.0.0.1", "http"] {
+            assert!(!error.contains(leaked), "{platform}: {leaked}: {error}");
+        }
+    }
+}

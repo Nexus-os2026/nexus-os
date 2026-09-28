@@ -1109,14 +1109,17 @@ impl AppState {
         );
         // Bug AK Commit 2: run the one-shot credential-vault
         // migration before any consumer reads `config.social.x_*`
-        // (twitter / social-poster / etc.). This installs the
-        // process-singleton SecretsFacade exposed by
-        // `kernel::secrets::global::facade()`. Failure is
-        // best-effort — startup continues so a broken vault
-        // doesn't keep the desktop from launching, but consumers
-        // that hit `facade()` after a failed install will panic
-        // with the OnceLock not-installed message. Surface the
-        // result to stderr so an operator can see it.
+        // (twitter / social-poster / etc.), and install the
+        // process-singleton SecretsFacade (`kernel::secrets::global`).
+        // It is installed only when `security.enabled` is set, the
+        // vault key source validates (Final Gate items A and E: a
+        // non-empty NEXUS_ENCRYPTION_KEY, or an owner-only regular key
+        // file on Linux or macOS) and that key opens the secrets
+        // already stored. The default configuration leaves the vault
+        // disabled. A failure does not stop startup: every consumer
+        // uses `try_facade()`, and vault-backed operations such as
+        // `save_api_key` are refused. The reason goes to stderr for
+        // the operator.
         // Bug AK-15: construct the AuditTrail BEFORE
         // run_migrations so the SecretsFacade and AppState
         // share the same hash-chained instance. Migration
@@ -1135,8 +1138,7 @@ impl AppState {
                 }
                 Err(e) => {
                     eprintln!(
-                        "kernel::startup: secrets migration FAILED: {e}; \
-                         consumers reading via facade() will panic"
+                        "kernel::startup: secrets vault unavailable: {e}; vault-backed operations are refused"
                     );
                 }
             }
@@ -4063,21 +4065,17 @@ pub mod runtime {
         ))
     }
 
-    /// Store deploy provider credentials (encrypted on disk).
+    /// Store deploy provider credentials: closed (Final Gate items A and H).
+    /// The only store is obfuscated with a key derived from the host and
+    /// account names, and no approved secret store exists. Credentials
+    /// stored earlier stay readable by `builder_deploy_check_credentials` and
+    /// `builder_deploy_list_sites`.
     #[tauri::command]
-    fn builder_deploy_store_credentials(
-        provider: String,
-        token: String,
-        account_id: Option<String>,
-    ) -> Result<(), String> {
-        let creds = web_builder_agent::deploy::Credentials {
-            provider: provider.clone(),
-            token,
-            account_id,
-            expires_at: None,
-        };
-        web_builder_agent::deploy::credentials::store_credentials(&provider, &creds)
-            .map_err(|e| format!("store credentials: {e}"))
+    pub(crate) fn builder_deploy_store_credentials() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "builder_deploy_store_credentials",
+            crate::phase0_surface::Closure::SecretStorage,
+        ))
     }
 
     /// Check if valid credentials exist for a deploy provider.
@@ -4270,21 +4268,15 @@ pub mod runtime {
 
     // ── Backend Integration Commands (Phase 8A) ──
 
+    /// Connect a Supabase backend: closed (Final Gate items A and H). Its
+    /// only effect was to store the project's anon and service role keys in
+    /// the obfuscated legacy deploy credential store, which nothing reads.
     #[tauri::command]
-    fn builder_backend_connect(
-        project_id: String,
-        project_url: String,
-        anon_key: String,
-        service_role_key: Option<String>,
-    ) -> Result<(), String> {
-        eprintln!("[builder-backend] Connecting Supabase for project '{project_id}'");
-        let creds = web_builder_agent::backend::credentials::SupabaseCredentials {
-            project_url,
-            anon_key,
-            service_role_key,
-        };
-        web_builder_agent::backend::credentials::store_supabase_credentials(&creds)
-            .map_err(|e| format!("credential storage failed: {e}"))
+    pub(crate) fn builder_backend_connect() -> Result<(), String> {
+        Err(crate::phase0_surface::closed(
+            "builder_backend_connect",
+            crate::phase0_surface::Closure::SecretStorage,
+        ))
     }
 
     #[tauri::command]
@@ -5925,12 +5917,16 @@ pub mod runtime {
     }
 
     // ── Email OAuth2 commands ──
+    /// Email sign-in: closed (Final Gate item H). The flow's only product was
+    /// access and refresh tokens persisted as plaintext files, and no approved
+    /// secret store exists. Tokens stored earlier stay readable by the email
+    /// commands; `email_disconnect` still removes them on request.
     #[tauri::command]
-    fn email_start_oauth(
-        state: tauri::State<'_, AppState>,
-        provider: String,
-    ) -> Result<String, String> {
-        super::email_start_oauth(state.inner(), provider)
+    pub(crate) fn email_start_oauth() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "email_start_oauth",
+            crate::phase0_surface::Closure::SecretStorage,
+        ))
     }
 
     #[tauri::command]
@@ -6007,12 +6003,16 @@ pub mod runtime {
     }
 
     // ── Integration OAuth commands ──
+    /// Integration sign-in (GitHub, GitLab, Slack, Jira): closed (Final Gate
+    /// item H). Its only product was the token response persisted as a
+    /// plaintext file, which nothing reads, and no approved secret store
+    /// exists. Files stored earlier are left as they are.
     #[tauri::command]
-    fn integration_start_oauth(
-        state: tauri::State<'_, AppState>,
-        provider_id: String,
-    ) -> Result<String, String> {
-        super::integration_start_oauth(state.inner(), provider_id)
+    pub(crate) fn integration_start_oauth() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "integration_start_oauth",
+            crate::phase0_surface::Closure::SecretStorage,
+        ))
     }
 
     // ── Marketplace GitLab search ──

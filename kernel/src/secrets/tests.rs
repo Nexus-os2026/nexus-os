@@ -529,4 +529,4 @@ fn ak15_audit_records_ops_without_plaintext_leak() {
 /// don't touch the env var don't acquire and run in parallel
 /// as before. Tightens AK-8 (which still tracks the broader
 /// audit-of-env-mutating-tests sweep).
-static NEXUS_CONFIG_PATH_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+pub(crate) static NEXUS_CONFIG_PATH_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());

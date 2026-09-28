@@ -1857,7 +1857,7 @@ const APPROVED_STATE_ROOTS: &[(&str, &str, usize, &str)] = &[
         "kernel/src/config.rs",
         "var_os(\"HOME\")",
         1,
-        "final gate: configuration key derivation input",
+        "legacy configuration key input: reads legacy files, never keys a new or changed credential (item A)",
     ),
     (
         "kernel/src/hardware_security/tee_backend.rs",
@@ -2155,7 +2155,7 @@ fn p0_002c5b_identifier_joins_stay_behind_their_grammars() {
         (
             "app/src-tauri/src/commands/apps.rs",
             "join(format!(\"{provider}_tokens.json\"))",
-            3,
+            2,
         ),
         // nx_session_file: the name's storage stem, never the raw name, and
         // never a stored file that differs only by case (C5C).

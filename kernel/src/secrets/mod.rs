@@ -6,9 +6,11 @@
 //! OSKeyring, SqliteEnvelope, Memory) and a per-scope lookup order
 //! gated by `CredentialFacadeConfig.env_override_providers`.
 //!
-//! No callers wire into this module yet — Commit 1 is foundation.
-//! Commits 2-5 migrate consumers (SocialConfig, http_connector,
-//! nexus-swarm LLM providers, Tauri commands).
+//! Consumers (the desktop's provider keys, the social, messaging,
+//! HTTP-connector and OIDC readers, and the nexus-swarm providers)
+//! reach the facade through `global::try_facade()`.
+//! `kernel::startup::run_migrations` installs it at desktop startup,
+//! only when the vault is enabled and its key source validates.
 //!
 //! Trait shape: SYNC. Every backend's underlying API (rusqlite,
 //! `keyring` crate, std env) is sync; an async wrapper would be a
@@ -26,7 +28,7 @@ pub mod global;
 pub mod migrate;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use crate::config::CredentialFacadeConfig;
 use backend_env::EnvBackend;

@@ -238,9 +238,67 @@ pub(crate) fn api_client_list_collections() -> Result<String, String> {
     }
 }
 
+/// Saves the API Client collections (Final Gate item H). The file is
+/// plaintext and no approved secret store exists, so collections that hold
+/// an authentication secret are refused and nothing is written; the file
+/// already stored is left as it was. Collections that are not JSON cannot be
+/// checked and are refused too.
 pub(crate) fn api_client_save_collections(data_json: String) -> Result<(), String> {
+    refuse_api_client_secrets(&data_json)?;
     let path = api_collections_path()?;
     std::fs::write(&path, data_json).map_err(|e| format!("write error: {e}"))
+}
+
+/// The API Client's authentication secret fields: the bearer token, the basic
+/// password and the API key value.
+const API_CLIENT_SECRET_FIELDS: &[&str] = &["authToken", "authPass", "authKeyValue"];
+
+/// Standard HTTP headers that carry credentials. Secrets typed into other
+/// headers, parameters, URLs or bodies are user content and are not detected.
+const API_CLIENT_CREDENTIAL_HEADERS: &[&str] = &["authorization", "proxy-authorization", "cookie"];
+
+/// Refuses collections that hold a non-empty authentication secret, with a
+/// bounded reason that echoes nothing.
+fn refuse_api_client_secrets(data_json: &str) -> Result<(), String> {
+    let collections: serde_json::Value = serde_json::from_str(data_json)
+        .map_err(|_| "api_client_save_collections: collections must be JSON".to_string())?;
+    if holds_api_client_secret(&collections) {
+        return Err(
+            "api_client_save_collections: authentication secrets are not stored in Phase Zero; clear the token, password and API key values to save"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+/// Whether any object in `value` holds a non-empty secret field, or a
+/// credential header entry (`{"key": "Authorization", "value": "..."}`) with
+/// a non-empty value.
+fn holds_api_client_secret(value: &serde_json::Value) -> bool {
+    let filled = |field: &serde_json::Value| match field {
+        serde_json::Value::Null => false,
+        serde_json::Value::String(text) => !text.is_empty(),
+        _ => true,
+    };
+    match value {
+        serde_json::Value::Object(map) => {
+            let credential_header = map
+                .get("key")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|key| {
+                    API_CLIENT_CREDENTIAL_HEADERS
+                        .contains(&key.trim().to_ascii_lowercase().as_str())
+                })
+                && map.get("value").is_some_and(filled);
+            credential_header
+                || map.iter().any(|(key, field)| {
+                    (API_CLIENT_SECRET_FIELDS.contains(&key.as_str()) && filled(field))
+                        || holds_api_client_secret(field)
+                })
+        }
+        serde_json::Value::Array(items) => items.iter().any(holds_api_client_secret),
+        _ => false,
+    }
 }
 
 // ── Learning Progress ────────────────────────────────────────────────
@@ -539,19 +597,27 @@ pub(crate) fn email_delete(state: &AppState, id: String) -> Result<String, Strin
 // it is `GET /oauth/callback?…` and carries this flow's unguessable `state`.
 // Anything else is answered and ignored: it neither ends the flow nor
 // supplies the authorization code.
+//
+// Final Gate item H: the email and integration sign-in flows are closed,
+// because their only product was plaintext token files and no approved
+// secret store exists. No production code runs a flow, so these helpers are
+// compiled for their P0-002C5C tests only, as the reviewed callback handling
+// for any future flow backed by an approved store.
 
-/// How long a sign-in flow waits for the provider's redirect.
-const OAUTH_CALLBACK_WINDOW: std::time::Duration = std::time::Duration::from_secs(120);
 /// How long one loopback connection may take to send its request line.
+#[cfg(test)]
 const OAUTH_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 /// Largest request head read from one loopback connection.
+#[cfg(test)]
 const OAUTH_MAX_REQUEST_BYTES: usize = 8 * 1024;
 /// Pause between polls of the nonblocking listener.
+#[cfg(test)]
 const OAUTH_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// A configured client ID in the form providers issue: letters, digits, `.`,
 /// `-` and `_`. It can then add no parameter to the authorization URL and no
 /// quoting to the command that opens the browser.
+#[cfg(test)]
 fn oauth_client_id(client_id: String) -> Result<String, String> {
     let well_formed = !client_id.is_empty()
         && client_id.len() <= 256
@@ -566,6 +632,7 @@ fn oauth_client_id(client_id: String) -> Result<String, String> {
 }
 
 /// What one loopback request means for the waiting flow.
+#[cfg(test)]
 #[derive(Debug, PartialEq, Eq)]
 enum OAuthCallback {
     /// This flow's redirect, carrying an authorization code.
@@ -578,6 +645,7 @@ enum OAuthCallback {
 }
 
 /// Classify a request by its request line alone.
+#[cfg(test)]
 fn oauth_callback(request: &str, expected_state: &str) -> OAuthCallback {
     let line = request.split("\r\n").next().unwrap_or_default();
     let mut words = line.split(' ');
@@ -619,6 +687,7 @@ fn oauth_callback(request: &str, expected_state: &str) -> OAuthCallback {
 
 /// Read one request head, bounded in size and by the per-connection timeout.
 /// Only its request line is used.
+#[cfg(test)]
 fn read_oauth_request(stream: &mut std::net::TcpStream, deadline: std::time::Instant) -> String {
     use std::io::Read as IoRead;
     let remaining = deadline.saturating_duration_since(std::time::Instant::now());
@@ -648,6 +717,7 @@ fn read_oauth_request(stream: &mut std::net::TcpStream, deadline: std::time::Ins
 
 /// Wait on `listener` until `deadline` for this flow's provider redirect and
 /// return its authorization code.
+#[cfg(test)]
 fn await_oauth_code(
     listener: &std::net::TcpListener,
     expected_state: &str,
@@ -711,7 +781,28 @@ pub(crate) fn email_oauth_dir() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// The bot token the configuration stores for a supported platform, or an
+/// empty string when none is stored.
+fn stored_messaging_token(platform: &'static str) -> Result<String, String> {
+    let stored = load_config().map_err(|e| format!("config: {e}"))?.messaging;
+    Ok(match platform {
+        "telegram" => stored.telegram_bot_token,
+        "discord" => stored.discord_bot_token,
+        "slack" => stored.slack_bot_token,
+        _ => String::new(),
+    })
+}
+
+/// The bot token for a supported platform (Final Gate item H). The
+/// configuration is the token store: its token is used when it holds one.
+/// Otherwise a token file written by an earlier version is read as it is,
+/// never rewritten or removed.
 pub(crate) fn read_messaging_token(platform: &'static str) -> Result<String, String> {
+    if let Ok(token) = stored_messaging_token(platform) {
+        if !token.is_empty() {
+            return Ok(token);
+        }
+    }
     let path = nexus_data_dir()?
         .join("messaging_tokens")
         .join(format!("{platform}.json"));
@@ -727,138 +818,6 @@ pub(crate) fn read_messaging_token(platform: &'static str) -> Result<String, Str
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .ok_or_else(|| format!("no token for {platform}"))
-}
-
-pub(crate) fn read_oauth_setting(key: &str) -> Result<String, String> {
-    let path = nexus_data_dir()?.join("oauth_settings.json");
-    if !path.exists() {
-        return Err("no oauth settings file".to_string());
-    }
-    let content = std::fs::read_to_string(&path).map_err(|e| format!("read: {e}"))?;
-    let data: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("parse: {e}"))?;
-    data.get(key)
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| format!("key {key} not found"))
-}
-
-pub(crate) fn email_start_oauth(state: &AppState, provider: String) -> Result<String, String> {
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::UserAction,
-        json!({"action": "email_start_oauth", "provider": provider}),
-    );
-
-    // Client IDs from env vars or local config file
-    let client_id = match provider.as_str() {
-        "gmail" => std::env::var("NEXUS_GMAIL_CLIENT_ID")
-            .or_else(|_| read_oauth_setting("gmail_client_id"))
-            .unwrap_or_default(),
-        "outlook" => std::env::var("NEXUS_OUTLOOK_CLIENT_ID")
-            .or_else(|_| read_oauth_setting("outlook_client_id"))
-            .unwrap_or_default(),
-        _ => return Err(format!("Unknown email provider: {provider}")),
-    };
-
-    if client_id.is_empty() {
-        return Err(format!(
-            "No client ID configured for {provider}. Set NEXUS_{}_CLIENT_ID env var or configure in Settings.",
-            provider.to_uppercase()
-        ));
-    }
-    let client_id = oauth_client_id(client_id)?;
-
-    let csrf_token = uuid::Uuid::new_v4().to_string();
-    let redirect_uri = "http://localhost:19823/oauth/callback";
-
-    let auth_url = match provider.as_str() {
-        "gmail" => format!(
-            "https://accounts.google.com/o/oauth2/v2/auth?\
-             client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&\
-             scope=https://www.googleapis.com/auth/gmail.modify&\
-             state={csrf_token}&access_type=offline&prompt=consent"
-        ),
-        "outlook" => format!(
-            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?\
-             client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&\
-             scope=Mail.ReadWrite+Mail.Send+offline_access&state={csrf_token}"
-        ),
-        _ => unreachable!(),
-    };
-
-    // Listen before opening the browser, so the redirect cannot arrive first.
-    let listener = std::net::TcpListener::bind("127.0.0.1:19823")
-        .map_err(|e| format!("Cannot start OAuth listener: {e}"))?;
-
-    // Best-effort: open browser for OAuth; user can manually navigate if this fails
-    let _ = open::that(&auth_url);
-
-    let auth_code = await_oauth_code(
-        &listener,
-        &csrf_token,
-        std::time::Instant::now() + OAUTH_CALLBACK_WINDOW,
-    )?;
-
-    // Exchange code for tokens
-    let client_secret = match provider.as_str() {
-        "gmail" => std::env::var("NEXUS_GMAIL_CLIENT_SECRET")
-            .or_else(|_| read_oauth_setting("gmail_client_secret"))
-            .unwrap_or_default(),
-        "outlook" => std::env::var("NEXUS_OUTLOOK_CLIENT_SECRET")
-            .or_else(|_| read_oauth_setting("outlook_client_secret"))
-            .unwrap_or_default(),
-        _ => String::new(),
-    };
-
-    let token_url = match provider.as_str() {
-        "gmail" => "https://oauth2.googleapis.com/token",
-        "outlook" => "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-        _ => unreachable!(),
-    };
-
-    let token_resp = block_on_async(async {
-        reqwest::Client::new()
-            .post(token_url)
-            .form(&[
-                ("code", auth_code.as_str()),
-                ("client_id", client_id.as_str()),
-                ("client_secret", client_secret.as_str()),
-                ("redirect_uri", redirect_uri),
-                ("grant_type", "authorization_code"),
-            ])
-            .send()
-            .await
-            .map_err(|e| format!("token exchange: {e}"))?
-            .text()
-            .await
-            .map_err(|e| format!("token body: {e}"))
-    })?;
-
-    let token_json: serde_json::Value =
-        serde_json::from_str(&token_resp).map_err(|e| format!("token parse: {e}"))?;
-
-    // Store the tokens in the per-user OAuth directory. They are not encrypted
-    // at rest (docs/security/phase0-final-gate-dossier.md).
-    let token_path = email_oauth_dir()?.join(format!("{provider}_tokens.json"));
-    let token_data = json!({
-        "provider": provider,
-        "access_token": token_json.get("access_token").and_then(|v| v.as_str()).unwrap_or(""),
-        "refresh_token": token_json.get("refresh_token").and_then(|v| v.as_str()).unwrap_or(""),
-        "expires_at": chrono::Utc::now().timestamp() + token_json.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(3600),
-        "connected_at": chrono::Utc::now().to_rfc3339(),
-    });
-    std::fs::write(
-        &token_path,
-        serde_json::to_string_pretty(&token_data).map_err(|e| format!("json: {e}"))?,
-    )
-    .map_err(|e| format!("write tokens: {e}"))?;
-
-    serde_json::to_string(&json!({
-        "status": "connected",
-        "provider": provider,
-    }))
-    .map_err(|e| format!("json: {e}"))
 }
 
 pub(crate) fn email_oauth_status(state: &AppState) -> Result<String, String> {
@@ -1251,24 +1210,32 @@ pub(crate) fn email_disconnect(state: &AppState, provider: String) -> Result<Str
 
 // ── Messaging: Real Platform Connections ──────────────────────────────
 
+/// Connect a messaging platform with its stored bot token (Final Gate item
+/// H).
+///
+/// The configuration is the token store: a new token is saved there by the
+/// settings save, which needs the operator configuration key (item A).
+/// Connecting accepts only the stored token, which the interface sees as
+/// [`STORED_SECRET`]; any other value is refused before anything is read,
+/// written or sent. No token file is written: the plaintext copy under
+/// `messaging_tokens` and the cached Slack socket URL are gone.
 pub(crate) fn messaging_connect_platform(
     state: &AppState,
     platform: String,
     token_value: String,
 ) -> Result<String, String> {
     let known = messaging_platform(state, "messaging_connect", &platform)?;
-    // P0-002C5C: the interface sees a stored token only as the placeholder;
-    // connecting with it uses the stored token.
-    let token_value = if token_value == STORED_SECRET {
-        let stored = load_config().map_err(|e| format!("config: {e}"))?.messaging;
-        match known {
-            "telegram" => stored.telegram_bot_token,
-            "discord" => stored.discord_bot_token,
-            _ => stored.slack_bot_token,
-        }
-    } else {
-        token_value
-    };
+    if token_value != STORED_SECRET {
+        return Err(deny(
+            state,
+            "messaging_connect",
+            "token_must_be_saved_first",
+        ));
+    }
+    let token_value = stored_messaging_token(known)?;
+    if token_value.is_empty() {
+        return Err(deny(state, "messaging_connect", "no_stored_token"));
+    }
     if known == "telegram" && !telegram_token_ok(&token_value) {
         return Err(deny(state, "messaging_connect", "invalid_token"));
     }
@@ -1278,116 +1245,117 @@ pub(crate) fn messaging_connect_platform(
         json!({"action": "messaging_connect", "platform": known}),
     );
 
-    // Store token in messaging tokens file
-    let msg_dir = nexus_data_dir()?.join("messaging_tokens");
-    if !msg_dir.exists() {
-        std::fs::create_dir_all(&msg_dir).map_err(|e| format!("mkdir: {e}"))?;
-    }
-    let token_path = msg_dir.join(format!("{known}.json"));
-    std::fs::write(
-        &token_path,
-        serde_json::to_string_pretty(&json!({"token": token_value, "platform": platform, "connected_at": chrono::Utc::now().to_rfc3339()})).map_err(|e| format!("json: {e}"))?,
-    )
-    .map_err(|e| format!("write: {e}"))?;
+    block_on_async(check_messaging_connectivity(
+        known,
+        &token_value,
+        &MESSAGING_ENDPOINTS,
+    ))
+}
 
-    // Test connectivity
-    let test_result = block_on_async(async {
-        match platform.as_str() {
-            "telegram" => {
-                let url = format!("https://api.telegram.org/bot{}/getMe", token_value);
-                let resp = reqwest::Client::new()
-                    .get(&url)
-                    .send()
-                    .await
-                    .map_err(|e| format!("telegram test: {e}"))?;
-                let body = resp
-                    .text()
-                    .await
-                    .map_err(|e| format!("telegram body: {e}"))?;
-                let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
-                if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
-                    let bot_name = data
-                        .get("result")
-                        .and_then(|r| r.get("username"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    Ok(json!({"connected": true, "bot_name": bot_name}).to_string())
-                } else {
-                    Err("Invalid Telegram bot token".to_string())
-                }
-            }
-            "slack" => {
-                let resp = reqwest::Client::new()
-                    .post("https://slack.com/api/auth.test")
-                    .bearer_auth(&token_value)
-                    .send()
-                    .await
-                    .map_err(|e| format!("slack test: {e}"))?;
-                let body = resp.text().await.map_err(|e| format!("slack body: {e}"))?;
-                let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
-                if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
-                    let team = data
-                        .get("team")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
+/// Where the connectivity check sends its one request.
+struct MessagingEndpoints<'a> {
+    /// Base URL; the bot token goes in the path.
+    telegram: &'a str,
+    /// `auth.test` URL; the token goes in the Authorization header.
+    slack: &'a str,
+    /// `users/@me` URL; the token goes in the Authorization header.
+    discord: &'a str,
+}
 
-                    // Attempt Socket Mode WebSocket connection for real-time events
-                    // Requires an app-level token (xapp-*) — if using a bot token, falls back to polling
-                    if token_value.starts_with("xapp-") {
-                        let ws_resp = reqwest::Client::new()
-                            .post("https://slack.com/api/apps.connections.open")
-                            .bearer_auth(&token_value)
-                            .send()
-                            .await;
-                        if let Ok(ws_resp) = ws_resp {
-                            let ws_data: serde_json::Value =
-                                ws_resp.json().await.unwrap_or_default();
-                            if let Some(ws_url) = ws_data.get("url").and_then(|v| v.as_str()) {
-                                // Store WebSocket URL for the frontend to use
-                                let ws_path = msg_dir.join("slack_ws_url.txt");
-                                // Best-effort: cache WebSocket URL on disk for frontend access
-                                let _ = std::fs::write(&ws_path, ws_url);
-                            }
-                        }
-                    }
+const MESSAGING_ENDPOINTS: MessagingEndpoints<'static> = MessagingEndpoints {
+    telegram: "https://api.telegram.org",
+    slack: "https://slack.com/api/auth.test",
+    discord: "https://discord.com/api/v10/users/@me",
+};
 
-                    Ok(json!({"connected": true, "team": team, "realtime": token_value.starts_with("xapp-")}).to_string())
-                } else {
-                    Err(format!(
-                        "Slack auth failed: {}",
-                        data.get("error")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown")
-                    ))
-                }
+/// Tests a stored bot token against its platform. A transport or body error
+/// is reported without its URL (`without_url`): Telegram carries the token in
+/// the URL path, and an error returns to the interface (Final Gate item H).
+async fn check_messaging_connectivity(
+    platform: &'static str,
+    token_value: &str,
+    endpoints: &MessagingEndpoints<'_>,
+) -> Result<String, String> {
+    match platform {
+        "telegram" => {
+            let url = format!("{}/bot{}/getMe", endpoints.telegram, token_value);
+            let resp = reqwest::Client::new()
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| format!("telegram test: {}", e.without_url()))?;
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| format!("telegram body: {}", e.without_url()))?;
+            let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+            if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+                let bot_name = data
+                    .get("result")
+                    .and_then(|r| r.get("username"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                Ok(json!({"connected": true, "bot_name": bot_name}).to_string())
+            } else {
+                Err("Invalid Telegram bot token".to_string())
             }
-            "discord" => {
-                let resp = reqwest::Client::new()
-                    .get("https://discord.com/api/v10/users/@me")
-                    .header("Authorization", format!("Bot {}", token_value))
-                    .send()
-                    .await
-                    .map_err(|e| format!("discord test: {e}"))?;
-                let status = resp.status();
-                let body = resp
-                    .text()
-                    .await
-                    .map_err(|e| format!("discord body: {e}"))?;
-                if status.is_success() {
-                    let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
-                    let name = data
-                        .get("username")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    Ok(json!({"connected": true, "bot_name": name}).to_string())
-                } else {
-                    Err(format!("Discord auth failed ({status})"))
-                }
-            }
-            _ => Ok(json!({"connected": true}).to_string()),
         }
-    })?;
-    Ok(test_result)
+        "slack" => {
+            let resp = reqwest::Client::new()
+                .post(endpoints.slack)
+                .bearer_auth(token_value)
+                .send()
+                .await
+                .map_err(|e| format!("slack test: {}", e.without_url()))?;
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| format!("slack body: {}", e.without_url()))?;
+            let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+            if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
+                let team = data
+                    .get("team")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+
+                // Final Gate item H: no Socket Mode URL is requested or
+                // cached on disk; `realtime` only reports an app-level
+                // (xapp-*) token.
+                Ok(json!({"connected": true, "team": team, "realtime": token_value.starts_with("xapp-")}).to_string())
+            } else {
+                Err(format!(
+                    "Slack auth failed: {}",
+                    data.get("error")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                ))
+            }
+        }
+        "discord" => {
+            let resp = reqwest::Client::new()
+                .get(endpoints.discord)
+                .header("Authorization", format!("Bot {}", token_value))
+                .send()
+                .await
+                .map_err(|e| format!("discord test: {}", e.without_url()))?;
+            let status = resp.status();
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| format!("discord body: {}", e.without_url()))?;
+            if status.is_success() {
+                let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+                let name = data
+                    .get("username")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                Ok(json!({"connected": true, "bot_name": name}).to_string())
+            } else {
+                Err(format!("Discord auth failed ({status})"))
+            }
+        }
+        _ => Ok(json!({"connected": true}).to_string()),
+    }
 }
 
 /// Final Gate item C (redaction): a messaging transport error without the
@@ -1540,130 +1508,6 @@ pub(crate) fn messaging_poll_messages(
         }
     })?;
     Ok(result)
-}
-
-// ── Integration OAuth2 Flow ──────────────────────────────────────────
-
-pub(crate) fn integration_start_oauth(
-    state: &AppState,
-    provider_id: String,
-) -> Result<String, String> {
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::UserAction,
-        json!({"action": "integration_start_oauth", "provider": provider_id}),
-    );
-
-    let env_key = format!("NEXUS_{}_CLIENT_ID", provider_id.to_uppercase());
-    let client_id = std::env::var(&env_key)
-        .or_else(|_| read_oauth_setting(&format!("{provider_id}_client_id")))
-        .unwrap_or_default();
-
-    if client_id.is_empty() {
-        return Err(format!(
-            "No client ID for {provider_id}. Set {env_key} env var or configure in Settings."
-        ));
-    }
-    let client_id = oauth_client_id(client_id)?;
-
-    let redirect_uri = "http://localhost:19824/oauth/callback";
-    let csrf = uuid::Uuid::new_v4().to_string();
-
-    let auth_url = match provider_id.as_str() {
-        "github" => format!(
-            "https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&state={csrf}&scope=repo,read:org"
-        ),
-        "gitlab" => format!(
-            "https://gitlab.com/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&state={csrf}&scope=api+read_user"
-        ),
-        "slack" => format!(
-            "https://slack.com/oauth/v2/authorize?client_id={client_id}&redirect_uri={redirect_uri}&state={csrf}&scope=chat:write,channels:read,channels:history"
-        ),
-        "jira" => format!(
-            "https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id={client_id}&scope=read%3Ajira-work%20manage%3Ajira-project&redirect_uri={redirect_uri}&state={csrf}&response_type=code&prompt=consent"
-        ),
-        _ => return Err(format!("OAuth not supported for {provider_id}. Use token-based auth.")),
-    };
-
-    // Listen before opening the browser, so the redirect cannot arrive first.
-    let listener = std::net::TcpListener::bind("127.0.0.1:19824")
-        .map_err(|e| format!("Cannot start OAuth listener: {e}"))?;
-
-    // Best-effort: open browser for OAuth; user can manually navigate if this fails
-    let _ = open::that(&auth_url);
-
-    let auth_code = await_oauth_code(
-        &listener,
-        &csrf,
-        std::time::Instant::now() + OAUTH_CALLBACK_WINDOW,
-    )?;
-
-    // Exchange code for token
-    let secret_key = format!("NEXUS_{}_CLIENT_SECRET", provider_id.to_uppercase());
-    let client_secret = std::env::var(&secret_key)
-        .or_else(|_| read_oauth_setting(&format!("{provider_id}_client_secret")))
-        .unwrap_or_default();
-
-    let token_result = block_on_async(async {
-        let (token_url, use_json) = match provider_id.as_str() {
-            "github" => ("https://github.com/login/oauth/access_token", false),
-            "gitlab" => ("https://gitlab.com/oauth/token", false),
-            "slack" => ("https://slack.com/api/oauth.v2.access", false),
-            "jira" => ("https://auth.atlassian.com/oauth/token", true),
-            _ => return Err("unsupported".to_string()),
-        };
-
-        let client = reqwest::Client::new();
-        let resp = if use_json {
-            client
-                .post(token_url)
-                .json(&json!({
-                    "grant_type": "authorization_code",
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "code": auth_code,
-                    "redirect_uri": redirect_uri,
-                }))
-                .send()
-                .await
-        } else {
-            client
-                .post(token_url)
-                .header("Accept", "application/json")
-                .form(&[
-                    ("client_id", client_id.as_str()),
-                    ("client_secret", client_secret.as_str()),
-                    ("code", auth_code.as_str()),
-                    ("redirect_uri", redirect_uri),
-                    ("grant_type", "authorization_code"),
-                ])
-                .send()
-                .await
-        };
-
-        let resp = resp.map_err(|e| format!("token request: {e}"))?;
-        resp.text().await.map_err(|e| format!("token body: {e}"))
-    })?;
-
-    // Store token
-    let integration_dir = nexus_data_dir()?.join("integrations");
-    if !integration_dir.exists() {
-        std::fs::create_dir_all(&integration_dir).map_err(|e| format!("mkdir: {e}"))?;
-    }
-    let token_path = integration_dir.join(format!("{provider_id}_oauth.json"));
-    let token_data = json!({
-        "provider": provider_id,
-        "token_response": serde_json::from_str::<serde_json::Value>(&token_result).unwrap_or(json!({"raw": token_result})),
-        "connected_at": chrono::Utc::now().to_rfc3339(),
-    });
-    std::fs::write(
-        &token_path,
-        serde_json::to_string_pretty(&token_data).map_err(|e| format!("json: {e}"))?,
-    )
-    .map_err(|e| format!("write: {e}"))?;
-
-    serde_json::to_string(&json!({"status": "connected", "provider": provider_id}))
-        .map_err(|e| format!("json: {e}"))
 }
 
 // ── App Store: GitLab API search ─────────────────────────────────────

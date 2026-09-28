@@ -1,7 +1,12 @@
-//! Supabase Credential Storage — encrypted at rest, machine-bound.
+//! Supabase credential storage: read-only in Phase Zero (Final Gate items A
+//! and H).
 //!
-//! Uses the same XOR obfuscation + machine-specific key pattern as deploy credentials.
-//! Service role key is the most sensitive credential — never logged, never in manifests.
+//! Entries live in the legacy deploy credential store, which is not
+//! encrypted: it XORs each entry with a key derived from the host and account
+//! names (see `crate::deploy::credentials`). No approved secret store exists
+//! for these credentials, so [`store_supabase_credentials`] refuses and writes
+//! nothing, while an entry stored earlier stays readable. The service role key
+//! is never logged and never put in a manifest.
 
 use crate::deploy::{credentials as deploy_creds, Credentials as DeployCreds, DeployError};
 use serde::{Deserialize, Serialize};
@@ -27,7 +32,8 @@ impl std::fmt::Debug for SupabaseCredentials {
 
 const PROVIDER_KEY: &str = "supabase";
 
-/// Store Supabase credentials using the deploy credential encryption.
+/// Store Supabase credentials: refused in Phase Zero by the deploy credential
+/// store (Final Gate items A and H). Nothing is written.
 pub fn store_supabase_credentials(creds: &SupabaseCredentials) -> Result<(), DeployError> {
     // Store as a deploy Credentials with project_url in account_id field
     let deploy_cred = DeployCreds {
@@ -92,6 +98,19 @@ mod tests {
         assert_eq!(parsed.project_url, creds.project_url);
         assert_eq!(parsed.anon_key, creds.anon_key);
         assert_eq!(parsed.service_role_key, creds.service_role_key);
+    }
+
+    /// Final Gate items A and H: a Supabase key is never stored.
+    #[test]
+    fn p0_fg_a_supabase_credentials_are_never_stored() {
+        let creds = SupabaseCredentials {
+            project_url: "https://synthetic.supabase.co".into(),
+            anon_key: "synthetic-anon".into(),
+            service_role_key: Some("synthetic-service".into()),
+        };
+        let error = store_supabase_credentials(&creds).unwrap_err().to_string();
+        assert!(error.contains("unavailable in Phase Zero"), "{error}");
+        assert!(!error.contains("synthetic"), "{error}");
     }
 
     #[test]

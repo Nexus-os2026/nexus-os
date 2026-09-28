@@ -240,7 +240,7 @@ fn run_setup_interactive() -> Result<String, String> {
         let key = ask_value("Anthropic API key")?;
         if validate_anthropic_key(key.as_str()) {
             config.llm.anthropic_api_key = key;
-            println!("  Validated and saved.");
+            println!("  Validated.");
         } else {
             println!("  Validation failed, skipping.");
         }
@@ -250,7 +250,7 @@ fn run_setup_interactive() -> Result<String, String> {
         let key = ask_value("Brave API key")?;
         if validate_brave_key(key.as_str()) {
             config.search.brave_api_key = key;
-            println!("  Validated and saved.");
+            println!("  Validated.");
         } else {
             println!("  Validation failed, skipping.");
         }
@@ -260,12 +260,15 @@ fn run_setup_interactive() -> Result<String, String> {
         let token = ask_value("Telegram bot token")?;
         if validate_telegram_token(token.as_str()) {
             config.messaging.telegram_bot_token = token;
-            println!("  Validated and saved.");
+            println!("  Validated.");
         } else {
             println!("  Validation failed, skipping.");
         }
     }
 
+    // Final Gate item A: a new API key or token is written only under the
+    // operator configuration key (NEXUS_CONFIG_KEY); without it the kernel
+    // refuses the save and says why, and nothing is written.
     save_config(&config).map_err(|error| format!("failed to save config: {error}"))?;
 
     println!();
@@ -309,7 +312,9 @@ fn ask_value(prompt: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::run_setup_check_with_path;
-    use nexus_kernel::config::{save_config_to_path, NexusConfig};
+    use nexus_kernel::config::{
+        save_config_checked_to_path, save_config_to_path, ConfigKeyMaterial, NexusConfig,
+    };
     use std::path::PathBuf;
     use uuid::Uuid;
 
@@ -326,7 +331,22 @@ mod tests {
         let mut config = NexusConfig::default();
         config.llm.anthropic_api_key = "sk-ant-test".to_string();
 
-        let saved = save_config_to_path(path.as_path(), &config);
+        // Final Gate item A: a credential is written only under the operator
+        // configuration key. Without one nothing is written at all...
+        let refused = save_config_checked_to_path(
+            path.as_path(),
+            &config,
+            &ConfigKeyMaterial::from_values(
+                None,
+                [Some("/home/synthetic-nexus"), None, None, None],
+            ),
+        );
+        assert!(refused.is_err());
+        assert!(!path.exists());
+        // ...so the fixture is a legacy plaintext configuration, which the
+        // check reads as it is.
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let saved = std::fs::write(path.as_path(), toml::to_string(&config).unwrap());
         assert!(saved.is_ok());
 
         let output = run_setup_check_with_path(path.as_path()).unwrap_or_default();
