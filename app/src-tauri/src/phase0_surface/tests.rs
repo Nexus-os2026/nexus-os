@@ -171,6 +171,26 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("capture_screen", Closure::ScreenObservation),
     ("analyze_screen", Closure::ScreenObservation),
     ("nx_computer_use_screenshot", Closure::ScreenObservation),
+    // P0-FINAL-GATE items B and F: a caller-chosen destination or peer is not
+    // egress authority.
+    ("api_client_request", Closure::NetworkDestination),
+    ("a2a_discover_agent", Closure::NetworkDestination),
+    ("a2a_send_task", Closure::NetworkDestination),
+    ("a2a_get_task_status", Closure::NetworkDestination),
+    ("a2a_cancel_task", Closure::NetworkDestination),
+    ("a2a_crate_send_task", Closure::NetworkDestination),
+    ("a2a_crate_get_task", Closure::NetworkDestination),
+    ("a2a_crate_discover_agent", Closure::NetworkDestination),
+    ("mcp_host_connect", Closure::NetworkDestination),
+    ("mcp_host_call_tool", Closure::NetworkDestination),
+    ("builder_theme_extract_from_url", Closure::NetworkDestination),
+    ("nexus_link_send_model", Closure::PeerTransfer),
+    // P0-FINAL-GATE item C: a credential would be placed on a process command
+    // line.
+    ("perception_init", Closure::CredentialTransport),
+    // P0-FINAL-GATE item I: no helper program is started or run to report on
+    // it.
+    ("is_ollama_installed", Closure::HelperLaunch),
 ];
 
 const LIB_RS: &str = include_str!("../lib.rs");
@@ -345,6 +365,9 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             voice_start_listening, voice_pipeline_health, transcribe_push_to_talk,
             computer_control_execute_action, start_computer_action,
             computer_control_capture_screen, capture_screen, analyze_screen,
+            api_client_request, a2a_discover_agent, a2a_send_task, a2a_get_task_status,
+            a2a_cancel_task, mcp_host_connect, mcp_host_call_tool,
+            builder_theme_extract_from_url, nexus_link_send_model, is_ollama_installed,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
@@ -354,7 +377,8 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             cc_execute_action, mcp2_client_add, mcp2_client_discover, mcp2_client_call,
             cm_execute_validation_run, cm_list_validation_runs, cm_get_validation_run,
             cm_three_way_comparison, memory_save, memory_load, memory_list_agents,
-            mcp2_server_handle, browser_screenshot,
+            mcp2_server_handle, browser_screenshot, a2a_crate_send_task, a2a_crate_get_task,
+            a2a_crate_discover_agent, perception_init,
         ],
         crate::nx_bridge::commands => [nx_agent_run, nx_chat, nx_tool],
         crate::commands::orchestration => [run_content_pipeline],
@@ -401,6 +425,10 @@ fn closure_reasons_are_bounded_and_echo_no_input() {
         Closure::AmbientResource,
         Closure::OsInput,
         Closure::ScreenObservation,
+        Closure::NetworkDestination,
+        Closure::PeerTransfer,
+        Closure::CredentialTransport,
+        Closure::HelperLaunch,
     ] {
         let reason = closure.reason();
         assert!(reason.contains("Phase Zero"), "{reason}");
@@ -1349,6 +1377,44 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
     (
         "ComputerControlEngine::enable",
         "enables the computer-control engine",
+    ),
+    // P0-FINAL-GATE items B, C, F and I: clients whose destination, peer or
+    // helper the caller or PATH would choose.
+    (".discover_agent(", "A2A discovery of a caller-chosen agent URL"),
+    (".send_task(", "A2A task sent to a caller-chosen agent URL"),
+    (".get_task_status(", "A2A status from a caller-chosen agent URL"),
+    (".cancel_task(", "A2A cancel at a caller-chosen agent URL"),
+    (
+        "a2a_crate_cmds::a2a_crate_send_task",
+        "A2A crate send to a caller-chosen URL",
+    ),
+    (
+        "a2a_crate_cmds::a2a_crate_get_task",
+        "A2A crate remote status lookup",
+    ),
+    (
+        "a2a_crate_cmds::a2a_crate_discover_agent",
+        "A2A crate discovery of a caller-chosen URL",
+    ),
+    (
+        ".connect_server(",
+        "MCP host connection to a caller-registered URL",
+    ),
+    (".call_tool(", "MCP host tool call to a caller-registered server"),
+    ("extract_theme_from_url", "theme fetch from a caller-chosen URL"),
+    (".send_model(", "Nexus Link model transfer to a peer"),
+    ("discover_peer_models(", "Nexus Link peer model listing"),
+    (
+        "init_provider(",
+        "perception provider holding an interface key for curl",
+    ),
+    (
+        "Command::new(\"ollama\")",
+        "starting or running the ollama program from PATH",
+    ),
+    (
+        "Command::new(\"which\")",
+        "running which from PATH to report on a program",
     ),
 ];
 
@@ -2728,6 +2794,7 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
     let identity = include_str!("../../../../kernel/src/identity_home.rs");
     let lib_tests = include_str!("../lib_tests.rs");
     let egress = include_str!("../../../../kernel/src/firewall/egress.rs");
+    let fg_egress = include_str!("fg_egress/tests.rs");
     for (regression, source, guards) in [
         (
             "a closed command reopened",
@@ -2852,6 +2919,45 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
                 "p0_002c5c_malformed_or_ambiguous_endpoints_admit_nothing",
             ][..],
         ),
+        (
+            "a caller-chosen destination or peer reached from the desktop",
+            fg_egress,
+            &[
+                "p0_fg_caller_chosen_destinations_are_closed_commands",
+                "p0_fg_closed_destination_handlers_return_only_their_reason",
+                "p0_fg_the_desktop_calls_no_caller_chosen_destination_client",
+                "p0_fg_agent_web_fetch_is_not_egress_authority",
+                "p0_fg_desktop_tool_calls_reach_no_caller_chosen_destination",
+            ][..],
+        ),
+        (
+            "an Ollama address from the interface or a stored record",
+            fg_egress,
+            &[
+                "p0_fg_the_ollama_address_is_backend_configuration",
+                "p0_fg_caller_ollama_addresses_are_refused_before_anything_connects",
+                "p0_fg_the_persisted_ollama_address_chooses_no_destination",
+            ][..],
+        ),
+        (
+            "a credential on a process command line or in a returned error",
+            fg_egress,
+            &[
+                "p0_fg_no_reachable_credential_reaches_a_curl_command_line",
+                "p0_fg_perception_takes_no_key_and_sends_nothing",
+                "p0_fg_messaging_errors_never_carry_the_bot_token",
+            ][..],
+        ),
+        (
+            "a helper started or run from PATH",
+            fg_egress,
+            &["p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it"][..],
+        ),
+        (
+            "an egress closure reason that echoes input",
+            fg_egress,
+            &["p0_fg_egress_closure_reasons_are_bounded_and_echo_no_input"][..],
+        ),
     ] {
         for guard in guards {
             assert!(
@@ -2873,6 +2979,10 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
     ] {
         assert!(own.contains(registry), "registry {registry} is missing");
     }
+    assert!(
+        fg_egress.contains("const CREDENTIAL_CURL_SITES: &[(&str, usize, &str)]"),
+        "registry CREDENTIAL_CURL_SITES is missing"
+    );
 }
 
 /// Frontend raw-HTML sinks (P0-002C5C) and what makes each safe. The webview
