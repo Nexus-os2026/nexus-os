@@ -1,28 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  WITHDRAWN during Phase Zero (P0-FINAL-GATE-CLOSURE, dossier item J4).
+
+  This launchd job ran /usr/local/bin/nexus-cli at load and kept it running.
+  nexus-cli is withdrawn: it only prints a withdrawal message.
+
+  This file names no program and is disabled, so launchd has nothing to run.
+  It does not unload or remove a job installed from an earlier version.
+-->
 <plist version="1.0">
   <dict>
     <key>Label</key>
     <string>com.nexusos.agent</string>
 
-    <key>ProgramArguments</key>
-    <array>
-      <string>/usr/local/bin/nexus-cli</string>
-    </array>
-
-    <key>RunAtLoad</key>
+    <key>Disabled</key>
     <true/>
-
-    <key>KeepAlive</key>
-    <true/>
-
-    <key>WorkingDirectory</key>
-    <string>/usr/local/var/nexus-os</string>
-
-    <key>StandardOutPath</key>
-    <string>/usr/local/var/log/nexus-os.log</string>
-
-    <key>StandardErrorPath</key>
-    <string>/usr/local/var/log/nexus-os.err.log</string>
   </dict>
 </plist>

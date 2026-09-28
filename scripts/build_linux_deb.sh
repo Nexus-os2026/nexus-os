@@ -1,40 +1,13 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-VERSION="${1:-1.0.0}"
-ARCH="${2:-amd64}"
-PKG_NAME="nexus-os"
-PKG_ROOT="target/package/${PKG_NAME}_${VERSION}_${ARCH}"
-DEBIAN_DIR="${PKG_ROOT}/DEBIAN"
-
-echo "[linux] building release binary"
-cargo build --release -p nexus-cli
-
-echo "[linux] assembling package tree at ${PKG_ROOT}"
-rm -rf "${PKG_ROOT}"
-mkdir -p "${DEBIAN_DIR}" \
-  "${PKG_ROOT}/usr/bin" \
-  "${PKG_ROOT}/lib/systemd/system"
-
-cat > "${DEBIAN_DIR}/control" <<EOF
-Package: ${PKG_NAME}
-Version: ${VERSION}
-Section: utils
-Priority: optional
-Architecture: ${ARCH}
-Maintainer: NEXUS OS Team <release@nexus-os.dev>
-Description: NEXUS OS governed agent runtime
-EOF
-
-cp target/release/nexus-cli "${PKG_ROOT}/usr/bin/nexus-cli"
-cp packaging/linux/nexus-os.service "${PKG_ROOT}/lib/systemd/system/nexus-os.service"
-
-if command -v dpkg-deb >/dev/null 2>&1; then
-  echo "[linux] creating .deb via dpkg-deb"
-  dpkg-deb --build "${PKG_ROOT}" "target/package/${PKG_NAME}_${VERSION}_${ARCH}.deb"
-  echo "[linux] output: target/package/${PKG_NAME}_${VERSION}_${ARCH}.deb"
-else
-  echo "[linux] dpkg-deb not found; creating tarball fallback"
-  tar -C target/package -czf "target/package/${PKG_NAME}_${VERSION}_${ARCH}.tar.gz" "$(basename "${PKG_ROOT}")"
-  echo "[linux] output: target/package/${PKG_NAME}_${VERSION}_${ARCH}.tar.gz"
-fi
+# WITHDRAWN during Phase Zero (P0-FINAL-GATE-CLOSURE, dossier item J4).
+#
+# This script built nexus-cli with cargo and packaged it, with the
+# packaging/linux/nexus-os.service unit, as
+# target/package/nexus-os_<version>_<arch>.deb (or a tarball). nexus-cli is
+# withdrawn: it only prints a withdrawal message. The desktop app's Linux
+# package is built by the release workflow, not by this script.
+#
+# Running this file fails immediately, on purpose. It reads no argument,
+# builds nothing and packages nothing.
+echo "build_linux_deb.sh: withdrawn during Phase Zero; nothing is built or packaged" >&2
+exit 1

@@ -1,27 +1,10 @@
-class NexusOs < Formula
-  desc "Governed agent runtime with auditable policy controls"
-  homepage "https://gitlab.com/nexaiceo/nexus-os"
-  url "https://gitlab.com/nexaiceo/nexus-os/-/archive/v10.3.0/nexus-os-v10.3.0.tar.gz"
-  sha256 "" # Computed from release tarball after tag is pushed
-  license "MIT"
-
-  depends_on "rust" => :build
-
-  def install
-    system "cargo", "build", "--release", "-p", "nexus-cli"
-    bin.install "target/release/nexus-cli"
-    (prefix/"com.nexusos.agent.plist").write File.read("packaging/macos/com.nexusos.agent.plist")
-  end
-
-  service do
-    run [opt_bin/"nexus-cli"]
-    keep_alive true
-    working_dir var/"nexus-os"
-    log_path var/"log/nexus-os.log"
-    error_log_path var/"log/nexus-os.err.log"
-  end
-
-  test do
-    assert_match "nexus", shell_output("#{bin}/nexus-cli --help")
-  end
-end
+# WITHDRAWN during Phase Zero (P0-FINAL-GATE-CLOSURE, dossier item J4).
+#
+# This formula built nexus-cli from a source archive with cargo, installed it
+# and registered a Homebrew service that kept it running. nexus-cli is
+# withdrawn: it only prints a withdrawal message.
+#
+# Loading this file raises immediately, on purpose: no formula is defined, so
+# nothing is downloaded, built, installed or started. It does not uninstall a
+# formula or stop a service installed from an earlier version.
+raise "nexus-os formula: withdrawn during Phase Zero; nothing is built or installed"

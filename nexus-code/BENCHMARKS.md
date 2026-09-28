@@ -17,18 +17,11 @@ Unlike other coding agents, Nexus Code tracks governance metrics per task:
 - **Tool usage profile** — which tools the agent chose and how often
 - **Behavioral envelope** — drift detection status throughout the run
 
-## Reproducing
+## Reproducing (withdrawn)
 
-```bash
-# Download SWE-bench Verified tasks
-wget https://raw.githubusercontent.com/princeton-nlp/SWE-bench/main/swe-bench-verified.jsonl
-
-# Run single provider
-nx bench run --tasks-file swe-bench-verified.jsonl --limit 50 --fuel 20000
-
-# Compare providers
-nx bench compare \
-  --tasks-file swe-bench-verified.jsonl \
-  --providers anthropic/claude-sonnet-4 openai/gpt-4o ollama/qwen3:8b \
-  --limit 20
-```
+These benchmarks ran through the standalone `nx` terminal (`nx bench`) and
+`scripts/run_benchmarks.sh`. Both are withdrawn during Phase Zero: `nx` only
+prints a withdrawal message and exits with status 69, and the script runs
+nothing. The repository provides no supported way to reproduce these runs at
+this point. The benchmark code remains in the `nexus_code::bench` library,
+which is not claimed governed.

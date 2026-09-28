@@ -162,20 +162,14 @@ cd app && npm ci && npm run build && cd ..
 cd app && npm run tauri dev
 ```
 
-### Server Deployment (Docker)
+### Server Deployment (withdrawn)
 
-```bash
-# One-command start — serves UI + API on port 8080
-docker compose up -d
-
-# With local LLM inference via Ollama
-docker compose --profile with-ollama up -d
-
-# Verify
-curl http://localhost:8080/health
-```
-
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Kubernetes/Helm, air-gapped, and HA deployment.
+The standalone server deployments (Docker, Docker Compose, Kubernetes/Helm,
+air-gapped and headless binary) and the standalone command-line binaries
+are withdrawn during Phase Zero. The repository provides no supported server
+deployment at this point; Nexus OS runs as the desktop app above. An existing
+deployment is not stopped automatically. See
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Post-Audit Status
 

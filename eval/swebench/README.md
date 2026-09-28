@@ -77,14 +77,18 @@ through the simpler single-shot API path.
 
 ## Quick Start
 
+> **Withdrawn during Phase Zero.** This harness needs the OpenAI-compatible
+> API (`/v1/chat/completions`) of the protocols server. That server
+> (`nexus-protocols-server` and its `nexus-os` alias) is withdrawn: it only
+> prints a withdrawal message and serves nothing. The desktop app does not
+> serve this API either, so the repository provides no Nexus OS endpoint for
+> this harness at this point. The remaining steps are kept for reference only.
+
 ```bash
 # 1. Setup
 bash setup.sh
 
-# 2. Start Nexus OS (in another terminal)
-cd ~/NEXUS/nexus-os
-cargo run -p nexus-protocols -- --port 3000
-# OR: launch the desktop app
+# 2. (Withdrawn) Start a Nexus OS API endpoint: none is available in Phase Zero.
 
 # 3. Quick validation (3 synthetic instances)
 source venv/bin/activate

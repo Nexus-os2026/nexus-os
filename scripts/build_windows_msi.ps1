@@ -1,23 +1,11 @@
-$ErrorActionPreference = "Stop"
-
-param(
-    [string]$Version = "1.0.0"
-)
-
-Write-Host "[windows] building nexus-cli release binary"
-cargo build --release -p nexus-cli
-
-if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
-    Write-Warning "WiX Toolset (wix) not found. MSI build step skipped; manifest is generated."
-    Exit 0
-}
-
-Write-Host "[windows] building MSI from WiX manifest"
-$outDir = "target/package/windows"
-New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-
-wix build `
-  packaging/windows/nexus-os.wxs `
-  -o "$outDir/nexus-os-$Version.msi"
-
-Write-Host "[windows] output: $outDir/nexus-os-$Version.msi"
+# WITHDRAWN during Phase Zero (P0-FINAL-GATE-CLOSURE, dossier item J4).
+#
+# This script built nexus-cli with cargo and an MSI from
+# packaging/windows/nexus-os.wxs. nexus-cli is withdrawn: it only prints a
+# withdrawal message. The desktop app's Windows installers are built by the
+# release workflow, not by this script.
+#
+# Running this file fails immediately, on purpose. It reads no parameter,
+# builds nothing and packages nothing.
+[Console]::Error.WriteLine("build_windows_msi.ps1: withdrawn during Phase Zero; nothing is built or packaged")
+exit 1

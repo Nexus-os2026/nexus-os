@@ -1,125 +1,13 @@
-# Default values for nexus-os Helm chart.
-
-replicaCount: 2
-
-image:
-  repository: registry.gitlab.com/nexaiceo/nexus-os
-  tag: "" # Set by CI on release; defaults to chart appVersion
-  pullPolicy: IfNotPresent
-
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
-
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
-
-# -- Server configuration passed as environment variables.
-config:
-  mode: server
-  httpAddr: "0.0.0.0:8080"
-  frontendDist: /opt/nexus/app/dist
-  configPath: /data/config
-  shutdownTimeoutSecs: "30"
-  corsOrigins: "*"
-
-# -- JWT secret (use existingSecret in production).
-auth:
-  jwtSecret: changeme
-  existingSecret: ""
-  existingSecretKey: jwt-secret
-
-# -- Database backend for server mode.
-database:
-  # "sqlite" for single-node, "postgres" for HA.
-  backend: sqlite
-  # Only used when backend=postgres.
-  postgresUrl: ""
-  existingSecret: ""
-  existingSecretKey: database-url
-
-# -- Ollama sidecar for local LLM inference.
-ollama:
-  enabled: false
-  url: "http://localhost:11434"
-  image: ollama/ollama:latest
-  resources:
-    limits:
-      memory: 8Gi
-    requests:
-      memory: 4Gi
-
-service:
-  type: ClusterIP
-  port: 8080
-  metricsPort: 9090
-
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-  hosts:
-    - host: nexus-os.local
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-
-resources:
-  requests:
-    cpu: 250m
-    memory: 512Mi
-  limits:
-    cpu: "2"
-    memory: 2Gi
-
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 80
-
-highAvailability:
-  # Minimum pods that must remain available during voluntary disruptions.
-  minAvailable: 1
-
-persistence:
-  enabled: true
-  storageClass: ""
-  accessMode: ReadWriteOnce
-  size: 10Gi
-
-# -- Prometheus ServiceMonitor for metrics scraping.
-serviceMonitor:
-  enabled: false
-  interval: 30s
-  scrapeTimeout: 10s
-  additionalLabels: {}
-
-# -- Scheduled database backup CronJob.
-backup:
-  enabled: false
-  schedule: "0 2 * * *"
-  s3Bucket: ""
-  s3Region: us-east-1
-  existingSecret: ""
-
-nodeSelector: {}
-tolerations: []
-affinity: {}
-
-podAnnotations: {}
-podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  fsGroup: 1000
-
-securityContext:
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
-  capabilities:
-    drop:
-      - ALL
+# WITHDRAWN during Phase Zero (P0-FINAL-GATE-CLOSURE, dossier items J2 and J3).
+#
+# This chart deployed the protocols server image
+# (registry.gitlab.com/nexaiceo/nexus-os) with the HTTP gateway on port 8080,
+# CORS open to any origin by default, a default JWT secret, an optional Ollama
+# sidecar and a backup CronJob. Its only template (templates/withdrawn.yaml)
+# now fails, so no install, upgrade or values override renders any resource.
+# It defines no values.
+#
+# A release installed from an earlier version of this chart is not stopped,
+# removed or changed: an upgrade with this chart fails before it changes
+# anything, including the release's data volume claim. Images published
+# elsewhere are not removed.

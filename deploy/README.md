@@ -29,5 +29,6 @@ withdrawn, not repaired.
   token given to the server) are not revoked by this change.
 - The `nexus-mcp` tools are not made safe to expose on a network.
 - The protocols server (the root `Dockerfile`, `docker-compose.yml`, `helm/`
-  and `install.sh`) is a separate Final-Gate item and is not changed here.
+  and `install.sh`) is a separate Final-Gate item (J2, J3). It is withdrawn
+  separately, in the same way; see `docs/DEPLOYMENT.md`.
 - No volume, model file or user data is deleted.

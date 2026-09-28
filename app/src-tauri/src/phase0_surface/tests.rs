@@ -2053,12 +2053,6 @@ const APPROVED_STATE_ROOTS: &[(&str, &str, usize, &str)] = &[
         "latent nexus_code::tools",
     ),
     (
-        "nexus-code/src/main.rs",
-        "\"/tmp",
-        2,
-        "the nx terminal binary, outside the desktop",
-    ),
-    (
         "cli/src/lib.rs",
         "var(\"HOME\")",
         1,

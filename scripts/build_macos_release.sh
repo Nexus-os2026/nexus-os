@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-VERSION="${1:-1.0.0}"
-OUT_DIR="target/package/macos"
-
-mkdir -p "${OUT_DIR}"
-
-echo "[macos] building nexus-cli release binary"
-cargo build --release -p nexus-cli
-
-echo "[macos] collecting Homebrew formula and launchd plist"
-cp packaging/macos/homebrew/nexus-os.rb "${OUT_DIR}/nexus-os.rb"
-cp packaging/macos/com.nexusos.agent.plist "${OUT_DIR}/com.nexusos.agent.plist"
-cp target/release/nexus-cli "${OUT_DIR}/nexus-cli"
-
-tar -C "${OUT_DIR}" -czf "target/package/nexus-os_${VERSION}_macos.tar.gz" .
-echo "[macos] output: target/package/nexus-os_${VERSION}_macos.tar.gz"
+# WITHDRAWN during Phase Zero (P0-FINAL-GATE-CLOSURE, dossier item J4).
+#
+# This script built nexus-cli with cargo and archived it with the Homebrew
+# formula and the launchd job as target/package/nexus-os_<version>_macos.tar.gz.
+# nexus-cli is withdrawn: it only prints a withdrawal message. The desktop
+# app's macOS image is built by the release workflow, not by this script.
+#
+# Running this file fails immediately, on purpose. It reads no argument,
+# builds nothing and packages nothing.
+echo "build_macos_release.sh: withdrawn during Phase Zero; nothing is built or packaged" >&2
+exit 1

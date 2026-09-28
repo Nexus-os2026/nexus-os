@@ -836,8 +836,10 @@ fn p0_fg1_helm_chart_fails_for_every_values_override() {
 /// The deployment documents say J1 is withdrawn, say that existing
 /// deployments are not stopped by this, and give no command that installs,
 /// builds, starts or reaches it: `deploy/README.md` and the J1 part of
-/// `docs/DEPLOYMENT.md`. (That guide's protocols server instructions, for
-/// `nexus-protocols-server`, are a separate item and are not checked here.)
+/// `docs/DEPLOYMENT.md`. (That guide's protocols server section, for
+/// `nexus-protocols-server` and `nexus-os`, is a separate item, J2 and J3,
+/// withdrawn separately and checked by `protocols/tests/phase0_withdrawal.rs`,
+/// not here.)
 #[test]
 fn p0_fg1_deployment_docs_withdraw_without_claiming_a_stop() {
     // Line breaks in the Markdown source do not matter.

@@ -1,117 +1,13 @@
-services:
-  nexus-os:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-      - "9090:9090"
-    volumes:
-      - nexus-data:/data
-    environment:
-      NEXUS_HTTP_ADDR: 0.0.0.0:8080
-      NEXUS_FRONTEND_DIST: /opt/nexus/app/dist
-      NEXUS_CONFIG_PATH: /data/config
-      NEXUS_MODE: server
-      NEXUS_LOG_LEVEL: info
-      JWT_SECRET: ${JWT_SECRET:-changeme}
-      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-        reservations:
-          memory: 1G
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
-      interval: 30s
-      timeout: 5s
-      start_period: 20s
-      retries: 3
-
-  # ---------- Optional: Ollama for local LLM inference ----------
-
-  ollama:
-    image: ollama/ollama:latest
-    profiles: ["with-ollama"]
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-models:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          memory: 4G
-    restart: unless-stopped
-
-  # ---------- HA profile: multi-replica with shared PostgreSQL ----------
-
-  postgres:
-    image: postgres:16-bookworm
-    profiles: ["ha"]
-    environment:
-      POSTGRES_DB: nexus
-      POSTGRES_USER: nexus
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus}
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexus"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  nexus-ha-1:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    profiles: ["ha"]
-    ports:
-      - "8081:8080"
-    volumes:
-      - nexus-data:/data
-    environment:
-      NEXUS_HTTP_ADDR: 0.0.0.0:8080
-      NEXUS_FRONTEND_DIST: /opt/nexus/app/dist
-      NEXUS_CONFIG_PATH: /data/config
-      NEXUS_MODE: server
-      JWT_SECRET: ${JWT_SECRET:-changeme}
-      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
-      DATABASE_URL: postgres://nexus:${POSTGRES_PASSWORD:-nexus}@postgres:5432/nexus
-      HOSTNAME: nexus-ha-1
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
-  nexus-ha-2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    profiles: ["ha"]
-    ports:
-      - "8082:8080"
-    volumes:
-      - nexus-data:/data
-    environment:
-      NEXUS_HTTP_ADDR: 0.0.0.0:8080
-      NEXUS_FRONTEND_DIST: /opt/nexus/app/dist
-      NEXUS_CONFIG_PATH: /data/config
-      NEXUS_MODE: server
-      JWT_SECRET: ${JWT_SECRET:-changeme}
-      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
-      DATABASE_URL: postgres://nexus:${POSTGRES_PASSWORD:-nexus}@postgres:5432/nexus
-      HOSTNAME: nexus-ha-2
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
-volumes:
-  nexus-data:
-  ollama-models:
-  pgdata:
+# WITHDRAWN during Phase Zero (P0-FINAL-GATE-CLOSURE, dossier items J2 and J3).
+#
+# This file built and ran the protocols server (`nexus-protocols-server`) on
+# ports 8080 and 9090 of every host interface, two high-availability replicas
+# on ports 8081 and 8082, an Ollama service on port 11434 and a PostgreSQL
+# service on port 5432. All are withdrawn. This file defines no services,
+# ports, volumes, credentials or restart policies.
+#
+# It does not stop, remove or change containers, images, networks or volumes
+# (including nexus-data, ollama-models and pgdata) created from an earlier
+# version of this file.
+x-nexus-withdrawn: "nexus-protocols-server: this Compose recipe is withdrawn during Phase Zero; it defines no services"
+services: {}

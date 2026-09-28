@@ -11,22 +11,11 @@
 5. Publish: send approved post to X.
 6. Log: write a full audit trail for every step.
 
-## Run Guide
+## Running it (withdrawn)
 
-1. Configure keys:
-   - `nexus setup`
-2. Create the agent:
-   - `nexus agent create agents/social-poster/manifest.toml`
-3. Start the agent:
-   - `nexus agent start social-poster`
-4. View logs:
-   - `nexus agent logs social-poster`
-5. Verify post on X.
-
-## Demo Mode (No Real Posting)
-
-Use dry-run to execute the complete pipeline without calling real X posting:
-
-- `nexus agent start social-poster --dry-run`
-
-Dry-run still performs research, reading, generation, compliance checks, and audit logging, but only prints generated content.
+The standalone ways to run this agent are withdrawn during Phase Zero: the
+`nexus agent` commands of `nexus-cli` and the `social-poster-agent`
+executable each print only a fixed withdrawal message and exit with status
+69. The repository provides no supported way to run this agent from the
+command line at this point, including the dry-run demo mode. The
+`social_poster_agent` library is unchanged.

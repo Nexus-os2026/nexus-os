@@ -1,70 +1,35 @@
-use social_poster_agent::run_social_poster_from_manifest;
-use std::env;
-use std::path::PathBuf;
+//! `social-poster-agent` (`agents/social-poster/src/main.rs`) is withdrawn
+//! during Phase Zero.
+//!
+//! This executable was an alternate entry point to the withdrawn `nexus-cli`
+//! command `agent start social-poster` (Final-Gate dossier item J4): it loaded
+//! a manifest from the working directory (or the build checkout) and ran the
+//! social poster, which researches, generates and, unless `--dry-run` is
+//! given, publishes posts with the configured credentials. Every invocation
+//! now writes one fixed message to standard error and exits with one fixed
+//! non-zero status.
+//!
+//! Before that denial it reads no argument, environment variable, manifest,
+//! credential or file and starts no process or connection. No flag or
+//! environment variable restores it. The `social_poster_agent` library is
+//! unchanged and is not claimed governed.
+//!
+//! The withdrawal contract is tested against the built executable
+//! (`tests/phase0_withdrawal.rs`). The unit-test build of this target has no
+//! entry point, so only the real executable carries the withdrawal message.
 
-fn main() {
-    let mut manifest_path = default_manifest_path();
-    let mut dry_run = false;
+#![forbid(unsafe_code)]
 
-    let mut args = env::args().skip(1);
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--manifest" => {
-                let Some(path) = args.next() else {
-                    eprintln!("missing value for --manifest");
-                    std::process::exit(2);
-                };
-                manifest_path = PathBuf::from(path);
-            }
-            "--dry-run" => {
-                dry_run = true;
-            }
-            "-h" | "--help" => {
-                print_help();
-                return;
-            }
-            _ => {
-                eprintln!("unknown argument: {arg}");
-                print_help();
-                std::process::exit(2);
-            }
-        }
-    }
+#[cfg(not(test))]
+fn main() -> std::process::ExitCode {
+    use std::io::Write;
 
-    match run_social_poster_from_manifest(manifest_path.as_path(), dry_run) {
-        Ok(report) => {
-            println!(
-                "social-poster completed: generated={}, published={}, dry_run={}",
-                report.generated_posts.len(),
-                report.published_post_ids.len(),
-                report.dry_run
-            );
-            if report.dry_run {
-                for (idx, post) in report.generated_posts.iter().enumerate() {
-                    println!("\n--- dry-run post {} [x] ---\n{}\n", idx + 1, post.text);
-                }
-            }
-        }
-        Err(error) => {
-            eprintln!("social-poster failed: {error}");
-            std::process::exit(1);
-        }
-    }
-}
+    const WITHDRAWN_MESSAGE: &str =
+        "social-poster-agent: unavailable during Phase Zero; standalone use withdrawn";
+    // sysexits EX_UNAVAILABLE.
+    const WITHDRAWN_STATUS: u8 = 69;
 
-fn default_manifest_path() -> PathBuf {
-    if let Ok(cwd) = env::current_dir() {
-        let candidate = cwd
-            .join("agents")
-            .join("social-poster")
-            .join("manifest.toml");
-        if candidate.exists() {
-            return candidate;
-        }
-    }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("manifest.toml")
-}
-
-fn print_help() {
-    println!("Usage: social-poster-agent [--manifest <path>] [--dry-run]");
+    // A failed write changes nothing: the status is the same either way.
+    let _ = writeln!(std::io::stderr(), "{WITHDRAWN_MESSAGE}");
+    std::process::ExitCode::from(WITHDRAWN_STATUS)
 }

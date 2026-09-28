@@ -1,49 +1,14 @@
-#!/bin/bash
-set -euo pipefail
-
-# Nexus Code (nx) installer
-VERSION="${NX_VERSION:-latest}"
-INSTALL_DIR="${NX_INSTALL_DIR:-$HOME/.local/bin}"
-
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m)
-
-case "$OS" in
-    linux) PLATFORM="linux" ;;
-    darwin) PLATFORM="macos" ;;
-    *) echo "Unsupported OS: $OS"; exit 1 ;;
-esac
-
-case "$ARCH" in
-    x86_64|amd64) ARCH="x86_64" ;;
-    aarch64|arm64) ARCH="aarch64" ;;
-    *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
-esac
-
-BINARY_NAME="nx-${PLATFORM}-${ARCH}"
-echo "Installing Nexus Code (nx) for ${PLATFORM}/${ARCH}..."
-
-if [ "$VERSION" = "latest" ]; then
-    DOWNLOAD_URL="https://github.com/nexaiceo/nexus-os/releases/latest/download/${BINARY_NAME}.tar.gz"
-else
-    DOWNLOAD_URL="https://github.com/nexaiceo/nexus-os/releases/download/${VERSION}/${BINARY_NAME}.tar.gz"
-fi
-
-mkdir -p "$INSTALL_DIR"
-TMP_DIR=$(mktemp -d)
-trap "rm -rf $TMP_DIR" EXIT
-
-echo "Downloading..."
-curl -sSL "$DOWNLOAD_URL" -o "${TMP_DIR}/${BINARY_NAME}.tar.gz"
-tar xzf "${TMP_DIR}/${BINARY_NAME}.tar.gz" -C "$TMP_DIR"
-mv "${TMP_DIR}/nx" "${INSTALL_DIR}/nx"
-chmod +x "${INSTALL_DIR}/nx"
-
-echo ""
-echo "Installed to ${INSTALL_DIR}/nx"
-echo ""
-if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
-    echo "Add to PATH: export PATH=\"${INSTALL_DIR}:\$PATH\""
-    echo ""
-fi
-echo "Get started: nx doctor"
+#!/usr/bin/env bash
+# WITHDRAWN during Phase Zero (P0-FINAL-GATE-CLOSURE, dossier item J5).
+#
+# This script downloaded an `nx` release archive (nx-<platform>-<arch>.tar.gz)
+# from github.com/nexaiceo/nexus-os and installed it to ~/.local/bin/nx, with
+# NX_VERSION and NX_INSTALL_DIR overrides. The standalone `nx` terminal is
+# withdrawn, and a previously published archive would install a build from
+# before the withdrawal.
+#
+# Running this file fails immediately, on purpose. It reads no environment
+# variable or argument, downloads nothing and installs nothing. It does not
+# remove an `nx` installed by an earlier version of this script.
+echo "nexus-code/install.sh: withdrawn during Phase Zero; nothing is downloaded or installed" >&2
+exit 1
