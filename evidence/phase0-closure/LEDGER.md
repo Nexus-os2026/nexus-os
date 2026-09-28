@@ -69,3 +69,10 @@ reviewer to be assigned.
 Combined candidate `implement/p0-final-gate-closure`: `f3c91e0a` (scaffold +
 S4), local only. A merge-tree preview of all six component heads onto it
 reports no textual conflicts.
+- ~22:05Z: a second usage limit stopped the workstream agents (reviews and
+  repairs in progress). No build, fast-local or hosted run was active and
+  nothing was pushed except this evidence branch. On resumption, a leftover
+  read-only diagnostic from a review (an exponential dependency-tree listing)
+  was still running and holding a build slot; it was terminated. Repairs and
+  reviews resumed from each worktree's verified state. Hosted budget
+  unchanged: closure candidate 0 of 3.
