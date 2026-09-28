@@ -496,8 +496,8 @@ bundle). The desktop never reaches the binaries below.
       modified, and that no argument or environment value is echoed.
     - A source guard pins the entry point to exactly the withdrawal and the
       package to that one target.
-    - Deployment guards pin the Dockerfile, both Compose files, the chart and
-      `deploy/README.md`.
+    - Deployment guards pin the Dockerfile, both Compose files, the chart,
+      `deploy/README.md` and the J1 part of `docs/DEPLOYMENT.md`.
   - **Binary name collision.**
     - `nexus-protocols` also builds a binary named `nexus-server`.
     - When one Cargo invocation builds both, the shared output path Cargo
@@ -513,6 +513,11 @@ bundle). The desktop never reaches the binaries below.
       built them, check the result, and run that. On other platforms an
       unidentified build fails the tests.
     - They never run the protocols server or a `PATH` lookup.
+    - **Architect decision (P0-FG1).** The Windows fallback is accepted for
+      this checkpoint only, because the same tests pin the package to its one
+      withdrawal-only source file. It does not make direct-`rustc`
+      substitutes a normal testing pattern, and it does not resolve the
+      duplicate binary name, which stays build debt (item K).
   - **What shipped.** Nothing published this binary or an image built from
     `deploy/`.
     - CI and the release workflow compile it as a workspace member
@@ -531,11 +536,15 @@ bundle). The desktop never reaches the binaries below.
     - revoke a credential that such a deployment could use;
     - make `nexus-mcp` safe to expose on a network;
     - change the protocols server, `nexus-cli` or `nx`.
-  - **Outside this change.** `docs/DEPLOYMENT.md` ("CLI server
-    (alternative)") still documents building and starting this binary with
-    the retired port arguments. Running it now prints only the withdrawal
-    message. The file is outside the P0-FG1 allowlist and is recorded for a
-    scope decision.
+  - **Deployment guide (Architect scope extension).**
+    - `docs/DEPLOYMENT.md` replaced its "CLI server (alternative)" subsection,
+      which built and started this binary with the retired port arguments.
+    - The replacement states that the package is withdrawn, that it only
+      prints the withdrawal, that no supported deployment exists, and that
+      existing deployments are not stopped automatically.
+    - The FG1 documentation guard rejects a return of those instructions.
+    - The guide's protocols `nexus-server` instructions belong to J2/J3 and
+      are unchanged.
 - **protocols `nexus-server` (`protocols/src/bin/`, built by the root
   `Dockerfile`, compose and helm).**
   - `protocols/src/server_runtime.rs` binds `NEXUS_HTTP_ADDR`, default
@@ -601,6 +610,30 @@ bundle). The desktop never reaches the binaries below.
     added.
   - The production code and the finalize-exactly-once invariant are
     unchanged.
+- **`nexus-ui-repair` `HOME` race** (`crates/nexus-ui-repair/tests/report_format.rs`).
+  Repaired on the P0-FG1 validation branch (test-only; Architect scope
+  extension); review pending.
+  - A test defect: the tests of that binary run in parallel in one process,
+    and each set and restored the process-wide `HOME`. One test could remove
+    or change `HOME` while another built `Acl::default_scout()` from it.
+  - CI saw it on Windows, where `HOME` is not set: `HOME environment
+    variable must be set`.
+  - Reproduced before the repair: 64 of 1,000 runs failed with `HOME` absent
+    and 23 of 1,000 with it present.
+  - The repair: one process-wide lock serializes the `HOME` change. Each
+    guard holds it for its life and restores `HOME` before releasing it.
+  - After the repair: 0 failures in 3,000 runs (`HOME` absent and present,
+    default and 16 test threads). That is stress evidence, not proof.
+  - A deterministic test checks that the lock is held while a guard is
+    alive.
+  - The ACL code and the test assertions are unchanged.
+- **Duplicate binary name `nexus-server`** (`crates/nexus-server` and
+  `nexus-protocols`). Build debt for the Final Gate.
+  - One Cargo invocation that builds both writes them to the same output
+    paths: `target/<profile>/nexus-server`, and on Windows also
+    `deps\nexus_server.exe`. Cargo warns that this may become a hard error.
+  - P0-FG1 works around it in its tests (item J). Renaming either binary is
+    left to a later decision.
 
 ## L. Screen observation from the interface
 
