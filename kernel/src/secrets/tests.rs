@@ -272,12 +272,26 @@ fn migrate_config_to_vault_happy_path_clears_fields_and_bumps_version() {
 
 #[test]
 fn migrate_with_no_credentials_still_bumps_schema_version() {
+    // A migration that moves credentials re-saves the configuration with
+    // `save_config`, which writes the file NEXUS_CONFIG_PATH names, or else
+    // the one under HOME. Point it at a temporary file (serialized with the
+    // other tests that set the variable, and restored afterwards, even on
+    // panic) so that even a regression here can never rewrite a real
+    // configuration with the default one.
+    let _serial = NEXUS_CONFIG_PATH_GUARD
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let dir = tempfile::tempdir().unwrap();
+    let cfg_path = dir.path().join("config.toml");
+    let _config_path = EnvVarGuard::set("NEXUS_CONFIG_PATH", &cfg_path);
     let (facade, db) = build_facade(
         CredentialFacadeConfig::default(),
         KeyringBackendAdapter::os_keyring(),
     );
     let mut config = NexusConfig::default();
     let report = migrate_config_to_vault(&mut config, &facade).expect("ok");
+    // An empty migration has nothing to clear, so it re-saves nothing.
+    assert!(!cfg_path.exists());
     match report {
         MigrationReport::Migrated {
             fields_migrated,
@@ -530,3 +544,28 @@ fn ak15_audit_records_ops_without_plaintext_leak() {
 /// as before. Tightens AK-8 (which still tracks the broader
 /// audit-of-env-mutating-tests sweep).
 pub(crate) static NEXUS_CONFIG_PATH_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Sets an environment variable for the life of the guard and restores its
+/// previous value, or its absence, when dropped (also on panic). The caller
+/// holds the lock that serializes the variable.
+pub(crate) struct EnvVarGuard {
+    name: &'static str,
+    previous: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    pub(crate) fn set(name: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+        let previous = std::env::var_os(name);
+        std::env::set_var(name, value);
+        Self { name, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match &self.previous {
+            Some(value) => std::env::set_var(self.name, value),
+            None => std::env::remove_var(self.name),
+        }
+    }
+}
