@@ -1,0 +1,248 @@
+name: NEXUS OS Fast Local CI
+
+# Fast development validation on the self-hosted Nexus runner. It runs the
+# Linux-applicable checks of the final gate (ci.yml) with the same commands:
+# Rust formatting, clippy and workspace tests, the packaged Builder toolchain
+# (trusted-entry tests, verification and governed launch), the frontend, and
+# the Python voice tests.
+#
+# This workflow is for speed. It is not the final evidence: the GitHub-hosted
+# Linux, Windows and macOS gate in ci.yml is, run once on the candidate the
+# Architect approves.
+#
+# Caches that are reused:
+# - the runner's installed Rust 1.94.0 toolchain, called directly (never
+#   through rustup, which could install toolchains);
+# - one Cargo target directory kept outside the checkout; Cargo's
+#   fingerprints decide what is rebuilt;
+# - the runner's Cargo, npm and pip download caches, and versions pinned
+#   through the runner tool cache.
+# Everything else is rebuilt on every run: a cleaned checkout of the exact
+# commit, a freshly assembled Builder toolchain, `npm ci`, and a new Python
+# virtual environment.
+#
+# It never runs for pull requests: the repository is public, and this runner
+# is a self-hosted machine.
+on:
+  push:
+    branches:
+      - "implement/**"
+      - "repair/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fast-local-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  fast-linux:
+    runs-on: [self-hosted, Linux, X64, nexus-local]
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify the tested commit and a clean checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$GITHUB_SHA" ]]; then
+            echo "::error::checked out $tested but the event commit is $GITHUB_SHA"
+            exit 1
+          fi
+          if [[ -n "$(git status --porcelain=v1 --untracked-files=all --ignored)" ]]; then
+            echo "::error::the checkout is not clean"
+            git status --short --ignored
+            exit 1
+          fi
+          echo "Tested commit: $tested"
+          echo "Tested commit: \`$tested\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Use the runner's installed Rust 1.94.0 (no rustup, nothing installed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain="${RUSTUP_HOME:-$HOME/.rustup}/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin"
+          for tool in cargo rustc rustdoc cargo-clippy clippy-driver cargo-fmt rustfmt; do
+            if [[ ! -x "$toolchain/$tool" ]]; then
+              echo "::error::$toolchain/$tool is missing: provision Rust 1.94.0 with rustfmt and clippy on this runner"
+              exit 1
+            fi
+          done
+          echo "$toolchain" >> "$GITHUB_PATH"
+
+      - name: Verify the toolchain and the Tauri system libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! rustc --version | grep -q '^rustc 1\.94\.0 '; then
+            echo "::error::expected rustc 1.94.0, found: $(rustc --version)"
+            exit 1
+          fi
+          rustc --version
+          cargo --version
+          cargo clippy --version
+          cargo fmt --version
+          for lib in webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0 gtk+-3.0 glib-2.0; do
+            if ! pkg-config --exists "$lib"; then
+              echo "::error::system library $lib is missing on this runner"
+              exit 1
+            fi
+            echo "$lib $(pkg-config --modversion "$lib")"
+          done
+
+      - name: Use the persistent Cargo target cache (outside the checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache="$(dirname "$GITHUB_WORKSPACE")/.nexus-fast-cache"
+          mkdir -p "$cache/cargo-target" "$cache/tools"
+          echo "NEXUS_FAST_CACHE=$cache" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$cache/cargo-target" >> "$GITHUB_ENV"
+
+      # Privacy regressions exercise both real search backends.
+      - name: Provide ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$NEXUS_FAST_CACHE/tools/ripgrep-14.1.1"
+          if ! "$root/bin/rg" --version 2>/dev/null | head -n 1 | grep -q '^ripgrep 14\.1\.1 '; then
+            rm -rf "$root"
+            env -u CARGO_TARGET_DIR cargo install ripgrep --version 14.1.1 --locked --root "$root"
+          fi
+          echo "$root/bin" >> "$GITHUB_PATH"
+          "$root/bin/rg" --version
+          grep --version
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --locked
+
+      # P0-002C4D2 / P0-002C4C3: the same packaged-toolchain checks as ci.yml.
+      # The checkout above was cleaned, so the toolchain is always assembled
+      # fresh (assemble.mjs refuses an existing output directory and checks
+      # the pinned Node archive digest).
+      - name: Setup Node.js 24.21.0 (Builder toolchain assembly)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+
+      - name: Assemble Nexus Builder toolchain
+        shell: bash
+        run: node packaging/builder-toolchain/scripts/assemble.mjs --target x86_64-unknown-linux-gnu --out app/src-tauri/builder-toolchain
+
+      - name: Trusted Builder entry tests (packaged Node)
+        shell: bash
+        run: app/src-tauri/builder-toolchain/node/node --test packaging/builder-toolchain/test/entry.test.mjs
+
+      - name: Packaged Builder toolchain verification and governed launch
+        shell: bash
+        env:
+          NEXUS_BUILDER_TOOLCHAIN: packaged
+        run: |
+          set -o pipefail
+          cargo test -p nexus-desktop-backend --locked --lib -- p0_002c4d2_assembled_ p0_002c4c3_packaged_ 2>&1 | tee packaged-toolchain.log
+          grep -q 'test result: ok. 13 passed' packaged-toolchain.log
+
+  fast-frontend:
+    runs-on: [self-hosted, Linux, X64, nexus-local]
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify the tested commit and a clean checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$GITHUB_SHA" ]]; then
+            echo "::error::checked out $tested but the event commit is $GITHUB_SHA"
+            exit 1
+          fi
+          if [[ -n "$(git status --porcelain=v1 --untracked-files=all --ignored)" ]]; then
+            echo "::error::the checkout is not clean"
+            git status --short --ignored
+            exit 1
+          fi
+          echo "Tested commit: $tested"
+          echo "Tested commit: \`$tested\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install frontend dependencies
+        run: cd app && npm ci
+
+      - name: TypeScript check
+        run: cd app && npx tsc --noEmit
+
+      - name: Run frontend tests
+        run: cd app && npm test
+
+      - name: Build frontend
+        run: cd app && npx vite build
+
+  fast-python:
+    runs-on: [self-hosted, Linux, X64, nexus-local]
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify the tested commit and a clean checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$GITHUB_SHA" ]]; then
+            echo "::error::checked out $tested but the event commit is $GITHUB_SHA"
+            exit 1
+          fi
+          if [[ -n "$(git status --porcelain=v1 --untracked-files=all --ignored)" ]]; then
+            echo "::error::the checkout is not clean"
+            git status --short --ignored
+            exit 1
+          fi
+          echo "Tested commit: $tested"
+          echo "Tested commit: \`$tested\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # A new virtual environment every run: no package left from an earlier
+      # run can make the tests pass.
+      - name: Install voice dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/voice-venv"
+          echo "$RUNNER_TEMP/voice-venv/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/voice-venv/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/voice-venv/bin/python" -m pip install faster-whisper openwakeword silero-vad piper-tts pytest
+
+      - name: Run Python voice tests
+        run: cd voice && python -m pytest -v

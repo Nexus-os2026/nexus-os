@@ -1,12 +1,23 @@
 name: NEXUS OS CI
 
+# Final GitHub-hosted validation gate: Linux, Windows, macOS, frontend and
+# Python, including the packaged Builder toolchain and governed launch.
+#
+# Run it explicitly, once, on the Architect-approved candidate:
+#   gh workflow run ci.yml --ref <branch> -f candidate_sha=<full 40-char SHA>
+# Every job checks out exactly that commit and fails if it tested anything
+# else. Day-to-day development validation runs on the self-hosted runner
+# (ci-fast-local.yml); it does not replace this gate.
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: "Full 40-character SHA of the Architect-approved candidate commit"
+        required: true
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,6 +28,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha || github.sha }}
+
+      - name: Verify the exact candidate commit
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::candidate_sha must be a full 40-character lowercase commit SHA"
+            exit 1
+          fi
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$CANDIDATE_SHA" ]]; then
+            echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
+            exit 1
+          fi
+          echo "Tested commit: $tested"
+          echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
+          {
+            echo "Tested commit: \`$tested\`"
+            echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -92,6 +127,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha || github.sha }}
+
+      - name: Verify the exact candidate commit
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::candidate_sha must be a full 40-character lowercase commit SHA"
+            exit 1
+          fi
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$CANDIDATE_SHA" ]]; then
+            echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
+            exit 1
+          fi
+          echo "Tested commit: $tested"
+          echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
+          {
+            echo "Tested commit: \`$tested\`"
+            echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -115,6 +174,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha || github.sha }}
+
+      - name: Verify the exact candidate commit
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::candidate_sha must be a full 40-character lowercase commit SHA"
+            exit 1
+          fi
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$CANDIDATE_SHA" ]]; then
+            echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
+            exit 1
+          fi
+          echo "Tested commit: $tested"
+          echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
+          {
+            echo "Tested commit: \`$tested\`"
+            echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Rust 1.94.0
         uses: dtolnay/rust-toolchain@1.94.0
@@ -165,6 +248,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha || github.sha }}
+
+      - name: Verify the exact candidate commit
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::candidate_sha must be a full 40-character lowercase commit SHA"
+            exit 1
+          fi
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$CANDIDATE_SHA" ]]; then
+            echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
+            exit 1
+          fi
+          echo "Tested commit: $tested"
+          echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
+          {
+            echo "Tested commit: \`$tested\`"
+            echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Rust 1.94.0
         uses: dtolnay/rust-toolchain@1.94.0
@@ -217,6 +324,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha || github.sha }}
+
+      - name: Verify the exact candidate commit
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::candidate_sha must be a full 40-character lowercase commit SHA"
+            exit 1
+          fi
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$CANDIDATE_SHA" ]]; then
+            echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
+            exit 1
+          fi
+          echo "Tested commit: $tested"
+          echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
+          {
+            echo "Tested commit: \`$tested\`"
+            echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
