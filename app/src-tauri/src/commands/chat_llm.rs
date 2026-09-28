@@ -2122,49 +2122,28 @@ pub struct ModelPullProgress {
     pub error: Option<String>,
 }
 
-/// Ensure Ollama server is running. Returns true if already running or started.
+/// Final Gate item I: whether the Ollama service at the authorized address
+/// answers. Nexus connects to an Ollama service started outside it and never
+/// starts one: it holds no approved executable authority for `ollama` and
+/// would own no lifecycle for a detached server. So this starts, waits for
+/// and cleans up nothing; when the service does not answer, it returns the
+/// `HelperLaunch` refusal.
 pub(crate) fn ensure_ollama(base_url: Option<String>) -> Result<bool, String> {
     let url = ollama_base_url_for("ensure_ollama", base_url)?;
-    let provider = OllamaProvider::new(&url);
-
-    // Check if already running
-    if provider.health_check().unwrap_or(false) {
-        return Ok(true);
-    }
-
-    // Try to start ollama serve in the background
-    let started = Command::new("ollama")
-        .arg("serve")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
-
-    if started.is_err() {
-        return Err(
-            "Ollama is not installed. Please install it from https://ollama.ai".to_string(),
-        );
-    }
-
-    // Wait up to 8 seconds for it to come online
-    for _ in 0..16 {
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        if provider.health_check().unwrap_or(false) {
-            return Ok(true);
-        }
-    }
-
-    Err("Ollama was started but did not respond within 8 seconds".to_string())
+    ollama_service_answers(&url)
 }
 
-/// Check if ollama binary is available on PATH.
-pub(crate) fn is_ollama_installed() -> bool {
-    Command::new("ollama")
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+/// [`ensure_ollama`] for a checked address: `Ok(true)` when the connection
+/// probe succeeds (it sends nothing), and otherwise the refusal.
+pub(crate) fn ollama_service_answers(url: &str) -> Result<bool, String> {
+    if OllamaProvider::new(url).health_check().unwrap_or(false) {
+        Ok(true)
+    } else {
+        Err(crate::phase0_surface::closed(
+            "ensure_ollama",
+            crate::phase0_surface::Closure::HelperLaunch,
+        ))
+    }
 }
 
 /// Delete a model from Ollama.
@@ -3579,41 +3558,22 @@ pub(crate) fn check_ollama_smart(url: &str) -> LlmProviderStatusEntry {
                 }
             }
         }
-        _ => {
-            // Not reachable. Detect whether Ollama binary exists.
-            let ollama_installed = Command::new("which")
-                .arg("ollama")
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-
-            if !ollama_installed {
-                LlmProviderStatusEntry {
-                    name: "ollama".to_string(),
-                    available: false,
-                    is_paid: false,
-                    reason: "Ollama not found on this system. Download it from https://ollama.com"
-                        .to_string(),
-                    latency_ms: None,
-                    error_hint: Some("Not installed".to_string()),
-                    setup_command: Some(
-                        "curl -fsSL https://ollama.com/install.sh | sh".to_string(),
-                    ),
-                    models_installed: None,
-                }
-            } else {
-                LlmProviderStatusEntry {
-                    name: "ollama".to_string(),
-                    available: false,
-                    is_paid: false,
-                    reason: "Ollama is not running. Start it with: ollama serve".to_string(),
-                    latency_ms: None,
-                    error_hint: Some("Not running".to_string()),
-                    setup_command: Some("ollama serve".to_string()),
-                    models_installed: None,
-                }
-            }
-        }
+        // Final Gate item I: no helper program is run to tell "not installed"
+        // from "not running" (this ran `which` from PATH). Nexus neither
+        // starts Ollama nor looks for its program; it reports that the
+        // service at the authorized address does not answer.
+        _ => LlmProviderStatusEntry {
+            name: "ollama".to_string(),
+            available: false,
+            is_paid: false,
+            reason: format!(
+                "Ollama is not reachable at {url}. Nexus does not start it: install and start Ollama outside Nexus."
+            ),
+            latency_ms: None,
+            error_hint: Some("Not reachable".to_string()),
+            setup_command: Some("ollama serve".to_string()),
+            models_installed: None,
+        },
     }
 }
 

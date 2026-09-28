@@ -2278,9 +2278,15 @@ pub mod runtime {
         super::ensure_ollama(base_url)
     }
 
+    /// Final Gate item I: answering this ran the `ollama` program found on
+    /// `PATH`. Nexus runs no helper for it (`Closure::HelperLaunch`); whether
+    /// the service answers is `check_ollama`.
     #[tauri::command]
-    fn is_ollama_installed() -> bool {
-        super::is_ollama_installed()
+    pub(crate) fn is_ollama_installed() -> Result<bool, String> {
+        Err(crate::phase0_surface::closed(
+            "is_ollama_installed",
+            crate::phase0_surface::Closure::HelperLaunch,
+        ))
     }
 
     #[tauri::command]

@@ -6,7 +6,7 @@ use crate::phase0_surface::{closed, Closure};
 const LIB_RS: &str = include_str!("../../lib.rs");
 const CRATE_BRIDGES_RS: &str = include_str!("../../commands/crate_bridges.rs");
 
-/// Final Gate items B, C and F: IPC commands this workstream closes.
+/// Final Gate items B, C, F and I: IPC commands this workstream closes.
 /// `(module defining the handler, command, closure)`; `""` is the `runtime`
 /// module in `lib.rs`.
 /// - B and F: the destination they reached (a URL, an agent or server
@@ -14,6 +14,7 @@ const CRATE_BRIDGES_RS: &str = include_str!("../../commands/crate_bridges.rs");
 ///   makes such a destination an egress grant.
 /// - C: the request would have placed a credential on a process command
 ///   line.
+/// - I: the answer came from running a helper program found on `PATH`.
 const CLOSED_EGRESS_COMMANDS: &[(&str, &str, Closure)] = &[
     ("", "api_client_request", Closure::NetworkDestination),
     ("", "a2a_discover_agent", Closure::NetworkDestination),
@@ -48,6 +49,7 @@ const CLOSED_EGRESS_COMMANDS: &[(&str, &str, Closure)] = &[
         "perception_init",
         Closure::CredentialTransport,
     ),
+    ("", "is_ollama_installed", Closure::HelperLaunch),
 ];
 
 /// Every closure reason this workstream adds.
@@ -55,6 +57,7 @@ const EGRESS_CLOSURES: &[Closure] = &[
     Closure::NetworkDestination,
     Closure::PeerTransfer,
     Closure::CredentialTransport,
+    Closure::HelperLaunch,
 ];
 
 fn module_source(module: &str) -> &'static str {
@@ -182,7 +185,7 @@ fn p0_fg_closed_destination_handlers_return_only_their_reason() {
     use crate::runtime;
     /// A closed command and a no-input invocation of its handler.
     type ClosedCall = (&'static str, fn() -> Result<(), String>);
-    let calls: [ClosedCall; 13] = [
+    let calls: [ClosedCall; 14] = [
         ("api_client_request", || {
             runtime::api_client_request().map(|_| ())
         }),
@@ -216,6 +219,9 @@ fn p0_fg_closed_destination_handlers_return_only_their_reason() {
             runtime::nexus_link_send_model().map(|_| ())
         }),
         ("perception_init", || bridges::perception_init().map(|_| ())),
+        ("is_ollama_installed", || {
+            runtime::is_ollama_installed().map(|_| ())
+        }),
     ];
     assert_eq!(calls.len(), CLOSED_EGRESS_COMMANDS.len());
     for (command, call) in calls {
@@ -619,5 +625,51 @@ fn p0_fg_desktop_tool_calls_reach_no_caller_chosen_destination() {
                 .is_some_and(|reason| reason.contains("operator credential")),
             "{tool}"
         );
+    }
+}
+
+/// Final Gate item I: Nexus starts no Ollama service and runs no helper
+/// program to find one. `ensure_ollama` only probes the authorized address:
+/// a service that answers is used, and one that does not is refused with the
+/// `HelperLaunch` reason, with nothing started, waited for or cleaned up.
+#[test]
+fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
+    use crate::commands::chat_llm::ollama_service_answers;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let running = format!("http://{}", listener.local_addr().unwrap());
+    assert_eq!(ollama_service_answers(&running), Ok(true));
+    // The probe connected and sent nothing.
+    let (mut probe, _) = listener.accept().unwrap();
+    probe
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .unwrap();
+    let mut byte = [0u8; 1];
+    assert_eq!(std::io::Read::read(&mut probe, &mut byte).unwrap(), 0);
+
+    let stopped = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
+    assert_eq!(
+        ollama_service_answers(&format!("http://{stopped}")),
+        Err(closed("ensure_ollama", Closure::HelperLaunch))
+    );
+
+    let chat_llm = include_str!("../../commands/chat_llm.rs");
+    for helper in [
+        "Command::new(\"ollama\")",
+        "Command::new(\"which\")",
+        "\"serve\"",
+    ] {
+        assert!(!chat_llm.contains(helper), "chat_llm.rs: {helper}");
+    }
+    assert!(!LIB_RS.contains("Command::new(\"ollama\")"));
+    let ensure = chat_llm
+        .split("pub(crate) fn ensure_ollama(")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("ensure_ollama");
+    for forbidden in ["spawn(", "Command::", "sleep("] {
+        assert!(!ensure.contains(forbidden), "ensure_ollama: {forbidden}");
     }
 }

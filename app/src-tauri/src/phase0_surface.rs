@@ -63,6 +63,11 @@ pub(crate) enum Closure {
     /// process command line, where other local processes can read it, and
     /// for which no in-process transport is approved in Phase Zero.
     CredentialTransport,
+    /// Final Gate item I: starting a helper service, or running a helper
+    /// program found on `PATH` only to report on it. Nexus holds no approved
+    /// executable authority or lifecycle ownership for such a program in
+    /// Phase Zero; it connects only to a service started outside it.
+    HelperLaunch,
     // Final Gate items A and H: stored secrets.
 }
 
@@ -99,6 +104,9 @@ impl Closure {
             }
             Self::CredentialTransport => {
                 "this request would place a credential on a process command line and is unavailable in Phase Zero"
+            }
+            Self::HelperLaunch => {
+                "starting or running a helper program is unavailable in Phase Zero; Nexus only connects to a service started outside it"
             }
 
             // Final Gate items A and H.
