@@ -229,6 +229,18 @@ const EXAMPLE_TARGETS: &[(&str, &str, &str)] = &[
     ("kernel", "generate_genomes", "examples/generate_genomes.rs"),
 ];
 
+/// Every Cargo bench target (`cargo bench`) of the workspace: the criterion
+/// harnesses of `benchmarks` (`harness = false`, so each has its own
+/// `main`). They are kept as benchmarks that no recipe ships (coordinator
+/// decision D3), and they run in process (see the bench guard below).
+const BENCH_TARGETS: &[(&str, &str, &str)] = &[
+    ("benchmarks", "agent_bench", "benches/agent_bench.rs"),
+    ("benchmarks", "gateway_bench", "benches/gateway_bench.rs"),
+    ("benchmarks", "kernel_bench", "benches/kernel_bench.rs"),
+    ("benchmarks", "phase67_bench", "benches/phase67_bench.rs"),
+    ("benchmarks", "replay_bench", "benches/replay_bench.rs"),
+];
+
 /// The `members` of the workspace manifest.
 fn workspace_members() -> Vec<String> {
     let manifest = read(&workspace_root().join("Cargo.toml"));
@@ -397,6 +409,32 @@ fn effective_examples(member: &str) -> Vec<(String, String)> {
     merge_targets(explicit, inferred_in(&package, "examples"), autodiscover)
 }
 
+/// The effective bench targets of one member, as (name, path).
+fn effective_benches(member: &str) -> Vec<(String, String)> {
+    let package = workspace_root().join(member);
+    let manifest = read(&package.join("Cargo.toml"));
+    let autodiscover = package_value(&manifest, "autobenches").as_deref() != Some("false");
+    let explicit = explicit_targets(&manifest, "bench")
+        .into_iter()
+        .map(|(bench, path)| {
+            let path = path.unwrap_or_else(|| {
+                if package
+                    .join("benches")
+                    .join(&bench)
+                    .join("main.rs")
+                    .is_file()
+                {
+                    format!("benches/{bench}/main.rs")
+                } else {
+                    format!("benches/{bench}.rs")
+                }
+            });
+            (bench, path)
+        })
+        .collect();
+    merge_targets(explicit, inferred_in(&package, "benches"), autodiscover)
+}
+
 /// Rust source with comments removed. String literals are kept verbatim.
 fn strip_rust_comments(source: &str) -> String {
     let chars: Vec<char> = source.chars().collect();
@@ -545,6 +583,49 @@ fn p0_fg_standalone_every_example_target_is_inventoried() {
         .collect();
     expected.sort();
     assert_eq!(found, expected, "every example target must be inventoried");
+}
+
+/// Every Cargo bench target of the workspace is inventoried: a bench is an
+/// entry point too (`cargo bench`), so a new one needs review. Each runs in
+/// process: it reads no credential or other environment variable, starts no
+/// process and opens no network connection (none meets the criterion under
+/// which five benchmark binaries were withdrawn).
+#[test]
+fn p0_fg_standalone_every_bench_target_is_inventoried() {
+    let mut found: Vec<(String, String, String)> = Vec::new();
+    for member in workspace_members() {
+        for (name, path) in effective_benches(&member) {
+            found.push((member.clone(), name, path));
+        }
+    }
+    found.sort();
+    let mut expected: Vec<(String, String, String)> = BENCH_TARGETS
+        .iter()
+        .map(|(member, name, path)| (member.to_string(), name.to_string(), path.to_string()))
+        .collect();
+    expected.sort();
+    assert_eq!(found, expected, "every bench target must be inventoried");
+
+    for (member, name, path) in BENCH_TARGETS {
+        let code = strip_rust_comments(&read(&workspace_root().join(member).join(path)));
+        for forbidden in [
+            "_API_KEY",
+            "_TOKEN",
+            "env::var",
+            "std::process",
+            "Command::new",
+            "curl",
+            "reqwest",
+            "TcpStream",
+            "TcpListener",
+            "UdpSocket",
+        ] {
+            assert!(
+                !code.contains(forbidden),
+                "{member}/{path}: bench `{name}` must not contain `{forbidden}`"
+            );
+        }
+    }
 }
 
 // ── Build scripts of the withdrawn packages ─────────────────────────────────
