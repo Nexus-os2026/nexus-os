@@ -713,8 +713,9 @@ also forbids enabling the engine anywhere that holds it.
 
 The installers ship only the desktop app. See §10.8 for the recount, and
 dossier item J for the shipped non-desktop binaries: `crates/nexus-server`
-(a Final-Gate blocker), the protocols server, `nexus-cli` and `nx`. None is
-reachable from desktop IPC or agents. The desktop depends on the libraries of
+(a Final-Gate blocker; its withdrawal is implemented on the P0-FG1
+validation branch, review pending), the protocols server, `nexus-cli` and
+`nx`. None is reachable from desktop IPC or agents. The desktop depends on the libraries of
 `nexus-code` and `protocols`, never on their binaries.
 
 ### 10.7 Benchmarks
@@ -879,6 +880,11 @@ unresolved and one is an approved operator assumption:
 
   Dossier item J classifies them. `crates/nexus-server` is a Final-Gate
   blocker.
+  - P0-FG1 (validation branch, review pending) withdraws `crates/nexus-server`
+    and its `deploy/` recipes. Its binary now reaches no filesystem, process
+    or network site.
+  - The SHIPPED counts above are the C5C recount. They are not recomputed
+    for P0-FG1.
 - **Developer-only:** the UI-repair tools, the computer-use harness, the
   swarm healthcheck, the social-poster and coding-agent binaries, and the
   unpackaged agent libraries.
@@ -1014,7 +1020,9 @@ effective port and whole leading path segments. It uses the `url` parser and
   (Architect decision above).
 - **Unresolved Final-Gate items.**
   - A: configuration key derivation;
-  - J1: the unauthenticated `crates/nexus-server`, a blocker;
+  - J1: the unauthenticated `crates/nexus-server`, a blocker; its
+    withdrawal is implemented on the P0-FG1 validation branch, review
+    pending;
   - B: destination, address and DNS policy;
   - C: secrets in argv;
   - D: the CSP;

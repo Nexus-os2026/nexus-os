@@ -5,7 +5,11 @@ the evidence for the Phase Zero Final Gate. It does not decide any item and
 does not claim that Phase Zero is complete. Items that C5C repaired are named
 as such; everything else is open for the Final Gate.
 
-Every location below is a repository path and function at the C5C head. An
+P0-FG1 updates item J1 only: the withdrawal of `crates/nexus-server` is
+implemented on its validation branch, and Architect review is pending.
+
+Every location below is a repository path and function at the C5C head,
+except where P0-FG1 is named. An
 **untrusted surface** means one of:
 
 - a script running in the desktop webview (the CSP is `null`, item D, so every
@@ -30,7 +34,7 @@ without a local same-user foothold or an operator mistake.
 | G | Approval channel | Approvals arrive over webview IPC; the desktop swarm only drafts (C5C) | Open: design |
 | H | Secrets at rest outside the vault | OAuth token files are plaintext | Open: design |
 | I | PATH-resolved helper programs | Fixed arguments; `ollama serve` detached | Open: review |
-| J | Shipped non-desktop binaries | `crates/nexus-server` is unauthenticated on all interfaces | **Blocker** |
+| J | Shipped non-desktop binaries | `crates/nexus-server` is unauthenticated on all interfaces | **Blocker**; J1 withdrawal implemented on the P0-FG1 validation branch, review pending |
 | K | Reliability signals | Windows `executes_python_code`, retained as debt | Open: debt |
 | L | Screen observation from the interface | Unbrokered observation is unavailable: the four capture routes are closed and enabling is refused (Architect decision) | Closed; a brokered mechanism is future work |
 
@@ -195,7 +199,7 @@ example `/proc/<pid>/cmdline`) while the request runs. On Linux without
 | `protocols/src/mcp_client.rs`, `send_http` | MCP bearer token | yes: `mcp_host_*` with bearer auth |
 | `crates/nexus-perception/src/vision.rs`, `call_api` | Groq or NIM key, supplied by the interface to `perception_init_provider` | yes: the `perception_*` commands |
 | `kernel/src/actuators/image_gen.rs`, `kernel/src/actuators/tts.rs` | provider keys | no: the actuators are refused by the Phase Zero executor |
-| `crates/nexus-mcp/src/tools.rs` (`nexus_github`) | `GITHUB_TOKEN` | no: `mcp2_server_handle` is closed; reachable in `crates/nexus-server` (item J) |
+| `crates/nexus-mcp/src/tools.rs` (`nexus_github`) | `GITHUB_TOKEN` | no: `mcp2_server_handle` is closed; `crates/nexus-server` reached it until its withdrawal (item J, P0-FG1, review pending) |
 | `crates/nexus-capability-measurement` (NIM, OpenRouter clients) | provider keys | no: the `cm_*` commands are closed |
 
 - **Exploitability.** Not from an untrusted surface of the desktop: a webview
@@ -441,21 +445,89 @@ Builder's Node toolchain is not among these: it is packaged and verified
 The installers ship only the desktop app (`app/src-tauri/tauri.conf.json`
 bundle). The desktop never reaches the binaries below.
 
-- **`crates/nexus-server` (`nexus-server`, built by `deploy/Dockerfile`):
-  BLOCKER.**
-  - `src/main.rs` binds `0.0.0.0` on ports 3000, 3001 and 3002 with no
-    authentication and a permissive CORS layer (`Any` origin, method and
-    header).
-  - It serves `/mcp/tools/invoke`, `/mcp/handle` and the MCP port's
-    `/tools/invoke`, which run the `nexus-mcp` tools. Those include
-    `nexus_github` with the operator's `GITHUB_TOKEN`
-    (`crates/nexus-mcp/src/tools.rs`) and tools that read files relative to
-    the working directory.
-  - Any network peer, and any web page through the permissive CORS, can
-    invoke them.
-  - A repair means changing its deployment contract (loopback default, an
-    authentication requirement, a CORS policy), so C5C records it here
-    rather than changing it.
+- **`crates/nexus-server` (`nexus-server`): BLOCKER. Withdrawal implemented
+  on the P0-FG1 validation branch; Architect review pending.**
+  - **Before P0-FG1.**
+    - `src/main.rs` bound `0.0.0.0` on ports 3000, 3001 and 3002 with no
+      authentication and a permissive CORS layer (`Any` origin, method and
+      header).
+    - It served `/mcp/tools/invoke`, `/mcp/handle` and the MCP port's
+      `/tools/invoke`, which ran the `nexus-mcp` tools. Those include
+      `nexus_github` with the operator's `GITHUB_TOKEN`
+      (`crates/nexus-mcp/src/tools.rs`) and tools that read files relative
+      to the working directory.
+    - Any network peer, and any web page through the permissive CORS, could
+      invoke them.
+    - `deploy/Dockerfile`, `deploy/docker-compose.yml`,
+      `deploy/docker-compose.cpu.yml` and the `deploy/helm/nexus-os` chart
+      built and ran it.
+  - **Withdrawal (P0-FG1).** The Architect chose withdrawal over repair: no
+    authentication, no loopback-only server, no health-only listener and no
+    way to reactivate it.
+    - The binary's only entry point writes `nexus-server: unavailable during
+      Phase Zero; deployment withdrawn` to standard error and exits with
+      status 69.
+    - It reads no argument, environment variable, configuration or
+      credential first. It creates no file, starts no runtime, binds no
+      socket, builds no MCP server and starts no process.
+    - No flag or environment variable restores the server.
+    - The package and its `nexus-server` target remain, so workspace builds
+      still compile. Its dependencies stay declared but unused.
+    - `deploy/Dockerfile` fails at its first step (a `RUN` that prints a
+      withdrawal message and exits 1). That is before any package
+      installation, source copy or compilation, and the file has no other
+      stage.
+    - Both `deploy/` Compose files define no services, ports, volumes,
+      credentials or restart policies. The Ollama service they published on
+      port 11434 is gone too.
+    - The chart's only template is an unconditional `fail`. No install,
+      upgrade or values override renders a resource. An upgrade of an
+      existing release fails before it changes or deletes anything,
+      including its data volume claim.
+  - **Tests.** `crates/nexus-server/tests/phase0_withdrawal.rs`:
+    - Runs the executable built from this package. Each run has an empty
+      environment apart from synthetic sentinels, a scratch home and working
+      directory, and a deadline after which the test kills its own child.
+    - Checks the fixed status and message for the default invocation, for
+      the retired `--port`, `--mcp-port`, `--a2a-port`, `--data-dir` and
+      `--log-level` arguments (port 0 included), and for help, version and
+      subcommand-like words.
+    - Checks that no requested or default data directory is created or
+      modified, and that no argument or environment value is echoed.
+    - A source guard pins the entry point to exactly the withdrawal and the
+      package to that one target.
+    - Deployment guards pin the Dockerfile, both Compose files, the chart and
+      `deploy/README.md`.
+  - **Binary name collision.**
+    - `nexus-protocols` also builds a binary named `nexus-server`.
+    - When one Cargo invocation builds both, the shared output path Cargo
+      gives this package's tests may hold the protocols server.
+    - The tests run a file only if its dep-info names
+      `crates/nexus-server/src/main.rs` and its bytes carry the withdrawal
+      message. They never run the protocols server or a `PATH` lookup.
+  - **What shipped.** Nothing published this binary or an image built from
+    `deploy/`.
+    - CI and the release workflow compile it as a workspace member
+      (`cargo test --workspace`, `cargo build --release`).
+    - The release uploads only the desktop bundles
+      (`.github/workflows/release.yml`, `create-release`), and the desktop
+      bundle has no sidecar.
+    - So the recipes were source-built deployment paths, not published
+      artifacts.
+  - **Correction.** Before P0-FG1 the package had two unit tests, which
+    checked command-line parsing of the retired arguments. They described
+    the retired behaviour and are replaced by the withdrawal tests.
+  - **Non-claims.** The change does not:
+    - stop, remove or update a deployment, container, image, volume or Helm
+      release made from an earlier version of these files;
+    - revoke a credential that such a deployment could use;
+    - make `nexus-mcp` safe to expose on a network;
+    - change the protocols server, `nexus-cli` or `nx`.
+  - **Outside this change.** `docs/DEPLOYMENT.md` ("CLI server
+    (alternative)") still documents building and starting this binary with
+    the retired port arguments. Running it now prints only the withdrawal
+    message. The file is outside the P0-FG1 allowlist and is recorded for a
+    scope decision.
 - **protocols `nexus-server` (`protocols/src/bin/`, built by the root
   `Dockerfile`, compose and helm).**
   - `protocols/src/server_runtime.rs` binds `NEXUS_HTTP_ADDR`, default
@@ -489,12 +561,15 @@ bundle). The desktop never reaches the binaries below.
   (`cargo build --release -p nexus-protocols --bin nexus-os`), and
   `install.sh` installs a `nexus-os` binary from release assets. It runs the
   same server runtime as protocols `nexus-server`.
-- **Build note, not executed.** Both `Dockerfile` and `deploy/Dockerfile`
-  copy every workspace member except `nexus-code/`, which is a member, so
-  the image builds appear unable to load the workspace.
-- **Decision needed.** J1 (`crates/nexus-server`) must be fixed or withdrawn
-  from deployment before any Phase Zero completion claim; it remains a
-  Final-Gate blocker after C5C. The others need review.
+- **Build note, not executed.** The root `Dockerfile` copies every workspace
+  member except `nexus-code/`, which is a member, so its image build appears
+  unable to load the workspace. `deploy/Dockerfile` had the same omission;
+  P0-FG1 withdrew it.
+- **Decision needed.**
+  - J1 (`crates/nexus-server`): withdrawal implemented on the P0-FG1
+    validation branch; Architect review pending. It remains a Final-Gate
+    blocker until that review, integration and final verification.
+  - The others need review.
 
 ## K. Reliability signals
 
