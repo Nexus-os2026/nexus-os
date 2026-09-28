@@ -715,3 +715,351 @@ fn p0_fg_messaging_errors_never_carry_the_bot_token() {
         assert!(!body.contains("{e}\"))"), "{name} formats a raw error");
     }
 }
+
+// ── Final Gate item C: credential-bearing process arguments ──────────────
+//
+// The production-text reader below is the same algorithm as the one in
+// `phase0_surface/tests.rs` (whose helpers are private to that module): it
+// drops comments and every `#[cfg(test)]` / `#[cfg(any(test, ..))]` item and
+// keeps literals.
+
+/// Directories that hold no production source: build output, dependencies,
+/// benchmarks, integration tests, examples, benches and fixtures. Dot
+/// directories are skipped as well.
+const NOT_PRODUCTION_DIRS: &[&str] = &[
+    "target",
+    "node_modules",
+    "dist",
+    "benchmarks",
+    "tests",
+    "examples",
+    "benches",
+    "fixtures",
+];
+
+/// (workspace-relative path, production text) of every production Rust
+/// source beneath a `src` directory of the workspace.
+fn workspace_production_sources() -> Vec<(String, String)> {
+    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<(String, String)>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !name.starts_with('.') && !NOT_PRODUCTION_DIRS.contains(&name.as_str()) {
+                    walk(root, &path, out);
+                }
+                continue;
+            }
+            let relative = path
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            let in_src = relative.split('/').any(|component| component == "src");
+            if in_src
+                && name.ends_with(".rs")
+                && !name.ends_with("tests.rs")
+                && !name.ends_with("_test.rs")
+                && name != "build.rs"
+            {
+                let text = std::fs::read_to_string(&path).unwrap();
+                out.push((relative, production_text(&text)));
+            }
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut out = Vec::new();
+    walk(&root, &root, &mut out);
+    assert!(out.len() > 500, "workspace sources not found");
+    out
+}
+
+/// End of the string, raw-string or char literal starting at `i`, if one
+/// starts there (a lifetime is not a literal).
+fn literal_end(b: &[u8], i: usize) -> Option<usize> {
+    let ident = |at: usize| b[at].is_ascii_alphanumeric() || b[at] == b'_';
+    match b[i] {
+        b'"' => {
+            let mut j = i + 1;
+            while j < b.len() {
+                match b[j] {
+                    b'\\' => j += 2,
+                    b'"' => return Some(j + 1),
+                    _ => j += 1,
+                }
+            }
+            Some(b.len())
+        }
+        b'r' if i == 0 || !ident(i - 1) || (b[i - 1] == b'b' && (i == 1 || !ident(i - 2))) => {
+            let mut j = i + 1;
+            while j < b.len() && b[j] == b'#' {
+                j += 1;
+            }
+            if j >= b.len() || b[j] != b'"' {
+                return None;
+            }
+            let hashes = j - i - 1;
+            let mut k = j + 1;
+            while k < b.len() {
+                if b[k] == b'"' && b[k + 1..].iter().take_while(|&&c| c == b'#').count() >= hashes {
+                    return Some(k + 1 + hashes);
+                }
+                k += 1;
+            }
+            Some(b.len())
+        }
+        b'\'' if i + 2 < b.len() => {
+            if b[i + 1] == b'\\' {
+                let close = b[i + 3..].iter().position(|&c| c == b'\'')?;
+                return Some(i + 3 + close + 1);
+            }
+            let width = match b[i + 1] {
+                0x00..=0x7f => 1,
+                0xc0..=0xdf => 2,
+                0xe0..=0xef => 3,
+                _ => 4,
+            };
+            (b.get(i + 1 + width) == Some(&b'\'')).then_some(i + 2 + width)
+        }
+        _ => None,
+    }
+}
+
+/// End of the comment starting at `i`, if one starts there. A line comment
+/// ends before its newline; block comments nest.
+fn comment_end(b: &[u8], i: usize) -> Option<usize> {
+    if b[i..].starts_with(b"//") {
+        return Some(
+            b[i..]
+                .iter()
+                .position(|&c| c == b'\n')
+                .map_or(b.len(), |at| i + at),
+        );
+    }
+    if !b[i..].starts_with(b"/*") {
+        return None;
+    }
+    let (mut depth, mut j) = (0usize, i);
+    while j < b.len() {
+        if b[j..].starts_with(b"/*") {
+            depth += 1;
+            j += 2;
+        } else if b[j..].starts_with(b"*/") {
+            depth -= 1;
+            j += 2;
+            if depth == 0 {
+                return Some(j);
+            }
+        } else {
+            j += 1;
+        }
+    }
+    Some(b.len())
+}
+
+/// End of what a `#[cfg(..)]` attribute ending at `i` applies to. An item
+/// (or statement) ends at its `;` outside any bracket or at the brace closing
+/// its block. A field, variant, match arm or argument also ends at its `,`,
+/// or just before the bracket closing the enclosing list.
+fn item_end(b: &[u8], mut i: usize) -> usize {
+    let first = b[i..]
+        .iter()
+        .position(|c| !c.is_ascii_whitespace())
+        .map_or(b.len(), |at| i + at);
+    let word: String = b[first..]
+        .iter()
+        .take_while(|c| c.is_ascii_alphanumeric() || **c == b'_')
+        .map(|&c| c as char)
+        .collect();
+    let item = b.get(first) == Some(&b'#')
+        || [
+            "mod",
+            "fn",
+            "pub",
+            "use",
+            "impl",
+            "struct",
+            "enum",
+            "const",
+            "static",
+            "type",
+            "trait",
+            "macro_rules",
+            "async",
+            "unsafe",
+            "extern",
+            "let",
+        ]
+        .contains(&word.as_str());
+    let (mut nesting, mut braces) = (0usize, 0usize);
+    while i < b.len() {
+        if let Some(end) = literal_end(b, i).or_else(|| comment_end(b, i)) {
+            i = end;
+            continue;
+        }
+        let outermost = nesting == 0 && braces == 0;
+        match b[i] {
+            b'(' | b'[' => nesting += 1,
+            b')' | b']' if outermost => return i,
+            b')' | b']' => nesting = nesting.saturating_sub(1),
+            b'{' => braces += 1,
+            b'}' if braces == 0 => return i,
+            b'}' => {
+                braces -= 1;
+                if braces == 0 && nesting == 0 {
+                    return i + 1;
+                }
+            }
+            b';' if outermost => return i + 1,
+            b',' if outermost && !item => return i + 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    b.len()
+}
+
+/// Production text of a Rust source: comments removed, and every item under
+/// `#[cfg(test)]` or `#[cfg(any(test, ..))]` removed. Literals are kept and
+/// are never read as delimiters or attributes.
+fn production_text(src: &str) -> String {
+    let b = src.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if let Some(end) = literal_end(b, i) {
+            out.extend_from_slice(&b[i..end]);
+            i = end;
+        } else if let Some(end) = comment_end(b, i) {
+            out.push(b' ');
+            i = end;
+        } else if b[i..].starts_with(b"#[cfg(test)]") || b[i..].starts_with(b"#[cfg(any(test") {
+            let attribute = i + b[i..].windows(2).position(|w| w == b")]").unwrap() + 2;
+            i = item_end(b, attribute);
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).expect("cuts fall on ASCII boundaries")
+}
+
+/// Credential markers in the production text of a file that runs curl: a
+/// credential-bearing header name, a bearer scheme, or a Telegram bot path,
+/// compared in lower case.
+const CREDENTIAL_MARKERS: &[&str] = &[
+    "authorization",
+    "x-api-key",
+    "x-subscription-token",
+    "x-goog-api-key",
+    "bearer ",
+    "/bot{",
+];
+
+/// Every production file that runs curl and still names a credential, with
+/// the exact marker count and why no desktop route puts that credential on
+/// a process command line. A new site, or a changed count, fails until it
+/// is classified here.
+const CREDENTIAL_CURL_SITES: &[(&str, usize, &str)] = &[
+    (
+        "connectors/core/src/validation.rs",
+        3,
+        "key validation is reached only by the nexus-cli setup flow, not by the desktop",
+    ),
+    (
+        "connectors/llm/src/providers/mod.rs",
+        5,
+        "the refusal list: curl_post_command refuses these headers before a command exists; keys go through post_json_in_process",
+    ),
+    (
+        "connectors/web/src/search.rs",
+        1,
+        "latent: only the social-poster pipeline's real search step builds this connector, and the desktop never runs it",
+    ),
+    (
+        "crates/nexus-capability-measurement/src/evaluation/nim_client.rs",
+        2,
+        "the validation-run commands are closed; the A/B command's battery is empty in the desktop, so no query is sent",
+    ),
+    (
+        "crates/nexus-capability-measurement/src/evaluation/openrouter_client.rs",
+        2,
+        "the validation-run commands are closed; the three-way comparison is closed",
+    ),
+    (
+        "crates/nexus-mcp/src/tools.rs",
+        2,
+        "the GitHub tool runs only through mcp2_server_handle, which is closed",
+    ),
+    (
+        "crates/nexus-perception/src/vision.rs",
+        2,
+        "perception_init is closed (CredentialTransport), so no key is ever set",
+    ),
+    (
+        "kernel/src/actuators/image_gen.rs",
+        4,
+        "the image actuator is refused by Phase0AgentExecutor",
+    ),
+    (
+        "kernel/src/actuators/tts.rs",
+        2,
+        "the speech actuator is refused by Phase0AgentExecutor",
+    ),
+];
+
+/// Final Gate item C: no reachable credential is passed to curl on its
+/// command line. Every production file that runs curl is scanned for
+/// credential markers, and the files that have any must be exactly the
+/// classified ones above, each with its count. The four hosted providers
+/// that did this now post in process, the external tools that did are
+/// refused, and the MCP client refuses credentials before curl.
+#[test]
+fn p0_fg_no_reachable_credential_reaches_a_curl_command_line() {
+    let mut found = Vec::new();
+    for (relative, text) in workspace_production_sources() {
+        let invocations =
+            text.matches("Command::new(\"curl\")").count() + text.matches("(\"curl\",").count();
+        if invocations == 0 {
+            continue;
+        }
+        let lower = text.to_ascii_lowercase();
+        let markers: usize = CREDENTIAL_MARKERS
+            .iter()
+            .map(|marker| lower.matches(marker).count())
+            .sum();
+        if markers > 0 {
+            found.push((relative, markers));
+        }
+    }
+    let expected: Vec<_> = CREDENTIAL_CURL_SITES
+        .iter()
+        .map(|(file, count, _)| (file.to_string(), *count))
+        .collect();
+    assert_eq!(
+        found, expected,
+        "a curl site that names a credential must be classified"
+    );
+    for (_, _, reason) in CREDENTIAL_CURL_SITES {
+        assert!(!reason.is_empty());
+    }
+    // The routes this workstream moved or closed stay that way.
+    let sources: std::collections::HashMap<_, _> =
+        workspace_production_sources().into_iter().collect();
+    for provider in ["openai", "deepseek", "gemini", "nvidia"] {
+        let text = &sources[&format!("connectors/llm/src/providers/{provider}.rs")];
+        assert!(text.contains("post_json_in_process("), "{provider}");
+        assert!(!text.contains("curl_post_json"), "{provider}");
+    }
+    for tool in ["github", "slack", "jira"] {
+        assert!(
+            nexus_external_tools::execution::phase0_refusal(tool).is_some(),
+            "{tool}"
+        );
+    }
+    assert!(sources["protocols/src/mcp_client.rs"].contains("needs credentials"));
+}
