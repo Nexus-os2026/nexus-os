@@ -12,12 +12,15 @@ use super::{closed, Closure};
 const LIB_RS: &str = include_str!("../lib.rs");
 const CRATE_BRIDGES_RS: &str = include_str!("../commands/crate_bridges.rs");
 
-/// Final Gate items B and F: IPC commands closed because the destination they
-/// reached (a URL, an agent or server address, a peer) was the caller's
-/// choice, and no backend-owned policy makes such a destination an egress
-/// grant. `(module defining the handler, command, closure)`; `""` is the
-/// `runtime` module in `lib.rs`.
-const CLOSED_DESTINATION_COMMANDS: &[(&str, &str, Closure)] = &[
+/// Final Gate items B, C and F: IPC commands this workstream closes.
+/// `(module defining the handler, command, closure)`; `""` is the `runtime`
+/// module in `lib.rs`.
+/// - B and F: the destination they reached (a URL, an agent or server
+///   address, a peer) was the caller's choice, and no backend-owned policy
+///   makes such a destination an egress grant.
+/// - C: the request would have placed a credential on a process command
+///   line.
+const CLOSED_EGRESS_COMMANDS: &[(&str, &str, Closure)] = &[
     ("", "api_client_request", Closure::NetworkDestination),
     ("", "a2a_discover_agent", Closure::NetworkDestination),
     ("", "a2a_send_task", Closure::NetworkDestination),
@@ -46,10 +49,19 @@ const CLOSED_DESTINATION_COMMANDS: &[(&str, &str, Closure)] = &[
         Closure::NetworkDestination,
     ),
     ("", "nexus_link_send_model", Closure::PeerTransfer),
+    (
+        "commands::crate_bridges",
+        "perception_init",
+        Closure::CredentialTransport,
+    ),
 ];
 
 /// Every closure reason this workstream adds.
-const EGRESS_CLOSURES: &[Closure] = &[Closure::NetworkDestination, Closure::PeerTransfer];
+const EGRESS_CLOSURES: &[Closure] = &[
+    Closure::NetworkDestination,
+    Closure::PeerTransfer,
+    Closure::CredentialTransport,
+];
 
 fn module_source(module: &str) -> &'static str {
     match module {
@@ -147,7 +159,7 @@ fn p0_fg_egress_closure_reasons_are_bounded_and_echo_no_input() {
 #[test]
 fn p0_fg_caller_chosen_destinations_are_closed_commands() {
     let handlers = registered_handlers();
-    for (module, command, closure) in CLOSED_DESTINATION_COMMANDS {
+    for (module, command, closure) in CLOSED_EGRESS_COMMANDS {
         assert_eq!(
             is_registered(&handlers, command),
             1,
@@ -176,7 +188,7 @@ fn p0_fg_closed_destination_handlers_return_only_their_reason() {
     use crate::runtime;
     /// A closed command and a no-input invocation of its handler.
     type ClosedCall = (&'static str, fn() -> Result<(), String>);
-    let calls: [ClosedCall; 12] = [
+    let calls: [ClosedCall; 13] = [
         ("api_client_request", || {
             runtime::api_client_request().map(|_| ())
         }),
@@ -209,10 +221,11 @@ fn p0_fg_closed_destination_handlers_return_only_their_reason() {
         ("nexus_link_send_model", || {
             runtime::nexus_link_send_model().map(|_| ())
         }),
+        ("perception_init", || bridges::perception_init().map(|_| ())),
     ];
-    assert_eq!(calls.len(), CLOSED_DESTINATION_COMMANDS.len());
+    assert_eq!(calls.len(), CLOSED_EGRESS_COMMANDS.len());
     for (command, call) in calls {
-        let (_, _, closure) = CLOSED_DESTINATION_COMMANDS
+        let (_, _, closure) = CLOSED_EGRESS_COMMANDS
             .iter()
             .find(|(_, name, _)| *name == command)
             .unwrap_or_else(|| panic!("{command} is not classified"));
@@ -541,4 +554,19 @@ fn p0_fg_agent_web_fetch_is_not_egress_authority() {
         query: "phase zero".into(),
     };
     assert_eq!(crate::phase0_agent_action_closure(&search), None);
+}
+
+/// Final Gate item C: no interface key reaches the vision provider, which
+/// would have placed it on curl's command line. With `perception_init`
+/// closed, no provider exists, and each perception task is refused before
+/// anything is sent.
+#[test]
+fn p0_fg_perception_takes_no_key_and_sends_nothing() {
+    let state = nexus_perception::tauri_commands::PerceptionState::default();
+    let error =
+        nexus_perception::tauri_commands::perceive_describe(&state, "aGVsbG8=", "png").unwrap_err();
+    assert!(error.contains("not initialized"), "{error}");
+    assert!(state.engine.read().unwrap().is_none());
+    let (_, body) = handler_shape(CRATE_BRIDGES_RS, "perception_init");
+    assert!(!body.contains("init_provider"), "{body}");
 }

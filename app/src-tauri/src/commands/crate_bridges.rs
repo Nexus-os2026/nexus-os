@@ -735,14 +735,17 @@ pub fn sim_branch(
 
 // ── Perception Commands ───────────────────────────────────────────────────────
 
+/// Final Gate item C: the vision provider sent the interface's API key to
+/// curl as a command-line header, readable by other local processes, and no
+/// in-process transport is approved for this crate in Phase Zero. Setting up
+/// a provider is closed (`Closure::CredentialTransport`), so no key is taken
+/// and the perception commands report that perception is not initialized.
 #[tauri::command]
-pub fn perception_init(
-    state: tauri::State<'_, AppState>,
-    provider: String,
-    api_key: String,
-    model_id: String,
-) -> Result<String, String> {
-    perception_cmds::init_provider(&state.perception, &provider, &api_key, &model_id)
+pub fn perception_init() -> Result<String, String> {
+    Err(crate::phase0_surface::closed(
+        "perception_init",
+        crate::phase0_surface::Closure::CredentialTransport,
+    ))
 }
 
 #[tauri::command]

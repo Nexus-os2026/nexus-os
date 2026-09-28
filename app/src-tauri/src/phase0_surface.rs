@@ -59,6 +59,10 @@ pub(crate) enum Closure {
     /// address is not authority, and Phase Zero has no pairing or peer
     /// authentication.
     PeerTransfer,
+    /// Final Gate item C: a request whose credential would be placed on a
+    /// process command line, where other local processes can read it, and
+    /// for which no in-process transport is approved in Phase Zero.
+    CredentialTransport,
     // Final Gate items A and H: stored secrets.
 }
 
@@ -92,6 +96,9 @@ impl Closure {
             }
             Self::PeerTransfer => {
                 "peer model transfer is unavailable in Phase Zero: a peer address is not authority, and no peer is paired or authenticated"
+            }
+            Self::CredentialTransport => {
+                "this request would place a credential on a process command line and is unavailable in Phase Zero"
             }
 
             // Final Gate items A and H.
