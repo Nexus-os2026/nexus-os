@@ -251,6 +251,12 @@ async fn schedule_loop(
     }
 }
 
+/// Normalize an agent schedule and refuse one that could fire more than once
+/// per minute.
+///
+/// Each tick assigns a goal and starts a cognitive loop (model calls,
+/// database and audit writes), so the seconds field must name a single
+/// second from 0 to 59. A five-field expression runs at second 0.
 fn normalize_cron_expression(expression: &str) -> Result<String, String> {
     let trimmed = expression.trim();
     if trimmed.is_empty() {
@@ -258,13 +264,31 @@ fn normalize_cron_expression(expression: &str) -> Result<String, String> {
     }
 
     let parts = trimmed.split_whitespace().collect::<Vec<_>>();
-    match parts.len() {
-        5 => Ok(format!("0 {}", parts.join(" "))),
-        6 | 7 => Ok(trimmed.to_string()),
-        other => Err(format!(
-            "invalid cron expression: expected 5, 6, or 7 fields, got {other}"
-        )),
+    let normalized = match parts.len() {
+        5 => format!("0 {}", parts.join(" ")),
+        6 | 7 => trimmed.to_string(),
+        other => {
+            return Err(format!(
+                "invalid cron expression: expected 5, 6, or 7 fields, got {other}"
+            ))
+        }
+    };
+    let seconds = normalized.split_whitespace().next().unwrap_or_default();
+    if !is_single_second(seconds) {
+        return Err(format!(
+            "invalid cron expression: an agent schedule fires at most once per minute, \
+             so its seconds field must be one value from 0 to 59, got '{seconds}'"
+        ));
     }
+    Ok(normalized)
+}
+
+/// One second of the minute: one or two ASCII digits, at most 59. Lists,
+/// ranges, steps and wildcards are refused.
+fn is_single_second(field: &str) -> bool {
+    (1..=2).contains(&field.len())
+        && field.bytes().all(|byte| byte.is_ascii_digit())
+        && field.parse::<u8>().is_ok_and(|second| second <= 59)
 }
 
 #[cfg(test)]
@@ -273,7 +297,11 @@ mod tests {
 
     #[test]
     fn validate_cron_accepts_valid() {
-        assert!(AgentScheduler::validate_cron("*/10 * * * * *").is_ok());
+        // P0-FG K: `*/10 * * * * *` (every ten seconds) was accepted here
+        // before agent schedules were bounded to once per minute; it is now
+        // refused (see the sub-minute test below). The accepted spelling of
+        // "every ten minutes" pins the seconds field.
+        assert!(AgentScheduler::validate_cron("0 */10 * * * *").is_ok());
         assert!(AgentScheduler::validate_cron("0 9 * * * *").is_ok());
     }
 
@@ -283,8 +311,7 @@ mod tests {
         assert!(AgentScheduler::validate_cron("").is_err());
     }
 
-    #[test]
-    fn list_empty_by_default() {
+    fn scheduler() -> AgentScheduler {
         use super::super::loop_runtime::{CognitiveRuntime, NoOpEmitter};
         use super::super::types::LoopConfig;
         use crate::supervisor::Supervisor;
@@ -296,7 +323,93 @@ mod tests {
             Arc::new(NoOpEmitter),
         ));
         let audit = Arc::new(Mutex::new(AuditTrail::new()));
-        let sched = AgentScheduler::new(rt, audit);
+        AgentScheduler::new(rt, audit)
+    }
+
+    #[test]
+    fn list_empty_by_default() {
+        assert!(scheduler().list().is_empty());
+    }
+
+    const SUB_MINUTE: &[&str] = &[
+        "* * * * * *",
+        "*/10 * * * * *",
+        "*/1 * * * * *",
+        "0,30 * * * * *",
+        "0-59 * * * * *",
+        "0/30 * * * * *",
+        "? * * * * *",
+        "* * * * * * *",
+        "*/5 * * * * * 2026",
+        "60 * * * * *",
+        "100 * * * * *",
+        "-1 * * * * *",
+        "+5 * * * * *",
+    ];
+
+    #[test]
+    fn p0_fg_k_sub_minute_schedules_are_refused() {
+        for expression in SUB_MINUTE {
+            let error = AgentScheduler::validate_cron(expression)
+                .expect_err(&format!("'{expression}' must be refused"));
+            assert!(
+                error.contains("at most once per minute"),
+                "'{expression}': {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn p0_fg_k_schedules_that_fire_once_per_minute_or_less_are_accepted() {
+        for expression in [
+            "* * * * *",
+            "*/5 * * * *",
+            "0 9 * * 1",
+            "0 * * * * *",
+            "59 * * * * *",
+            "7 */15 * * * *",
+            "30 0 9 * * * 2026",
+            "  0 9 * * *  ",
+        ] {
+            assert!(
+                AgentScheduler::validate_cron(expression).is_ok(),
+                "'{expression}' must be accepted"
+            );
+        }
+        assert_eq!(
+            normalize_cron_expression("*/5 * * * *").unwrap(),
+            "0 */5 * * * *"
+        );
+    }
+
+    #[test]
+    fn p0_fg_k_register_refuses_sub_minute_schedules_before_spawning() {
+        // No Tokio runtime exists here: reaching the spawn would panic.
+        let sched = scheduler();
+        for expression in SUB_MINUTE {
+            let error = sched
+                .register_agent("agent-a", expression, "goal")
+                .expect_err(&format!("'{expression}' must be refused"));
+            assert!(error.to_string().contains("at most once per minute"));
+        }
+        assert!(sched.list().is_empty());
+    }
+
+    #[tokio::test]
+    async fn p0_fg_k_a_refused_schedule_keeps_the_existing_registration() {
+        let sched = scheduler();
+        sched
+            .register_agent("agent-a", "0 9 * * *", "goal")
+            .unwrap();
+        let error = sched
+            .register_agent("agent-a", "* * * * * *", "other goal")
+            .expect_err("a sub-minute schedule must be refused");
+        assert!(error.to_string().contains("at most once per minute"));
+        let listed = sched.list();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].cron_expression, "0 9 * * *");
+        assert_eq!(listed[0].default_goal, "goal");
+        sched.shutdown();
         assert!(sched.list().is_empty());
     }
 }
