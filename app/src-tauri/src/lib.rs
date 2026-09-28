@@ -5948,12 +5948,16 @@ pub mod runtime {
     }
 
     // ── Email OAuth2 commands ──
+    /// Email sign-in: closed (Final Gate item H). The flow's only product was
+    /// access and refresh tokens persisted as plaintext files, and no approved
+    /// secret store exists. Tokens stored earlier stay readable by the email
+    /// commands; `email_disconnect` still removes them on request.
     #[tauri::command]
-    fn email_start_oauth(
-        state: tauri::State<'_, AppState>,
-        provider: String,
-    ) -> Result<String, String> {
-        super::email_start_oauth(state.inner(), provider)
+    pub(crate) fn email_start_oauth() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "email_start_oauth",
+            crate::phase0_surface::Closure::SecretStorage,
+        ))
     }
 
     #[tauri::command]
@@ -6030,12 +6034,16 @@ pub mod runtime {
     }
 
     // ── Integration OAuth commands ──
+    /// Integration sign-in (GitHub, GitLab, Slack, Jira): closed (Final Gate
+    /// item H). Its only product was the token response persisted as a
+    /// plaintext file, which nothing reads, and no approved secret store
+    /// exists. Files stored earlier are left as they are.
     #[tauri::command]
-    fn integration_start_oauth(
-        state: tauri::State<'_, AppState>,
-        provider_id: String,
-    ) -> Result<String, String> {
-        super::integration_start_oauth(state.inner(), provider_id)
+    pub(crate) fn integration_start_oauth() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "integration_start_oauth",
+            crate::phase0_surface::Closure::SecretStorage,
+        ))
     }
 
     // ── Marketplace GitLab search ──

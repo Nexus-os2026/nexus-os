@@ -299,4 +299,58 @@ mod guards {
         assert!(compact(&body(production, "fn delete_from_path("))
             .starts_with("letmutstore=load_store_for_rewrite(path)?;"));
     }
+
+    /// Final Gate item H: the email and integration sign-in commands are
+    /// closed with `SecretStorage` before any side effect. No production code
+    /// writes an OAuth token file, binds a sign-in port or opens a browser;
+    /// the loopback helpers are compiled for their tests only, and the legacy
+    /// email token readers remain.
+    #[test]
+    fn p0_fg_h_sign_in_flows_persist_no_token() {
+        let lib = normalized(include_str!("../lib.rs"));
+        for command in ["email_start_oauth", "integration_start_oauth"] {
+            let signature = format!("pub(crate) fn {command}() -> Result<String, String>");
+            assert_eq!(
+                lib.matches(&format!("fn {command}(")).count(),
+                1,
+                "{command}"
+            );
+            assert_eq!(
+                compact(&body(&lib, &signature)),
+                format!(
+                    "Err(crate::phase0_surface::closed(\"{command}\",crate::phase0_surface::Closure::SecretStorage,))"
+                ),
+                "{command}"
+            );
+        }
+        let apps = normalized(include_str!("../commands/apps.rs"));
+        for gone in [
+            "fn email_start_oauth(",
+            "fn integration_start_oauth(",
+            "fn read_oauth_setting(",
+            "oauth_settings.json",
+            "TcpListener::bind(",
+            "open::that(",
+            "_oauth.json",
+            "\"refresh_token\"",
+        ] {
+            assert!(!apps.contains(gone), "{gone}");
+        }
+        for helper in [
+            "#[cfg(test)]\nfn oauth_client_id(",
+            "#[cfg(test)]\nfn oauth_callback(",
+            "#[cfg(test)]\nfn read_oauth_request(",
+            "#[cfg(test)]\nfn await_oauth_code(",
+            "#[cfg(test)]\n#[derive(Debug, PartialEq, Eq)]\nenum OAuthCallback",
+        ] {
+            assert!(apps.contains(helper), "{helper}");
+        }
+        for reader in [
+            "pub(crate) fn email_oauth_status(",
+            "pub(crate) fn get_email_access_token(",
+            "pub(crate) fn email_disconnect(",
+        ] {
+            assert!(apps.contains(reader), "{reader}");
+        }
+    }
 }

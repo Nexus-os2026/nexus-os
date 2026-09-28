@@ -665,19 +665,27 @@ pub(crate) fn email_delete(state: &AppState, id: String) -> Result<String, Strin
 // it is `GET /oauth/callback?…` and carries this flow's unguessable `state`.
 // Anything else is answered and ignored: it neither ends the flow nor
 // supplies the authorization code.
+//
+// Final Gate item H: the email and integration sign-in flows are closed,
+// because their only product was plaintext token files and no approved
+// secret store exists. No production code runs a flow, so these helpers are
+// compiled for their P0-002C5C tests only, as the reviewed callback handling
+// for any future flow backed by an approved store.
 
-/// How long a sign-in flow waits for the provider's redirect.
-const OAUTH_CALLBACK_WINDOW: std::time::Duration = std::time::Duration::from_secs(120);
 /// How long one loopback connection may take to send its request line.
+#[cfg(test)]
 const OAUTH_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 /// Largest request head read from one loopback connection.
+#[cfg(test)]
 const OAUTH_MAX_REQUEST_BYTES: usize = 8 * 1024;
 /// Pause between polls of the nonblocking listener.
+#[cfg(test)]
 const OAUTH_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// A configured client ID in the form providers issue: letters, digits, `.`,
 /// `-` and `_`. It can then add no parameter to the authorization URL and no
 /// quoting to the command that opens the browser.
+#[cfg(test)]
 fn oauth_client_id(client_id: String) -> Result<String, String> {
     let well_formed = !client_id.is_empty()
         && client_id.len() <= 256
@@ -692,6 +700,7 @@ fn oauth_client_id(client_id: String) -> Result<String, String> {
 }
 
 /// What one loopback request means for the waiting flow.
+#[cfg(test)]
 #[derive(Debug, PartialEq, Eq)]
 enum OAuthCallback {
     /// This flow's redirect, carrying an authorization code.
@@ -704,6 +713,7 @@ enum OAuthCallback {
 }
 
 /// Classify a request by its request line alone.
+#[cfg(test)]
 fn oauth_callback(request: &str, expected_state: &str) -> OAuthCallback {
     let line = request.split("\r\n").next().unwrap_or_default();
     let mut words = line.split(' ');
@@ -745,6 +755,7 @@ fn oauth_callback(request: &str, expected_state: &str) -> OAuthCallback {
 
 /// Read one request head, bounded in size and by the per-connection timeout.
 /// Only its request line is used.
+#[cfg(test)]
 fn read_oauth_request(stream: &mut std::net::TcpStream, deadline: std::time::Instant) -> String {
     use std::io::Read as IoRead;
     let remaining = deadline.saturating_duration_since(std::time::Instant::now());
@@ -774,6 +785,7 @@ fn read_oauth_request(stream: &mut std::net::TcpStream, deadline: std::time::Ins
 
 /// Wait on `listener` until `deadline` for this flow's provider redirect and
 /// return its authorization code.
+#[cfg(test)]
 fn await_oauth_code(
     listener: &std::net::TcpListener,
     expected_state: &str,
@@ -853,138 +865,6 @@ pub(crate) fn read_messaging_token(platform: &'static str) -> Result<String, Str
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .ok_or_else(|| format!("no token for {platform}"))
-}
-
-pub(crate) fn read_oauth_setting(key: &str) -> Result<String, String> {
-    let path = nexus_data_dir()?.join("oauth_settings.json");
-    if !path.exists() {
-        return Err("no oauth settings file".to_string());
-    }
-    let content = std::fs::read_to_string(&path).map_err(|e| format!("read: {e}"))?;
-    let data: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("parse: {e}"))?;
-    data.get(key)
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| format!("key {key} not found"))
-}
-
-pub(crate) fn email_start_oauth(state: &AppState, provider: String) -> Result<String, String> {
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::UserAction,
-        json!({"action": "email_start_oauth", "provider": provider}),
-    );
-
-    // Client IDs from env vars or local config file
-    let client_id = match provider.as_str() {
-        "gmail" => std::env::var("NEXUS_GMAIL_CLIENT_ID")
-            .or_else(|_| read_oauth_setting("gmail_client_id"))
-            .unwrap_or_default(),
-        "outlook" => std::env::var("NEXUS_OUTLOOK_CLIENT_ID")
-            .or_else(|_| read_oauth_setting("outlook_client_id"))
-            .unwrap_or_default(),
-        _ => return Err(format!("Unknown email provider: {provider}")),
-    };
-
-    if client_id.is_empty() {
-        return Err(format!(
-            "No client ID configured for {provider}. Set NEXUS_{}_CLIENT_ID env var or configure in Settings.",
-            provider.to_uppercase()
-        ));
-    }
-    let client_id = oauth_client_id(client_id)?;
-
-    let csrf_token = uuid::Uuid::new_v4().to_string();
-    let redirect_uri = "http://localhost:19823/oauth/callback";
-
-    let auth_url = match provider.as_str() {
-        "gmail" => format!(
-            "https://accounts.google.com/o/oauth2/v2/auth?\
-             client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&\
-             scope=https://www.googleapis.com/auth/gmail.modify&\
-             state={csrf_token}&access_type=offline&prompt=consent"
-        ),
-        "outlook" => format!(
-            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?\
-             client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&\
-             scope=Mail.ReadWrite+Mail.Send+offline_access&state={csrf_token}"
-        ),
-        _ => unreachable!(),
-    };
-
-    // Listen before opening the browser, so the redirect cannot arrive first.
-    let listener = std::net::TcpListener::bind("127.0.0.1:19823")
-        .map_err(|e| format!("Cannot start OAuth listener: {e}"))?;
-
-    // Best-effort: open browser for OAuth; user can manually navigate if this fails
-    let _ = open::that(&auth_url);
-
-    let auth_code = await_oauth_code(
-        &listener,
-        &csrf_token,
-        std::time::Instant::now() + OAUTH_CALLBACK_WINDOW,
-    )?;
-
-    // Exchange code for tokens
-    let client_secret = match provider.as_str() {
-        "gmail" => std::env::var("NEXUS_GMAIL_CLIENT_SECRET")
-            .or_else(|_| read_oauth_setting("gmail_client_secret"))
-            .unwrap_or_default(),
-        "outlook" => std::env::var("NEXUS_OUTLOOK_CLIENT_SECRET")
-            .or_else(|_| read_oauth_setting("outlook_client_secret"))
-            .unwrap_or_default(),
-        _ => String::new(),
-    };
-
-    let token_url = match provider.as_str() {
-        "gmail" => "https://oauth2.googleapis.com/token",
-        "outlook" => "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-        _ => unreachable!(),
-    };
-
-    let token_resp = block_on_async(async {
-        reqwest::Client::new()
-            .post(token_url)
-            .form(&[
-                ("code", auth_code.as_str()),
-                ("client_id", client_id.as_str()),
-                ("client_secret", client_secret.as_str()),
-                ("redirect_uri", redirect_uri),
-                ("grant_type", "authorization_code"),
-            ])
-            .send()
-            .await
-            .map_err(|e| format!("token exchange: {e}"))?
-            .text()
-            .await
-            .map_err(|e| format!("token body: {e}"))
-    })?;
-
-    let token_json: serde_json::Value =
-        serde_json::from_str(&token_resp).map_err(|e| format!("token parse: {e}"))?;
-
-    // Store the tokens in the per-user OAuth directory. They are not encrypted
-    // at rest (docs/security/phase0-final-gate-dossier.md).
-    let token_path = email_oauth_dir()?.join(format!("{provider}_tokens.json"));
-    let token_data = json!({
-        "provider": provider,
-        "access_token": token_json.get("access_token").and_then(|v| v.as_str()).unwrap_or(""),
-        "refresh_token": token_json.get("refresh_token").and_then(|v| v.as_str()).unwrap_or(""),
-        "expires_at": chrono::Utc::now().timestamp() + token_json.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(3600),
-        "connected_at": chrono::Utc::now().to_rfc3339(),
-    });
-    std::fs::write(
-        &token_path,
-        serde_json::to_string_pretty(&token_data).map_err(|e| format!("json: {e}"))?,
-    )
-    .map_err(|e| format!("write tokens: {e}"))?;
-
-    serde_json::to_string(&json!({
-        "status": "connected",
-        "provider": provider,
-    }))
-    .map_err(|e| format!("json: {e}"))
 }
 
 pub(crate) fn email_oauth_status(state: &AppState) -> Result<String, String> {
@@ -1642,130 +1522,6 @@ pub(crate) fn messaging_poll_messages(
         }
     })?;
     Ok(result)
-}
-
-// ── Integration OAuth2 Flow ──────────────────────────────────────────
-
-pub(crate) fn integration_start_oauth(
-    state: &AppState,
-    provider_id: String,
-) -> Result<String, String> {
-    state.log_event(
-        SYSTEM_UUID,
-        EventType::UserAction,
-        json!({"action": "integration_start_oauth", "provider": provider_id}),
-    );
-
-    let env_key = format!("NEXUS_{}_CLIENT_ID", provider_id.to_uppercase());
-    let client_id = std::env::var(&env_key)
-        .or_else(|_| read_oauth_setting(&format!("{provider_id}_client_id")))
-        .unwrap_or_default();
-
-    if client_id.is_empty() {
-        return Err(format!(
-            "No client ID for {provider_id}. Set {env_key} env var or configure in Settings."
-        ));
-    }
-    let client_id = oauth_client_id(client_id)?;
-
-    let redirect_uri = "http://localhost:19824/oauth/callback";
-    let csrf = uuid::Uuid::new_v4().to_string();
-
-    let auth_url = match provider_id.as_str() {
-        "github" => format!(
-            "https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&state={csrf}&scope=repo,read:org"
-        ),
-        "gitlab" => format!(
-            "https://gitlab.com/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&state={csrf}&scope=api+read_user"
-        ),
-        "slack" => format!(
-            "https://slack.com/oauth/v2/authorize?client_id={client_id}&redirect_uri={redirect_uri}&state={csrf}&scope=chat:write,channels:read,channels:history"
-        ),
-        "jira" => format!(
-            "https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id={client_id}&scope=read%3Ajira-work%20manage%3Ajira-project&redirect_uri={redirect_uri}&state={csrf}&response_type=code&prompt=consent"
-        ),
-        _ => return Err(format!("OAuth not supported for {provider_id}. Use token-based auth.")),
-    };
-
-    // Listen before opening the browser, so the redirect cannot arrive first.
-    let listener = std::net::TcpListener::bind("127.0.0.1:19824")
-        .map_err(|e| format!("Cannot start OAuth listener: {e}"))?;
-
-    // Best-effort: open browser for OAuth; user can manually navigate if this fails
-    let _ = open::that(&auth_url);
-
-    let auth_code = await_oauth_code(
-        &listener,
-        &csrf,
-        std::time::Instant::now() + OAUTH_CALLBACK_WINDOW,
-    )?;
-
-    // Exchange code for token
-    let secret_key = format!("NEXUS_{}_CLIENT_SECRET", provider_id.to_uppercase());
-    let client_secret = std::env::var(&secret_key)
-        .or_else(|_| read_oauth_setting(&format!("{provider_id}_client_secret")))
-        .unwrap_or_default();
-
-    let token_result = block_on_async(async {
-        let (token_url, use_json) = match provider_id.as_str() {
-            "github" => ("https://github.com/login/oauth/access_token", false),
-            "gitlab" => ("https://gitlab.com/oauth/token", false),
-            "slack" => ("https://slack.com/api/oauth.v2.access", false),
-            "jira" => ("https://auth.atlassian.com/oauth/token", true),
-            _ => return Err("unsupported".to_string()),
-        };
-
-        let client = reqwest::Client::new();
-        let resp = if use_json {
-            client
-                .post(token_url)
-                .json(&json!({
-                    "grant_type": "authorization_code",
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "code": auth_code,
-                    "redirect_uri": redirect_uri,
-                }))
-                .send()
-                .await
-        } else {
-            client
-                .post(token_url)
-                .header("Accept", "application/json")
-                .form(&[
-                    ("client_id", client_id.as_str()),
-                    ("client_secret", client_secret.as_str()),
-                    ("code", auth_code.as_str()),
-                    ("redirect_uri", redirect_uri),
-                    ("grant_type", "authorization_code"),
-                ])
-                .send()
-                .await
-        };
-
-        let resp = resp.map_err(|e| format!("token request: {e}"))?;
-        resp.text().await.map_err(|e| format!("token body: {e}"))
-    })?;
-
-    // Store token
-    let integration_dir = nexus_data_dir()?.join("integrations");
-    if !integration_dir.exists() {
-        std::fs::create_dir_all(&integration_dir).map_err(|e| format!("mkdir: {e}"))?;
-    }
-    let token_path = integration_dir.join(format!("{provider_id}_oauth.json"));
-    let token_data = json!({
-        "provider": provider_id,
-        "token_response": serde_json::from_str::<serde_json::Value>(&token_result).unwrap_or(json!({"raw": token_result})),
-        "connected_at": chrono::Utc::now().to_rfc3339(),
-    });
-    std::fs::write(
-        &token_path,
-        serde_json::to_string_pretty(&token_data).map_err(|e| format!("json: {e}"))?,
-    )
-    .map_err(|e| format!("write: {e}"))?;
-
-    serde_json::to_string(&json!({"status": "connected", "provider": provider_id}))
-        .map_err(|e| format!("json: {e}"))
 }
 
 // ── App Store: GitLab API search ─────────────────────────────────────
