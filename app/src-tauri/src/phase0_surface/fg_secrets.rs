@@ -244,4 +244,59 @@ mod guards {
             "{run}"
         );
     }
+
+    /// The Final Gate items A and H closure reason is bounded and echoes no
+    /// input (the registry guard lists every other variant).
+    #[test]
+    fn p0_fg_secret_storage_closure_reason_is_bounded() {
+        use crate::phase0_surface::{closed, Closure};
+        let reason = Closure::SecretStorage.reason();
+        assert!(reason.contains("Phase Zero"), "{reason}");
+        assert!(reason.len() <= 160, "{reason}");
+        assert!(!reason.contains('/') && !reason.contains('\\'), "{reason}");
+        assert_eq!(
+            closed("surface", Closure::SecretStorage),
+            format!("surface: {reason}")
+        );
+    }
+
+    /// Final Gate items A and H: the deploy and Supabase credential commands,
+    /// whose only effect was storing a credential, are closed; the legacy
+    /// store refuses new credentials and keeps its explicit legacy read path.
+    #[test]
+    fn p0_fg_a_deploy_credentials_are_never_newly_stored() {
+        let lib = normalized(include_str!("../lib.rs"));
+        for command in [
+            "builder_deploy_store_credentials",
+            "builder_backend_connect",
+        ] {
+            let signature = format!("pub(crate) fn {command}() -> Result<(), String>");
+            assert_eq!(
+                lib.matches(&format!("fn {command}(")).count(),
+                1,
+                "{command}"
+            );
+            assert_eq!(
+                compact(&body(&lib, &signature)),
+                format!(
+                    "Err(crate::phase0_surface::closed(\"{command}\",crate::phase0_surface::Closure::SecretStorage,))"
+                ),
+                "{command}"
+            );
+        }
+        let store = normalized(include_str!(
+            "../../../../agents/web-builder/src/deploy/credentials.rs"
+        ));
+        let production = before_tests(&store);
+        assert_eq!(
+            compact(&body(production, "fn store_to_path(")),
+            "Err(DeployError::Credential(STORAGE_REFUSED.into()))"
+        );
+        // The legacy key is used only by the legacy read path.
+        assert_eq!(production.matches("machine_key()").count(), 2);
+        assert!(compact(&body(production, "fn load_from_path("))
+            .contains("load_from_path_with_key(path,provider,&machine_key())"));
+        assert!(compact(&body(production, "fn delete_from_path("))
+            .starts_with("letmutstore=load_store_for_rewrite(path)?;"));
+    }
 }
