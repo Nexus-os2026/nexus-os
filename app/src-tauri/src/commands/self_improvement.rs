@@ -17,7 +17,11 @@ pub struct SelfImproveState {
     pub signals: Vec<ImprovementSignal>,
     pub opportunities: Vec<ImprovementOpportunity>,
     pub proposals: Vec<ImprovementProposal>,
+    /// Records of proposals accepted in the interface. Since the Final Gate
+    /// (item G) each one stays `Proposed`: this pipeline applies nothing.
     pub history: Vec<AppliedImprovement>,
+    /// How many times `self_improve_run_cycle` has run.
+    pub cycles_run: u32,
     pub config: SelfImproveConfig,
     pub envelopes: HashMap<String, BehavioralEnvelope>,
     pub guardian: SimplexGuardian,
@@ -33,6 +37,7 @@ impl Default for SelfImproveState {
             opportunities: Vec::new(),
             proposals: Vec::new(),
             history: Vec::new(),
+            cycles_run: 0,
             config: SelfImproveConfig::default(),
             envelopes: HashMap::new(),
             guardian,
@@ -158,6 +163,8 @@ pub(crate) fn self_improve_run_cycle(state: &AppState) -> Result<serde_json::Val
         .self_improve_state
         .lock()
         .unwrap_or_else(|p| p.into_inner());
+    // Counted for the report, whatever the cycle finds.
+    si.cycles_run = si.cycles_run.saturating_add(1);
 
     // Collect real metrics from the OS fitness system
     let mut metrics = SystemMetrics::new();
@@ -534,6 +541,30 @@ pub(crate) fn self_improve_promote_baseline(state: &AppState) -> Result<(), Stri
     Ok(())
 }
 
+/// Whether a history entry's status says its change was applied: deployed,
+/// in canary, committed, or rolled back after deployment.
+fn was_applied(status: ImprovementStatus) -> bool {
+    matches!(
+        status,
+        ImprovementStatus::Applied
+            | ImprovementStatus::Monitoring
+            | ImprovementStatus::Committed
+            | ImprovementStatus::RolledBack
+    )
+}
+
+/// The self-improvement activity report.
+///
+/// P0-FINAL-GATE (item G): `ImprovementReport::generate` counts every
+/// history entry it is given as applied, and lists and dates them as such.
+/// So it gets only the entries whose status says the change was applied.
+/// There are none: this pipeline applies nothing and records an accepted
+/// proposal as `Proposed`, which the history view still shows.
+/// - `cycles_run` counts the cycles actually run.
+/// - `fuel_consumed` is 0, because no fuel is metered for this pipeline. It
+///   used to report the configured budget.
+/// - Guardian switches and invariant violations are not tracked here and
+///   stay 0.
 pub(crate) fn self_improve_get_report(
     state: &AppState,
     days: u32,
@@ -549,12 +580,18 @@ pub(crate) fn self_improve_get_report(
         .unwrap_or(0);
     let period_start = now.saturating_sub(u64::from(days) * 86400);
 
+    let applied: Vec<AppliedImprovement> = si
+        .history
+        .iter()
+        .filter(|improvement| was_applied(improvement.status))
+        .cloned()
+        .collect();
     let report = nexus_self_improve::report::ImprovementReport::generate(
-        &si.history,
-        si.history.len() as u32,
+        &applied,
+        si.cycles_run,
         0,
         0,
-        si.config.fuel_budget,
+        0,
         period_start,
         now,
     );

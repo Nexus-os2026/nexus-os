@@ -725,6 +725,37 @@ fn p0_fg_g_self_improvement_acceptance_is_recorded_truthfully() {
     assert!(!pipeline.contains("hitl_approved: true"));
 }
 
+/// P0-FINAL-GATE (item G): the self-improvement report gets only the
+/// history entries whose status says the change was applied, the number of
+/// cycles actually run, and no fuel figure (none is metered). The recorded
+/// acceptances (`Proposed`) are not counted as applied.
+#[test]
+fn p0_fg_g_self_improvement_report_counts_only_applied_changes() {
+    let pipeline = include_str!("../../commands/self_improvement.rs");
+    let (_, report) = fn_shape(pipeline, "self_improve_get_report");
+    assert!(
+        report.contains(concat!(
+            "letapplied:Vec<AppliedImprovement>=si.history.iter()",
+            ".filter(|improvement|was_applied(improvement.status)).cloned().collect();",
+            "letreport=nexus_self_improve::report::ImprovementReport::generate(",
+            "&applied,si.cycles_run,0,0,0,period_start,now);",
+        )),
+        "{report}"
+    );
+    let (params, applied) = fn_shape(pipeline, "was_applied");
+    assert_eq!(params, "(status:ImprovementStatus)");
+    assert_eq!(
+        applied,
+        concat!(
+            "matches!(status,ImprovementStatus::Applied|ImprovementStatus::Monitoring",
+            "|ImprovementStatus::Committed|ImprovementStatus::RolledBack)",
+        )
+    );
+    let (_, cycle) = fn_shape(pipeline, "self_improve_run_cycle");
+    assert!(cycle.contains("si.cycles_run=si.cycles_run.saturating_add(1);"));
+    assert_eq!(pipeline.matches(".cycles_run").count(), 3);
+}
+
 /// Why the computer-use loop controller source would let end of input or a
 /// read error approve a step, or `None` if it would not.
 fn eof_approval_defect(controller: &str) -> Option<String> {

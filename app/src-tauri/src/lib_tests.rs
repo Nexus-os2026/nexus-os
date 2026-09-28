@@ -3696,6 +3696,99 @@ fn p0_fg_self_improvement_acceptance_claims_no_hitl_approval() {
         .all(|entry| entry.proposal_id != over_budget.id));
 }
 
+/// P0-FINAL-GATE (item G): the self-improvement report counts only applied
+/// changes. An accepted proposal is recorded as `Proposed` and nothing is
+/// applied. So after two acceptances the report shows no improvement
+/// applied, listed or active, and no fuel consumed. `cycles_run` counts the
+/// cycles actually run. (The report used to count every accepted proposal
+/// as applied, give `cycles_run` as the number of history entries and
+/// report the fuel budget as consumed.) A history entry whose status says it
+/// was applied is still counted, so the report is filtered, not emptied.
+#[test]
+fn p0_fg_self_improvement_report_counts_no_recorded_acceptance_as_applied() {
+    use crate::commands::self_improvement::{
+        self_improve_approve_proposal, self_improve_get_report, self_improve_run_cycle,
+    };
+    use nexus_self_improve::types::{
+        AppliedImprovement, ImprovementProposal, ImprovementStatus, ProposedChange, RollbackPlan,
+        RollbackStep,
+    };
+    let proposal = || {
+        let change = ProposedChange::ConfigChange {
+            key: "agent.response_timeout_ms".into(),
+            old_value: json!(5000),
+            new_value: json!(6000),
+            justification: "p0-fg report".into(),
+        };
+        ImprovementProposal {
+            id: Uuid::new_v4(),
+            opportunity_id: Uuid::new_v4(),
+            domain: change.domain(),
+            description: "p0-fg report proposal".into(),
+            change,
+            rollback_plan: RollbackPlan {
+                checkpoint_id: Uuid::new_v4(),
+                steps: vec![RollbackStep {
+                    description: "revert".into(),
+                    action: json!({"revert": true}),
+                }],
+                estimated_rollback_time_ms: 100,
+                automatic: true,
+            },
+            expected_tests: vec![],
+            proof: None,
+            generated_by: "test".into(),
+            fuel_cost: 100,
+        }
+    };
+    let state = AppState::new_in_memory();
+    let accepted = [proposal(), proposal()];
+    state
+        .self_improve_state
+        .lock()
+        .unwrap()
+        .proposals
+        .extend(accepted.clone());
+    for proposal in &accepted {
+        self_improve_approve_proposal(&state, proposal.id.to_string()).unwrap();
+    }
+    assert_eq!(state.self_improve_state.lock().unwrap().history.len(), 2);
+
+    let report = self_improve_get_report(&state, 30).unwrap();
+    assert_eq!(report["improvements_applied"], json!(0));
+    assert_eq!(report["improvements_committed"], json!(0));
+    assert_eq!(report["top_improvements"], json!([]));
+    assert_eq!(report["domains_active"], json!([]));
+    assert_eq!(report["cycles_run"], json!(0));
+    assert_eq!(report["fuel_consumed"], json!(0));
+
+    self_improve_run_cycle(&state).unwrap();
+    let report = self_improve_get_report(&state, 30).unwrap();
+    assert_eq!(report["cycles_run"], json!(1));
+    assert_eq!(report["improvements_applied"], json!(0));
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    state
+        .self_improve_state
+        .lock()
+        .unwrap()
+        .history
+        .push(AppliedImprovement {
+            id: Uuid::new_v4(),
+            proposal_id: Uuid::new_v4(),
+            checkpoint_id: Uuid::new_v4(),
+            applied_at: now,
+            status: ImprovementStatus::Committed,
+            canary_deadline: 0,
+        });
+    let report = self_improve_get_report(&state, 30).unwrap();
+    assert_eq!(report["improvements_applied"], json!(1));
+    assert_eq!(report["improvements_committed"], json!(1));
+}
+
 /// P0-FINAL-GATE (item K, cross-stream request from stream 6): a parallel
 /// simulation request for a variant count outside 1..=10 is refused before
 /// the simulation model is built, the seed is parsed or any variant is
