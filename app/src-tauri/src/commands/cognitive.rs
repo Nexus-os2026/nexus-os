@@ -1644,6 +1644,53 @@ pub(crate) fn phase0_agent_executor(
     }
 }
 
+/// Owns one cognitive loop's entry in `AppState::cognitive_cancellations`.
+///
+/// The entry is the loop's cancellation flag: the Chat Stop button sets it,
+/// and a scheduled tick is skipped while it exists. A newer loop for the same
+/// agent replaces the entry, so when a loop ends only its own flag is removed
+/// (`Arc::ptr_eq`). An older loop's exit never erases a newer loop's entry.
+pub(crate) struct CognitiveCancelGuard {
+    state: AppState,
+    agent_id: String,
+    flag: Arc<AtomicBool>,
+}
+
+impl CognitiveCancelGuard {
+    /// Register a new loop's flag for `agent_id`, replacing any earlier
+    /// loop's entry, and return the flag with the guard that removes it.
+    pub(crate) fn register(state: &AppState, agent_id: &str) -> (Arc<AtomicBool>, Self) {
+        let flag = Arc::new(AtomicBool::new(false));
+        state
+            .cognitive_cancellations
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(agent_id.to_string(), flag.clone());
+        let guard = Self {
+            state: state.clone(),
+            agent_id: agent_id.to_string(),
+            flag: flag.clone(),
+        };
+        (flag, guard)
+    }
+}
+
+impl Drop for CognitiveCancelGuard {
+    fn drop(&mut self) {
+        let mut map = self
+            .state
+            .cognitive_cancellations
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if map
+            .get(&self.agent_id)
+            .is_some_and(|current| Arc::ptr_eq(current, &self.flag))
+        {
+            map.remove(&self.agent_id);
+        }
+    }
+}
+
 pub(crate) fn spawn_cognitive_loop_with_bridge(
     bridge: BackendEventBridge,
     state: AppState,
@@ -1653,31 +1700,13 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
     // G1b: register a cancellation flag so the Chat Stop button can break the
     // loop cleanly. Flag handle is stored in AppState keyed by agent_id so the
     // Tauri `stop_agent` command can look it up and set it.
-    let cancel_flag = Arc::new(AtomicBool::new(false));
-    state
-        .cognitive_cancellations
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .insert(agent_id.clone(), cancel_flag.clone());
+    let (cancel_flag, cancel_guard) = CognitiveCancelGuard::register(&state, &agent_id);
 
     tauri::async_runtime::spawn(async move {
-        // Drop-guard removes the cancellation entry on any exit path (normal,
-        // break, return, panic).
-        struct CancelGuard {
-            state: AppState,
-            agent_id: String,
-        }
-        impl Drop for CancelGuard {
-            fn drop(&mut self) {
-                if let Ok(mut map) = self.state.cognitive_cancellations.lock() {
-                    map.remove(&self.agent_id);
-                }
-            }
-        }
-        let _cancel_guard = CancelGuard {
-            state: state.clone(),
-            agent_id: agent_id.clone(),
-        };
+        // The task owns the guard: it removes this loop's own entry on any
+        // exit path (normal, break, return, panic), and also if the task is
+        // dropped before it runs.
+        let _cancel_guard = cancel_guard;
 
         // NOTE: Do NOT install a custom panic hook here. Calling prev_hook(info)
         // inside a hook can cause a double-panic (which aborts the entire process).
