@@ -150,6 +150,9 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("cm_list_validation_runs", Closure::AmbientResource),
     ("cm_get_validation_run", Closure::AmbientResource),
     ("cm_three_way_comparison", Closure::AmbientResource),
+    // P0-FINAL-GATE C5: the A/B route read an environment provider key
+    // through a fallback chain for a fixed Groq endpoint.
+    ("cm_run_ab_validation", Closure::AmbientResource),
     ("memory_save", Closure::AmbientResource),
     ("memory_load", Closure::AmbientResource),
     ("memory_list_agents", Closure::AmbientResource),
@@ -171,6 +174,11 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("capture_screen", Closure::ScreenObservation),
     ("analyze_screen", Closure::ScreenObservation),
     ("nx_computer_use_screenshot", Closure::ScreenObservation),
+    // P0-FINAL-GATE item G: a caller's boolean, or the call itself, is not
+    // human approval.
+    ("nx_consent_respond", Closure::ApprovalRequired),
+    ("nx_agent_approve", Closure::ApprovalRequired),
+    ("self_rewrite_apply_patch", Closure::ApprovalRequired),
     // P0-FINAL-GATE items B and F: a caller-chosen destination or peer is not
     // egress authority.
     ("api_client_request", Closure::NetworkDestination),
@@ -378,7 +386,7 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             a2a_cancel_task, mcp_host_connect, mcp_host_call_tool,
             builder_theme_extract_from_url, nexus_link_send_model, is_ollama_installed,
             builder_deploy_store_credentials, builder_backend_connect, email_start_oauth,
-            integration_start_oauth,
+            integration_start_oauth, self_rewrite_apply_patch,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
@@ -389,9 +397,11 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             cm_execute_validation_run, cm_list_validation_runs, cm_get_validation_run,
             cm_three_way_comparison, memory_save, memory_load, memory_list_agents,
             mcp2_server_handle, browser_screenshot, a2a_crate_send_task, a2a_crate_get_task,
-            a2a_crate_discover_agent, perception_init,
+            a2a_crate_discover_agent, perception_init, cm_run_ab_validation,
         ],
-        crate::nx_bridge::commands => [nx_agent_run, nx_chat, nx_tool],
+        crate::nx_bridge::commands => [
+            nx_agent_run, nx_chat, nx_tool, nx_consent_respond, nx_agent_approve,
+        ],
         crate::commands::orchestration => [run_content_pipeline],
     );
     // The nx screenshot handler is async: the real handler's future is run
@@ -1439,6 +1449,33 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
     (
         "Command::new(\"which\")",
         "running which from PATH to report on a program",
+    ),
+    // P0-FINAL-GATE C5: capability-measurement real-inference runners and
+    // clients (their only desktop route is closed).
+    (
+        "tauri_commands::run_ab_validation",
+        "capability-measurement A/B run with a provider key and live model calls",
+    ),
+    (
+        "run_batch_evaluation",
+        "capability-measurement batch run with a provider key and live model calls",
+    ),
+    (
+        "execute_validation_run_real",
+        "capability-measurement validation run with live model calls",
+    ),
+    (
+        "NimClient",
+        "capability-measurement client posting to the Groq endpoint with a provider key",
+    ),
+    (
+        "OpenRouterClient",
+        "capability-measurement client posting to OpenRouter with a provider key",
+    ),
+    // P0-FINAL-GATE item G: remote chat text as a consent decision.
+    (
+        "parse_consent_reply(",
+        "messaging chat reply parsed as a consent decision",
     ),
 ];
 
@@ -2823,6 +2860,12 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
     let kernel_config = include_str!("../../../../kernel/src/config.rs");
     let fg_standalone = include_str!("fg_standalone/tests.rs");
     let fg_reliability = include_str!("fg_reliability/tests.rs");
+    let fg_approval = include_str!("fg_approval/tests.rs");
+    let computer_use_loop =
+        include_str!("../../../../crates/nexus-computer-use/src/agent/loop_controller.rs");
+    let measurement_client = include_str!(
+        "../../../../crates/nexus-capability-measurement/src/evaluation/nim_client.rs"
+    );
     for (regression, source, guards) in [
         (
             "a closed command reopened",
@@ -3039,6 +3082,79 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
                 "p0_fg_k_temporal_fork_limits_are_refused_and_never_stored",
                 "p0_fg_k_an_older_loops_exit_keeps_a_newer_loops_cancellation_entry",
             ][..],
+        ),
+        (
+            "an unbounded resource surface reachable from the interface",
+            fg_approval,
+            &["p0_fg_k_simulation_and_arena_bounds_precede_any_work"][..],
+        ),
+        (
+            "an unbounded resource surface reachable from the interface",
+            lib_tests,
+            &[
+                "p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call",
+                "p0_fg_adversarial_session_rounds_are_bounded_before_any_work",
+            ][..],
+        ),
+        (
+            "a closed capability-measurement route reopened, or a provider key sent to another provider's endpoint",
+            fg_approval,
+            &[
+                "p0_fg_c5_ab_validation_route_is_closed_before_any_input",
+                "p0_fg_c5_measurement_clients_take_only_the_groq_key",
+                "p0_fg_c5_desktop_reaches_only_in_memory_measurement",
+                "p0_fg_source_lists_follow_their_directories",
+            ][..],
+        ),
+        (
+            "a closed capability-measurement route reopened, or a provider key sent to another provider's endpoint",
+            measurement_client,
+            &["p0_fg_groq_client_key_never_falls_back_to_another_provider"][..],
+        ),
+        (
+            "a caller's boolean, name or IPC call treated as human approval",
+            fg_approval,
+            &[
+                "p0_fg_g_transcendent_agents_are_refused_before_any_state_change",
+                "p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first",
+                "p0_fg_g_enabled_warden_review_without_a_warden_denies",
+                "p0_fg_g_caller_asserted_approval_commands_only_deny",
+                "p0_fg_g_consent_decisions_record_no_caller_identity",
+                "p0_fg_g_self_improvement_acceptance_is_recorded_truthfully",
+                "p0_fg_g_self_improvement_report_counts_only_applied_changes",
+                "p0_fg_g_no_actuator_reads_the_hitl_approval_flag",
+            ][..],
+        ),
+        (
+            "a caller's boolean, name or IPC call treated as human approval",
+            lib_tests,
+            &[
+                "p0_fg_transcendent_creation_is_refused_and_changes_nothing",
+                "p0_fg_transcendent_activation_is_refused_and_changes_nothing",
+                "p0_fg_transcendent_approval_is_refused_and_changes_nothing",
+                "p0_fg_stored_transcendent_records_are_not_registered_and_stay_stored",
+                "p0_fg_startup_registers_no_transcendent_agent_on_any_run",
+                "p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent",
+                "p0_fg_enabled_warden_review_fails_closed_without_a_warden",
+                "p0_fg_desktop_consent_resolutions_record_the_interface_label",
+                "p0_fg_desktop_approvals_do_not_reach_the_kernel_consent_queue",
+                "p0_fg_self_improvement_acceptance_claims_no_hitl_approval",
+                "p0_fg_self_improvement_report_counts_no_recorded_acceptance_as_applied",
+            ][..],
+        ),
+        (
+            "end of input or a read error taken as approval (E6)",
+            computer_use_loop,
+            &[
+                "test_approval_eof_aborts_instead_of_approving",
+                "test_approval_read_error_aborts",
+                "test_approval_modify_requires_an_entered_replacement",
+            ][..],
+        ),
+        (
+            "end of input or a read error taken as approval (E6)",
+            fg_approval,
+            &["p0_fg_g_eof_or_a_read_error_is_never_an_approval"][..],
         ),
     ] {
         for guard in guards {
