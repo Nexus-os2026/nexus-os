@@ -1012,11 +1012,17 @@ mod tests {
         ] {
             assert_eq!(searxng_base(Some(unusable.into())), None, "{unusable:?}");
         }
-        let production = include_str!("web.rs")
-            .split("#[cfg(test)]\nmod tests")
-            .next()
-            .unwrap()
-            .replace("\r\n", "\n");
+        let source = include_str!("web.rs");
+        assert_no_guessed_searxng_address(source);
+        // As a CRLF checkout (Windows CI, core.autocrlf=true) reads it.
+        assert_no_guessed_searxng_address(&source.replace("\r\n", "\n").replace('\n', "\r\n"));
+    }
+
+    /// The source side of the guard above, for either line ending: the
+    /// source is read with LF line endings before the production cut.
+    fn assert_no_guessed_searxng_address(source: &str) {
+        let source = source.replace("\r\n", "\n");
+        let production = source.split("#[cfg(test)]\nmod tests").next().unwrap();
         for guessed in [
             "localhost:8080",
             "127.0.0.1:8080",

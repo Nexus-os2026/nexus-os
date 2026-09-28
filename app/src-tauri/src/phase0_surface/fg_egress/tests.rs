@@ -96,6 +96,19 @@ fn without_whitespace(text: &str) -> String {
     text.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
+/// A source with LF line endings. On a CRLF checkout (Windows CI checks out
+/// with `core.autocrlf=true`), every `include_str!` text has `\r\n`, so the
+/// guards that match across lines read their sources through this.
+fn lf(source: &str) -> String {
+    source.replace("\r\n", "\n")
+}
+
+/// The same source as a CRLF checkout gives it. The guards that match across
+/// lines run on both forms.
+fn crlf(source: &str) -> String {
+    lf(source).replace('\n', "\r\n")
+}
+
 /// Index just past the brace closing the block that opens at `open`. String
 /// literals are skipped; the handler bodies read here contain no others.
 fn block_end(src: &str, open: usize) -> usize {
@@ -656,6 +669,13 @@ fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
     );
 
     let chat_llm = include_str!("../../commands/chat_llm.rs");
+    assert_no_ollama_helper(chat_llm, LIB_RS);
+    assert_no_ollama_helper(&crlf(chat_llm), &crlf(LIB_RS));
+}
+
+/// The source side of the guard above, for either line ending.
+fn assert_no_ollama_helper(chat_llm: &str, lib_rs: &str) {
+    let chat_llm = lf(chat_llm);
     for helper in [
         "Command::new(\"ollama\")",
         "Command::new(\"which\")",
@@ -663,7 +683,7 @@ fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
     ] {
         assert!(!chat_llm.contains(helper), "chat_llm.rs: {helper}");
     }
-    assert!(!LIB_RS.contains("Command::new(\"ollama\")"));
+    assert!(!lf(lib_rs).contains("Command::new(\"ollama\")"));
     let ensure = chat_llm
         .split("pub(crate) fn ensure_ollama(")
         .nth(1)
@@ -681,11 +701,19 @@ fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
 /// none escapes it.
 #[test]
 fn p0_fg_the_application_exit_ends_in_flight_model_downloads() {
+    let model_hub = include_str!("../../../../../connectors/llm/src/model_hub.rs");
+    assert_downloads_end_at_exit(LIB_RS, model_hub);
+    assert_downloads_end_at_exit(&crlf(LIB_RS), &crlf(model_hub));
+}
+
+/// The guard above, for either line ending.
+fn assert_downloads_end_at_exit(lib_rs: &str, model_hub: &str) {
+    let lib_rs = lf(lib_rs);
     let needle = "if let tauri::RunEvent::Exit = event {";
-    assert_eq!(LIB_RS.matches(needle).count(), 1);
-    let open = LIB_RS.find(needle).unwrap() + needle.len() - 1;
+    assert_eq!(lib_rs.matches(needle).count(), 1);
+    let open = lib_rs.find(needle).unwrap() + needle.len() - 1;
     assert_eq!(
-        without_whitespace(&production_text(&LIB_RS[open..block_end(LIB_RS, open)])),
+        without_whitespace(&production_text(&lib_rs[open..block_end(&lib_rs, open)])),
         without_whitespace(
             "{
                 super::builder_workspace::shutdown_dev_servers(&app.state::<AppState>());
@@ -697,9 +725,7 @@ fn p0_fg_the_application_exit_ends_in_flight_model_downloads() {
         "the exit arm"
     );
 
-    let model_hub = production_text(include_str!(
-        "../../../../../connectors/llm/src/model_hub.rs"
-    ));
+    let model_hub = production_text(&lf(model_hub));
     assert_eq!(
         model_hub.matches(".spawn()").count(),
         1,
@@ -746,6 +772,13 @@ fn p0_fg_messaging_errors_never_carry_the_bot_token() {
     assert!(!reported.contains("sendMessage"), "{reported}");
 
     let apps = include_str!("../../commands/apps.rs");
+    assert_messaging_errors_are_redacted(apps);
+    assert_messaging_errors_are_redacted(&crlf(apps));
+}
+
+/// The source side of the guard above, for either line ending.
+fn assert_messaging_errors_are_redacted(apps: &str) {
+    let apps = lf(apps);
     let start = apps.find("pub(crate) fn messaging_send(").unwrap();
     let end = apps[start..]
         .find("pub(crate) fn messaging_poll_messages(")

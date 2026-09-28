@@ -1285,15 +1285,26 @@ mod tests {
     /// running and unreaped. The pre-repair `?` returns are gone.
     #[test]
     fn p0_fg_curl_children_are_reaped_on_early_errors() {
-        let production = |source: &'static str| {
+        let (helpers, ollama) = (include_str!("mod.rs"), include_str!("ollama.rs"));
+        assert_curl_children_are_reaped(helpers, ollama);
+        // As a CRLF checkout (Windows CI, core.autocrlf=true) reads them.
+        let crlf = |source: &str| source.replace("\r\n", "\n").replace('\n', "\r\n");
+        assert_curl_children_are_reaped(&crlf(helpers), &crlf(ollama));
+    }
+
+    /// The guard above, for either line ending: the sources are read with LF
+    /// line endings before any match that spans lines.
+    fn assert_curl_children_are_reaped(helpers: &str, ollama: &str) {
+        let production = |source: &str| {
             source
+                .replace("\r\n", "\n")
                 .split("#[cfg(test)]\nmod tests")
                 .next()
                 .unwrap()
-                .replace("\r\n", "\n")
+                .to_string()
         };
-        let helpers = production(include_str!("mod.rs"));
-        let ollama = production(include_str!("ollama.rs"));
+        let helpers = production(helpers);
+        let ollama = production(ollama);
         assert_eq!(helpers.matches("reap_child(&mut child);").count(), 1);
         assert_eq!(ollama.matches("super::reap_child(&mut child);").count(), 5);
         for gone in [
