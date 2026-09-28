@@ -370,8 +370,19 @@ pub(crate) fn api_client_list_collections() -> Result<String, String> {
 /// already stored is left as it was. Collections that are not JSON cannot be
 /// checked and are refused too.
 pub(crate) fn api_client_save_collections(data_json: String) -> Result<(), String> {
+    save_api_collections_to(data_json, api_collections_path)
+}
+
+/// [`api_client_save_collections`] with the file location injected. The
+/// secret check runs before `path` is resolved, so a refused save neither
+/// resolves nor writes the file (tests pass a temporary location, so no test
+/// can reach a real home even if the check regresses).
+fn save_api_collections_to(
+    data_json: String,
+    path: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<(), String> {
     refuse_api_client_secrets(&data_json)?;
-    let path = api_collections_path()?;
+    let path = path()?;
     std::fs::write(&path, data_json).map_err(|e| format!("write error: {e}"))
 }
 
@@ -1350,6 +1361,26 @@ pub(crate) fn messaging_connect_platform(
     platform: String,
     token_value: String,
 ) -> Result<String, String> {
+    messaging_connect_with(
+        state,
+        platform,
+        token_value,
+        stored_messaging_token,
+        &MESSAGING_ENDPOINTS,
+    )
+}
+
+/// [`messaging_connect_platform`] with the stored-token source and the
+/// platform endpoints injected. Tests pass a token source that must not be
+/// read and loopback endpoints, so no test reads a real configuration or
+/// contacts a platform even if a check regresses.
+fn messaging_connect_with(
+    state: &AppState,
+    platform: String,
+    token_value: String,
+    stored_token: impl FnOnce(&'static str) -> Result<String, String>,
+    endpoints: &MessagingEndpoints<'_>,
+) -> Result<String, String> {
     let known = messaging_platform(state, "messaging_connect", &platform)?;
     if token_value != STORED_SECRET {
         return Err(deny(
@@ -1358,7 +1389,7 @@ pub(crate) fn messaging_connect_platform(
             "token_must_be_saved_first",
         ));
     }
-    let token_value = stored_messaging_token(known)?;
+    let token_value = stored_token(known)?;
     if token_value.is_empty() {
         return Err(deny(state, "messaging_connect", "no_stored_token"));
     }
@@ -1371,11 +1402,7 @@ pub(crate) fn messaging_connect_platform(
         json!({"action": "messaging_connect", "platform": known}),
     );
 
-    block_on_async(check_messaging_connectivity(
-        known,
-        &token_value,
-        &MESSAGING_ENDPOINTS,
-    ))
+    block_on_async(check_messaging_connectivity(known, &token_value, endpoints))
 }
 
 /// Where the connectivity check sends its one request.

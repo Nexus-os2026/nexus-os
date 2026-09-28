@@ -10,6 +10,7 @@
 
 use crate::deploy::{credentials as deploy_creds, Credentials as DeployCreds, DeployError};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 /// Supabase project credentials.
 #[derive(Clone, Serialize, Deserialize)]
@@ -35,6 +36,15 @@ const PROVIDER_KEY: &str = "supabase";
 /// Store Supabase credentials: refused in Phase Zero by the deploy credential
 /// store (Final Gate items A and H). Nothing is written.
 pub fn store_supabase_credentials(creds: &SupabaseCredentials) -> Result<(), DeployError> {
+    store_supabase_credentials_to(&deploy_creds::credentials_path()?, creds)
+}
+
+/// [`store_supabase_credentials`] against an explicit store file, so tests
+/// use a temporary file and never the store under a real home.
+fn store_supabase_credentials_to(
+    path: &Path,
+    creds: &SupabaseCredentials,
+) -> Result<(), DeployError> {
     // Store as a deploy Credentials with project_url in account_id field
     let deploy_cred = DeployCreds {
         provider: PROVIDER_KEY.into(),
@@ -42,7 +52,7 @@ pub fn store_supabase_credentials(creds: &SupabaseCredentials) -> Result<(), Dep
         account_id: Some(creds.project_url.clone()),
         expires_at: None,
     };
-    deploy_creds::store_credentials(PROVIDER_KEY, &deploy_cred)
+    deploy_creds::store_to_path(path, PROVIDER_KEY, &deploy_cred)
 }
 
 /// Load Supabase credentials.
@@ -100,17 +110,32 @@ mod tests {
         assert_eq!(parsed.service_role_key, creds.service_role_key);
     }
 
-    /// Final Gate items A and H: a Supabase key is never stored.
+    /// Final Gate items A and H: a Supabase key is never stored. The store is
+    /// a temporary file, so the result does not depend on HOME and even a
+    /// regressed refusal writes nothing under a real home.
     #[test]
     fn p0_fg_a_supabase_credentials_are_never_stored() {
+        struct Removed(std::path::PathBuf);
+        impl Drop for Removed {
+            fn drop(&mut self) {
+                // Best-effort cleanup of this test's own temporary file.
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+        let store = Removed(
+            std::env::temp_dir().join(format!("nexus-supabase-test-{}.json", uuid::Uuid::new_v4())),
+        );
         let creds = SupabaseCredentials {
             project_url: "https://synthetic.supabase.co".into(),
             anon_key: "synthetic-anon".into(),
             service_role_key: Some("synthetic-service".into()),
         };
-        let error = store_supabase_credentials(&creds).unwrap_err().to_string();
+        let error = store_supabase_credentials_to(&store.0, &creds)
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("unavailable in Phase Zero"), "{error}");
         assert!(!error.contains("synthetic"), "{error}");
+        assert!(!store.0.exists());
     }
 
     #[test]

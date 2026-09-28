@@ -48,7 +48,7 @@ struct StoredEntry {
 }
 
 /// The credential store under the validated identity home (P0-002C5B).
-fn credentials_path() -> Result<PathBuf, DeployError> {
+pub(crate) fn credentials_path() -> Result<PathBuf, DeployError> {
     nexus_kernel::identity_home::nexus_state_path("deploy_credentials.json")
         .map_err(|e| DeployError::Credential(e.to_string()))
 }
@@ -134,7 +134,7 @@ fn save_store_to(path: &Path, store: &CredentialStore) -> Result<(), DeployError
 
 /// Final Gate items A and H: a new or changed deploy credential is never
 /// stored. The file is not touched.
-fn store_to_path(
+pub(crate) fn store_to_path(
     _path: &Path,
     _provider: &str,
     _credentials: &Credentials,

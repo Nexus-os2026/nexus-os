@@ -545,26 +545,82 @@ fn p0_002c5c_email_header_values_cannot_add_headers() {
     );
 }
 
+/// A loopback listener standing in for the messaging platforms in a test that
+/// must never reach them, with the endpoints that point at it.
+fn unreached_platforms() -> (std::net::TcpListener, [String; 3]) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let endpoints = [
+        base.clone(),
+        format!("{base}/api/auth.test"),
+        format!("{base}/api/v10/users/@me"),
+    ];
+    (listener, endpoints)
+}
+
+/// No connection reached the listener: its accept queue is empty.
+fn assert_never_contacted(listener: &std::net::TcpListener) {
+    match listener.accept() {
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+        other => panic!("a platform endpoint was contacted: {other:?}"),
+    }
+}
+
+/// A file location in the temporary directory, removed when dropped.
+struct TempFile(PathBuf);
+
+impl TempFile {
+    fn new(name: &str) -> Self {
+        Self(std::env::temp_dir().join(format!("nexus-{name}-{}", Uuid::new_v4())))
+    }
+}
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        // Best-effort cleanup of this test's own temporary file.
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// Final Gate item H: messaging connect accepts only the token stored in the
 /// configuration. Any other value is refused and audited by reason class
 /// before anything is read, written or sent, so no plaintext token file can
-/// result from it.
+/// result from it. The stored-token source must not be read and the
+/// endpoints are an unanswered loopback listener, so even a regressed check
+/// reads no real configuration and contacts no platform.
 #[test]
 fn p0_fg_h_messaging_connect_takes_only_the_stored_token() {
     let state = AppState::new_in_memory();
+    let (listener, [telegram, slack, discord]) = unreached_platforms();
+    let endpoints = MessagingEndpoints {
+        telegram: &telegram,
+        slack: &slack,
+        discord: &discord,
+    };
+    let connect = |platform: &str, token: &str| {
+        messaging_connect_with(
+            &state,
+            platform.into(),
+            token.into(),
+            |_| panic!("the stored token was read"),
+            &endpoints,
+        )
+    };
     for platform in ["telegram", "discord", "slack"] {
         for token in ["123:synthetic-token", "", "xapp-synthetic"] {
             assert_eq!(
-                messaging_connect_platform(&state, platform.into(), token.into()),
+                connect(platform, token),
                 Err("messaging_connect: token must be saved first".to_string()),
                 "{platform} {token:?}"
             );
         }
     }
     assert_eq!(
-        messaging_connect_platform(&state, "matrix".into(), STORED_SECRET.into()),
+        connect("matrix", STORED_SECRET),
         Err("messaging_connect: unsupported platform".to_string())
     );
+    assert_never_contacted(&listener);
     let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
     let logged = serde_json::to_string(
         &audit
@@ -580,9 +636,18 @@ fn p0_fg_h_messaging_connect_takes_only_the_stored_token() {
 
 /// Final Gate item H: API Client collections holding an authentication
 /// secret are refused before the file is resolved or written; collections
-/// without one pass the check.
+/// without one pass the check. The save runs against a temporary location, so
+/// even a regressed check writes nothing under a real home.
 #[test]
 fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
+    let target = TempFile::new("api-collections");
+    let resolved = std::cell::Cell::new(0_u32);
+    let save = |data: String| {
+        save_api_collections_to(data, || {
+            resolved.set(resolved.get() + 1);
+            Ok(target.0.clone())
+        })
+    };
     let request = |auth: serde_json::Value| {
         let mut request = serde_json::json!({
             "id": "r1", "name": "req", "method": "GET", "url": "https://example.test/",
@@ -615,14 +680,22 @@ fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
         let error = refuse_api_client_secrets(&data).unwrap_err();
         assert!(error.contains("not stored in Phase Zero"), "{auth}");
         assert!(!error.contains("synthetic"), "{error}");
-        // The command refuses before resolving or writing the file.
-        assert_eq!(api_client_save_collections(data), Err(error));
+        // The save refuses before resolving or writing the file.
+        assert_eq!(save(data), Err(error));
+        assert_eq!(resolved.get(), 0, "{auth}");
+        assert!(!target.0.exists(), "{auth}");
     }
     let not_json = refuse_api_client_secrets("authToken=synthetic").unwrap_err();
     assert_eq!(
         not_json,
         "api_client_save_collections: collections must be JSON"
     );
+    assert_eq!(save("authToken=synthetic".into()), Err(not_json));
+    assert!(!target.0.exists());
+    // Collections without a secret are written where the location says.
+    assert_eq!(save(clean.clone()), Ok(()));
+    assert_eq!(resolved.get(), 1);
+    assert_eq!(std::fs::read_to_string(&target.0).unwrap(), clean);
 }
 
 /// Final Gate item H (stream 3 report): a failed connectivity check never

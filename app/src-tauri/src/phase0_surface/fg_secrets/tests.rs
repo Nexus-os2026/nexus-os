@@ -356,14 +356,21 @@ fn p0_fg_h_sign_in_flows_persist_no_token() {
 #[test]
 fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
     let apps = normalized(include_str!("../../commands/apps.rs"));
-    let connect = compact(&body(&apps, "pub(crate) fn messaging_connect_platform("));
+    // The command reads the configuration's token and the platforms' real
+    // endpoints only through its one call to the injected seam.
+    assert_eq!(
+        compact(&body(&apps, "pub(crate) fn messaging_connect_platform(")),
+        "messaging_connect_with(state,platform,token_value,stored_messaging_token,&MESSAGING_ENDPOINTS,)"
+    );
+    let connect = compact(&body(&apps, "fn messaging_connect_with("));
     assert!(
         in_order(
             &connect,
             &[
                 "messaging_platform(state,\"messaging_connect\",&platform)?;",
                 "iftoken_value!=STORED_SECRET{returnErr(deny(state,\"messaging_connect\",\"token_must_be_saved_first\"",
-                "stored_messaging_token(known)?",
+                "stored_token(known)?",
+                "check_messaging_connectivity(known,&token_value,endpoints)",
             ],
         ),
         "{connect}"
@@ -402,13 +409,17 @@ fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
 #[test]
 fn p0_fg_h_api_client_collections_are_checked_before_writing() {
     let apps = normalized(include_str!("../../commands/apps.rs"));
-    let save = compact(&body(&apps, "pub(crate) fn api_client_save_collections("));
+    assert_eq!(
+        compact(&body(&apps, "pub(crate) fn api_client_save_collections(")),
+        "save_api_collections_to(data_json,api_collections_path)"
+    );
+    let save = compact(&body(&apps, "fn save_api_collections_to("));
     assert!(
         in_order(
             &save,
             &[
                 "refuse_api_client_secrets(&data_json)?;",
-                "api_collections_path()?",
+                "letpath=path()?;",
                 "std::fs::write(",
             ],
         ),
