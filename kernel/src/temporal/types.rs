@@ -16,6 +16,9 @@ pub enum TemporalError {
     LlmError(String),
     /// Fork count must be >= 1.
     InvalidForkCount(u32),
+    /// A dilated session's iteration count is outside
+    /// `1..=MAX_DILATED_ITERATIONS`.
+    InvalidIterationCount(u32),
     /// Requested fork/decision not found.
     NotFound(String),
     /// Checkpoint operation failed.
@@ -34,6 +37,11 @@ impl fmt::Display for TemporalError {
             }
             Self::LlmError(msg) => write!(f, "LLM error: {msg}"),
             Self::InvalidForkCount(n) => write!(f, "invalid fork count: {n}"),
+            Self::InvalidIterationCount(n) => write!(
+                f,
+                "invalid iteration count: {n} (allowed: 1 to {})",
+                super::dilation::MAX_DILATED_ITERATIONS
+            ),
             Self::NotFound(id) => write!(f, "not found: {id}"),
             Self::CheckpointError(msg) => write!(f, "checkpoint error: {msg}"),
             Self::ParseError(msg) => write!(f, "parse error: {msg}"),

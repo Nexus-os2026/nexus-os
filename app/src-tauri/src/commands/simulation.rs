@@ -361,6 +361,10 @@ pub(crate) fn run_dilated_session(
     agent_ids: Vec<String>,
     max_iterations: u32,
 ) -> Result<String, String> {
+    // Refused before the configuration is read or a provider is built; the
+    // kernel applies the same bound again before either closure runs.
+    let max_iterations = nexus_kernel::temporal::dilation::check_iteration_count(max_iterations)
+        .map_err(|e| e.to_string())?;
     let config = load_config().map_err(agent_error)?;
     let provider_config = build_provider_config(&config);
     let provider = select_provider(&provider_config).map_err(|e| e.to_string())?;
@@ -433,7 +437,13 @@ pub(crate) fn run_dilated_session(
         Ok((score, feedback))
     };
 
-    let dilator = state.time_dilator.lock().unwrap_or_else(|p| p.into_inner());
+    // A snapshot of the dilator's settings: no lock is held across the
+    // provider calls the session makes.
+    let dilator = state
+        .time_dilator
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
     let session = dilator
         .run_dilated_session(
             &task,
