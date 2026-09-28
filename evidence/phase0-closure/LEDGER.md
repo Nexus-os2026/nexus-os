@@ -25,7 +25,7 @@ PR #15: open, draft, unmerged, auto-merge off, head `1b049e15`, base `main@80640
 2. **FG1 post-integration dispatch (sent once, never resend).**
    `gh workflow run ci.yml --ref rebuild/phase0-trust-boundary --raw-field candidate_sha=71c47acb…`
    at 2026-09-28T16:38:33.967Z, exit 0. Run `36452512718` (#108), attempt 1.
-   Result: in progress at the time of this entry.
+   Result: **success**, all five jobs (see `FG1-POST-INTEGRATION.md`).
 
 ## Working branches (all rooted at `71c47acb`)
 
@@ -41,4 +41,5 @@ PR #15: open, draft, unmerged, auto-merge off, head `1b049e15`, base `main@80640
 
 ## Current activity
 
+- FG1 post-integration evidence recorded; awaiting Architect review.
 - Six workstreams are in read-only reachability investigation.
