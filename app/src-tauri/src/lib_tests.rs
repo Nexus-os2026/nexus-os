@@ -511,15 +511,78 @@ fn test_prebuilt_manifest_count_is_nonzero() {
     assert!(!paths.is_empty());
 }
 
+/// The prebuilt manifests at autonomy level 6, by agent name.
+const TRANSCENDENT_PREBUILT: [&str; 12] = [
+    "nexus-arbiter",
+    "nexus-architect-prime",
+    "nexus-ascendant",
+    "nexus-continuum",
+    "nexus-genesis-prime",
+    "nexus-legion",
+    "nexus-mirror",
+    "nexus-oracle-omega",
+    "nexus-oracle-supreme",
+    "nexus-prime",
+    "nexus-warden",
+    "nexus-weaver",
+];
+
+/// (name, autonomy level, manifest JSON) of every prebuilt manifest.
+fn prebuilt_manifests() -> Vec<(String, Option<u8>, String)> {
+    list_prebuilt_manifest_paths()
+        .iter()
+        .map(|path| {
+            let json = std::fs::read_to_string(path).unwrap();
+            let manifest = parse_agent_manifest_json(&json).unwrap();
+            (manifest.name, manifest.autonomy_level, json)
+        })
+        .collect()
+}
+
+/// How many prebuilt manifests are below L6, after checking that the L6 ones
+/// are exactly `TRANSCENDENT_PREBUILT`.
+fn prebuilt_count_below_l6() -> usize {
+    let manifests = prebuilt_manifests();
+    let mut transcendent: Vec<&str> = manifests
+        .iter()
+        .filter(|(_, level, _)| *level == Some(6))
+        .map(|(name, _, _)| name.as_str())
+        .collect();
+    transcendent.sort_unstable();
+    assert_eq!(transcendent, TRANSCENDENT_PREBUILT);
+    manifests.len() - TRANSCENDENT_PREBUILT.len()
+}
+
+/// (name, autonomy level) of every agent registered with the supervisor,
+/// sorted.
+fn registered_agents(state: &AppState) -> Vec<(String, u8)> {
+    let supervisor = state.supervisor.lock().unwrap();
+    let mut agents: Vec<(String, u8)> = supervisor
+        .health_check()
+        .into_iter()
+        .filter_map(|status| supervisor.get_agent(status.id))
+        .map(|handle| (handle.manifest.name.clone(), handle.autonomy_level))
+        .collect();
+    agents.sort();
+    agents
+}
+
+/// Every prebuilt manifest below L6 is stored and registered. None of the
+/// twelve L6 manifests is (P0-FINAL-GATE item G). This test used to be
+/// `test_load_prebuilt_agents_registers_every_manifest`. It asserted that
+/// every manifest was stored, the L6 ones included, and so pinned the
+/// loader's registration of L6 agents.
 #[test]
-fn test_load_prebuilt_agents_registers_every_manifest() {
+fn test_load_prebuilt_agents_loads_every_manifest_below_l6() {
     let state = AppState::new_in_memory();
     state.load_prebuilt_agents();
-    let agents = state.db.list_agents().unwrap_or_else(|e| {
-        eprintln!("operation failed: {e}");
-        std::process::exit(1)
-    });
-    assert_eq!(agents.len(), list_prebuilt_manifest_paths().len());
+    let below = prebuilt_count_below_l6();
+    let rows = state.db.list_agents().unwrap();
+    assert_eq!(rows.len(), below);
+    assert!(rows.iter().all(|row| row.autonomy_level < 6));
+    let registered = registered_agents(&state);
+    assert_eq!(registered.len(), below);
+    assert!(registered.iter().all(|(_, level)| *level < 6));
 }
 
 #[test]
@@ -531,7 +594,8 @@ fn test_load_prebuilt_agents_skips_duplicate_names() {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
-    assert_eq!(agents.len(), list_prebuilt_manifest_paths().len());
+    // The L6 manifests are never loaded (P0-FINAL-GATE item G).
+    assert_eq!(agents.len(), prebuilt_count_below_l6());
 }
 
 #[test]
@@ -543,7 +607,8 @@ fn test_list_agents_includes_stopped_prebuilt_agents_from_persistence() {
         eprintln!("list_agents should succeed: {e}");
         std::process::exit(1)
     });
-    let manifest_count = list_prebuilt_manifest_paths().len();
+    // The L6 manifests are never loaded (P0-FINAL-GATE item G).
+    let manifest_count = prebuilt_count_below_l6();
 
     assert_eq!(agents.len(), manifest_count);
     assert!(agents.iter().all(|agent| !agent.id.trim().is_empty()));
@@ -559,19 +624,112 @@ fn test_get_preinstalled_agents_keeps_persisted_agent_ids() {
         eprintln!("preinstalled agent query should succeed: {e}");
         std::process::exit(1)
     });
-    let manifest_count = list_prebuilt_manifest_paths().len();
+    // The L6 manifests are never loaded (P0-FINAL-GATE item G).
+    let manifest_count = prebuilt_count_below_l6();
 
     assert_eq!(agents.len(), manifest_count);
     assert!(agents.iter().all(|agent| !agent.agent_id.trim().is_empty()));
     assert!(agents.iter().any(|agent| agent.name == "nexus-oracle"));
 }
 
+/// P0-FINAL-GATE (item G): the real startup order, restore then the prebuilt
+/// load, registers no L6 (transcendent) agent on any run:
+/// - a first run over an empty store;
+/// - a restart over that store, after an earlier build also stored the
+///   twelve L6 prebuilt records there (some running, some stopped);
+/// - a further restart.
+///
+/// The L6 records stay exactly as stored, and every run registers the same
+/// agents.
+#[test]
+fn p0_fg_startup_registers_no_transcendent_agent_on_any_run() {
+    let below = prebuilt_count_below_l6();
+    let copy_store = |rows: Vec<nexus_persistence::AgentRow>| {
+        let state = AppState::new_in_memory();
+        for row in rows {
+            state
+                .db
+                .save_agent(
+                    &row.id,
+                    &row.manifest_json,
+                    &row.state,
+                    row.autonomy_level,
+                    &row.execution_mode,
+                )
+                .unwrap();
+        }
+        state
+    };
+
+    let first = AppState::new_in_memory();
+    first.load_agents_deferred();
+    let registered = registered_agents(&first);
+    assert_eq!(registered.len(), below);
+    assert!(registered.iter().all(|(_, level)| *level < 6));
+    let stored = first.db.list_agents().unwrap();
+    assert_eq!(stored.len(), below);
+    assert!(stored.iter().all(|row| row.autonomy_level < 6));
+
+    let second = copy_store(stored);
+    let mut transcendent_ids = Vec::new();
+    for (index, (_, _, json)) in prebuilt_manifests()
+        .into_iter()
+        .filter(|(_, level, _)| *level == Some(6))
+        .enumerate()
+    {
+        let id = Uuid::new_v4().to_string();
+        let stored_state = if index % 2 == 0 { "running" } else { "stopped" };
+        second
+            .db
+            .save_agent(&id, &json, stored_state, 6, "native")
+            .unwrap();
+        transcendent_ids.push(id);
+    }
+    let transcendent_rows = |state: &AppState| {
+        let mut rows: Vec<_> = state
+            .db
+            .list_agents()
+            .unwrap()
+            .into_iter()
+            .filter(|row| transcendent_ids.contains(&row.id))
+            .map(|row| {
+                (
+                    row.id,
+                    row.manifest_json,
+                    row.state,
+                    row.was_running,
+                    row.autonomy_level,
+                    row.execution_mode,
+                    row.updated_at,
+                )
+            })
+            .collect();
+        rows.sort();
+        rows
+    };
+    let before = transcendent_rows(&second);
+    assert_eq!(before.len(), TRANSCENDENT_PREBUILT.len());
+    assert!(before.iter().any(|row| row.3), "a running L6 record");
+    second.load_agents_deferred();
+    assert_eq!(registered_agents(&second), registered);
+    assert_eq!(transcendent_rows(&second), before);
+
+    let third = copy_store(second.db.list_agents().unwrap());
+    let before = transcendent_rows(&third);
+    third.load_agents_deferred();
+    assert_eq!(registered_agents(&third), registered);
+    assert_eq!(transcendent_rows(&third), before);
+}
+
 /// P0-FINAL-GATE (item G): starting an L6 (transcendent) agent used to
 /// enqueue an activation review that any caller could approve over IPC. It
 /// is now refused before the agent's state changes, and no review is
 /// enqueued. The refusal holds whether the stored record or the registered
-/// agent says L6. (An L6 agent can no longer be created or restored; the
-/// registration below stands in for one registered before this closure.)
+/// agent says L6. (No current route registers an L6 agent: creation refuses
+/// it, restore skips it and the prebuilt load skips L6 manifests. See
+/// `p0_fg_startup_registers_no_transcendent_agent_on_any_run`. The direct
+/// registration below stands in for an L6 agent that some other route
+/// might register.)
 #[test]
 fn p0_fg_transcendent_activation_is_refused_and_changes_nothing() {
     use crate::phase0_surface::{closed, Closure};

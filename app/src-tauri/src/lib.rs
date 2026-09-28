@@ -1463,6 +1463,10 @@ impl AppState {
     }
 
     /// Heavy agent loading deferred from `new()` so the GUI thread is not blocked.
+    ///
+    /// P0-FINAL-GATE (item G): stored records are restored first, then the
+    /// prebuilt manifests are loaded. Neither step registers an L6
+    /// (transcendent) agent, on the first run or any later one.
     fn load_agents_deferred(&self) {
         restore_persisted_agents(self);
         self.load_prebuilt_agents();

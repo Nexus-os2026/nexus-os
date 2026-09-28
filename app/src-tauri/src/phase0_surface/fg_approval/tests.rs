@@ -299,21 +299,57 @@ fn position(body: &str, needle: &str) -> usize {
 }
 
 /// P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human approval
-/// the backend cannot verify, so L6 is unavailable. Each route that created,
-/// started or registered one refuses first, with the bounded
-/// `ApprovalRequired` reason, before any state changes:
+/// the backend cannot verify, so L6 is unavailable. Before any state
+/// changes, the desktop routes that create, start, register or load an agent
+/// refuse an L6 one with the bounded `ApprovalRequired` reason, or skip it:
 /// - `create_agent` refuses level 6 right after parsing, before anything is
 ///   written;
 /// - `start_agent` refuses before the agent is restarted, stored or audited;
 /// - restore registers no level-6 record and writes nothing to it;
+/// - the prebuilt load skips a level-6 manifest before the manifest is
+///   registered, stored, named or published;
 /// - `approve_consent_request` and `batch_approve_consents` refuse a
 ///   transcendent request before resolving anything, and nothing in the
 ///   consent module creates or starts an agent;
 /// - nothing enqueues a transcendent request any more.
+///
+/// (The earlier version of this guard said each such route refused first.
+/// It did not check the prebuilt load, which still registered the twelve L6
+/// prebuilt manifests whenever it found them.)
 #[test]
 fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
     let agents = include_str!("../../commands/agents.rs");
     let consent = include_str!("../../commands/consent.rs");
+    let chat = include_str!("../../commands/chat_llm.rs");
+
+    let (_, load) = fn_shape(chat, "load_prebuilt_agents");
+    let skip = position(&load, "ifmanifest.autonomy_level==Some(6){");
+    assert!(
+        load[skip..].starts_with(concat!(
+            "ifmanifest.autonomy_level==Some(6){eprintln!(",
+            "\"prebuilt:{}notloaded:transcendent(L6)agentsareunavailableinPhaseZero\",",
+            "manifest.name);continue;}",
+        )),
+        "{load}"
+    );
+    assert!(skip > position(&load, "parse_agent_manifest_json(&manifest_json)"));
+    for later in [
+        "existing_names.contains(",
+        "supervisor.start_agent(",
+        "self.db.save_agent(",
+        "meta.insert(",
+        "publish_prebuilt_manifest_to_marketplace(",
+        "existing_names.insert(",
+    ] {
+        assert!(
+            skip < position(&load, later),
+            "load_prebuilt_agents: {later}"
+        );
+    }
+    let lib = without_whitespace(&code_lines(include_str!("../../lib.rs")));
+    assert!(lib.contains(
+        "fnload_agents_deferred(&self){restore_persisted_agents(self);self.load_prebuilt_agents();}"
+    ));
 
     let (_, create) = fn_shape(agents, "create_agent");
     assert!(
