@@ -53,10 +53,15 @@ pub trait WebSearchBackend: Send + Sync {
 /// Default backend that uses curl subprocesses. Works everywhere, no deps.
 pub struct CurlWebBackend;
 
-/// SearXNG instance URL. Configurable via SEARXNG_URL env var.
-/// Default: http://localhost:8080 (local Docker instance).
+/// The operator's SearXNG instance (`SEARXNG_URL`), if one is configured and
+/// answers its health probe.
+///
+/// Final Gate item B (Architect decision D6): there is no default instance.
+/// A service that happens to listen on a guessed local port is not an
+/// authorized search service, and model-chosen queries are never sent to
+/// one; without `SEARXNG_URL`, search uses only its fixed public hosts.
 fn searxng_url() -> Option<String> {
-    let url = std::env::var("SEARXNG_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let url = searxng_base(std::env::var_os("SEARXNG_URL"))?;
     // Quick probe: if SearXNG isn't running, don't waste time on it
     // P0-002C5B: the operator URL is checked; an invalid one disables search
     // through SearXNG rather than reaching curl.
@@ -75,6 +80,17 @@ fn searxng_url() -> Option<String> {
         }
     }
     None
+}
+
+/// The operator's SearXNG base URL: an http(s) URL with a host and no user
+/// information, query or fragment, without a trailing `/`. Anything else,
+/// including no value, is no instance.
+fn searxng_base(operator: Option<std::ffi::OsString>) -> Option<String> {
+    let url = crate::governed_http::http_url(&operator?.into_string().ok()?).ok()?;
+    if url.query().is_some() || url.fragment().is_some() {
+        return None;
+    }
+    Some(url.as_str().trim_end_matches('/').to_string())
 }
 
 impl WebSearchBackend for CurlWebBackend {
@@ -965,6 +981,46 @@ mod tests {
                 "io error: URL must be an http or https URL with a host",
                 "{url:?}"
             );
+        }
+    }
+
+    /// Final Gate item B (Architect decision D6): SearXNG is used only at an
+    /// address the operator configured. With none, search names no instance
+    /// and no local port is guessed; an unusable value is no instance.
+    #[test]
+    fn p0_fg_searxng_needs_an_operator_address() {
+        assert_eq!(searxng_base(None), None);
+        assert_eq!(
+            searxng_base(Some("http://search.lan:8888/".into())),
+            Some("http://search.lan:8888".to_string())
+        );
+        assert_eq!(
+            searxng_base(Some("https://search.example/searx/".into())),
+            Some("https://search.example/searx".to_string())
+        );
+        for unusable in [
+            "",
+            "search.lan:8888",
+            "ftp://search.lan",
+            "file:///search",
+            "http://user:secret@search.lan",
+            "http://search.lan/?q=1",
+            "http://search.lan/#top",
+            " http://search.lan",
+        ] {
+            assert_eq!(searxng_base(Some(unusable.into())), None, "{unusable:?}");
+        }
+        let production = include_str!("web.rs")
+            .split("#[cfg(test)]\nmod tests")
+            .next()
+            .unwrap()
+            .replace("\r\n", "\n");
+        for guessed in [
+            "localhost:8080",
+            "127.0.0.1:8080",
+            "unwrap_or_else(|_| \"http",
+        ] {
+            assert!(!production.contains(guessed), "{guessed}");
         }
     }
 }
