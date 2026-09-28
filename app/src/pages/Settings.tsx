@@ -39,7 +39,9 @@ interface SettingsProps {
 }
 
 type SettingsSection = "general" | "llm" | "api" | "privacy" | "voice" | "models" | "tools" | "about";
-type ServiceStatus = "unknown" | "testing" | "ok" | "error";
+// "format-ok" / "format-error" come from a local format check only; no key is
+// verified with its provider from the webview (see testKey).
+type ServiceStatus = "unknown" | "format-ok" | "format-error";
 
 interface ApiKeyDef {
   id: string;
@@ -216,22 +218,20 @@ export function Settings({
     // api.anthropic.com carrying the secret straight from the privileged
     // origin (credential egress), and the restrictive CSP's `connect-src` no
     // longer permits it. A live provider check must go through a governed
-    // backend path; until one exists, this is a local format check only.
+    // backend path; until one exists, this is a local format check only, and
+    // the result says so: it never reports a key as connected or verified.
     const ok = !!value && value.trim().length > 4;
-    setStatuses((prev) => ({ ...prev, [id]: ok ? "ok" : "error" }));
+    setStatuses((prev) => ({ ...prev, [id]: ok ? "format-ok" : "format-error" }));
   }
 
   function statusLabel(s: ServiceStatus): JSX.Element {
-    if (s === "testing") return <><RefreshCw size={12} className="inline-icon spin" /> Testing...</>;
-    if (s === "ok") return <><Check size={12} className="inline-icon" /> Connected</>;
-    if (s === "error") return <><X size={12} className="inline-icon" /> Invalid</>;
+    if (s === "format-ok") return <>Format looks valid (not verified)</>;
+    if (s === "format-error") return <><X size={12} className="inline-icon" /> Invalid format</>;
     return <>Not Set</>;
   }
 
   function statusClass(s: ServiceStatus): string {
-    if (s === "ok") return "status-ok";
-    if (s === "error") return "status-error";
-    if (s === "testing") return "status-testing";
+    if (s === "format-error") return "status-error";
     return "status-none";
   }
 
@@ -1051,8 +1051,13 @@ export function Settings({
                     <button type="button" className="st-api-save-btn cursor-pointer" onClick={onSave} disabled={saving}>
                       Save
                     </button>
-                    <button type="button" className="st-api-test-btn cursor-pointer" onClick={() => testKey(key.id, key.value)}>
-                      Test Connection
+                    <button
+                      type="button"
+                      className="st-api-test-btn cursor-pointer"
+                      title="Checks the key's format only; it is not sent to the provider or verified"
+                      onClick={() => testKey(key.id, key.value)}
+                    >
+                      Check Format
                     </button>
                   </div>
                 </div>
@@ -1082,8 +1087,13 @@ export function Settings({
                   <button type="button" className="st-api-save-btn cursor-pointer" onClick={onSave} disabled={saving}>
                     Save
                   </button>
-                  <button type="button" className="st-api-test-btn cursor-pointer" onClick={() => testKey(key.id, key.value)}>
-                    Validate
+                  <button
+                    type="button"
+                    className="st-api-test-btn cursor-pointer"
+                    title="Checks the token's format only; it is not sent to the service or verified"
+                    onClick={() => testKey(key.id, key.value)}
+                  >
+                    Check Format
                   </button>
                 </div>
               </div>
