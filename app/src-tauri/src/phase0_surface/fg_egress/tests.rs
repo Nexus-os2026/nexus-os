@@ -673,3 +673,45 @@ fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
         assert!(!ensure.contains(forbidden), "ensure_ollama: {forbidden}");
     }
 }
+
+/// Final Gate item C (redaction): a messaging transport error names no
+/// request URL, so a stored Telegram bot token, which travels in the URL
+/// path, never reaches the interface through an error. The failing request
+/// here goes to a closed loopback port.
+#[test]
+fn p0_fg_messaging_errors_never_carry_the_bot_token() {
+    let closed_port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap();
+    let url = format!("http://{closed_port}/bot123456:fg-secret-token/sendMessage");
+    let error = crate::block_on_async(async { reqwest::Client::new().post(&url).send().await })
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("fg-secret-token"),
+        "precondition: reqwest names the URL in its errors"
+    );
+    let reported = crate::commands::apps::messaging_transport_error("telegram send", error);
+    assert!(reported.starts_with("telegram send: "), "{reported}");
+    assert!(!reported.contains("fg-secret-token"), "{reported}");
+    assert!(!reported.contains("sendMessage"), "{reported}");
+
+    let apps = include_str!("../../commands/apps.rs");
+    let start = apps.find("pub(crate) fn messaging_send(").unwrap();
+    let end = apps[start..]
+        .find("pub(crate) fn messaging_poll_messages(")
+        .map(|at| start + at)
+        .unwrap();
+    let poll_end = apps[end..].find("\n}\n").map(|at| end + at).unwrap();
+    for (name, body) in [
+        ("messaging_send", &apps[start..end]),
+        ("messaging_poll_messages", &apps[end..poll_end]),
+    ] {
+        assert_eq!(
+            body.matches("messaging_transport_error(").count(),
+            6,
+            "{name}"
+        );
+        assert!(!body.contains("{e}\"))"), "{name} formats a raw error");
+    }
+}

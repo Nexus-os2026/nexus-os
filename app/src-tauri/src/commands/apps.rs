@@ -1390,6 +1390,15 @@ pub(crate) fn messaging_connect_platform(
     Ok(test_result)
 }
 
+/// Final Gate item C (redaction): a messaging transport error without the
+/// request URL. reqwest names the URL in its errors, and a Telegram URL
+/// carries the stored bot token in its path, so an error returned to the
+/// interface as given would hand it the stored token. The URL is dropped
+/// from every messaging error, whatever the platform.
+pub(crate) fn messaging_transport_error(context: &str, error: reqwest::Error) -> String {
+    format!("{context}: {}", error.without_url())
+}
+
 pub(crate) fn messaging_send(
     state: &AppState,
     platform: String,
@@ -1420,8 +1429,11 @@ pub(crate) fn messaging_send(
                     .json(&json!({"chat_id": channel, "text": text}))
                     .send()
                     .await
-                    .map_err(|e| format!("telegram send: {e}"))?;
-                let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
+                    .map_err(|e| messaging_transport_error("telegram send", e))?;
+                let body = resp
+                    .text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))?;
                 Ok(body)
             }
             "slack" => {
@@ -1431,8 +1443,11 @@ pub(crate) fn messaging_send(
                     .json(&json!({"channel": channel, "text": text}))
                     .send()
                     .await
-                    .map_err(|e| format!("slack send: {e}"))?;
-                let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
+                    .map_err(|e| messaging_transport_error("slack send", e))?;
+                let body = resp
+                    .text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))?;
                 Ok(body)
             }
             "discord" => {
@@ -1443,8 +1458,11 @@ pub(crate) fn messaging_send(
                     .json(&json!({"content": text}))
                     .send()
                     .await
-                    .map_err(|e| format!("discord send: {e}"))?;
-                let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
+                    .map_err(|e| messaging_transport_error("discord send", e))?;
+                let body = resp
+                    .text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))?;
                 Ok(body)
             }
             _ => Err(format!("Unknown platform: {platform}")),
@@ -1486,8 +1504,10 @@ pub(crate) fn messaging_poll_messages(
                     .get(&url)
                     .send()
                     .await
-                    .map_err(|e| format!("telegram poll: {e}"))?;
-                resp.text().await.map_err(|e| format!("body: {e}"))
+                    .map_err(|e| messaging_transport_error("telegram poll", e))?;
+                resp.text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))
             }
             "slack" => {
                 let resp = reqwest::Client::new()
@@ -1496,8 +1516,10 @@ pub(crate) fn messaging_poll_messages(
                     .query(&[("channel", channel.as_str()), ("limit", "20")])
                     .send()
                     .await
-                    .map_err(|e| format!("slack poll: {e}"))?;
-                resp.text().await.map_err(|e| format!("body: {e}"))
+                    .map_err(|e| messaging_transport_error("slack poll", e))?;
+                resp.text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))
             }
             "discord" => {
                 let url = format!(
@@ -1509,8 +1531,10 @@ pub(crate) fn messaging_poll_messages(
                     .header("Authorization", format!("Bot {}", token))
                     .send()
                     .await
-                    .map_err(|e| format!("discord poll: {e}"))?;
-                resp.text().await.map_err(|e| format!("body: {e}"))
+                    .map_err(|e| messaging_transport_error("discord poll", e))?;
+                resp.text()
+                    .await
+                    .map_err(|e| messaging_transport_error("body", e))
             }
             _ => Err(format!("Unknown platform: {platform}")),
         }
