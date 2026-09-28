@@ -3,11 +3,12 @@
 //! The protocols server (`nexus-protocols-server`, J2) and its `nexus-os`
 //! alias (J3), `nexus-cli` (J4) and the standalone `nx` terminal (J5) are
 //! withdrawn, together with the alternate `coding-agent` and
-//! `social-poster-agent` entry points and the `nx-*` computer-use harness
-//! (coordinator decisions D1 and D2), on the pattern of `crates/nexus-server`
-//! (J1). Each package's `tests/phase0_withdrawal.rs` runs its withdrawn
-//! executables and pins their sources and recipes. The guards here are
-//! workspace-wide:
+//! `social-poster-agent` entry points, the `nx-*` computer-use harness
+//! (coordinator decisions D1 and D2) and the five benchmarks that sent a
+//! provider key on curl's command line (coordinator decision after internal
+//! review), on the pattern of `crates/nexus-server` (J1). Each package's
+//! `tests/phase0_withdrawal.rs` runs its withdrawn executables and pins their
+//! sources and recipes. The guards here are workspace-wide:
 //!
 //! - every effective binary (and example) target of the workspace is
 //!   inventoried with its disposition, so a new or changed entry point fails
@@ -88,7 +89,7 @@ const BINARY_TARGETS: &[(&str, &str, &str, Disposition)] = &[
         "benchmarks/conductor-bench",
         "cloud-models-bench",
         "src/cloud_models_bench.rs",
-        Benchmark,
+        Withdrawn,
     ),
     (
         "benchmarks/conductor-bench",
@@ -112,13 +113,13 @@ const BINARY_TARGETS: &[(&str, &str, &str, Disposition)] = &[
         "benchmarks/conductor-bench",
         "inference-consistency-bench",
         "src/inference_consistency_bench.rs",
-        Benchmark,
+        Withdrawn,
     ),
     (
         "benchmarks/conductor-bench",
         "local-vs-cloud-battle",
         "src/local_vs_cloud_battle.rs",
-        Benchmark,
+        Withdrawn,
     ),
     (
         "benchmarks/conductor-bench",
@@ -136,13 +137,13 @@ const BINARY_TARGETS: &[(&str, &str, &str, Disposition)] = &[
         "benchmarks/conductor-bench",
         "nim-cloud-bench",
         "src/nim_cloud_bench.rs",
-        Benchmark,
+        Withdrawn,
     ),
     (
         "benchmarks/conductor-bench",
         "real-agent-validation",
         "src/real_agent_validation.rs",
-        Benchmark,
+        Withdrawn,
     ),
     (
         "benchmarks/conductor-bench",
@@ -516,7 +517,7 @@ fn p0_fg_standalone_every_binary_target_is_inventoried() {
             ),
         }
     }
-    assert_eq!(messages.len(), 12, "twelve binaries are withdrawn");
+    assert_eq!(messages.len(), 17, "seventeen binaries are withdrawn");
     for message in messages.keys() {
         for other in messages.keys().filter(|other| *other != message) {
             assert!(
@@ -791,6 +792,11 @@ const WITHDRAWN_BINARIES: &[&str] = &[
     "nx-agent",
     "nx-govern",
     "nx-learn",
+    "nim-cloud-bench",
+    "cloud-models-bench",
+    "inference-consistency-bench",
+    "local-vs-cloud-battle",
+    "real-agent-validation",
 ];
 
 /// No workflow builds, installs, uploads or publishes a withdrawn binary, a
