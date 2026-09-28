@@ -1,16 +1,12 @@
+# WITHDRAWN during Phase Zero (P0-FINAL-GATE-CLOSURE, dossier item J4).
+#
+# This unit ran /usr/bin/nexus-cli as a service (Restart=on-failure) for the
+# package built by scripts/build_linux_deb.sh. nexus-cli is withdrawn: it only
+# prints a withdrawal message. (It never ran as a working service: without a
+# command it exited with a usage error.)
+#
+# This file has no [Service] and no [Install] section: systemd refuses to
+# start it (it has no ExecStart=) and it cannot be enabled. It does not stop,
+# disable or remove a unit installed by an earlier package.
 [Unit]
-Description=NEXUS OS Agent Runtime Service
-After=network.target
-
-[Service]
-Type=simple
-User=nexus
-Group=nexus
-ExecStart=/usr/bin/nexus-cli
-Restart=on-failure
-RestartSec=3
-Environment=RUST_LOG=info
-WorkingDirectory=/var/lib/nexus-os
-
-[Install]
-WantedBy=multi-user.target
+Description=WITHDRAWN during Phase Zero: this unit starts nothing

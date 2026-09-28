@@ -667,3 +667,233 @@ fn p0_j2_j3_package_has_no_other_entry_point() {
         );
     }
 }
+
+// ── Withdrawn deployment recipes at the repository root ─────────────────────
+
+fn workspace_root() -> PathBuf {
+    manifest_dir().join("..")
+}
+
+/// Lines that are neither blank nor `#` comments (a shebang counts as a
+/// comment).
+fn directive_lines(text: &str) -> Vec<&str> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect()
+}
+
+/// The root Dockerfile (the protocols server image) fails at its first step
+/// with the withdrawal message. It has one stage, no parser directive that
+/// could swap the frontend, and no package installation, source copy, build,
+/// entry point, port, health check, volume or environment.
+#[test]
+fn p0_j2_j3_docker_recipe_fails_before_any_build_step() {
+    let dockerfile = read(&workspace_root().join("Dockerfile"));
+    for line in dockerfile.lines() {
+        let lower = line.trim().to_ascii_lowercase();
+        let directive = lower.trim_start_matches('#').trim_start();
+        assert!(
+            !(lower.starts_with('#')
+                && ["syntax", "escape", "check"]
+                    .iter()
+                    .any(|key| directive.starts_with(key) && directive.contains('='))),
+            "no Dockerfile parser directive is allowed: {line}"
+        );
+    }
+    assert_eq!(
+        directive_lines(&dockerfile),
+        [
+            "FROM debian:bookworm-slim",
+            "RUN echo \"nexus-protocols-server: Dockerfile is withdrawn during Phase Zero; \
+             no image is built\" >&2; exit 1",
+        ],
+        "Dockerfile must fail at its first step and build nothing"
+    );
+    let upper = directive_lines(&dockerfile).join("\n").to_ascii_uppercase();
+    for forbidden in [
+        "COPY",
+        "ADD ",
+        "CARGO",
+        "APT",
+        "ENTRYPOINT",
+        "CMD",
+        "EXPOSE",
+        "HEALTHCHECK",
+        "VOLUME",
+        "USER",
+        "WORKDIR",
+        "ENV ",
+        "ARG ",
+        "ONBUILD",
+        " AS ",
+    ] {
+        assert!(
+            !upper.contains(forbidden),
+            "Dockerfile must not use {forbidden}"
+        );
+    }
+}
+
+/// The root Compose recipe is a non-operational stub: no service, port,
+/// build, image, volume, credential or restart policy, including the Ollama,
+/// PostgreSQL and high-availability services it used to define.
+#[test]
+fn p0_j2_j3_compose_recipe_defines_no_services() {
+    let compose = read(&workspace_root().join("docker-compose.yml"));
+    for forbidden in [
+        "ports:",
+        "image:",
+        "build:",
+        "environment:",
+        "env_file:",
+        "restart:",
+        "volumes:",
+        "command:",
+        "entrypoint:",
+        "secrets:",
+        "configs:",
+        "extends:",
+        "include:",
+        "profiles:",
+        "network_mode:",
+        "healthcheck:",
+        "depends_on:",
+        "deploy:",
+        "ollama",
+        "postgres",
+        "8080",
+        "9090",
+        "11434",
+        "5432",
+    ] {
+        assert!(
+            !directive_lines(&compose)
+                .iter()
+                .any(|line| line.to_ascii_lowercase().contains(forbidden)),
+            "docker-compose.yml must not define `{forbidden}`"
+        );
+    }
+    assert_eq!(
+        directive_lines(&compose),
+        [
+            "x-nexus-withdrawn: \"nexus-protocols-server: this Compose recipe is withdrawn \
+             during Phase Zero; it defines no services\"",
+            "services: {}",
+        ],
+        "docker-compose.yml must be the withdrawal stub"
+    );
+}
+
+/// The root Helm chart renders nothing: its only template is an
+/// unconditional `fail`, so no values override can produce a Deployment,
+/// Service, volume claim, CronJob or hook. Because rendering fails, an
+/// upgrade of an existing release changes nothing (and deletes nothing).
+#[test]
+fn p0_j2_j3_helm_chart_fails_for_every_values_override() {
+    let chart = workspace_root().join("helm").join("nexus-os");
+    assert_eq!(
+        entries(&workspace_root().join("helm")),
+        ["nexus-os"],
+        "helm/ holds only the withdrawn chart"
+    );
+    assert_eq!(entries(&chart), ["Chart.yaml", "templates", "values.yaml"]);
+    assert_eq!(entries(&chart.join("templates")), ["withdrawn.yaml"]);
+
+    let template = read(&chart.join("templates").join("withdrawn.yaml"));
+    assert_eq!(
+        directive_lines(&template),
+        [
+            "{{- fail \"helm/nexus-os chart: withdrawn during Phase Zero; it renders no \
+             resources\" -}}"
+        ],
+        "the only template must fail unconditionally"
+    );
+
+    let values = read(&chart.join("values.yaml"));
+    assert!(
+        directive_lines(&values).is_empty(),
+        "values.yaml must define no values"
+    );
+
+    let manifest = read(&chart.join("Chart.yaml"));
+    let manifest_lines = directive_lines(&manifest);
+    assert!(manifest_lines.contains(&"deprecated: true"));
+    assert!(manifest_lines.contains(&"type: application"));
+    assert!(manifest_lines
+        .iter()
+        .any(|line| line.starts_with("description: WITHDRAWN during Phase Zero")));
+    for forbidden in ["dependencies:", "kubeVersion:"] {
+        assert!(
+            !manifest_lines
+                .iter()
+                .any(|line| line.starts_with(forbidden)),
+            "Chart.yaml must not declare `{forbidden}`"
+        );
+    }
+}
+
+/// The `nexus-os` Makefile target builds, copies and runs nothing: it has no
+/// prerequisite and its one recipe line fails with the withdrawal message.
+/// No other target builds a protocols binary.
+#[test]
+fn p0_j3_make_target_builds_nothing() {
+    let makefile = read(&workspace_root().join("Makefile"));
+    let lines: Vec<&str> = makefile.lines().collect();
+    let rule = lines
+        .iter()
+        .position(|line| line.starts_with("nexus-os:"))
+        .expect("the nexus-os rule stays, withdrawn");
+    assert_eq!(lines[rule], "nexus-os:", "the rule has no prerequisite");
+    let recipe: Vec<&str> = lines[rule + 1..]
+        .iter()
+        .take_while(|line| line.starts_with('\t'))
+        .copied()
+        .collect();
+    assert_eq!(
+        recipe,
+        ["\t@echo \"make nexus-os: withdrawn during Phase Zero; nothing is built\" >&2; exit 1"],
+        "the nexus-os recipe must only fail"
+    );
+    for forbidden in [
+        "cargo",
+        "nexus-protocols",
+        "--bin",
+        "target/release",
+        "server_runtime",
+    ] {
+        assert!(
+            !makefile.contains(forbidden),
+            "Makefile must not contain `{forbidden}`"
+        );
+    }
+}
+
+/// The root installer downloads and installs nothing: after its comments it
+/// only prints the withdrawal and fails. It reads no environment variable
+/// (so no repository or release-API override), uses no network tool, no
+/// sudo and no install, archive or disk-image tool.
+#[test]
+fn p0_j3_install_script_downloads_and_installs_nothing() {
+    let script = read(&workspace_root().join("install.sh"));
+    assert!(script.starts_with("#!/usr/bin/env bash\n"));
+    assert_eq!(
+        directive_lines(&script),
+        [
+            "echo \"install.sh: withdrawn during Phase Zero; nothing is downloaded or \
+             installed\" >&2",
+            "exit 1",
+        ],
+        "install.sh must only print the withdrawal and fail"
+    );
+    let code = directive_lines(&script).join("\n");
+    for forbidden in [
+        "$", "curl", "wget", "sudo", "install ", "tar ", "dpkg", "hdiutil", "mktemp", "chmod",
+        "mv ", "cp ",
+    ] {
+        assert!(
+            !code.contains(forbidden),
+            "install.sh must not use `{forbidden}`"
+        );
+    }
+}

@@ -665,3 +665,109 @@ fn p0_j5_package_has_no_other_entry_point() {
         );
     }
 }
+
+// ── Withdrawn recipes for the standalone terminal ───────────────────────────
+
+/// Lines that are neither blank nor `#` comments (a shebang counts as a
+/// comment).
+fn directive_lines(text: &str) -> Vec<&str> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect()
+}
+
+/// `nexus-code/Dockerfile` fails at its first step with the withdrawal
+/// message: one stage, no parser directive, and no package installation,
+/// source copy, build or entry point.
+#[test]
+fn p0_j5_docker_recipe_fails_before_any_build_step() {
+    let dockerfile = read(&manifest_dir().join("Dockerfile"));
+    for line in dockerfile.lines() {
+        let lower = line.trim().to_ascii_lowercase();
+        let directive = lower.trim_start_matches('#').trim_start();
+        assert!(
+            !(lower.starts_with('#')
+                && ["syntax", "escape", "check"]
+                    .iter()
+                    .any(|key| directive.starts_with(key) && directive.contains('='))),
+            "no Dockerfile parser directive is allowed: {line}"
+        );
+    }
+    assert_eq!(
+        directive_lines(&dockerfile),
+        [
+            "FROM debian:bookworm-slim",
+            "RUN echo \"nx: nexus-code/Dockerfile is withdrawn during Phase Zero; no image is \
+             built\" >&2; exit 1",
+        ],
+        "nexus-code/Dockerfile must fail at its first step and build nothing"
+    );
+    let upper = directive_lines(&dockerfile).join("\n").to_ascii_uppercase();
+    for forbidden in [
+        "COPY",
+        "ADD ",
+        "CARGO",
+        "APT",
+        "ENTRYPOINT",
+        "CMD",
+        "EXPOSE",
+        "VOLUME",
+        "USER",
+        "WORKDIR",
+        "ENV ",
+        "ARG ",
+        "ONBUILD",
+        " AS ",
+    ] {
+        assert!(
+            !upper.contains(forbidden),
+            "nexus-code/Dockerfile must not use {forbidden}"
+        );
+    }
+}
+
+/// The `nx` installer downloads and installs nothing, and the benchmark
+/// script runs nothing (it used to run whichever `nx` came first on `PATH`).
+/// Neither reads an environment variable (no version or directory override,
+/// no provider key).
+#[test]
+fn p0_j5_install_and_benchmark_scripts_do_nothing() {
+    for (script, expected) in [
+        (
+            "install.sh",
+            [
+                "echo \"nexus-code/install.sh: withdrawn during Phase Zero; nothing is \
+                 downloaded or installed\" >&2",
+                "exit 1",
+            ],
+        ),
+        (
+            "scripts/run_benchmarks.sh",
+            [
+                "echo \"run_benchmarks.sh: withdrawn during Phase Zero; nothing is run\" >&2",
+                "exit 1",
+            ],
+        ),
+    ] {
+        let text = read(&manifest_dir().join(script));
+        assert!(
+            text.starts_with("#!/usr/bin/env bash\n"),
+            "{script}: shebang"
+        );
+        assert_eq!(
+            directive_lines(&text),
+            expected,
+            "nexus-code/{script} must only print the withdrawal and fail"
+        );
+        let code = directive_lines(&text).join("\n");
+        for forbidden in [
+            "$", "curl", "wget", "tar ", "mv ", "chmod", "mkdir", "cp ", "nx ", "API_KEY",
+        ] {
+            assert!(
+                !code.contains(forbidden),
+                "nexus-code/{script} must not use `{forbidden}`"
+            );
+        }
+    }
+}

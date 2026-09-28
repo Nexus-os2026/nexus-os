@@ -1,0 +1,5 @@
+# WITHDRAWN during Phase Zero (P0-FINAL-GATE-CLOSURE, dossier items J2 and J3).
+#
+# This is the chart's only template. It fails unconditionally, so helm
+# install, upgrade and template render no resources whatever values are set.
+{{- fail "helm/nexus-os chart: withdrawn during Phase Zero; it renders no resources" -}}

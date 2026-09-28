@@ -600,3 +600,278 @@ fn p0_j4_package_has_no_other_entry_point() {
         );
     }
 }
+
+// ── Withdrawn packaging and release recipes ─────────────────────────────────
+
+fn workspace_root() -> PathBuf {
+    manifest_dir().join("..")
+}
+
+/// Lines that are neither blank nor comments (`#`, and `;` for systemd; a
+/// shebang counts as a comment).
+fn directive_lines(text: &str) -> Vec<&str> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#') && !line.starts_with(';'))
+        .collect()
+}
+
+/// XML text with `<!-- ... -->` comments removed.
+fn strip_xml_comments(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("<!--") {
+        out.push_str(&rest[..start]);
+        match rest[start..].find("-->") {
+            Some(end) => rest = &rest[start + end + 3..],
+            None => panic!("unterminated XML comment"),
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The systemd unit and the launchd job that ran `nexus-cli` start nothing:
+/// the unit has no `[Service]` (systemd refuses a service without
+/// `ExecStart=`) and no `[Install]` (it cannot be enabled); the launchd job
+/// names no program and is disabled.
+#[test]
+fn p0_j4_service_units_start_nothing() {
+    let unit = read(&workspace_root().join("packaging/linux/nexus-os.service"));
+    assert_eq!(
+        directive_lines(&unit),
+        [
+            "[Unit]",
+            "Description=WITHDRAWN during Phase Zero: this unit starts nothing"
+        ],
+        "the systemd unit must be the withdrawal stub"
+    );
+    for forbidden in [
+        "[Service]",
+        "[Install]",
+        "ExecStart",
+        "ExecStop",
+        "WantedBy",
+        "Restart",
+        "/usr/bin/nexus-cli",
+    ] {
+        assert!(
+            !directive_lines(&unit).join("\n").contains(forbidden),
+            "the systemd unit must not contain `{forbidden}`"
+        );
+    }
+
+    let plist = strip_xml_comments(&read(
+        &workspace_root().join("packaging/macos/com.nexusos.agent.plist"),
+    ));
+    let plist = normalize_whitespace(&plist);
+    assert!(
+        plist.contains("<key>Disabled</key> <true/>"),
+        "the launchd job must be disabled"
+    );
+    for forbidden in [
+        "<key>Program</key>",
+        "ProgramArguments",
+        "RunAtLoad",
+        "KeepAlive",
+        "StartInterval",
+        "StartCalendarInterval",
+        "StartOnMount",
+        "WatchPaths",
+        "QueueDirectories",
+        "Sockets",
+        "WorkingDirectory",
+        "StandardOutPath",
+        "StandardErrorPath",
+        "nexus-cli",
+    ] {
+        assert!(
+            !plist.contains(forbidden),
+            "the launchd job must not contain `{forbidden}`"
+        );
+    }
+}
+
+/// The Homebrew formula raises as soon as it is loaded (it defines no
+/// formula, so nothing is fetched, built, installed or kept running), and the
+/// WiX source stops at a preprocessor error before compilation (no installer,
+/// no file, no component).
+#[test]
+fn p0_j4_homebrew_formula_and_msi_source_build_nothing() {
+    let formula = read(&workspace_root().join("packaging/macos/homebrew/nexus-os.rb"));
+    assert_eq!(
+        directive_lines(&formula),
+        ["raise \"nexus-os formula: withdrawn during Phase Zero; nothing is built or installed\""],
+        "the formula must only raise"
+    );
+    let code = directive_lines(&formula).join("\n");
+    for forbidden in [
+        "class ",
+        "Formula",
+        "url ",
+        "sha256",
+        "cargo",
+        "bin.install",
+        "service",
+        "system ",
+    ] {
+        assert!(
+            !code.contains(forbidden),
+            "the formula must not contain `{forbidden}`"
+        );
+    }
+
+    let wxs = strip_xml_comments(&read(
+        &workspace_root().join("packaging/windows/nexus-os.wxs"),
+    ));
+    assert_eq!(
+        normalize_whitespace(&wxs),
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?> \
+         <?error nexus-os.wxs: withdrawn during Phase Zero; no installer is built ?> \
+         <Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\" />",
+        "the WiX source must stop at the preprocessor error and define nothing"
+    );
+    for forbidden in [
+        "<Package",
+        "<File",
+        "<Component",
+        "<Directory",
+        "<Feature",
+        "Source=",
+        "nexus-cli.exe",
+    ] {
+        assert!(
+            !wxs.contains(forbidden),
+            "the WiX source must not contain `{forbidden}`"
+        );
+    }
+}
+
+/// The packaging scripts only print the withdrawal and fail: no build, no
+/// copy, no package tool, no argument or variable.
+#[test]
+fn p0_j4_packaging_scripts_build_nothing() {
+    for (script, shebang, expected) in [
+        (
+            "scripts/build_linux_deb.sh",
+            Some("#!/usr/bin/env bash\n"),
+            [
+                "echo \"build_linux_deb.sh: withdrawn during Phase Zero; nothing is built or \
+                 packaged\" >&2",
+                "exit 1",
+            ],
+        ),
+        (
+            "scripts/build_macos_release.sh",
+            Some("#!/usr/bin/env bash\n"),
+            [
+                "echo \"build_macos_release.sh: withdrawn during Phase Zero; nothing is built or \
+                 packaged\" >&2",
+                "exit 1",
+            ],
+        ),
+        (
+            "scripts/build_windows_msi.ps1",
+            None,
+            [
+                "[Console]::Error.WriteLine(\"build_windows_msi.ps1: withdrawn during Phase \
+                 Zero; nothing is built or packaged\")",
+                "exit 1",
+            ],
+        ),
+    ] {
+        let text = read(&workspace_root().join(script));
+        if let Some(shebang) = shebang {
+            assert!(text.starts_with(shebang), "{script}: shebang");
+        }
+        assert_eq!(
+            directive_lines(&text),
+            expected,
+            "{script} must only print the withdrawal and fail"
+        );
+        let code = directive_lines(&text).join("\n");
+        for forbidden in [
+            "$", "cargo", "target/", "dpkg", "wix ", "hdiutil", "tar ", "cp ", "param",
+        ] {
+            assert!(
+                !code.contains(forbidden),
+                "{script} must not use `{forbidden}`"
+            );
+        }
+    }
+}
+
+/// The packaging directories hold only the withdrawn recipes, so no other
+/// unit, job, formula or installer source for `nexus-cli` sits beside them.
+#[test]
+fn p0_j4_packaging_directories_hold_only_withdrawn_recipes() {
+    let packaging = workspace_root().join("packaging");
+    assert_eq!(entries(&packaging.join("linux")), ["nexus-os.service"]);
+    assert_eq!(
+        entries(&packaging.join("macos")),
+        ["com.nexusos.agent.plist", "homebrew"]
+    );
+    assert_eq!(entries(&packaging.join("macos/homebrew")), ["nexus-os.rb"]);
+    assert_eq!(entries(&packaging.join("windows")), ["nexus-os.wxs"]);
+}
+
+/// The GitLab `release-build` job builds and publishes nothing: it keeps its
+/// manual trigger on version tags but its script only prints the withdrawal
+/// and fails, and it declares no artifact. No job builds or exports the
+/// `nexus-cli` binary. The core test job still tests the `nexus-cli`
+/// package (its library and these withdrawal tests).
+#[test]
+fn p0_j4_gitlab_release_build_job_publishes_nothing() {
+    let ci = read(&workspace_root().join(".gitlab-ci.yml"));
+    let lines: Vec<&str> = ci.lines().collect();
+    let start = lines
+        .iter()
+        .position(|line| *line == "release-build:")
+        .expect("the release-build job stays, withdrawn");
+    let block: Vec<&str> = std::iter::once(lines[start])
+        .chain(
+            lines[start + 1..]
+                .iter()
+                .take_while(|line| line.is_empty() || line.starts_with(' '))
+                .copied(),
+        )
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect();
+    assert_eq!(
+        block,
+        [
+            "release-build:",
+            "stage: deploy",
+            "allow_failure: true",
+            "script:",
+            "- echo \"release-build is withdrawn during Phase Zero; nexus-cli is not built or \
+             published\" >&2",
+            "- exit 1",
+            "rules:",
+            "- if: $CI_COMMIT_TAG =~ /^v/",
+            "when: manual",
+        ],
+        "release-build must only print the withdrawal and fail"
+    );
+    for line in lines
+        .iter()
+        .map(|line| line.trim())
+        .filter(|line| !line.starts_with('#'))
+    {
+        assert!(
+            !(line.contains("cargo build") && line.contains("nexus-cli")),
+            "no job may build nexus-cli: {line}"
+        );
+        assert!(
+            !line.contains("target/release/nexus-cli"),
+            "no job may export the nexus-cli binary: {line}"
+        );
+    }
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.trim() == "- cargo test -p nexus-kernel -p nexus-sdk -p nexus-cli"),
+        "the core test job still tests the nexus-cli package"
+    );
+}
