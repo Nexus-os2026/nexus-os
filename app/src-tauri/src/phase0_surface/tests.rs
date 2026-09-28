@@ -2806,6 +2806,8 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
     let fg_egress = include_str!("fg_egress/tests.rs");
     let fg_secrets = include_str!("fg_secrets/tests.rs");
     let kernel_config = include_str!("../../../../kernel/src/config.rs");
+    let fg_standalone = include_str!("fg_standalone/tests.rs");
+    let fg_reliability = include_str!("fg_reliability/tests.rs");
     for (regression, source, guards) in [
         (
             "a closed command reopened",
@@ -2993,6 +2995,36 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
                 "p0_fg_a_an_unreadable_configuration_is_never_overwritten",
             ][..],
         ),
+        (
+            "a withdrawn standalone binary, alias, recipe or workflow reactivated",
+            fg_standalone,
+            &[
+                "p0_fg_standalone_every_binary_target_is_inventoried",
+                "p0_fg_standalone_every_example_target_is_inventoried",
+                "p0_fg_standalone_no_alias_reaches_a_withdrawn_entry",
+                "p0_fg_standalone_only_the_desktop_embeds_nexus_code",
+                "p0_fg_standalone_computer_use_is_not_re_exposed",
+                "p0_fg_standalone_every_recipe_is_inventoried",
+                "p0_fg_standalone_no_workflow_ships_a_standalone_binary",
+            ][..],
+        ),
+        (
+            "an unbounded resource surface reachable from the interface",
+            fg_reliability,
+            &[
+                "p0_fg_k_approved_limits_are_pinned",
+                "p0_fg_k_stress_persona_count_is_refused_outside_its_bound",
+                "p0_fg_k_parallel_simulation_count_is_refused_outside_its_bound",
+                "p0_fg_k_dilated_session_iterations_are_refused_outside_their_bound",
+                "p0_fg_k_agent_schedules_fire_at_most_once_per_minute",
+                "p0_fg_k_a_scheduled_tick_never_overlaps_the_agents_running_loop",
+                "p0_fg_k_the_frontend_error_command_uses_the_bounded_log",
+                "p0_fg_k_build_records_outside_the_bounds_are_refused",
+                "p0_fg_k_adversarial_rounds_are_refused_outside_their_bound",
+                "p0_fg_k_temporal_fork_limits_are_refused_and_never_stored",
+                "p0_fg_k_an_older_loops_exit_keeps_a_newer_loops_cancellation_entry",
+            ][..],
+        ),
     ] {
         for guard in guards {
             assert!(
@@ -3018,6 +3050,18 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
         fg_egress.contains("const CREDENTIAL_CURL_SITES: &[(&str, usize, &str)]"),
         "registry CREDENTIAL_CURL_SITES is missing"
     );
+    for registry in [
+        "const BINARY_TARGETS: &[(&str, &str, &str, Disposition)]",
+        "const EXAMPLE_TARGETS: &[(&str, &str, &str)]",
+        "const ALIAS_NEEDLES: &[(&str, &[&str])]",
+        "const RECIPE_FILES: &[&str]",
+        "const WITHDRAWN_BINARIES: &[&str]",
+    ] {
+        assert!(
+            fg_standalone.contains(registry),
+            "registry {registry} is missing"
+        );
+    }
 }
 
 /// Frontend raw-HTML sinks (P0-002C5C) and what makes each safe. The webview
