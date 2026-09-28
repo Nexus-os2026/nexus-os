@@ -423,12 +423,26 @@ impl SimulationRuntime {
     }
 }
 
+/// Most variants one [`run_parallel_simulations`] call may run.
+///
+/// Every variant is its own OS thread that generates personas and runs
+/// simulation ticks through the configured LLM, so the count is a thread and
+/// model-spend multiplier. A count outside `1..=MAX_PARALLEL_SIMULATION_VARIANTS`
+/// is refused, never clamped, before any thread starts or any model is called.
+pub const MAX_PARALLEL_SIMULATION_VARIANTS: usize = 10;
+
 pub fn run_parallel_simulations(
     seed: &WorldSeed,
     variant_count: usize,
     llm: Arc<dyn PlannerLlm>,
     db: Arc<NexusDatabase>,
 ) -> Result<Vec<PredictionReport>, AgentError> {
+    if !(1..=MAX_PARALLEL_SIMULATION_VARIANTS).contains(&variant_count) {
+        return Err(AgentError::SupervisorError(format!(
+            "parallel simulation variant count must be between 1 and \
+             {MAX_PARALLEL_SIMULATION_VARIANTS}, got {variant_count}"
+        )));
+    }
     let swarm = SwarmCoordinator::default();
     let parallel_batch_size = prepare_parallel_batch_size(seed, &swarm);
     thread::scope(|scope| {
@@ -1360,6 +1374,49 @@ mod tests {
         let (seed, _, llm, db) = build_seed_and_world();
         let reports = run_parallel_simulations(&seed, 3, llm, db).unwrap();
         assert_eq!(reports.len(), 3);
+    }
+
+    /// Counts every model call made through it.
+    struct CountingPlanner {
+        inner: MockPlanner,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl PlannerLlm for CountingPlanner {
+        fn plan_query(&self, prompt: &str) -> Result<String, AgentError> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.inner.plan_query(prompt)
+        }
+    }
+
+    #[test]
+    fn p0_fg_k_parallel_variant_count_is_refused_before_any_thread_or_model_call() {
+        let (seed, _, _, db) = build_seed_and_world();
+        let counting = Arc::new(CountingPlanner {
+            inner: MockPlanner::default(),
+            calls: std::sync::atomic::AtomicUsize::new(0),
+        });
+        for count in [0, MAX_PARALLEL_SIMULATION_VARIANTS + 1, usize::MAX] {
+            let error = run_parallel_simulations(&seed, count, counting.clone(), db.clone())
+                .expect_err("an out-of-range variant count must be refused");
+            assert!(error.to_string().contains("between 1 and 10"), "{error}");
+        }
+        assert_eq!(
+            counting.calls.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "a refused count must not reach the model"
+        );
+    }
+
+    #[test]
+    fn p0_fg_k_parallel_variant_count_bounds_are_inclusive() {
+        let (seed, _, llm, db) = build_seed_and_world();
+        assert_eq!(MAX_PARALLEL_SIMULATION_VARIANTS, 10);
+        let one = run_parallel_simulations(&seed, 1, llm.clone(), db.clone()).unwrap();
+        assert_eq!(one.len(), 1);
+        let max =
+            run_parallel_simulations(&seed, MAX_PARALLEL_SIMULATION_VARIANTS, llm, db).unwrap();
+        assert_eq!(max.len(), MAX_PARALLEL_SIMULATION_VARIANTS);
     }
 
     #[test]
