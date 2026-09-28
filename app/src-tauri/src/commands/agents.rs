@@ -855,15 +855,14 @@ pub(crate) fn get_audit_log(
 /// `std::env::var` shape — they have no NexusConfig backing and
 /// no migration path. Routing them through the facade would be
 /// uniform but adds no benefit over a direct env read.
-pub(crate) fn build_provider_config(config: &NexusConfig) -> ProviderSelectionConfig {
-    let non_empty = |s: &str| -> Option<String> {
-        if s.trim().is_empty() {
-            None
-        } else {
-            Some(s.to_string())
-        }
-    };
-
+///
+/// Final Gate item B: the configuration chooses no destination here. The
+/// Ollama address is the authorized one (the operator's `OLLAMA_URL`, else
+/// the fixed local address), never the persisted `llm.ollama_url`, which the
+/// interface can write. When `OLLAMA_URL` is set but unusable the address is
+/// empty: every Ollama request then fails its http(s) check, and nothing
+/// falls back to the default.
+pub(crate) fn build_provider_config(_config: &NexusConfig) -> ProviderSelectionConfig {
     // Bug AK Commit 3: facade-or-env helper for the six migrated
     // LLM keys. Production: facade is installed; its lookup chain
     // is keyring-stub → env → sqlite → memory, which preserves
@@ -889,9 +888,9 @@ pub(crate) fn build_provider_config(config: &NexusConfig) -> ProviderSelectionCo
 
     ProviderSelectionConfig {
         provider: std::env::var("LLM_PROVIDER").ok(),
-        ollama_url: std::env::var("OLLAMA_URL")
-            .ok()
-            .or_else(|| non_empty(&config.llm.ollama_url)),
+        ollama_url: Some(
+            crate::commands::chat_llm::authorized_ollama_base_url().unwrap_or_default(),
+        ),
         deepseek_api_key: llm_lookup("deepseek", "DEEPSEEK_API_KEY"),
         anthropic_api_key: llm_lookup("anthropic", "ANTHROPIC_API_KEY"),
         openai_api_key: llm_lookup("openai", "OPENAI_API_KEY"),

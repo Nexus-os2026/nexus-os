@@ -1936,8 +1936,83 @@ pub(crate) fn detect_hardware() -> Result<HardwareInfo, String> {
     })
 }
 
+// ── Ollama address (Final Gate item B) ──
+//
+// The Ollama service address is backend configuration: the operator's
+// `OLLAMA_URL` launch setting, or else the fixed local address. It is never
+// the persisted `llm.ollama_url` or `ollama.base_url` (both are writable over
+// IPC), and never an address the interface passes: a URL is not an egress
+// grant. Nexus connects to an Ollama service it did not start; it starts none.
+
+/// The fixed local Ollama address, used when the operator sets no `OLLAMA_URL`.
+pub(crate) const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
+
+/// Why no Ollama address is available: the operator set `OLLAMA_URL` to a
+/// value that is not a usable base URL. Nothing falls back to the default.
+pub(crate) const OLLAMA_ADDRESS_UNAVAILABLE: &str =
+    "the operator's OLLAMA_URL is not a usable http or https base URL, so Ollama is unavailable";
+
+/// The authorized Ollama base URL, normalized and without a trailing `/`.
+pub(crate) fn authorized_ollama_base_url() -> Result<String, String> {
+    authorized_ollama_base_url_from(std::env::var_os("OLLAMA_URL"))
+}
+
+/// [`authorized_ollama_base_url`] for a given `OLLAMA_URL` value. A set but
+/// unusable value (not UTF-8, not an http(s) URL with a host, or carrying
+/// user information, a query or a fragment) leaves Ollama unavailable.
+pub(crate) fn authorized_ollama_base_url_from(
+    operator: Option<std::ffi::OsString>,
+) -> Result<String, String> {
+    let Some(value) = operator else {
+        return Ok(DEFAULT_OLLAMA_URL.to_string());
+    };
+    value
+        .to_str()
+        .and_then(normalized_ollama_base)
+        .ok_or_else(|| OLLAMA_ADDRESS_UNAVAILABLE.to_string())
+}
+
+/// A base URL in the one spelling Ollama addresses are compared in: an
+/// http(s) URL with a host and no user information, query or fragment,
+/// rendered without a trailing `/` (`HTTP://LocalHost:11434/` is
+/// `http://localhost:11434`).
+fn normalized_ollama_base(raw: &str) -> Option<String> {
+    let url = nexus_kernel::governed_http::http_url(raw).ok()?;
+    if url.query().is_some() || url.fragment().is_some() {
+        return None;
+    }
+    Some(url.as_str().trim_end_matches('/').to_string())
+}
+
+/// The Ollama base URL an IPC command uses. Without an address from the
+/// caller it is the authorized one. An address from the caller must first be
+/// an http(s) URL (the C5B shape check), and then name exactly the authorized
+/// address; any other address is refused before anything connects.
+pub(crate) fn ollama_base_url_for(
+    surface: &'static str,
+    requested: Option<String>,
+) -> Result<String, String> {
+    let requested = match requested {
+        None => None,
+        Some(raw) => {
+            nexus_kernel::governed_http::http_url(&raw).map_err(|e| e.to_string())?;
+            Some(normalized_ollama_base(&raw))
+        }
+    };
+    let authorized =
+        authorized_ollama_base_url().map_err(|reason| format!("{surface}: {reason}"))?;
+    match requested {
+        None => Ok(authorized),
+        Some(Some(requested)) if requested == authorized => Ok(authorized),
+        Some(_) => Err(crate::phase0_surface::closed(
+            surface,
+            crate::phase0_surface::Closure::NetworkDestination,
+        )),
+    }
+}
+
 pub(crate) fn check_ollama(base_url: Option<String>) -> Result<OllamaStatus, String> {
-    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let url = ollama_base_url_for("check_ollama", base_url)?;
     let provider = OllamaProvider::new(&url);
 
     let connected = provider.health_check().unwrap_or(false);
@@ -1966,7 +2041,7 @@ pub(crate) fn pull_ollama_model(
     model_name: String,
     base_url: Option<String>,
 ) -> Result<String, String> {
-    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let url = ollama_base_url_for("pull_ollama_model", base_url)?;
     let provider = OllamaProvider::new(&url);
     provider
         .pull_model(&model_name, |_status, _completed, _total| {})
@@ -1984,7 +2059,7 @@ pub(crate) fn pull_ollama_model_throttled<F>(
 where
     F: FnMut(ModelPullProgress),
 {
-    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let url = ollama_base_url_for("pull_model", base_url)?;
     let provider = OllamaProvider::new(&url);
     let model_id = model_name.clone();
     let mut last_emit = std::time::Instant::now()
@@ -2049,7 +2124,7 @@ pub struct ModelPullProgress {
 
 /// Ensure Ollama server is running. Returns true if already running or started.
 pub(crate) fn ensure_ollama(base_url: Option<String>) -> Result<bool, String> {
-    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let url = ollama_base_url_for("ensure_ollama", base_url)?;
     let provider = OllamaProvider::new(&url);
 
     // Check if already running
@@ -2097,7 +2172,7 @@ pub(crate) fn delete_ollama_model(
     model_name: String,
     base_url: Option<String>,
 ) -> Result<(), String> {
-    let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let url = ollama_base_url_for("delete_model", base_url)?;
     // P0-002C5B: the base URL is validated independently of the model name,
     // which travels only inside the literal JSON body.
     let endpoint =
@@ -2152,13 +2227,17 @@ pub(crate) fn list_available_models() -> Result<Vec<AvailableModel>, String> {
     let vram = hw.vram_mb;
     let ram = hw.ram_mb;
 
-    let provider = OllamaProvider::new("http://localhost:11434");
-    let installed_names: Vec<String> = provider
-        .list_models()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|m| m.name)
-        .collect();
+    // The authorized Ollama address (Final Gate item B); none, none installed.
+    let installed_names: Vec<String> = authorized_ollama_base_url()
+        .map(|url| {
+            OllamaProvider::new(&url)
+                .list_models()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| m.name)
+                .collect()
+        })
+        .unwrap_or_default();
 
     let has = |id: &str| installed_names.iter().any(|n| n == id);
 
@@ -3288,16 +3367,10 @@ pub(crate) fn chat_with_ollama_streaming<F>(
 where
     F: FnMut(&str),
 {
+    // Final Gate item B: the authorized Ollama address, never the persisted
+    // `llm.ollama_url` and never another address from the caller.
+    let url = ollama_base_url_for("chat_with_ollama", base_url)?;
     state.check_rate(nexus_kernel::rate_limit::RateCategory::LlmRequest)?;
-    let config = load_config().map_err(|e| e.to_string())?;
-    let url = base_url.unwrap_or_else(|| {
-        let cfg_url = config.llm.ollama_url.trim();
-        if cfg_url.is_empty() {
-            "http://localhost:11434".to_string()
-        } else {
-            cfg_url.to_string()
-        }
-    });
     let provider = OllamaProvider::new(&url);
 
     // Ensure Ollama is running first

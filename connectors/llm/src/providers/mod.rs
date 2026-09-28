@@ -173,11 +173,12 @@ pub(crate) fn checked_endpoint(endpoint: &str) -> Result<String, AgentError> {
 pub(crate) fn curl_get_status(endpoint: &str) -> Result<u16, AgentError> {
     let endpoint = checked_endpoint(endpoint)?;
     eprintln!("[nexus-llm][governance] curl_get_status endpoint={endpoint}");
+    // Final Gate item B: no redirect is followed; the checked address is the
+    // one contacted.
     let output = Command::new("curl")
         .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
         .args([
             "-sS",
-            "-L",
             "-m",
             "5",
             "--max-filesize",
@@ -234,17 +235,12 @@ pub(crate) fn curl_post_json_with_timeout(
     })?;
 
     let timeout_str = timeout_secs.to_string();
+    // Final Gate item B: no redirect is followed; the checked address is the
+    // one contacted, and nothing is re-sent to a redirect target.
     let mut command = Command::new("curl");
     command
         .args(nexus_kernel::governed_http::CURL_HTTP_ONLY)
-        .args([
-            "-sS",
-            "-L",
-            "-m",
-            &timeout_str,
-            "--max-filesize",
-            "33554432",
-        ]);
+        .args(["-sS", "-m", &timeout_str, "--max-filesize", "33554432"]);
     for (header_name, header_value) in headers {
         let header = nexus_kernel::governed_http::http_header(header_name, header_value)
             .map_err(|error| AgentError::SupervisorError(error.to_string()))?;

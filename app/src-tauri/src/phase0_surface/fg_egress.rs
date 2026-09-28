@@ -283,3 +283,200 @@ fn p0_fg_the_desktop_calls_no_caller_chosen_destination_client() {
         );
     }
 }
+
+/// A loopback listener that must never be contacted, and its http base URL.
+fn quiet_listener() -> (std::net::TcpListener, String) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    (listener, base)
+}
+
+fn assert_never_contacted(listener: &std::net::TcpListener) {
+    assert!(matches!(
+        listener.accept(),
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+    ));
+}
+
+/// Final Gate item B: the Ollama address is backend configuration, the
+/// operator's `OLLAMA_URL` or else the fixed local address. A set but
+/// unusable value leaves Ollama unavailable and never falls back to the
+/// default, and the refusal does not echo the value.
+#[test]
+fn p0_fg_the_ollama_address_is_backend_configuration() {
+    use crate::commands::chat_llm::{
+        authorized_ollama_base_url_from, DEFAULT_OLLAMA_URL, OLLAMA_ADDRESS_UNAVAILABLE,
+    };
+    use std::ffi::OsString;
+    assert_eq!(
+        authorized_ollama_base_url_from(None),
+        Ok(DEFAULT_OLLAMA_URL.to_string())
+    );
+    for (operator, authorized) in [
+        ("http://127.0.0.1:12345", "http://127.0.0.1:12345"),
+        (
+            "HTTP://Ollama.Example:11434/",
+            "http://ollama.example:11434",
+        ),
+        ("https://ollama.example:443/", "https://ollama.example"),
+        ("http://[::1]:11434", "http://[::1]:11434"),
+        ("http://ollama.example/base/", "http://ollama.example/base"),
+    ] {
+        assert_eq!(
+            authorized_ollama_base_url_from(Some(OsString::from(operator))),
+            Ok(authorized.to_string()),
+            "{operator}"
+        );
+    }
+    let mut unusable: Vec<OsString> = [
+        "",
+        "localhost:11434",
+        "ftp://ollama.example",
+        "file:///ollama.example",
+        "http://user:secret@ollama.example",
+        "http://ollama.example/?key=1",
+        "http://ollama.example/#top",
+        " http://ollama.example",
+        "http://ollama.example\n",
+    ]
+    .map(OsString::from)
+    .to_vec();
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        unusable.push(OsString::from_vec(b"http://ollama.example\xff".to_vec()));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStringExt;
+        unusable.push(OsString::from_wide(&[0x68, 0xD800]));
+    }
+    for operator in unusable {
+        assert_eq!(
+            authorized_ollama_base_url_from(Some(operator.clone())),
+            Err(OLLAMA_ADDRESS_UNAVAILABLE.to_string()),
+            "{operator:?}"
+        );
+    }
+    assert!(!OLLAMA_ADDRESS_UNAVAILABLE.contains("ollama.example"));
+}
+
+/// Final Gate item B: an address the interface passes is accepted only when
+/// it names the authorized address (any spelling of it). Every other
+/// address, including another spelling of the host (`127.0.0.1` for
+/// `localhost`), another port or path, or a URL that is not a base, is
+/// refused before anything connects, by every Ollama command.
+#[test]
+fn p0_fg_caller_ollama_addresses_are_refused_before_anything_connects() {
+    use crate::commands::chat_llm::{authorized_ollama_base_url, ollama_base_url_for};
+    let authorized = authorized_ollama_base_url();
+    let (listener, foreign) = quiet_listener();
+    assert_ne!(authorized.as_deref().ok(), Some(foreign.as_str()));
+    let expected = |surface: &'static str| match &authorized {
+        Ok(_) => closed(surface, Closure::NetworkDestination),
+        Err(reason) => format!("{surface}: {reason}"),
+    };
+    let state = crate::AppState::new_in_memory();
+    let user = vec![serde_json::json!({"role": "user", "content": "hello"})];
+    let results: [(&'static str, Result<(), String>); 7] = [
+        (
+            "check_ollama",
+            crate::check_ollama(Some(foreign.clone())).map(|_| ()),
+        ),
+        (
+            "pull_ollama_model",
+            crate::pull_ollama_model("llama3".into(), Some(foreign.clone())).map(|_| ()),
+        ),
+        (
+            "pull_model",
+            crate::pull_ollama_model_throttled("llama3".into(), Some(foreign.clone()), |_| {})
+                .map(|_| ()),
+        ),
+        (
+            "ensure_ollama",
+            crate::ensure_ollama(Some(foreign.clone())).map(|_| ()),
+        ),
+        (
+            "delete_model",
+            crate::delete_ollama_model("llama3".into(), Some(foreign.clone())),
+        ),
+        (
+            "chat_with_ollama",
+            crate::chat_with_ollama_streaming(
+                &state,
+                user,
+                "m".into(),
+                Some(foreign.clone()),
+                |_| {},
+            )
+            .map(|_| ()),
+        ),
+        (
+            "run_setup_wizard",
+            crate::run_setup_wizard(Some(foreign.clone())).map(|_| ()),
+        ),
+    ];
+    for (surface, result) in results {
+        assert_eq!(result, Err(expected(surface)), "{surface}");
+    }
+    assert_never_contacted(&listener);
+
+    if let Ok(authorized) = &authorized {
+        // The authorized address, with or without a trailing `/`, is that
+        // address.
+        for spelling in [authorized.clone(), format!("{authorized}/")] {
+            assert_eq!(
+                ollama_base_url_for("check_ollama", Some(spelling.clone())).as_ref(),
+                Ok(authorized),
+                "{spelling}"
+            );
+        }
+        assert_eq!(
+            ollama_base_url_for("check_ollama", None).as_ref(),
+            Ok(authorized)
+        );
+    }
+    if authorized.as_deref() == Ok(crate::commands::chat_llm::DEFAULT_OLLAMA_URL) {
+        assert_eq!(
+            ollama_base_url_for("check_ollama", Some("HTTP://LocalHost:11434/".into())).as_deref(),
+            Ok(crate::commands::chat_llm::DEFAULT_OLLAMA_URL)
+        );
+        for alias in [
+            "http://127.0.0.1:11434",
+            "http://[::1]:11434",
+            "https://localhost:11434",
+            "http://localhost:11435",
+            "http://localhost",
+            "http://localhost:11434/api",
+            "http://localhost:11434/?x=1",
+            "http://localhost.:11434",
+        ] {
+            assert_eq!(
+                ollama_base_url_for("check_ollama", Some(alias.into())),
+                Err(closed("check_ollama", Closure::NetworkDestination)),
+                "{alias}"
+            );
+        }
+    }
+    // A pull naming a registry host is refused before any request, on the
+    // authorized address too.
+    let error = crate::pull_ollama_model("hf.co/user/model".into(), None).unwrap_err();
+    assert!(
+        error.contains("default registry") || authorized.is_err(),
+        "{error}"
+    );
+}
+
+/// Final Gate item B: the persisted `llm.ollama_url` and `ollama.base_url`
+/// choose no destination. Provider selection uses the authorized address.
+#[test]
+fn p0_fg_the_persisted_ollama_address_chooses_no_destination() {
+    let mut config = nexus_kernel::config::NexusConfig::default();
+    config.llm.ollama_url = "http://persisted.invalid:1".into();
+    config.ollama.base_url = "http://persisted.invalid:2".into();
+    let selection = crate::build_provider_config(&config);
+    let authorized = crate::commands::chat_llm::authorized_ollama_base_url().unwrap_or_default();
+    assert_eq!(selection.ollama_url, Some(authorized));
+    assert!(!format!("{:?}", selection.ollama_url).contains("persisted"));
+}

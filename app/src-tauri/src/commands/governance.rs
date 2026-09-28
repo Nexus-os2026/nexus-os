@@ -351,8 +351,13 @@ pub(crate) fn is_setup_complete() -> bool {
 }
 
 pub(crate) fn run_setup_wizard(ollama_url: Option<String>) -> Result<SetupResult, String> {
+    // Final Gate item B: an address from the interface must name the
+    // authorized Ollama address, before anything is detected or saved. Only
+    // that address is persisted below; the persisted value is a record for
+    // display, and no request reads it.
+    let ollama_url = ollama_base_url_for("run_setup_wizard", ollama_url)?;
     let hw_info = detect_hardware()?;
-    let ollama_status = check_ollama(ollama_url.clone())?;
+    let ollama_status = check_ollama(Some(ollama_url))?;
 
     // Build and save config
     let mut config = load_config().map_err(|e| e.to_string())?;
