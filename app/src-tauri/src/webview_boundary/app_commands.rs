@@ -6,10 +6,17 @@
 //! permission per command) and for `capabilities/app-commands.json`, which
 //! grants those commands to window `main` at the local app origin only.
 //!
-//! Regenerate with the recon extractor; the guard
-//! `p0_fg_webview_app_manifest_lists_every_registered_command` in
-//! `phase0_surface/fg_webview.rs` fails if this list ever diverges from the
-//! live `generate_handler!` registry, so it can never silently drift.
+//! There is no generator in the tree. The list is the entries of the
+//! `generate_handler![..]` registration in `lib.rs`, each reduced to its final
+//! `::` path segment, sorted and deduplicated — exactly what
+//! `registered_command_names()` in `phase0_surface/fg_webview/tests.rs`
+//! computes. When a command is added, removed or renamed, update this list and
+//! the matching `allow-<name, with '_' as '-'>` entry in
+//! `capabilities/app-commands.json` together. The guards
+//! `p0_fg_webview_app_manifest_lists_every_registered_command` and
+//! `p0_fg_webview_capability_is_local_main_only` (both in
+//! `phase0_surface/fg_webview/tests.rs`) fail on any drift between the
+//! registry, this list and the capability, so neither can drift silently.
 
 /// Every registered application command, sorted and unique (804).
 pub const APP_COMMANDS: &[&str] = &[
