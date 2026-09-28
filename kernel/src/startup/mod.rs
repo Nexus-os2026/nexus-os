@@ -9,12 +9,14 @@
 //! `app/src-tauri/src/lib.rs` immediately after the DB open.
 //!
 //! `run_migrations` is the Phase-1 entry point:
-//!   1. Construct a `SecretsFacade` with all four backends in
-//!      canonical order (Env, OsKeyring stub, SqliteEnvelope,
-//!      Memory).
-//!   2. Call
+//!   1. Load the master key from the validated key source
+//!      (`EncryptionKey::from_config`) and verify that it opens every
+//!      secret already stored in the vault (Final Gate item E).
+//!   2. Construct a `SecretsFacade` with all four backends in
+//!      canonical order (Env, OsKeyring, SqliteEnvelope, Memory).
+//!   3. Call
 //!      `kernel::secrets::migrate::migrate_config_to_vault`.
-//!   3. On success, install the facade into
+//!   4. On success, install the facade into
 //!      `kernel::secrets::global::FACADE`.
 //!
 //! UNILATERAL DEVIATION (flagged in Commit 2 report): the locked
@@ -33,7 +35,7 @@ use crate::secrets::backend_keyring::KeyringBackendAdapter;
 use crate::secrets::backend_memory::MemoryBackend;
 use crate::secrets::backend_sqlite::SqliteEnvelopeBackend;
 use crate::secrets::migrate::{migrate_config_to_vault, MigrationError, MigrationReport};
-use crate::secrets::SecretsFacade;
+use crate::secrets::{SecretBackend, SecretsFacade};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -43,6 +45,45 @@ pub enum StartupError {
     Crypto(String),
     #[error("migration error: {0}")]
     Migration(#[from] MigrationError),
+    /// Final Gate item E: the master key does not open a secret already in
+    /// the vault, so the vault is not used with it.
+    #[error("the vault key does not open the stored secrets; the vault is not used")]
+    VaultKeyMismatch,
+    #[error("the stored vault secrets could not be listed; the vault is not used")]
+    VaultUnreadable,
+}
+
+/// The vault scopes Nexus OS reads or writes through the facade: provider
+/// keys (`llm`), the migrated social credentials, messaging, HTTP connector
+/// and OIDC secrets.
+const VAULT_SCOPES: &[&str] = &[
+    "llm",
+    "social",
+    "messaging.whatsapp",
+    "messaging.matrix",
+    "http",
+    "auth.oidc",
+];
+
+/// Final Gate item E: the master key must open every secret already stored
+/// in the vault scopes before anything reads the vault or writes to it. A
+/// changed or wrong key source is refused here rather than leaving old rows
+/// unreadable and writing new rows under another key. An empty vault has
+/// nothing to verify, so its first key is accepted.
+fn verify_vault_key(sqlite: &SqliteEnvelopeBackend) -> Result<(), StartupError> {
+    for scope in VAULT_SCOPES {
+        let names = sqlite
+            .db()
+            .list_secrets(scope)
+            .map_err(|_| StartupError::VaultUnreadable)?;
+        for name in names {
+            // The decrypted value is dropped (and zeroized) at once.
+            sqlite
+                .get(scope, &name)
+                .map_err(|_| StartupError::VaultKeyMismatch)?;
+        }
+    }
+    Ok(())
 }
 
 /// Build the production facade, run the credential-vault
@@ -62,9 +103,11 @@ pub fn run_migrations(
     let master = EncryptionKey::from_config(&config.security)
         .map_err(|e| StartupError::Crypto(format!("{e}")))?;
 
+    let sqlite = Arc::new(SqliteEnvelopeBackend::new(Arc::clone(&db), &master));
+    verify_vault_key(&sqlite)?;
+
     let env = Arc::new(EnvBackend::new());
     let keyring = Arc::new(KeyringBackendAdapter::os_keyring());
-    let sqlite = Arc::new(SqliteEnvelopeBackend::new(Arc::clone(&db), &master));
     let memory = Arc::new(MemoryBackend::new());
 
     let facade = Arc::new(SecretsFacade::new(
@@ -176,5 +219,95 @@ mod tests {
         std::env::remove_var("NEXUS_CONFIG_PATH");
         std::env::remove_var("NEXUS_ENCRYPTION_KEY");
         let _ = std::fs::remove_dir_all(&tmpdir);
+    }
+
+    /// Final Gate item E: a master key opens the vault only if it opens every
+    /// stored secret; an empty vault accepts its first key.
+    #[test]
+    fn p0_fg_e_the_vault_key_must_open_the_stored_secrets() {
+        use crate::secrets::Zeroizing;
+        let db = Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        let key_a = || EncryptionKey::from_raw_for_test([0x11; 32]);
+        let key_b = || EncryptionKey::from_raw_for_test([0x22; 32]);
+        assert!(verify_vault_key(&SqliteEnvelopeBackend::new(Arc::clone(&db), &key_b())).is_ok());
+        let writer = SqliteEnvelopeBackend::new(Arc::clone(&db), &key_a());
+        writer
+            .set("llm", "anthropic", Zeroizing::new("synthetic-llm".into()))
+            .unwrap();
+        writer
+            .set(
+                "auth.oidc",
+                "client_secret",
+                Zeroizing::new("synthetic-oidc".into()),
+            )
+            .unwrap();
+        assert!(verify_vault_key(&SqliteEnvelopeBackend::new(Arc::clone(&db), &key_a())).is_ok());
+        assert!(matches!(
+            verify_vault_key(&SqliteEnvelopeBackend::new(Arc::clone(&db), &key_b())),
+            Err(StartupError::VaultKeyMismatch)
+        ));
+        // One row under another key is enough to refuse.
+        let mixed = Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        SqliteEnvelopeBackend::new(Arc::clone(&mixed), &key_a())
+            .set("llm", "openai", Zeroizing::new("synthetic-a".into()))
+            .unwrap();
+        SqliteEnvelopeBackend::new(Arc::clone(&mixed), &key_b())
+            .set(
+                "social",
+                "x_consumer_key",
+                Zeroizing::new("synthetic-b".into()),
+            )
+            .unwrap();
+        for key in [key_a(), key_b()] {
+            assert!(matches!(
+                verify_vault_key(&SqliteEnvelopeBackend::new(Arc::clone(&mixed), &key)),
+                Err(StartupError::VaultKeyMismatch)
+            ));
+        }
+    }
+
+    /// Final Gate item E: startup refuses a key file whose key does not open
+    /// the vault before it migrates, clears or writes anything, and before a
+    /// facade could be installed.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn p0_fg_e_startup_refuses_a_vault_key_that_does_not_open_the_vault() {
+        use crate::secrets::Zeroizing;
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let db = Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        SqliteEnvelopeBackend::new(
+            Arc::clone(&db),
+            &EncryptionKey::from_raw_for_test([0x11; 32]),
+        )
+        .set("llm", "anthropic", Zeroizing::new("synthetic-llm".into()))
+        .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let key_path = dir.path().join("vault.key");
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&key_path)
+            .unwrap()
+            .write_all(&[0x22; 32])
+            .unwrap();
+        let mut config = NexusConfig::default();
+        config.security.enabled = true;
+        config.security.key_source = "file".into();
+        config.security.key_file = Some(key_path.to_str().unwrap().into());
+        config.social.x_api_key = "synthetic-social".into();
+        let audit = Arc::new(std::sync::Mutex::new(crate::audit::AuditTrail::new()));
+        match run_migrations(&mut config, Arc::clone(&db), audit) {
+            Err(StartupError::VaultKeyMismatch) => {}
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(db.schema_version("credential_vault_v1").unwrap(), None);
+        assert_eq!(config.social.x_api_key, "synthetic-social");
+        assert!(db.list_secrets("social").unwrap().is_empty());
+        assert_eq!(
+            db.list_secrets("llm").unwrap(),
+            vec!["anthropic".to_string()]
+        );
     }
 }

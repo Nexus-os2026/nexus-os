@@ -1109,14 +1109,17 @@ impl AppState {
         );
         // Bug AK Commit 2: run the one-shot credential-vault
         // migration before any consumer reads `config.social.x_*`
-        // (twitter / social-poster / etc.). This installs the
-        // process-singleton SecretsFacade exposed by
-        // `kernel::secrets::global::facade()`. Failure is
-        // best-effort — startup continues so a broken vault
-        // doesn't keep the desktop from launching, but consumers
-        // that hit `facade()` after a failed install will panic
-        // with the OnceLock not-installed message. Surface the
-        // result to stderr so an operator can see it.
+        // (twitter / social-poster / etc.), and install the
+        // process-singleton SecretsFacade (`kernel::secrets::global`).
+        // It is installed only when `security.enabled` is set, the
+        // vault key source validates (Final Gate items A and E: a
+        // non-empty NEXUS_ENCRYPTION_KEY, or an owner-only regular key
+        // file on Linux or macOS) and that key opens the secrets
+        // already stored. The default configuration leaves the vault
+        // disabled. A failure does not stop startup: every consumer
+        // uses `try_facade()`, and vault-backed operations such as
+        // `save_api_key` are refused. The reason goes to stderr for
+        // the operator.
         // Bug AK-15: construct the AuditTrail BEFORE
         // run_migrations so the SecretsFacade and AppState
         // share the same hash-chained instance. Migration

@@ -181,4 +181,67 @@ mod guards {
             "{write}"
         );
     }
+
+    /// Final Gate items A and E: the vault key file is opened once without
+    /// following a final symlink, and every check and the read use that opened
+    /// file; blank environment key material and a mismatched `key_env` are
+    /// refused; startup verifies the key against the stored secrets before a
+    /// facade exists.
+    #[test]
+    fn p0_fg_e_vault_key_sources_are_validated_on_what_is_read() {
+        let crypto = normalized(include_str!("../../../../kernel/src/crypto.rs"));
+        let production = before_tests(&crypto);
+        let from_file = compact(&body(production, "pub fn from_file("));
+        assert!(from_file.contains("key_file::open(path)"), "{from_file}");
+        assert!(!from_file.contains("fs::read"), "{from_file}");
+        let open = compact(&body(production, "pub(super) fn open("));
+        for flag in ["O_NOFOLLOW", "O_NONBLOCK", "O_NOCTTY"] {
+            assert!(open.contains(flag), "{flag}: {open}");
+        }
+        let read = compact(&body(production, "pub(super) fn read("));
+        assert!(
+            in_order(
+                &read,
+                &[
+                    "file.metadata()",
+                    "check_opened_key_file(",
+                    "take(MAX_KEY_FILE_BYTES+1)",
+                    "file.metadata()",
+                    "unchanged(&before,&after)",
+                ],
+            ),
+            "{read}"
+        );
+        let env_value = compact(&body(production, "fn from_env_value("));
+        assert!(
+            env_value.starts_with("ifraw.trim().is_empty(){returnErr("),
+            "{env_value}"
+        );
+        let from_config = compact(&body(production, "pub fn from_config("));
+        assert!(
+            in_order(
+                &from_config,
+                &[
+                    "ifconfig.key_env!=DEFAULT_KEY_ENV{returnErr(",
+                    "Self::from_env()"
+                ],
+            ),
+            "{from_config}"
+        );
+        let startup = normalized(include_str!("../../../../kernel/src/startup/mod.rs"));
+        let run = compact(&body(before_tests(&startup), "pub fn run_migrations("));
+        assert!(
+            in_order(
+                &run,
+                &[
+                    "EncryptionKey::from_config(",
+                    "verify_vault_key(&sqlite)?;",
+                    "SecretsFacade::new(",
+                    "migrate_config_to_vault(",
+                    "install(",
+                ],
+            ),
+            "{run}"
+        );
+    }
 }
