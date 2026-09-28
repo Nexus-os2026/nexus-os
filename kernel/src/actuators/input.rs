@@ -324,6 +324,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn verify_emergency_kill_switch_stops_all_input() {
         let tmp = TempDir::new().unwrap();
         let ctx = ctx(&tmp, AutonomyLevel::L4, true);
