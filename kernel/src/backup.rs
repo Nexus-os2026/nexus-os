@@ -65,7 +65,9 @@ pub struct BackupConfig {
     #[serde(default = "yes")]
     pub include_genomes: bool,
 
-    /// Include configuration files.
+    /// Include the configuration file. It is copied only when it is an
+    /// encrypted configuration envelope or the archive is encrypted;
+    /// otherwise it is skipped and the metadata says so (Final Gate item H).
     #[serde(default = "yes")]
     pub include_config: bool,
 
@@ -118,7 +120,26 @@ pub struct BackupMetadata {
 
     /// Whether the archive is encrypted.
     pub encrypted: bool,
+
+    /// Items a backup chose not to copy, each with a bounded reason (no path
+    /// or content). Absent from metadata written by earlier versions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<String>,
 }
+
+/// Why the configuration file is not in a backup (Final Gate item H): it is
+/// not an encrypted configuration envelope (legacy or hand-written
+/// plaintext, which can hold credentials) and the archive is not encrypted.
+pub const CONFIG_NOT_COPIED_PLAINTEXT: &str =
+    "config/config.toml not copied: the configuration file is not encrypted and neither is the archive";
+
+/// Why the configuration file is not in a backup: it is not a readable
+/// regular file.
+pub const CONFIG_NOT_COPIED_NOT_A_FILE: &str =
+    "config/config.toml not copied: the configuration location is not a readable regular file";
+
+/// The configuration file's name inside an archive.
+const CONFIG_ENTRY: &str = "config/config.toml";
 
 /// Result of a restore operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -238,11 +259,33 @@ pub fn create_backup(
     data_dir: &Path,
     encryption_key: Option<&EncryptionKey>,
 ) -> Result<BackupMetadata, BackupError> {
+    create_backup_with_config_file(config, data_dir, encryption_key, || {
+        crate::config::config_path().map_err(|error| BackupError::Io(error.to_string()))
+    })
+}
+
+/// [`create_backup`] with the configuration file's location injected.
+fn create_backup_with_config_file(
+    config: &BackupConfig,
+    data_dir: &Path,
+    encryption_key: Option<&EncryptionKey>,
+    config_file: impl FnOnce() -> Result<PathBuf, BackupError>,
+) -> Result<BackupMetadata, BackupError> {
     if !config.output_dir.is_absolute() {
         return Err(BackupError::Io(
             "backup output directory must be an absolute backend location".into(),
         ));
     }
+    // An encrypted backup needs its key before anything is written, so a
+    // missing key never leaves an unencrypted archive behind.
+    let archive_key = if config.encrypt {
+        Some(
+            encryption_key
+                .ok_or_else(|| BackupError::Encryption("encryption key required".into()))?,
+        )
+    } else {
+        None
+    };
     std::fs::create_dir_all(&config.output_dir)?;
 
     let backup_id = Uuid::new_v4().to_string();
@@ -261,16 +304,35 @@ pub fn create_backup(
         collect_backup_files(data_dir, data_dir, config, &mut files_to_backup)?;
     }
 
-    // Also back up config file.
+    // The configuration file (Final Gate item H). An encrypted configuration
+    // envelope is copied as it is. Anything else (legacy or hand-written
+    // plaintext, which can hold credentials) is copied only into an encrypted
+    // archive; otherwise it is skipped and the metadata says why. The file is
+    // read once, so what was checked is what is copied.
+    let mut skipped = Vec::new();
+    let mut config_entry: Option<Vec<u8>> = None;
     if config.include_config {
-        let config_path =
-            crate::config::config_path().map_err(|error| BackupError::Io(error.to_string()))?;
-        if config_path.exists() {
-            files_to_backup.push((config_path.clone(), "config/config.toml".to_string()));
+        let config_path = config_file()?;
+        match std::fs::symlink_metadata(&config_path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Ok(meta) if meta.is_file() && !crate::governed_path::is_redirect(&meta) => {
+                let bytes = std::fs::read(&config_path)?;
+                let envelope =
+                    std::str::from_utf8(&bytes).is_ok_and(crate::config::is_config_envelope);
+                if envelope || archive_key.is_some() {
+                    config_entry = Some(bytes);
+                } else {
+                    skipped.push(CONFIG_NOT_COPIED_PLAINTEXT.to_string());
+                }
+            }
+            _ => skipped.push(CONFIG_NOT_COPIED_NOT_A_FILE.to_string()),
         }
     }
 
-    let contents: Vec<String> = files_to_backup.iter().map(|(_, rel)| rel.clone()).collect();
+    let mut contents: Vec<String> = files_to_backup.iter().map(|(_, rel)| rel.clone()).collect();
+    if config_entry.is_some() {
+        contents.push(CONFIG_ENTRY.to_string());
+    }
 
     // Create tar.gz archive, owner-only from its first byte (Final Gate item
     // H): it can hold the encrypted configuration and every other store it
@@ -289,6 +351,7 @@ pub fn create_backup(
         contents: contents.clone(),
         size_bytes: 0,
         encrypted: config.encrypt,
+        skipped: skipped.clone(),
     };
 
     let meta_json = serde_json::to_vec_pretty(&metadata)
@@ -320,6 +383,15 @@ pub fn create_backup(
                 .map_err(|e| BackupError::Archive(e.to_string()))?;
         }
     }
+    if let Some(data) = &config_entry {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar_builder
+            .append_data(&mut header, CONFIG_ENTRY, data.as_slice())
+            .map_err(|e| BackupError::Archive(e.to_string()))?;
+    }
 
     tar_builder
         .finish()
@@ -329,9 +401,7 @@ pub fn create_backup(
     drop(tar_builder);
 
     // Optionally encrypt the archive.
-    if config.encrypt {
-        let key = encryption_key
-            .ok_or_else(|| BackupError::Encryption("encryption key required".into()))?;
+    if let Some(key) = archive_key {
         crypto::encrypt_file(key, &archive_path)?;
     }
 
@@ -350,6 +420,7 @@ pub fn create_backup(
         contents,
         size_bytes,
         encrypted: config.encrypt,
+        skipped,
     };
 
     let meta_path = archive_path.with_extension("meta.json");
@@ -1412,5 +1483,213 @@ mod tests {
         let meta = create_backup(&config, &data_dir, None).unwrap();
         assert_eq!(meta.contents.len(), 3);
         assert!(meta.contents.iter().all(|c| !c.contains("link")));
+    }
+
+    /// A configuration file as the checked writer stores it: an encrypted
+    /// envelope, here under an explicit synthetic operator key.
+    fn write_envelope_config(path: &Path) {
+        let keys = crate::config::ConfigKeyMaterial::from_values(
+            Some("synthetic-operator-key"),
+            [None; 4],
+        );
+        let mut config = crate::config::NexusConfig::default();
+        config.llm.anthropic_api_key = "synthetic-envelope-secret".into();
+        crate::config::save_config_checked_to_path(path, &config, &keys).unwrap();
+    }
+
+    /// A hand-written plaintext configuration holding a credential.
+    fn write_plaintext_config(path: &Path) {
+        let mut config = crate::config::NexusConfig::default();
+        config.llm.anthropic_api_key = "synthetic-plaintext-secret".into();
+        std::fs::write(path, toml::to_string(&config).unwrap()).unwrap();
+    }
+
+    /// The single archive in `dir`.
+    fn only_archive(dir: &Path) -> PathBuf {
+        let archives: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|ext| ext.to_str()) == Some("gz"))
+            .collect();
+        assert_eq!(archives.len(), 1);
+        archives[0].clone()
+    }
+
+    /// The entry names and the whole decompressed tar stream of an
+    /// unencrypted archive.
+    fn tar_entries(archive: &Path) -> (Vec<String>, Vec<u8>) {
+        let mut tar_bytes = Vec::new();
+        GzDecoder::new(std::fs::File::open(archive).unwrap())
+            .read_to_end(&mut tar_bytes)
+            .unwrap();
+        let names = tar::Archive::new(tar_bytes.as_slice())
+            .entries()
+            .unwrap()
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        (names, tar_bytes)
+    }
+
+    fn with_config(output_dir: PathBuf, encrypt: bool) -> BackupConfig {
+        BackupConfig {
+            output_dir,
+            include_config: true,
+            encrypt,
+            ..BackupConfig::default()
+        }
+    }
+
+    /// Final Gate item H: a plaintext configuration never enters an
+    /// unencrypted archive; the metadata says it was skipped.
+    #[test]
+    fn p0_fg_h_plaintext_configuration_stays_out_of_an_unencrypted_backup() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        setup_test_data(&data_dir);
+        let config_file = tmp.path().join("config.toml");
+        write_plaintext_config(&config_file);
+        let backups = tmp.path().join("backups");
+
+        let meta = create_backup_with_config_file(
+            &with_config(backups.clone(), false),
+            &data_dir,
+            None,
+            || Ok(config_file.clone()),
+        )
+        .unwrap();
+        assert!(!meta.contents.iter().any(|c| c == CONFIG_ENTRY), "{meta:?}");
+        assert_eq!(meta.skipped, vec![CONFIG_NOT_COPIED_PLAINTEXT.to_string()]);
+        let archive = only_archive(&backups);
+        let (names, tar_bytes) = tar_entries(&archive);
+        assert!(!names.iter().any(|n| n == CONFIG_ENTRY), "{names:?}");
+        let marker = b"synthetic-plaintext-secret";
+        assert!(!tar_bytes.windows(marker.len()).any(|w| w == marker));
+        // The sidecar and the in-archive metadata both record the skip.
+        let sidecar = std::fs::read_to_string(archive.with_extension("meta.json")).unwrap();
+        assert!(sidecar.contains(CONFIG_NOT_COPIED_PLAINTEXT), "{sidecar}");
+        let inner = String::from_utf8_lossy(&tar_bytes);
+        assert!(inner.contains(CONFIG_NOT_COPIED_PLAINTEXT));
+    }
+
+    /// Final Gate item H: a plaintext configuration is copied into an
+    /// encrypted archive, and restores from it unchanged.
+    #[test]
+    fn p0_fg_h_plaintext_configuration_is_copied_into_an_encrypted_backup() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        setup_test_data(&data_dir);
+        let config_file = tmp.path().join("config.toml");
+        write_plaintext_config(&config_file);
+        let backups = tmp.path().join("backups");
+        let key = EncryptionKey::from_raw_for_test([0x33; 32]);
+
+        let meta = create_backup_with_config_file(
+            &with_config(backups.clone(), true),
+            &data_dir,
+            Some(&key),
+            || Ok(config_file.clone()),
+        )
+        .unwrap();
+        assert!(meta.encrypted);
+        assert!(meta.contents.iter().any(|c| c == CONFIG_ENTRY), "{meta:?}");
+        assert!(meta.skipped.is_empty(), "{meta:?}");
+        let restore_root = tmp.path().join("restored");
+        std::fs::create_dir_all(&restore_root).unwrap();
+        let restore_root = restore_root.canonicalize().unwrap();
+        let result = restore_backup(&only_archive(&backups), &restore_root, Some(&key)).unwrap();
+        assert_eq!(
+            std::fs::read(restore_root.join(&result.restore_dir).join(CONFIG_ENTRY)).unwrap(),
+            std::fs::read(&config_file).unwrap()
+        );
+    }
+
+    /// Final Gate item H: an encrypted configuration envelope is copied as it
+    /// is, even into an unencrypted archive.
+    #[test]
+    fn p0_fg_h_an_encrypted_configuration_is_copied_as_it_is() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        setup_test_data(&data_dir);
+        let config_file = tmp.path().join("config.toml");
+        write_envelope_config(&config_file);
+        let backups = tmp.path().join("backups");
+
+        let meta = create_backup_with_config_file(
+            &with_config(backups.clone(), false),
+            &data_dir,
+            None,
+            || Ok(config_file.clone()),
+        )
+        .unwrap();
+        assert!(meta.contents.iter().any(|c| c == CONFIG_ENTRY), "{meta:?}");
+        assert!(meta.skipped.is_empty(), "{meta:?}");
+        let (names, tar_bytes) = tar_entries(&only_archive(&backups));
+        assert!(names.iter().any(|n| n == CONFIG_ENTRY), "{names:?}");
+        let mut archive = tar::Archive::new(tar_bytes.as_slice());
+        let copied = archive
+            .entries()
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .find(|entry| entry.path().unwrap().to_string_lossy() == CONFIG_ENTRY)
+            .map(|mut entry| {
+                let mut bytes = Vec::new();
+                entry.read_to_end(&mut bytes).unwrap();
+                bytes
+            })
+            .unwrap();
+        assert_eq!(copied, std::fs::read(&config_file).unwrap());
+        let marker = b"synthetic-envelope-secret";
+        assert!(!tar_bytes.windows(marker.len()).any(|w| w == marker));
+    }
+
+    /// Final Gate item H: only an exact envelope counts as encrypted.
+    #[test]
+    fn p0_fg_h_only_an_exact_envelope_counts_as_an_encrypted_configuration() {
+        let tmp = tempfile::tempdir().unwrap();
+        let envelope = tmp.path().join("envelope.toml");
+        write_envelope_config(&envelope);
+        let text = std::fs::read_to_string(&envelope).unwrap();
+        assert!(crate::config::is_config_envelope(&text));
+        let plaintext = tmp.path().join("plaintext.toml");
+        write_plaintext_config(&plaintext);
+        assert!(!crate::config::is_config_envelope(
+            &std::fs::read_to_string(&plaintext).unwrap()
+        ));
+        // An envelope with anything added is not an envelope.
+        let padded = format!("{text}\nanthropic_api_key = \"synthetic\"\n");
+        assert!(!crate::config::is_config_envelope(&padded));
+        assert!(!crate::config::is_config_envelope(""));
+        assert!(!crate::config::is_config_envelope("version = 1"));
+    }
+
+    /// An encrypted backup without its key writes nothing, so no unencrypted
+    /// archive is left behind.
+    #[test]
+    fn p0_fg_h_an_encrypted_backup_without_a_key_writes_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        setup_test_data(&data_dir);
+        let config_file = tmp.path().join("config.toml");
+        write_plaintext_config(&config_file);
+        let backups = tmp.path().join("backups");
+        let result = create_backup_with_config_file(
+            &with_config(backups.clone(), true),
+            &data_dir,
+            None,
+            || Ok(config_file.clone()),
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            BackupError::Encryption("encryption key required".into())
+        );
+        assert!(!backups.exists());
     }
 }

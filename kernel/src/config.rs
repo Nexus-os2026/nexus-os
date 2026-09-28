@@ -788,6 +788,17 @@ fn read_stored_for_write(
         .map_err(|_| refused())
 }
 
+/// Whether `raw` is a configuration encryption envelope: exactly the
+/// envelope's fields, whatever version or key it names (Final Gate item H).
+/// Legacy or hand-written plaintext configuration is not, and neither is a
+/// file that adds anything to the envelope.
+pub fn is_config_envelope(raw: &str) -> bool {
+    const FIELDS: [&str; 4] = ["version", "key_id", "nonce", "ciphertext"];
+    toml::from_str::<toml::Table>(raw).is_ok_and(|table| {
+        table.len() == FIELDS.len() && FIELDS.iter().all(|field| table.contains_key(*field))
+    }) && toml::from_str::<EncryptedConfigEnvelope>(raw).is_ok()
+}
+
 /// Opens configuration text: a version 1 envelope through the explicit legacy
 /// read path, or legacy plaintext as it is. Errors carry no configuration
 /// text.
