@@ -1436,8 +1436,10 @@ pub(crate) async fn messaging_body(response: reqwest::Response) -> Result<String
     messaging_body_bounded(response, MAX_MESSAGING_RESPONSE_BYTES).await
 }
 
-/// At most `max` bytes of a response body, read chunk by chunk; decoded as
-/// `text()` did (lossy UTF-8). Errors name no URL.
+/// At most `max` bytes of a response body, read chunk by chunk and decoded
+/// as UTF-8, with any invalid sequence replaced by U+FFFD. A `charset` in the
+/// response's Content-Type is not honoured (reqwest's `text()` did honour
+/// it); Telegram, Slack and Discord answer in UTF-8 JSON. Errors name no URL.
 pub(crate) async fn messaging_body_bounded(
     mut response: reqwest::Response,
     max: usize,
