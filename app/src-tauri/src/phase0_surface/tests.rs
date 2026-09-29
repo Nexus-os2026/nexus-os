@@ -2961,6 +2961,63 @@ fn js_call_args(text: &str, open: usize) -> Option<Vec<String>> {
     None
 }
 
+/// `text` with its JS comments (`// ..` and `/* .. */`, including
+/// `/*@vite-ignore*/`) removed and string and template literals kept. Regex
+/// literals are not recognised, so a quote inside one can keep a later comment
+/// in place; callers check the raw text as well.
+fn strip_js_comments(text: &str) -> String {
+    let b = text.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len());
+    let mut quote: Option<u8> = None;
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        if let Some(q) = quote {
+            out.push(c);
+            if c == b'\\' && i + 1 < b.len() {
+                out.push(b[i + 1]);
+                i += 2;
+                continue;
+            }
+            if c == q {
+                quote = None;
+            }
+            i += 1;
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'/') {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'*') {
+            i = text[i + 2..]
+                .find("*/")
+                .map_or(b.len(), |end| i + 2 + end + 2);
+            out.push(b' ');
+            continue;
+        }
+        if matches!(c, b'"' | b'\'' | b'`') {
+            quote = Some(c);
+        }
+        out.push(c);
+        i += 1;
+    }
+    String::from_utf8(out).expect("comment stripping keeps UTF-8 boundaries")
+}
+
+/// Whether `arg` is exactly one string literal ('..', ".." or a template
+/// literal without substitutions), so the value is fixed in the source.
+fn is_js_string_literal(arg: &str) -> bool {
+    let b = arg.as_bytes();
+    b.len() >= 2
+        && matches!(b[0], b'"' | b'\'' | b'`')
+        && b[b.len() - 1] == b[0]
+        && !arg[1..arg.len() - 1].contains(b[0] as char)
+        && !(b[0] == b'`' && arg.contains("${"))
+}
+
 /// The opening tag of the JSX/HTML element starting at `at` (`<iframe ...>` or
 /// `<iframe ... />`), with comments removed. Quoted strings, template
 /// literals and `{..}` expressions are honoured, so a `>` inside an
@@ -3105,6 +3162,62 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
                 "{relative}: iframes must not be created from script ({literal})"
             );
         }
+        // Script may not create an element whose tag is not fixed in the
+        // source, nor a frame-like element, nor touch any element's sandbox:
+        // no `.sandbox` access, and no set/remove/toggle of a `sandbox`
+        // attribute.
+        for (at, _) in text.match_indices("createElement") {
+            let rest = &text[at + "createElement".len()..];
+            let name_end = if rest.starts_with("NS(") { 2 } else { 0 };
+            if !rest[name_end..].starts_with('(') {
+                continue;
+            }
+            let args = js_call_args(text, at + "createElement".len() + name_end)
+                .unwrap_or_else(|| panic!("{relative}: unterminated createElement call"));
+            let tag_index = usize::from(name_end == 2);
+            let tag = args.get(tag_index).map(String::as_str).unwrap_or_default();
+            assert!(
+                is_js_string_literal(tag),
+                "{relative}: createElement needs a literal tag, not `{tag}`"
+            );
+            let tag = tag[1..tag.len() - 1].to_ascii_lowercase();
+            assert!(
+                ![
+                    "iframe",
+                    "frame",
+                    "frameset",
+                    "object",
+                    "embed",
+                    "portal",
+                    "fencedframe"
+                ]
+                .contains(&tag.as_str()),
+                "{relative}: script may not create a `{tag}` element"
+            );
+        }
+        for (at, _) in text.match_indices(".sandbox") {
+            let next = text[at + ".sandbox".len()..].chars().next().unwrap_or(' ');
+            // `.sandboxed`, `.sandboxId` etc. are other identifiers.
+            assert!(
+                next.is_ascii_alphanumeric() || next == '_' || next == '$',
+                "{relative}: script may not read or change an element's sandbox"
+            );
+        }
+        let compact_lower: String = lower.split_whitespace().collect();
+        for api in [
+            "setattribute(",
+            "removeattribute(",
+            "toggleattribute(",
+            "setattributens(",
+        ] {
+            for quote in ['"', '\'', '`'] {
+                let needle = format!("{api}{quote}sandbox");
+                assert!(
+                    !compact_lower.contains(&needle),
+                    "{relative}: script may not change a sandbox attribute ({needle})"
+                );
+            }
+        }
         // P0 item D: the navigation guard admits `blob:` URLs created by the
         // app origin (downloads), and a scriptable document at such a URL
         // would run as the local app origin with the invoke key. So every
@@ -3186,7 +3299,25 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
         // whitespace removed, in every quote style, for static, side-effect,
         // re-export, dynamic `import(..)` and `require(..)` forms. (The packages
         // stay in package.json, unused.)
-        let compact: String = text.split_whitespace().collect();
+        // Comments (e.g. `/*@vite-ignore*/`) are removed before matching,
+        // and the raw text is checked too. Every dynamic `import(..)` must
+        // name one string literal (no concatenation, variable or comment),
+        // except the one pinned dialog-plugin importer in KnowledgeGraph.tsx.
+        for (at, _) in text.match_indices("import(") {
+            let before = text[..at].chars().next_back().unwrap_or(' ');
+            if before.is_ascii_alphanumeric() || before == '_' || before == '$' || before == '.' {
+                continue;
+            }
+            let args = js_call_args(text, at + "import".len())
+                .unwrap_or_else(|| panic!("{relative}: unterminated import("));
+            let pinned = relative == "src/pages/KnowledgeGraph.tsx" && args == ["specifier"];
+            assert!(
+                pinned || (args.len() == 1 && is_js_string_literal(&args[0])),
+                "{relative}: a dynamic import must name one string literal: {args:?}"
+            );
+        }
+        let stripped: String = strip_js_comments(text).split_whitespace().collect();
+        let raw: String = text.split_whitespace().collect();
         for module in [
             "@monaco-editor/",
             "monaco-editor",
@@ -3198,7 +3329,7 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
                 for form in ["from", "import", "import(", "require("] {
                     let needle = format!("{form}{quote}{module}");
                     assert!(
-                        !compact.contains(&needle),
+                        !raw.contains(&needle) && !stripped.contains(&needle),
                         "{relative}: `{module}` is unavailable in Phase Zero ({needle})"
                     );
                 }
