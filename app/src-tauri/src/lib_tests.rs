@@ -133,7 +133,7 @@ fn build_transcendent_manifest(name: &str) -> String {
 
 #[test]
 fn test_tauri_create_agent_command() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let created = create_agent(&state, build_manifest("my-social-poster"));
     assert!(created.is_ok());
 
@@ -145,7 +145,7 @@ fn test_tauri_create_agent_command() {
 
 #[test]
 fn test_tauri_create_agent_rejects_manifest_names_outside_kernel_schema() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let invalid_manifest = json!({
         "name": "NEXUS ORACLE",
         "version": "1.0.0",
@@ -1307,7 +1307,7 @@ fn test_cleanup_legacy_agent_db_only_once() {
 
 #[test]
 fn test_browser_navigate_logs_audit() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = navigate_to(&state, "https://docs.rust-lang.org/".to_string());
     assert!(result.is_ok());
     let nav = result.unwrap_or_else(|e| {
@@ -1339,7 +1339,7 @@ fn test_browser_navigate_logs_audit() {
 
 #[test]
 fn test_browser_blocked_domain_returns_error() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = navigate_to(&state, "https://malware.example.com/payload".to_string());
     assert!(result.is_ok());
     let nav = result.unwrap_or_else(|e| {
@@ -1359,7 +1359,7 @@ fn test_browser_blocked_domain_returns_error() {
 
 #[test]
 fn test_browser_invalid_protocol_blocked() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = navigate_to(&state, "ftp://files.example.com/data".to_string());
     assert!(result.is_ok());
     let nav = result.unwrap_or_else(|e| {
@@ -1373,7 +1373,7 @@ fn test_browser_invalid_protocol_blocked() {
 
 #[test]
 fn test_research_session_creates_multiple_agents() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = start_research(&state, "Rust async patterns".to_string(), 3);
     assert!(result.is_ok());
     let session = result.unwrap_or_else(|e| {
@@ -1397,7 +1397,7 @@ fn test_research_session_creates_multiple_agents() {
 
 #[test]
 fn test_research_complete_merges_findings() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let session = start_research(&state, "WebAssembly".to_string(), 2).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
@@ -1416,7 +1416,7 @@ fn test_research_complete_merges_findings() {
 
 #[test]
 fn test_build_session_streams_code() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let session = start_build(&state, "Dashboard widget".to_string()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
@@ -1438,7 +1438,7 @@ fn test_build_session_streams_code() {
 
 #[test]
 fn test_learning_session_extracts_takeaways() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let sources = vec![
         LearningSource {
             url: "https://docs.rust-lang.org/stable/".to_string(),
@@ -1530,7 +1530,7 @@ fn test_learning_session_extracts_takeaways() {
 
 #[test]
 fn test_learning_blocked_source_rejected() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let sources = vec![LearningSource {
         url: "https://phishing.evil.com/".to_string(),
         label: "Bad Source".to_string(),
@@ -1544,7 +1544,7 @@ fn test_learning_blocked_source_rejected() {
 
 #[test]
 fn test_learning_browse_blocked_url() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let sources = vec![LearningSource {
         url: "https://docs.rust-lang.org/".to_string(),
         label: "Rust Docs".to_string(),
@@ -1594,7 +1594,7 @@ fn test_chat_with_documents_returns_answer() {
         return;
     }
 
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
 
     // Index the document
     let ingest_result = ingest_test_document(
@@ -1626,7 +1626,7 @@ fn test_chat_with_documents_returns_answer() {
 
 #[test]
 fn test_provider_status_command() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = get_active_llm_provider(&state);
     assert!(result.is_ok());
 
@@ -1665,7 +1665,7 @@ fn test_search_documents_end_to_end() {
         eprintln!("SKIPPED: Ollama embedding model not available");
         return;
     }
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let _ = ingest_test_document(
         &state,
         "nexus_test_search_e2e.txt",
@@ -1707,7 +1707,7 @@ fn test_list_indexed_documents_two_docs() {
         eprintln!("SKIPPED: Ollama embedding model not available");
         return;
     }
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let _ = ingest_test_document(&state, "nexus_test_list_a.txt", "Document A content.")
         .unwrap_or_else(|e| {
             eprintln!("operation failed: {e}");
@@ -1746,7 +1746,7 @@ fn test_remove_indexed_document() {
         eprintln!("SKIPPED: Ollama embedding model not available");
         return;
     }
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let path_str = "nexus_test_remove.txt".to_string();
 
     let _ = ingest_test_document(&state, &path_str, "Content to be removed.").unwrap_or_else(|e| {
@@ -1782,7 +1782,7 @@ fn test_remove_indexed_document() {
 
 #[test]
 fn test_list_local_models_returns_array() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = list_local_models(&state);
     assert!(result.is_ok());
     // Must parse as a JSON array (may be empty)
@@ -1815,7 +1815,7 @@ fn test_get_system_specs_has_fields() {
 
 #[test]
 fn test_get_live_system_metrics_has_fields() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = get_live_system_metrics(&state);
     assert!(result.is_ok());
     let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
@@ -1840,7 +1840,7 @@ fn test_get_live_system_metrics_has_fields() {
 
 #[test]
 fn test_check_model_compatibility() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     // 500 MB file
     let result = check_model_compatibility(&state, 500_000_000);
     assert!(result.is_ok());
@@ -1856,7 +1856,7 @@ fn test_check_model_compatibility() {
 
 #[test]
 fn test_time_machine_create_and_list_checkpoints() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let baseline: Vec<serde_json::Value> =
         serde_json::from_str(&time_machine_list_checkpoints(&state).unwrap_or_else(|e| {
             eprintln!("JSON parse failed: {e}");
@@ -1920,7 +1920,7 @@ fn test_time_machine_undo_empty() {
 
 #[test]
 fn test_time_machine_create_undo_redo_cycle() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
 
     let _ = time_machine_create_checkpoint(&state, "cycle-test".to_string()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
@@ -1970,7 +1970,7 @@ fn test_time_machine_create_undo_redo_cycle() {
 
 #[test]
 fn test_voice_get_status_json() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = voice_get_status(&state);
     assert!(result.is_ok());
     let parsed: serde_json::Value = serde_json::from_str(&result.unwrap_or_else(|e| e))
@@ -1991,7 +1991,7 @@ fn test_voice_get_status_json() {
 #[test]
 fn test_voice_transcribe_fallback_stub() {
     std::env::set_var("LLM_PROVIDER", "mock");
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     // With no whisper model loaded and no python server, should return clear error
     let result = voice_transcribe(&state, "AAAA".to_string());
     assert!(result.is_ok());
@@ -2012,7 +2012,7 @@ fn test_voice_transcribe_fallback_stub() {
 #[test]
 fn test_voice_transcribe_returns_engine_field() {
     std::env::set_var("LLM_PROVIDER", "mock");
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     // Send some base64 data (doesn't matter what — stub ignores content)
     let result = voice_transcribe(&state, "SGVsbG8gV29ybGQ=".to_string());
     assert!(result.is_ok());
@@ -2031,7 +2031,7 @@ fn test_voice_transcribe_returns_engine_field() {
 
 #[test]
 fn test_economy_full_cycle() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let agent_id = uuid::Uuid::new_v4().to_string();
 
     // Create wallet
@@ -2107,7 +2107,7 @@ fn test_economy_full_cycle() {
 
 #[test]
 fn test_economy_transfer_between_wallets() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let from_id = uuid::Uuid::new_v4().to_string();
     let to_id = uuid::Uuid::new_v4().to_string();
 
@@ -2172,7 +2172,7 @@ fn test_economy_transfer_between_wallets() {
 
 #[test]
 fn test_economy_freeze_wallet() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let agent_id = uuid::Uuid::new_v4().to_string();
     economy_create_wallet(&state, agent_id.clone()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
@@ -2201,7 +2201,7 @@ fn test_economy_freeze_wallet() {
 
 #[test]
 fn test_ghost_protocol_status_has_device_id() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = ghost_protocol_status(&state).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
@@ -2218,7 +2218,7 @@ fn test_ghost_protocol_status_has_device_id() {
 
 #[test]
 fn test_ghost_protocol_toggle() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
 
     let toggle = ghost_protocol_toggle(&state, true).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
@@ -2249,7 +2249,7 @@ fn test_ghost_protocol_toggle() {
 
 #[test]
 fn test_ghost_protocol_add_remove_peer() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     ghost_protocol_toggle(&state, true).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
@@ -2303,7 +2303,7 @@ fn test_ghost_protocol_add_remove_peer() {
 
 #[test]
 fn test_evolution_status() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = evolution_get_status(&state).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
@@ -2319,7 +2319,7 @@ fn test_evolution_status() {
 
 #[test]
 fn test_evolution_register_and_evolve() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let agent_id = uuid::Uuid::new_v4().to_string();
     let params = json!({"learning_rate": 0.01, "batch_size": 32}).to_string();
 
@@ -2383,7 +2383,7 @@ fn test_evolution_register_and_evolve() {
 
 #[test]
 fn test_mcp_host_add_list_remove_server() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
 
     // Initially empty
     let list = mcp_host_list_servers(&state).unwrap_or_else(|e| {
@@ -2470,7 +2470,7 @@ fn test_mcp_host_add_list_remove_server() {
 
 #[test]
 fn test_neural_bridge_status() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let result = neural_bridge_status(&state).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
@@ -2485,7 +2485,7 @@ fn test_neural_bridge_status() {
 
 #[test]
 fn test_neural_bridge_ingest_and_search() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     neural_bridge_toggle(&state, true).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
@@ -2556,7 +2556,7 @@ fn test_neural_bridge_ingest_and_search() {
 
 #[test]
 fn test_tracing_full_lifecycle() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
 
     // Start trace
     let trace_result = tracing_start_trace(&state, "test-operation".to_string(), None);
@@ -2650,7 +2650,7 @@ fn test_tracing_full_lifecycle() {
 
 #[test]
 fn test_agent_memory_remember_and_recall() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
     let agent_id = uuid::Uuid::new_v4().to_string();
 
     // Remember
@@ -2719,7 +2719,7 @@ fn test_agent_memory_remember_and_recall() {
 
 #[test]
 fn test_payment_plan_and_invoice() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
 
     // Create plan
     let plan = payment_create_plan(
@@ -2833,7 +2833,7 @@ fn test_payment_plan_and_invoice() {
 
 #[test]
 fn test_tauri_replay_evidence_flow() {
-    let state = AppState::new();
+    let state = AppState::new_in_memory();
 
     // Toggle recording on
     let toggle = replay_toggle_recording(&state, true).unwrap_or_else(|e| {

@@ -1197,7 +1197,10 @@ impl AppState {
         // Final Gate item A: a configuration save whose caller does not
         // receive the outcome (the migration's re-save below, and the
         // backend's own settings saves) reports a change to how the file is
-        // protected to this audit chain. Only the first state installs it.
+        // protected to this audit chain. Only the first state installs it,
+        // and a test build never does, so no test can bind the process-wide
+        // recorder to a database (tests use `AppState::new_in_memory`).
+        #[cfg(not(test))]
         nexus_kernel::config::install_protection_recorder(config_protection_recorder(
             audit.clone(),
             db.clone(),

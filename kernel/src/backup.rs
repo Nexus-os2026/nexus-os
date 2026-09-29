@@ -133,9 +133,10 @@ pub struct BackupMetadata {
 pub const CONFIG_NOT_COPIED_PLAINTEXT: &str =
     "config/config.toml not copied: the configuration file is not encrypted and neither is the archive";
 
-/// Why the configuration file is not in a backup: it is not a readable
-/// regular file.
-pub const CONFIG_NOT_COPIED_NOT_A_FILE: &str =
+/// Why the configuration file is not in a backup: the location is not a
+/// regular file (a directory, a link or another special file), or it is one
+/// that cannot be read.
+pub const CONFIG_NOT_COPIED_UNREADABLE: &str =
     "config/config.toml not copied: the configuration location is not a readable regular file";
 
 /// The configuration file's name inside an archive.
@@ -307,8 +308,10 @@ fn create_backup_with_config_file(
     // The configuration file (Final Gate item H). An encrypted configuration
     // envelope is copied as it is. Anything else (legacy or hand-written
     // plaintext, which can hold credentials) is copied only into an encrypted
-    // archive; otherwise it is skipped and the metadata says why. The file is
-    // read once, so what was checked is what is copied.
+    // archive; otherwise it is skipped and the metadata says why. A location
+    // that is not a regular file, or one that cannot be read, is skipped the
+    // same way; the backup goes on without it. The file is read once, so
+    // what was checked is what is copied.
     let mut skipped = Vec::new();
     let mut config_entry: Option<Vec<u8>> = None;
     if config.include_config {
@@ -316,16 +319,20 @@ fn create_backup_with_config_file(
         match std::fs::symlink_metadata(&config_path) {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Ok(meta) if meta.is_file() && !crate::governed_path::is_redirect(&meta) => {
-                let bytes = std::fs::read(&config_path)?;
-                let envelope =
-                    std::str::from_utf8(&bytes).is_ok_and(crate::config::is_config_envelope);
-                if envelope || archive_key.is_some() {
-                    config_entry = Some(bytes);
-                } else {
-                    skipped.push(CONFIG_NOT_COPIED_PLAINTEXT.to_string());
+                match std::fs::read(&config_path) {
+                    Ok(bytes) => {
+                        let envelope = std::str::from_utf8(&bytes)
+                            .is_ok_and(crate::config::is_config_envelope);
+                        if envelope || archive_key.is_some() {
+                            config_entry = Some(bytes);
+                        } else {
+                            skipped.push(CONFIG_NOT_COPIED_PLAINTEXT.to_string());
+                        }
+                    }
+                    Err(_) => skipped.push(CONFIG_NOT_COPIED_UNREADABLE.to_string()),
                 }
             }
-            _ => skipped.push(CONFIG_NOT_COPIED_NOT_A_FILE.to_string()),
+            _ => skipped.push(CONFIG_NOT_COPIED_UNREADABLE.to_string()),
         }
     }
 
@@ -1691,5 +1698,58 @@ mod tests {
             BackupError::Encryption("encryption key required".into())
         );
         assert!(!backups.exists());
+    }
+
+    /// Final Gate item H (stream 4 review): a configuration location that is
+    /// not a regular file, or a file that cannot be read, is skipped with a
+    /// bounded reason and the backup goes on.
+    #[test]
+    fn p0_fg_h_an_unreadable_configuration_is_skipped() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        setup_test_data(&data_dir);
+
+        // A directory where the file should be.
+        let not_a_file = tmp.path().join("config-dir");
+        std::fs::create_dir(&not_a_file).unwrap();
+        let backups = tmp.path().join("backups-dir");
+        let meta = create_backup_with_config_file(
+            &with_config(backups.clone(), false),
+            &data_dir,
+            None,
+            || Ok(not_a_file.clone()),
+        )
+        .unwrap();
+        assert_eq!(meta.skipped, vec![CONFIG_NOT_COPIED_UNREADABLE.to_string()]);
+        assert!(!meta.contents.iter().any(|c| c == CONFIG_ENTRY), "{meta:?}");
+        assert!(
+            !meta.contents.is_empty(),
+            "the data files are still backed up"
+        );
+
+        // A regular file that cannot be read (Unix permissions; skipped where
+        // the test runs with the privilege to read it anyway).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let unreadable = tmp.path().join("config.toml");
+            write_plaintext_config(&unreadable);
+            std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o000)).unwrap();
+            if std::fs::read(&unreadable).is_err() {
+                let backups = tmp.path().join("backups-unreadable");
+                let meta = create_backup_with_config_file(
+                    &with_config(backups, true),
+                    &data_dir,
+                    Some(&EncryptionKey::from_raw_for_test([0x44; 32])),
+                    || Ok(unreadable.clone()),
+                )
+                .unwrap();
+                assert_eq!(meta.skipped, vec![CONFIG_NOT_COPIED_UNREADABLE.to_string()]);
+                assert!(!meta.contents.iter().any(|c| c == CONFIG_ENTRY), "{meta:?}");
+            } else {
+                eprintln!("skipped: this process can read a mode-000 file");
+            }
+            std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
     }
 }

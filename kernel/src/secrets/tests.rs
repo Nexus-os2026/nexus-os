@@ -187,7 +187,10 @@ fn migrate_config_to_vault_happy_path_clears_fields_and_bumps_version() {
         .lock()
         .unwrap_or_else(|p| p.into_inner());
     let cfg = CredentialFacadeConfig::default();
-    let (facade, db) = build_facade(cfg, KeyringBackendAdapter::os_keyring());
+    // The keyring is the rejecting fixture, never the host's keyring: the
+    // read-backs below must come from the migrated rows, not from a
+    // production keyring entry.
+    let (facade, db) = build_facade(cfg, KeyringBackendAdapter::rejecting());
     let mut config = NexusConfig::default();
     // SocialConfig (4 fields, Commit 2 substance).
     config.social.x_api_key = "ck".into();
@@ -282,7 +285,7 @@ fn migrate_with_no_credentials_still_bumps_schema_version() {
     let _config_path = EnvVarGuard::set("NEXUS_CONFIG_PATH", &cfg_path);
     let (facade, db) = build_facade(
         CredentialFacadeConfig::default(),
-        KeyringBackendAdapter::os_keyring(),
+        KeyringBackendAdapter::rejecting(),
     );
     let mut config = NexusConfig::default();
     let report = migrate_config_to_vault(&mut config, &facade).expect("ok");
@@ -346,7 +349,7 @@ fn migrate_records_resave_failure_but_treats_facade_as_authoritative() {
 
     let (facade, db) = build_facade(
         CredentialFacadeConfig::default(),
-        KeyringBackendAdapter::os_keyring(),
+        KeyringBackendAdapter::rejecting(),
     );
     let mut config = NexusConfig::default();
     config.social.x_api_key = "ck".into();
@@ -375,7 +378,7 @@ fn migrate_returns_sqlite_unavailable_when_facade_lacks_sqlite() {
     // Build a facade WITHOUT a sqlite backend; migration must
     // refuse rather than silently no-op.
     let env = Arc::new(EnvBackend::new());
-    let kr = Arc::new(KeyringBackendAdapter::os_keyring());
+    let kr = Arc::new(KeyringBackendAdapter::rejecting());
     let mem = Arc::new(MemoryBackend::new());
     let audit = Arc::new(std::sync::Mutex::new(crate::audit::AuditTrail::new()));
     let facade = SecretsFacade::new(
