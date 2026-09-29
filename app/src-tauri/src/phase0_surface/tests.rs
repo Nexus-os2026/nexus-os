@@ -2913,6 +2913,59 @@ const FRONTEND_HTML_SINKS: &[(&str, usize, &str)] = &[
     ),
 ];
 
+/// The opening tag of the JSX/HTML element starting at `at` (`<iframe ...>` or
+/// `<iframe ... />`), with comments removed. Quoted strings, template
+/// literals and `{..}` expressions are honoured, so a `>` inside an
+/// expression (an arrow function, a type argument) does not end the tag.
+fn jsx_opening_tag(text: &str, at: usize) -> String {
+    let b = text.as_bytes();
+    let mut out: Vec<u8> = Vec::new();
+    let mut i = at;
+    let mut depth = 0usize;
+    let mut quote: Option<u8> = None;
+    while i < b.len() {
+        let c = b[i];
+        if let Some(q) = quote {
+            out.push(c);
+            if c == b'\\' && i + 1 < b.len() {
+                out.push(b[i + 1]);
+                i += 2;
+                continue;
+            }
+            if c == q {
+                quote = None;
+            }
+            i += 1;
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'*') {
+            let end = text[i + 2..].find("*/").expect("end of a comment in a tag");
+            i += 2 + end + 2;
+            out.push(b' ');
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'/') && depth > 0 {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        match c {
+            b'"' | b'\'' | b'`' => quote = Some(c),
+            b'{' => depth += 1,
+            b'}' => depth = depth.saturating_sub(1),
+            b'>' if depth == 0 => {
+                out.push(c);
+                return String::from_utf8(out).expect("tag text is UTF-8");
+            }
+            _ => {}
+        }
+        out.push(c);
+        i += 1;
+    }
+    panic!("unterminated tag at byte {at}");
+}
+
 /// P0-002C5C: every raw-HTML sink in the frontend is counted and renders
 /// escaped text; every `srcDoc` preview iframe is sandboxed so that it never
 /// runs script with the app's origin; the crash screen escapes its message.
@@ -2953,39 +3006,55 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
         if count > 0 {
             sinks.push((relative.clone(), count));
         }
-        // Every iframe — whether `srcDoc` or `src` — must be sandboxed without
-        // scripts and without same-origin, and must render inline `srcDoc`
-        // content rather than loading a remote or loopback `src` URL. Under
-        // item D a preview then has an opaque origin and no script, so it can
-        // neither run in nor reach the IPC of the privileged window. (Before
-        // this closure a remote page was embedded with `allow-scripts
+        // Every iframe must render inline `srcDoc` content with exactly
+        // `sandbox=""` (no token at all: no scripts, opaque origin, no
+        // navigation of the app document) and no `src` URL. Under item D a
+        // preview then has an opaque origin and no script, so it can neither
+        // run in nor reach the IPC of the privileged window — on Windows every
+        // frame receives the invoke key, and a same-origin frame counts as the
+        // local app origin on every platform, so this rule is load-bearing.
+        // The opening tag is parsed with its quotes, `{..}` expressions and
+        // comments, so closing-tag iframes and `>` inside expressions are
+        // handled, and a props spread (which could override `sandbox`) fails.
+        // (Before this closure a remote page was embedded with `allow-scripts
         // allow-same-origin allow-popups`, and a loopback dev server with
         // `allow-same-origin`; both are removed.)
+        assert_eq!(
+            text.to_ascii_lowercase().matches("<iframe").count(),
+            text.matches("<iframe").count(),
+            "{relative}: iframe tags must be spelled `<iframe`"
+        );
         for (at, _) in text.match_indices("<iframe") {
-            let close = at + text[at..].find("/>").expect("iframe element end") + 2;
-            let element = &text[at..close];
-            let sandbox = element
-                .split("sandbox=\"")
-                .nth(1)
-                .and_then(|rest| rest.split('"').next())
-                .unwrap_or_else(|| panic!("{relative}: iframe without a sandbox attribute"));
+            let tag = jsx_opening_tag(text, at);
+            let compact: String = tag.split_whitespace().collect();
             assert!(
-                !sandbox.contains("allow-scripts"),
-                "{relative}: iframe sandbox must not allow scripts in Phase Zero"
+                !compact.contains("{..."),
+                "{relative}: iframe props spread could override its sandbox: {tag}"
             );
             assert!(
-                !sandbox.contains("allow-same-origin"),
-                "{relative}: iframe sandbox must not grant the app origin"
+                compact.matches("sandbox").count() == 1 && compact.contains("sandbox=\"\""),
+                "{relative}: an iframe must carry exactly sandbox=\"\": {tag}"
+            );
+            assert_eq!(
+                compact.matches("srcDoc=").count(),
+                1,
+                "{relative}: iframe must render inline srcDoc content: {tag}"
             );
             assert!(
-                element.contains("srcDoc"),
-                "{relative}: iframe must render inline srcDoc content"
-            );
-            assert!(
-                !element.contains("src="),
-                "{relative}: iframe must not load a remote or loopback src URL"
+                !compact.contains("src="),
+                "{relative}: iframe must not load a remote or loopback src URL: {tag}"
             );
             previews += 1;
+        }
+        // No iframe built from script (createElement, createElementNS,
+        // React.createElement, innerHTML strings): only the JSX tags above,
+        // whose sandbox this guard can see, may create one.
+        let lower = text.to_ascii_lowercase();
+        for literal in ["\"iframe\"", "'iframe'", "`iframe`"] {
+            assert!(
+                !lower.contains(literal),
+                "{relative}: iframes must not be created from script ({literal})"
+            );
         }
         // P0 item D: the navigation guard admits `blob:` URLs created by the
         // app origin (downloads). Every Blob the frontend builds must declare
@@ -3027,13 +3096,29 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
         }
         // P0 item D closures enforced across the frontend: no Monaco editor (it
         // injected a remote CDN script into the app origin), no collaboration
-        // WebSocket, and no direct remote fetch carrying secrets from the
-        // privileged origin. (Import/comment mentions are allowed; only the
-        // live constructs are forbidden.)
-        assert!(
-            !text.contains("from \"@monaco-editor"),
-            "{relative}: the Monaco editor is unavailable in Phase Zero (remote script)"
-        );
+        // WebSocket (yjs / y-websocket), and no direct remote fetch carrying
+        // secrets from the privileged origin. Imports are matched with all
+        // whitespace removed, in every quote style, for static, side-effect,
+        // re-export, dynamic `import(..)` and `require(..)` forms. (The packages
+        // stay in package.json, unused.)
+        let compact: String = text.split_whitespace().collect();
+        for module in [
+            "@monaco-editor/",
+            "monaco-editor",
+            "yjs",
+            "y-websocket",
+            "y-protocols",
+        ] {
+            for quote in ['"', '\'', '`'] {
+                for form in ["from", "import", "import(", "require("] {
+                    let needle = format!("{form}{quote}{module}");
+                    assert!(
+                        !compact.contains(&needle),
+                        "{relative}: `{module}` is unavailable in Phase Zero ({needle})"
+                    );
+                }
+            }
+        }
         assert!(
             !text.contains("new WebsocketProvider("),
             "{relative}: the collaboration WebSocket is disabled in Phase Zero"
