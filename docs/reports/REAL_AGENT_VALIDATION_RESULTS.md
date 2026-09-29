@@ -117,9 +117,6 @@
 - **Total inference calls**: 69
 - **Zero crashes**: PASS
 
-## How to Run
+## How to Run (withdrawn)
 
-```bash
-NVIDIA_NIM_API_KEY=nvapi-xxx \
-  cargo run -p nexus-conductor-benchmark --bin real-agent-validation --release
-```
+`real-agent-validation` is withdrawn during Phase Zero: it sent the `GROQ_API_KEY` value to NVIDIA NIM as a bearer token on curl's command line. Running it now only prints a withdrawal message and exits with status 69. The results above are historical.

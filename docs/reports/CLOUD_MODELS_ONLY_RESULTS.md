@@ -559,14 +559,6 @@ All models tested on NVIDIA NIM free tier (1000 credits on signup).
 - Seed: 42
 - Timeout: 180s
 
-## How to Run
+## How to Run (withdrawn)
 
-```bash
-# Full catalog (93 models, ~25 minutes with rate limiting)
-NVIDIA_NIM_API_KEY=nvapi-xxx \
-  cargo run -p nexus-conductor-benchmark --bin nim-cloud-bench --release
-
-# Quick test (first 5 models)
-NVIDIA_NIM_API_KEY=nvapi-xxx NIM_MODELS=5 \
-  cargo run -p nexus-conductor-benchmark --bin nim-cloud-bench --release
-```
+`nim-cloud-bench` is withdrawn during Phase Zero: it sent the `GROQ_API_KEY` value to NVIDIA NIM as a bearer token on curl's command line. Running it now only prints a withdrawal message and exits with status 69. The results above are historical.

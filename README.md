@@ -165,11 +165,18 @@ cd app && npm run tauri dev
 ### Server Deployment (withdrawn)
 
 The standalone server deployments (Docker, Docker Compose, Kubernetes/Helm,
-air-gapped and headless binary) and the standalone command-line binaries
-are withdrawn during Phase Zero. The repository provides no supported server
-deployment at this point; Nexus OS runs as the desktop app above. An existing
-deployment is not stopped automatically. See
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+air-gapped and headless binary) are withdrawn during Phase Zero, and so are
+these standalone binaries: `nexus-server`, `nexus-protocols-server` and its
+`nexus-os` alias, `nexus-cli`, `nx`, `coding-agent`, `social-poster-agent`,
+the computer-use tools `nx-screen`, `nx-input`, `nx-agent`, `nx-govern` and
+`nx-learn`, and the benchmarks `nim-cloud-bench`, `cloud-models-bench`,
+`inference-consistency-bench`, `local-vs-cloud-battle`,
+`real-agent-validation` and `real-battery-validation`. Each now prints a fixed
+withdrawal message and exits with status 69. Developer and benchmark binaries
+remain in the repository, pending the Architect's decision on them (D3); no
+recipe ships them. The repository provides no supported server deployment at
+this point; Nexus OS runs as the desktop app above. An existing deployment is
+not stopped automatically. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Post-Audit Status
 
@@ -257,18 +264,18 @@ nexus-os/
 | [Privacy Design](PRIVACY_DESIGN.md) | Privacy-by-design principles |
 | [Changelog](CHANGELOG.md) | Version history and release notes |
 | [Self-Improvement](docs/SELF_IMPROVEMENT.md) | Governed self-improvement pipeline, 10 hard invariants |
-| [Deployment Guide](docs/DEPLOYMENT.md) | Docker, Kubernetes/Helm, air-gapped installation |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Server deployment (Docker, Kubernetes/Helm, air-gapped): withdrawn during Phase Zero |
 | [Contributing](CONTRIBUTING.md) | How to contribute |
 
 ## Roadmap
 
-- [x] v10.6.0 — Governed Self-Improvement, SOC 2/NIST compliance, Docker/Helm deployment
+- [x] v10.6.0 — Governed Self-Improvement, SOC 2/NIST compliance, Docker/Helm deployment (withdrawn during Phase Zero)
 - [x] v10.5.0 — Post-audit hardening: 9.5/10 audit score, OWASP 10/10
 - [x] v10.4.0 — Agent memory, PQC crypto, migration tool, OpenAI-compat API
 - [x] v10.3.0 — Full audit: 54 agents, 655 commands, 84 pages
 - [x] Darwin Core — Darwinian evolution engine with adversarial arena
 - [x] Flash Inference — llama.cpp integration, 397B model verified
-- [x] Docker + Helm chart for server/K8s deployment
+- [x] Docker + Helm chart for server/K8s deployment (withdrawn during Phase Zero)
 - [x] SOC 2 Type II / NIST 800-53 formal certification
 - [x] Governed Self-Improvement (capstone — agents improve the OS itself)
 - [ ] Research paper: formal verification of governance properties

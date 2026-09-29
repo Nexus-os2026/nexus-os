@@ -3,11 +3,12 @@
 //! The protocols server (`nexus-protocols-server`, J2) and its `nexus-os`
 //! alias (J3), `nexus-cli` (J4) and the standalone `nx` terminal (J5) are
 //! withdrawn, together with the alternate `coding-agent` and
-//! `social-poster-agent` entry points and the `nx-*` computer-use harness
-//! (coordinator decisions D1 and D2), on the pattern of `crates/nexus-server`
-//! (J1). Each package's `tests/phase0_withdrawal.rs` runs its withdrawn
-//! executables and pins their sources and recipes. The guards here are
-//! workspace-wide:
+//! `social-poster-agent` entry points, the `nx-*` computer-use harness
+//! (coordinator decisions D1 and D2) and the six benchmarks that sent a
+//! provider key on curl's command line (coordinator decision after internal
+//! review), on the pattern of `crates/nexus-server` (J1). Each package's
+//! `tests/phase0_withdrawal.rs` runs its withdrawn executables and pins their
+//! sources and recipes. The guards here are workspace-wide:
 //!
 //! - every effective binary (and example) target of the workspace is
 //!   inventoried with its disposition, so a new or changed entry point fails
@@ -88,7 +89,7 @@ const BINARY_TARGETS: &[(&str, &str, &str, Disposition)] = &[
         "benchmarks/conductor-bench",
         "cloud-models-bench",
         "src/cloud_models_bench.rs",
-        Benchmark,
+        Withdrawn,
     ),
     (
         "benchmarks/conductor-bench",
@@ -112,13 +113,13 @@ const BINARY_TARGETS: &[(&str, &str, &str, Disposition)] = &[
         "benchmarks/conductor-bench",
         "inference-consistency-bench",
         "src/inference_consistency_bench.rs",
-        Benchmark,
+        Withdrawn,
     ),
     (
         "benchmarks/conductor-bench",
         "local-vs-cloud-battle",
         "src/local_vs_cloud_battle.rs",
-        Benchmark,
+        Withdrawn,
     ),
     (
         "benchmarks/conductor-bench",
@@ -136,19 +137,19 @@ const BINARY_TARGETS: &[(&str, &str, &str, Disposition)] = &[
         "benchmarks/conductor-bench",
         "nim-cloud-bench",
         "src/nim_cloud_bench.rs",
-        Benchmark,
+        Withdrawn,
     ),
     (
         "benchmarks/conductor-bench",
         "real-agent-validation",
         "src/real_agent_validation.rs",
-        Benchmark,
+        Withdrawn,
     ),
     (
         "benchmarks/conductor-bench",
         "real-battery-validation",
         "src/real_battery_validation.rs",
-        Benchmark,
+        Withdrawn,
     ),
     ("cli", "nexus-cli", "src/main.rs", Withdrawn),
     (
@@ -226,6 +227,18 @@ const BINARY_TARGETS: &[(&str, &str, &str, Disposition)] = &[
 const EXAMPLE_TARGETS: &[(&str, &str, &str)] = &[
     ("kernel", "dump_config", "examples/dump_config.rs"),
     ("kernel", "generate_genomes", "examples/generate_genomes.rs"),
+];
+
+/// Every Cargo bench target (`cargo bench`) of the workspace: the criterion
+/// harnesses of `benchmarks` (`harness = false`, so each has its own
+/// `main`). They are kept as benchmarks that no recipe ships (coordinator
+/// decision D3), and they run in process (see the bench guard below).
+const BENCH_TARGETS: &[(&str, &str, &str)] = &[
+    ("benchmarks", "agent_bench", "benches/agent_bench.rs"),
+    ("benchmarks", "gateway_bench", "benches/gateway_bench.rs"),
+    ("benchmarks", "kernel_bench", "benches/kernel_bench.rs"),
+    ("benchmarks", "phase67_bench", "benches/phase67_bench.rs"),
+    ("benchmarks", "replay_bench", "benches/replay_bench.rs"),
 ];
 
 /// The `members` of the workspace manifest.
@@ -396,6 +409,32 @@ fn effective_examples(member: &str) -> Vec<(String, String)> {
     merge_targets(explicit, inferred_in(&package, "examples"), autodiscover)
 }
 
+/// The effective bench targets of one member, as (name, path).
+fn effective_benches(member: &str) -> Vec<(String, String)> {
+    let package = workspace_root().join(member);
+    let manifest = read(&package.join("Cargo.toml"));
+    let autodiscover = package_value(&manifest, "autobenches").as_deref() != Some("false");
+    let explicit = explicit_targets(&manifest, "bench")
+        .into_iter()
+        .map(|(bench, path)| {
+            let path = path.unwrap_or_else(|| {
+                if package
+                    .join("benches")
+                    .join(&bench)
+                    .join("main.rs")
+                    .is_file()
+                {
+                    format!("benches/{bench}/main.rs")
+                } else {
+                    format!("benches/{bench}.rs")
+                }
+            });
+            (bench, path)
+        })
+        .collect();
+    merge_targets(explicit, inferred_in(&package, "benches"), autodiscover)
+}
+
 /// Rust source with comments removed. String literals are kept verbatim.
 fn strip_rust_comments(source: &str) -> String {
     let chars: Vec<char> = source.chars().collect();
@@ -516,7 +555,7 @@ fn p0_fg_standalone_every_binary_target_is_inventoried() {
             ),
         }
     }
-    assert_eq!(messages.len(), 12, "twelve binaries are withdrawn");
+    assert_eq!(messages.len(), 18, "eighteen binaries are withdrawn");
     for message in messages.keys() {
         for other in messages.keys().filter(|other| *other != message) {
             assert!(
@@ -544,6 +583,101 @@ fn p0_fg_standalone_every_example_target_is_inventoried() {
         .collect();
     expected.sort();
     assert_eq!(found, expected, "every example target must be inventoried");
+}
+
+/// Every Cargo bench target of the workspace is inventoried: a bench is an
+/// entry point too (`cargo bench`), so a new one needs review. Each runs in
+/// process: it reads no credential or other environment variable, starts no
+/// process and opens no network connection (none meets the criterion under
+/// which six benchmark binaries were withdrawn).
+#[test]
+fn p0_fg_standalone_every_bench_target_is_inventoried() {
+    let mut found: Vec<(String, String, String)> = Vec::new();
+    for member in workspace_members() {
+        for (name, path) in effective_benches(&member) {
+            found.push((member.clone(), name, path));
+        }
+    }
+    found.sort();
+    let mut expected: Vec<(String, String, String)> = BENCH_TARGETS
+        .iter()
+        .map(|(member, name, path)| (member.to_string(), name.to_string(), path.to_string()))
+        .collect();
+    expected.sort();
+    assert_eq!(found, expected, "every bench target must be inventoried");
+
+    for (member, name, path) in BENCH_TARGETS {
+        let code = strip_rust_comments(&read(&workspace_root().join(member).join(path)));
+        for forbidden in [
+            "_API_KEY",
+            "_TOKEN",
+            "env::var",
+            "std::process",
+            "Command::new",
+            "curl",
+            "reqwest",
+            "TcpStream",
+            "TcpListener",
+            "UdpSocket",
+        ] {
+            assert!(
+                !code.contains(forbidden),
+                "{member}/{path}: bench `{name}` must not contain `{forbidden}`"
+            );
+        }
+    }
+}
+
+// ── Build scripts of the withdrawn packages ─────────────────────────────────
+
+/// The one build script of a package with a withdrawn entry point, comments
+/// aside: `protocols/build.rs` asks Cargo to rebuild when the web interface
+/// (`app/dist`) changes, and does nothing else.
+const PROTOCOLS_BUILD_SCRIPT: &str = "use std::env; use std::path::PathBuf; \
+    fn main() { let manifest_dir = PathBuf::from(match env::var(\"CARGO_MANIFEST_DIR\") { \
+    Ok(d) => d, Err(e) => { eprintln!(\"CARGO_MANIFEST_DIR not set: {e}\"); \
+    std::process::exit(1); } }); \
+    let frontend_dist = manifest_dir.join(\"../app/dist\"); \
+    println!(\"cargo:rerun-if-changed={}\", frontend_dist.display()); }";
+
+/// The packages with a withdrawn entry point run no other build script:
+/// `protocols/build.rs` is exactly the script above (its only Cargo directive
+/// is `rerun-if-changed`), no other such package has a `build.rs`, and none
+/// names a build script with a `build` key.
+#[test]
+fn p0_fg_standalone_withdrawn_packages_run_no_other_build_script() {
+    let packages: BTreeSet<&str> = BINARY_TARGETS
+        .iter()
+        .filter(|(_, _, _, disposition)| *disposition == Withdrawn)
+        .map(|(member, _, _, _)| *member)
+        .collect();
+    assert_eq!(
+        packages.len(),
+        8,
+        "packages with a withdrawn entry point: {packages:?}"
+    );
+    for member in packages {
+        let package = workspace_root().join(member);
+        let manifest = read(&package.join("Cargo.toml"));
+        assert_eq!(
+            package_value(&manifest, "build"),
+            None,
+            "{member}: no `build` key may name a build script"
+        );
+        let script = package.join("build.rs");
+        if member == "protocols" {
+            let code = normalize_whitespace(&strip_rust_comments(&read(&script)));
+            assert_eq!(
+                code,
+                normalize_whitespace(PROTOCOLS_BUILD_SCRIPT),
+                "protocols/build.rs must stay exactly the rerun-if-changed script"
+            );
+            assert_eq!(code.matches("cargo:").count(), 1, "one Cargo directive");
+            assert!(code.contains("\"cargo:rerun-if-changed={}\""));
+        } else {
+            assert!(!script.exists(), "{member}: no build script");
+        }
+    }
 }
 
 // ── No alternate alias ──────────────────────────────────────────────────────
@@ -601,9 +735,22 @@ fn production_sources() -> Vec<(String, String)> {
 /// may name them (their definitions, their own libraries, and the withdrawn
 /// CLI library that the withdrawn CLI binary used to call).
 const ALIAS_NEEDLES: &[(&str, &[&str])] = &[
-    // J2, J3: the protocols gateway runtime.
+    // J2, J3: the protocols gateway runtime, and the gateway module and
+    // router constructor it serves (public API of the `nexus-protocols`
+    // library).
     ("server_runtime", &["protocols/src/lib.rs"]),
     ("run_from_args", &["protocols/src/server_runtime.rs"]),
+    (
+        "http_gateway",
+        &["protocols/src/lib.rs", "protocols/src/server_runtime.rs"],
+    ),
+    (
+        "build_router",
+        &[
+            "protocols/src/http_gateway.rs",
+            "protocols/src/server_runtime.rs",
+        ],
+    ),
     // J4: the CLI library, and the agent flows its binary ran (D1).
     ("nexus_cli", &[]),
     (
@@ -627,9 +774,11 @@ const ALIAS_NEEDLES: &[(&str, &[&str])] = &[
     ("run_tui(", &["nexus-code/src/tui/mod.rs"]),
 ];
 
-/// No production source reaches a withdrawn surface's entry APIs except the
-/// counted files above, so no other binary, example or library can become an
-/// alternate alias of a withdrawn surface.
+/// No production source names a listed entry API of a withdrawn surface
+/// outside the counted files above, so no other binary, example or library
+/// calls one of them to become an alternate alias. The needles are names,
+/// not a call graph: an entry API that is not listed here is not covered,
+/// and a new one needs a row.
 #[test]
 fn p0_fg_standalone_no_alias_reaches_a_withdrawn_entry() {
     let sources = production_sources();
@@ -721,7 +870,11 @@ const RECIPE_FILES: &[&str] = &[
 fn is_recipe(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower.starts_with("dockerfile")
+        || lower.ends_with(".dockerfile")
         || lower == "containerfile"
+        || lower == "vagrantfile"
+        || lower == "devcontainer.json"
+        || lower == ".devcontainer.json"
         || (lower.contains("compose") && (lower.ends_with(".yml") || lower.ends_with(".yaml")))
         || lower == "chart.yaml"
         || lower == "pkgbuild"
@@ -736,12 +889,69 @@ fn is_recipe(name: &str) -> bool {
         .any(|extension| lower.ends_with(extension))
 }
 
-/// No deployment, installation or packaging recipe exists beyond the
-/// inventoried, withdrawn ones, so no new container, chart, service unit,
-/// installer or package recipe can ship a standalone binary unreviewed.
-#[test]
-fn p0_fg_standalone_every_recipe_is_inventoried() {
-    fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
+/// A directory the root `.gitignore` anchors as ignored: a directory entry
+/// (ending in `/`) with a `/` at its start or in its middle, as a
+/// workspace-relative path, or as a path prefix when its last component ends
+/// in a `*` glob. Negated, file, unanchored and other glob entries are not
+/// used.
+#[derive(Debug)]
+struct IgnoredDirectory {
+    path: String,
+    prefix: bool,
+}
+
+impl IgnoredDirectory {
+    fn matches(&self, relative: &str) -> bool {
+        if self.prefix {
+            relative.starts_with(&self.path) && !relative[self.path.len()..].contains('/')
+        } else {
+            relative == self.path
+        }
+    }
+}
+
+/// The anchored ignored directories of the root `.gitignore`: ignored build
+/// output and local state, such as the Builder toolchain that the packaging
+/// step assembles, cloned upstream sources and agent worktrees (other
+/// checkouts of this repository, each guarded by its own copy of these
+/// tests). Read at run time, so the walk never names them itself.
+fn ignored_anchored_directories() -> Vec<IgnoredDirectory> {
+    let mut directories = Vec::new();
+    for line in read(&workspace_root().join(".gitignore")).lines() {
+        let entry = line.trim();
+        if entry.is_empty() || entry.starts_with('#') || entry.starts_with('!') {
+            continue;
+        }
+        let Some(body) = entry.strip_suffix('/') else {
+            continue;
+        };
+        if !body.contains('/') {
+            continue;
+        }
+        let body = body.trim_start_matches('/');
+        let (path, prefix) = match body.strip_suffix('*') {
+            Some(stem) => (stem, true),
+            None => (body, false),
+        };
+        if path.is_empty() || path.contains(['*', '?', '[', '\\']) {
+            continue;
+        }
+        directories.push(IgnoredDirectory {
+            path: path.to_string(),
+            prefix,
+        });
+    }
+    directories
+}
+
+/// Every file of the repository as a workspace-relative path, in sorted
+/// order. Dot directories (`.github`, `.gitlab`, `.cargo`, `.claude` and any
+/// new one) are walked like the others. Skipped are version-control
+/// internals, build output and dependencies by name (`target`,
+/// `node_modules`, `dist`), and the anchored ignored directories of the root
+/// `.gitignore` (see [`ignored_anchored_directories`]).
+fn repository_files() -> Vec<String> {
+    fn walk(root: &Path, dir: &Path, ignored: &[IgnoredDirectory], out: &mut Vec<String>) {
         for path in sorted_dir(dir) {
             let name = path
                 .file_name()
@@ -754,27 +964,87 @@ fn p0_fg_standalone_every_recipe_is_inventoried() {
                 .to_string_lossy()
                 .replace('\\', "/");
             if path.is_dir() {
-                // Build output, dependencies, and the Builder toolchain that
-                // the packaging step assembles (ignored by Git).
-                let generated = ["target", "node_modules", "dist"].contains(&name.as_str())
-                    || relative == "app/src-tauri/builder-toolchain"
-                    || relative.starts_with("app/src-tauri/builder-toolchain.assembly-");
-                if !name.starts_with('.') && !generated {
-                    walk(root, &path, out);
+                let skipped = [".git", "target", "node_modules", "dist"].contains(&name.as_str())
+                    || ignored.iter().any(|directory| directory.matches(&relative));
+                if !skipped {
+                    walk(root, &path, ignored, out);
                 }
-            } else if is_recipe(&name) {
+            } else {
                 out.push(relative);
             }
         }
     }
     let root = workspace_root();
     let root = root.canonicalize().unwrap_or(root);
-    let mut found = Vec::new();
-    walk(&root, &root, &mut found);
-    found.sort();
+    let ignored = ignored_anchored_directories();
+    let mut out = Vec::new();
+    walk(&root, &root, &ignored, &mut out);
+    assert!(out.len() > 1000, "repository files not found");
+    out.sort();
+    out
+}
+
+fn file_name(relative: &str) -> &str {
+    relative.rsplit('/').next().unwrap_or(relative)
+}
+
+/// No deployment, installation or packaging recipe exists beyond the
+/// inventoried, withdrawn ones, so no new container, chart, service unit,
+/// installer or package recipe can ship a standalone binary unreviewed. Dot
+/// directories are searched too.
+#[test]
+fn p0_fg_standalone_every_recipe_is_inventoried() {
+    let found: Vec<String> = repository_files()
+        .into_iter()
+        .filter(|relative| is_recipe(file_name(relative)))
+        .collect();
     let mut expected: Vec<String> = RECIPE_FILES.iter().map(|path| path.to_string()).collect();
     expected.sort();
     assert_eq!(found, expected, "every recipe must be inventoried");
+}
+
+/// Whether a file configures a continuous-integration pipeline (which could
+/// build, ship or publish a binary): GitHub workflows and actions, GitLab CI
+/// (including included files by the conventional names), and the pipeline
+/// files of other CI services.
+fn is_ci_config(relative: &str) -> bool {
+    let name = file_name(relative).to_ascii_lowercase();
+    let yaml = name.ends_with(".yml") || name.ends_with(".yaml");
+    (relative.starts_with(".github/workflows/") && yaml)
+        || name == "action.yml"
+        || name == "action.yaml"
+        || name.ends_with("gitlab-ci.yml")
+        || name.ends_with("gitlab-ci.yaml")
+        || (relative.starts_with(".gitlab/") && yaml)
+        || [
+            ".circleci/",
+            ".buildkite/",
+            ".woodpecker/",
+            ".tekton/",
+            ".drone/",
+            ".semaphore/",
+            ".cirrus/",
+        ]
+        .iter()
+        .any(|dir| relative.starts_with(dir))
+        || [
+            ".travis.yml",
+            "jenkinsfile",
+            "azure-pipelines.yml",
+            "azure-pipelines.yaml",
+            "bitbucket-pipelines.yml",
+            ".drone.yml",
+            ".woodpecker.yml",
+            "appveyor.yml",
+            ".appveyor.yml",
+            "cloudbuild.yml",
+            "cloudbuild.yaml",
+            "buildspec.yml",
+            "codemagic.yaml",
+            ".cirrus.yml",
+            "wercker.yml",
+        ]
+        .contains(&name.as_str())
 }
 
 /// Names of the withdrawn binaries, as a workflow would name them.
@@ -791,25 +1061,88 @@ const WITHDRAWN_BINARIES: &[&str] = &[
     "nx-agent",
     "nx-govern",
     "nx-learn",
+    "nim-cloud-bench",
+    "cloud-models-bench",
+    "inference-consistency-bench",
+    "local-vs-cloud-battle",
+    "real-agent-validation",
+    "real-battery-validation",
 ];
+
+/// The README's withdrawal section names exactly the withdrawn binaries (as
+/// code spans), and that list is the inventory's: users are told which
+/// binaries only deny, and no kept binary is named as withdrawn.
+#[test]
+fn p0_fg_standalone_readme_names_every_withdrawn_binary() {
+    let inventoried: BTreeSet<&str> = BINARY_TARGETS
+        .iter()
+        .filter(|(_, _, _, disposition)| *disposition == Withdrawn)
+        .map(|(_, name, _, _)| *name)
+        .collect();
+    let listed: BTreeSet<&str> = WITHDRAWN_BINARIES.iter().copied().collect();
+    assert_eq!(
+        listed, inventoried,
+        "the withdrawn names are the inventory's"
+    );
+
+    let readme = read(&workspace_root().join("README.md")).replace("\r\n", "\n");
+    let start = readme
+        .find("### Server Deployment (withdrawn)")
+        .expect("the README's withdrawal section");
+    let section = &readme[start..];
+    let section = &section[..section.find("\n## ").unwrap_or(section.len())];
+    let named: BTreeSet<&str> = section.split('`').skip(1).step_by(2).collect();
+    assert_eq!(
+        named, inventoried,
+        "the README's withdrawal section names exactly the withdrawn binaries"
+    );
+}
 
 /// No workflow builds, installs, uploads or publishes a withdrawn binary, a
 /// container image or a chart, and the release publishes only the desktop
 /// installers. (Workflows still compile and test the withdrawn packages.)
+/// Every CI configuration in the repository, dot directories included, is
+/// one this guard reads: the GitHub workflows and `.gitlab-ci.yml`, which
+/// includes no other file. A pipeline file of any other kind or place fails
+/// until it is reviewed.
 #[test]
 fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
     let root = workspace_root();
-    let mut workflows: Vec<PathBuf> = sorted_dir(&root.join(".github").join("workflows"))
+    let configs: Vec<String> = repository_files()
+        .into_iter()
+        .filter(|relative| is_ci_config(relative))
+        .collect();
+    let mut expected: Vec<String> = sorted_dir(&root.join(".github").join("workflows"))
         .into_iter()
         .filter(|path| {
             path.extension()
                 .is_some_and(|extension| extension == "yml" || extension == "yaml")
         })
+        .map(|path| {
+            format!(
+                ".github/workflows/{}",
+                path.file_name().expect("file name").to_string_lossy()
+            )
+        })
         .collect();
-    assert!(workflows.len() >= 5, "workflows not found");
-    workflows.push(root.join(".gitlab-ci.yml"));
-    for workflow in &workflows {
-        let text = read(workflow);
+    assert!(expected.len() >= 5, "workflows not found");
+    expected.push(".gitlab-ci.yml".to_string());
+    expected.sort();
+    assert_eq!(
+        configs, expected,
+        "every CI configuration must be one this guard reads"
+    );
+    let gitlab = read(&root.join(".gitlab-ci.yml"));
+    assert!(
+        !gitlab
+            .lines()
+            .map(str::trim_start)
+            .any(|line| line.starts_with("include:")),
+        ".gitlab-ci.yml must include no other file"
+    );
+    for config in &configs {
+        let workflow = root.join(config);
+        let text = read(&workflow);
         let name = workflow.display();
         for line in text
             .lines()

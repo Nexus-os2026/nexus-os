@@ -2,7 +2,7 @@
 
 **Date**: 2026-03-25 05:04:38 GMT
 **Total wall time**: 731.1s (12.2 minutes across 4 model runs)
-**Test harness**: `nexus-conductor-benchmark --bin cloud-models-bench`
+**Test harness**: `nexus-conductor-benchmark --bin cloud-models-bench` (withdrawn during Phase Zero; historical results)
 **Providers framework**: 12 supported (11 cloud + Ollama local)
 **Models tested**: 4 local Ollama models (llama3.1:8b, qwen3.5:4b, glm4:9b, qwen2.5-coder:7b)
 **Cloud providers**: 11 configured but awaiting API keys (DeepSeek, Groq, Mistral, Together, Fireworks, Perplexity, OpenRouter, OpenAI, Gemini, Cohere, NVIDIA NIM)
@@ -251,24 +251,9 @@ The benchmark supports all 11 cloud providers. Set the API keys to enable:
 - Agentic test prompts: 3
 - NVIDIA NIM models wired: 20 (representative from each family)
 
-## How to Run
+## How to Run (withdrawn)
 
-```bash
-# Local only (Ollama)
-OLLAMA_MODEL=qwen2.5-coder:7b \
-  cargo run -p nexus-conductor-benchmark --bin cloud-models-bench --release
-
-# With cloud providers (set any/all keys)
-DEEPSEEK_API_KEY=sk-xxx \
-GROQ_API_KEY=gsk_xxx \
-NVIDIA_NIM_API_KEY=nvapi-xxx \
-OLLAMA_MODEL=qwen2.5-coder:7b \
-  cargo run -p nexus-conductor-benchmark --bin cloud-models-bench --release
-
-# Full NVIDIA NIM sweep (tests 20 models)
-NVIDIA_NIM_API_KEY=nvapi-xxx \
-  cargo run -p nexus-conductor-benchmark --bin cloud-models-bench --release
-```
+`cloud-models-bench` is withdrawn during Phase Zero: it sent provider keys as bearer tokens on curl's command line. Running it now only prints a withdrawal message and exits with status 69. The results above are historical.
 
 ---
 
