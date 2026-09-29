@@ -53,6 +53,20 @@ pub(crate) fn build_openai_chat_request(
 pub(crate) fn execute_openai_compatible_query(
     query: OpenAiCompatibleQuery<'_>,
 ) -> Result<LlmResponse, AgentError> {
+    execute_bounded(
+        query,
+        Duration::from_secs(REQUEST_TIMEOUT_SECS),
+        super::MAX_PROVIDER_RESPONSE_BYTES,
+    )
+}
+
+/// The query with its bounds (Final Gate decision E): the whole exchange
+/// ends within `timeout` and at most `max_bytes` of response is read.
+pub(super) fn execute_bounded(
+    query: OpenAiCompatibleQuery<'_>,
+    timeout: Duration,
+    max_bytes: u64,
+) -> Result<LlmResponse, AgentError> {
     let Some(api_key) = query.api_key.filter(|value| !value.trim().is_empty()) else {
         return Err(AgentError::SupervisorError(
             query.missing_key_error.to_string(),
@@ -72,19 +86,18 @@ pub(crate) fn execute_openai_compatible_query(
             .insert((*header_name).to_string(), header_value.clone());
     }
 
-    let client =
-        super::credential_client(Duration::from_secs(REQUEST_TIMEOUT_SECS)).map_err(|error| {
-            AgentError::SupervisorError(format!(
-                "failed to build HTTP client for {}: {error}",
-                query.provider_name
-            ))
-        })?;
+    let client = super::credential_client(timeout).map_err(|error| {
+        AgentError::SupervisorError(format!(
+            "failed to build HTTP client for {}: {error}",
+            query.provider_name
+        ))
+    })?;
 
     eprintln!(
         "[nexus-llm][governance] {}::complete endpoint={}",
         query.provider_name, request.endpoint
     );
-    let mut call = client.post(request.endpoint.clone());
+    let mut call = client.post(request.endpoint.clone()).timeout(timeout);
     for (header_name, header_value) in &request.headers {
         call = call.header(header_name, header_value);
     }
@@ -93,12 +106,13 @@ pub(crate) fn execute_openai_compatible_query(
         AgentError::SupervisorError(format!("{} request failed: {error}", query.provider_name))
     })?;
     let status = response.status();
-    let raw_text = response.text().map_err(|error| {
+    let raw = super::read_bounded(response, max_bytes).map_err(|error| {
         AgentError::SupervisorError(format!(
             "{} response read failed: {error}",
             query.provider_name
         ))
     })?;
+    let raw_text = String::from_utf8_lossy(&raw);
     let payload: Value = serde_json::from_str(&raw_text).map_err(|error| {
         let preview = if raw_text.len() > 200 {
             &raw_text[..raw_text.floor_char_boundary(200)]
