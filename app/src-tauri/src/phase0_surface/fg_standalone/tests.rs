@@ -1055,13 +1055,21 @@ fn p0_fg_standalone_every_recipe_is_inventoried() {
 }
 
 /// Whether a file configures a continuous-integration pipeline (which could
-/// build, ship or publish a binary): GitHub workflows and actions, GitLab CI
-/// (including included files by the conventional names), and the pipeline
+/// build, ship or publish a binary): any `workflows/*.yml` or `.yaml` under a
+/// dot directory (GitHub, Gitea and Forgejo Actions, and any other service
+/// that reads them there), GitHub actions (`action.yml`), GitLab CI
+/// (including included files by the conventional names), sourcehut
+/// (`.build.yml`, `.builds/`), TeamCity (`.teamcity/`), and the pipeline
 /// files of other CI services.
 fn is_ci_config(relative: &str) -> bool {
     let name = file_name(relative).to_ascii_lowercase();
     let yaml = name.ends_with(".yml") || name.ends_with(".yaml");
-    (relative.starts_with(".github/workflows/") && yaml)
+    let components: Vec<&str> = relative.split('/').collect();
+    let workflows_under_dot_directory = yaml
+        && components
+            .windows(3)
+            .any(|window| window[0].starts_with('.') && window[1] == "workflows");
+    workflows_under_dot_directory
         || name == "action.yml"
         || name == "action.yaml"
         || name.ends_with("gitlab-ci.yml")
@@ -1075,6 +1083,8 @@ fn is_ci_config(relative: &str) -> bool {
             ".drone/",
             ".semaphore/",
             ".cirrus/",
+            ".builds/",
+            ".teamcity/",
         ]
         .iter()
         .any(|dir| relative.starts_with(dir))
@@ -1094,6 +1104,7 @@ fn is_ci_config(relative: &str) -> bool {
             "codemagic.yaml",
             ".cirrus.yml",
             "wercker.yml",
+            ".build.yml",
         ]
         .contains(&name.as_str())
 }
