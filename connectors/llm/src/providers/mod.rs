@@ -1297,6 +1297,16 @@ mod tests {
             while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
                 request.push(byte[0]);
             }
+            // Read the request body too: closing a socket with unread input
+            // resets the connection on Windows.
+            let length = String::from_utf8_lossy(&request)
+                .to_ascii_lowercase()
+                .lines()
+                .find_map(|line| line.strip_prefix("content-length:").map(str::to_string))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            let mut sent = vec![0u8; length];
+            stream.read_exact(&mut sent).unwrap();
             let body = br#"{"dripped":"slow"}"#;
             let head = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",

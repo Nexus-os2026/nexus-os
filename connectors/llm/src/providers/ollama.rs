@@ -797,6 +797,21 @@ mod tests {
             while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
                 request.push(byte[0]);
             }
+            // Read the whole request before answering: closing a socket with
+            // unread input resets the connection on Windows, which can drop
+            // the answer before curl reads it.
+            let length = String::from_utf8_lossy(&request)
+                .to_ascii_lowercase()
+                .lines()
+                .find_map(|line| line.strip_prefix("content-length:").map(str::to_string))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            let mut pull_request = vec![0u8; length];
+            stream.read_exact(&mut pull_request).unwrap();
+            assert!(
+                String::from_utf8_lossy(&pull_request).contains("\"llama3\""),
+                "the pull names the model"
+            );
             let body =
                 "{\"status\":\"pulling\",\"completed\":1,\"total\":2}\n{\"status\":\"success\"}\n";
             let _ = write!(
