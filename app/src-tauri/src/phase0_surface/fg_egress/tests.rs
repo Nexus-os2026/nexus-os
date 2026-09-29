@@ -1234,7 +1234,7 @@ const CREDENTIAL_CURL_SITES: &[(&str, usize, &str)] = &[
     (
         "crates/nexus-capability-measurement/src/evaluation/nim_client.rs",
         2,
-        "the validation-run commands are closed; the A/B command's battery is empty in the desktop, so no query is sent",
+        "the validation-run commands are closed, and cm_run_ab_validation is closed by the C5 closure (item G workstream), so no query is sent",
     ),
     (
         "crates/nexus-capability-measurement/src/evaluation/openrouter_client.rs",

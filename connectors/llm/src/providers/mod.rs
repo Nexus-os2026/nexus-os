@@ -388,7 +388,8 @@ const MAX_PROVIDER_RESPONSE_BYTES: u64 = 32 * 1024 * 1024;
 /// - `timeout_secs` bounds the whole exchange, from connecting until the
 ///   last response byte is read (as curl's `-m` did), and at most 32 MiB of
 ///   response is read;
-/// - TLS certificates are verified;
+/// - TLS certificates are verified (see [`credential_client`] for which TLS
+///   implementation, trust roots and proxy settings apply);
 /// - an error names what failed, never a header value or the URL.
 ///
 /// The request runs on its own thread: the blocking client must not run on
@@ -459,6 +460,14 @@ fn post_json_bounded(
 /// `www-authenticate`, and would re-send `x-api-key` (and, on 307 and 308,
 /// the body) to the target. A redirect comes back as its status, which the
 /// callers report as a failed request.
+///
+/// Certificate verification is always on. Which TLS implementation, trust
+/// roots and proxy settings apply follows the build's unified reqwest
+/// features: in the desktop build other crates enable reqwest's
+/// `default-tls` and `system-proxy`, so the platform TLS (OpenSSL, SChannel
+/// or Security.framework) with the operating system's trust store is used and
+/// the system and environment proxy settings apply; this crate built on its
+/// own uses rustls with the bundled webpki roots.
 pub(crate) fn credential_client(
     timeout: std::time::Duration,
 ) -> reqwest::Result<reqwest::blocking::Client> {
