@@ -928,6 +928,63 @@ fn p0_fg_transcendent_check_matches_every_spelling_of_a_stored_id() {
     assert!(!is_transcendent_agent(&state, "not-an-agent-id"));
 }
 
+/// P0-FINAL-GATE (item G, review W5): a stored record above L6 counts as L6.
+/// Manifest validation admits no level above 6, but a stored record is read
+/// without it. The checks used to compare with 6 exactly, so a stored
+/// autonomy 7 passed:
+/// - `start_agent` went on to the supervisor;
+/// - a goal reached the rate limit;
+/// - an autonomous loop was registered.
+///
+/// Every check now uses the bound `TRANSCENDENT_AUTONOMY` (6 and above).
+/// Levels up to 5 are unaffected.
+#[test]
+fn p0_fg_stored_levels_above_l6_count_as_transcendent() {
+    use crate::commands::agents::{is_transcendent_agent, is_transcendent_level};
+    use crate::commands::cognitive::assign_agent_goal;
+    use crate::phase0_surface::{closed, Closure};
+    for level in 0..=5 {
+        assert!(!is_transcendent_level(level), "{level}");
+    }
+    for level in [6, 7, u8::MAX] {
+        assert!(is_transcendent_level(level), "{level}");
+    }
+
+    let state = AppState::new_in_memory();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let beyond = Uuid::new_v4().to_string();
+    let manifest = json!({
+        "name": "beyond-transcendent",
+        "version": "1.0.0",
+        "capabilities": ["llm.query"],
+        "fuel_budget": 1000,
+        "autonomy_level": 7,
+    })
+    .to_string();
+    state
+        .db
+        .save_agent(&beyond, &manifest, "stopped", 7, "native")
+        .unwrap();
+    assert!(is_transcendent_agent(&state, &beyond));
+    assert_eq!(
+        start_agent(&state, beyond.clone()),
+        Err(closed("start_agent", Closure::ApprovalRequired))
+    );
+    assert_eq!(
+        assign_agent_goal(&state, beyond.clone(), "p0fg".into(), 5, None),
+        Err(closed("assign_agent_goal", Closure::ApprovalRequired))
+    );
+    assert_eq!(
+        super::start_autonomous_loop(&state, beyond.clone(), Some(120), None),
+        Err(closed("start_autonomous_loop", Closure::ApprovalRequired))
+    );
+    assert!(state.agent_scheduler.list().is_empty());
+}
+
 /// P0-FINAL-GATE (item G): in Phase Zero an enabled Warden review denies
 /// with the bounded `WARDEN_REVIEW_UNAVAILABLE` reason, and nothing can stand
 /// in for the Warden. That holds in each of these cases:

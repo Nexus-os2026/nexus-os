@@ -1294,7 +1294,7 @@ impl AppState {
             // named or published, as `create_agent` writes nothing for L6. A
             // record an earlier build stored stays as it is; restore
             // registers none.
-            if manifest.autonomy_level == Some(6) {
+            if manifest.autonomy_level.is_some_and(is_transcendent_level) {
                 eprintln!(
                     "prebuilt: {} not loaded: transcendent (L6) agents are unavailable in Phase Zero",
                     manifest.name

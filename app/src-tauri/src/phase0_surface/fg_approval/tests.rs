@@ -336,10 +336,13 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
     let chat = include_str!("../../commands/chat_llm.rs");
 
     let (_, load) = fn_shape(chat, "load_prebuilt_agents");
-    let skip = position(&load, "ifmanifest.autonomy_level==Some(6){");
+    let skip = position(
+        &load,
+        "ifmanifest.autonomy_level.is_some_and(is_transcendent_level){",
+    );
     assert!(
         load[skip..].starts_with(concat!(
-            "ifmanifest.autonomy_level==Some(6){eprintln!(",
+            "ifmanifest.autonomy_level.is_some_and(is_transcendent_level){eprintln!(",
             "\"prebuilt:{}notloaded:transcendent(L6)agentsareunavailableinPhaseZero\",",
             "manifest.name);continue;}",
         )),
@@ -367,7 +370,7 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
     let (_, create) = fn_shape(agents, "create_agent");
     assert!(
         create.starts_with(&format!(
-            "letmanifest=parse_agent_manifest_json(manifest_json.as_str())?;ifmanifest.autonomy_level==Some(6){{{}}}",
+            "letmanifest=parse_agent_manifest_json(manifest_json.as_str())?;ifmanifest.autonomy_level.is_some_and(is_transcendent_level){{{}}}",
             denial("create_agent", "ApprovalRequired")
         )),
         "{create}"
@@ -377,9 +380,11 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
     let (_, start) = fn_shape(agents, "start_agent");
     let refusal = position(&start, &denial("start_agent", "ApprovalRequired"));
     assert!(start.contains(
-        "letstored_transcendent=find_manifest(state,&agent_id).is_some_and(|manifest|manifest.autonomy_level==Some(6));"
+        "letstored_transcendent=find_manifest(state,&agent_id).is_some_and(|manifest|manifest.autonomy_level.is_some_and(is_transcendent_level));"
     ));
-    assert!(start.contains(".get_agent(parsed).is_some_and(|handle|handle.autonomy_level==6);"));
+    assert!(start.contains(
+        ".get_agent(parsed).is_some_and(|handle|is_transcendent_level(handle.autonomy_level));"
+    ));
     assert!(start.contains("ifstored_transcendent||registered_transcendent{"));
     for later in [
         "restart_agent(",
@@ -393,7 +398,10 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
     }
 
     let (_, restore) = fn_shape(agents, "restore_persisted_agents");
-    let skip = position(&restore, "ifmanifest.autonomy_level==Some(6){");
+    let skip = position(
+        &restore,
+        "ifmanifest.autonomy_level.is_some_and(is_transcendent_level){",
+    );
     assert!(restore[skip..].contains("continue;"));
     assert!(skip < position(&restore, "start_agent_with_id("));
     assert!(skip > position(&restore, "validate_stored_manifest(&manifest)"));
@@ -518,7 +526,7 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
     );
     assert!(
         tools.ends_with(&format!(
-            "ifagent.autonomy_level==6{{{}}}Ok(claimed.min(agent.autonomy_level))",
+            "ifcrate::commands::agents::is_transcendent_level(agent.autonomy_level){{{}}}Ok(claimed.min(agent.autonomy_level))",
             denial("tools_execute", "ApprovalRequired")
         )),
         "{tools}"
@@ -536,12 +544,14 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
             "letparsed=Uuid::parse_str(agent_id).ok();",
             "letcanonical=parsed.map(|id|id.to_string());",
             "letstored=std::iter::once(agent_id).chain(canonical.as_deref()).any(|id|{",
-            "find_manifest(state,id).is_some_and(|manifest|manifest.autonomy_level==Some(6))});",
+            "find_manifest(state,id).is_some_and(|manifest|manifest.autonomy_level.is_some_and(is_transcendent_level))});",
             "letregistered=parsed.is_some_and(|id|{",
         )),
         "{helper}"
     );
-    assert!(helper.contains(".get_agent(id).is_some_and(|handle|handle.autonomy_level==6)"));
+    assert!(helper.contains(
+        ".get_agent(id).is_some_and(|handle|is_transcendent_level(handle.autonomy_level))"
+    ));
     assert!(helper.ends_with("stored||registered"));
     for write in [
         "start_agent",
@@ -554,6 +564,42 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
         "register_agent",
     ] {
         assert!(!helper.contains(write), "is_transcendent_agent: {write}");
+    }
+}
+
+/// P0-FINAL-GATE (item G, review W5): every L6 check uses the named bound
+/// `TRANSCENDENT_AUTONOMY` through `is_transcendent_level` (L6 or above),
+/// never an equality with 6, so a stored level above 6 cannot pass as
+/// ordinary.
+#[test]
+fn p0_fg_g_l6_checks_use_the_named_bound() {
+    let agents = include_str!("../../commands/agents.rs");
+    assert!(without_whitespace(&code_lines(agents))
+        .contains("pub(crate)constTRANSCENDENT_AUTONOMY:u8=6;"));
+    let (params, bound) = fn_shape(agents, "is_transcendent_level");
+    assert_eq!(params, "(level:u8)");
+    assert_eq!(bound, "level>=TRANSCENDENT_AUTONOMY");
+    for (file, src, function) in [
+        ("commands/agents.rs", agents, "create_agent"),
+        ("commands/agents.rs", agents, "start_agent"),
+        ("commands/agents.rs", agents, "restore_persisted_agents"),
+        ("commands/agents.rs", agents, "is_transcendent_agent"),
+        (
+            "commands/chat_llm.rs",
+            include_str!("../../commands/chat_llm.rs"),
+            "load_prebuilt_agents",
+        ),
+        (
+            "commands/crate_bridges.rs",
+            include_str!("../../commands/crate_bridges.rs"),
+            "tool_call_autonomy",
+        ),
+    ] {
+        let (_, body) = fn_shape(src, function);
+        assert!(body.contains("is_transcendent_level"), "{file} {function}");
+        for equality in ["autonomy_level==Some(6)", "autonomy_level==6"] {
+            assert!(!body.contains(equality), "{file} {function}: {equality}");
+        }
     }
 }
 
