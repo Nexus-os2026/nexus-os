@@ -516,10 +516,20 @@ fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
     let check = body(&apps, "async fn check_messaging_connectivity(");
     assert!(!check.contains("{e}"), "{check}");
     assert_eq!(check.matches("e.without_url()").count(), 4, "{check}");
-    let compact_check = compact(&check);
+    // Comment lines are dropped; the client follows no redirect and sends no
+    // Referer (a redirect would otherwise carry the token-bearing URL).
+    let compact_check = compact(
+        &check
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
     assert!(
-        compact_check
-            .starts_with("letclient=reqwest::Client::builder().timeout(endpoints.timeout).build()"),
+        compact_check.starts_with(concat!(
+            "letclient=reqwest::Client::builder().timeout(endpoints.timeout)",
+            ".redirect(reqwest::redirect::Policy::none()).referer(false).build()"
+        )),
         "{check}"
     );
     assert_eq!(check.matches("reqwest::Client").count(), 1, "{check}");
