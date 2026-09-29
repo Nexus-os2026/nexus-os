@@ -925,11 +925,11 @@ fn assert_doc(path: &str, required: &[&str], forbidden: &[&str]) {
 /// SWE-bench harness say that the protocols server is withdrawn, say that
 /// existing deployments are not stopped, and give no command that builds,
 /// installs, deploys, starts or reaches it. The README also says that the
-/// withdrawn binaries only deny, that developer and benchmark binaries remain
-/// pending the Architect's decision (D3), and that the deployment guide and
-/// the Docker/Helm roadmap items are withdrawn. (J1's own guard checks its
-/// part of the deployment guide; the desktop's standalone guard checks that
-/// the README names every withdrawn binary.)
+/// withdrawn binaries only deny, and it states the Architect's Decision M for
+/// the remaining developer and benchmark binaries; the superseded
+/// "decision pending (D3)" wording is refused, so it cannot return. (J1's own
+/// guard checks its part of the deployment guide; the desktop's standalone
+/// guard checks that the README names every withdrawn binary.)
 #[test]
 fn p0_j2_j3_deployment_docs_withdraw_without_claiming_a_stop() {
     assert_doc(
@@ -975,14 +975,11 @@ fn p0_j2_j3_deployment_docs_withdraw_without_claiming_a_stop() {
             "### Server Deployment (withdrawn)",
             "are withdrawn during Phase Zero",
             "Each now prints a fixed withdrawal message and exits with status 69.",
-            "Developer and benchmark binaries remain in the repository, pending the \
-             Architect's decision on them (D3); no recipe ships them.",
+            "Other developer and benchmark binaries may remain as development-only tools, \
+             provided they are not shipped, stay pinned by the inventory guard, and are not \
+             documented as runtime entry points.",
             "The repository provides no supported server deployment at this point",
             "An existing deployment is not stopped automatically",
-            "| [Deployment Guide](docs/DEPLOYMENT.md) | Server deployment (Docker, \
-             Kubernetes/Helm, air-gapped): withdrawn during Phase Zero |",
-            "Docker/Helm deployment (withdrawn during Phase Zero)",
-            "Docker + Helm chart for server/K8s deployment (withdrawn during Phase Zero)",
         ],
         &[
             "docker compose up",
@@ -993,6 +990,7 @@ fn p0_j2_j3_deployment_docs_withdraw_without_claiming_a_stop() {
             "for Kubernetes/Helm, air-gapped, and HA deployment",
             "and the standalone command-line binaries are withdrawn",
             "| Docker, Kubernetes/Helm, air-gapped installation |",
+            "pending the Architect's decision on them (D3)",
         ],
     );
     assert_doc(

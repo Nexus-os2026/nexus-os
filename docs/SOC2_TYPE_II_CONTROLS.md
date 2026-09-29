@@ -1,15 +1,36 @@
-# SOC 2 Type II Controls — Nexus OS
+# SOC 2 Trust Services Criteria — Internal Control Mapping (legacy) — Nexus OS
+
+> **Status: internal mapping — not an audit, not a certification.**
+>
+> - This is an internal self-assessment and control mapping, written before the
+>   Phase Zero trust-boundary rebuild. It has not been revalidated against the
+>   rebuild, and Phase Zero is not complete.
+> - It is not external audit evidence, and it is not a certification,
+>   accreditation or attestation.
+> - No SOC 2 Type II observation period, SOC 2 report or attestation is
+>   established by this repository, and no auditor is named in it. The
+>   pre-audit readiness view is in [SOC2_READINESS.md](SOC2_READINESS.md).
+> - Its status labels (such as IMPLEMENTED) and its code, test and deployment
+>   references are historical, recorded at the mapping date. They are not
+>   current Phase Zero validation claims: some surfaces it cites are now closed
+>   or withdrawn (for example the standalone servers and the Docker/Helm
+>   deployment), and some references may no longer exist.
+> - Current trust-boundary evidence is in the
+>   [Phase Zero Final-Gate dossier](security/phase0-final-gate-dossier.md) and the
+>   [Phase Zero authority inventory](security/phase0-c5-authority-inventory.md).
+> - Do not use this document as evidence of current regulatory certification,
+>   compliance or production readiness.
 
 ## Overview
 
-This document maps Nexus OS v10.5.0 features to the AICPA Trust Service Criteria for SOC 2 Type II compliance. Each control includes implementation status, code references, and test evidence.
+This document maps Nexus OS v10.5.0 features, as recorded before the Phase Zero rebuild, to the AICPA Trust Services Criteria. It is an internal mapping, not a statement of SOC 2 compliance. Each row lists the status, code references and test evidence recorded at the mapping date.
 
-**Assessment Date:** 2026-03-31
-**Observation Period Target:** Q3–Q4 2026
+**Internal mapping date:** 2026-03-31 (internal; no assessor or auditor)
+**Observation period:** none has run; the earlier target of Q3–Q4 2026 is not evidence of one
 **System Version:** 10.5.0
 
 **Status Key:**
-- **IMPLEMENTED** — Feature is built, tested, and active in the current release
+- **IMPLEMENTED** — Legacy label recorded at the mapping date; not revalidated as a current Phase Zero property
 - **PARTIAL** — Core capability exists but requires additional work
 - **PLANNED** — Scheduled for development
 
@@ -141,6 +162,8 @@ This document maps Nexus OS v10.5.0 features to the AICPA Trust Service Criteria
 ---
 
 ## Evidence Summary
+
+*Historical internal tally at the mapping date, not revalidated under Phase Zero; not audit evidence.*
 
 | Category | Controls | Implemented | Partial | Planned |
 |----------|----------|-------------|---------|---------|

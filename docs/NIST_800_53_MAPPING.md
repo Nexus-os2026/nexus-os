@@ -1,15 +1,35 @@
-# NIST 800-53 Rev 5 Control Mapping — Nexus OS
+# NIST 800-53 Rev 5 Control Mapping (internal, legacy) — Nexus OS
+
+> **Status: internal control mapping — not an audit, not a certification.**
+>
+> - This is an internal self-assessment and control mapping, written before the
+>   Phase Zero trust-boundary rebuild. It has not been revalidated against the
+>   rebuild, and Phase Zero is not complete.
+> - It is not external audit evidence, and it is not a certification,
+>   accreditation or attestation.
+> - It is a control mapping only: not a NIST assessment, and not an
+>   authorization, accreditation or certification of any kind.
+> - Its status labels (such as IMPLEMENTED) and its code, test and deployment
+>   references are historical, recorded at the mapping date. They are not
+>   current Phase Zero validation claims: some surfaces it cites are now closed
+>   or withdrawn (for example the standalone servers and the Docker/Helm
+>   deployment), and some references may no longer exist.
+> - Current trust-boundary evidence is in the
+>   [Phase Zero Final-Gate dossier](security/phase0-final-gate-dossier.md) and the
+>   [Phase Zero authority inventory](security/phase0-c5-authority-inventory.md).
+> - Do not use this document as evidence of current regulatory certification,
+>   compliance or production readiness.
 
 ## Overview
 
-This document maps Nexus OS v10.5.0 controls to NIST Special Publication 800-53 Revision 5 control families. Focus is on families most relevant to AI agent operating systems.
+This document is an internal mapping of Nexus OS v10.5.0 features, as recorded before the Phase Zero rebuild, to NIST Special Publication 800-53 Revision 5 control families. Focus is on families most relevant to AI agent operating systems.
 
-**Assessment Date:** 2026-03-31
+**Internal mapping date:** 2026-03-31 (internal; no assessor)
 **Framework:** NIST SP 800-53 Rev 5 (September 2020)
 **System Version:** 10.5.0
 
 **Status Key:**
-- **IMPLEMENTED** — Feature is built, tested, and active
+- **IMPLEMENTED** — Legacy label recorded at the mapping date; not revalidated as a current Phase Zero property
 - **PARTIAL** — Core capability exists, additional work needed
 - **PLANNED** — Scheduled for development
 
@@ -216,6 +236,8 @@ This document maps Nexus OS v10.5.0 controls to NIST Special Publication 800-53 
 ---
 
 ## Coverage Summary
+
+*Historical internal tally at the mapping date, not revalidated under Phase Zero; not assessment evidence.*
 
 | Control Family | Controls Mapped | Implemented | Partial | Planned |
 |---------------|----------------|-------------|---------|---------|

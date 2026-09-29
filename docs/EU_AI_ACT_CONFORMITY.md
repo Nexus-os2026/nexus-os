@@ -1,4 +1,28 @@
-# NEXUS OS — EU AI Act Conformity Self-Assessment
+# NEXUS OS — EU AI Act Conformity Self-Assessment (internal, legacy)
+
+> **Status: internal self-assessment — not an audit, not a certification.**
+>
+> - This is an internal self-assessment and control mapping, written before the
+>   Phase Zero trust-boundary rebuild. It has not been revalidated against the
+>   rebuild, and Phase Zero is not complete.
+> - It is not external audit evidence, and it is not a certification,
+>   accreditation or attestation.
+> - It is not a conformity assessment, and it is not a certification, CE
+>   marking or registration. No notified body has been engaged (Section 7).
+>   It makes no legal determination.
+> - Its system description (version, test, crate and provider figures) is
+>   historical, and the target dates in Section 7 have passed without
+>   completion recorded in this repository.
+> - Its status labels (such as IMPLEMENTED) and its code, test and deployment
+>   references are historical, recorded at the mapping date. They are not
+>   current Phase Zero validation claims: some surfaces it cites are now closed
+>   or withdrawn (for example the standalone servers and the Docker/Helm
+>   deployment), and some references may no longer exist.
+> - Current trust-boundary evidence is in the
+>   [Phase Zero Final-Gate dossier](security/phase0-final-gate-dossier.md) and the
+>   [Phase Zero authority inventory](security/phase0-c5-authority-inventory.md).
+> - Do not use this document as evidence of current regulatory certification,
+>   compliance or production readiness.
 
 ## Regulation (EU) 2024/1689 — Artificial Intelligence Act
 ### Chapter III, Section 2: High-Risk AI System Requirements
@@ -11,7 +35,7 @@
 | **Compliance Target** | August 2, 2026 (High-Risk) |
 | **Repository** | gitlab.com/nexaiceo/nexus-os |
 
-*CONFIDENTIAL — For compliance review purposes*
+*Internal self-assessment; not a conformity assessment.*
 
 ---
 
@@ -33,7 +57,7 @@
 
 Nexus OS is a governed AI agent operating system built in Rust with cryptographic security at the kernel level. This document maps Nexus OS capabilities to the EU AI Act (Regulation (EU) 2024/1689) requirements for high-risk AI systems under Chapter III, Section 2, which become enforceable on **August 2, 2026**.
 
-Nexus OS is not itself a high-risk AI system. It is infrastructure that can be deployed for high-risk use cases listed in Annex III (e.g., employment screening, critical infrastructure management, law enforcement support). When used in such contexts, the deployer bears primary compliance responsibility. This document demonstrates that Nexus OS provides the technical controls necessary to meet those obligations.
+Nexus OS is not itself a high-risk AI system. It is infrastructure that can be deployed for high-risk use cases listed in Annex III (e.g., employment screening, critical infrastructure management, law enforcement support). When used in such contexts, the deployer bears primary compliance responsibility. This document maps capabilities recorded at the assessment date to those obligations; it does not establish that they are met.
 
 ### Compliance Summary
 
@@ -48,7 +72,7 @@ Nexus OS is not itself a high-risk AI system. It is infrastructure that can be d
 | Article 15 — Accuracy & Cybersecurity | **Implemented** | Seven-layer defense: Ed25519 identity, capability ACL, WASM sandbox, output firewall |
 | Article 17 — Quality Management | **Partial** | CI/CD quality gates and test coverage in place; formal QMS documentation in progress |
 
-**Status legend:** **Implemented** = feature is built, tested, and active in the current release. **Partial** = core capability exists but requires additional work for full compliance. **Deployer** = compliance responsibility falls on the deploying organization using Nexus OS tooling. **Planned** = scheduled for development.
+**Status legend:** **Implemented** = legacy label recorded at the assessment date; not revalidated as a current Phase Zero property. **Partial** = core capability exists but requires additional work for full compliance. **Deployer** = compliance responsibility falls on the deploying organization using Nexus OS tooling. **Planned** = scheduled for development.
 
 ---
 
@@ -252,7 +276,7 @@ Nexus OS provides the most comprehensive governance infrastructure available in 
 
 **Key compliance strengths:** cryptographic agent identity (Article 15), hash-chained audit trail (Article 12), HITL consent gates at the kernel level (Article 14), graduated L0–L6 autonomy (Article 14), multi-layer defense architecture (Article 15), and continuous risk management through adversarial testing (Article 9).
 
-Known gaps are documented transparently in Section 7 with specific remediation plans and timelines. All gaps are addressable before the August 2, 2026 enforcement deadline.
+Known gaps are documented transparently in Section 7 with specific remediation plans and timelines. [Status note: the target dates above have passed; this repository records no completion of these gaps.]
 
 Organizations evaluating AI agent platforms for EU AI Act compliance are encouraged to review the full technical documentation at gitlab.com/nexaiceo/nexus-os and contact the development team for deployment-specific compliance discussions.
 

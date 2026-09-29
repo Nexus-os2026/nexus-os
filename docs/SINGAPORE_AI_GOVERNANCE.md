@@ -1,4 +1,22 @@
-# Singapore Model AI Governance Framework — Nexus OS Mapping
+# Singapore Model AI Governance Framework — Nexus OS Mapping (internal, legacy)
+
+> **Status: internal mapping — not an audit, not a certification.**
+>
+> - This is an internal self-assessment and control mapping, written before the
+>   Phase Zero trust-boundary rebuild. It has not been revalidated against the
+>   rebuild, and Phase Zero is not complete.
+> - It is not external audit evidence, and it is not a certification,
+>   accreditation or attestation.
+> - Its status labels (such as IMPLEMENTED) and its code, test and deployment
+>   references are historical, recorded at the mapping date. They are not
+>   current Phase Zero validation claims: some surfaces it cites are now closed
+>   or withdrawn (for example the standalone servers and the Docker/Helm
+>   deployment), and some references may no longer exist.
+> - Current trust-boundary evidence is in the
+>   [Phase Zero Final-Gate dossier](security/phase0-final-gate-dossier.md) and the
+>   [Phase Zero authority inventory](security/phase0-c5-authority-inventory.md).
+> - Do not use this document as evidence of current regulatory certification,
+>   compliance or production readiness.
 
 ## Overview
 
@@ -6,7 +24,7 @@ This document maps Nexus OS v10.5.0 to Singapore's Model AI Governance Framework
 
 The framework is voluntary and principle-based, designed to guide organizations deploying AI systems in Singapore and the ASEAN region.
 
-**Assessment Date:** 2026-03-31
+**Internal mapping date:** 2026-03-31 (internal; no assessor)
 **Framework:** Model AI Governance Framework, 2nd Edition (January 2020)
 **System Version:** 10.5.0
 
@@ -110,6 +128,6 @@ Singapore's PDPA complements the AI Governance Framework. Nexus OS provides tech
 
 ## Summary
 
-Nexus OS provides comprehensive technical controls aligned with all four principles of Singapore's Model AI Governance Framework. The governance-first architecture — where controls are built into the kernel rather than added as plugins — provides structural assurance that cannot be bypassed.
+This internal mapping relates Nexus OS features, as recorded before the Phase Zero rebuild, to the four principles of Singapore's Model AI Governance Framework. It is not an assessment of alignment and makes no assurance claim.
 
-For organizations deploying AI agents in Singapore and ASEAN markets, Nexus OS's combination of formal autonomy levels (L0–L6), HITL consent gates, hash-chained audit trails, and OWASP Agentic Top 10 defenses provides the most complete governance infrastructure available in any open-source AI agent platform.
+Current trust-boundary evidence, including what Phase Zero does not claim, is in the Phase Zero dossier and inventory linked at the top of this document.
