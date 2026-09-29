@@ -1686,4 +1686,126 @@ mod tests {
         assert!(seen.contains(&"encrypted_legacy_plaintext"), "{seen:?}");
         assert!(seen.contains(&"rekeyed_to_operator_key"), "{seen:?}");
     }
+
+    /// Final Gate item A (stream 6 review): every configuration field whose
+    /// name says it holds a key, token, secret or password is either a
+    /// credential the writer protects (`credential_fields`, or a provider's
+    /// `api_key`, which `introduces_credentials` checks) or on an explicit
+    /// list of fields that hold none. A new field of that kind fails here
+    /// until it is classified. Every collection gets one entry, so the fields
+    /// of its items are walked too; map keys are `{}`.
+    #[test]
+    fn p0_fg_a_every_secret_named_field_is_classified() {
+        use super::{AgentLlmAssignment, AgentLlmConfig, CliProviderEntry};
+        use std::collections::BTreeSet;
+
+        /// Provider API keys: credentials, checked by `introduces_credentials`.
+        const PROVIDER_CREDENTIALS: &[&str] = &["llm.providers[].api_key"];
+        /// Fields named like a secret that hold none.
+        const NOT_CREDENTIALS: &[&str] = &[
+            // "env" or "file": where the vault key comes from.
+            "security.key_source",
+            // The name of the variable that holds the vault key.
+            "security.key_env",
+            // The path of the vault key file.
+            "security.key_file",
+            // Token budgets.
+            "agents.{}.max_tokens",
+            "agent_llm_assignments.{}.budget_tokens",
+        ];
+        fn secret_named(path: &str) -> bool {
+            let name = path.rsplit('.').next().unwrap().to_ascii_lowercase();
+            ["key", "token", "secret", "password"]
+                .iter()
+                .any(|word| name.contains(word))
+        }
+        fn walk(value: &serde_json::Value, path: &str, out: &mut Vec<(String, serde_json::Value)>) {
+            match value {
+                serde_json::Value::Object(map) => {
+                    for (name, field) in map {
+                        let path = if path.is_empty() {
+                            name.clone()
+                        } else {
+                            format!("{path}.{name}")
+                        };
+                        out.push((path.clone(), field.clone()));
+                        walk(field, &path, out);
+                    }
+                }
+                serde_json::Value::Array(items) => {
+                    for item in items {
+                        walk(item, &format!("{path}[]"), out);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut config = NexusConfig::default();
+        config.llm.providers.push(LlmProviderEntry {
+            id: "p".into(),
+            provider_type: "t".into(),
+            display_name: "d".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+            enabled: true,
+            priority: 0,
+        });
+        config.llm.cli_providers.push(CliProviderEntry {
+            id: "c".into(),
+            enabled: true,
+            last_detected: String::new(),
+        });
+        config.agents.insert(
+            "{}".into(),
+            AgentLlmConfig {
+                model: String::new(),
+                temperature: 0.0,
+                max_tokens: 0,
+            },
+        );
+        config.agent_llm_assignments.insert(
+            "{}".into(),
+            AgentLlmAssignment {
+                provider_id: String::new(),
+                local_only: false,
+                budget_dollars: 0,
+                budget_tokens: 0,
+            },
+        );
+        for (index, field) in credential_fields_mut(&mut config).into_iter().enumerate() {
+            *field = format!("classified-credential-{index}");
+        }
+        let mut fields = Vec::new();
+        walk(&serde_json::to_value(&config).unwrap(), "", &mut fields);
+        let credentials: BTreeSet<&str> = fields
+            .iter()
+            .filter(|(_, value)| {
+                value
+                    .as_str()
+                    .is_some_and(|text| text.starts_with("classified-credential-"))
+            })
+            .map(|(path, _)| path.as_str())
+            .collect();
+        assert_eq!(credentials.len(), 17, "{credentials:?}");
+
+        for (path, _) in &fields {
+            if secret_named(path) {
+                assert!(
+                    credentials.contains(path.as_str())
+                        || PROVIDER_CREDENTIALS.contains(&path.as_str())
+                        || NOT_CREDENTIALS.contains(&path.as_str()),
+                    "{path}: add it to credential_fields, or to NOT_CREDENTIALS if it holds no secret"
+                );
+            }
+        }
+        // Every listed field exists and is named like a secret.
+        for listed in PROVIDER_CREDENTIALS.iter().chain(NOT_CREDENTIALS) {
+            assert!(
+                fields.iter().any(|(path, _)| path == listed),
+                "{listed} is not a configuration field"
+            );
+            assert!(secret_named(listed), "{listed} needs no classification");
+        }
+    }
 }
