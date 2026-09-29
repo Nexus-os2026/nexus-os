@@ -14,7 +14,7 @@ review. "Architect decision" items are not accepted by the implementer.
   re-keys an ambient file explicitly (reported and audited).
 - H: OAuth start flows close (`SecretStorage`) rather than persist tokens;
   existing token files stay readable and untouched.
-- E: key files are refused on non-Unix platforms.
+- E: key files are accepted only on Linux and macOS (validated on the opened file); every other platform refuses them.
 - B/F: only `OLLAMA_URL` or the fixed default is Ollama authority; interface
   saves may not change the Ollama address; agent web fetch is refused;
   SearXNG requires `SEARXNG_URL`; Ollama pulls use the default registry only.
