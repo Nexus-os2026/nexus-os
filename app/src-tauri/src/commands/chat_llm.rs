@@ -875,11 +875,8 @@ fn save_config_with<E>(
 /// (Final Gate item A): a credential save moved it to the operator key, or a
 /// first explicit save encrypted a legacy plaintext file. Reason class only.
 fn record_protection_change(state: &AppState, outcome: nexus_kernel::config::SaveOutcome) {
-    use nexus_kernel::config::SaveOutcome;
-    let protection = match outcome {
-        SaveOutcome::Written => return,
-        SaveOutcome::RekeyedToOperatorKey => "rekeyed_to_operator_key",
-        SaveOutcome::EncryptedLegacyPlaintext => "encrypted_legacy_plaintext",
+    let Some(protection) = outcome.protection_change() else {
+        return;
     };
     state.log_event(
         SYSTEM_UUID,

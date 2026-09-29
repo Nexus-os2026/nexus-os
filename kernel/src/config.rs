@@ -343,7 +343,8 @@ pub fn load_config() -> Result<NexusConfig, AgentError> {
 }
 
 /// Writes the configuration file under the launch environment's key material
-/// (see [`save_config_checked_to_path`]).
+/// (see [`save_config_checked_to_path`]). A save that changes how the file is
+/// protected is reported (see [`save_config_to_path`]).
 pub fn save_config(config: &NexusConfig) -> Result<(), AgentError> {
     save_config_to_path(config_path()?.as_path(), config)
 }
@@ -438,10 +439,58 @@ fn security_baseline_from_text(
         .map_err(|_| SecurityBaselineUnavailable)
 }
 
+/// Writes `config` to `path` under the launch environment's key material. Its
+/// caller does not receive the outcome, so a save that changes how the file
+/// is protected (a legacy plaintext file encrypted, or a file moved to the
+/// operator key) is reported here: a bounded line on standard error and the
+/// process's protection recorder, by reason class only (Final Gate item A).
 pub fn save_config_to_path(path: &Path, config: &NexusConfig) -> Result<(), AgentError> {
-    save_config_checked_to_path(path, config, &ConfigKeyMaterial::from_launch_environment())
-        .map(|_| ())
-        .map_err(AgentError::from)
+    save_config_to_path_with(
+        path,
+        config,
+        &ConfigKeyMaterial::from_launch_environment(),
+        report_protection_change,
+    )
+}
+
+/// [`save_config_to_path`] with the key material and the report injected.
+fn save_config_to_path_with(
+    path: &Path,
+    config: &NexusConfig,
+    keys: &ConfigKeyMaterial,
+    report: impl FnOnce(SaveOutcome),
+) -> Result<(), AgentError> {
+    let outcome = save_config_checked_to_path(path, config, keys)?;
+    report(outcome);
+    Ok(())
+}
+
+/// Records the reason class of a configuration save that changed how the
+/// file is protected (Final Gate item A). The application that owns the audit
+/// trail installs one per process ([`install_protection_recorder`]).
+pub type ProtectionRecorder = Box<dyn Fn(&'static str) + Send + Sync>;
+
+static PROTECTION_RECORDER: std::sync::OnceLock<ProtectionRecorder> = std::sync::OnceLock::new();
+
+/// Installs the process's recorder for protection changes reported by
+/// [`save_config`] and [`save_config_to_path`]. Only the first installation
+/// takes effect; a later one returns `false`. The recorder must not save the
+/// configuration itself.
+pub fn install_protection_recorder(recorder: ProtectionRecorder) -> bool {
+    PROTECTION_RECORDER.set(recorder).is_ok()
+}
+
+/// Reports a protection change: a bounded line on standard error for the
+/// operator, and the installed recorder, if any. A plain write reports
+/// nothing.
+fn report_protection_change(outcome: SaveOutcome) {
+    let Some(protection) = outcome.protection_change() else {
+        return;
+    };
+    eprintln!("nexus_kernel::config: the configuration file's protection changed: {protection}");
+    if let Some(record) = PROTECTION_RECORDER.get() {
+        record(protection);
+    }
 }
 
 /// Writes `config` to `path` (Final Gate item A).
@@ -509,6 +558,18 @@ pub enum SaveOutcome {
     /// key was set and no credential was added or changed, so the legacy
     /// ambient key was used.
     EncryptedLegacyPlaintext,
+}
+
+impl SaveOutcome {
+    /// The audit reason class of a save that changed how the file is
+    /// protected, or `None` for a plain write.
+    pub const fn protection_change(self) -> Option<&'static str> {
+        match self {
+            Self::Written => None,
+            Self::RekeyedToOperatorKey => Some("rekeyed_to_operator_key"),
+            Self::EncryptedLegacyPlaintext => Some("encrypted_legacy_plaintext"),
+        }
+    }
 }
 
 /// Why a configuration save wrote nothing (Final Gate item A). The reasons are
@@ -1551,5 +1612,78 @@ mod tests {
         let entries = fs::read_dir(path.parent().unwrap()).unwrap().count();
         assert_eq!(entries, 1, "no temporary file is left behind");
         cleanup(&path);
+    }
+
+    /// Final Gate item A: a save whose caller does not receive the outcome
+    /// hands every outcome to its report, so each protection change is
+    /// reported: a legacy plaintext file encrypted under the ambient key, a
+    /// plain rewrite, and a plaintext file moved to the operator key.
+    #[test]
+    fn p0_fg_a_unreturned_save_outcomes_are_reported() {
+        use super::save_config_to_path_with;
+        let plaintext = toml::to_string(&NexusConfig::default()).unwrap();
+        let mut seen = Vec::new();
+        let ambient = temp_config_path();
+        fs::create_dir_all(ambient.parent().unwrap()).unwrap();
+        fs::write(&ambient, &plaintext).unwrap();
+        for _ in 0..2 {
+            save_config_to_path_with(&ambient, &NexusConfig::default(), &ambient_only(), |o| {
+                seen.push(o)
+            })
+            .unwrap();
+        }
+        cleanup(&ambient);
+        let operator = temp_config_path();
+        fs::create_dir_all(operator.parent().unwrap()).unwrap();
+        fs::write(&operator, &plaintext).unwrap();
+        save_config_to_path_with(
+            &operator,
+            &NexusConfig::default(),
+            &with_operator_key(),
+            |o| seen.push(o),
+        )
+        .unwrap();
+        cleanup(&operator);
+        assert_eq!(
+            seen,
+            [
+                SaveOutcome::EncryptedLegacyPlaintext,
+                SaveOutcome::Written,
+                SaveOutcome::RekeyedToOperatorKey,
+            ]
+        );
+        assert_eq!(SaveOutcome::Written.protection_change(), None);
+        assert_eq!(
+            SaveOutcome::EncryptedLegacyPlaintext.protection_change(),
+            Some("encrypted_legacy_plaintext")
+        );
+        assert_eq!(
+            SaveOutcome::RekeyedToOperatorKey.protection_change(),
+            Some("rekeyed_to_operator_key")
+        );
+    }
+
+    /// Final Gate item A: the production report hands each protection change
+    /// to the process's recorder by reason class, and the recorder is
+    /// installed once. (Other tests in this process may add entries, so only
+    /// presence is asserted; `protection_change` pins that a plain write has
+    /// no reason class.)
+    #[test]
+    fn p0_fg_a_protection_changes_reach_the_installed_recorder() {
+        use super::{install_protection_recorder, report_protection_change};
+        static SEEN: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+        let seen = || SEEN.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        assert!(install_protection_recorder(Box::new(|protection| {
+            SEEN.lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(protection)
+        })));
+        assert!(!install_protection_recorder(Box::new(|_| {})));
+        report_protection_change(SaveOutcome::Written);
+        report_protection_change(SaveOutcome::EncryptedLegacyPlaintext);
+        report_protection_change(SaveOutcome::RekeyedToOperatorKey);
+        let seen = seen();
+        assert!(seen.contains(&"encrypted_legacy_plaintext"), "{seen:?}");
+        assert!(seen.contains(&"rekeyed_to_operator_key"), "{seen:?}");
     }
 }

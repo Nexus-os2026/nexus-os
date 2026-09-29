@@ -104,8 +104,19 @@ fn p0_fg_a_configuration_writes_check_key_material_before_writing() {
         ),
         "{checked}"
     );
-    assert!(compact(&body(production, "pub fn save_config_to_path("))
-        .starts_with("save_config_checked_to_path("));
+    // A save whose caller does not receive the outcome reports it.
+    assert_eq!(
+        compact(&body(production, "pub fn save_config_to_path(")),
+        "save_config_to_path_with(path,config,&ConfigKeyMaterial::from_launch_environment(),report_protection_change,)"
+    );
+    assert_eq!(
+        compact(&body(production, "fn save_config_to_path_with(")),
+        "letoutcome=save_config_checked_to_path(path,config,keys)?;report(outcome);Ok(())"
+    );
+    assert_eq!(
+        compact(&body(production, "pub fn save_config(")),
+        "save_config_to_path(config_path()?.as_path(),config)"
+    );
     assert!(compact(&body(production, "pub fn save_config_checked("))
         .contains("save_config_checked_to_path(&path,config,"));
     // A file already on disk that does not open refuses the write.
@@ -128,6 +139,58 @@ fn p0_fg_a_configuration_writes_check_key_material_before_writing() {
             &["ErrorKind::NotFound", "save_config_checked_to_path("]
         ),
         "{load}"
+    );
+}
+
+/// Final Gate item A (stream 6 review): a backend configuration save that
+/// changes how the file is protected is audited in the state's chain. The
+/// state installs the kernel's protection recorder before the migration can
+/// re-save the file, and the recorder appends one bounded event, by reason
+/// class, to the trail and to the persisted audit table.
+#[test]
+fn p0_fg_a_backend_protection_changes_are_audited() {
+    use nexus_persistence::StateStore;
+    use std::sync::{Arc, Mutex};
+    let audit = Arc::new(Mutex::new(nexus_kernel::audit::AuditTrail::new()));
+    let db = Arc::new(nexus_persistence::NexusDatabase::in_memory().unwrap());
+    let record = crate::config_protection_recorder(Arc::clone(&audit), Arc::clone(&db));
+    record("encrypted_legacy_plaintext");
+    let payloads: Vec<serde_json::Value> = audit
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .events()
+        .iter()
+        .map(|event| event.payload.clone())
+        .collect();
+    assert_eq!(
+        payloads,
+        vec![serde_json::json!({
+            "action": "save_config",
+            "outcome": "written",
+            "protection": "encrypted_legacy_plaintext"
+        })]
+    );
+    assert_eq!(db.get_audit_count().unwrap(), 1);
+
+    let lib = normalized(include_str!("../../lib.rs"));
+    let new = compact(&body(
+        &lib,
+        "    pub fn new() -> Self {\n        #[cfg(not(test))]\n        maybe_cleanup_legacy_agent_db();",
+    ));
+    assert!(
+        in_order(
+            &new,
+            &[
+                "letaudit=Arc::new(Mutex::new(AuditTrail::new()));",
+                "nexus_kernel::config::install_protection_recorder(config_protection_recorder(audit.clone(),db.clone(),));",
+                "nexus_kernel::startup::run_migrations(",
+            ],
+        ),
+        "{new}"
+    );
+    assert_eq!(
+        compact(&body(&lib, "fn log_event(")),
+        "append_audit_event(&self.audit,&self.db,agent_id,event_type,payload);"
     );
 }
 

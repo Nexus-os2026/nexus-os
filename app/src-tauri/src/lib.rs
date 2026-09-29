@@ -1070,6 +1070,69 @@ fn identity_schedule_store() -> nexus_kernel::scheduler::ScheduleStore {
     }
 }
 
+/// Appends one event to the shared hash-chained audit trail and to the
+/// persisted audit table: the body of [`AppState::log_event`], apart from the
+/// state so that the configuration protection recorder can audit before the
+/// state exists (Final Gate item A).
+fn append_audit_event(
+    audit: &Mutex<AuditTrail>,
+    db: &NexusDatabase,
+    agent_id: AgentId,
+    event_type: EventType,
+    payload: serde_json::Value,
+) {
+    let event_type_str = format!("{event_type:?}");
+    let mut guard = match audit.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Err(e) = guard.append_event(agent_id, event_type, payload.clone()) {
+        eprintln!("audit append failed: {e}");
+    }
+
+    // Leaf critical section: serialize the DB chain's read/count/append as
+    // before. No callbacks or supervisor operations while holding audit.
+    // Persist audit event to database
+    let prev_hash = db
+        .get_latest_audit_hash()
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "0".repeat(64));
+    let sequence = db.get_audit_count().unwrap_or(0);
+    let detail = serde_json::to_string(&payload).unwrap_or_default();
+    let hash_input = format!("{prev_hash}:{sequence}:{detail}");
+    let current_hash = format!("{:x}", sha2::Sha256::digest(hash_input.as_bytes()));
+    if let Err(e) = db.append_audit_event(
+        &agent_id.to_string(),
+        &event_type_str,
+        &detail,
+        &prev_hash,
+        &current_hash,
+        sequence,
+    ) {
+        eprintln!("persistence: audit append failed: {e}");
+    }
+}
+
+/// Final Gate item A: the recorder for configuration saves whose caller does
+/// not receive the outcome (the kernel's `save_config`). A save that changed
+/// how the file is protected is audited in this state's chain, by reason class
+/// only, with the payload the interface save records.
+fn config_protection_recorder(
+    audit: Arc<Mutex<AuditTrail>>,
+    db: Arc<NexusDatabase>,
+) -> nexus_kernel::config::ProtectionRecorder {
+    Box::new(move |protection| {
+        append_audit_event(
+            &audit,
+            &db,
+            SYSTEM_UUID,
+            EventType::UserAction,
+            json!({"action": "save_config", "outcome": "written", "protection": protection}),
+        );
+    })
+}
+
 impl AppState {
     pub fn new() -> Self {
         #[cfg(not(test))]
@@ -1126,6 +1189,14 @@ impl AppState {
         // events + post-startup credential ops appear in
         // one continuous audit chain.
         let audit = Arc::new(Mutex::new(AuditTrail::new()));
+        // Final Gate item A: a configuration save whose caller does not
+        // receive the outcome (the migration's re-save below, and the
+        // backend's own settings saves) reports a change to how the file is
+        // protected to this audit chain. Only the first state installs it.
+        nexus_kernel::config::install_protection_recorder(config_protection_recorder(
+            audit.clone(),
+            db.clone(),
+        ));
         {
             let mut migration_config = load_config().unwrap_or_default();
             match nexus_kernel::startup::run_migrations(
@@ -1772,38 +1843,7 @@ impl AppState {
     }
 
     fn log_event(&self, agent_id: AgentId, event_type: EventType, payload: serde_json::Value) {
-        let event_type_str = format!("{event_type:?}");
-        let mut guard = match self.audit.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        if let Err(e) = guard.append_event(agent_id, event_type, payload.clone()) {
-            eprintln!("audit append failed: {e}");
-        }
-
-        // Leaf critical section: serialize the DB chain's read/count/append as
-        // before. No callbacks or supervisor operations while holding audit.
-        // Persist audit event to database
-        let prev_hash = self
-            .db
-            .get_latest_audit_hash()
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "0".repeat(64));
-        let sequence = self.db.get_audit_count().unwrap_or(0);
-        let detail = serde_json::to_string(&payload).unwrap_or_default();
-        let hash_input = format!("{prev_hash}:{sequence}:{detail}");
-        let current_hash = format!("{:x}", sha2::Sha256::digest(hash_input.as_bytes()));
-        if let Err(e) = self.db.append_audit_event(
-            &agent_id.to_string(),
-            &event_type_str,
-            &detail,
-            &prev_hash,
-            &current_hash,
-            sequence,
-        ) {
-            eprintln!("persistence: audit append failed: {e}");
-        }
+        append_audit_event(&self.audit, &self.db, agent_id, event_type, payload);
     }
 
     /// Check rate limit for the given category. Returns `Err(String)` if exceeded.
