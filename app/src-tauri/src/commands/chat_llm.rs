@@ -1765,6 +1765,23 @@ pub(crate) fn goal_with_manifest_context(
     }
 }
 
+/// P0-FINAL-GATE: whether the scheduler accepts a manifest schedule. The
+/// scheduler's own check (`AgentScheduler::validate_cron`) decides, and its
+/// reason is passed through unchanged. `create_agent` and `start_agent` call
+/// this before they change anything. Otherwise a schedule the scheduler
+/// refuses would be saved, and `register_manifest_schedule` would drop it
+/// with only a log line while the command reported success.
+pub(crate) fn check_manifest_schedule(schedule: Option<&str>) -> Result<(), String> {
+    match schedule {
+        Some(expression) => nexus_kernel::cognitive::AgentScheduler::validate_cron(expression),
+        None => Ok(()),
+    }
+}
+
+/// Register a manifest schedule with the scheduler. Its callers,
+/// `create_agent` and `start_agent`, check the schedule first with
+/// `check_manifest_schedule`, so a refusal here is not the only trace of a
+/// refused schedule.
 pub(crate) fn register_manifest_schedule(
     state: &AppState,
     agent_id: &str,

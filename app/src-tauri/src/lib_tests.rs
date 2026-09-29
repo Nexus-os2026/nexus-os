@@ -827,6 +827,97 @@ fn p0_fg_transcendent_resume_is_refused_and_changes_nothing() {
     );
 }
 
+/// P0-FINAL-GATE (schedule refusal, a coordinator request following stream
+/// 3's review of stream 6): a manifest schedule the scheduler refuses is
+/// refused by `create_agent` before anything is registered or written, and
+/// by `start_agent` before the agent is restarted. The scheduler's reason is
+/// passed through: it begins "invalid cron expression". Both commands used
+/// to report success while `register_manifest_schedule` dropped the schedule
+/// with only a log line. An accepted schedule is still registered.
+///
+/// The expression here is malformed, so the scheduler refuses it on every
+/// branch. A sub-minute schedule is refused only once stream 6's
+/// once-per-minute bound is composed; that case is tested there.
+#[test]
+fn p0_fg_refused_manifest_schedules_fail_create_and_start() {
+    use nexus_kernel::lifecycle::AgentState;
+    let state = AppState::new_in_memory();
+    // The scheduler starts a task per registration; nothing here polls it.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let manifest = |name: &str, schedule: Option<&str>| {
+        json!({
+            "name": name,
+            "version": "1.0.0",
+            "capabilities": ["llm.query"],
+            "fuel_budget": 1000,
+            "schedule": schedule,
+            "default_goal": "p0fg scheduled goal",
+        })
+        .to_string()
+    };
+    let malformed = "p0fg is not a schedule";
+    let snapshot = |state: &AppState| {
+        (
+            state.db.list_agents().unwrap().len(),
+            state.supervisor.lock().unwrap().health_check().len(),
+            state.meta.lock().unwrap().len(),
+            state.agent_scheduler.list().len(),
+            state.audit.lock().unwrap().events().len(),
+        )
+    };
+
+    let before = snapshot(&state);
+    let refused = create_agent(&state, manifest("scheduled-refused", Some(malformed))).unwrap_err();
+    assert!(refused.starts_with("invalid cron expression"), "{refused}");
+    assert_eq!(snapshot(&state), before);
+
+    // A stored agent whose schedule the scheduler refuses is not started.
+    let stored = create_agent(&state, manifest("scheduled-stored", None)).unwrap();
+    stop_agent(&state, stored.clone()).unwrap();
+    state
+        .db
+        .save_agent(
+            &stored,
+            &manifest("scheduled-stored", Some(malformed)),
+            "stopped",
+            0,
+            "native",
+        )
+        .unwrap();
+    let before = snapshot(&state);
+    let refused = start_agent(&state, stored.clone()).unwrap_err();
+    assert!(refused.starts_with("invalid cron expression"), "{refused}");
+    assert_eq!(snapshot(&state), before);
+    let stored_id = Uuid::parse_str(&stored).unwrap();
+    assert_eq!(
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .get_agent(stored_id)
+            .map(|handle| handle.state),
+        Some(AgentState::Stopped)
+    );
+
+    // An accepted schedule is still registered.
+    let accepted =
+        create_agent(&state, manifest("scheduled-accepted", Some("0 0 9 * * *"))).unwrap();
+    assert_eq!(
+        state
+            .agent_scheduler
+            .list()
+            .iter()
+            .filter(|scheduled| scheduled.agent_id == accepted)
+            .count(),
+        1
+    );
+    state.agent_scheduler.unregister_agent(&accepted);
+}
+
 /// P0-FINAL-GATE (item G): the goal, autonomous-loop and tool routes refuse
 /// an L6 (transcendent) agent before anything changes, with the bounded
 /// `ApprovalRequired` reason:

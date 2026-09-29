@@ -585,6 +585,45 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
     }
 }
 
+/// P0-FINAL-GATE (schedule refusal): `create_agent` and `start_agent` check a
+/// manifest schedule with the scheduler's own `validate_cron` before they
+/// change anything, and pass its reason through. `create_agent` checks after
+/// the L6 refusal and before `create_agent_immediately`. `start_agent`
+/// checks after the L6 refusal and before the restart. So no refused
+/// schedule is saved or started and then dropped with only a log line.
+#[test]
+fn p0_fg_manifest_schedules_are_checked_before_any_state_change() {
+    let (params, check) = fn_shape(
+        include_str!("../../commands/chat_llm.rs"),
+        "check_manifest_schedule",
+    );
+    assert_eq!(params, "(schedule:Option<&str>)");
+    assert_eq!(
+        check,
+        concat!(
+            "matchschedule{Some(expression)=>",
+            "nexus_kernel::cognitive::AgentScheduler::validate_cron(expression),",
+            "None=>Ok(()),}",
+        )
+    );
+    let agents = include_str!("../../commands/agents.rs");
+    let (_, create) = fn_shape(agents, "create_agent");
+    assert!(
+        create.ends_with(concat!(
+            "check_manifest_schedule(manifest.schedule.as_deref())?;",
+            "create_agent_immediately(state,manifest,manifest_json)",
+        )),
+        "{create}"
+    );
+    let (_, start) = fn_shape(agents, "start_agent");
+    let checked = position(
+        &start,
+        "check_manifest_schedule(find_manifest(state,&agent_id).and_then(|manifest|manifest.schedule).as_deref())?;",
+    );
+    assert!(checked > position(&start, &denial("start_agent", "ApprovalRequired")));
+    assert!(checked < position(&start, "restart_agent("));
+}
+
 /// P0-FINAL-GATE (item G, review W5): every L6 check uses the named bound
 /// `TRANSCENDENT_AUTONOMY` through `is_transcendent_level` (L6 or above),
 /// never an equality with 6, so a stored level above 6 cannot pass as

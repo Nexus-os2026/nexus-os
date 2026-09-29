@@ -365,6 +365,10 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
             crate::phase0_surface::Closure::ApprovalRequired,
         ));
     }
+    // A schedule the scheduler refuses is refused here, with the scheduler's
+    // reason, before anything is registered or written. It used to be saved
+    // and then dropped with only a log line, while creation reported success.
+    check_manifest_schedule(manifest.schedule.as_deref())?;
 
     create_agent_immediately(state, manifest, manifest_json)
 }
@@ -377,11 +381,10 @@ pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     // record or the registered agent says L6.
     let stored_transcendent = find_manifest(state, &agent_id)
         .is_some_and(|manifest| manifest.autonomy_level.is_some_and(is_transcendent_level));
-    let mut supervisor = match state.supervisor.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    let registered_transcendent = supervisor
+    let registered_transcendent = state
+        .supervisor
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
         .get_agent(parsed)
         .is_some_and(|handle| is_transcendent_level(handle.autonomy_level));
     if stored_transcendent || registered_transcendent {
@@ -390,6 +393,18 @@ pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
             crate::phase0_surface::Closure::ApprovalRequired,
         ));
     }
+    // A stored schedule the scheduler refuses is refused here, with the
+    // scheduler's reason, before the agent is restarted. It used to be dropped
+    // with only a log line after a start reported as successful.
+    check_manifest_schedule(
+        find_manifest(state, &agent_id)
+            .and_then(|manifest| manifest.schedule)
+            .as_deref(),
+    )?;
+    let mut supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     supervisor.restart_agent(parsed).map_err(agent_error)?;
     drop(supervisor);
     // Best-effort: persist state to DB; in-memory supervisor is already updated
