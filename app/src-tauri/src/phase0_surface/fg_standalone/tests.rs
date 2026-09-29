@@ -241,74 +241,62 @@ const BENCH_TARGETS: &[(&str, &str, &str)] = &[
     ("benchmarks", "replay_bench", "benches/replay_bench.rs"),
 ];
 
+/// A manifest, parsed as TOML (so spacing, quoting and table layout cannot
+/// hide a key from these guards).
+fn parse_manifest(path: &Path) -> toml::Table {
+    read(path)
+        .parse::<toml::Table>()
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// The manifest of workspace member `member`.
+fn member_manifest(member: &str) -> toml::Table {
+    parse_manifest(&workspace_root().join(member).join("Cargo.toml"))
+}
+
 /// The `members` of the workspace manifest.
 fn workspace_members() -> Vec<String> {
-    let manifest = read(&workspace_root().join("Cargo.toml"));
-    let mut members = Vec::new();
-    let mut inside = false;
-    for line in manifest.lines().map(str::trim) {
-        if line.starts_with("members = [") {
-            inside = true;
-            continue;
-        }
-        if inside {
-            if line.starts_with(']') {
-                break;
-            }
-            let member = line.trim_end_matches(',').trim_matches('"');
-            if !member.is_empty() {
-                members.push(member.to_string());
-            }
-        }
-    }
+    let manifest = parse_manifest(&workspace_root().join("Cargo.toml"));
+    let members: Vec<String> = manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("members"))
+        .and_then(toml::Value::as_array)
+        .expect("workspace members")
+        .iter()
+        .map(|member| member.as_str().expect("a member path").to_string())
+        .collect();
     assert!(members.len() > 50, "workspace members not found");
     members
 }
 
 /// A manifest's `[package]` value for `key`, if it is set there.
-fn package_value(manifest: &str, key: &str) -> Option<String> {
-    let mut in_package = false;
-    for line in manifest.lines().map(str::trim) {
-        if line.starts_with('[') {
-            in_package = line == "[package]";
-            continue;
-        }
-        if in_package {
-            if let Some(value) = line.strip_prefix(&format!("{key} = ")) {
-                return Some(value.trim_matches('"').to_string());
-            }
-        }
-    }
-    None
+fn package_value<'a>(manifest: &'a toml::Table, key: &str) -> Option<&'a toml::Value> {
+    manifest.get("package")?.as_table()?.get(key)
+}
+
+/// Whether the manifest switches a target auto-discovery key off.
+fn autodiscovery_off(manifest: &toml::Table, key: &str) -> bool {
+    package_value(manifest, key).and_then(toml::Value::as_bool) == Some(false)
 }
 
 /// Explicit `[[section]]` targets of a manifest as (name, optional path).
-fn explicit_targets(manifest: &str, section: &str) -> Vec<(String, Option<String>)> {
-    let header = format!("[[{section}]]");
-    let mut targets = Vec::new();
-    let mut current: Option<(String, Option<String>)> = None;
-    for line in manifest.lines().map(str::trim) {
-        if line.starts_with('[') {
-            if let Some(target) = current.take() {
-                targets.push(target);
-            }
-            if line == header {
-                current = Some((String::new(), None));
-            }
-            continue;
-        }
-        if let Some((name, path)) = current.as_mut() {
-            if let Some(value) = line.strip_prefix("name = ") {
-                *name = value.trim_matches('"').to_string();
-            } else if let Some(value) = line.strip_prefix("path = ") {
-                *path = Some(value.trim_matches('"').to_string());
-            }
-        }
-    }
-    if let Some(target) = current.take() {
-        targets.push(target);
-    }
+fn explicit_targets(manifest: &toml::Table, section: &str) -> Vec<(String, Option<String>)> {
+    let Some(targets) = manifest.get(section) else {
+        return Vec::new();
+    };
+    let targets = targets
+        .as_array()
+        .unwrap_or_else(|| panic!("[[{section}]] must be an array of tables"));
     targets
+        .iter()
+        .map(|target| {
+            let field = |key: &str| target.get(key).and_then(toml::Value::as_str);
+            (
+                field("name").unwrap_or_default().to_string(),
+                field("path").map(str::to_string),
+            )
+        })
+        .collect()
 }
 
 fn sorted_dir(dir: &Path) -> Vec<PathBuf> {
@@ -368,9 +356,12 @@ fn merge_targets(
 /// The effective binary targets of one member, as (name, path).
 fn effective_binaries(member: &str) -> Vec<(String, String)> {
     let package = workspace_root().join(member);
-    let manifest = read(&package.join("Cargo.toml"));
-    let name = package_value(&manifest, "name").expect("package name");
-    let autodiscover = package_value(&manifest, "autobins").as_deref() != Some("false");
+    let manifest = member_manifest(member);
+    let name = package_value(&manifest, "name")
+        .and_then(toml::Value::as_str)
+        .expect("package name")
+        .to_string();
+    let autodiscover = !autodiscovery_off(&manifest, "autobins");
     let mut inferred = Vec::new();
     if package.join("src").join("main.rs").is_file() {
         inferred.push((name.clone(), "src/main.rs".to_string()));
@@ -397,8 +388,8 @@ fn effective_binaries(member: &str) -> Vec<(String, String)> {
 /// The effective example targets of one member, as (name, path).
 fn effective_examples(member: &str) -> Vec<(String, String)> {
     let package = workspace_root().join(member);
-    let manifest = read(&package.join("Cargo.toml"));
-    let autodiscover = package_value(&manifest, "autoexamples").as_deref() != Some("false");
+    let manifest = member_manifest(member);
+    let autodiscover = !autodiscovery_off(&manifest, "autoexamples");
     let explicit = explicit_targets(&manifest, "example")
         .into_iter()
         .map(|(example, path)| {
@@ -412,8 +403,8 @@ fn effective_examples(member: &str) -> Vec<(String, String)> {
 /// The effective bench targets of one member, as (name, path).
 fn effective_benches(member: &str) -> Vec<(String, String)> {
     let package = workspace_root().join(member);
-    let manifest = read(&package.join("Cargo.toml"));
-    let autodiscover = package_value(&manifest, "autobenches").as_deref() != Some("false");
+    let manifest = member_manifest(member);
+    let autodiscover = !autodiscovery_off(&manifest, "autobenches");
     let explicit = explicit_targets(&manifest, "bench")
         .into_iter()
         .map(|(bench, path)| {
@@ -658,7 +649,7 @@ fn p0_fg_standalone_withdrawn_packages_run_no_other_build_script() {
     );
     for member in packages {
         let package = workspace_root().join(member);
-        let manifest = read(&package.join("Cargo.toml"));
+        let manifest = member_manifest(member);
         assert_eq!(
             package_value(&manifest, "build"),
             None,
