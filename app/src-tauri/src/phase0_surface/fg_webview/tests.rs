@@ -30,6 +30,131 @@ const BOUNDARY_RS: &str = include_str!(concat!(
     "/src/webview_boundary.rs"
 ));
 
+/// `src` with its Rust comments removed — line, block (nested) and doc
+/// comments — and string, raw-string and char literals kept verbatim, so a
+/// text guard cannot be satisfied by commented-out code.
+fn strip_rust_comments(src: &str) -> String {
+    fn ident(b: u8) -> bool {
+        b.is_ascii_alphanumeric() || b == b'_'
+    }
+    let b = src.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        let next = b.get(i + 1).copied();
+        if c == b'/' && next == Some(b'/') {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+        } else if c == b'/' && next == Some(b'*') {
+            let mut depth = 0usize;
+            while i < b.len() {
+                if b[i] == b'/' && b.get(i + 1) == Some(&b'*') {
+                    depth += 1;
+                    i += 2;
+                } else if b[i] == b'*' && b.get(i + 1) == Some(&b'/') {
+                    depth -= 1;
+                    i += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    i += 1;
+                }
+            }
+            out.push(b' ');
+        } else if c == b'r'
+            && matches!(next, Some(b'"') | Some(b'#'))
+            && (i == 0 || !ident(b[i - 1]) || (b[i - 1] == b'b' && (i < 2 || !ident(b[i - 2]))))
+        {
+            // A raw string: r"..", r#".."#, br"..".
+            let mut j = i + 1;
+            while b.get(j) == Some(&b'#') {
+                j += 1;
+            }
+            let hashes = j - i - 1;
+            if b.get(j) != Some(&b'"') {
+                out.push(c);
+                i += 1;
+                continue;
+            }
+            let mut k = j + 1;
+            while k < b.len() {
+                if b[k] == b'"' && b[k + 1..].iter().take_while(|&&h| h == b'#').count() >= hashes {
+                    k += 1 + hashes;
+                    break;
+                }
+                k += 1;
+            }
+            out.extend_from_slice(&b[i..k.min(b.len())]);
+            i = k;
+        } else if c == b'"' {
+            let mut j = i + 1;
+            while j < b.len() && b[j] != b'"' {
+                j += if b[j] == b'\\' { 2 } else { 1 };
+            }
+            let end = (j + 1).min(b.len());
+            out.extend_from_slice(&b[i..end]);
+            i = end;
+        } else if c == b'\'' && next == Some(b'\\') {
+            // An escaped char literal: '\n', '\'', '\u{..}'.
+            let mut j = i + 3;
+            while j < b.len() && b[j] != b'\'' {
+                j += 1;
+            }
+            let end = (j + 1).min(b.len());
+            out.extend_from_slice(&b[i..end]);
+            i = end;
+        } else if c == b'\'' && b.get(i + 2) == Some(&b'\'') {
+            // A one-byte char literal such as '"' (a lifetime is left alone).
+            out.extend_from_slice(&b[i..i + 3]);
+            i += 3;
+        } else {
+            out.push(c);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).expect("comment stripping keeps UTF-8 boundaries")
+}
+
+/// The comment stripper keeps code and literals and drops comments.
+#[test]
+fn p0_fg_webview_comment_stripper_drops_only_comments() {
+    let src = concat!(
+        "let a = \"tauri://localhost\"; // .on_navigation(x)\n",
+        "/* outer /* .on_new_window(y) */ still comment */ let b = 1;\n",
+        "/// doc .setup(z)\n",
+        "let r = r#\"raw // not a comment\"#; let q = '\"'; let e = '\\''; fn f<'a>(_: &'a str) {}\n",
+        "//! inner doc build_main_window(app)?;\n",
+        "call(); // trailing",
+    );
+    let out = strip_rust_comments(src);
+    for kept in [
+        "let a = \"tauri://localhost\";",
+        "let b = 1;",
+        "r#\"raw // not a comment\"#",
+        "let q = '\"';",
+        "let e = '\\'';",
+        "fn f<'a>(_: &'a str) {}",
+        "call();",
+    ] {
+        assert!(out.contains(kept), "stripper must keep `{kept}`: {out}");
+    }
+    for dropped in [
+        ".on_navigation(",
+        ".on_new_window(",
+        ".setup(",
+        "build_main_window",
+        "trailing",
+    ] {
+        assert!(
+            !out.contains(dropped),
+            "stripper must drop `{dropped}`: {out}"
+        );
+    }
+}
+
 /// The command names in the `generate_handler![..]` registry, read the same way
 /// the C5 reachability guard reads them: strip line comments, split on commas,
 /// take the final `::` segment.
@@ -84,24 +209,93 @@ fn p0_fg_webview_app_manifest_lists_every_registered_command() {
 }
 
 /// build.rs must actually feed APP_COMMANDS into the app manifest, or the ACL
-/// is never emitted and app commands stay ungoverned.
+/// is never emitted and app commands stay ungoverned. Checked on the build
+/// script with its comments removed, so a commented-out call does not pass.
 #[test]
 fn p0_fg_webview_build_script_emits_the_app_manifest() {
+    let build = strip_rust_comments(BUILD_RS);
     assert!(
-        BUILD_RS.contains("AppManifest::new().commands(app_commands::APP_COMMANDS)"),
+        build.contains("mod app_commands;"),
+        "build.rs must include the APP_COMMANDS list"
+    );
+    assert!(
+        build.contains("AppManifest::new().commands(app_commands::APP_COMMANDS)"),
         "build.rs must pass APP_COMMANDS to tauri_build::AppManifest::commands"
     );
     assert!(
-        BUILD_RS.contains("try_build"),
+        build.contains("tauri_build::try_build("),
         "build.rs must call tauri_build::try_build with the app manifest"
+    );
+    assert!(
+        !build.contains("tauri_build::build()"),
+        "build.rs must not also run the manifest-less tauri_build::build()"
     );
 }
 
 /// The app-command capability must grant every command — and only those — to
 /// window `main` at the local origin, with no remote URL and no platform
-/// narrowing.
+/// narrowing. tauri-build compiles every file in `capabilities/` (and any
+/// inline capability in `tauri.conf.json`), so the exact file set is pinned and
+/// the only other capability, `default.json`, is pinned to its core
+/// permissions for window `main` at the local origin.
 #[test]
 fn p0_fg_webview_capability_is_local_main_only() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("capabilities");
+    let mut files: Vec<String> = std::fs::read_dir(&dir)
+        .expect("capabilities directory")
+        .map(|e| {
+            e.expect("capabilities entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    files.sort();
+    assert_eq!(
+        files,
+        ["app-commands.json", "default.json"],
+        "capabilities/ must hold exactly the two reviewed capability files"
+    );
+    let default: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(dir.join("default.json")).expect("default.json"),
+    )
+    .expect("default.json parses");
+    let mut keys: Vec<&str> = default
+        .as_object()
+        .expect("default.json object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        [
+            "$schema",
+            "description",
+            "identifier",
+            "permissions",
+            "windows"
+        ],
+        "default.json: no remote, local, webviews or platforms override"
+    );
+    assert_eq!(default["identifier"], "default");
+    assert_eq!(default["windows"], serde_json::json!(["main"]));
+    assert_eq!(
+        default["permissions"],
+        serde_json::json!([
+            "core:default",
+            "core:event:default",
+            "core:event:allow-listen",
+            "core:event:allow-unlisten",
+            "core:event:allow-emit",
+            "core:event:allow-emit-to",
+            "core:window:default",
+            "core:webview:default",
+            "core:app:default"
+        ]),
+        "default.json grants only the reviewed core permissions"
+    );
+
     let cap: serde_json::Value =
         serde_json::from_str(APP_CAPABILITY).expect("app-commands.json parses");
 
@@ -151,40 +345,109 @@ fn p0_fg_webview_capability_is_local_main_only() {
     }
 }
 
-/// The CSP is a real, restrictive policy (defence in depth), and the privileged
-/// window is not auto-created without the navigation/new-window guards.
+/// The CSP is a real, restrictive policy (defence in depth), compared
+/// directive by directive with the exact source sets, so an added source,
+/// directive or duplicate fails; the security block carries nothing else (no
+/// devCsp, no inline capability, no asset protocol); the privileged window
+/// loads the app URL and is not auto-created without its guards; the app URLs
+/// are the reviewed ones; and the bundle-time config merge touches only the
+/// bundle.
 #[test]
 fn p0_fg_webview_conf_has_restrictive_csp_and_guarded_window() {
+    use std::collections::{BTreeMap, BTreeSet};
+
     let conf: serde_json::Value = serde_json::from_str(TAURI_CONF).expect("tauri.conf.json parses");
-    let csp = &conf["app"]["security"]["csp"];
-    let csp = csp.as_str().expect("csp must be a string, not null");
-    for directive in [
-        "default-src 'self'",
-        "script-src 'self'",
-        "connect-src 'self' ipc:",
-        "frame-src 'self'",
-        "object-src 'none'",
-        "base-uri 'self'",
-        "frame-ancestors 'none'",
-    ] {
-        assert!(csp.contains(directive), "CSP missing `{directive}`");
-    }
-    // No wildcard script or remote-frame sources, and no eval.
-    assert!(
-        !csp.contains("script-src 'self' http"),
-        "script-src must stay 'self'"
+    let security = conf["app"]["security"]
+        .as_object()
+        .expect("security object");
+    assert_eq!(
+        security.keys().collect::<Vec<_>>(),
+        ["csp"],
+        "app.security must hold only the CSP"
     );
-    assert!(!csp.contains("unsafe-eval"), "no unsafe-eval");
+    let csp = security["csp"]
+        .as_str()
+        .expect("csp must be a string, not null");
+
+    let mut directives: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for directive in csp.split(';').map(str::trim).filter(|d| !d.is_empty()) {
+        let mut parts = directive.split_whitespace();
+        let name = parts.next().expect("directive name").to_ascii_lowercase();
+        let sources: BTreeSet<String> = parts.map(str::to_owned).collect();
+        assert!(
+            directives.insert(name.clone(), sources).is_none(),
+            "duplicate CSP directive `{name}`"
+        );
+    }
+    let expected: BTreeMap<String, BTreeSet<String>> = [
+        ("default-src", "'self'"),
+        ("script-src", "'self'"),
+        ("style-src", "'self' 'unsafe-inline'"),
+        ("font-src", "'self'"),
+        ("img-src", "'self' data:"),
+        ("media-src", "'self'"),
+        ("connect-src", "'self' ipc: http://ipc.localhost"),
+        ("frame-src", "'self'"),
+        ("child-src", "'self'"),
+        ("worker-src", "'self'"),
+        ("object-src", "'none'"),
+        ("base-uri", "'self'"),
+        ("form-action", "'none'"),
+        ("frame-ancestors", "'none'"),
+    ]
+    .into_iter()
+    .map(|(name, sources)| {
+        (
+            name.to_owned(),
+            sources.split_whitespace().map(str::to_owned).collect(),
+        )
+    })
+    .collect();
+    assert_eq!(
+        directives, expected,
+        "the CSP must be exactly the reviewed policy"
+    );
 
     let windows = conf["app"]["windows"].as_array().expect("windows array");
-    let main = windows
-        .iter()
-        .find(|w| w["label"] == "main")
-        .expect("a window labelled main");
+    assert_eq!(windows.len(), 1, "exactly one configured window");
+    let main = &windows[0];
+    assert_eq!(main["label"], "main");
     assert_eq!(
         main["create"],
         serde_json::Value::Bool(false),
         "the main window must not be auto-created; it is built with its boundary in setup()"
+    );
+    for key in [
+        "url",
+        "useHttpsScheme",
+        "dataDirectory",
+        "additionalBrowserArgs",
+        "proxyUrl",
+    ] {
+        assert!(
+            main.get(key).is_none(),
+            "the main window keeps the app URL and default engine settings (`{key}`)"
+        );
+    }
+    assert_eq!(conf["build"]["devUrl"], "http://localhost:1420");
+    assert_eq!(
+        conf["build"]["frontendDist"], "../dist",
+        "the production app document is the embedded dist, never a URL"
+    );
+
+    let merge: serde_json::Value = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tauri.builder-toolchain.conf.json"
+    )))
+    .expect("builder-toolchain conf parses");
+    assert_eq!(
+        merge
+            .as_object()
+            .expect("merge object")
+            .keys()
+            .collect::<Vec<_>>(),
+        ["bundle"],
+        "the release-time config merge must not change the app, window or security"
     );
 }
 
@@ -438,35 +701,105 @@ fn p0_fg_webview_navigation_admits_only_the_exact_app_origin() {
 }
 
 /// The privileged window must be built with both boundary handlers wired: the
-/// navigation guard (the pure predicate, with the dev flag from the build
-/// profile) and an unconditional new-window denial that covers every platform
-/// (Linux included). This checks the wiring; the pure predicate is covered by
-/// the test above, and wry's cancel/deny behaviour is verified from the pinned
-/// wry 0.54.4 source.
+/// navigation guard with the app origin resolved by `tauri::is_dev()`, and an
+/// unconditional new-window denial; `setup()` must build it; and nothing else
+/// in the desktop sources may build a window or webview. Checked on the
+/// sources with comments removed, so commented-out wiring does not pass. The
+/// predicate itself is covered above and exercised live by
+/// `tests/webview_boundary_live.rs`.
 #[test]
 fn p0_fg_webview_main_window_wires_navigation_and_newwindow_guards() {
-    assert!(
-        BOUNDARY_RS.contains("WebviewWindowBuilder::from_config(app.handle(), &config)"),
-        "the main window must be built from its config in setup()"
-    );
-    assert!(
-        BOUNDARY_RS.contains(".on_navigation(move |url| navigation_allowed(url, &app_origin))"),
-        "the main window must install the navigation guard"
-    );
-    assert!(
-        BOUNDARY_RS.contains(".on_new_window(|_url, _features| NewWindowResponse::Deny)"),
-        "the main window must deny every new window on every platform"
-    );
-    assert!(
-        BOUNDARY_RS.contains(
-            "AppOrigin::resolve(app.config(), &config, tauri::is_dev(), cfg!(windows))"
+    let boundary = strip_rust_comments(BOUNDARY_RS);
+    for (needle, what) in [
+        (
+            "WebviewWindowBuilder::from_config(app.handle(), &config)?",
+            "the main window must be built from its config",
         ),
-        "the guard's app origin must be resolved with tauri::is_dev(), the condition that selects devUrl"
-    );
+        (
+            ".on_navigation(move |url| navigation_allowed(url, &app_origin))",
+            "the main window must install the navigation guard",
+        ),
+        (
+            ".on_new_window(|_url, _features| NewWindowResponse::Deny)",
+            "the main window must deny every new window on every platform",
+        ),
+        (
+            "AppOrigin::resolve(app.config(), &config, tauri::is_dev(), cfg!(windows))",
+            "the guard's app origin must be resolved with tauri::is_dev(), the condition that selects devUrl",
+        ),
+    ] {
+        assert_eq!(boundary.matches(needle).count(), 1, "{what}");
+    }
+    for once in [
+        ".on_navigation(",
+        ".on_new_window(",
+        "WebviewWindowBuilder::",
+    ] {
+        assert_eq!(
+            boundary.matches(once).count(),
+            1,
+            "`{once}` must appear exactly once in the boundary module"
+        );
+    }
     assert!(
-        !BOUNDARY_RS.contains("debug_assertions"),
+        !boundary.contains("debug_assertions"),
         "the dev origin must not be keyed on the build profile"
     );
+
+    let lib = strip_rust_comments(LIB_RS);
+    assert_eq!(
+        lib.matches("crate::webview_boundary::build_main_window(app)?;")
+            .count(),
+        1,
+        "setup() must build the privileged window through the boundary"
+    );
+    let setup = lib.find(".setup(|app| {").expect("setup closure");
+    let call = lib
+        .find("crate::webview_boundary::build_main_window(app)?;")
+        .expect("boundary call");
+    assert!(call > setup, "the boundary call must be inside setup()");
+
+    // No other window or webview construction in the desktop sources.
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).expect("source dir") {
+            let path = entry.expect("source entry").path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|n| n != "tests") {
+                    walk(&path, out);
+                }
+            } else if path.extension().is_some_and(|e| e == "rs")
+                && !path
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().ends_with("tests.rs"))
+            {
+                out.push(path);
+            }
+        }
+    }
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    walk(&src, &mut files);
+    assert!(files.len() > 20, "desktop sources not found");
+    for file in files {
+        if file.ends_with("webview_boundary.rs") {
+            continue;
+        }
+        let text = strip_rust_comments(&std::fs::read_to_string(&file).expect("read source"));
+        for builder in [
+            "WebviewWindowBuilder",
+            "WebviewBuilder",
+            "WindowBuilder",
+            "add_child(",
+            ".on_navigation(",
+            ".on_new_window(",
+        ] {
+            assert!(
+                !text.contains(builder),
+                "{}: only webview_boundary.rs may build a window or webview ({builder})",
+                file.display()
+            );
+        }
+    }
 }
 
 /// Native origin enforcement (N3), on the real ACL that tauri-build embedded
@@ -491,19 +824,13 @@ fn p0_fg_webview_app_command_ipc_is_local_main_only() {
         url: "http://127.0.0.1:15173/".parse().unwrap(),
     };
 
-    // A representative spread of the registry, including a closed command
-    // (`capture_screen`) and an approval command (`swarm_approve`): the ACL
-    // grants all of them at the local origin, and the handler/closure decides
-    // the rest. If any registered command were missing from the manifest it
-    // would be refused here even at the local origin.
-    for cmd in [
-        "list_agents",
-        "send_chat",
-        "capture_screen",
-        "swarm_approve",
-        "api_client_request",
-        "workspace_usage",
-    ] {
+    // Every registered command (the list the fg_webview registry guard pins
+    // to the live generate_handler! registration): the ACL grants each one
+    // at the local origin on the main window, and the handler/closure decides
+    // the rest. A command missing from the manifest would be refused here
+    // even at the local origin.
+    assert_eq!(APP_COMMANDS.len(), 804);
+    for &cmd in APP_COMMANDS {
         // Allowed: local origin, main window/webview.
         assert!(
             authority
