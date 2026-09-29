@@ -635,11 +635,34 @@ fn assert_doc(path: &str, required: &[&str], forbidden: &[&str]) {
     }
 }
 
-/// The notes that told users how to run a withdrawn benchmark say that it is
-/// withdrawn and that the results are historical, and no longer give the
-/// command.
+/// The result reports and notes that told users how to run a withdrawn
+/// benchmark say that it is withdrawn and that their results are
+/// historical, and no longer give the command.
 #[test]
 fn p0_bench_docs_describe_the_withdrawn_benchmarks_as_withdrawn() {
+    assert_doc(
+        "docs/reports/CLOUD_MODELS_COMPARISON_RESULTS.md",
+        &[
+            "**Test harness**: `nexus-conductor-benchmark --bin cloud-models-bench` \
+             (withdrawn during Phase Zero; historical results)",
+            "## How to Run (withdrawn)",
+            "`cloud-models-bench` is withdrawn during Phase Zero: it sent provider keys as \
+             bearer tokens on curl's command line. Running it now only prints a withdrawal \
+             message and exits with status 69. The results above are historical.",
+        ],
+        &["cargo run", "--release"],
+    );
+    assert_doc(
+        "docs/reports/CLOUD_MODELS_ONLY_RESULTS.md",
+        &[
+            "## How to Run (withdrawn)",
+            "`nim-cloud-bench` is withdrawn during Phase Zero: it sent the `GROQ_API_KEY` \
+             value to NVIDIA NIM as a bearer token on curl's command line. Running it now \
+             only prints a withdrawal message and exits with status 69. The results above \
+             are historical.",
+        ],
+        &["cargo run", "--release"],
+    );
     assert_doc(
         "data/validation_runs/README.md",
         &[
