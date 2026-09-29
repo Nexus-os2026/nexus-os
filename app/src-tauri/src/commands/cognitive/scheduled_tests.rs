@@ -174,3 +174,30 @@ fn p0_fg_sub_minute_manifest_schedules_fail_create_and_start() {
         Some(AgentState::Stopped)
     );
 }
+
+/// P0-FINAL-GATE (item K, composed): `start_autonomous_loop` accepts only
+/// intervals the bounded scheduler can express (60 to 3599 seconds, whole
+/// minutes) and refuses any other with a bounded reason, registering nothing.
+#[test]
+fn p0_fg_autonomous_loop_intervals_outside_the_schedule_bound_are_refused() {
+    let state = AppState::new_in_memory();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let agent = Uuid::new_v4().to_string();
+    for interval in [0, 1, 30, 59, 3600, 86_400, u64::MAX] {
+        assert_eq!(
+            super::start_autonomous_loop(&state, agent.clone(), Some(interval), None),
+            Err(super::AUTONOMOUS_LOOP_INTERVAL.to_string()),
+            "{interval}"
+        );
+        assert!(state.agent_scheduler.list().is_empty(), "{interval}");
+    }
+    for interval in [60, 90, 3599] {
+        super::start_autonomous_loop(&state, agent.clone(), Some(interval), None).unwrap();
+        assert_eq!(state.agent_scheduler.list().len(), 1, "{interval}");
+        state.agent_scheduler.unregister_agent(&agent);
+    }
+}

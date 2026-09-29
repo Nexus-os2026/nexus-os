@@ -140,6 +140,10 @@ pub(crate) fn assign_agent_goal(
 ///
 /// P0-FINAL-GATE (item G): an L6 (transcendent) agent is refused before
 /// anything is read from its manifest or registered with the scheduler.
+/// The refusal for an autonomous-loop interval outside 60..=3599 seconds.
+pub(crate) const AUTONOMOUS_LOOP_INTERVAL: &str =
+    "interval_seconds must be from 60 to 3599: an agent schedule fires at most once per minute";
+
 pub(crate) fn start_autonomous_loop(
     state: &AppState,
     agent_id: String,
@@ -153,14 +157,15 @@ pub(crate) fn start_autonomous_loop(
         ));
     }
     let interval = interval_seconds.unwrap_or(60);
-    // Build a cron expression from interval: "0 */N * * * *" (every N minutes) or
-    // use seconds-level scheduling for intervals < 60s.
-    let cron_expr = if interval < 60 {
-        format!("*/{interval} * * * * *") // every N seconds
-    } else {
-        let mins = (interval / 60).max(1);
-        format!("0 */{mins} * * * *") // every N minutes
-    };
+    // P0-FINAL-GATE (item K): agent schedules fire at most once per minute,
+    // and the minute step of "0 */N * * * *" allows 1 to 59. Any other
+    // interval is refused here with a bounded reason, rather than as a cron
+    // expression the caller never wrote (under 60 s it was refused by the
+    // scheduler, from 3600 s it was unparsable).
+    if !(60..3600).contains(&interval) {
+        return Err(AUTONOMOUS_LOOP_INTERVAL.to_string());
+    }
+    let cron_expr = format!("0 */{} * * * *", interval / 60); // every N minutes
 
     let manifest = find_manifest(state, &agent_id);
     let goal = goal_override
