@@ -375,7 +375,110 @@ fn json_response(trimmed_body: &str) -> Result<Value, AgentError> {
 }
 
 /// The largest provider response read in process, as for curl (32 MiB).
-const MAX_PROVIDER_RESPONSE_BYTES: u64 = 32 * 1024 * 1024;
+pub(crate) const MAX_PROVIDER_RESPONSE_BYTES: u64 = 32 * 1024 * 1024;
+
+/// The most bytes of a failed request's body kept for its error message.
+pub(crate) const MAX_ERROR_BODY_BYTES: u64 = 64 * 1024;
+
+/// Read at most `max_bytes` of a credentialed provider's response body
+/// (Final Gate decision E). A declared or streamed body longer than that is
+/// refused without the rest being read. Errors name only what failed, never
+/// the URL or a header; a read cut off by the request's total timeout says
+/// "(timed out)".
+pub(crate) fn read_bounded(
+    response: reqwest::blocking::Response,
+    max_bytes: u64,
+) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let too_large = || format!("the response is larger than {max_bytes} bytes");
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes)
+    {
+        return Err(too_large());
+    }
+    let mut raw = Vec::new();
+    response
+        .take(max_bytes + 1)
+        .read_to_end(&mut raw)
+        .map_err(|error| read_error(&error))?;
+    if raw.len() as u64 > max_bytes {
+        return Err(too_large());
+    }
+    Ok(raw)
+}
+
+/// A body read failure by its kind only (an inner error could name the URL);
+/// the request's timeout surfaces as a wrapped reqwest error, and the
+/// streamed-body cap as its own message.
+pub(crate) fn read_error(error: &std::io::Error) -> String {
+    if error.kind() == std::io::ErrorKind::FileTooLarge {
+        return error.to_string();
+    }
+    let timed_out = error.kind() == std::io::ErrorKind::TimedOut
+        || error
+            .get_ref()
+            .and_then(|inner| inner.downcast_ref::<reqwest::Error>())
+            .is_some_and(reqwest::Error::is_timeout);
+    if timed_out {
+        "the response could not be read (timed out)".to_string()
+    } else {
+        format!("the response could not be read: {}", error.kind())
+    }
+}
+
+/// At most `max_bytes` of a failed request's body, as text, for its error
+/// message; the rest is not read, and a read failure leaves what was read.
+pub(crate) fn error_body(response: reqwest::blocking::Response, max_bytes: u64) -> String {
+    use std::io::Read;
+    let mut raw = Vec::new();
+    let _ = response.take(max_bytes).read_to_end(&mut raw);
+    String::from_utf8_lossy(&raw).into_owned()
+}
+
+/// A streamed body of at most `max` bytes (Final Gate decision E): reads
+/// pass through until `max` bytes have been read, and a read past that fails
+/// with "the response is larger than <max> bytes" instead of returning more.
+/// End of stream exactly at `max` is not an error.
+pub(crate) struct CappedReader<R> {
+    inner: R,
+    left: u64,
+    max: u64,
+}
+
+impl<R> CappedReader<R> {
+    pub(crate) fn new(inner: R, max: u64) -> Self {
+        Self {
+            inner,
+            left: max,
+            max,
+        }
+    }
+}
+
+impl<R: std::io::Read> std::io::Read for CappedReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        if self.left == 0 {
+            let mut probe = [0u8; 1];
+            return match self.inner.read(&mut probe)? {
+                0 => Ok(0),
+                _ => Err(std::io::Error::new(
+                    std::io::ErrorKind::FileTooLarge,
+                    format!("the response is larger than {} bytes", self.max),
+                )),
+            };
+        }
+        let room = usize::try_from(self.left)
+            .unwrap_or(usize::MAX)
+            .min(buf.len());
+        let read = self.inner.read(&mut buf[..room])?;
+        self.left -= read as u64;
+        Ok(read)
+    }
+}
 
 /// Final Gate item C: POST backend-serialized JSON to a provider endpoint
 /// with credential-bearing headers, from this process. No credential is
@@ -486,7 +589,6 @@ fn send_bounded(
     timeout: std::time::Duration,
     max_bytes: u64,
 ) -> Result<(u16, Vec<u8>), String> {
-    use std::io::Read;
     let client =
         credential_client(timeout).map_err(|error| request_error("could not start", error))?;
     // The client's timeout bounds each wait (the headers, then every read)
@@ -500,35 +602,7 @@ fn send_bounded(
         .send()
         .map_err(|error| request_error("failed", error))?;
     let status = response.status().as_u16();
-    let too_large = || format!("the response is larger than {max_bytes} bytes");
-    if response
-        .content_length()
-        .is_some_and(|length| length > max_bytes)
-    {
-        return Err(too_large());
-    }
-    let mut raw = Vec::new();
-    response
-        .take(max_bytes + 1)
-        .read_to_end(&mut raw)
-        .map_err(|error| {
-            // Only the kind is reported (an inner error could name the URL);
-            // the request's timeout surfaces here as a wrapped reqwest error.
-            let timed_out = error.kind() == std::io::ErrorKind::TimedOut
-                || error
-                    .get_ref()
-                    .and_then(|inner| inner.downcast_ref::<reqwest::Error>())
-                    .is_some_and(reqwest::Error::is_timeout);
-            if timed_out {
-                "the response could not be read (timed out)".to_string()
-            } else {
-                format!("the response could not be read: {}", error.kind())
-            }
-        })?;
-    if raw.len() as u64 > max_bytes {
-        return Err(too_large());
-    }
-    Ok((status, raw))
+    Ok((status, read_bounded(response, max_bytes)?))
 }
 
 /// A request failure without the URL (it is dropped from the error) and
@@ -1470,5 +1544,220 @@ mod tests {
         ] {
             assert!(!ollama.contains(gone) && !helpers.contains(gone), "{gone}");
         }
+    }
+
+    // ── Final Gate decision E: every credentialed answer is bounded ──
+
+    /// Answer one loopback request (read whole) with `head`, then `body`:
+    /// all at once, or one byte per `drip` until the client gives up.
+    fn serve_answer(
+        head: String,
+        body: Vec<u8>,
+        drip: Option<Duration>,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(30)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0u8; 1];
+            while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                request.push(byte[0]);
+            }
+            let length = String::from_utf8_lossy(&request)
+                .to_ascii_lowercase()
+                .lines()
+                .find_map(|line| line.strip_prefix("content-length:").map(str::to_string))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            let mut sent = vec![0u8; length];
+            stream.read_exact(&mut sent).unwrap();
+            if stream.write_all(head.as_bytes()).is_err() {
+                return;
+            }
+            match drip {
+                None => {
+                    let _ = stream.write_all(&body);
+                }
+                Some(interval) => {
+                    for byte in body {
+                        std::thread::sleep(interval);
+                        if stream.write_all(&[byte]).is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+        (base, server)
+    }
+
+    /// The four ways a credentialed provider answer is read in process
+    /// (Claude's query and stream, Cohere, the OpenAI-compatible providers),
+    /// each against `base` with `timeout` and a `max_bytes` cap. The result
+    /// is the error text, or "ok".
+    fn provider_outcomes(bases: [String; 4], timeout: Duration, max_bytes: u64) -> [String; 4] {
+        use super::claude::ClaudeProvider;
+        use super::cohere::CohereProvider;
+        use super::openai_compatible::{execute_bounded, OpenAiCompatibleQuery};
+        let outcome = |result: Result<(), super::AgentError>| match result {
+            Ok(()) => "ok".to_string(),
+            Err(error) => error.to_string(),
+        };
+        let [claude, stream, cohere, compatible] = bases;
+        let claude = outcome(
+            ClaudeProvider::new(Some("k".to_string()))
+                .query_bounded(
+                    Some(&format!("{claude}/v1/messages")),
+                    "p",
+                    1,
+                    "m",
+                    timeout,
+                    max_bytes,
+                )
+                .map(|_| ()),
+        );
+        let stream = outcome(
+            ClaudeProvider::at("k", &format!("{stream}/v1/messages"))
+                .stream_query_bounded("p", "", 1, "m", timeout, max_bytes)
+                .and_then(|mut chunks| chunks.try_for_each(|chunk| chunk.map(|_| ()))),
+        );
+        let cohere = outcome(
+            CohereProvider::new(Some("k".to_string()))
+                .query_bounded(
+                    Some(&format!("{cohere}/v2/chat")),
+                    "p",
+                    1,
+                    "m",
+                    timeout,
+                    max_bytes,
+                )
+                .map(|_| ()),
+        );
+        let endpoint = format!("{compatible}/v1/chat/completions");
+        let compatible = outcome(
+            execute_bounded(
+                OpenAiCompatibleQuery {
+                    provider_name: "groq",
+                    missing_key_error: "no key",
+                    api_key: Some("k".to_string()),
+                    endpoint: &endpoint,
+                    prompt: "p",
+                    max_tokens: 1,
+                    model: "m",
+                    extra_headers: &[],
+                },
+                timeout,
+                max_bytes,
+            )
+            .map(|_| ()),
+        );
+        [claude, stream, cohere, compatible]
+    }
+
+    /// The answers a well-behaved server gives: JSON for the queries, an SSE
+    /// stream for Claude's streamed answer.
+    fn answers(filler: usize) -> [Vec<u8>; 4] {
+        let pad = "x".repeat(filler);
+        let claude = format!(r#"{{"content":[{{"type":"text","text":"{pad}"}}]}}"#);
+        let stream = format!(
+            "event: content_block_delta\ndata: {{\"type\":\"content_block_delta\",\"delta\":{{\"text\":\"{pad}\"}}}}\n\ndata: {{\"type\":\"message_stop\"}}\n\n"
+        );
+        let cohere = format!(r#"{{"message":{{"content":[{{"type":"text","text":"{pad}"}}]}}}}"#);
+        let compatible = format!(r#"{{"choices":[{{"message":{{"content":"{pad}"}}}}]}}"#);
+        [claude, stream, cohere, compatible].map(String::into_bytes)
+    }
+
+    /// Final Gate decision E: every credentialed answer read in process is
+    /// size-bounded. Small answers are read; answers past the cap, whether
+    /// declared or streamed without a length, are refused without being read
+    /// whole (Claude's stream ends with the error).
+    #[test]
+    fn p0_r1_credentialed_provider_answers_are_size_bounded() {
+        for (filler, declared, expect_ok) in
+            [(10, true, true), (4000, true, false), (4000, false, false)]
+        {
+            let mut servers = Vec::new();
+            let bases = answers(filler).map(|body| {
+                let head = if declared {
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    )
+                } else {
+                    "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".to_string()
+                };
+                let (base, server) = serve_answer(head, body, None);
+                servers.push(server);
+                base
+            });
+            let outcomes = provider_outcomes(bases, Duration::from_secs(10), 1024);
+            for (index, outcome) in outcomes.iter().enumerate() {
+                if expect_ok {
+                    assert_eq!(outcome, "ok", "{index}");
+                } else {
+                    assert!(
+                        outcome.contains("larger than 1024 bytes"),
+                        "{index} declared={declared}: {outcome}"
+                    );
+                }
+            }
+            for server in servers {
+                server.join().unwrap();
+            }
+        }
+    }
+
+    /// Final Gate decision E: every credentialed exchange ends within its
+    /// total time, including the body: an answer dripped over 5.4 s is
+    /// abandoned at a 1 s timeout (per read it would never time out).
+    #[test]
+    fn p0_r1_credentialed_provider_exchanges_are_bounded_in_total_time() {
+        let mut servers = Vec::new();
+        let bases = answers(0).map(|body| {
+            let body = body
+                .into_iter()
+                .chain(std::iter::repeat_n(b' ', 18))
+                .take(18)
+                .collect::<Vec<u8>>();
+            let head = "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".to_string();
+            let (base, server) = serve_answer(head, body, Some(Duration::from_millis(300)));
+            servers.push(server);
+            base
+        });
+        let started = std::time::Instant::now();
+        let outcomes = provider_outcomes(bases, Duration::from_secs(1), 1024 * 1024);
+        assert!(
+            started.elapsed() < Duration::from_secs(12),
+            "{:?}",
+            started.elapsed()
+        );
+        for (index, outcome) in outcomes.iter().enumerate() {
+            assert!(outcome.contains("timed out"), "{index}: {outcome}");
+        }
+        for server in servers {
+            server.join().unwrap();
+        }
+    }
+
+    /// The streamed-body cap passes a stream of exactly the cap and refuses
+    /// one byte more.
+    #[test]
+    fn p0_r1_capped_reader_allows_the_cap_and_refuses_more() {
+        use std::io::Read;
+        let mut exact = Vec::new();
+        super::CappedReader::new(&b"12345"[..], 5)
+            .read_to_end(&mut exact)
+            .unwrap();
+        assert_eq!(exact, b"12345");
+        let mut over = Vec::new();
+        let error = super::CappedReader::new(&b"123456"[..], 5)
+            .read_to_end(&mut over)
+            .unwrap_err();
+        assert_eq!(error.to_string(), "the response is larger than 5 bytes");
     }
 }

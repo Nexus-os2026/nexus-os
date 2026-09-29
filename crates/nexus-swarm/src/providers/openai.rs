@@ -239,12 +239,13 @@ impl Provider for OpenAiSwarmProvider {
             ));
         }
         if !status.is_success() {
-            let text = resp.text().await.unwrap_or_default();
+            let text = super::error_text(resp, super::MAX_ERROR_BODY_BYTES).await;
             return Err(ProviderError::Http("openai".into(), status.as_u16(), text));
         }
-        let parsed: ChatResp = resp
-            .json()
+        let raw = super::read_capped(resp, super::MAX_RESPONSE_BYTES)
             .await
+            .map_err(|e| ProviderError::Malformed("openai".into(), e))?;
+        let parsed: ChatResp = serde_json::from_slice(&raw)
             .map_err(|e| ProviderError::Malformed("openai".into(), e.to_string()))?;
         let text = parsed
             .choices

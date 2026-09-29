@@ -58,26 +58,64 @@ impl CohereProvider {
 
 impl LlmProvider for CohereProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
+        self.query_bounded(
+            None,
+            prompt,
+            max_tokens,
+            model,
+            Duration::from_secs(REQUEST_TIMEOUT_SECS),
+            super::MAX_PROVIDER_RESPONSE_BYTES,
+        )
+    }
+
+    fn name(&self) -> &str {
+        "cohere"
+    }
+
+    fn cost_per_token(&self) -> f64 {
+        0.000_002
+    }
+
+    fn endpoint_url(&self) -> String {
+        self.endpoint.clone()
+    }
+}
+
+impl CohereProvider {
+    /// The query with its bounds (Final Gate decision E): the whole exchange
+    /// ends within `timeout` and at most `max_bytes` of response is read.
+    /// `endpoint` replaces the fixed endpoint only in tests.
+    pub(super) fn query_bounded(
+        &self,
+        endpoint: Option<&str>,
+        prompt: &str,
+        max_tokens: u32,
+        model: &str,
+        timeout: Duration,
+        max_bytes: u64,
+    ) -> Result<LlmResponse, AgentError> {
         let Some(api_key) = self.api_key() else {
             return Err(AgentError::SupervisorError(
                 "COHERE_API_KEY is not set".to_string(),
             ));
         };
 
-        let request = CohereProvider::new(Some(api_key)).build_request(prompt, max_tokens, model);
-        let client = super::credential_client(Duration::from_secs(REQUEST_TIMEOUT_SECS)).map_err(
-            |error| {
-                AgentError::SupervisorError(format!(
-                    "failed to build HTTP client for cohere: {error}"
-                ))
-            },
-        )?;
+        let mut request =
+            CohereProvider::new(Some(api_key)).build_request(prompt, max_tokens, model);
+        // The query goes to the fixed Cohere endpoint, as before; tests pass
+        // a loopback stand-in.
+        if let Some(endpoint) = endpoint {
+            request.endpoint = endpoint.to_string();
+        }
+        let client = super::credential_client(timeout).map_err(|error| {
+            AgentError::SupervisorError(format!("failed to build HTTP client for cohere: {error}"))
+        })?;
 
         eprintln!(
             "[nexus-llm][governance] cohere::complete endpoint={}",
             request.endpoint
         );
-        let mut call = client.post(request.endpoint.clone());
+        let mut call = client.post(request.endpoint.clone()).timeout(timeout);
         for (header_name, header_value) in &request.headers {
             call = call.header(header_name, header_value);
         }
@@ -86,7 +124,10 @@ impl LlmProvider for CohereProvider {
             AgentError::SupervisorError(format!("cohere request failed: {error}"))
         })?;
         let status = response.status();
-        let payload = response.json::<Value>().map_err(|error| {
+        let raw = super::read_bounded(response, max_bytes).map_err(|error| {
+            AgentError::SupervisorError(format!("cohere response read failed: {error}"))
+        })?;
+        let payload = serde_json::from_slice::<Value>(&raw).map_err(|error| {
             AgentError::SupervisorError(format!("cohere response parse failed: {error}"))
         })?;
         if !status.is_success() {
@@ -124,17 +165,5 @@ impl LlmProvider for CohereProvider {
             tool_calls: extract_tool_calls(&payload),
             input_tokens: None,
         })
-    }
-
-    fn name(&self) -> &str {
-        "cohere"
-    }
-
-    fn cost_per_token(&self) -> f64 {
-        0.000_002
-    }
-
-    fn endpoint_url(&self) -> String {
-        "https://api.cohere.ai".to_string()
     }
 }

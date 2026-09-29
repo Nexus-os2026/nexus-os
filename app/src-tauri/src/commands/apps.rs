@@ -900,6 +900,46 @@ pub(crate) fn get_email_access_token(provider: &'static str) -> Result<String, S
     Ok(token)
 }
 
+/// Final Gate decision E: the longest one email request may take, from
+/// connecting until its whole body is read.
+pub(crate) const EMAIL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Final Gate decision E: the most response bytes one email request reads
+/// (a page of 20 messages, bodies included, is far smaller).
+pub(crate) const MAX_EMAIL_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
+
+/// The most bytes of a failed email request's body kept for its error.
+const MAX_EMAIL_ERROR_BODY_BYTES: usize = 64 * 1024;
+
+/// The client every Gmail and Outlook request uses (Final Gate decisions C
+/// and E): the access token travels only in the Authorization header, no
+/// redirect is followed (reqwest would re-send a 307/308 body, such as a
+/// message being sent, to another host), no Referer is sent, and each
+/// request ends within `EMAIL_REQUEST_TIMEOUT`.
+pub(crate) fn email_client() -> Result<reqwest::Client, String> {
+    messaging_client_with(EMAIL_REQUEST_TIMEOUT)
+}
+
+/// An email response's body: at most `MAX_EMAIL_RESPONSE_BYTES`, declared
+/// or streamed; errors name no URL.
+pub(crate) async fn email_body(response: reqwest::Response) -> Result<String, String> {
+    messaging_body_bounded(response, MAX_EMAIL_RESPONSE_BYTES).await
+}
+
+/// At most `MAX_EMAIL_ERROR_BODY_BYTES` of a failed email request's body,
+/// for its error message.
+async fn email_error_body(mut response: reqwest::Response) -> String {
+    let mut body = Vec::new();
+    while let Ok(Some(chunk)) = response.chunk().await {
+        let room = MAX_EMAIL_ERROR_BODY_BYTES - body.len();
+        body.extend_from_slice(&chunk[..chunk.len().min(room)]);
+        if body.len() == MAX_EMAIL_ERROR_BODY_BYTES {
+            break;
+        }
+    }
+    String::from_utf8_lossy(&body).into_owned()
+}
+
 pub(crate) fn email_fetch_messages(
     state: &AppState,
     provider: String,
@@ -929,13 +969,13 @@ pub(crate) fn email_fetch_messages(
                 let url = format!(
                     "https://gmail.googleapis.com/gmail/v1/users/me/messages?labelIds={label}&maxResults={max_results}"
                 );
-                let resp = reqwest::Client::new()
+                let resp = email_client()?
                     .get(&url)
                     .bearer_auth(&token)
                     .send()
                     .await
-                    .map_err(|e| format!("gmail list: {e}"))?;
-                let body = resp.text().await.map_err(|e| format!("gmail body: {e}"))?;
+                    .map_err(|e| messaging_transport_error("gmail list", e))?;
+                let body = email_body(resp).await?;
                 let list: serde_json::Value =
                     serde_json::from_str(&body).map_err(|e| format!("gmail parse: {e}"))?;
 
@@ -947,13 +987,13 @@ pub(crate) fn email_fetch_messages(
                             let detail_url = format!(
                                 "https://gmail.googleapis.com/gmail/v1/users/me/messages/{id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date"
                             );
-                            let detail_resp = reqwest::Client::new()
+                            let detail_resp = email_client()?
                                 .get(&detail_url)
                                 .bearer_auth(&token)
                                 .send()
                                 .await;
                             if let Ok(resp) = detail_resp {
-                                if let Ok(text) = resp.text().await {
+                                if let Ok(text) = email_body(resp).await {
                                     if let Ok(detail) =
                                         serde_json::from_str::<serde_json::Value>(&text)
                                     {
@@ -1034,16 +1074,13 @@ pub(crate) fn email_fetch_messages(
                     "https://graph.microsoft.com/v1.0/me/mailFolders/{folder_path}/messages?$top={max_results}&$skip={}&$orderby=receivedDateTime+desc",
                     page * max_results
                 );
-                let resp = reqwest::Client::new()
+                let resp = email_client()?
                     .get(&url)
                     .bearer_auth(&token)
                     .send()
                     .await
-                    .map_err(|e| format!("outlook list: {e}"))?;
-                let body = resp
-                    .text()
-                    .await
-                    .map_err(|e| format!("outlook body: {e}"))?;
+                    .map_err(|e| messaging_transport_error("outlook list", e))?;
+                let body = email_body(resp).await?;
                 let data: serde_json::Value =
                     serde_json::from_str(&body).map_err(|e| format!("outlook parse: {e}"))?;
 
@@ -1132,15 +1169,15 @@ pub(crate) fn email_send_message(
                     &base64::engine::general_purpose::URL_SAFE_NO_PAD,
                     raw_message.as_bytes(),
                 );
-                let resp = reqwest::Client::new()
+                let resp = email_client()?
                     .post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send")
                     .bearer_auth(&token)
                     .json(&json!({"raw": encoded}))
                     .send()
                     .await
-                    .map_err(|e| format!("gmail send: {e}"))?;
+                    .map_err(|e| messaging_transport_error("gmail send", e))?;
                 let status = resp.status();
-                let text = resp.text().await.unwrap_or_default();
+                let text = email_error_body(resp).await;
                 if status.is_success() {
                     Ok(json!({"status": "sent", "provider": "gmail"}).to_string())
                 } else {
@@ -1156,18 +1193,18 @@ pub(crate) fn email_send_message(
                     },
                     "saveToSentItems": true
                 });
-                let resp = reqwest::Client::new()
+                let resp = email_client()?
                     .post("https://graph.microsoft.com/v1.0/me/sendMail")
                     .bearer_auth(&token)
                     .json(&mail)
                     .send()
                     .await
-                    .map_err(|e| format!("outlook send: {e}"))?;
+                    .map_err(|e| messaging_transport_error("outlook send", e))?;
                 let status = resp.status();
                 if status.is_success() || status.as_u16() == 202 {
                     Ok(json!({"status": "sent", "provider": "outlook"}).to_string())
                 } else {
-                    let text = resp.text().await.unwrap_or_default();
+                    let text = email_error_body(resp).await;
                     Err(format!("Outlook send failed ({status}): {text}"))
                 }
             }
@@ -1197,26 +1234,26 @@ pub(crate) fn email_search_messages(
                     "https://gmail.googleapis.com/gmail/v1/users/me/messages?q={}&maxResults=20",
                     urlencoding::encode(&query)
                 );
-                let resp = reqwest::Client::new()
+                let resp = email_client()?
                     .get(&url)
                     .bearer_auth(&token)
                     .send()
                     .await
-                    .map_err(|e| format!("gmail search: {e}"))?;
-                resp.text().await.map_err(|e| format!("gmail body: {e}"))
+                    .map_err(|e| messaging_transport_error("gmail search", e))?;
+                email_body(resp).await
             }
             "outlook" => {
                 let url = format!(
                     "https://graph.microsoft.com/v1.0/me/messages?$search=\"{}\"&$top=20",
                     query.replace('"', "\\\"")
                 );
-                let resp = reqwest::Client::new()
+                let resp = email_client()?
                     .get(&url)
                     .bearer_auth(&token)
                     .send()
                     .await
-                    .map_err(|e| format!("outlook search: {e}"))?;
-                resp.text().await.map_err(|e| format!("outlook body: {e}"))
+                    .map_err(|e| messaging_transport_error("outlook search", e))?;
+                email_body(resp).await
             }
             _ => Err(format!("Unknown provider: {provider}")),
         }

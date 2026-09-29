@@ -23,6 +23,15 @@ impl ClaudeProvider {
         }
     }
 
+    /// A provider for `endpoint`, for tests.
+    #[cfg(test)]
+    pub(super) fn at(api_key: &str, endpoint: &str) -> Self {
+        Self {
+            api_key: Some(api_key.to_string()),
+            endpoint: endpoint.to_string(),
+        }
+    }
+
     pub fn from_env() -> Self {
         let endpoint = env::var("ANTHROPIC_URL")
             .unwrap_or_else(|_| "https://api.anthropic.com/v1/messages".to_string());
@@ -66,16 +75,68 @@ impl ClaudeProvider {
     }
 }
 
+/// A query's total time (Final Gate decision E), per attempt.
+const QUERY_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// A streamed answer's total time, from connecting until its last byte.
+const STREAM_TIMEOUT: Duration = Duration::from_secs(300);
+
 impl LlmProvider for ClaudeProvider {
     fn query(&self, prompt: &str, max_tokens: u32, model: &str) -> Result<LlmResponse, AgentError> {
+        self.query_bounded(
+            None,
+            prompt,
+            max_tokens,
+            model,
+            QUERY_TIMEOUT,
+            super::MAX_PROVIDER_RESPONSE_BYTES,
+        )
+    }
+
+    fn name(&self) -> &str {
+        "claude"
+    }
+
+    fn cost_per_token(&self) -> f64 {
+        0.000_015
+    }
+
+    fn endpoint_url(&self) -> String {
+        "https://api.anthropic.com".to_string()
+    }
+}
+
+/// Maximum retry attempts for overloaded (529) or rate-limited (429) errors.
+const MAX_RETRIES: u32 = 3;
+
+impl ClaudeProvider {
+    /// The query with its bounds (Final Gate decision E): each attempt ends
+    /// within `timeout`, from connecting until its body is read, and at most
+    /// `max_bytes` of response is read. At most three retries follow a 429 or
+    /// 529, after 5, 10 and 20 s. `endpoint` replaces the fixed endpoint only
+    /// in tests.
+    pub(super) fn query_bounded(
+        &self,
+        endpoint: Option<&str>,
+        prompt: &str,
+        max_tokens: u32,
+        model: &str,
+        timeout: Duration,
+        max_bytes: u64,
+    ) -> Result<LlmResponse, AgentError> {
         let Some(api_key) = self.api_key() else {
             return Err(AgentError::SupervisorError(
                 "ANTHROPIC_API_KEY is not set".to_string(),
             ));
         };
-        let request = ClaudeProvider::new(Some(api_key)).build_request(prompt, max_tokens, model);
+        let mut request =
+            ClaudeProvider::new(Some(api_key)).build_request(prompt, max_tokens, model);
+        // The query goes to the fixed Anthropic endpoint, as before.
+        if let Some(endpoint) = endpoint {
+            request.endpoint = endpoint.to_string();
+        }
 
-        let client = super::credential_client(Duration::from_secs(120)).map_err(|error| {
+        let client = super::credential_client(timeout).map_err(|error| {
             AgentError::SupervisorError(format!("failed to build HTTP client: {error}"))
         })?;
 
@@ -84,6 +145,7 @@ impl LlmProvider for ClaudeProvider {
         let (status, payload) = loop {
             let response = client
                 .post(&request.endpoint)
+                .timeout(timeout)
                 .header("x-api-key", request.headers["x-api-key"].as_str())
                 .header(
                     "anthropic-version",
@@ -108,7 +170,10 @@ impl LlmProvider for ClaudeProvider {
                 continue;
             }
 
-            let payload = response.json::<Value>().map_err(|error| {
+            let raw = super::read_bounded(response, max_bytes).map_err(|error| {
+                AgentError::SupervisorError(format!("claude response read failed: {error}"))
+            })?;
+            let payload = serde_json::from_slice::<Value>(&raw).map_err(|error| {
                 AgentError::SupervisorError(format!("claude response parse failed: {error}"))
             })?;
             break (status, payload);
@@ -160,22 +225,7 @@ impl LlmProvider for ClaudeProvider {
             input_tokens,
         })
     }
-
-    fn name(&self) -> &str {
-        "claude"
-    }
-
-    fn cost_per_token(&self) -> f64 {
-        0.000_015
-    }
-
-    fn endpoint_url(&self) -> String {
-        "https://api.anthropic.com".to_string()
-    }
 }
-
-/// Maximum retry attempts for overloaded (529) or rate-limited (429) errors.
-const MAX_RETRIES: u32 = 3;
 
 /// Check if an HTTP status code is retryable (overloaded/rate-limited).
 fn is_retryable_status(status: reqwest::StatusCode) -> bool {
@@ -189,6 +239,35 @@ impl StreamingLlmProvider for ClaudeProvider {
         system_prompt: &str,
         max_tokens: u32,
         model: &str,
+    ) -> Result<StreamingResponse, AgentError> {
+        self.stream_query_bounded(
+            prompt,
+            system_prompt,
+            max_tokens,
+            model,
+            STREAM_TIMEOUT,
+            super::MAX_PROVIDER_RESPONSE_BYTES,
+        )
+    }
+
+    fn streaming_provider_name(&self) -> &str {
+        "claude"
+    }
+}
+
+impl ClaudeProvider {
+    /// The streamed query with its bounds (Final Gate decision E): each
+    /// attempt ends within `timeout`, from connecting until the stream's last
+    /// byte, and at most `max_bytes` of the stream is read; a longer stream
+    /// ends with an error. At most three retries follow a 429 or 529.
+    pub(super) fn stream_query_bounded(
+        &self,
+        prompt: &str,
+        system_prompt: &str,
+        max_tokens: u32,
+        model: &str,
+        timeout: Duration,
+        max_bytes: u64,
     ) -> Result<StreamingResponse, AgentError> {
         let api_key = self.api_key().ok_or_else(|| {
             AgentError::SupervisorError("ANTHROPIC_API_KEY is not set".to_string())
@@ -210,8 +289,7 @@ impl StreamingLlmProvider for ClaudeProvider {
             body["system"] = Value::String(system_prompt.to_string());
         }
 
-        // A longer timeout for streaming.
-        let client = super::credential_client(Duration::from_secs(300)).map_err(|e| {
+        let client = super::credential_client(timeout).map_err(|e| {
             AgentError::SupervisorError(format!("failed to build HTTP client: {e}"))
         })?;
 
@@ -222,6 +300,7 @@ impl StreamingLlmProvider for ClaudeProvider {
         for attempt in 0..=MAX_RETRIES {
             let response = client
                 .post(&self.endpoint)
+                .timeout(timeout)
                 .header("x-api-key", &api_key)
                 .header("anthropic-version", "2023-06-01")
                 .header("content-type", "application/json")
@@ -234,10 +313,10 @@ impl StreamingLlmProvider for ClaudeProvider {
             let status = response.status();
             if status.is_success() {
                 // Successful response — proceed to stream parsing below
-                return self.parse_streaming_response(response);
+                return self.parse_streaming_response(response, max_bytes);
             }
 
-            let error_body = response.text().unwrap_or_default();
+            let error_body = super::error_body(response, super::MAX_ERROR_BODY_BYTES);
 
             if is_retryable_status(status) && attempt < MAX_RETRIES {
                 eprintln!(
@@ -264,10 +343,6 @@ impl StreamingLlmProvider for ClaudeProvider {
             MAX_RETRIES
         )))
     }
-
-    fn streaming_provider_name(&self) -> &str {
-        "claude"
-    }
 }
 
 impl ClaudeProvider {
@@ -275,11 +350,14 @@ impl ClaudeProvider {
     fn parse_streaming_response(
         &self,
         response: reqwest::blocking::Response,
+        max_bytes: u64,
     ) -> Result<StreamingResponse, AgentError> {
         let usage_cell = new_usage_cell();
         let iter_usage = usage_cell.clone();
 
-        let reader = std::io::BufReader::new(response);
+        // At most `max_bytes` of the stream is read; past that the next
+        // read fails and the stream ends with that error.
+        let reader = std::io::BufReader::new(super::CappedReader::new(response, max_bytes));
         let lines = reader.lines();
 
         let iter = ClaudeSseIterator {
@@ -313,7 +391,8 @@ impl<R: BufRead + Send> Iterator for ClaudeSseIterator<R> {
                 Some(Err(e)) => {
                     self.finished = true;
                     return Some(Err(AgentError::SupervisorError(format!(
-                        "stream read error: {e}"
+                        "stream read error: {}",
+                        super::read_error(&e)
                     ))));
                 }
                 None => {

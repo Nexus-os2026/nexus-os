@@ -51,6 +51,78 @@ pub enum DeployError {
     Other(String),
 }
 
+// ─── Bounded provider API client (Final Gate decisions C and E) ─────────────
+
+/// The longest one provider API request may take, from connecting until its
+/// whole body is read.
+pub const API_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// The most response bytes one provider API request reads into memory.
+pub const MAX_API_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+
+/// The most bytes of a failed request's body kept for its error.
+pub const MAX_API_ERROR_BODY_BYTES: usize = 64 * 1024;
+
+/// The client for the provider API calls that carry the stored deploy token
+/// (the desktop's token check and site listing): no redirect is followed
+/// (reqwest would re-send a 307/308 request, token header included unless it
+/// is Authorization, to another host), no Referer is sent, and each request
+/// ends within `API_REQUEST_TIMEOUT`.
+pub fn api_client() -> Result<reqwest::Client, DeployError> {
+    api_client_with(API_REQUEST_TIMEOUT)
+}
+
+/// [`api_client`] with a given total timeout.
+fn api_client_with(timeout: std::time::Duration) -> Result<reqwest::Client, DeployError> {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .referer(false)
+        .build()
+        .map_err(|e| DeployError::Network(e.without_url().to_string()))
+}
+
+/// At most `max` bytes of a provider response, parsed as JSON. A body
+/// declared or streamed past `max` is refused without the rest being read;
+/// errors name no URL.
+pub(crate) async fn read_json_capped<T: serde::de::DeserializeOwned>(
+    mut resp: reqwest::Response,
+    max: usize,
+) -> Result<T, DeployError> {
+    let too_large = || DeployError::Network(format!("the response is larger than {max} bytes"));
+    if resp
+        .content_length()
+        .is_some_and(|length| length > max as u64)
+    {
+        return Err(too_large());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| DeployError::Network(e.without_url().to_string()))?
+    {
+        if chunk.len() > max - body.len() {
+            return Err(too_large());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&body).map_err(|e| DeployError::Network(e.to_string()))
+}
+
+/// At most `max` bytes of a failed request's body, as text, for its error.
+pub(crate) async fn error_text(mut resp: reqwest::Response, max: usize) -> String {
+    let mut body = Vec::new();
+    while let Ok(Some(chunk)) = resp.chunk().await {
+        let room = max - body.len();
+        body.extend_from_slice(&chunk[..chunk.len().min(room)]);
+        if body.len() == max {
+            break;
+        }
+    }
+    String::from_utf8_lossy(&body).into_owned()
+}
+
 // ─── Shared Types ──────────────────────────────────────────────────────────
 
 /// A single file to be deployed.
@@ -399,6 +471,168 @@ mod legacy {
 
 #[cfg(test)]
 mod tests {
+
+    // ── Final Gate decisions C and E: the bounded provider API client ──
+
+    /// Answer one loopback request (read whole) with `head` and `body`, all
+    /// at once or one byte per `drip`.
+    fn serve(
+        head: String,
+        body: Vec<u8>,
+        drip: Option<std::time::Duration>,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0u8; 1];
+            while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                request.push(byte[0]);
+            }
+            if stream.write_all(head.as_bytes()).is_err() {
+                return;
+            }
+            match drip {
+                None => {
+                    let _ = stream.write_all(&body);
+                }
+                Some(interval) => {
+                    for byte in body {
+                        std::thread::sleep(interval);
+                        if stream.write_all(&[byte]).is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+        (base, server)
+    }
+
+    fn runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+    }
+
+    /// The deploy token check and site listing: a redirect is returned as its
+    /// status (the target is never contacted), a body past the cap is
+    /// refused, declared or not, and a body dripped past the total timeout
+    /// is abandoned.
+    #[test]
+    fn p0_r1_deploy_api_requests_are_bounded_and_follow_no_redirect() {
+        let rt = runtime();
+        let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        target.set_nonblocking(true).unwrap();
+        let target_url = format!("http://{}", target.local_addr().unwrap());
+        for code in [
+            "301 Moved Permanently",
+            "307 Temporary Redirect",
+            "308 Permanent Redirect",
+        ] {
+            let (base, server) = serve(
+                format!("HTTP/1.1 {code}\r\nLocation: {target_url}/collect\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
+                Vec::new(),
+                None,
+            );
+            let status = rt.block_on(async {
+                api_client()
+                    .unwrap()
+                    .get(format!("{base}/api/v1/sites"))
+                    .header("Authorization", "Bearer fg-deploy-token")
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+                    .as_u16()
+            });
+            assert_eq!(status.to_string(), code[..3]);
+            server.join().unwrap();
+        }
+        assert!(matches!(
+            target.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+
+        for declared in [true, false] {
+            let body = format!("[\"{}\"]", "a".repeat(2048)).into_bytes();
+            let head = if declared {
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                )
+            } else {
+                "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".to_string()
+            };
+            let (base, server) = serve(head, body, None);
+            let result: Result<Vec<String>, DeployError> = rt.block_on(async {
+                let resp = api_client().unwrap().get(base).send().await.unwrap();
+                read_json_capped(resp, 1024).await
+            });
+            assert!(
+                matches!(&result, Err(DeployError::Network(reason)) if reason == "the response is larger than 1024 bytes"),
+                "{result:?}"
+            );
+            server.join().unwrap();
+        }
+        let (base, server) = serve(
+            "HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\n".to_string(),
+            b"[\"site\"]".to_vec(),
+            None,
+        );
+        let sites: Vec<String> = rt.block_on(async {
+            let resp = api_client().unwrap().get(base).send().await.unwrap();
+            read_json_capped(resp, 1024).await.unwrap()
+        });
+        assert_eq!(sites, ["site"]);
+        server.join().unwrap();
+
+        let (base, server) = serve(
+            "HTTP/1.1 200 OK\r\nContent-Length: 18\r\nConnection: close\r\n\r\n".to_string(),
+            b"[\"dripped-slowly\"]".to_vec(),
+            Some(std::time::Duration::from_millis(300)),
+        );
+        let started = std::time::Instant::now();
+        let result: Result<Vec<String>, DeployError> = rt.block_on(async {
+            let resp = api_client_with(std::time::Duration::from_secs(1))
+                .unwrap()
+                .get(base)
+                .send()
+                .await
+                .unwrap();
+            read_json_capped(resp, 1024).await
+        });
+        assert!(result.is_err(), "a 5.4 s body must not be read within 1 s");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(4),
+            "{:?}",
+            started.elapsed()
+        );
+        server.join().unwrap();
+
+        for (file, source) in [
+            ("netlify.rs", include_str!("netlify.rs")),
+            ("cloudflare.rs", include_str!("cloudflare.rs")),
+            ("vercel.rs", include_str!("vercel.rs")),
+        ] {
+            let source = source.replace("\r\n", "\n");
+            let list = source.split("pub async fn list_sites(").nth(1).unwrap();
+            let list = list.split("\n}\n").next().unwrap();
+            assert!(
+                list.contains("super::read_json_capped(resp, super::MAX_API_RESPONSE_BYTES)"),
+                "{file}"
+            );
+            for unbounded in [".json()", ".text()", ".bytes()"] {
+                assert!(!list.contains(unbounded), "{file}: {unbounded}");
+            }
+        }
+    }
     use super::*;
     use std::fs;
 
