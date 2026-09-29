@@ -3,8 +3,11 @@
 > **Status: internal mapping — not an audit, not a certification.**
 >
 > - This is an internal self-assessment and control mapping, written before the
->   Phase Zero trust-boundary rebuild. It has not been revalidated against the
->   rebuild, and Phase Zero is not complete.
+>   Phase Zero trust-boundary rebuild. The Phase Zero Linux support profile
+>   has since been completed, but this mapping was not revalidated as current
+>   compliance or certification evidence by that completion, and Phase Zero
+>   completion does not make its historical IMPLEMENTED rows current claims.
+>   It remains an internal legacy mapping.
 > - It is not external audit evidence, and it is not a certification,
 >   accreditation or attestation.
 > - Its status labels (such as IMPLEMENTED) and its code, test and deployment

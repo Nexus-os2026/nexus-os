@@ -1,8 +1,9 @@
 # Enterprise Guide (legacy, not current)
 
-> **This is not a current or supported deployment guide.** The enterprise
-> guide that was here predates the Phase Zero trust-boundary rebuild. Phase
-> Zero is not complete.
+> **This is not a current or supported deployment guide.** The Phase Zero
+> Linux support profile is complete, but the enterprise guide that was here
+> predates that rebuild and remains a legacy document, not a current
+> supported enterprise or deployment guide.
 
 ## Status
 
@@ -10,16 +11,16 @@
   integrations and commitments from before the Phase Zero rebuild. It has
   been withdrawn from this page; it remains in the repository history only.
 - Docker, Docker Compose, Kubernetes/Helm and other standalone server
-  deployments are withdrawn on the current Phase Zero candidate. There is no
-  supported server deployment.
+  deployments are withdrawn in the Phase Zero Linux support profile. There
+  is no supported server deployment.
 - The earlier guide's statements do not describe current Phase Zero
   capabilities or commitments. That includes its enterprise integrations,
   high-availability and multi-tenant topologies, key-management, secrets
   vault and SIEM integrations, support tiers and response times, and
   compliance or certification statements. None of them is a current
   commitment unless it is separately revalidated later.
-- Organisation-scale and enterprise functionality is future work after Phase
-  Zero, unless current evidence explicitly establishes otherwise.
+- Organisation-scale and enterprise functionality remains future work after
+  Phase Zero, unless it is separately revalidated.
 - No external audit, attestation or certification is claimed.
 
 ## Current sources of truth

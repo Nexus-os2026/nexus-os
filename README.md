@@ -6,23 +6,32 @@ through backend-owned, explicitly granted authority.
 
 It is not production-ready.
 
-## Status: Phase Zero — Trust Boundary rebuild
+## Status: Phase Zero complete — Linux support profile
 
-**Phase Zero is not complete.**
+**PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE**, as declared by the project
+Architect on 2026-09-29.
 
-The repository is being rebuilt around one rule: a string is never
-authority. Phase Zero replaces ambient, caller-asserted and path-based
+- Phase Zero is complete for the Linux support profile.
+- Windows and macOS portability validation remains deferred.
+- This is not a production-readiness declaration.
+- This is not an external certification or audit.
+- Phase One has not been implemented; this status update adds no Phase One
+  capability.
+
+Phase Zero rebuilt the project's trust boundary around one rule: a string is
+never authority. It replaced ambient, caller-asserted and path-based
 authority with backend-owned grants, narrowing, revocation and fail-closed
 defaults.
 
-The current technical and documentation work is a Linux closure candidate.
-It still awaits final hosted validation and integration. Until then, what
-this README describes is the state of that candidate, not of an integrated
-or released product.
+The final hosted validation of the Phase Zero checkpoint passed. The
+authoritative branch and the public `main` branch were then aligned to that
+checkpoint. The completed Phase Zero checkpoint is frozen at commit
+`f727f5c39fab8d5c729a55eb28ad576d3d56ce47`; later documentation or status
+commits do not redefine those validated bytes.
 
-Material on the public default branch, and older releases, tags and
-repository metadata, predate the rebuild. They are not a description of the
-current state.
+The public default branch (`main`) was aligned to the completed Phase Zero
+checkpoint. Older releases and tags predate the rebuild; they remain
+historical and are explicitly labelled as such.
 
 ## Platform scope
 
@@ -41,8 +50,8 @@ cloud provider.
 ## Closed and withdrawn surfaces
 
 Surfaces that cannot yet be governed are closed or withdrawn rather than
-offered as production features. On the current Phase Zero candidate this
-includes, for example, screen observation, operating-system input control,
+offered as production features. In the completed Phase Zero Linux support
+profile this includes, for example, screen observation, operating-system input control,
 voice capture, browser automation through the agent executor,
 caller-chosen network destinations and the highest autonomy level. A closed
 route fails with an explicit error instead of running.
@@ -66,7 +75,7 @@ not documented as runtime entry points.
 
 The repository provides no supported server deployment at this point: there
 is no supported standalone server, Docker, Compose, Helm or Kubernetes
-deployment of Nexus on the current Phase Zero candidate. An existing
+deployment of Nexus in the Phase Zero Linux support profile. An existing
 deployment is not stopped automatically by this source change. See the
 deployment guide linked below.
 

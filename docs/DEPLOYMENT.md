@@ -1,8 +1,9 @@
 # Deployment Status (Phase Zero)
 
-> **Phase Zero is not complete, and there is no supported server
-> deployment.** This page records what the current Phase Zero Linux closure
-> candidate does and does not support. It is not an installation guide.
+> **The Phase Zero Linux support profile is complete, and there is still no
+> supported server deployment.** This page records what the completed Phase
+> Zero Linux support profile does and does not support. It is not an
+> installation guide.
 
 ## Platform scope
 
@@ -24,7 +25,7 @@ variable or file first, and starts no server or process.
 
 This covers the Docker, Docker Compose, Kubernetes/Helm and air-gapped server
 recipes and the headless server paths. There is no supported standalone
-server deployment on the current Phase Zero candidate.
+server deployment in the Phase Zero Linux support profile.
 
 ### Protocols server (`nexus-protocols-server`, `nexus-os`) (withdrawn)
 

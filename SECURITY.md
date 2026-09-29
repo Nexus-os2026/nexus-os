@@ -29,9 +29,14 @@ grant, for example:
 
 ---
 
-## Current status: Phase Zero trust-boundary rebuild
+## Current status: Phase Zero complete — Linux support profile
 
-- The Phase Zero trust-boundary rebuild is in progress and **not complete**.
+- The Phase Zero trust-boundary rebuild is complete for the validated Linux
+  support profile ("PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE", declared
+  by the project Architect on 2026-09-29 for commit
+  `f727f5c39fab8d5c729a55eb28ad576d3d56ce47`). The recorded limitations and
+  non-claims below remain in force; completion does not turn them into
+  guarantees.
 - Linux is the active Phase Zero validation target. Windows and macOS
   portability validation is deferred, and no Phase Zero security claim is
   made for them.
