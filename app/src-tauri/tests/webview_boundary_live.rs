@@ -10,12 +10,16 @@
 //! `list_agents`, page-load events, the window list and, on Linux, the
 //! engine's `create` signal. No signal is elapsed time.
 //!
-//! # Two origin modes, one process each
+//! # Origin modes and build profiles, one process per mode
 //!
-//! `cargo test` builds tauri without `custom-protocol`, i.e. tauri's dev
-//! profile (`tauri::is_dev()`), where the app window loads `devUrl`. The
-//! harness runs its checks twice, each time in a child process of its own (a
-//! native event loop can be created only once per process):
+//! A plain `cargo test` builds tauri without `custom-protocol`, i.e. tauri's
+//! dev profile (`tauri::is_dev()`), where the app window loads `devUrl`; there
+//! the harness runs its checks twice, each time in a child process of its own
+//! (a native event loop can be created only once per process). Built with
+//! `--features tauri/custom-protocol` (the release profile; `app/dist` must
+//! exist, since it is embedded) tauri ignores `devUrl`, so only the
+//! app-origin mode runs — on tauri's release code path and the guard's
+//! `tauri::is_dev() == false` branch, exactly as in the shipped app.
 //!
 //! * **dev-origin** — the context as generated: the privileged document is
 //!   `devUrl`, `http://localhost:1420`, served by the harness itself (no dev
@@ -25,11 +29,11 @@
 //!   asset provider in place of the embedded `dist`: tauri then loads its
 //!   PRODUCTION origin — `tauri://localhost` on Linux/macOS,
 //!   `http://tauri.localhost` on Windows — through its own protocol handler,
-//!   with the production CSP header, and the navigation guard resolves that
-//!   origin on the same code path as a release build. Not exercised: tauri
-//!   compiled with `custom-protocol` (tauri's `cfg(dev)` branches differ, and
-//!   the real `dist` is not embedded). The production origin of every platform
-//!   is also unit-tested
+//!   with the production CSP header. In the dev profile the guard reaches that
+//!   origin through its `devUrl`-absent fallback; in the release profile
+//!   through the release branch. (The harness's document replaces the embedded
+//!   `dist` in both, so the checks drive a document they control.) The
+//!   production origin of every platform is also unit-tested
 //!   (`p0_fg_webview_app_origin_is_resolved_like_tauri_resolves_the_app_url`).
 //!
 //! Loopback servers (no DNS, no off-host traffic even if a claim were false):
@@ -228,8 +232,23 @@ fn main() {
         std::env::temp_dir().join(format!("nexus-webview-live-{}-{stamp}", std::process::id()));
     std::fs::create_dir_all(&run_dir).expect("create the per-run temp dir");
 
+    // A release (custom-protocol) build ignores devUrl, so only the
+    // app-origin mode exists there.
+    let modes: &[Mode] = if tauri::is_dev() {
+        &[Mode::DevOrigin, Mode::AppOrigin]
+    } else {
+        &[Mode::AppOrigin]
+    };
+    println!(
+        "[live] tauri profile: {}",
+        if tauri::is_dev() {
+            "dev (tauri without custom-protocol)"
+        } else {
+            "release (tauri custom-protocol, embedded dist)"
+        }
+    );
     let mut failures = Vec::new();
-    for mode in [Mode::DevOrigin, Mode::AppOrigin] {
+    for &mode in modes {
         match run_child(mode, &run_dir) {
             Ok(()) => println!("[live] {}: all checks passed", mode.name()),
             Err(e) => {
@@ -704,8 +723,11 @@ fn run_live(mode: Mode, phase: &Mutex<String>, servers: &Servers) -> Vec<String>
     if mode == Mode::AppOrigin {
         // What a release build does with this config: no devUrl, and the app
         // document from tauri's own protocol handler (here, the harness's
-        // asset provider in place of the embedded dist).
-        ctx.config_mut().build.dev_url = None;
+        // asset provider in place of the embedded dist). A release build
+        // ignores devUrl by itself, so there the config stays as generated.
+        if tauri::is_dev() {
+            ctx.config_mut().build.dev_url = None;
+        }
         ctx.set_assets(Box::new(HarnessAssets {
             log: asset_log.clone(),
         }));
