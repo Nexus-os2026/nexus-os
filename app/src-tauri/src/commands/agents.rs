@@ -530,6 +530,15 @@ pub(crate) fn pause_agent(state: &AppState, agent_id: String) -> Result<(), Stri
 
 pub(crate) fn resume_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
+    // P0-FINAL-GATE (item G, review W3): resuming an L6 (transcendent) agent
+    // is refused as starting one is, before its state changes, whether the
+    // stored record or the registration says L6.
+    if is_transcendent_agent(state, &agent_id) {
+        return Err(crate::phase0_surface::closed(
+            "resume_agent",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
+    }
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),

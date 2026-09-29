@@ -397,6 +397,16 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
         assert!(refusal < position(&start, later), "start_agent: {later}");
     }
 
+    // Resuming refuses an L6 agent first, as starting does (review W3).
+    let (_, resume) = fn_shape(agents, "resume_agent");
+    assert!(
+        resume.starts_with(&format!(
+            "letparsed=parse_agent_id(agent_id.as_str())?;ifis_transcendent_agent(state,&agent_id){{{}}}",
+            denial("resume_agent", "ApprovalRequired")
+        )),
+        "{resume}"
+    );
+
     let (_, restore) = fn_shape(agents, "restore_persisted_agents");
     let skip = position(
         &restore,

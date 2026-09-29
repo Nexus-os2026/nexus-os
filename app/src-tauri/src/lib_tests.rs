@@ -775,6 +775,58 @@ fn p0_fg_transcendent_activation_is_refused_and_changes_nothing() {
     assert_eq!(start_agent(&state, below), Ok(()));
 }
 
+/// P0-FINAL-GATE (item G, review W3): resuming a paused L6 (transcendent)
+/// agent is refused before its state changes, as starting one is. No state,
+/// stored state or audit event changes. (No current route registers an L6
+/// agent; the direct registration stands in for one.) Resuming a paused
+/// agent below L6 is unchanged.
+#[test]
+fn p0_fg_transcendent_resume_is_refused_and_changes_nothing() {
+    use crate::phase0_surface::{closed, Closure};
+    use nexus_kernel::lifecycle::AgentState;
+    let state = AppState::new_in_memory();
+    let transcendent = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(
+            parse_agent_manifest_json(&build_transcendent_manifest("transcendent-resume")).unwrap(),
+        )
+        .unwrap();
+    state
+        .supervisor
+        .lock()
+        .unwrap()
+        .pause_agent(transcendent)
+        .unwrap();
+    let agent_state = |state: &AppState, id: Uuid| {
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .get_agent(id)
+            .map(|handle| handle.state)
+    };
+    assert_eq!(agent_state(&state, transcendent), Some(AgentState::Paused));
+    let events = state.audit.lock().unwrap().events().len();
+
+    assert_eq!(
+        resume_agent(&state, transcendent.to_string()),
+        Err(closed("resume_agent", Closure::ApprovalRequired))
+    );
+    assert_eq!(agent_state(&state, transcendent), Some(AgentState::Paused));
+    assert_eq!(state.audit.lock().unwrap().events().len(), events);
+
+    // Resuming a paused agent below L6 is unchanged.
+    let below = create_agent(&state, build_manifest("below-resume")).unwrap();
+    pause_agent(&state, below.clone()).unwrap();
+    assert_eq!(resume_agent(&state, below.clone()), Ok(()));
+    assert_eq!(
+        agent_state(&state, Uuid::parse_str(&below).unwrap()),
+        Some(AgentState::Running)
+    );
+}
+
 /// P0-FINAL-GATE (item G): the goal, autonomous-loop and tool routes refuse
 /// an L6 (transcendent) agent before anything changes, with the bounded
 /// `ApprovalRequired` reason:
