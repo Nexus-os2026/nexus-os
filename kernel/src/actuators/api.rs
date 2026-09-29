@@ -53,9 +53,13 @@ impl GovernedApiClient {
 
     /// Check URL against egress allowlist.
     fn check_egress(url: &str, context: &ActuatorContext) -> Result<(), ActuatorError> {
-        // Scheme is stripped on both sides so `http://host` matches an
-        // `https://host` allowlist entry (see firewall::egress::strip_scheme).
-        // P0-002C5C: an entry admits only whole host and path segments.
+        // P0-002C5C (Architect repair B): `endpoint_admits` compares the
+        // scheme, the normalized host, the effective port and whole path
+        // segments; an `https` entry never admits `http` (only a legacy entry
+        // written without a scheme admits both). The desktop's Phase Zero
+        // executor refuses agent API calls before this check
+        // (`Closure::AgentExecution`), so it governs only other hosts of this
+        // actuator.
         let allowed = context
             .egress_allowlist
             .iter()
