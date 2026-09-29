@@ -43,8 +43,12 @@ numbered decision requests are collected at the end of this dossier.
 | Item | Topic | Closure candidate | Status |
 |---|---|---|---|
 | A | Configuration encryption key | A new or changed credential is written only under the operator key `NEXUS_CONFIG_KEY`; legacy files open through an explicit two-key read path; a load never rewrites a file; protection changes are reported and audited | Repaired on the closure candidate (P0-FINAL-GATE-CLOSURE); Architect review pending. Decision requests 9 and 10 |
+| B | Egress policy | The 11 IPC commands that sent requests to a caller-chosen destination are closed; the Ollama address is `OLLAMA_URL` or the fixed local default; agent web fetch and caller-destination external tools are refused; SearXNG only at `SEARXNG_URL`; search redirects https only | Repaired on the closure candidate; Architect review pending. No address or DNS policy was added (remaining destinations are backend constants or operator configuration). Decision request 13 |
+| C | Secrets in subprocess argv | Reachable credentials leave the command line: four hosted providers post in process with no redirect and total time and size bounds; `perception_init`, the credential-bearing external tools and credentialed MCP servers are closed or refused; remaining credential curl sites are counted, each CLI-only, latent or behind a closed route | Partly repaired on the closure candidate; Architect review pending. Decision request 12 (the in-process transport) |
 | E | Operator overrides | The vault key file is validated on the opened file (Linux, macOS) and refused elsewhere; the vault key must open every stored secret before the vault is used; `key_env` other than `NEXUS_ENCRYPTION_KEY` is refused | Repaired on the closure candidate; Architect review pending. Decision request 11 |
+| F | Network peers (Nexus Link) | `nexus_link_send_model` closed; the library admits no peer under an empty policy, matches exact IP socket addresses only, resolves no names and requires a shared secret and a key | Repaired on the closure candidate; transfer unavailable (no pairing exists); Architect review pending |
 | H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged; Architect review pending. Decision request 10 |
+| I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the Nexus Code diagnostics' `which` probes remain [PENDING: S3 final], and helpers still resolve from `PATH`; Architect review pending. Decision requests 1 and 17 |
 
 ### At C5C (historical)
 
@@ -304,6 +308,90 @@ change area, and `endpoint_admits` alone decides the behaviour.
   address policy, DNS pinning and peer policy (item F). These remain
   unresolved; no general egress redesign was authorized.
 
+**Corrections (P0-FINAL-GATE-CLOSURE) to the C5C text above.**
+
+- The exploitability note was wrong: the rows above did add authority beyond
+  `api_client_request`. `save_config` and `run_setup_wizard` persisted
+  `llm.ollama_url`, and when `OLLAMA_URL` was unset the backend sent all later
+  planner, agent and chat traffic for Ollama to that persisted address
+  (`build_provider_config`). And `api_client_request` read back responses that
+  a webview script cannot read cross-origin.
+- The comment at the web actuator's `check_egress` now describes
+  `endpoint_admits` (`kernel/src/actuators/web.rs`). The API actuator's
+  comment (`kernel/src/actuators/api.rs`, `check_egress`) still describes the
+  old scheme stripping; `endpoint_admits` alone decides the behaviour.
+
+**Repaired in P0-FINAL-GATE-CLOSURE (contract B; Architect review
+pending).** A syntactically valid URL, DNS answer or `host:port` is not an
+egress grant.
+
+- **Caller-chosen destinations closed.** Eleven commands are closed with
+  `Closure::NetworkDestination`; each handler takes no input and only denies,
+  and the implementations are removed: `api_client_request`;
+  `a2a_discover_agent`, `a2a_send_task`, `a2a_get_task_status`,
+  `a2a_cancel_task`; `a2a_crate_send_task`, `a2a_crate_get_task`,
+  `a2a_crate_discover_agent`; `mcp_host_connect`, `mcp_host_call_tool`;
+  `builder_theme_extract_from_url`. `nexus_link_send_model` is closed too
+  (item F). Commands that send nothing stay (`a2a_known_agents`, the MCP
+  server list, saved API Client collections).
+- **External tools.** `tools_execute` refuses `rest_api`, `webhook` and
+  `file_storage` (a caller-chosen URL or bucket host) at every autonomy level
+  (`crates/nexus-external-tools/src/execution.rs`, `phase0_refusal`). The
+  order is: tool lookup, the level check, the Phase Zero refusal, then
+  availability, so the refusal is the same whether or not the tool's token is
+  set, and comes before any credential read or request. The substring URL
+  denylist is removed; `127.1`, `0x7f000001` and `[::1]` passed it.
+- **Agent web fetch.** `Phase0AgentExecutor` refuses an http(s) `WebFetch`
+  with `Closure::NetworkDestination` (`phase0_agent_action_closure`,
+  `app/src-tauri/src/commands/cognitive.rs`): the agent's
+  `allowed_endpoints` came from `create_agent` or a stored record, neither of
+  which is an egress grant. Web search stays.
+- **Ollama address.** It is backend configuration: the operator's
+  `OLLAMA_URL` (read with `var_os`), or else the fixed `http://localhost:11434`
+  (`authorized_ollama_base_url`, `chat_llm.rs`). A set but unusable value makes
+  Ollama unavailable; nothing falls back to the default.
+  - The persisted `llm.ollama_url` and `ollama.base_url` are never used as a
+    destination: `build_provider_config` (`commands/agents.rs`) ignores the
+    configuration for it, and `save_config` refuses a changed
+    `llm.ollama_url`.
+  - A caller `base_url` (`check_ollama`, `pull_ollama_model`, `ensure_ollama`,
+    `chat_with_ollama`, `delete_model`, `run_setup_wizard`) must normalize to
+    exactly the authorized address, or it is refused
+    (`Closure::NetworkDestination`) before anything connects.
+    `run_setup_wizard` persists only the authorized address.
+  - After a model download, the model is registered only at the authorized
+    address, and not at all when Ollama is unavailable
+    (`register_downloaded_model_with_ollama`, `model_hub.rs`).
+  - A pull must name a model of Ollama's default registry; `hf.co` and other
+    registry hosts are refused. The Ollama curl helpers follow no redirect.
+- **SearXNG and search.** SearXNG is used only at the operator's
+  `SEARXNG_URL`, with no guessed local default (`searxng_base`,
+  `kernel/src/actuators/web.rs`). Search follows redirects only to https
+  addresses (`--proto-redir =https`); an agent fetch follows none.
+- **Credentialed providers follow no redirect** (item C).
+- **Remaining destinations** are compile-time provider endpoints, fixed
+  service hosts and operator launch configuration (item E).
+- **Guards.** `phase0_surface/fg_egress/tests.rs`: the caller-destination
+  closures, the absence of the destination clients from desktop sources
+  (with 15 new latent-API needles), agent fetch, tool calls, the Ollama
+  address rules, the persisted address and model registration
+  (`p0_fg_model_registration_uses_the_authorized_ollama_address`);
+  `p0_fg_searxng_needs_an_operator_address`; the external-tools refusal
+  tests. The guards read LF and CRLF sources alike.
+- **Non-claims.**
+  - No address or DNS policy was added. The remaining destinations are
+    backend constants or operator configuration, and their DNS answers are
+    not pinned.
+  - The webview can still send requests itself; the CSP of item D is the
+    control there [PENDING: S1 final].
+  - Operator endpoints are trusted as configured: a non-loopback
+    `OLLAMA_URL` is accepted.
+  - `OllamaProvider::health_check` probes `127.0.0.1:11434` when the
+    authorized address names a host rather than an IP address, so
+    `ensure_ollama` can report a local service while the operator's host is
+    down. Requests still go to the operator's host.
+- **Decision requested.** Request 13.
+
 ## C. Secrets in subprocess argv
 
 Credentials passed as curl arguments are visible in the process table (for
@@ -327,6 +415,86 @@ example `/proc/<pid>/cmdline`) while the request runs. On Linux without
 - **Decision needed.** Pass credentials on stdin (for example curl's
   `-H @-`), or move these calls to an in-process HTTP client. The C5B curl
   guard forbids `-K` and `--config`, so a stdin form needs a guard update.
+
+**Corrections (P0-FINAL-GATE-CLOSURE) to the C5C table above.**
+
+- First row: only OpenAI, DeepSeek, Gemini and NVIDIA sent their key through
+  curl (`Authorization: Bearer`). Anthropic (`x-api-key`), Cohere and the
+  OpenAI-compatible providers already sent theirs from the process.
+- `connectors/core/src/validation.rs` was reached only by the `nexus-cli`
+  setup flow, not by the desktop; that binary is now withdrawn (item J).
+- `connectors/web/src/search.rs` is latent: only the social-poster pipeline's
+  real search step builds that connector, and the desktop never runs it.
+- The perception command is `perception_init`.
+- "The `cm_*` commands are closed" was wrong for `cm_run_ab_validation`, which
+  was open (C5, below).
+- Missing row: `tools_execute`'s `github`, `slack` and `jira` tools put the
+  operator's token on curl's command line as an `Authorization` header
+  (`crates/nexus-external-tools/src/adapter.rs`).
+
+**Repaired in P0-FINAL-GATE-CLOSURE (contract C, argv part; Architect review
+pending).**
+
+- **Hosted providers.** OpenAI, DeepSeek, Gemini and NVIDIA send from the
+  process (`post_json_in_process`, `connectors/llm/src/providers/mod.rs`),
+  on a thread of its own:
+  - no redirect is followed, so a key reaches only its endpoint;
+  - the same timeouts as before bound the whole exchange (20 s; NVIDIA NIM
+    120 s, or 300 s for very large models), from connecting until the body
+    is read;
+  - at most 32 MiB of response is read;
+  - credential header values are marked sensitive, and errors name neither
+    the URL nor a header;
+  - certificate verification is always on.
+- **TLS stack (stated precisely).** A client built without an explicit TLS
+  choice follows the build's unified reqwest features. In the desktop build,
+  `nexus-auth` and `nexus-code` enable reqwest's default features, so the
+  platform TLS library with the operating system's trust store is used, and
+  the system and environment proxy settings apply. The connector crate built
+  alone uses rustls with bundled roots (`credential_client` documentation).
+- **No curl credential.** The curl POST helper refuses a credential header
+  (`authorization`, `proxy-authorization`, `x-api-key`, `api-key`,
+  `x-goog-api-key`, `x-subscription-token`, `cookie`) before a command
+  exists.
+- **Other credentialed clients.** The Claude, Cohere and OpenAI-compatible
+  providers (Groq, Mistral, Together, Fireworks, Perplexity, OpenRouter) now
+  build their clients with `credential_client`: no redirect is followed; a
+  redirect is reported as a failed request.
+- **Closed or refused routes.** `perception_init` is closed
+  (`Closure::CredentialTransport`), so no key reaches the perception client.
+  `tools_execute` refuses `github`, `slack` and `jira` at every level, before
+  any token is read (item B's order). The MCP client refuses a server with a
+  bearer token or API key before a command is built
+  (`protocols/src/mcp_client.rs`, `http_command`). `api_client_request` is
+  closed (item B).
+- **Remaining credential curl sites** are counted, each with its reason, in
+  `CREDENTIAL_CURL_SITES` (`phase0_surface/fg_egress/tests.rs`): key
+  validation (CLI only), the refusal list in the provider helper, the latent
+  search connector, the capability-measurement clients (their only desktop
+  route is closed, C5 below), the GitHub MCP tool (only through the closed
+  `mcp2_server_handle`), perception (closed), and the image and speech
+  actuators (refused by the Phase Zero executor).
+- **Guards and tests.** `p0_fg_no_reachable_credential_reaches_a_curl_command_line`,
+  `p0_fg_perception_takes_no_key_and_sends_nothing` and
+  `p0_fg_messaging_errors_never_carry_the_bot_token` (`fg_egress`); in
+  `connectors/llm/src/providers/mod.rs`,
+  `p0_fg_credential_headers_never_reach_a_process_command_line`,
+  `p0_fg_credentialed_posts_follow_no_redirect`,
+  `p0_fg_credentialed_reqwest_providers_follow_no_redirect`,
+  `p0_fg_credentialed_posts_read_a_bounded_response` and
+  `p0_fg_credentialed_posts_are_bounded_in_total_time`;
+  `p0_fg_mcp_credentials_never_reach_a_process_command_line`;
+  `p0_fg_operator_credential_tools_are_refused`.
+- **Non-claims.**
+  - Keys set by `save_provider_api_key` are still in the process environment,
+    which child processes inherit (not on their command line).
+  - The CREDENTIAL_CURL_SITES guard sees only literal curl sites and a fixed
+    list of credential markers.
+  - Response size caps apply to the in-process POST; the other credentialed
+    reqwest providers read their responses without one.
+  - The desktop swarm's Anthropic client (`crates/nexus-swarm`) still follows
+    redirects with its key [PENDING: S3 final].
+- **Decision requested.** Request 12.
 
 ## D. `null` webview CSP
 
@@ -514,6 +682,19 @@ selection stay closed.
     validation of an operator source, not proof of secure secret storage.
 - **Decision requested.** Request 11.
 
+**Update and correction (P0-FINAL-GATE-CLOSURE, item B) to the endpoint list
+above.**
+
+- `OLLAMA_URL` is now the only Ollama address authority, with the fixed
+  `http://localhost:11434` when it is unset. A set but unusable value makes
+  Ollama unavailable (item B).
+- `SEARXNG_URL` is required for SearXNG; there is no default instance.
+- Correction: the twelve provider base URLs (`ANTHROPIC_URL` …
+  `NVIDIA_NIM_URL`) did not set where desktop requests go. Only the
+  providers' `from_env` constructors read them, and no production code calls
+  those; `select_provider` (`connectors/llm/src/gateway.rs`) builds each
+  hosted provider with its fixed endpoint.
+
 ## F. Network peers (Nexus Link)
 
 - **Where.** `connectors/llm/src/nexus_link.rs`; IPC `nexus_link_send_model`
@@ -537,6 +718,29 @@ selection stay closed.
   The interface can already send data anywhere through `api_client_request`.
 - **Decision needed.** A default peer policy (deny by default, pairing), and
   authentication and encryption for transfers.
+
+**Repaired in P0-FINAL-GATE-CLOSURE (contract F; Architect review
+pending).**
+
+- **Command.** `nexus_link_send_model` is closed (`Closure::PeerTransfer`): it
+  takes no input and only denies.
+- **Library policy** (`connectors/llm/src/nexus_link.rs`, `send_model`,
+  `check_peer_allowed`, `require_authenticated_transport`):
+  - an empty peer policy admits no peer;
+  - a peer is named by its IP socket address and must equal a policy entry,
+    compared as socket addresses; a host name is never resolved;
+  - a transfer needs both a shared secret and an encryption key;
+  - each check runs before any connection, after the C5B model-file check.
+- **Consequence.** The desktop configures no peer, secret or key, and Phase
+  Zero builds no pairing, so model transfer is unavailable.
+- **Tests.** `p0_fg_an_empty_peer_policy_admits_no_peer`,
+  `p0_fg_the_peer_policy_admits_only_exact_socket_addresses`,
+  `p0_fg_an_unauthenticated_transfer_is_refused_before_connecting`,
+  `p0_fg_an_admitted_authenticated_peer_is_reached_at_its_policy_address`.
+- **Non-claims.** No pairing or peer authentication infrastructure was
+  added, and `send_model` still does not consult `sharing_enabled`.
+  `receive_model` stays latent (guard needle), and no production code
+  listens for peers.
 
 ## G. Approval channel
 
@@ -642,7 +846,9 @@ left as they are.
   `fg_secrets` guards (`p0_fg_h_sign_in_flows_persist_no_token`,
   `p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files`,
   `p0_fg_h_api_client_collections_are_checked_before_writing`,
-  `p0_fg_a_deploy_credentials_are_never_newly_stored`).
+  `p0_fg_a_deploy_credentials_are_never_newly_stored`); for the messaging
+  transport, `p0_fg_messaging_errors_never_carry_the_bot_token` and
+  `p0_fg_messaging_requests_are_bounded_in_time_and_size` (`fg_egress`).
 - **Non-claims.**
   - Closing new writes does not encrypt anything written earlier: OAuth token
     files, messaging token files, the XOR store, API Client collections and
@@ -677,6 +883,66 @@ Builder's Node toolchain is not among these: it is packaged and verified
 
 - **Decision needed.** Whether helper programs must resolve from fixed
   locations, and whether `ollama serve` needs a lifecycle.
+
+**Correction (P0-FINAL-GATE-CLOSURE) to the C5C list above.** It omitted the
+hardware probes: `nvidia-smi`, `rocm-smi`, `lspci`, `sysctl` and `wmic`
+(`kernel/src/hardware.rs`; `nvidia-smi` also for the flash metrics), and on
+Linux `dmesg` and `dmidecode`, run at every startup by the flash engine's
+hardware detection (`crates/nexus-flash-infer/src/hardware.rs`). It also
+omitted `which sd`, run by the open `builder_image_gen_status`
+(`agents/web-builder/src/image_gen/local.rs`), and the `open` crate's browser
+launcher for the OAuth flows (closed since, item H).
+
+**Repaired in P0-FINAL-GATE-CLOSURE (contract I; Architect review
+pending).**
+
+- **No unowned launch.** `ensure_ollama` (`chat_llm.rs`) starts nothing. It
+  probes the authorized Ollama address (item B) and returns
+  `Closure::HelperLaunch` when nothing answers; nothing is started, waited for
+  or stopped, and nothing is found or stopped by PID, name or port. Before,
+  each failed probe spawned another `ollama serve` from `PATH`, detached,
+  never reaped, with the desktop's environment (including the `*_API_KEY`
+  values that `save_provider_api_key` sets). Connecting to an Ollama service
+  started outside Nexus stays available.
+- **No program run to report on Ollama.** `is_ollama_installed` is closed
+  (`Closure::HelperLaunch`; it ran `ollama --version`), and
+  `check_ollama_smart` no longer runs `which`. The desktop's own sources hold
+  no `Command::new("ollama")` or `Command::new("which")` (latent-API needles).
+- **Owned cleanup.** curl children are reaped on early-error paths
+  (`reap_child`), and a panicking pull-progress callback no longer unwinds
+  past a running child.
+- **In-flight model downloads (I5).** An in-flight registry
+  (`connectors/llm/src/model_hub.rs`) starts each download's curl child under
+  its lock and owns it until the download ends.
+  `terminate_in_flight_downloads`, called from the normal-exit hook
+  (`RunEvent::Exit` in `lib.rs`, after the Builder dev-server cleanup):
+  - kills each running transfer through its owned handle and reaps it, within
+    one 5-second deadline;
+  - removes the partial files, and refuses any later start;
+  - treats a transfer that had already ended as reaped, not as an error;
+  - counts transfers whose exit it cannot confirm; they stay registered and
+    are logged by count only, with no URL, path or process id.
+- **Remaining `which` probes.** The Nexus Code diagnostics the desktop runs
+  (`nexus_code::setup::diagnose_for_desktop`: `ollama`, `git`, `rg`) and
+  Nexus Code's provider detection still run `which` from `PATH`
+  [PENDING: S3 final]; the computer-use readiness probe
+  (`nx_computer_use_status`) and `which sd` (above) remain.
+- **Guards and tests.** `p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it`
+  and `p0_fg_the_application_exit_ends_in_flight_model_downloads` (the exit
+  hook and the single registered spawn), in `fg_egress`;
+  `p0_fg_curl_children_are_reaped_on_early_errors`; the `model_hub`
+  registry tests (`p0_fg_terminating_in_flight_downloads_reaps_each_running_transfer`,
+  `p0_fg_an_unconfirmed_exit_is_reported_and_stays_registered`,
+  `p0_fg_no_download_starts_after_the_exit_cleanup`, and others).
+- **Non-claims.**
+  - The download cleanup runs at a normal exit only. After a crash or a kill
+    (SIGKILL, a forced end of task), no exit code runs and a transfer in
+    flight can outlive the application. Downloads have a stall bound (120 s
+    below 1 byte/s) and the 64 GiB size bound, but no total time limit.
+  - Ollama pull and chat curl children are not registered; each is bounded by
+    curl's `-m` (900 s by default).
+  - Every remaining helper, curl included, is still found through `PATH`.
+- **Decision requested.** Requests 1 and 17.
 
 ## J. Shipped non-desktop binaries
 
