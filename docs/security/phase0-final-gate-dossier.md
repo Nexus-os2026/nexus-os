@@ -15,13 +15,12 @@ review of that evidence is pending. See item J.]
 closure mission implements contracts A–K, C5 and DEP on local component
 branches, composed into the closure candidate
 (`implement/p0-final-gate-closure`). Blocks headed "P0-FINAL-GATE-CLOSURE"
-describe that candidate as composed for this update: every workstream except
-item D. They are claims for Architect review, checked against the code; the
-internal reviews are recorded on the mission's evidence branch. Nothing here
-approves an item, accepts a risk, integrates a change, or declares FG1, the
-Final Gate or Phase Zero complete. Earlier text stays as it was; where it is
-now stale, a labelled correction or note says so. Text marked `[PENDING: …]`
-describes work that is not yet composed.
+describe that candidate with every workstream composed (`d1735577`). They
+are claims for Architect review, checked against the code; the internal
+reviews are recorded on the mission's evidence branch. Nothing here approves
+an item, accepts a risk, integrates a change, or declares FG1, the Final Gate
+or Phase Zero complete. Earlier text stays as it was; where it is now stale, a
+labelled correction or note says so.
 
 Every location below is a repository path and function at the C5C head,
 except where P0-FG1 or P0-FINAL-GATE-CLOSURE is named. An
@@ -29,9 +28,9 @@ except where P0-FG1 or P0-FINAL-GATE-CLOSURE is named. An
 
 - a script running in the desktop webview (the CSP is `null`, item D, so every
   registered IPC command is callable by any script there) [P0-FINAL-GATE-CLOSURE:
-  item D restricts application commands to the privileged window's own origin
-  [PENDING: S1 final]; a script that runs inside that document still reaches
-  every registered command];
+  item D grants application commands only to the privileged window at the
+  app's own origin and keeps non-app documents out of it; a script that runs
+  inside that document still reaches every registered command];
 - model output (planner steps, agent actions, generated text);
 - remote content (fetched pages, API responses, peers);
 - a persisted record (database rows, stored files).
@@ -52,16 +51,16 @@ numbered decision requests are collected at the end of this dossier.
 | B | Egress policy | The 11 IPC commands that sent requests to a caller-chosen destination are closed; the Ollama address is `OLLAMA_URL` or the fixed local default; agent web fetch and caller-destination external tools are refused; SearXNG only at `SEARXNG_URL`; search redirects https only | Repaired on the closure candidate; Architect review pending. No address or DNS policy was added (remaining destinations are backend constants or operator configuration). Decision request 13 |
 | C | Secrets in subprocess argv | Reachable credentials leave the command line: four hosted providers post in process with no redirect and total time and size bounds; `perception_init`, the credential-bearing external tools and credentialed MCP servers are closed or refused; remaining credential curl sites are counted, each CLI-only, latent or behind a closed route | Partly repaired on the closure candidate; Architect review pending. Decision request 12 (the in-process transport) |
 | C5 (contract) | Residual capability-measurement route | `cm_run_ab_validation` closed (`AmbientResource`) before any input use; the Groq-endpoint client takes only `GROQ_API_KEY` | Repaired on the closure candidate (the route denies before any input use); Architect review pending. Decision request 15 |
-| D | Privileged webview, navigation and IPC origin | Not composed on this base [PENDING: S1 final]: an app ACL limiting application commands to the `main` window at the app origin, a navigation guard and new-window denial, frames removed or script-free, a restrictive CSP as defence in depth | Pending stream 1; no redirect protection is claimed. Decision request 18 |
+| D | Privileged webview, navigation and IPC origin | An app ACL grants all 804 application commands only to the `main` window at the local app origin; a navigation guard admits only the exact app origin (redirects included) and every new window is denied; frames are script-free or removed; a CSP with no third-party origin; a live native harness in CI on all three platforms | Repaired on the closure candidate; Architect review pending. Finding: on Linux neither the ACL nor the guard is sufficient alone (the guard is load-bearing). Decision request 18 |
 | E | Operator overrides | The vault key file is validated on the opened file (Linux, macOS) and refused elsewhere; the vault key must open every stored secret before the vault is used; `key_env` other than `NEXUS_ENCRYPTION_KEY` is refused | Repaired on the closure candidate; Architect review pending. Decision request 11 |
 | F | Network peers (Nexus Link) | `nexus_link_send_model` closed; the library admits no peer under an empty policy, matches exact IP socket addresses only, resolves no names and requires a shared secret and a key | Repaired on the closure candidate; transfer unavailable (no pairing exists); Architect review pending |
-| G | Approval channel | L6 agents refused at create, start, approve, restore, prebuilt load, goal, loop, scheduled tick and tool call; caller-asserted approval commands closed; consent resolutions labelled `desktop-ui (unverified)`; self-improvement recorded truthfully; enabled Warden review with no Warden denies | Repaired on the closure candidate, with S5 follow-ups [PENDING: S5 final]; no out-of-band approval exists (non-claim); Architect review pending. Decision request 14 |
+| G | Approval channel | L6 (autonomy 6 or above) refused at create, start, resume, approve and review-each, never registered by restore or the prebuilt load, and refused for goals, autonomous loops, scheduled ticks and tool calls; caller-asserted approval commands closed; consent resolutions labelled `desktop-ui (unverified)`; self-improvement recorded truthfully; an enabled Warden review denies | Repaired on the closure candidate; no out-of-band approval exists (non-claim); Architect review pending. Decision request 14 |
 | H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged; Architect review pending. Decision request 10 |
-| I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the Nexus Code diagnostics' `which` probes remain [PENDING: S3 final], and helpers still resolve from `PATH`; Architect review pending. Decision requests 1 and 17 |
+| I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the desktop's Nexus Code checks start no process, but fixed-argument helpers still resolve from `PATH`; Architect review pending. Decision requests 1 and 17 |
 | J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: post-integration run #108 succeeded, Architect review of that evidence pending. J2–J5: withdrawn on the closure candidate; Architect review pending. Decision requests 2 (D3: the 7 benchmark and 4 developer binaries, 5 bench targets and 2 examples kept) and 19 |
 | K | Reliability signals and resource bounds | `executes_python_code`: no retained hosted failure (evidence corrected); GPU-host voice stderr repaired; the duplicate binary name repaired by P0-FG1-R1 (integrated); resource surfaces bounded by refusal (see "Resource bounds") | Repaired or bounded on the closure candidate; Architect review pending. Proposed: `executes_python_code` as monitored debt (decision request 7); decision request 16 |
 | L | Screen observation from the interface | Unchanged since C5C: unbrokered observation is unavailable (Architect repair A) | No change in P0-FINAL-GATE-CLOSURE; a brokered mechanism is future work |
-| DEP (contract) | Dependency advisories | Cargo.lock 19 → 8 cargo-audit vulnerabilities; npm (app) 14 → 6; residual advisories with proposed dispositions [PENDING: DEP final] | Minimal updates on the closure candidate; residual advisories and audit governance for Architect decision (requests 3 to 6) |
+| DEP (contract) | Dependency advisories | Measured on the final candidate's lockfiles: Cargo.lock 19 → 7 cargo-audit vulnerabilities (rsa removed with the unused `openidconnect`); cargo-deny advisory errors 16 → 10; npm (app) 14 → 6 | Minimal updates on the closure candidate; residual advisories and audit governance for Architect decision (requests 3 to 6) |
 
 ### At C5C (historical)
 
@@ -190,7 +189,8 @@ per item. J concerns a separately deployed server, not the desktop.
     other saves use, report such a protection change: one bounded line on
     standard error, and the desktop's recorder, which appends a `save_config`
     audit event by reason class (`install_protection_recorder`, installed in
-    `AppState::new` before the credential migration can re-save the file).
+    `AppState::new` before the credential migration can re-save the file;
+    never in test builds).
     The interface save audits its own outcome.
   - A file on disk that does not open (unreadable, empty, malformed,
     undecryptable or another envelope) is never overwritten
@@ -216,7 +216,8 @@ per item. J concerns a separately deployed server, not the desktop.
   `kernel/tests/phase0_config_key.rs` (unset, empty, whitespace-only and, on
   Unix, non-UTF-8 values), the desktop's
   `p0_fg_a_interface_credential_edits_need_the_operator_key`, and the
-  `phase0_surface/fg_secrets/tests.rs` guards.
+  `phase0_surface/fg_secrets/tests.rs` guards (among them
+  `p0_fg_a_backend_protection_changes_are_audited`).
 - **Non-claims.**
   - Credentials already under the ambient key stay under it until a
     credential save. Historical files are not re-encrypted.
@@ -378,6 +379,9 @@ egress grant.
     (`register_downloaded_model_with_ollama`, `model_hub.rs`).
   - A pull must name a model of Ollama's default registry; `hf.co` and other
     registry hosts are refused. The Ollama curl helpers follow no redirect.
+  - The desktop's Nexus Code bridge registers Ollama only at the authorized
+    address, not at `OLLAMA_BASE_URL`; the standalone `nx` (withdrawn) is
+    unchanged.
 - **SearXNG and search.** SearXNG is used only at the operator's
   `SEARXNG_URL`, with no guessed local default (`searxng_base`,
   `kernel/src/actuators/web.rs`). Search follows redirects only to https
@@ -396,8 +400,9 @@ egress grant.
   - No address or DNS policy was added. The remaining destinations are
     backend constants or operator configuration, and their DNS answers are
     not pinned.
-  - The webview can still send requests itself; the CSP of item D is the
-    control there [PENDING: S1 final].
+  - The privileged document's own requests are limited by the CSP of item D
+    (`connect-src 'self' ipc: http://ipc.localhost`), a defence-in-depth
+    control, not an egress policy.
   - Operator endpoints are trusted as configured: a non-loopback
     `OLLAMA_URL` is accepted.
   - `OllamaProvider::health_check` probes `127.0.0.1:11434` when the
@@ -473,7 +478,16 @@ pending).**
 - **Other credentialed clients.** The Claude, Cohere and OpenAI-compatible
   providers (Groq, Mistral, Together, Fireworks, Perplexity, OpenRouter) now
   build their clients with `credential_client`: no redirect is followed; a
-  redirect is reported as a failed request.
+  redirect is reported as a failed request. A crate-wide guard allows HTTP
+  clients in the LLM providers only through that helper.
+- **Nexus Code bridge and swarm clients.** The desktop's Nexus Code bridge
+  (Anthropic, OpenAI-compatible and Google providers, `nexus-code/src/llm/providers/`)
+  and the desktop swarm (Anthropic, OpenAI, OpenRouter and Hugging Face
+  providers, `crates/nexus-swarm/src/providers/`) build clients that follow
+  no redirect. The bridge's Google provider sends its key only in a header,
+  never in the URL, and its errors carry no URL.
+- **Messaging clients.** The messaging connectivity check and the send and
+  poll client follow no redirect and send no `Referer` (item H).
 - **Closed or refused routes.** `perception_init` is closed
   (`Closure::CredentialTransport`), so no key reaches the perception client.
   `tools_execute` refuses `github`, `slack` and `jira` at every level, before
@@ -504,10 +518,16 @@ pending).**
     which child processes inherit (not on their command line).
   - The CREDENTIAL_CURL_SITES guard sees only literal curl sites and a fixed
     list of credential markers.
-  - Response size caps apply to the in-process POST; the other credentialed
-    reqwest providers read their responses without one.
-  - The desktop swarm's Anthropic client (`crates/nexus-swarm`) still follows
-    redirects with its key [PENDING: S3 final].
+  - Response size caps and a total time bound apply to the in-process POST.
+    The other `connectors/llm` credentialed providers read their responses
+    without a size cap, and their timeout (the reqwest client's) bounds each
+    phase of the exchange rather than the whole of it.
+  - Other clients keep reqwest's default redirect policy, including the
+    desktop's email commands (Gmail, Outlook) and Builder deploy checks, and
+    the Slack and Discord clients of `connectors/messaging` and
+    `integrations`. On a redirect to another host reqwest drops
+    `Authorization`, but it re-sends the request body on 307 and 308; their
+    hosts are fixed.
 - **Decision requested.** Request 12.
 
 **Repaired in P0-FINAL-GATE-CLOSURE: the residual capability-measurement
@@ -603,7 +623,7 @@ the placeholder keeps the stored value (`redacted_config`,
   frontend changes a CSP requires.
 
 **Corrections (P0-FINAL-GATE-CLOSURE) to the C5C text above** (checked on the
-closure candidate's base, where item D is not yet composed).
+code before item D's repair).
 
 - The "Open" list named only the scriptable srcdoc previews. It omitted:
   - the Research view's frame, which embedded arbitrary remote pages with
@@ -621,38 +641,93 @@ closure candidate's base, where item D is not yet composed).
     `fetch` to test them (`app/src/pages/Settings.tsx`).
 - The C5C guard `p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed`
   inspected `srcDoc` frames only, so the `src` frames above were outside it.
-- No application-command ACL existed: `app/src-tauri/build.rs` calls
+- No application-command ACL existed: `app/src-tauri/build.rs` called
   `tauri_build::build()` with no app manifest, so Tauri checked no origin for
   application commands, and the invoke key injected into the page was the only
   gate.
 
-**P0-FINAL-GATE-CLOSURE: item D [PENDING: S1 final].** Item D is not composed
-on this documentation's base; stream 1 is repairing its internal review's
-findings. The design being implemented (a coordinator decision applying
-contract D), to be confirmed against the final code:
+**Repaired in P0-FINAL-GATE-CLOSURE (contract D; Architect review
+pending).** The sources checked are the pinned tauri 2.10.3 and wry 0.54.4,
+cited in `app/src-tauri/src/webview_boundary.rs`.
 
-- **Application-command origin (primary control).** An app ACL: the build
-  script emits an app manifest listing every registered command, and one
-  capability grants them only to the `main` window at the app's own origin.
-  Tauri then refuses an application command from any other origin, window or
-  webview, using native request context, never a frontend field.
-- **Privileged window.** Built with a navigation guard that admits only the
-  exact app origin, and a denial of every new window.
-- **Frontend.** No remote or loopback frame; generated previews without
-  script (`sandbox=""`); the Monaco editor, the collaboration WebSocket and
-  the Settings live key test unavailable; no remote font stylesheet.
-- **CSP** as defence in depth; it is not claimed to prove the IPC boundary.
-- **Native evidence.** A live native harness on Linux, Windows and macOS
-  [PENDING: S1 final].
-- **Non-claims known now.**
-  - No protection against a server redirect navigating the privileged
-    document off its origin is claimed. On Linux the engine followed a server
-    redirect without consulting the navigation guard (live harness); the ACL,
-    not the navigation guard, is the IPC boundary.
-  - A script that runs inside the privileged document itself still reaches
-    every registered command.
-  - Tauri 2.10.3 exempts its IPC channel fetch command from the ACL; the app
-    uses no IPC channels.
+- **Application-command ACL (origin).** `app/src-tauri/build.rs` passes the
+  exact list of registered application commands
+  (`src/webview_boundary/app_commands.rs`, all 804, checked against
+  `generate_handler!`) to `tauri_build::AppManifest::commands`. Tauri then
+  checks every application command against the ACL instead of skipping it.
+  `capabilities/app-commands.json` grants them only to the window `main` at
+  the local app origin; the capabilities directory holds only that file and
+  the core-only `default.json` (pinned). Tauri classifies each request from
+  native context, never from a frontend field: the request's `Origin` header
+  on the custom-protocol path, or the URL wry reports on the `postMessage`
+  path. A non-app origin matches no capability and is refused; a sandboxed
+  frame's `Origin: null` is rejected before the ACL.
+- **Privileged window.** `build_main_window` builds the one window
+  (`"create": false` in `tauri.conf.json`) with:
+  - a navigation guard that admits only the exact app origin:
+    `tauri://localhost` on Linux and macOS, `http://tauri.localhost` on
+    Windows (`https` when the window sets `useHttpsScheme`), the configured
+    `devUrl` only when `tauri::is_dev()`, exactly `about:blank` and
+    `about:srcdoc`, and `blob:` URLs created by the app origin. `data:`,
+    `file:` and every other URL are refused;
+  - a new-window handler that denies every request. wry's default without a
+    handler also refuses; that default is observed live only on Linux.
+- **Frontend.** Every iframe renders inline `srcDoc` with `sandbox=""` (an
+  opaque origin, no script), and none is created from script. The remote
+  Research frame and the loopback React-mode Builder frame are removed; the
+  Monaco editor is not imported; the collaboration WebSocket is disabled;
+  Settings no longer sends keys from the webview, and its check says "Format
+  looks valid (not verified)"; Builder output is downloaded as a literally
+  typed blob.
+- **CSP** (`tauri.conf.json`), defence in depth and not proof of the IPC
+  boundary: `default-src 'self'`, `script-src 'self'`, `connect-src 'self'
+  ipc: http://ipc.localhost`, `frame-src 'self'`, `object-src 'none'`,
+  `form-action 'none'`, `frame-ancestors 'none'`, and no third-party origin:
+  the remote font stylesheet is removed, and the interface falls back to
+  local fonts.
+- **Native evidence.** A live native harness
+  (`app/src-tauri/tests/webview_boundary_live.rs`, its own `main`) drives the
+  real Wry runtime with the production context and window builder, in the
+  dev profile and the release (`custom-protocol`) profile. It re-checks every
+  refusal after a settle interval, and on Windows exercises the raw
+  `postMessage` path from subframes. CI runs it as a blocking step in the
+  Linux (Xvfb), Windows and macOS jobs of `ci.yml`, in both profiles, and in
+  `ci-fast-local.yml`. The workstream reports 20 of 20 local Linux runs per
+  profile; Windows and macOS runs have not yet been observed.
+- **Redirects (correction of the draft).** The draft recorded that on Linux
+  the engine followed a server redirect without consulting the navigation
+  guard. The final harness shows WebKitGTK consulting the guard for server
+  redirects: a `302` from the app origin to a non-app origin is cancelled
+  before the target is requested (Linux, 20 of 20 per the workstream). On
+  Windows, WebView2's `NavigationStarting` covers main-frame navigations,
+  redirects included (source reading); macOS was not observed.
+- **Finding for the Architect: on Linux neither layer is sufficient alone.**
+  wry's WebKitGTK handler attributes a `postMessage` to the webview's URL
+  when the message is handled (`webkitgtk/mod.rs` 640-650), not to the
+  document that sent it. With the navigation guard removed (a live negative
+  control), a non-app main-frame document that starts a navigation back to
+  the app origin can have an invoke accepted in that window. The navigation
+  guard, which keeps every non-app document out of the main frame, is
+  therefore load-bearing, and the ACL refuses callers that reach IPC by other
+  routes. Windows and macOS were not observed. This may be an upstream
+  wry or tauri issue (decision request 18).
+- **Guards.** `phase0_surface/fg_webview/tests.rs` (11 guards, all pinned by
+  the final trust-surface guard), and the extended
+  `p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed`.
+- **Non-claims.**
+  - A script running inside the privileged document itself still reaches
+    every registered command: item D keeps other documents out; it does not
+    narrow what the app document may call.
+  - A same-origin, non-sandboxed frame would count as the app origin, so the
+    frontend rule (`sandbox=""`, no frame created from script) is
+    load-bearing; its guards are source-text recognisers.
+  - Tauri 2.10.3 exempts `plugin:__TAURI_CHANNEL__|fetch` from the ACL; the
+    app uses no IPC channels.
+  - The Windows and macOS behaviour rests on reading the pinned sources until
+    their harness runs are observed.
+  - Unavailable in Phase Zero: the Monaco editor, Builder collaboration, the
+    Settings live key test, scripted Builder previews and click-to-edit, and
+    remote images in notes (`img-src 'self' data:`).
 - **Decision requested.** Request 18.
 
 ## E. Operator overrides
@@ -882,12 +957,14 @@ available release only what backend-owned policy already bounds.
   L6 agent at once; restore registered stored L6 records; and startup
   registered the 12 prebuilt autonomy-6 manifests, which a goal could then
   run. Now each route refuses an L6 agent with `Closure::ApprovalRequired`
-  before any state change:
-  - `create_agent` at level 6, and `start_agent` for an agent whose stored
-    record or registration says L6 (`app/src-tauri/src/commands/agents.rs`);
-  - `approve_consent_request` and `batch_approve_consents` for a
-    `transcendent_creation` request (`commands/consent.rs`); such a request
-    can still be denied;
+  before any state change. An agent counts as L6 when its stored record
+  (found under any spelling of its id) or its registration has an autonomy
+  level of 6 or above (`is_transcendent_level`, `TRANSCENDENT_AUTONOMY`):
+  - `create_agent` at level 6, and `start_agent` and `resume_agent` for an L6
+    agent (`app/src-tauri/src/commands/agents.rs`);
+  - `approve_consent_request`, `batch_approve_consents` and
+    `review_consent_batch` for a `transcendent_creation` request
+    (`commands/consent.rs`); such a request can still be denied;
   - goal assignment (`assign_agent_goal`, reached by `execute_agent_goal` and
     every caller of it), `start_autonomous_loop` and a scheduled tick
     (`ScheduledGoalExecutor::execute`, before anything is audited, restarted
@@ -898,9 +975,6 @@ available release only what backend-owned policy already bounds.
     (`load_prebuilt_agents`, `chat_llm.rs`) loads no L6 manifest, on the
     first run or any later one: each run registers the same prebuilt agents,
     all but the 12 L6 manifests. Stored records are left untouched.
-  - [PENDING: S5 final] `resume_agent` refusing an L6 agent, the stored-record
-    check under any spelling of an agent id and for any level above 6, and
-    `review_consent_batch` refusing a transcendent request.
 - **Commands that took a caller's word as approval** are closed with
   `Closure::ApprovalRequired`: `nx_consent_respond` and `nx_agent_approve`
   (they answered the closed nx loops' consents with a caller boolean;
@@ -919,12 +993,19 @@ available release only what backend-owned policy already bounds.
   was applied (none, with this pipeline), `cycles_run` counts runs, and
   `fuel_consumed` is 0.
 - **Warden review.** With `governance.enable_warden_review` set (off by
-  default), an action is denied with the bounded reason "Warden review is
-  unavailable in Phase Zero: no Warden agent can run" when no running agent
-  named `nexus-warden` exists [PENDING: S5 final: the review denies without
-  looking up any agent]. Before, an inactive Warden meant Allow.
+  default), every reviewed action is denied with the bounded reason "Warden
+  review is unavailable in Phase Zero: no agent can be verified as the
+  Warden" (`WardenReviewEngine::review_with`, `commands/cognitive.rs`). No
+  Warden is looked up, by name or otherwise, and no model is queried, so no
+  caller-created agent can stand in for it. Before, an inactive Warden meant
+  Allow. Of the actions the Phase Zero executor permits, only knowledge-graph
+  updates reach the review (`should_apply_governance_review`,
+  `kernel/src/actuators/mod.rs`).
+- **Manifest schedules.** `create_agent` and `start_agent` refuse a manifest
+  schedule the scheduler rejects, before any state change, with the
+  scheduler's bounded reason (`check_manifest_schedule`, item K).
 - **Stays available (bounded, not human approval).**
-  - HITL and Warden step approvals and denials, batch, review-each and review
+  - HITL step approvals and denials, batch, review-each and review
     mode. An approval releases a step only as far as `Phase0AgentExecutor`
     permits: LLM, memory, notification, agent message, HITL request, web
     search and knowledge graph. No actuator reads the `hitl_approved` flag
@@ -938,7 +1019,8 @@ available release only what backend-owned policy already bounds.
 - **Guards and tests.** `phase0_surface/fg_approval/tests.rs`
   (`p0_fg_g_transcendent_agents_are_refused_before_any_state_change`,
   `p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first`,
-  `p0_fg_g_enabled_warden_review_without_a_warden_denies`,
+  `p0_fg_g_enabled_warden_review_denies_without_any_lookup`,
+  `p0_fg_g_l6_checks_use_the_named_bound`,
   `p0_fg_g_caller_asserted_approval_commands_only_deny`,
   `p0_fg_g_consent_decisions_record_no_caller_identity`,
   `p0_fg_g_self_improvement_acceptance_is_recorded_truthfully`,
@@ -947,7 +1029,13 @@ available release only what backend-owned policy already bounds.
   `p0_fg_g_eof_or_a_read_error_is_never_an_approval`); behavioural tests in
   `lib_tests.rs`, among them
   `p0_fg_startup_registers_no_transcendent_agent_on_any_run` (the real
-  startup order) and `p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent`.
+  startup order), `p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent`,
+  `p0_fg_transcendent_resume_is_refused_and_changes_nothing`,
+  `p0_fg_transcendent_check_matches_every_spelling_of_a_stored_id`,
+  `p0_fg_stored_levels_above_l6_count_as_transcendent` and
+  `p0_fg_enabled_warden_review_denies_and_no_stand_in_can_allow`; and
+  `p0_fg_scheduled_ticks_refuse_a_transcendent_agent_before_any_state_change`
+  (`commands/cognitive/scheduled_tests.rs`).
 - **Non-claims.**
   - There is no out-of-band approval. Approvals still arrive over webview
     IPC, and a script running in the privileged document can deliver them
@@ -961,6 +1049,8 @@ available release only what backend-owned policy already bounds.
     neither registered nor approvable.
   - Denials are still forwarded to the kernel consent queue.
   - The Warden review setting itself is interface-editable.
+  - A stored agent whose manifest schedule the bounded scheduler now refuses
+    cannot be started again: no route edits a stored manifest.
 - **Decision requested.** Request 14.
 
 ## H. Secrets at rest outside the vault
@@ -1012,19 +1102,25 @@ left as they are.
   uses the configuration's token first, then reads a legacy token file as it
   is. Connect, send and poll errors carry no URL, so the Telegram token in the
   URL path never reaches the interface. The connectivity check is bounded
-  (10 s in total, 64 KiB per body); send and poll too (30 s, 4 MiB).
+  (10 s in total, 64 KiB per body); send and poll too (30 s, 4 MiB). Both
+  clients follow no redirect and send no `Referer`: the internal review found
+  that a redirect carried the Telegram token to its target in the `Referer`
+  header, and that is fixed.
 - **API Client collections.** `api_client_save_collections` refuses
   collections that are not JSON or that hold a non-empty `authToken`,
   `authPass` or `authKeyValue`, or a credential header entry
   (`Authorization`, `Proxy-Authorization`, `Cookie`, `X-Api-Key`, `Api-Key`,
   `X-Auth-Token`, `Private-Token`); field and header names match in any
-  letter case. The stored file is left as it was.
+  letter case, and every spelling of a header entry's key and value fields is
+  checked, so a decoy key cannot hide a credential header. The stored file is
+  left as it was.
 - **Backups.** `create_backup` (`kernel/src/backup.rs`, IPC `backup_create`)
   never copies `email_oauth/`, `integrations/`, `messaging_tokens/`,
   `deploy_credentials.json`, `oauth_settings.json` or
   `api_collections.json`. It copies the configuration file only when that
   file is an exact configuration encryption envelope or the archive is
-  encrypted; otherwise it skips it and says so in the backup metadata. An
+  encrypted; otherwise, or when the file cannot be read, it skips it and says
+  so in the backup metadata. An
   encrypted backup checks for its key before writing anything. The archive
   is created owner-only (0600 on Unix); on Windows it keeps the directory's
   inherited access.
@@ -1111,11 +1207,15 @@ pending).**
   - treats a transfer that had already ended as reaped, not as an error;
   - counts transfers whose exit it cannot confirm; they stay registered and
     are logged by count only, with no URL, path or process id.
-- **Remaining `which` probes.** The Nexus Code diagnostics the desktop runs
-  (`nexus_code::setup::diagnose_for_desktop`: `ollama`, `git`, `rg`) and
-  Nexus Code's provider detection still run `which` from `PATH`
-  [PENDING: S3 final]; the computer-use readiness probe
-  (`nx_computer_use_status`) and `which sd` (above) remain.
+- **Nexus Code checks start no process.** The Nexus Code diagnostics the
+  desktop runs (`diagnose_for_desktop`: `ollama`, `git`, `rg`) and Nexus
+  Code's provider auto-detection find programs with an in-process `PATH`
+  lookup (`nexus_code::setup::program_on_path`, which skips relative entries)
+  and run no `which`. The standalone `nx` (withdrawn) keeps its behaviour.
+- **Remaining `which` probes.** The computer-use readiness probe
+  (`nx_computer_use_status`), `which sd` (above), and `which rg` in the
+  Nexus Code tools (`nexus-code/src/tools/search.rs`, latent in the desktop)
+  remain, under decision request 1.
 - **Guards and tests.** `p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it`
   and `p0_fg_the_application_exit_ends_in_flight_model_downloads` (the exit
   hook and the single registered spawn), in `fg_egress`;
@@ -1624,15 +1724,14 @@ refuses rather than clamps, and nothing is deleted to stay within one.
   A schedule fires at most once per minute: its seconds field must be one
   value from 0 to 59, and a five-field expression runs at second 0. A
   refused schedule is refused before anything is spawned, and a refused
-  re-registration keeps the existing schedule. So `start_autonomous_loop`
-  with an interval under 60 seconds is refused, and a sub-minute schedule
-  stored earlier is not registered at startup (logged). The once-per-minute
-  refusal states the rule and never repeats the caller's seconds field.
-  [PENDING: S6 final: a schedule the cron parser rejects is refused without
-  repeating the expression; composed after this documentation's base.]
-  [PENDING: S5 final: `create_agent` and `start_agent` report a refused
-  manifest schedule; until then the refusal is a standard-error line and the
-  call succeeds.]
+  re-registration keeps the existing schedule. A sub-minute schedule stored
+  earlier is not registered at startup (logged).
+  `register_agent` and `validate_cron` share one parser, and every refusal is
+  one of a few fixed texts that repeat no part of the caller's expression.
+  `create_agent` and `start_agent` refuse a manifest schedule the scheduler
+  rejects before any state change (item G), and `start_autonomous_loop`
+  accepts only intervals from 60 to 3,599 seconds, which the bounded
+  scheduler can express.
 - **Scheduled ticks** (`ScheduledGoalExecutor::execute`,
   `commands/cognitive.rs`). A tick is skipped, and audited as
   `scheduled_execution_skipped` (`agent_loop_active`), while the agent's
@@ -1640,8 +1739,19 @@ refuses rather than clamps, and nothing is deleted to stay within one.
   that ends removes that entry only if it is still its own (`Arc::ptr_eq`),
   so the Stop button and the scheduler always see the newest running loop. An
   L6 agent's tick is refused first (item G).
-- **Guards and tests.** `phase0_surface/fg_reliability/tests.rs` (11 guards,
-  among them `p0_fg_k_approved_limits_are_pinned`), the kernel, budget and
+- **Test isolation.** The cognitive loop records its L6 cooldown and its
+  algorithm selection in the host's injected state database (the same file
+  in production), so a test on the in-memory application state writes no
+  database under the identity home. No desktop test builds the real
+  application state (guard `p0_fg_a_no_desktop_test_builds_the_real_application_state`),
+  and the configuration's protection recorder is not installed in test
+  builds.
+- **Guards and tests.** `phase0_surface/fg_reliability/tests.rs` (12 guards,
+  among them `p0_fg_k_approved_limits_are_pinned` and
+  `p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database`),
+  `p0_fg_autonomous_loop_intervals_outside_the_schedule_bound_are_refused`
+  and `p0_fg_sub_minute_manifest_schedules_fail_create_and_start`
+  (`commands/cognitive/scheduled_tests.rs`), the kernel, budget and
   frontend-error tests, and the desktop tests
   `p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call` and
   `p0_fg_adversarial_session_rounds_are_bounded_before_any_work`. The
@@ -1660,25 +1770,26 @@ refuses rather than clamps, and nothing is deleted to stay within one.
     its read.
   - A refused arena run seen through the older `run_session` API (the
     benchmark's) reports a NaN win rate.
+  - The Warden review reads the configuration (`load_config`), which creates
+    a first-run `config.toml` under the identity home if none exists, so a
+    test that reaches it can still write that file.
 - **Decision requested.** Request 16.
 
 ## Dependency evidence (P0-FINAL-GATE-CLOSURE)
 
-[PENDING: DEP final] The counts below were measured on the reliability
-workstream's component; they must be re-measured on the final candidate. The
-composed lockfiles at this documentation's base are byte-identical to the
-ones measured.
-
 **Method.** Security advisories were measured on the closure candidate's own
 lockfiles, never on `main`'s: before (the approved candidate `71c47acb`) and
-after the minimal updates, with cargo-audit 0.22.1 and cargo-deny 0.19.6
-against one advisory-database snapshot (`ef036051`, 1,273 advisories), and
-`npm audit --package-lock-only`. The internal review re-checked the lockfile
-changes independently.
+after, on the final candidate's lockfiles (`d1735577`), with cargo-audit
+0.22.1 and cargo-deny 0.19.6 against one advisory-database snapshot (1,273
+advisories), and `npm audit --package-lock-only`. The cargo-deny figure was
+taken on the lockfile after the `openidconnect` removal; the final lockfile
+differs from it only by one dependency edge to an already-locked package
+(`webkit2gtk`, item D), which adds no package. The internal reviews
+re-checked the lockfile changes independently.
 
 | Lockfile | Tool | Before (`71c47acb`) | After |
 |---|---|---|---|
-| `Cargo.lock` | cargo-audit | 19 vulnerabilities, 26 warnings, 1,110 packages | 8 vulnerabilities, 26 warnings, 1,106 packages |
+| `Cargo.lock` | cargo-audit | 19 vulnerabilities, 26 warnings, 1,110 packages | 7 vulnerabilities, 25 warnings (13 unmaintained, 12 unsound), 1,086 packages |
 | `Cargo.lock` | cargo-deny (advisories) | 16 errors (13 vulnerability, 3 unmaintained) | 10 errors (7 vulnerability, 3 unmaintained) |
 | `app/package-lock.json` | npm audit | 14 (2 low, 6 moderate, 6 high) | 6 (5 moderate, 1 high) |
 | `nexus-website/package-lock.json` | npm audit | 12 (1 low, 2 moderate, 9 high) | 12, unchanged |
@@ -1686,9 +1797,9 @@ changes independently.
 | `packaging/builder-toolchain/package-lock.json` | npm audit | 0 | 0 |
 
 cargo-deny's bans, licenses and sources checks report no error. cargo-deny
-shows one vulnerability fewer than cargo-audit because `deny.toml` ignores
-RUSTSEC-2023-0071 (rsa); it reports the three unmaintained crates as errors,
-cargo-audit as warnings.
+already ignored RUSTSEC-2023-0071 (rsa), so removing rsa lowered only the
+cargo-audit count; cargo-deny reports the three unmaintained crates as
+errors, cargo-audit as warnings.
 
 **Updates taken** (precise and semver-compatible; `Cargo.toml` unchanged
 except the removal):
@@ -1704,6 +1815,11 @@ except the removal):
   RUSTSEC-2026-0195 on 0.38.4);
 - the unused `rmcp` dependency of `nexus-protocols` removed (RUSTSEC-2026-0189),
   which also dropped rmcp-macros, pastey and schemars_derive 1.2.1;
+- the unused `openidconnect` dependency of `nexus-auth` removed
+  (RUSTSEC-2023-0071, rsa 0.9.10): no source imported it. The lockfile was
+  only pruned: 20 packages removed (rsa, openidconnect, oauth2 and their
+  exclusive dependencies, the yanked spin 0.9.8 among them), with no version,
+  source or checksum change;
 - npm: 29 development-only entries of `app/package-lock.json`; `package.json`
   unchanged.
 
@@ -1719,19 +1835,19 @@ implementer accepts no risk; each line is a proposal (decision request 3).
 | RUSTSEC-2026-0193, RUSTSEC-2026-0213 (sanitizer bypasses) | ammonia 4.1.2 | `web-builder-agent` → desktop | Only `design_import::import_design` uses it, and no production code calls that; its desktop command `builder_import_design` is closed | Update to 4.1.4 (adds four crates), or accept for Phase Zero with this reason |
 | RUSTSEC-2026-0258 (unbounded empty DATA frames) | h2 0.3.27 | `readability` 0.3 → `reqwest` 0.11 → `hyper` 0.14 → `nexus-kernel` | The kernel calls only `readability::extractor::extract` on text it already holds and builds no reqwest 0.11 client; no fix exists on the 0.3 line | Accept until `readability` is replaced |
 | RUSTSEC-2026-0194, RUSTSEC-2026-0195 | quick-xml 0.30.0 | `zbus_xml` → `atspi` 0.24 → `nexus-ui-repair` | Developer tool only, not shipped (D3) | Accept with D3, or withdraw the tool |
-| RUSTSEC-2023-0071 (timing side channel) | rsa 0.9.10 | `openidconnect` 4.0.1 → `nexus-auth` → desktop | No workspace source uses `openidconnect` (declared in `auth/Cargo.toml`, never imported), so no RSA operation is reachable from workspace code; no fixed release exists | Remove the unused dependency (as `rmcp` was), or accept |
 | RUSTSEC-2026-0269, RUSTSEC-2026-0222 | wasmtime 43.0.2 | `nexus-sdk`, `nexus-protocols`, `nexus-benchmarks` | `wasmtime-wasi` is not in the lockfile; the SDK's WASM sandbox is latent (C5A) | Accept until a planned major upgrade (46.0.3+ or 47.0.4+) |
 | RUSTSEC-2026-0247, RUSTSEC-2026-0250, RUSTSEC-2026-0251 (unmaintained) | bitmaps 2.1.0, im-rc 15.1.0, sized-chunks 0.6.5 | `wasm-compose` → wasmtime 43.0.2 | As wasmtime | Accept with wasmtime |
 
-Warning-level entries (26) are unchanged in number. Fixes exist but were not
-taken for anyhow, event-listener, memmap2, rand 0.8, 0.9 and 0.10, and the
-yanked spin 0.9.8; lru, glib, scc and rand 0.7 have no semver-compatible fix
-(decision request 3).
+Warning-level entries: 25 (13 unmaintained, 12 unsound); the yanked spin
+0.9.8 left with the `openidconnect` removal. Fixes exist but were not taken
+for anyhow, event-listener, memmap2 and rand 0.8, 0.9 and 0.10; lru, glib, scc
+and rand 0.7 have no semver-compatible fix (decision request 3).
 
 npm residue in `app/package-lock.json` (6, all but two development tooling):
 vite 5 and esbuild (fix is a major upgrade), vitest and `@vitest/mocker`;
-`monaco-editor` and its `dompurify` are runtime packages of the Monaco editor,
-which item D makes unavailable [PENDING: S1 final] (decision request 5).
+`monaco-editor` and its `dompurify` are packages of the Monaco editor, which
+item D no longer imports; `@monaco-editor/react` stays declared in
+`app/package.json`, so they stay in the lockfile (decision request 5).
 `nexus-website` and `scripts/page-audit` are measured only (decision request
 6).
 
@@ -1739,9 +1855,11 @@ which item D makes unavailable [PENDING: S1 final] (decision request 5).
 `main` and weekly only, so it never scans a closure candidate, and its five
 `--ignore` IDs match nothing in the candidate's audit. cargo-audit does not
 read the root `audit.toml` (it reads `.cargo/audit.toml`, which does not
-exist). `deny.toml` holds 12 ignores that match nothing any more (eight GTK3
-IDs, and RUSTSEC-2026-0044, -0048, -0067 and -0068, fixed by the updates), and
-its note that RUSTSEC-2026-0097 has "no semver-compatible bump" is
+exist). `deny.toml` holds 13 ignores that match nothing any more: eight GTK3
+IDs; RUSTSEC-2026-0044, -0048, -0067 and -0068, fixed by the updates; and
+RUSTSEC-2023-0071, since rsa is gone (its ignores in `audit.toml` and
+`.gitlab-ci.yml` are stale too). Its
+note that RUSTSEC-2026-0097 has "no semver-compatible bump" is
 contradicted by the advisory, which lists rand 0.8.6, 0.9.3 and 0.10.1 as
 fixed. `.gitlab-ci.yml` ignores RUSTSEC-2026-0114, which matches nothing, and
 installs both scanners unpinned with `|| true`. The four ignore lists
@@ -1779,11 +1897,12 @@ These are unavailable rather than working unsafely. The C5 inventory lists each 
 
 **P0-FINAL-GATE-CLOSURE update.**
 
-- **154 IPC commands closed** on this documentation's base (counted from
-  `CLOSED_COMMANDS` in `app/src-tauri/src/phase0_surface/tests.rs`): C5A 125,
-  C5C 7, P0-FINAL-GATE-CLOSURE 22. Of the 804 registered commands, 650 stay
-  open. Item D's design closes no command [PENDING: S1 final: recount when
-  composed]. The 22, each taking no input and returning one bounded reason:
+- **154 IPC commands closed** on the closure candidate (counted from
+  `CLOSED_COMMANDS` in `app/src-tauri/src/phase0_surface/tests.rs` at
+  `d1735577`): C5A 125, C5C 7, P0-FINAL-GATE-CLOSURE 22. Of the 804 registered
+  commands, 650 stay open. Item D closes no command; it restricts which
+  documents may call them. The 22, each taking no input and returning one
+  bounded reason:
   - `NetworkDestination` (11): `api_client_request`; `a2a_discover_agent`,
     `a2a_send_task`, `a2a_get_task_status`, `a2a_cancel_task`;
     `a2a_crate_send_task`, `a2a_crate_get_task`, `a2a_crate_discover_agent`;
@@ -1816,9 +1935,11 @@ These are unavailable rather than working unsafely. The C5 inventory lists each 
   - The 18 withdrawn standalone binaries and their recipes (item J).
   - Schedules firing more than once per minute, and inputs outside the
     resource bounds (item K).
-  - [PENDING: S1 final] The Monaco editor, Builder collaboration, the
-    Settings live key test, scripted Builder previews and click-to-edit, and
-    remote images in notes.
+  - The Monaco editor, Builder collaboration, the Settings live key test,
+    scripted Builder previews and click-to-edit, remote images in notes, and
+    new windows (item D).
+  - Autonomous-loop intervals outside 60 to 3,599 seconds, and manifest
+    schedules the scheduler rejects (item K).
 
 ## TOCTOU non-claims
 
@@ -1979,12 +2100,15 @@ are those cited in the items above.
 15. **Contract C5.** `AmbientResource` as the closure reason; a dedicated
     variant is an option.
 16. **Item K.** The `ArenaRun` compatibility type, whose refusal surfaces as a
-    serialization error to the older API; the 1-token minimum budget; the
-    interface's input limits aligned with the bounds [PENDING: S1 final].
+    serialization error to the older API; the 1-token minimum budget (the
+    Time Machine inputs now stop at 10 forks and 200,000 tokens).
 17. **Item I (I5).** Download termination at a normal exit only; a crash or a
     kill is a non-claim.
-18. **Item D** [PENDING: S1 final]. Live native evidence in CI, and the
-    feature reductions item D makes.
+18. **Item D.** The Linux finding that neither the ACL nor the navigation
+    guard is sufficient alone (wry attributes a `postMessage` to the
+    webview's URL at handling time; possibly an upstream wry or tauri issue,
+    worth reporting); accepting the Windows and macOS behaviour once their
+    harness runs are observed; and the feature reductions item D makes.
 19. **Item J.** The withdrawal message wording and the uniform status 69; the
     coordinator decisions D1 (alternate agent binaries), D2 (the computer-use
     harness) and D4 to D7 (the GitLab release job, recipes and packaging).
