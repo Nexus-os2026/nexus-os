@@ -10,6 +10,7 @@ bounded checkpoints:
 | **P0-002C5A** | Make every reachable E1–E5 surface fail closed unless an approved backend-owned authority mechanism already governs it; fix the computer-use EOF approval bug; stabilise the Darwin sealed-spawn fixture; record this inventory and the reachability guard. |
 | **P0-002C5B** | Governed recovery and the remaining straightforward filesystem migrations: every reachable surface deferred by C5A is migrated onto an existing Phase Zero primitive or fails closed (§5). |
 | **P0-002C5C** | A fresh whole-repository audit, repair of every reachable finding it could bound, the final recount and the final trust-surface guard (§10). After the Architect's review, it also closes unbrokered screen observation and enforces explicit egress schemes and ports (§10.10). One finding remains unresolved and one is an approved operator assumption (§10.8). The Final-Gate evidence is in `phase0-final-gate-dossier.md`. |
+| **P0-FINAL-GATE-CLOSURE** | The Architect's closure mission for the Final-Gate contracts (A–K, C5, DEP), recorded on the closure candidate in §11: the dispositions, the closed-command recount, the new needles, registries and guard rows, the non-claims and the corrections to this document. Internal work; Architect review pending. |
 
 The invariant C5 serves: **a path is not authority.** C5C states it in its
 general form: **a string is never authority**, including frontend, model and
@@ -69,7 +70,7 @@ These are audit-base totals. Neither C5A nor C5B re-ran the class audit, so the
 table is not re-derived here. §4 and §5 record the transitions site by site,
 and the C5C inventory recounts.
 
-The desktop registered 804 IPC commands. `capabilities/default.json` is core-only and the webview CSP is `null`, so every registered command is callable by any script running in the webview. A frontend value is therefore never evidence of user intent.
+The desktop registered 804 IPC commands. `capabilities/default.json` is core-only and the webview CSP is `null`, so every registered command is callable by any script running in the webview. A frontend value is therefore never evidence of user intent. [P0-FINAL-GATE-CLOSURE: still 804 registered; item D restricts them to the privileged document. See §11.7.]
 
 ## 2. Families
 
@@ -328,7 +329,7 @@ content and absolute path are never recorded.
 
 ### 5.6 URL / curl (D-CURL)
 
-- **Every production curl invocation (35 invocation sites in 21 files, as counted by `CURL_SITES`) now:**
+- **Every production curl invocation (35 invocation sites in 21 files, as counted by `CURL_SITES`) now:** [P0-FINAL-GATE-CLOSURE: 34 sites in 20 files; see §11.4.]
   - starts with `-q` and `--globoff`;
   - allows only `http,https` (or `https`) for the request and for every redirect;
   - receives the URL after `--`, in the normalized spelling of a URL that parsed as http(s) with a host and no userinfo;
@@ -343,9 +344,9 @@ content and absolute path are never recorded.
   - connectors: web reader and search, and key validation;
   - crates: the external-tools adapter (tools_execute), nexus-mcp tools, memory embeddings, perception vision and evaluation clients.
 - **Before the process runs:** hostile URLs (`file:`, leading `-`, `@file`, userinfo, other schemes, whitespace), unsupported methods and injected headers are refused. api_client_request audits the refusal by reason class.
-- **Egress checks.** The API and web actuators now apply their allowlists to the normalized URL, so `allowed.example@other.example` no longer passes a prefix match. Egress itself stays prefix-based (§7).
+- **Egress checks.** The API and web actuators now apply their allowlists to the normalized URL, so `allowed.example@other.example` no longer passes a prefix match. Egress itself stays prefix-based (§7). [Stale since C5C (§10.2, §10.10); see §11.7.]
 - **Now fail closed:** external-tools pseudo-requests that are not http(s): the `smtp://` email tool and the `local://database` tool. Neither ever worked through curl.
-- **Unchanged:** the benchmarks' curl calls (six sites in `benchmarks/conductor-bench`), which are outside the desktop closure and use configured endpoints.
+- **Unchanged:** the benchmarks' curl calls (six sites in `benchmarks/conductor-bench`), which are outside the desktop closure and use configured endpoints. [P0-FINAL-GATE-CLOSURE: those benchmarks are withdrawn; see §11.7.]
 - **Tests:** `governed_http`, plus a refusal test at every family of sites above.
 
 ### 5.7 Serialized records (D-RECORD)
@@ -359,6 +360,8 @@ content and absolute path are never recorded.
 | nx sessions, notes, projects, email, tokens | Named only through §5.3 |
 | Scheduler records | Name agents and goals, no path; the store lives under the identity home |
 | `NexusConfig.backup.output_dir` | Stored, but read by no code (there is no scheduled-backup consumer) |
+
+[P0-FINAL-GATE-CLOSURE: the `NexusConfig.security` row is corrected in §11.7: `key_env`, the key file and the first-run default.]
 
 Found during the C5B preflight rather than by the original audit: `save_config`
 accepted the whole `NexusConfig` from the webview, including the key source
@@ -459,7 +462,7 @@ PHASE ZERO FINAL-GATE REVIEW REQUIRED:
    - The sealing secret comes from `/etc/machine-id` and `/etc/hostname`; this path is unreached.
    - The TEE key directory is in shared temp; also unreached.
 2. **Broad outbound network policy.**
-   - Egress checks are prefix/substring based.
+   - Egress checks are prefix/substring based. [Stale since C5C; see §11.7.]
      - C5B normalizes the URL and refuses userinfo before the API and web actuators check their allowlists.
      - It does not narrow any allowlist.
    - `tools_execute` and `mcp_host_*` accept caller http(s) URLs. Since C5B, no URL can select another protocol, a file or a curl option.
@@ -468,10 +471,10 @@ PHASE ZERO FINAL-GATE REVIEW REQUIRED:
 Also recorded for the final inventory:
 
 - **Operator state-location environment overrides** (`NEXUS_DB_PATH`, `NEXUS_CONFIG_PATH`). They relocate app state; they are not code-bearing. C5B keeps them as recorded operator overrides.
-- **Secrets in curl arguments.** Some provider calls pass API keys in `-H` arguments, where a same-user process listing can see them. This is unchanged.
-- **PATH-resolved helper binaries run with fixed arguments.** This includes curl, git, and `which` presence probes for git, ripgrep and ollama at nx bridge startup. No external CLI agent is among them.
+- **Secrets in curl arguments.** Some provider calls pass API keys in `-H` arguments, where a same-user process listing can see them. This is unchanged. [P0-FINAL-GATE-CLOSURE: changed; see dossier item C and §11.7.]
+- **PATH-resolved helper binaries run with fixed arguments.** This includes curl, git, and `which` presence probes for git, ripgrep and ollama at nx bridge startup. No external CLI agent is among them. [See dossier item I and §11.7.]
 - **OS input** by the kernel computer-control commands. The E6 decision covered only the EOF approval bug.
-- The `null` webview CSP.
+- The `null` webview CSP. [P0-FINAL-GATE-CLOSURE: replaced by a restrictive CSP, with an app ACL (item D); see §11.7.]
 
 ## 8. Reachability guard
 
@@ -717,6 +720,7 @@ dossier item J for the shipped non-desktop binaries: `crates/nexus-server`
 validation branch, review pending), the protocols server, `nexus-cli` and
 `nx`. None is reachable from desktop IPC or agents. The desktop depends on the libraries of
 `nexus-code` and `protocols`, never on their binaries.
+[P0-FINAL-GATE-CLOSURE: J1 is integrated and J2–J5 are withdrawn; see §11.2 and §11.7.]
 
 ### 10.7 Benchmarks
 
@@ -725,6 +729,7 @@ without the production governance, from benchmark binaries only.
 `BENCHMARK_PROCESS_SITES` counts them per file, and
 `p0_002c5c_benchmark_process_sites_stay_benchmark_only` fails when a new site
 appears or when any non-benchmark member depends on a benchmark crate.
+[P0-FINAL-GATE-CLOSURE: those sites belonged to withdrawn benchmarks, and the registry is empty; see §11.4.]
 
 ### 10.8 Final recount
 
@@ -756,7 +761,8 @@ only: tests, benches, examples, fixtures, build scripts and
   unchanged, so only the classes moved.
 
 **IPC commands:** 804 registered. 128 were closed and 676 open until the
-Architect repair; since then 132 are closed and 672 open.
+Architect repair; since then 132 are closed and 672 open. [P0-FINAL-GATE-CLOSURE: 154
+closed and 650 open; see §11.3.]
 
 | Class of the open commands | Recount | After C5C repairs | After the Architect repair (§10.10) |
 |---|---:|---:|---:|
@@ -782,6 +788,9 @@ Independent of class:
 - 23 commands send a governed-shape request to a caller-chosen destination
   (Final-Gate egress).
 - 17 act on an approval delivered over IPC (Final-Gate approval channel).
+
+[P0-FINAL-GATE-CLOSURE: neither figure was enumerated. §11.7 gives the
+state of the destination families and the enumerated approval list.]
 
 **Dispatchers and startup.**
 - Every production cognitive loop, the AgentScheduler and hivemind subtasks
@@ -862,6 +871,9 @@ unresolved and one is an approved operator assumption:
      secret storage. Key-file ownership, permissions, redirection and
      key-source integrity remain Final-Gate review (dossier item E).
 
+[P0-FINAL-GATE-CLOSURE: the state of both entries on the closure candidate
+is in §11.2.]
+
 **Outside the desktop:**
 
 | Category | Filesystem and ambient | Process and network |
@@ -891,6 +903,9 @@ unresolved and one is an approved operator assumption:
   unpackaged agent libraries.
 - **Benchmarks:** `benchmarks/` and `benchmarks/conductor-bench`.
 
+[P0-FINAL-GATE-CLOSURE: the shipped binaries are withdrawn, and the site
+tables are not recounted; see §11.7.]
+
 **Summary:** after the C5C and Architect repairs:
 - **Unresolved.** One reachable filesystem entry remains unresolved (E): the
   configuration key (item A, deferred to the Final Gate). No other reachable
@@ -908,7 +923,8 @@ unresolved and one is an approved operator assumption:
 `p0_002c5c_final_trust_surface_guard_is_complete` fails if any guard or
 registry below is removed or renamed. Each regression class is caught by
 these guards; the negative controls are those of the C5C validation report,
-each caught by an assertion, never a compile error.
+each caught by an assertion, never a compile error. [P0-FINAL-GATE-CLOSURE:
+the rows added are in §11.5.]
 
 | Regression | Guards | Negative control |
 |---|---|---|
@@ -1033,3 +1049,309 @@ effective port and whole leading path segments. It uses the `url` parser and
   - H: secrets at rest;
   - I: PATH helpers;
   - K: reliability debt.
+
+[P0-FINAL-GATE-CLOSURE: the state of each item on the closure candidate is in
+§11.2.]
+
+## 11. P0-FINAL-GATE-CLOSURE
+
+Internal work, not approval. The Architect's closure mission implements the
+Final-Gate contracts on the closure candidate
+(`implement/p0-final-gate-closure`). This section records the candidate with
+every workstream composed (`d1735577`). Nothing here approves an item,
+accepts a risk or declares FG1, the Final Gate or Phase Zero complete.
+`phase0-final-gate-dossier.md` gives the evidence per item.
+
+### 11.1 Scope and method
+
+- **Compared states.** The approved candidate `71c47acb` (the authoritative
+  head after P0-FG1's integration) and the final closure candidate
+  `d1735577`.
+- **Counts come from the code, not from reports.**
+  - The registries of `app/src-tauri/src/phase0_surface/tests.rs`
+    (`CLOSED_COMMANDS`, `LATENT_UNSAFE_APIS`, `CURL_SITES`,
+    `APPROVED_STATE_ROOTS`, `BENCHMARK_PROCESS_SITES`) and of the Final-Gate
+    guard modules (`phase0_surface/fg_*/tests.rs`) were parsed from the source
+    at both commits.
+  - Registered commands were counted from the `generate_handler!` list in
+    `app/src-tauri/src/lib.rs`.
+  - The final guard's rows were parsed from
+    `p0_002c5c_final_trust_surface_guard_is_complete`.
+- **Verification.** Each disposition below was checked against the code at the
+  named files. Workstream reports and internal reviews were treated as claims
+  to verify.
+- **Not re-run.** The class audit of §1 and the site recounts of §10.8. The
+  C5C command-class table recorded totals only, with no per-command class, so
+  its rows are not moved; §11.3 counts closures instead.
+
+### 11.2 Dispositions
+
+| Item | On the closure candidate | Where | Guards |
+|---|---|---|---|
+| A | Repaired: a new or changed credential only under the operator key `NEXUS_CONFIG_KEY` (not blank, not the ambient derivation); explicit two-key legacy read path; no load-time rewrite; protection changes reported and audited; owner-only atomic writes | `kernel/src/config.rs`; `app/src-tauri/src/commands/chat_llm.rs` | `fg_secrets/tests.rs`; `p0_fg_a_*` in `kernel/src/config.rs` |
+| B | Repaired: 11 caller-destination commands closed; the Ollama address from `OLLAMA_URL` or the fixed default only; agent web fetch and caller-destination tools refused; SearXNG only at `SEARXNG_URL`; search redirects https only | `commands/{apps,governance,crate_bridges,tools_infra,chat_llm,agents,cognitive}.rs`; `connectors/llm/src/providers/ollama.rs`; `crates/nexus-external-tools/src/execution.rs`; `kernel/src/actuators/web.rs` | `fg_egress/tests.rs` |
+| C | Partly repaired: four hosted providers post in process (no redirect; total time and size bounds); every other credentialed reqwest client in `connectors/llm`, the desktop's Nexus Code bridge and the desktop swarm follows no redirect; perception closed; credential-bearing tools and MCP servers refused; remaining curl sites counted | `connectors/llm/src/providers/*`; `nexus-code/src/llm/providers/*`; `crates/nexus-swarm/src/providers/*`; `protocols/src/mcp_client.rs` | `fg_egress/tests.rs` (`CREDENTIAL_CURL_SITES`); provider tests |
+| C5 | Repaired (route closed): `cm_run_ab_validation` (`AmbientResource`); the Groq-endpoint client takes only `GROQ_API_KEY` | `commands/crate_bridges.rs`; `crates/nexus-capability-measurement` | `fg_approval/tests.rs`; `nim_client.rs` test |
+| D | Repaired: an app ACL grants all 804 application commands only to the `main` window at the local app origin; a navigation guard admits only the exact app origin, and new windows are denied; frames script-free or removed; CSP with no third-party origin; live native harness in CI on Linux, Windows and macOS. Finding: on Linux neither the ACL nor the guard is sufficient alone | `app/src-tauri/build.rs`; `capabilities/app-commands.json`; `src/webview_boundary.rs`; `tauri.conf.json`; `app/src/**` | `fg_webview/tests.rs`; `tests/webview_boundary_live.rs` |
+| E | Repaired: the vault key file validated on the opened descriptor (Linux, macOS), refused elsewhere; the key must open every stored secret; `key_env` enforced | `kernel/src/crypto.rs`; `kernel/src/startup/mod.rs` | `fg_secrets/tests.rs`; `p0_fg_e_*` |
+| F | Repaired: send closed; empty policy denies; exact socket addresses; no name resolution; secret and key required | `connectors/llm/src/nexus_link.rs` | `nexus_link` tests; `fg_egress/tests.rs` |
+| G | Repaired: L6 (autonomy 6 or above, any id spelling) refused at create, start, resume, approve and review-each, never registered, and refused for goals, loops, scheduled ticks and tool calls; caller-asserted approval commands closed; fixed resolver label; truthful self-improvement records; an enabled Warden review denies with no lookup; rejected manifest schedules refused at create and start | `commands/{agents,consent,cognitive,crate_bridges,chat_llm,self_improvement}.rs`; `nx_bridge/commands.rs`; `lib.rs` | `fg_approval/tests.rs`; `lib_tests.rs`; `commands/cognitive/scheduled_tests.rs` |
+| H | Repaired for new writes: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored token; API Client secrets refused; backups exclude credential stores | `commands/apps.rs`; `lib.rs`; `agents/web-builder/src/{deploy,backend}/credentials.rs`; `kernel/src/backup.rs` | `fg_secrets/tests.rs`; `p0_fg_h_*` |
+| I | Partly repaired: no unowned `ollama serve`; `is_ollama_installed` closed; in-flight downloads ended at a normal exit; the desktop's Nexus Code checks use an in-process `PATH` lookup; fixed-argument helpers still resolve from `PATH` | `commands/chat_llm.rs`; `connectors/llm/src/model_hub.rs`; `nexus-code/src/setup.rs`; `lib.rs` | `fg_egress/tests.rs`; `model_hub` tests |
+| J | J1 integrated at `71c47acb` (run #108 green; Architect review pending). J2–J5 withdrawn: 18 withdrawn binaries in all | entry points of the withdrawn targets; the 14 recipe files | `fg_standalone/tests.rs`; per-package `tests/phase0_withdrawal.rs` |
+| K | Evidence corrected (`executes_python_code`); voice stderr repaired; resource surfaces bounded by refusal | dossier "Resource bounds" | `fg_reliability/tests.rs`; kernel, budget and desktop tests |
+| L | Unchanged since C5C | — | C5C guards |
+| DEP | Minimal updates and two unused dependencies removed (`rmcp`, `openidconnect`): cargo-audit 19 → 7, cargo-deny advisory errors 16 → 10, npm (app) 14 → 6 on the final lockfiles; residual advisories proposed to the Architect | `Cargo.lock`; `app/package-lock.json`; `protocols/Cargo.toml`; `auth/Cargo.toml` | — |
+
+The two filesystem entries §10.8 left open:
+
+1. **`config_user_key`** (unresolved, E) is replaced by `ConfigKeyMaterial`
+   (item A). The ambient derivation now only opens legacy files and keeps a
+   file that gains no credential under the key that opened it; it never keys
+   a new or changed credential. `APPROVED_STATE_ROOTS` records the reason
+   ("legacy configuration key input"). Repaired on the candidate; Architect
+   review pending.
+2. **`EncryptionKey::from_file`** stays the approved operator trust
+   assumption, and is now validated on the opened file (item E).
+
+### 11.3 Closed-command recount
+
+Registered commands: 804 at `71c47acb` and on the candidate (the
+`generate_handler!` list; unchanged).
+
+| | Closed | Open |
+|---|---:|---:|
+| At `71c47acb` (C5A 125, C5C 7) | 132 | 672 |
+| Stream 3 (items B, C, F, I) | +14 | |
+| Stream 2 (items A, H) | +4 | |
+| Stream 5 (items G, C5) | +4 | |
+| On the closure candidate | 154 | 650 |
+| Stream 1 (item D) | none (item D restricts callers, not commands) | |
+
+- Stream 3: `NetworkDestination` 11 (`api_client_request`, the four `a2a_*`,
+  the three `a2a_crate_*`, `mcp_host_connect`, `mcp_host_call_tool`,
+  `builder_theme_extract_from_url`), `PeerTransfer` 1
+  (`nexus_link_send_model`), `CredentialTransport` 1 (`perception_init`),
+  `HelperLaunch` 1 (`is_ollama_installed`).
+- Stream 2: `SecretStorage` 4 (`builder_deploy_store_credentials`,
+  `builder_backend_connect`, `email_start_oauth`, `integration_start_oauth`).
+- Stream 5: `AmbientResource` 1 (`cm_run_ab_validation`), `ApprovalRequired` 3
+  (`nx_consent_respond`, `nx_agent_approve`, `self_rewrite_apply_patch`).
+
+Closed commands by closure, on the candidate:
+
+| Closure | Commands |
+|---|---:|
+| `LegacyBuilder` | 49 |
+| `AmbientResource` | 30 |
+| `FileSelection` | 29 |
+| `NetworkDestination` | 11 |
+| `ProcessExecution` | 9 |
+| `ExternalCliAgent` | 6 |
+| `ApprovalRequired` | 4 |
+| `ScreenObservation` | 4 |
+| `SecretStorage` | 4 |
+| `AgentExecution` | 3 |
+| `OsInput` | 2 |
+| `PeerTransfer` | 1 |
+| `CredentialTransport` | 1 |
+| `HelperLaunch` | 1 |
+| Total | 154 |
+
+Each new closure keeps its command registered, takes no input and returns
+one bounded reason; the closed-command guards check all 154. Five
+`Closure` variants are new (`NetworkDestination`, `PeerTransfer`,
+`CredentialTransport`, `HelperLaunch`, `SecretStorage`), each checked by
+`closure_reasons_are_bounded_and_echo_no_input`.
+
+### 11.4 Latent APIs and registries
+
+`LATENT_UNSAFE_APIS`: 159 needles at `71c47acb`, 180 on the candidate.
+
+- Stream 3 (15): `.discover_agent(`, `.send_task(`, `.get_task_status(`,
+  `.cancel_task(`, `a2a_crate_cmds::a2a_crate_send_task`,
+  `a2a_crate_cmds::a2a_crate_get_task`,
+  `a2a_crate_cmds::a2a_crate_discover_agent`, `.connect_server(`,
+  `.call_tool(`, `extract_theme_from_url`, `.send_model(`,
+  `discover_peer_models(`, `init_provider(`, `Command::new("ollama")`,
+  `Command::new("which")`.
+- Stream 5 (6): `tauri_commands::run_ab_validation`, `run_batch_evaluation`,
+  `execute_validation_run_real`, `NimClient`, `OpenRouterClient`,
+  `parse_consent_reply(`.
+
+New registries:
+
+- `CREDENTIAL_CURL_SITES` (`fg_egress/tests.rs`): nine files whose curl
+  invocations still name a credential, each counted with the reason it is
+  unreachable from the desktop or refused.
+- In `fg_standalone/tests.rs`: `BINARY_TARGETS` (30: 18 withdrawn, 1 desktop,
+  4 developer, 7 benchmark), `EXAMPLE_TARGETS` (2), `BENCH_TARGETS` (5),
+  `ALIAS_NEEDLES` (13 entry APIs and the only files that may name them),
+  `RECIPE_FILES` (14), `WITHDRAWN_BINARIES` (18) and `PROTOCOLS_BUILD_SCRIPT`.
+
+Changed registries:
+
+- `CURL_SITES`: 35 sites in 21 files → 34 in 20 (`api_client_request`'s
+  site went with its implementation).
+- `APPROVED_STATE_ROOTS`: 48 rows (61 reads) → 47 (59). The `nx` entry
+  point's two `"/tmp` reads went with its withdrawal (stricter), and the
+  reason for `kernel/src/config.rs`'s `var_os("HOME")` now says it only reads
+  legacy files.
+- The identifier-join count for `{provider}_tokens.json` in
+  `commands/apps.rs`: 3 → 2 (`email_start_oauth` is closed).
+- `BENCHMARK_PROCESS_SITES`: 10 sites in 5 files → none. All ten were in
+  benchmarks now withdrawn; a new benchmark process site still fails until
+  it is classified.
+
+Guard layout (coordinator decision): each Final-Gate guard module keeps its
+code in `phase0_surface/fg_<name>/tests.rs`, which the production-source
+scanners skip; the scanners are unchanged.
+
+### 11.5 Final trust-surface guard
+
+`p0_002c5c_final_trust_surface_guard_is_complete` grows from 20 rows naming
+31 guards to 45 rows naming 139. Rows with the same regression and source are
+merged below; the guards each adds:
+
+| Regression | Source | Guards added |
+|---|---|---|
+| A caller-chosen destination or peer reached from the desktop | `fg_egress/tests.rs` | `p0_fg_caller_chosen_destinations_are_closed_commands`, `p0_fg_closed_destination_handlers_return_only_their_reason`, `p0_fg_the_desktop_calls_no_caller_chosen_destination_client`, `p0_fg_agent_web_fetch_is_not_egress_authority`, `p0_fg_desktop_tool_calls_reach_no_caller_chosen_destination` |
+| An Ollama address from the interface or a stored record | `fg_egress/tests.rs` | `p0_fg_the_ollama_address_is_backend_configuration`, `p0_fg_caller_ollama_addresses_are_refused_before_anything_connects`, `p0_fg_the_persisted_ollama_address_chooses_no_destination` |
+| A credential on a process command line or in a returned error | `fg_egress/tests.rs` | `p0_fg_no_reachable_credential_reaches_a_curl_command_line`, `p0_fg_perception_takes_no_key_and_sends_nothing`, `p0_fg_messaging_errors_never_carry_the_bot_token` |
+| A helper started or run from PATH | `fg_egress/tests.rs` | `p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it` |
+| An egress closure reason that echoes input | `fg_egress/tests.rs` | `p0_fg_egress_closure_reasons_are_bounded_and_echo_no_input` |
+| A new or changed credential under an ambient key, an unvalidated vault key source, or a token persisted outside an approved secret store | `fg_secrets/tests.rs` | `p0_fg_a_configuration_writes_check_key_material_before_writing`, `p0_fg_a_desktop_config_key_material_comes_from_the_launch_environment`, `p0_fg_interface_saves_keep_the_ollama_endpoint_backend_owned`, `p0_fg_e_vault_key_sources_are_validated_on_what_is_read`, `p0_fg_secret_storage_closure_reason_is_bounded`, `p0_fg_a_deploy_credentials_are_never_newly_stored`, `p0_fg_h_sign_in_flows_persist_no_token`, `p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files`, `p0_fg_h_api_client_collections_are_checked_before_writing`, `p0_fg_a_backend_protection_changes_are_audited`, `p0_fg_a_no_desktop_test_builds_the_real_application_state` |
+| A new or changed credential under an ambient key, an unvalidated vault key source, or a token persisted outside an approved secret store | `kernel/src/config.rs` | `p0_fg_a_new_or_changed_credentials_need_the_operator_key`, `p0_fg_a_legacy_ciphertext_still_reads_and_is_never_rewritten`, `p0_fg_a_an_unreadable_configuration_is_never_overwritten` |
+| A withdrawn standalone binary, alias, recipe or workflow reactivated | `fg_standalone/tests.rs` | `p0_fg_standalone_every_binary_target_is_inventoried`, `p0_fg_standalone_every_example_target_is_inventoried`, `p0_fg_standalone_no_alias_reaches_a_withdrawn_entry`, `p0_fg_standalone_only_the_desktop_embeds_nexus_code`, `p0_fg_standalone_computer_use_is_not_re_exposed`, `p0_fg_standalone_every_recipe_is_inventoried`, `p0_fg_standalone_no_workflow_ships_a_standalone_binary`, `p0_fg_standalone_every_bench_target_is_inventoried`, `p0_fg_standalone_withdrawn_packages_run_no_other_build_script`, `p0_fg_standalone_readme_names_every_withdrawn_binary`, `p0_fg_standalone_gitlab_includes_are_recognized`, `p0_fg_standalone_shipping_recognizers_catch_probes` |
+| A withdrawn standalone binary, alias, recipe or workflow reactivated | `benchmarks/conductor-bench/tests/phase0_withdrawal.rs` | `p0_bench_every_withdrawn_benchmark_invocation_is_withdrawn`, `p0_bench_withdrawn_entries_and_package_targets_are_pinned`, `p0_bench_docs_describe_the_withdrawn_benchmarks_as_withdrawn` |
+| An unbounded resource surface reachable from the interface | `fg_reliability/tests.rs` | `p0_fg_k_approved_limits_are_pinned`, `p0_fg_k_stress_persona_count_is_refused_outside_its_bound`, `p0_fg_k_parallel_simulation_count_is_refused_outside_its_bound`, `p0_fg_k_dilated_session_iterations_are_refused_outside_their_bound`, `p0_fg_k_agent_schedules_fire_at_most_once_per_minute`, `p0_fg_k_a_scheduled_tick_never_overlaps_the_agents_running_loop`, `p0_fg_k_the_frontend_error_command_uses_the_bounded_log`, `p0_fg_k_build_records_outside_the_bounds_are_refused`, `p0_fg_k_adversarial_rounds_are_refused_outside_their_bound`, `p0_fg_k_temporal_fork_limits_are_refused_and_never_stored`, `p0_fg_k_an_older_loops_exit_keeps_a_newer_loops_cancellation_entry`, `p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database` |
+| An unbounded resource surface reachable from the interface | `fg_approval/tests.rs` | `p0_fg_k_simulation_and_arena_bounds_precede_any_work`, `p0_fg_manifest_schedules_are_checked_before_any_state_change` |
+| An unbounded resource surface reachable from the interface | `commands/cognitive/scheduled_tests.rs` | `p0_fg_sub_minute_manifest_schedules_fail_create_and_start` |
+| A caller's boolean, name or IPC call treated as human approval | `commands/cognitive/scheduled_tests.rs` | `p0_fg_scheduled_ticks_refuse_a_transcendent_agent_before_any_state_change` |
+| An unbounded resource surface reachable from the interface | `lib_tests.rs` | `p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call`, `p0_fg_adversarial_session_rounds_are_bounded_before_any_work`, `p0_fg_refused_manifest_schedules_fail_create_and_start` |
+| A closed capability-measurement route reopened, or a provider key sent to another provider's endpoint | `fg_approval/tests.rs` | `p0_fg_c5_ab_validation_route_is_closed_before_any_input`, `p0_fg_c5_measurement_clients_take_only_the_groq_key`, `p0_fg_c5_desktop_reaches_only_in_memory_measurement`, `p0_fg_source_lists_follow_their_directories`, `p0_fg_directory_guards_read_their_directories` |
+| A closed capability-measurement route reopened, or a provider key sent to another provider's endpoint | `crates/nexus-capability-measurement/src/evaluation/nim_client.rs` | `p0_fg_groq_client_key_never_falls_back_to_another_provider` |
+| A caller's boolean, name or IPC call treated as human approval | `fg_approval/tests.rs` | `p0_fg_g_transcendent_agents_are_refused_before_any_state_change`, `p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first`, `p0_fg_g_enabled_warden_review_denies_without_any_lookup`, `p0_fg_g_l6_checks_use_the_named_bound`, `p0_fg_g_caller_asserted_approval_commands_only_deny`, `p0_fg_g_consent_decisions_record_no_caller_identity`, `p0_fg_g_self_improvement_acceptance_is_recorded_truthfully`, `p0_fg_g_self_improvement_report_counts_only_applied_changes`, `p0_fg_g_no_actuator_reads_the_hitl_approval_flag` |
+| A caller's boolean, name or IPC call treated as human approval | `lib_tests.rs` | `p0_fg_transcendent_creation_is_refused_and_changes_nothing`, `p0_fg_transcendent_activation_is_refused_and_changes_nothing`, `p0_fg_transcendent_approval_is_refused_and_changes_nothing`, `p0_fg_stored_transcendent_records_are_not_registered_and_stay_stored`, `p0_fg_startup_registers_no_transcendent_agent_on_any_run`, `p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent`, `p0_fg_enabled_warden_review_denies_and_no_stand_in_can_allow`, `p0_fg_stored_levels_above_l6_count_as_transcendent`, `p0_fg_transcendent_check_matches_every_spelling_of_a_stored_id`, `p0_fg_transcendent_resume_is_refused_and_changes_nothing`, `p0_fg_desktop_consent_resolutions_record_the_interface_label`, `p0_fg_desktop_approvals_do_not_reach_the_kernel_consent_queue`, `p0_fg_self_improvement_acceptance_claims_no_hitl_approval`, `p0_fg_self_improvement_report_counts_no_recorded_acceptance_as_applied` |
+| End of input or a read error taken as approval (E6) | `crates/nexus-computer-use/src/agent/loop_controller.rs` | `test_approval_eof_aborts_instead_of_approving`, `test_approval_read_error_aborts`, `test_approval_modify_requires_an_entered_replacement` |
+| End of input or a read error taken as approval (E6) | `fg_approval/tests.rs` | `p0_fg_g_eof_or_a_read_error_is_never_an_approval` |
+| A non-app origin, frame or navigation reaching an application command | `fg_webview/tests.rs` | `p0_fg_webview_app_manifest_lists_every_registered_command`, `p0_fg_webview_build_script_emits_the_app_manifest`, `p0_fg_webview_capability_is_local_main_only`, `p0_fg_webview_conf_has_restrictive_csp_and_guarded_window`, `p0_fg_webview_privileged_document_loads_no_third_party_resources`, `p0_fg_webview_app_origin_is_resolved_like_tauri_resolves_the_app_url`, `p0_fg_webview_navigation_admits_only_the_exact_app_origin`, `p0_fg_webview_main_window_wires_navigation_and_newwindow_guards`, `p0_fg_webview_boundary_exposes_only_build_main_window`, `p0_fg_webview_app_command_ipc_is_local_main_only`, `p0_fg_webview_comment_stripper_drops_only_comments` |
+| A helper, download or messaging request left unowned or unbounded | `fg_egress/tests.rs` | `p0_fg_the_application_exit_ends_in_flight_model_downloads`, `p0_fg_model_registration_uses_the_authorized_ollama_address`, `p0_fg_messaging_requests_are_bounded_in_time_and_size` |
+
+The guard also requires the registries `CREDENTIAL_CURL_SITES`
+(`fg_egress`) and `BINARY_TARGETS`, `EXAMPLE_TARGETS`, `ALIAS_NEEDLES`,
+`RECIPE_FILES`, `WITHDRAWN_BINARIES`, `BENCH_TARGETS` and
+`PROTOCOLS_BUILD_SCRIPT` (`fg_standalone`).
+
+**Completeness check.** Every `#[test]` in the six Final-Gate guard modules
+(`fg_approval` 18, `fg_egress` 16, `fg_reliability` 12, `fg_secrets` 11,
+`fg_standalone` 12, `fg_webview` 11: 80 guards) must be named in the rows
+above, so a guard cannot be removed, renamed or added unreviewed without
+failing the final guard. Item-level tests elsewhere (the kernel, connector,
+crate and package tests the dossier names) are pinned only where a row names
+them.
+
+### 11.6 Explicit non-claims
+
+- Nothing here is approval. FG1, the Final Gate and Phase Zero are not
+  declared complete; the candidate awaits Architect review.
+- The closure mission adds no filesystem, process or network sandbox, no
+  destination, address or DNS policy, no out-of-band approval, no pairing or
+  peer authentication, and no secret store.
+- Closing new writes does not encrypt anything written earlier.
+- Withdrawing a binary stops no existing deployment, revokes no credential
+  and does not make its library governed.
+- The in-process credential transport is not isolation, and in the desktop
+  build it uses the operating system's trust store and proxy settings, not
+  bundled roots.
+- The resource bounds are per request, not rate limits.
+- The guards cover the named commands, registries, needles and files; they
+  are not a complete call graph.
+- The counts are those of the final closure candidate `d1735577`, the
+  dependency counts included (measured on its lockfiles).
+- Item D keeps non-app documents away from application commands; it does not
+  narrow what the app document itself may call. On Linux neither the ACL nor
+  the navigation guard is sufficient alone (dossier item D).
+
+### 11.7 Corrections to earlier sections, and notes for the documentation audit
+
+Corrections (each earlier section carries a short note pointing here):
+
+- **§1.** Still 804 registered commands. The CSP is no longer `null`, and an
+  app ACL grants the commands only to the `main` window at the app's own
+  origin (item D), so a document at another origin no longer reaches them; a
+  script inside the privileged document still reaches them all.
+- **§5.6 and §7, "prefix-based" egress.** Stale since C5C: `endpoint_admits`
+  compares whole hosts and path segments (§10.2), and schemes and effective
+  ports (§10.10). The closure also removes the external tools' substring
+  denylist and closes the caller-chosen destinations (§11.2, B).
+- **§5.6, curl sites.** 34 invocation sites in 20 files now. The six
+  benchmark curl sites it calls unchanged belonged to benchmarks that are
+  withdrawn.
+- **§5.7, `NexusConfig.security`.** `key_env` must now name
+  `NEXUS_ENCRYPTION_KEY`; the key file is validated on the opened file (Linux,
+  macOS) and refused elsewhere. "Only backend startup (`load_config`) creates
+  the first-run default" is imprecise: only a load of a missing configuration
+  creates it, and an empty file is refused, never replaced.
+- **§7, secrets in curl arguments and PATH helpers.** No longer "unchanged":
+  see dossier items C and I.
+- **§10.6.** J1 is integrated; J2–J5 are withdrawn (18 withdrawn binaries);
+  the desktop still depends on the libraries only.
+- **§10.7.** The ten benchmark process sites (six curl, four `date`) were in
+  five benchmarks that are withdrawn; `BENCHMARK_PROCESS_SITES` is empty.
+- **§10.8.**
+  - IPC commands: 154 closed and 650 open now (§11.3).
+  - "23 commands send a governed-shape request to a caller-chosen
+    destination": the figure was never enumerated, so it cannot be mapped
+    one to one. The families dossier item B named now stand as follows: the
+    eleven `NetworkDestination` commands and `nexus_link_send_model` are
+    closed; `check_ollama`, `pull_ollama_model`, `ensure_ollama`,
+    `chat_with_ollama`, `delete_model` and `run_setup_wizard` accept only the
+    authorized Ollama address; `save_config` refuses a changed Ollama
+    address; `tools_execute` refuses the caller-destination tools;
+    `is_ollama_installed` is closed.
+  - "17 act on an approval delivered over IPC": also never enumerated. The
+    commands that do, and their state now: `approve_consent_request`,
+    `deny_consent_request`, `batch_approve_consents`, `batch_deny_consents`,
+    `review_consent_batch` and `set_agent_review_mode` (open; transcendent
+    requests refused on approval and review-each; fixed label); `swarm_approve` and
+    `swarm_reject` (open; bounded plan, drafts-only Herald);
+    `nx_consent_respond` and `nx_agent_approve` (closed);
+    `self_improve_approve_proposal` and `self_improve_reject_proposal` (open;
+    recorded truthfully); `self_rewrite_apply_patch` (closed);
+    `override_security_block` (open; records a statistic); and the L6 paths of
+    `create_agent` and `start_agent` (refused). That is 16 entries.
+  - `config_user_key` and `EncryptionKey::from_file`: see §11.2.
+  - "Outside the desktop: Shipped": the shipped binaries are withdrawn. The
+    site tables are not recounted.
+- **§10.9.** The final guard's added rows are in §11.5.
+- **§10.10, unresolved Final-Gate items.** Their state on the candidate is
+  in §11.2.
+
+Recorded for the documentation audit (the mission's final documentation
+stage; not changed here):
+
+- `docs/architecture/decisions/0004_credential_vault_facade.md` says
+  `key_env` is honoured, that `EncryptionKey::from_config` also powers the
+  configuration file's encryption (the configuration has its own key
+  derivation, item A), and describes a first-install bootstrap
+  (`ensure_master_key_available`) that does not exist in the code.
+- `persistence/src/lib.rs`: the `list_secrets` documentation names a
+  `vault_list` Tauri command that is not registered.
+- `.github/workflows/ci-fast-local.yml`: the comment on the CUDA mask blames
+  "the runner's NVIDIA driver"; the failure came from a driver and library
+  mismatch together with the torch probe (dossier item K).
+- `deny.toml`: the RUSTSEC-2026-0097 note ("no semver-compatible bump")
+  contradicts the advisory's fixed versions, and its RUSTSEC-2023-0071 (rsa)
+  ignore, like those in `audit.toml` and `.gitlab-ci.yml`, is stale since rsa
+  left the lockfile.
+- `voice/`: `python -m pytest` runs the repository's unittest shim
+  (`voice/pytest.py`), not pytest.
+- Documents that still describe withdrawn surfaces: `docs/NIST_800_53_MAPPING.md`
+  (PE-17 cites Docker and Helm deployment), `docs/ENTERPRISE_DEPLOYMENT.md`
+  (a Docker Compose check), `docs/SECURITY_HARDENING.md` (`nexus` CLI
+  commands), the CLI layer and `nexus-cli` row of `docs/ARCHITECTURE.md`,
+  and the SDK READMEs (`sdk/python`, `sdk/typescript`), whose examples use
+  `http://localhost:3000`, the withdrawn J1 server's former port.
+- `.github/MIRROR_ONLY.md` says GitHub is a mirror and CI runs on GitLab;
+  the checkpoint evidence comes from the GitHub workflows.
