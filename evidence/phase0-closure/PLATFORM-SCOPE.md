@@ -3,8 +3,10 @@
 Owner decision, 2026-09-29: the Phase Zero active target is **Linux only**.
 Windows and macOS work is deferred to future dedicated portability stages.
 Windows/macOS code and tests are preserved (not deleted or weakened), and
-the Windows/macOS jobs and harness steps remain in `ci.yml`; no further
-hosted cross-platform run is dispatched in this stage.
+the Windows/macOS jobs and harness steps were preserved, and in
+P0-LINUX-FINAL-R1 moved unchanged into the manual-only
+`.github/workflows/ci-portability.yml` (ci.yml is the Linux-only final gate);
+no hosted cross-platform run is dispatched in this stage.
 
 ## What the one hosted run showed (run `36559976709`, #109, commit `9ed607f8`)
 
