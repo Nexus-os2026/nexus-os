@@ -1,14 +1,16 @@
 name: NEXUS OS Fast Local CI
 
-# Fast development validation on the self-hosted Nexus runner. It runs the
-# Linux-applicable checks of the final gate (ci.yml) with the same commands:
-# Rust formatting, clippy and workspace tests, the packaged Builder toolchain
+# Primary Linux development gate, on the self-hosted Nexus runner. It runs the
+# checks of the Linux Phase Zero final gate (ci.yml) with the same commands:
+# Rust formatting, clippy and workspace tests, the live webview boundary
+# harness (dev and release profiles), the packaged Builder toolchain
 # (trusted-entry tests, verification and governed launch), the frontend, and
 # the Python voice tests.
 #
 # This workflow is for speed. It is not the final evidence: the GitHub-hosted
-# Linux, Windows and macOS gate in ci.yml is, run once on the candidate the
-# Architect approves.
+# Linux Phase Zero gate in ci.yml is, run once on the candidate the Architect
+# approves. The active Phase Zero target is Linux only; Windows and macOS
+# validation is deferred (ci-portability.yml, manual only).
 #
 # Caches that are reused:
 # - the runner's installed Rust 1.94.0 toolchain, called directly (never

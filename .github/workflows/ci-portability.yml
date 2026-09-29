@@ -1,26 +1,24 @@
-name: NEXUS OS CI
+name: NEXUS OS Deferred Windows/macOS Portability
 
-# Linux Phase Zero final gate (GitHub-hosted): Linux Rust (fmt, clippy,
-# workspace tests, the live webview boundary harness in the dev and release
-# profiles, the packaged Builder toolchain and governed launch), frontend and
-# Python voice. The active Phase Zero target is Linux only; Windows and macOS
-# validation is deferred and preserved, manual-only, in ci-portability.yml.
+# DEFERRED WINDOWS/MACOS PORTABILITY. The active Phase Zero target is Linux
+# only; ci.yml is the final gate. This workflow preserves, unchanged, the
+# Windows and macOS validation (workspace tests, the live webview boundary
+# harness in the dev and release profiles, the packaged Builder toolchain and
+# governed launch) for a future dedicated portability stage. It runs only when
+# dispatched manually; it is not part of the Phase Zero gate, and its known
+# Windows/macOS failures are not repaired in Phase Zero.
 #
-# Run it explicitly, once, on the Architect-approved candidate, from a branch
-# whose head is that candidate:
-#   gh workflow run ci.yml --ref <branch> -f candidate_sha=<full 40-char SHA>
+# When a portability stage is authorised, run it explicitly on the approved
+# candidate, from a branch whose head is that candidate:
+#   gh workflow run ci-portability.yml --ref <branch> -f candidate_sha=<full 40-char SHA>
 # Every job first checks, before checkout, that the candidate is a full
 # lowercase SHA and equals both the commit the run was dispatched for
 # (GITHUB_SHA) and the workflow revision executing the gate
-# (GITHUB_WORKFLOW_SHA). A push to main uses the pushed commit the same way.
+# (GITHUB_WORKFLOW_SHA).
 # Every job then checks out exactly that commit and fails if it tested
 # anything else. These checks establish revision identity only; they do not
-# approve or integrate anything. Day-to-day development validation runs on
-# the self-hosted runner (ci-fast-local.yml); it does not replace this gate.
+# approve or integrate anything.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       candidate_sha:
@@ -32,8 +30,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test-linux:
-    runs-on: ubuntu-latest
+  test-macos:
+    runs-on: macos-latest
     steps:
       # Selects the one candidate this run may test, before checkout. The raw
       # dispatch input only reaches the shell as data, through the
@@ -105,44 +103,18 @@ jobs:
             echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libglib2.0-dev \
-            libgtk-3-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev \
-            glib-2.0 \
-            pkg-config \
-            xvfb
-
       - name: Install Rust 1.94.0
         uses: dtolnay/rust-toolchain@1.94.0
-        with:
-          components: rustfmt, clippy
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
-      # Privacy regressions exercise both real search backends.
       - name: Install ripgrep 14.1.1 and verify search backends
         shell: bash
         run: |
           cargo install ripgrep --version 14.1.1 --locked
           rg --version
           grep --version
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Run clippy
-        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
       - name: Run tests
         run: cargo test --workspace --locked
@@ -155,7 +127,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          xvfb-run -a -s "-screen 0 1280x1024x24" cargo test -p nexus-desktop-backend --locked --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live.log
+          cargo test -p nexus-desktop-backend --locked --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live.log
           grep -q '^test webview_boundary_live ... ok$' webview-boundary-live.log
 
       # P0-002C4D2: assemble this target's packaged Builder toolchain, run the
@@ -171,7 +143,7 @@ jobs:
 
       - name: Assemble Nexus Builder toolchain
         shell: bash
-        run: node packaging/builder-toolchain/scripts/assemble.mjs --target x86_64-unknown-linux-gnu --out app/src-tauri/builder-toolchain
+        run: node packaging/builder-toolchain/scripts/assemble.mjs --target aarch64-apple-darwin --out app/src-tauri/builder-toolchain
 
       - name: Trusted Builder entry tests (packaged Node)
         shell: bash
@@ -193,12 +165,12 @@ jobs:
         run: |
           set -o pipefail
           (cd app && npm ci && npm run build)
-          xvfb-run -a -s "-screen 0 1280x1024x24" cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live-release.log
+          cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live-release.log
           grep -q '^\[live\] tauri profile: release' webview-boundary-live-release.log
           grep -q '^test webview_boundary_live ... ok$' webview-boundary-live-release.log
 
-  test-frontend:
-    runs-on: ubuntu-latest
+  test-windows:
+    runs-on: windows-latest
     steps:
       # Selects the one candidate this run may test, before checkout. The raw
       # dispatch input only reaches the shell as data, through the
@@ -270,121 +242,70 @@ jobs:
             echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Setup Node.js
+      - name: Install Rust 1.94.0
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install ripgrep 14.1.1 and verify search backends
+        shell: bash
+        run: |
+          cargo install ripgrep --version 14.1.1 --locked
+          rg --version
+          grep --version
+          # Expose Git for Windows grep/which to the native Cargo test process.
+          cygpath -w /usr/bin >> "$GITHUB_PATH"
+
+      - name: Run tests
+        run: cargo test --workspace --locked
+
+      # P0-FINAL-GATE item D: the live native webview boundary harness (real
+      # Wry runtime, production context and main-window builder, dev profile):
+      # navigation and redirects to a non-app origin are refused, and a
+      # non-app document gets no application command.
+      - name: Live webview boundary harness (item D)
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p nexus-desktop-backend --locked --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live.log
+          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live.log
+
+      # P0-002C4D2: assemble this target's packaged Builder toolchain, run the
+      # trusted-entry tests with its own Node, and verify the real assembled
+      # bytes through the embedded manifest (packaged backend test build).
+      # P0-002C4C3: the same packaged build runs the governed dev-server launch
+      # end to end (assembled Node, embedded manifest, Nexus entry, permission
+      # model, sealed spawn, lifecycle ownership and the loopback preview).
+      - name: Setup Node.js 24.21.0 (Builder toolchain assembly)
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: 24.21.0
 
-      - name: Install frontend dependencies
-        run: cd app && npm ci
+      - name: Assemble Nexus Builder toolchain
+        shell: bash
+        run: node packaging/builder-toolchain/scripts/assemble.mjs --target x86_64-pc-windows-msvc --out app/src-tauri/builder-toolchain
 
-      - name: TypeScript check
-        run: cd app && npx tsc --noEmit
+      - name: Trusted Builder entry tests (packaged Node)
+        shell: bash
+        run: app/src-tauri/builder-toolchain/node/node.exe --test packaging/builder-toolchain/test/entry.test.mjs
 
-      - name: Run frontend tests
-        run: cd app && npm test
-
-      - name: Build frontend
-        run: cd app && npx vite build
-
-  test-python:
-    runs-on: ubuntu-latest
-    steps:
-      # Selects the one candidate this run may test, before checkout. The raw
-      # dispatch input only reaches the shell as data, through the
-      # environment; it is never interpolated or evaluated.
-      - name: Select and validate the candidate commit
-        id: candidate
+      - name: Packaged Builder toolchain verification and governed launch
         shell: bash
         env:
-          RAW_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          NEXUS_BUILDER_TOOLCHAIN: packaged
         run: |
-          set -euo pipefail
-          export LC_ALL=C
-          reject() {
-            echo "::error::$1"
-            exit 1
-          }
-          case "${GITHUB_EVENT_NAME:-}" in
-            workflow_dispatch)
-              candidate="${RAW_CANDIDATE_SHA-}"
-              ;;
-            push)
-              if [[ "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
-                reject "push validation runs only for refs/heads/main"
-              fi
-              candidate="${GITHUB_SHA:-}"
-              ;;
-            *)
-              reject "unsupported event for the final validation gate"
-              ;;
-          esac
-          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
-            reject "the candidate must be a full 40-character lowercase commit SHA"
-          fi
-          if [[ "$candidate" != "${GITHUB_SHA:-}" ]]; then
-            reject "the candidate is not the commit this run is for (GITHUB_SHA)"
-          fi
-          if [[ "$candidate" != "${GITHUB_WORKFLOW_SHA:-}" ]]; then
-            reject "the candidate is not the workflow revision running this gate (GITHUB_WORKFLOW_SHA)"
-          fi
-          echo "candidate_sha=$candidate" >> "$GITHUB_OUTPUT"
-          echo "Validated candidate: $candidate"
+          set -o pipefail
+          cargo test -p nexus-desktop-backend --locked --lib -- p0_002c4d2_assembled_ p0_002c4c3_packaged_ 2>&1 | tee packaged-toolchain.log
+          grep -q 'test result: ok. 13 passed' packaged-toolchain.log
 
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.candidate.outputs.candidate_sha }}
-
-      - name: Verify the exact candidate commit
+      # P0-FINAL-GATE item D: the same harness on tauri's release path
+      # (custom-protocol build with the embedded frontend and production CSP).
+      - name: Live webview boundary harness, release profile (item D)
         shell: bash
-        env:
-          CANDIDATE_SHA: ${{ steps.candidate.outputs.candidate_sha }}
         run: |
-          set -euo pipefail
-          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::candidate_sha must be a full 40-character lowercase commit SHA"
-            exit 1
-          fi
-          tested="$(git rev-parse HEAD)"
-          if [[ "$tested" != "$CANDIDATE_SHA" ]]; then
-            echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
-            exit 1
-          fi
-          echo "Validated candidate: $CANDIDATE_SHA"
-          echo "Tested commit: $tested"
-          echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
-          {
-            echo "Validated candidate: \`$CANDIDATE_SHA\`"
-            echo "Tested commit: \`$tested\`"
-            echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libglib2.0-dev \
-            libgtk-3-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev \
-            glib-2.0 \
-            pkg-config
-
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install voice dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install faster-whisper openwakeword silero-vad piper-tts pytest
-
-      - name: Run Python voice tests
-        run: cd voice && python -m pytest -v
+          set -o pipefail
+          (cd app && npm ci && npm run build)
+          cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live-release.log
+          grep -q '^\[live\] tauri profile: release' webview-boundary-live-release.log
+          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live-release.log
