@@ -1092,6 +1092,55 @@ fn p0_fg_source_lists_follow_their_directories() {
     );
 }
 
+/// P0-FINAL-GATE (review W7): the two directory-driven guards keep reading
+/// their directories:
+/// - the C5 and actuator source sets are exactly `sources_including` over
+///   their directories;
+/// - `sources_including` reads through the directory walker;
+/// - the C5 and actuator guards take their sources from these sets;
+/// - no compile-time source list or macro is left.
+///
+/// Reverting bd5ba357's walker, or narrowing a set to a fixed list or
+/// count, fails here. This file reads itself for that.
+#[test]
+fn p0_fg_directory_guards_read_their_directories() {
+    let own = include_str!("tests.rs");
+    let (params, measurement) = fn_shape(own, "measurement_sources");
+    assert_eq!(params, "()");
+    assert_eq!(
+        measurement,
+        concat!(
+            "sources_including(\"crates/nexus-capability-measurement/src\",",
+            "&[\"lib.rs\",\"tauri_commands.rs\",\"evaluation/nim_client.rs\"])",
+        )
+    );
+    let (params, actuators) = fn_shape(own, "actuator_sources");
+    assert_eq!(params, "()");
+    assert_eq!(
+        actuators,
+        "sources_including(\"kernel/src/actuators\",&[\"mod.rs\",\"shell.rs\",\"types.rs\"])"
+    );
+    let (_, including) = fn_shape(own, "sources_including");
+    assert!(
+        including.starts_with("letsources=rust_sources_under(&workspace_dir(relative));"),
+        "{including}"
+    );
+    let (_, c5) = fn_shape(own, "p0_fg_c5_measurement_clients_take_only_the_groq_key");
+    assert!(c5.starts_with("letsources=measurement_sources();"), "{c5}");
+    let (_, hitl) = fn_shape(own, "p0_fg_g_no_actuator_reads_the_hitl_approval_flag");
+    assert!(
+        hitl.starts_with("letactuators=actuator_sources();"),
+        "{hitl}"
+    );
+    // The needles are assembled here so that this test does not match itself.
+    for needle in [
+        ["macro", "_rules!"].concat(),
+        ["include_str!(", "concat!("].concat(),
+    ] {
+        assert!(!own.contains(&needle), "{needle}");
+    }
+}
+
 /// P0-FINAL-GATE (item K, cross-stream request from stream 6): both
 /// resource-heavy consent-module commands check their caller-chosen amount
 /// first. A parallel simulation refuses a variant count outside 1..=10 before
