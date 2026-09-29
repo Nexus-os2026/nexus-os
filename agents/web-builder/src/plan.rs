@@ -276,11 +276,33 @@ pub fn load_plan_artefacts(project_dir: &Path) -> Option<BuildPlan> {
 
 // ─── Budget Recording ────────────────────────────────────────────────────────
 
+/// Longest standard-error line reporting a plan cost the budget store
+/// refused, in bytes.
+const PLAN_COST_REPORT_MAX_BYTES: usize = 512;
+
 /// Record the plan generation cost in the budget tracker.
+///
+/// The project name comes from the model's product brief, so it is first
+/// made to fit the store's text bound (see [`plan_record_name`]): a long or
+/// unusual name never costs the record, and with it the spend. A record the
+/// store still refuses (a full history, a file it cannot read, no identity
+/// home) is reported on standard error in one bounded line, never dropped
+/// silently.
 pub fn record_plan_cost(result: &PlanResult, project_name: &str) {
-    let tracker = BudgetTracker::new();
+    record_plan_cost_with(&BudgetTracker::new(), result, project_name, |report| {
+        eprintln!("{report}")
+    });
+}
+
+/// [`record_plan_cost`] with the tracker and the report sink given.
+fn record_plan_cost_with(
+    tracker: &BudgetTracker,
+    result: &PlanResult,
+    project_name: &str,
+    report: impl FnOnce(&str),
+) {
     let record = crate::budget::BuildRecord {
-        project_name: format!("Plan: {project_name}"),
+        project_name: plan_record_name(project_name),
         model_name: HAIKU_MODEL.to_string(),
         provider: "anthropic".to_string(),
         input_tokens: result.input_tokens,
@@ -291,7 +313,31 @@ pub fn record_plan_cost(result: &PlanResult, project_name: &str) {
         checkpoint_id: String::new(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     };
-    let _ = tracker.record_build(record);
+    if let Err(reason) = tracker.record_build(record) {
+        report(&plan_cost_report(&reason));
+    }
+}
+
+/// The budget record's name for a plan: `Plan: <name>` without control
+/// characters, cut on a character boundary to the store's text bound
+/// (`MAX_BUDGET_TEXT_BYTES`).
+fn plan_record_name(project_name: &str) -> String {
+    let name: String = format!("Plan: {project_name}")
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect();
+    name[..name.floor_char_boundary(crate::budget::MAX_BUDGET_TEXT_BYTES)].to_string()
+}
+
+/// One standard-error line for a refused plan cost: control characters
+/// become spaces, and the line is cut on a character boundary to
+/// `PLAN_COST_REPORT_MAX_BYTES`.
+fn plan_cost_report(reason: &str) -> String {
+    let line: String = format!("builder budget: plan cost not recorded: {reason}")
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    line[..line.floor_char_boundary(PLAN_COST_REPORT_MAX_BYTES)].to_string()
 }
 
 // ─── Prompt Augmentation ─────────────────────────────────────────────────────
@@ -862,5 +908,153 @@ mod tests {
         assert!(spec.contains("hero"));
         assert!(spec.contains("pricing"));
         assert!(spec.contains("data-nexus-section"));
+    }
+
+    // ── P0-FG (item K): plan costs within the budget store's bounds ──
+
+    fn plan_result(cost_usd: f64) -> PlanResult {
+        PlanResult {
+            plan: BuildPlan {
+                product_brief: ProductBrief {
+                    project_name: "Synthetic".into(),
+                    project_type: String::new(),
+                    target_audience: String::new(),
+                    sections: Vec::new(),
+                    design_direction: String::new(),
+                    tone: String::new(),
+                    template_suggestion: String::new(),
+                    estimated_cost: String::new(),
+                    estimated_time: String::new(),
+                },
+                acceptance_criteria: AcceptanceCriteria {
+                    must_have: Vec::new(),
+                    must_not_have: Vec::new(),
+                    constraints: Vec::new(),
+                },
+            },
+            input_tokens: 200,
+            output_tokens: 500,
+            cost_usd,
+            elapsed_seconds: 1.5,
+        }
+    }
+
+    fn budget_dir() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("nexus-plan-budget-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// A model-supplied project name that is long or holds control
+    /// characters is made to fit the store's text bound, so the plan's cost
+    /// is recorded and counted as spend. Such a record used to be refused and
+    /// dropped silently.
+    #[test]
+    fn p0_fg_k_plan_costs_are_recorded_whatever_the_project_name() {
+        let dir = budget_dir();
+        let tracker = BudgetTracker::with_path(dir.join("budget.json"));
+        let names = [
+            // 300 bytes of three-byte characters.
+            "€".repeat(100),
+            "Line\nbreak\ttab\u{7f}del\u{85}next".to_string(),
+            // "Plan: " and 250 bytes: the bound exactly.
+            "x".repeat(250),
+            "x".repeat(251),
+            String::new(),
+        ];
+        let mut reports = Vec::new();
+        for name in &names {
+            record_plan_cost_with(&tracker, &plan_result(0.25), name, |report| {
+                reports.push(report.to_string())
+            });
+        }
+        assert!(reports.is_empty(), "{reports:?}");
+
+        let data = tracker.load();
+        let recorded: Vec<String> = data
+            .builds
+            .iter()
+            .map(|build| build.project_name.clone())
+            .collect();
+        assert_eq!(
+            recorded,
+            [
+                format!("Plan: {}", "€".repeat(83)),
+                "Plan: Linebreaktabdelnext".to_string(),
+                format!("Plan: {}", "x".repeat(250)),
+                format!("Plan: {}", "x".repeat(250)),
+                "Plan: ".to_string(),
+            ]
+        );
+        for build in &data.builds {
+            assert!(build.project_name.len() <= crate::budget::MAX_BUDGET_TEXT_BYTES);
+            build.validate().unwrap();
+        }
+        let spent = data
+            .budgets
+            .iter()
+            .find(|budget| budget.provider == "anthropic")
+            .unwrap()
+            .spent_usd;
+        assert!((spent - 1.25).abs() < 1e-9, "{spent}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A plan cost the store still refuses (a full history, a file that is
+    /// not budget data) is reported in one bounded line instead of being
+    /// dropped silently, and the store is left as it was.
+    #[test]
+    fn p0_fg_k_a_refused_plan_cost_is_reported() {
+        use crate::budget::{BudgetData, BuildRecord, MAX_BUILD_HISTORY};
+        let dir = budget_dir();
+        let path = dir.join("budget.json");
+        let full = BudgetData {
+            builds: (0..MAX_BUILD_HISTORY)
+                .map(|i| BuildRecord {
+                    project_name: format!("proj-{i}"),
+                    model_name: "claude-haiku".into(),
+                    provider: "anthropic".into(),
+                    input_tokens: 1,
+                    output_tokens: 1,
+                    cost_usd: 0.01,
+                    elapsed_seconds: 1.0,
+                    lines_generated: 0,
+                    checkpoint_id: String::new(),
+                    timestamp: "2026-09-29T00:00:00Z".into(),
+                })
+                .collect(),
+            ..BudgetData::default()
+        };
+        for (contents, reason) in [
+            (
+                serde_json::to_string(&full).unwrap(),
+                "build history is full",
+            ),
+            ("{ not budget data".to_string(), "not valid budget data"),
+        ] {
+            fs::write(&path, &contents).unwrap();
+            let mut reports = Vec::new();
+            record_plan_cost_with(
+                &BudgetTracker::with_path(path.clone()),
+                &plan_result(0.25),
+                "Refused",
+                |report| reports.push(report.to_string()),
+            );
+            assert_eq!(reports.len(), 1, "{reason}");
+            assert!(
+                reports[0].starts_with("builder budget: plan cost not recorded: "),
+                "{}",
+                reports[0]
+            );
+            assert!(reports[0].contains(reason), "{}", reports[0]);
+            assert_eq!(fs::read_to_string(&path).unwrap(), contents);
+        }
+
+        // A long reason with control characters still makes one bounded line.
+        let line = plan_cost_report(&format!("first\nsecond\r{}", "z".repeat(10_000)));
+        assert!(line.len() <= PLAN_COST_REPORT_MAX_BYTES);
+        assert!(line.starts_with("builder budget: plan cost not recorded: first second "));
+        assert!(!line.chars().any(char::is_control));
+        let _ = fs::remove_dir_all(&dir);
     }
 }
