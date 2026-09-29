@@ -187,7 +187,7 @@ fn p0_fg_a_backend_protection_changes_are_audited() {
             &new,
             &[
                 "letaudit=Arc::new(Mutex::new(AuditTrail::new()));",
-                "nexus_kernel::config::install_protection_recorder(config_protection_recorder(audit.clone(),db.clone(),));",
+                "#[cfg(not(test))]nexus_kernel::config::install_protection_recorder(config_protection_recorder(audit.clone(),db.clone(),));",
                 "nexus_kernel::startup::run_migrations(",
             ],
         ),
@@ -197,6 +197,51 @@ fn p0_fg_a_backend_protection_changes_are_audited() {
         compact(&body(&lib, "fn log_event(")),
         "append_audit_event(&self.audit,&self.db,agent_id,event_type,payload);"
     );
+}
+
+/// Final Gate item A (stream 4 review): no desktop test builds the real
+/// application state. `AppState::new()` opens the identity home's database,
+/// loads the real configuration and runs the credential migration, which can
+/// re-save that configuration; outside a test build it also binds the
+/// process-wide configuration protection recorder to that database. Tests
+/// use `AppState::new_in_memory()`. Every desktop source other than `lib.rs`
+/// (whose `run()` is the one production caller) is scanned, except this
+/// guard file, which names the constructor.
+#[test]
+fn p0_fg_a_no_desktop_test_builds_the_real_application_state() {
+    fn walk(dir: &std::path::Path, out: &mut Vec<(std::path::PathBuf, String)>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                let text = std::fs::read_to_string(&path).unwrap();
+                out.push((path, text));
+            }
+        }
+    }
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    walk(&src, &mut files);
+    assert!(files.len() > 50, "desktop sources not found");
+    let this_guard = src
+        .join("phase0_surface")
+        .join("fg_secrets")
+        .join("tests.rs");
+    let mut scanned = 0;
+    for (path, text) in &files {
+        if *path == src.join("lib.rs") || *path == this_guard {
+            continue;
+        }
+        scanned += 1;
+        assert!(
+            !text.contains("AppState::new()"),
+            "{} builds the real application state; use AppState::new_in_memory()",
+            path.display()
+        );
+    }
+    assert!(scanned > 50);
+    assert!(files.iter().any(|(path, _)| path.ends_with("lib_tests.rs")));
 }
 
 /// Final Gate item A: the desktop's configuration writer takes key
