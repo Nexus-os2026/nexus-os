@@ -1099,6 +1099,115 @@ fn p0_fg_messaging_requests_are_bounded_in_time_and_size() {
     server.join().unwrap();
 }
 
+/// Final Gate decisions C and E: the Gmail and Outlook commands build every
+/// client with `email_client` (no redirect, no Referer, 30 s total) and read
+/// every body through the capped readers; no default client and no
+/// unbounded `text()` remain, on LF and CRLF sources.
+#[test]
+fn p0_r1_email_requests_are_bounded_and_follow_no_redirect() {
+    use crate::commands::apps::{
+        email_body, email_client, messaging_transport_error, EMAIL_REQUEST_TIMEOUT,
+        MAX_EMAIL_RESPONSE_BYTES,
+    };
+    assert_eq!(EMAIL_REQUEST_TIMEOUT, std::time::Duration::from_secs(30));
+    assert_eq!(MAX_EMAIL_RESPONSE_BYTES, 16 * 1024 * 1024);
+
+    // A redirect is returned as its status; the target is never contacted.
+    let (target, target_url) = quiet_listener();
+    for code in [
+        "301 Moved Permanently",
+        "307 Temporary Redirect",
+        "308 Permanent Redirect",
+    ] {
+        let (base, server) = serve_answer(
+            format!("HTTP/1.1 {code}\r\nLocation: {target_url}/collect\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
+            Vec::new(),
+            None,
+        );
+        let status = crate::block_on_async(async {
+            email_client()
+                .unwrap()
+                .post(format!("{base}/gmail/v1/users/me/messages/send"))
+                .bearer_auth("fg-email-token")
+                .body("raw message")
+                .send()
+                .await
+                .map(|response| response.status().as_u16())
+                .map_err(|e| messaging_transport_error("send", e))
+        });
+        assert_eq!(status.map(|s| s.to_string()), Ok(code[..3].to_string()));
+        server.join().unwrap();
+    }
+    assert_never_contacted(&target);
+
+    // A body declared past the cap is refused without being read.
+    let (base, server) = serve_answer(
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            MAX_EMAIL_RESPONSE_BYTES + 1
+        ),
+        Vec::new(),
+        None,
+    );
+    let result = crate::block_on_async(async {
+        let response = email_client()
+            .unwrap()
+            .get(format!("{base}/gmail/v1/users/me/messages"))
+            .send()
+            .await
+            .map_err(|e| messaging_transport_error("list", e))?;
+        email_body(response).await
+    });
+    assert_eq!(
+        result,
+        Err(format!(
+            "body: the response is larger than {MAX_EMAIL_RESPONSE_BYTES} bytes"
+        ))
+    );
+    server.join().unwrap();
+
+    let apps = include_str!("../../commands/apps.rs");
+    assert_email_clients_are_bounded(apps);
+    assert_email_clients_are_bounded(&crlf(apps));
+}
+
+/// The source side of the guard above, for either line ending.
+fn assert_email_clients_are_bounded(apps: &str) {
+    let apps = lf(apps);
+    let start = apps.find("pub(crate) fn email_fetch_messages(").unwrap();
+    let end = apps.find("pub(crate) fn email_disconnect(").unwrap();
+    let email = &apps[start..end];
+    assert_eq!(
+        email.matches("email_client()?").count(),
+        7,
+        "every email request"
+    );
+    for unbounded in [
+        "reqwest::Client::new()",
+        "Client::builder()",
+        ".text()",
+        ".json()",
+        ".bytes()",
+    ] {
+        assert!(!email.contains(unbounded), "email: {unbounded}");
+    }
+    // Only JSON parse and serialize errors are formatted as they are; request
+    // errors go through `messaging_transport_error`, which drops the URL.
+    for (at, _) in email.match_indices("{e}\"))") {
+        let before = &email[at.saturating_sub(24)..at];
+        assert!(
+            before.ends_with("parse: ") || before.ends_with("serialize: "),
+            "email formats a raw request error: {before}"
+        );
+    }
+    let helper = apps.find("pub(crate) fn email_client(").unwrap();
+    let body = &apps[helper..apps[helper..].find("\n}\n").map(|at| helper + at).unwrap()];
+    assert!(
+        body.contains("messaging_client_with(EMAIL_REQUEST_TIMEOUT)"),
+        "{body}"
+    );
+}
+
 // ── Final Gate item C: credential-bearing process arguments ──────────────
 //
 // The production-text reader below is the same algorithm as the one in

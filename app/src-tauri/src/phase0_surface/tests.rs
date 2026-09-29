@@ -3209,6 +3209,7 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
                 "p0_fg_the_application_exit_ends_in_flight_model_downloads",
                 "p0_fg_model_registration_uses_the_authorized_ollama_address",
                 "p0_fg_messaging_requests_are_bounded_in_time_and_size",
+                "p0_r1_email_requests_are_bounded_and_follow_no_redirect",
             ][..],
         ),
         (
