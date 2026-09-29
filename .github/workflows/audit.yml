@@ -1,11 +1,18 @@
 name: NEXUS OS Security Audit
 
+# Scans main on every push and weekly (new advisories appear without code
+# changes), and any ref on request. Closure candidates are scanned by the
+# Linux security-audit job in ci.yml, which runs the same gate.
 on:
   push:
     branches:
       - main
   schedule:
     - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,54 +24,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libglib2.0-dev \
-            libgtk-3-dev \
-            libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev \
-            glib-2.0 \
-            pkg-config
-
-      - name: Install Rust stable
+      - name: Install rustup (rust-toolchain.toml selects the toolchain)
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
+      - name: Fetch fresh advisory databases
+        run: rm -rf ~/.cargo/advisory-db ~/.cargo/advisory-dbs
 
-      - name: Install cargo-audit (pinned)
-        run: cargo install cargo-audit --version 0.22.0 --locked --force
-
-      - name: Install cargo-deny (pinned)
-        run: cargo install cargo-deny --version 0.19.0 --locked --force
-
-      - name: Refresh advisory caches
-        run: |
-          rm -rf ~/.cargo/advisory-db
-          rm -rf ~/.cargo/advisory-dbs
-
-      - name: Print tool versions
-        run: |
-          rustc -V
-          cargo -V
-          cargo audit -V
-          cargo deny -V
-
-      - name: Run cargo audit
-        run: >
-          cargo audit
-          --ignore RUSTSEC-2025-0046
-          --ignore RUSTSEC-2025-0118
-          --ignore RUSTSEC-2026-0020
-          --ignore RUSTSEC-2026-0021
-          --ignore RUSTSEC-2026-0037
-
-      - name: Run cargo deny check
-        run: cargo deny check -W unlicensed
+      # scripts/security-audit.sh installs the pinned cargo-audit 0.22.1 and
+      # cargo-deny 0.19.6 with --locked and scans Cargo.lock with deny.toml's
+      # one exception set. A vulnerability outside the set, a stale
+      # exception or any scanner failure fails the job.
+      - name: Security gate (cargo-audit and cargo-deny)
+        run: scripts/security-audit.sh --install

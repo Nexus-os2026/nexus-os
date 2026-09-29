@@ -5,17 +5,17 @@
 #
 # WHAT IT DOES
 #   Runs the exact same commands that .gitlab-ci.yml runs on GitLab, locally,
-#   so we can see what CI sees BEFORE pushing. Mirrors the 6 jobs in the
-#   failing pipeline: cargo-audit, cargo-deny, rust-lint, rust-tests-core,
-#   rust-tests-full, frontend-tests.
+#   so we can see what CI sees BEFORE pushing. Mirrors the 5 jobs in the
+#   pipeline: security-audit, rust-lint, rust-tests-core, rust-tests-full,
+#   frontend-tests.
 #
 #   This is the mandatory pre-push gate. Run it before every push to main.
 #
 # HOW TO RUN
-#   bash scripts/ci-local.sh                 # run all 6 jobs (matches CI)
+#   bash scripts/ci-local.sh                 # run all 5 jobs (matches CI)
 #   bash scripts/ci-local.sh --clean-check   # stash working tree, run against committed main
 #   bash scripts/ci-local.sh --skip-frontend # skip frontend-tests
-#   bash scripts/ci-local.sh --skip-security # skip cargo-audit + cargo-deny
+#   bash scripts/ci-local.sh --skip-security # skip security-audit
 #   bash scripts/ci-local.sh --skip-security --skip-frontend  # Rust jobs only
 #
 # --clean-check    Stash uncommitted changes (including untracked), run the
@@ -37,8 +37,9 @@
 # REPRODUCIBILITY CAVEATS
 #   - GitLab CI does not pin an image in .gitlab-ci.yml, so runner toolchain
 #     is unknown. Local rustc may differ — lint/test divergence is possible.
-#   - cargo-audit and cargo-deny are installed on-the-fly by this script
-#     (mirroring CI's `cargo install --locked ... || true` pattern).
+#   - The security stage runs scripts/security-audit.sh --install, as CI
+#     does: it installs the pinned cargo-audit and cargo-deny with --locked,
+#     and any install or scanner failure fails the job.
 #   - CARGO_BUILD_JOBS=2 mirrors CI's global throttle; machine may have more
 #     cores but we preserve CI behavior for result parity.
 # =============================================================================
@@ -196,29 +197,11 @@ job_preflight() {
     rustup show active-toolchain
 }
 
-# ----- cargo-audit (.gitlab-ci.yml:22-32) ------------------------------------
-# before_script: cargo install cargo-audit --locked 2>/dev/null || true
-# script:        cargo audit --ignore RUSTSEC-2026-0044 ... (6 ignores)
-job_cargo_audit() {
+# ----- security-audit (.gitlab-ci.yml `security-audit` job) -----------------
+# The pinned cargo-audit and cargo-deny with deny.toml's one exception set.
+job_security_audit() {
     cd "$REPO_ROOT"
-    cargo install cargo-audit --locked 2>/dev/null || true
-    cargo audit \
-        --ignore RUSTSEC-2026-0044 \
-        --ignore RUSTSEC-2026-0048 \
-        --ignore RUSTSEC-2023-0071 \
-        --ignore RUSTSEC-2026-0049 \
-        --ignore RUSTSEC-2026-0067 \
-        --ignore RUSTSEC-2026-0068 \
-        --ignore RUSTSEC-2026-0114
-}
-
-# ----- cargo-deny (.gitlab-ci.yml:34-44) -------------------------------------
-# before_script: cargo install cargo-deny --locked 2>/dev/null || true
-# script:        cargo deny check
-job_cargo_deny() {
-    cd "$REPO_ROOT"
-    cargo install cargo-deny --locked 2>/dev/null || true
-    cargo deny check
+    scripts/security-audit.sh --install
 }
 
 # ----- rust-lint (.gitlab-ci.yml:61-66, extends .rust-base) ------------------
@@ -286,8 +269,7 @@ main() {
 
     # Security stage
     if [ "$SKIP_SECURITY" -eq 0 ]; then
-        run_job "cargo-audit" job_cargo_audit
-        run_job "cargo-deny" job_cargo_deny
+        run_job "security-audit" job_security_audit
     else
         echo "[ci-local] skipping security stage (--skip-security)"
     fi
