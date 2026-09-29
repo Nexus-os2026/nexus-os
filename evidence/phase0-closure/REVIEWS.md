@@ -279,3 +279,25 @@ wry 0.54.4 sources). The CI commit `83712a86` is correct. Repairs assigned to S1
 settle checks so a late navigation in the release-profile run cannot pass as
 cancelled; stricter Blob, iframe and import guards; a Windows raw-postMessage
 subframe check; wording; narrower public exposure of the boundary module.
+
+### Later rounds (summary)
+
+- S4 guard hardening (`5dc2229a..10fe0039`), re-checked by S5: **accept**;
+  every earlier probe now fails; residual text-recogniser limits (shell
+  operators, `..` in paths, git failing open) assigned to S4; YAML alias and
+  block-scalar keys recorded as non-claims.
+- S3 R7/R8 (no-redirect bounded clients for the desktop nx bridge and swarm
+  providers; nx Google key only in a header; nx Ollama address from the
+  desktop authority; hermetic setup-wizard test): composed at `686bc95d`;
+  re-review by S4 in progress.
+- S6 follow-ups (`61dd2321..691456c1`), re-reviewed by S3: **ready, no
+  blocker or should-fix**. The openidconnect removal is prune-only (20
+  packages; no version, source or checksum change; features only shrink and
+  nothing uses the lost ones) and removes RUSTSEC-2023-0071 (cargo-audit
+  8 -> 7). The cognitive loop's records go to the injected state database
+  (same file in production; leaf lock, no inversion). Coverage note: the
+  voice real-transcription tests now skip when no model is cached (tests run
+  offline).
+- Composed full check at `91ac155b`: fmt clean; clippy (workspace, all
+  targets, all features, `-D warnings`) clean; `cargo test --workspace
+  --locked` 7,672 passed, 0 failed, 43 ignored (293 test binaries).
