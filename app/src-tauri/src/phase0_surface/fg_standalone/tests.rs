@@ -1330,7 +1330,9 @@ fn action_references(line: &str) -> Vec<&str> {
 /// that name build output other than the desktop bundle: anything under a
 /// `release` or `debug` profile directory but the allowlisted outputs, the
 /// profile directory itself, the target directory itself, or a glob in the
-/// target directory.
+/// target directory. Each word is checked as written and with its `.` and
+/// `..` segments resolved, and any `..` segment in a word that names
+/// `target/` fails it (`target/release/bundle/../nexus-server`).
 fn undesktop_build_outputs(line: &str) -> Vec<String> {
     let normalized = line.to_ascii_lowercase().replace('\\', "/");
     normalized
@@ -1354,16 +1356,32 @@ fn undesktop_build_outputs(line: &str) -> Vec<String> {
                 )
         })
         .filter(|word| {
-            let components: Vec<&str> = word.split('/').collect();
-            components.iter().enumerate().any(|(index, component)| {
-                let next = components.get(index + 1).copied();
-                let profile = index > 0 && matches!(*component, "release" | "debug");
-                let target = *component == "target" && word.contains('/');
-                (profile && !next.is_some_and(|next| DESKTOP_BUILD_OUTPUTS.contains(&next)))
-                    || (target
-                        && next
-                            .is_none_or(|next| next.is_empty() || next.contains(['*', '?', '['])))
-            })
+            let offends = |components: &[&str]| {
+                components.iter().enumerate().any(|(index, component)| {
+                    let next = components.get(index + 1).copied();
+                    let profile = index > 0 && matches!(*component, "release" | "debug");
+                    let target = *component == "target" && word.contains('/');
+                    (profile && !next.is_some_and(|next| DESKTOP_BUILD_OUTPUTS.contains(&next)))
+                        || (target
+                            && next.is_none_or(|next| {
+                                next.is_empty() || next.contains(['*', '?', '['])
+                            }))
+                })
+            };
+            let written: Vec<&str> = word.split('/').collect();
+            let mut resolved: Vec<&str> = Vec::new();
+            for component in &written {
+                match *component {
+                    "." => {}
+                    ".." => {
+                        resolved.pop();
+                    }
+                    other => resolved.push(other),
+                }
+            }
+            (word.contains("target/") && written.contains(&".."))
+                || offends(&written)
+                || offends(&resolved)
         })
         .map(str::to_string)
         .collect()
@@ -1515,6 +1533,11 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
         "path: target/x86_64-unknown-linux-gnu/release/nexus-server",
         "path: ${{ env.CARGO_TARGET_DIR }}/release/nexus-server",
         "path: target/release/{bundle,nexus-server}",
+        "path: target/release/bundle/../nexus-server",
+        "path: target/release/bundle/../../release/nexus-server",
+        "path: target/release/./nexus-server",
+        "path: target/release/bundle/..",
+        "Copy-Item target\\release\\bundle\\..\\nexus-server.exe out",
     ] {
         assert!(
             !undesktop_build_outputs(line).is_empty(),
@@ -1526,6 +1549,7 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
         "Get-ChildItem -Recurse target\\release\\bundle -ErrorAction SilentlyContinue",
         "ls -R target/release/bundle || true",
         "find target/release/bundle/deb -mindepth 2",
+        "ls ./target/release/bundle",
         "cargo build --release --target x86_64-pc-windows-msvc",
     ] {
         assert!(
