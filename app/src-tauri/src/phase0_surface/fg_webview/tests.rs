@@ -825,6 +825,46 @@ fn p0_fg_webview_main_window_wires_navigation_and_newwindow_guards() {
     }
 }
 
+/// The boundary module is `pub` (hidden) only so the live harness can build
+/// the production window: `build_main_window` is its one public item, and
+/// the navigation predicate, the app origin and the command list stay
+/// crate-private.
+#[test]
+fn p0_fg_webview_boundary_exposes_only_build_main_window() {
+    let boundary = strip_rust_comments(BOUNDARY_RS);
+    let public: Vec<&str> = boundary
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("pub ") || l.starts_with("pub("))
+        .filter(|l| !l.starts_with("pub(crate)"))
+        .collect();
+    assert_eq!(
+        public,
+        [
+            "pub fn build_main_window(app: &tauri::App) -> tauri::Result<()> {",
+            "pub use live::build_main_window;"
+        ],
+        "only build_main_window may be public in webview_boundary.rs"
+    );
+    for item in [
+        "pub use live::build_main_window;",
+        "pub fn build_main_window(",
+    ] {
+        let at = boundary.find(item).expect("public item");
+        assert!(
+            boundary[..at].trim_end().ends_with("#[doc(hidden)]"),
+            "`{item}` must be #[doc(hidden)]"
+        );
+    }
+    let lib = strip_rust_comments(LIB_RS);
+    assert_eq!(
+        lib.matches("#[doc(hidden)]\npub mod webview_boundary;")
+            .count(),
+        1,
+        "lib.rs exports the boundary module hidden"
+    );
+}
+
 /// Native origin enforcement (N3), on the real ACL that tauri-build embedded
 /// into this crate. Every application command is invocable only from the local
 /// app origin on the `main` window; a remote origin, a loopback origin (a

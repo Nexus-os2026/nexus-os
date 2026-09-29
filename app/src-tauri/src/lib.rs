@@ -8,8 +8,10 @@ mod phase0_surface;
 pub mod swarm_caller_identity;
 // P0 item D: privileged webview boundary (navigation/new-window guards) and the
 // app-command list backing the app ACL manifest. See webview_boundary.rs.
-// `pub` so the native boundary harness (tests/webview_boundary_live.rs) can call
-// the production build_main_window; build_main_window is #[doc(hidden)].
+// `pub` only so the native boundary harness (tests/webview_boundary_live.rs) can
+// call the production build_main_window, the module's one public item; the
+// origin predicate and the command list stay crate-private.
+#[doc(hidden)]
 pub mod webview_boundary;
 use base64::Engine;
 use chrono::TimeZone;

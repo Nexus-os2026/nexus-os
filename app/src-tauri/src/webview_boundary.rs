@@ -241,6 +241,7 @@ mod live {
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
 ))]
+#[doc(hidden)]
 pub use live::build_main_window;
 
 #[cfg(all(
