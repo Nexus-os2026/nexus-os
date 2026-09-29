@@ -358,3 +358,36 @@ fn p0_fg_k_build_records_outside_the_bounds_are_refused() {
         assert!(invalid.validate().is_err());
     }
 }
+
+/// Test isolation: the cognitive loop of an in-memory `AppState` records its
+/// L6 cooldowns and algorithm selections in the in-memory database. The
+/// production-executor test, run in a child process whose identity home is a
+/// scratch directory, leaves that home without a nexus.db. (The loop used to
+/// open the identity home's nexus.db: on a developer machine, the real one.)
+#[test]
+fn p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database() {
+    let home = std::env::temp_dir().join(format!("p0-fg-state-db-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(home.join(".nexus")).unwrap();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "phase0_surface::tests::p0_002c5c_a2a_and_agent_actions_are_decided_by_the_production_executor",
+            "--nocapture",
+        ])
+        .env("HOME", &home)
+        .env_remove("NEXUS_DB_PATH")
+        .output()
+        .unwrap();
+    let written = home.join(".nexus").join("nexus.db").exists();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert!(
+        output.status.success(),
+        "child failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+        "the child ran no test"
+    );
+    assert!(!written, "the identity home's nexus.db was written");
+}

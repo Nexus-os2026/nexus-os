@@ -519,6 +519,10 @@ pub struct CognitiveRuntime {
     /// Goal identity publication/removal is serialized with `loops` so a cycle
     /// cannot observe a missing or replaced goal snapshot for its own agent.
     status_snapshots: Mutex<HashMap<String, Arc<ArcSwap<CognitiveStatusResponse>>>>,
+    /// The database the loop records L6 cooldowns and algorithm selections
+    /// in, when its host injects one (`with_state_database`). Without one the
+    /// loop opens the identity home's database for each record, as before.
+    state_db: Option<Arc<NexusDatabase>>,
 }
 
 impl CognitiveRuntime {
@@ -548,6 +552,29 @@ impl CognitiveRuntime {
             evolution: Mutex::new(EvolutionEngine::new(0.3)),
             darwin: Mutex::new(PlanEvolutionEngine::default()),
             status_snapshots: Mutex::new(HashMap::new()),
+            state_db: None,
+        }
+    }
+
+    /// Record the loop's L6 cooldowns and algorithm selections in `db`, the
+    /// host's own state database, instead of opening the identity home's
+    /// database for each record.
+    pub fn with_state_database(mut self, db: Arc<NexusDatabase>) -> Self {
+        self.state_db = Some(db);
+        self
+    }
+
+    /// Run `record` against the injected state database, or else against the
+    /// identity home's database (opened for this record, as before). With
+    /// neither, nothing is recorded.
+    fn with_state_db(&self, record: impl FnOnce(&NexusDatabase)) {
+        if let Some(db) = &self.state_db {
+            record(db);
+        } else if let Ok(db) = crate::identity_home::nexus_db_path()
+            .map_err(|_| ())
+            .and_then(|path| NexusDatabase::open(&path).map_err(|_| ()))
+        {
+            record(&db);
         }
     }
 
@@ -754,12 +781,10 @@ impl CognitiveRuntime {
     }
 
     fn persist_l6_cooldown(&self, agent_id: &str, cycle_count: u32, cooled_down: bool) {
-        let Ok(db) = crate::identity_home::nexus_db_path()
-            .map_err(|_| ())
-            .and_then(|path| NexusDatabase::open(&path).map_err(|_| ()))
-        else {
-            return;
-        };
+        self.with_state_db(|db| Self::record_l6_cooldown(db, agent_id, cycle_count, cooled_down));
+    }
+
+    fn record_l6_cooldown(db: &NexusDatabase, agent_id: &str, cycle_count: u32, cooled_down: bool) {
         // Optional: missing cooldown row means first run; use defaults
         let previous = db.load_l6_cooldown(agent_id).ok().flatten().unwrap_or(
             nexus_persistence::L6CooldownTrackerRow {
@@ -1070,10 +1095,7 @@ impl CognitiveRuntime {
                     "swarm" | "adversarial" => {}
                     _ => {}
                 }
-                if let Ok(db) = crate::identity_home::nexus_db_path()
-                    .map_err(|_| ())
-                    .and_then(|path| NexusDatabase::open(&path).map_err(|_| ()))
-                {
+                self.with_state_db(|db| {
                     // Best-effort: persist algorithm selection; planning proceeds regardless
                     let _ = db.save_algorithm_selection(
                         agent_id,
@@ -1082,7 +1104,7 @@ impl CognitiveRuntime {
                         &selected_algorithm.config_json,
                         None,
                     );
-                }
+                });
             }
 
             state.steps = new_steps;
@@ -4668,5 +4690,121 @@ mod tests {
             .recv_timeout(budget)
             .expect("polling worker cancelled");
         worker.join().unwrap();
+    }
+
+    const STATE_DB_CHILD: &str = "P0FG_LOOP_STATE_DB_CHILD";
+    const STATE_DB_TEST: &str =
+        "cognitive::loop_runtime::tests::p0_fg_an_injected_state_database_keeps_the_identity_home_untouched";
+
+    /// The child's scenario: an L6 agent reaching its cooldown and an L3 agent
+    /// planning with a stored algorithm selection, the two loop records that
+    /// are persisted. With `inject`, both go to the runtime's own database.
+    fn state_db_scenario(inject: bool) {
+        let db = Arc::new(NexusDatabase::in_memory().unwrap());
+        let runtime = |sup| {
+            let runtime = CognitiveRuntime::new(
+                sup,
+                LoopConfig::default(),
+                Arc::new(CollectingEmitter::new()),
+            );
+            if inject {
+                runtime.with_state_database(db.clone())
+            } else {
+                runtime
+            }
+        };
+        let planner = make_planner(r#"[{"action": {"type": "Noop"}, "description": "done"}]"#);
+        let executor = MockExecutor::always_ok("ok");
+        let mut audit = AuditTrail::new();
+
+        let (sup, l6) = make_supervisor_with_autonomy(6);
+        let cooling = runtime(sup);
+        cooling
+            .assign_goal(&l6, AgentGoal::new("cooldown record".into(), 5))
+            .unwrap();
+        cooling
+            .loops
+            .lock()
+            .unwrap()
+            .get_mut(&l6)
+            .unwrap()
+            .cycle_count = 100;
+        cooling
+            .run_cycle(&l6, &planner, &make_memory_mgr(), &executor, &mut audit)
+            .unwrap();
+
+        let (sup, l3) = make_supervisor_with_autonomy(3);
+        let planning = runtime(sup);
+        planning
+            .assign_goal(&l3, AgentGoal::new("selection record".into(), 5))
+            .unwrap();
+        let selection = super::super::memory_manager::MemoryEntry {
+            id: 1,
+            agent_id: l3.clone(),
+            memory_type: "algorithm_selection".to_string(),
+            key: "latest".to_string(),
+            value_json: json!({"algorithm": "swarm"}).to_string(),
+            relevance_score: 1.0,
+            access_count: 0,
+            created_at: "now".to_string(),
+            last_accessed: "now".to_string(),
+        };
+        planning
+            .run_cycle(
+                &l3,
+                &planner,
+                &make_seeded_memory_mgr(vec![selection]),
+                &executor,
+                &mut audit,
+            )
+            .unwrap();
+
+        if inject {
+            let cooldown = db.load_l6_cooldown(&l6).unwrap().expect("cooldown row");
+            assert_eq!(cooldown.total_cooldowns, 1);
+            let selections = db.load_algorithm_selections(&l3, 10).unwrap();
+            assert_eq!(selections.len(), 1);
+            assert_eq!(selections[0].algorithm, "swarm");
+        }
+    }
+
+    /// Runs the scenario in a child test process whose identity home is a
+    /// scratch directory, and reports whether the identity home's database
+    /// was written.
+    fn identity_home_written_by_child(inject: bool) -> bool {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::create_dir(home.path().join(".nexus")).unwrap();
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", STATE_DB_TEST, "--nocapture"])
+            .env(STATE_DB_CHILD, if inject { "inject" } else { "fallback" })
+            .env("HOME", home.path())
+            .env_remove("NEXUS_DB_PATH")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "child failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+            "the child ran no test"
+        );
+        home.path().join(".nexus").join("nexus.db").exists()
+    }
+
+    /// P0-FINAL-GATE (test isolation): a runtime given its host's state
+    /// database records its L6 cooldowns and algorithm selections there and
+    /// never opens the identity home's database. Without one it keeps the
+    /// identity-home fallback, which the control run shows the check detects.
+    #[test]
+    fn p0_fg_an_injected_state_database_keeps_the_identity_home_untouched() {
+        match std::env::var(STATE_DB_CHILD).as_deref() {
+            Ok("inject") => return state_db_scenario(true),
+            Ok("fallback") => return state_db_scenario(false),
+            _ => {}
+        }
+        assert!(!identity_home_written_by_child(true));
+        assert!(identity_home_written_by_child(false));
     }
 }

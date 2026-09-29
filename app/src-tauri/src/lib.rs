@@ -1226,13 +1226,16 @@ impl AppState {
         let evolution_tracker = Arc::new(nexus_kernel::cognitive::EvolutionTracker::new(Box::new(
             DbStrategyStore { db: db.clone() },
         )));
+        // The loop records L6 cooldowns and algorithm selections in this
+        // state database (the identity home's nexus.db, or its fallback).
         let cognitive_runtime = Arc::new(
             nexus_kernel::cognitive::CognitiveRuntime::with_provider_registry(
                 supervisor.clone(),
                 nexus_kernel::cognitive::LoopConfig::default(),
                 Arc::new(nexus_kernel::cognitive::NoOpEmitter),
                 build_provider_registry(),
-            ),
+            )
+            .with_state_database(db.clone()),
         );
         let agent_scheduler = Arc::new(nexus_kernel::cognitive::AgentScheduler::new(
             cognitive_runtime.clone(),
@@ -1680,14 +1683,17 @@ impl AppState {
             reputation_registry: Arc::new(Mutex::new(
                 nexus_kernel::reputation::ReputationRegistry::new(),
             )),
-            db: test_db,
+            db: test_db.clone(),
+            // Both runtimes record into the in-memory database, never the
+            // identity home's nexus.db.
             cognitive_runtime: Arc::new(
                 nexus_kernel::cognitive::CognitiveRuntime::with_provider_registry(
                     supervisor,
                     nexus_kernel::cognitive::LoopConfig::default(),
                     Arc::new(nexus_kernel::cognitive::NoOpEmitter),
                     build_provider_registry(),
-                ),
+                )
+                .with_state_database(test_db.clone()),
             ),
             blocked_consent_waits: Arc::new(Mutex::new(HashMap::new())),
             computer_action_cancellations: Arc::new(Mutex::new(HashMap::new())),
@@ -1707,7 +1713,8 @@ impl AppState {
                         nexus_kernel::cognitive::LoopConfig::default(),
                         Arc::new(nexus_kernel::cognitive::NoOpEmitter),
                         build_provider_registry(),
-                    ),
+                    )
+                    .with_state_database(test_db),
                 ),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),

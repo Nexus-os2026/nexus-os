@@ -7,7 +7,6 @@ description = "OIDC/SAML authentication, session management, and role-based user
 
 [dependencies]
 nexus-kernel = { path = "../kernel" }
-openidconnect = "4"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 jsonwebtoken = "9"
 serde = { version = "1", features = ["derive"] }
