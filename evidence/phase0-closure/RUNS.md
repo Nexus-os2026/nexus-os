@@ -22,5 +22,11 @@
 - Advisories on the candidate's lockfiles: cargo-audit 7 vulnerabilities (13
   unmaintained, 12 unsound warnings); npm (app) 6; cargo-deny 10 advisory
   errors (measured after the openidconnect removal on the same package set).
-- Fast-local: run `36557040915` (#7, push event) — result pending.
-- Hosted budget for the closure candidate: 0 of 3 used.
+- Fast-local: run `36557040915` (#7, push event): **success**. fast-linux:
+  fmt clean, clippy clean, workspace 7,675 passed / 0 failed / 43 ignored
+  (293 test binaries), all 241 Final Gate guard tests passed, live webview
+  harness ok in the dev and release profiles; fast-python: voice 27 tests OK;
+  fast-frontend: node and vitest 461/461, tsc and vite build ok.
+- Hosted run 1 of 3: `gh workflow run ci.yml --ref implement/p0-final-gate-closure
+  --raw-field candidate_sha=9ed607f8…`, dispatched once; run `36559976709`
+  (#109) — in progress.
