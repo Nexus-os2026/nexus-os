@@ -200,3 +200,38 @@ request body (Windows reset risk); no-redirect for the desktop swarm's
 Anthropic client; a crate-wide no-client guard; a doc correction. Response
 size caps for the remaining credentialed providers are optional (else a
 non-claim).
+
+### Composition status (2026-09-29 ~01:20Z)
+
+Combined candidate `f31a63bb` (local): S2, S3, S4, S5 and S6 including their
+review repairs; coordinator commits for registry entries and guard rows,
+the consent-module bound reconciliation (`910063d0`), the L6-first check in
+the scheduled goal executor (`636356fd`) and the composed sub-minute
+schedule test (`55ae7959`). Desktop library suite on `f31a63bb`: 425 passed,
+0 failed, 5 ignored (the five pre-existing `c4b_fixture_*` ignores). S1
+(item D) is not yet composed.
+
+Further repairs since the previous entries:
+- S6 (review by S3): plan cost records never dropped silently; schedule
+  refusals are fixed texts with no caller text (`register_agent`,
+  `validate_cron`); voice tests fully offline. Voice evidence on the
+  GPU-mismatch host: CTranslate2 reports no CUDA device and writes nothing to
+  stderr with and without the GPU mask; the fast-local mask stays (CI's CUDA
+  torch untested here).
+- S5 (re-review by S6): an enabled Warden review denies without any Warden
+  lookup (no caller-created stand-in can allow); L6 checks use a named bound
+  (>= 6) and every id spelling; resume and review-each refuse L6; the
+  goal-assignment guard scans every desktop source; manifest schedules the
+  scheduler rejects are refused at create and start. Re-review of these by S6
+  in progress.
+- S2 (re-review by S4): no blocker; a decoy-key bypass of the API Client
+  secret check (regression from the case-insensitive change), desktop tests
+  that construct the real application state against the real home, kernel
+  tests reading the OS keyring, a backup wording mismatch and a narrow
+  secret-name pattern are being fixed by S2.
+- S3 (re-review by S4): no blocker; desktop Nexus Code diagnostics and
+  provider auto-detection start no process to find programs; stand-ins read
+  requests fully; the desktop swarm's Anthropic client follows no redirect;
+  a crate-wide client guard. Residual no-redirect for the remaining desktop
+  nx and swarm provider clients and a hermetic setup-wizard test are being
+  done by S3.
