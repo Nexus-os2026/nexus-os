@@ -2755,19 +2755,12 @@ fn p0_002c5c_no_delegation_path_runs_around_the_executor() {
 }
 
 /// Benchmark-only process sites (P0-002C5C): ungoverned curl and `date`
-/// invocations in the conductor benchmark binaries. They are outside the
-/// production guards (`NOT_PRODUCTION_DIRS`), no other member depends on a
-/// benchmark crate, and the installers ship only the desktop.
-const BENCHMARK_PROCESS_SITES: &[(&str, usize)] = &[
-    ("benchmarks/conductor-bench/src/cloud_models_bench.rs", 2),
-    (
-        "benchmarks/conductor-bench/src/inference_consistency_bench.rs",
-        2,
-    ),
-    ("benchmarks/conductor-bench/src/local_vs_cloud_battle.rs", 3),
-    ("benchmarks/conductor-bench/src/nim_cloud_bench.rs", 2),
-    ("benchmarks/conductor-bench/src/real_agent_validation.rs", 1),
-];
+/// invocations in the benchmark packages. There are none: the five conductor
+/// benchmarks that had them are withdrawn (their entry points only deny; see
+/// `benchmarks/conductor-bench/tests/phase0_withdrawal.rs`). A new site fails
+/// until it is classified here; no other member depends on a benchmark
+/// crate, and the installers ship only the desktop.
+const BENCHMARK_PROCESS_SITES: &[(&str, usize)] = &[];
 
 /// P0-002C5C: benchmark curl and `date` sites stay counted and
 /// benchmark-only: a new one, or a dependency on a benchmark crate from any
