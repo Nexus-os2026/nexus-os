@@ -17,5 +17,6 @@ declare a checkpoint or Phase Zero complete.
 | `RUNS.md` | Fast-local and hosted runs with measured results |
 | `DECISIONS.md` | Outstanding Architect decisions and proposed dispositions |
 | `PHASE-ZERO-COMPLETION-RECORD.md` | Phase Zero Linux completion evidence record for the Architect's final review (declaration pending) |
+| `ARCHITECT-DECLARATION.md` | The Architect's declaration, PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE, for `f727f5c3` (2026-09-29) |
 
 No secrets, environment dumps or credential-bearing logs belong here.
