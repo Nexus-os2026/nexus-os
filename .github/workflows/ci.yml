@@ -2,8 +2,9 @@ name: NEXUS OS CI
 
 # Linux Phase Zero final gate (GitHub-hosted): Linux Rust (fmt, clippy,
 # workspace tests, the live webview boundary harness in the dev and release
-# profiles, the packaged Builder toolchain and governed launch), frontend and
-# Python voice. The active Phase Zero target is Linux only; Windows and macOS
+# profiles, the packaged Builder toolchain and governed launch), the pinned
+# dependency security gate (security-audit-linux), frontend and Python voice.
+# The active Phase Zero target is Linux only; Windows and macOS
 # validation is deferred and preserved, manual-only, in ci-portability.yml.
 #
 # Run it explicitly, once, on the Architect-approved candidate, from a branch
@@ -196,6 +197,92 @@ jobs:
           xvfb-run -a -s "-screen 0 1280x1024x24" cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live-release.log
           grep -q '^\[live\] tauri profile: release' webview-boundary-live-release.log
           grep -q '^test webview_boundary_live ... ok$' webview-boundary-live-release.log
+
+  # P0-LINUX-FINAL-R1 repair B: the Rust dependency gate on the candidate
+  # itself. scripts/security-audit.sh installs the pinned cargo-audit 0.22.1
+  # and cargo-deny 0.19.6 with --locked, and scans the candidate's Cargo.lock
+  # with deny.toml's one exception set against freshly fetched advisory
+  # databases. A vulnerability outside the set, a stale exception, or any
+  # install or scanner failure fails the gate.
+  security-audit-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Select and validate the candidate commit
+        id: candidate
+        shell: bash
+        env:
+          RAW_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          reject() {
+            echo "::error::$1"
+            exit 1
+          }
+          case "${GITHUB_EVENT_NAME:-}" in
+            workflow_dispatch)
+              candidate="${RAW_CANDIDATE_SHA-}"
+              ;;
+            push)
+              if [[ "${GITHUB_REF:-}" != "refs/heads/main" ]]; then
+                reject "push validation runs only for refs/heads/main"
+              fi
+              candidate="${GITHUB_SHA:-}"
+              ;;
+            *)
+              reject "unsupported event for the final validation gate"
+              ;;
+          esac
+          if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]]; then
+            reject "the candidate must be a full 40-character lowercase commit SHA"
+          fi
+          if [[ "$candidate" != "${GITHUB_SHA:-}" ]]; then
+            reject "the candidate is not the commit this run is for (GITHUB_SHA)"
+          fi
+          if [[ "$candidate" != "${GITHUB_WORKFLOW_SHA:-}" ]]; then
+            reject "the candidate is not the workflow revision running this gate (GITHUB_WORKFLOW_SHA)"
+          fi
+          echo "candidate_sha=$candidate" >> "$GITHUB_OUTPUT"
+          echo "Validated candidate: $candidate"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.candidate.outputs.candidate_sha }}
+
+      - name: Verify the exact candidate commit
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::candidate_sha must be a full 40-character lowercase commit SHA"
+            exit 1
+          fi
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$CANDIDATE_SHA" ]]; then
+            echo "::error::checked out $tested but the candidate is $CANDIDATE_SHA"
+            exit 1
+          fi
+          echo "Validated candidate: $CANDIDATE_SHA"
+          echo "Tested commit: $tested"
+          echo "Workflow definition: $GITHUB_WORKFLOW_REF at $GITHUB_WORKFLOW_SHA"
+          {
+            echo "Validated candidate: \`$CANDIDATE_SHA\`"
+            echo "Tested commit: \`$tested\`"
+            echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Rust 1.94.0
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: Use fresh advisory databases
+        run: rm -rf ~/.cargo/advisory-db ~/.cargo/advisory-dbs
+
+      - name: Security gate (cargo-audit and cargo-deny)
+        run: scripts/security-audit.sh --install
 
   test-frontend:
     runs-on: ubuntu-latest

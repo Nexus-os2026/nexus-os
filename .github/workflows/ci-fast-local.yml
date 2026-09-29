@@ -181,6 +181,31 @@ jobs:
           grep -q '^\[live\] tauri profile: release' webview-boundary-live-release.log
           grep -q '^test webview_boundary_live ... ok$' webview-boundary-live-release.log
 
+      # Last step of fast-linux, so a dependency finding never hides the
+      # other Linux evidence of the run.
+      # P0-LINUX-FINAL-R1 repair B: the same Rust dependency gate as ci.yml.
+      # The pinned scanners are installed with --locked once into the runner
+      # tool cache (never the runner's ~/.cargo/bin); the advisory databases
+      # are fetched fresh into this run's temporary directory. A vulnerability
+      # outside deny.toml's exception set, a stale exception, or any install
+      # or scanner failure fails the job.
+      - name: Security gate (cargo-audit 0.22.1 and cargo-deny 0.19.6)
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$NEXUS_FAST_CACHE/tools/security-audit"
+          if ! "$root/bin/cargo-audit" audit --version 2>/dev/null | grep -qx 'cargo-audit-audit 0\.22\.1'; then
+            env -u CARGO_TARGET_DIR cargo install cargo-audit --version 0.22.1 --locked --force --root "$root"
+          fi
+          if ! "$root/bin/cargo-deny" --version 2>/dev/null | grep -qx 'cargo-deny 0\.19\.6'; then
+            env -u CARGO_TARGET_DIR cargo install cargo-deny --version 0.19.6 --locked --force --root "$root"
+          fi
+          export PATH="$root/bin:$PATH"
+          db="$RUNNER_TEMP/security-audit-db"
+          rm -rf "$db"
+          mkdir -p "$db"
+          SECURITY_AUDIT_DB_ROOT="$db" scripts/security-audit.sh
+
   fast-frontend:
     runs-on: [self-hosted, Linux, X64, nexus-local]
     timeout-minutes: 45
