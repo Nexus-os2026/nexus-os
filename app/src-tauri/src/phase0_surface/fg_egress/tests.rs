@@ -439,14 +439,35 @@ fn p0_fg_caller_ollama_addresses_are_refused_before_anything_connects() {
             .map(|_| ()),
         ),
         (
+            // The command's own address check, with a stand-in for the
+            // setup it guards (the command's body is pinned to this check
+            // below): a regressed check fails here without detecting
+            // hardware, probing an address or writing the operator's
+            // configuration.
             "run_setup_wizard",
-            crate::run_setup_wizard(Some(foreign.clone())).map(|_| ()),
+            crate::setup_wizard_after_address_check(Some(foreign.clone()), |_| {
+                Err("the setup ran past the address check".to_string())
+            })
+            .map(|_| ()),
         ),
     ];
     for (surface, result) in results {
         assert_eq!(result, Err(expected(surface)), "{surface}");
     }
     assert_never_contacted(&listener);
+    let governance = production_text(&lf(include_str!("../../commands/governance.rs")));
+    assert_eq!(
+        handler_shape(&governance, "run_setup_wizard").1,
+        "setup_wizard_after_address_check(ollama_url,run_setup_wizard_at)"
+    );
+    assert_eq!(
+        handler_shape(&governance, "setup_wizard_after_address_check").1,
+        "setup(ollama_base_url_for(\"run_setup_wizard\",ollama_url)?)"
+    );
+    assert_eq!(
+        handler_shape(&production_text(&lf(LIB_RS)), "run_setup_wizard").1,
+        "super::run_setup_wizard(ollama_url)"
+    );
 
     if let Ok(authorized) = &authorized {
         // The authorized address, with or without a trailing `/`, is that
