@@ -1,42 +1,82 @@
 //! P0 item D — the privileged webview boundary.
 //!
-//! Two layers close the "any script in the app origin can call every IPC
-//! command" gap that the `null` CSP left open:
+//! Two native layers close the "any script in the app origin can call every
+//! IPC command" gap that the `null` CSP left open. Sources cited are the
+//! pinned tauri 2.10.3 and wry 0.54.4.
 //!
-//! * **Origin ACL (native).** `app_commands::APP_COMMANDS` is the exact set of
+//! * **Origin ACL.** `app_commands::APP_COMMANDS` is the exact set of
 //!   application (non-plugin) commands registered by `generate_handler!`.
-//!   `build.rs` passes it to `tauri_build::AppManifest::commands`, which turns
-//!   the runtime into "an app command is refused unless a capability allows
-//!   it". `capabilities/app-commands.json` allows them for window `main` at the
-//!   **local** app origin only. Tauri derives `Origin::Local` vs
-//!   `Origin::Remote` from trustworthy native context (the request's `Origin`
-//!   header on the custom-protocol IPC path, or the frame URL on the
-//!   `postMessage` path — never a frontend-supplied field), so a subframe, a
-//!   `srcdoc`/`about:blank`/`data:` document or a navigated remote page is
-//!   `Origin::Remote`, matches no capability, and is refused even if it holds
-//!   the injected invoke key.
-//! * **Navigation / new-window (native).** [`build_main_window`] builds the one
-//!   privileged window with a navigation guard that admits only the exact app
-//!   origin (see `live::navigation_allowed`) and denies every new window
-//!   request on every platform.
+//!   `build.rs` passes it to `tauri_build::AppManifest::commands`; with an app
+//!   manifest present tauri checks every app command against the ACL
+//!   (`webview/mod.rs` 1801-1830) instead of skipping it.
+//!   `capabilities/app-commands.json` grants them to window `main` at the
+//!   **local** origin only. Tauri classifies each request natively, never from
+//!   a frontend-supplied field: the URL it checks is the request's `Origin`
+//!   header on the custom-protocol IPC path (`ipc/protocol.rs` 490-498), or
+//!   the URL wry reports on the `postMessage` fallback path (on Linux that is
+//!   the main frame's URL, `webkitgtk/mod.rs` 640-650). The request is
+//!   `Origin::Local` only if that URL is the app origin (`is_local_url`,
+//!   `webview/mod.rs` 1680-1720; this app registers no custom URI scheme);
+//!   anything else is `Origin::Remote`, matches no capability and is refused
+//!   with the ACL's "not allowed" error.
 //!
-//! Redirects (observed live by `tests/webview_boundary_live.rs`): on WebKitGTK
-//! (Linux) a server `3xx` redirect is followed by the engine without the
-//! navigation guard being consulted — wry 0.54.4 routes only the engine's
-//! navigation-action policy decisions to the guard (`webkitgtk/mod.rs`
-//! 547-575), and the redirected request reaches the target. On Windows,
-//! WebView2 raises `NavigationStarting` for redirects too, and wry routes that
-//! event to the guard (`webview2/mod.rs` 673-692). macOS was not observed in
-//! this environment. With the exact-origin rule the only admitted document
-//! that is fetched over HTTP at all is the app origin itself: in a release
-//! build that is the `tauri` protocol, which tauri serves from the embedded
-//! assets and never answers with a redirect (tauri 2.10.3 `protocol/tauri.rs`
-//! 212-219); in a dev build it is the configured `devUrl` dev server, which
-//! is trusted development tooling and could redirect. `about:blank`,
-//! `about:srcdoc` and `blob:` documents make no HTTP request. A document that
-//! nevertheless lands on a non-app origin is still refused every application
-//! command by the origin ACL above: the ACL, not the navigation guard, is the
-//! IPC boundary.
+//!   The ACL distinguishes origins and windows, not frames. What keeps
+//!   subframes and other documents from command authority, per platform:
+//!   - **Linux and macOS:** tauri's init scripts, which carry the invoke key,
+//!     are injected into the main frame only (`for_main_frame_only`,
+//!     `manager/webview.rs` 156 and 542; WebKitGTK `TopFrame`,
+//!     `webkitgtk/mod.rs` 720-729; WKWebView `forMainFrameOnly`,
+//!     `wkwebview/mod.rs` 776-786). A subframe has no key of its own.
+//!   - **Windows:** WebView2 adds the init scripts to every frame
+//!     (`webview2/mod.rs` 493-494; wry `lib.rs` 1007), so every subframe holds
+//!     the key. A cross-origin subframe's request carries its own `Origin` and
+//!     is refused by the ACL; a sandboxed (opaque-origin) frame sends
+//!     `Origin: null`, which tauri rejects before the ACL ("Origin header is
+//!     not a valid URL").
+//!   - **All platforms:** a main-frame document at a non-app origin (one the
+//!     navigation guard below failed to cancel) holds the key and is refused
+//!     by the ACL. A **same-origin, non-sandboxed** frame — an `about:blank` or
+//!     `srcdoc` frame without `sandbox`, or an app-origin `src` — counts as
+//!     `Origin::Local` on every platform: it can reach the parent's bridge
+//!     (Linux/macOS) or holds the key itself (Windows). The frontend rule is
+//!     therefore load-bearing: every in-app iframe renders inline `srcDoc`
+//!     with `sandbox=""` (opaque origin, no script) and no iframe is created
+//!     from script (guarded by
+//!     `p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed`).
+//!     This is the remaining limitation of the native layer.
+//!   - Tauri 2.10.3 exempts `plugin:__TAURI_CHANNEL__|fetch` from the ACL
+//!     (`webview/mod.rs` 1803-1804); this app uses no IPC channels.
+//! * **Navigation / new windows.** [`build_main_window`] builds the one
+//!   privileged window with a navigation guard that admits only the exact app
+//!   origin (see `live::navigation_allowed`) and a new-window handler that
+//!   denies every request. The guard is consulted for main-frame navigations
+//!   on every platform, and for subframe navigations on Linux (observed) and
+//!   macOS (wry routes every navigation action to it there); on Windows it
+//!   sees `NavigationStarting`, the main frame only. For new windows, wry 0.54.4
+//!   already refuses them when no handler is set (WebKitGTK's `create` signal
+//!   is connected only with a handler, `webkitgtk/mod.rs` 486-489; WebView2
+//!   marks the request handled, `webview2/mod.rs` 784-786; the WKWebView UI
+//!   delegate returns no webview), so the explicit `Deny` handler is a
+//!   safeguard against a change of that default, not the closure itself.
+//!
+//! Redirects and subframes, as observed live on Linux by
+//! `tests/webview_boundary_live.rs`: WebKitGTK consults the guard for server
+//! redirects and for subframe navigations, so a `302` from the app origin to
+//! a non-app origin is cancelled before the target is requested, and so is a
+//! cross-origin subframe. On Windows the guard sees WebView2's
+//! `NavigationStarting` (`webview2/mod.rs` 673-692), which is raised for
+//! main-frame navigations including redirects, but not for subframes. macOS
+//! was not observed in this environment (wry routes every WKWebView
+//! navigation action to the guard, `wkwebview/navigation.rs` 50-83). With the
+//! exact-origin rule, the only admitted document fetched over HTTP at all is
+//! the app origin itself: in a release build the `tauri` protocol, which
+//! tauri serves from the embedded assets and never answers with a redirect
+//! (tauri 2.10.3 `protocol/tauri.rs` 212-219); in a dev build the configured
+//! `devUrl` dev server. `about:blank`, `about:srcdoc` and `blob:` documents
+//! make no HTTP request. A document that nevertheless lands on a non-app
+//! origin is still refused every application command by the origin ACL
+//! (observed live with the guard removed): the ACL, not the navigation guard,
+//! is the IPC boundary.
 //!
 //! Neither layer trusts the CSP to prove the boundary; the CSP is a separate
 //! defence-in-depth control in `tauri.conf.json`.
