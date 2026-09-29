@@ -55,6 +55,9 @@ numbered decision requests are collected at the end of this dossier.
 | H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged; Architect review pending. Decision request 10 |
 | I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the Nexus Code diagnostics' `which` probes remain [PENDING: S3 final], and helpers still resolve from `PATH`; Architect review pending. Decision requests 1 and 17 |
 | J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: post-integration run #108 succeeded, Architect review of that evidence pending. J2–J5: withdrawn on the closure candidate; Architect review pending. Decision requests 2 (D3: the 7 benchmark and 4 developer binaries, 5 bench targets and 2 examples kept) and 19 |
+| K | Reliability signals and resource bounds | `executes_python_code`: no retained hosted failure (evidence corrected); GPU-host voice stderr repaired; the duplicate binary name repaired by P0-FG1-R1 (integrated); resource surfaces bounded by refusal (see "Resource bounds") | Repaired or bounded on the closure candidate; Architect review pending. Proposed: `executes_python_code` as monitored debt (decision request 7); decision request 16 |
+| L | Screen observation from the interface | Unchanged since C5C | Closed at C5C (Architect repair A); a brokered mechanism is future work |
+| DEP (contract) | Dependency advisories | Cargo.lock 19 → 8 cargo-audit vulnerabilities; npm (app) 14 → 6; residual advisories with proposed dispositions [PENDING: DEP final] | Minimal updates on the closure candidate; residual advisories and audit governance for Architect decision (requests 3 to 6) |
 
 ### At C5C (historical)
 
@@ -1407,6 +1410,41 @@ checks are unchanged.
     that `nexus-protocols` builds `nexus-protocols-server` and `nexus-os` and
     no `nexus-server`. The item stays open until a complete hosted run on the
     repaired candidate is green and the repair is reviewed and integrated.
+  - [Update (P0-FINAL-GATE-CLOSURE): P0-FG1-R1 is integrated at `71c47acb`.
+    Hosted runs #107 and #108 on that commit succeeded, and the #108 logs show
+    no output-filename collision warning; the Architect's review of the
+    post-integration evidence is pending.]
+
+**Corrections and repairs (P0-FINAL-GATE-CLOSURE, contract K; Architect review
+pending).**
+
+- **Windows `executes_python_code`: evidence corrected.** No retained hosted
+  log shows this test failing. The 26 hosted Windows job logs kept with the
+  mission's evidence (runs #79–#108, including #107 and #108 on `71c47acb`)
+  all show it passing; the reliability workstream counted 43 such jobs from
+  runs #16–#108. The `CommandTimeout { seconds: 5 }` recorded above has no
+  retained hosted evidence. The only timeout in this test family is the
+  sibling `native_python_and_node_execute_within_workspace` (10 s,
+  `CommandTimeout { seconds: 10 }` at `code_exec.rs:568`) in run #87 on
+  `889f1e52`; run #86 passed on the same commit. A plausible, unproven
+  mechanism: the deadline starts at spawn and covers interpreter start-up
+  while about 2,100 kernel tests run in parallel. The Phase Zero executor
+  never calls this actuator. No code or test changed. Proposed disposition:
+  monitored debt (decision request 7).
+- **GPU-host voice CLI: repaired.** On the self-hosted runner, a GPU driver
+  and library mismatch made torch's CUDA probe print a warning (CUDA Error
+  804, seen in the fast-local Python job log), which broke the voice CLI's
+  stderr contract (stderr carries one JSON error object, or nothing).
+  `voice/stt.py` probed CUDA through torch, which is not the Whisper backend.
+  `detect_gpu()` now uses CTranslate2's device count and never imports torch;
+  without CTranslate2 only the `nvidia-smi -L` hint remains, for the model
+  tier. A stand-in torch that warns like that host holds the contract in
+  `voice/tests/test_stt_cli.py`. Every voice test module now keeps the
+  Hugging Face hub offline (`voice/tests/_offline.py`), so tests never
+  download a model. The fast-local workflow keeps its CUDA mask
+  (coordinator decision), and the host driver is an Owner matter (decision
+  request 7).
+- **Resource bounds:** see "Resource bounds" below.
 
 ## L. Screen observation from the interface
 
@@ -1472,6 +1510,184 @@ These surfaces are bounded in authority but not in amount:
 - An AgentScheduler cron schedule may fire every second.
 
 They are denial-of-service items for the Final Gate, not authority items.
+
+[The list above is the C5C state. The review for P0-FINAL-GATE-CLOSURE also
+found two unbounded surfaces it did not name: `run_adversarial_session`
+passed a caller's `u32` round count to `Vec::with_capacity` (about 137 GB for
+`u32::MAX`, which aborts the process), and `temporal_fork` /
+`set_temporal_config` let the caller set the fork count and token budget.]
+
+**Bounded in P0-FINAL-GATE-CLOSURE (contract K; Architect review pending).**
+Each surface below was reachable from any script in the webview. Every bound
+refuses rather than clamps, and nothing is deleted to stay within one.
+
+- **Frontend error log** (`log_frontend_error`, also called by the global
+  error handlers; `app/src-tauri/src/commands/frontend_errors.rs`). Each field
+  is cut to 8 KiB on a character boundary with a marker, on stderr and in the
+  log. `frontend_errors.log` is appended only while it stays within 4 MiB; a
+  record that would pass the cap is dropped whole, with one stderr notice per
+  process. Records are only appended: nothing is rotated, truncated or
+  deleted, and an existing larger log is kept.
+- **Build budget store** (`builder_record_build`, `builder_set_budget`,
+  `builder_set_remaining` and the governed plan's cost record;
+  `agents/web-builder/src/budget.rs`). Text fields of at most 256 bytes with
+  no control characters; a provider name of 1 to 32 ASCII letters, digits,
+  `.`, `_` or `-`; finite amounts from 0 to 1,000,000 USD; elapsed time at
+  most one week; counts at most 10^9; at most 16 providers and 1,000 records
+  (a full history refuses a new record); a file of at most 4 MiB. No write
+  replaces a file that is unreadable, unparsable or oversized. Before, two
+  records costing about 1.7e308 wrote `null`, and the next write replaced the
+  whole history with defaults. A plan's cost record keeps a cleaned project
+  name cut to the text bound, so a model-supplied name never costs the
+  record, and a record the store still refuses is reported on stderr in one
+  bounded line.
+- **Stress personas** (`stress_generate_personas`,
+  `app/src-tauri/src/commands/autopilot.rs`): 1 to 1,000, refused before the
+  simulator is locked.
+- **Parallel simulations** (`run_parallel_simulations`): 1 to 10 variants. The
+  desktop refuses before the model is built, the seed is parsed or any variant
+  starts (`commands/consent.rs`, with the kernel's constant), and the kernel
+  refuses again before any thread or model call
+  (`kernel/src/simulation/runtime.rs`).
+- **Dilated sessions** (`run_dilated_session`): 1 to 50 iterations, refused by
+  the desktop before the configuration is read and by the kernel before any
+  model call (`kernel/src/temporal/dilation.rs`). The dilator's settings are
+  copied out of its lock, so no lock is held across provider calls.
+- **Adversarial arena** (`run_adversarial_session`): 1 to 50 rounds. The
+  desktop checks the kernel's bound, and the arena refuses again before any
+  allocation, computation or record (`kernel/src/immune/arena.rs`,
+  `try_run_session`). The IPC reply's JSON is unchanged for accepted runs.
+- **Temporal forks** (`temporal_fork`, `set_temporal_config`): 1 to 10 forks and
+  a token budget of 1 to 200,000, refused before a provider is built or the
+  model is called, and never stored. The kernel's `fork_and_evaluate`
+  (`kernel/src/temporal/engine.rs`) also refuses an out-of-bound
+  configuration first, whichever path stored it.
+- **Agent schedules** (`AgentScheduler`, `kernel/src/cognitive/scheduler.rs`).
+  A schedule fires at most once per minute: its seconds field must be one
+  value from 0 to 59, and a five-field expression runs at second 0. A
+  refused schedule is refused before anything is spawned, and a refused
+  re-registration keeps the existing schedule. So `start_autonomous_loop`
+  with an interval under 60 seconds is refused, and a sub-minute schedule
+  stored earlier is not registered at startup (logged). The once-per-minute
+  refusal states the rule and never repeats the caller's seconds field.
+  [PENDING: S6 final: a schedule the cron parser rejects is refused without
+  repeating the expression; composed after this documentation's base.]
+  [PENDING: S5 final: `create_agent` and `start_agent` report a refused
+  manifest schedule; until then the refusal is a standard-error line and the
+  call succeeds.]
+- **Scheduled ticks** (`ScheduledGoalExecutor::execute`,
+  `commands/cognitive.rs`). A tick is skipped, and audited as
+  `scheduled_execution_skipped` (`agent_loop_active`), while the agent's
+  desktop loop runs. The signal is the loop's cancellation entry, and a loop
+  that ends removes that entry only if it is still its own (`Arc::ptr_eq`),
+  so the Stop button and the scheduler always see the newest running loop. An
+  L6 agent's tick is refused first (item G).
+- **Guards and tests.** `phase0_surface/fg_reliability/tests.rs` (11 guards,
+  among them `p0_fg_k_approved_limits_are_pinned`), the kernel, budget and
+  frontend-error tests, and the desktop tests
+  `p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call` and
+  `p0_fg_adversarial_session_rounds_are_bounded_before_any_work`. The
+  workstreams recorded a mutation control for each bound.
+- **Non-claims.**
+  - These are per-request bounds, not rate limits.
+  - The scheduled-tick check and the loop spawn are not atomic.
+  - Older overlapping loops of one agent keep running and can be stopped only
+    through the kernel's stop path, not the map entry.
+  - The temporal engine's lock is still held across the model calls of one
+    fork request.
+  - Two desktop processes can each overshoot the log cap by at most one
+    record, and the frontend-error stderr output is not rate-limited.
+  - An existing budget file larger than 4 MiB now displays defaults. The
+    internal review recorded that a FIFO at the budget file's path blocks
+    its read.
+  - A refused arena run seen through the older `run_session` API (the
+    benchmark's) reports a NaN win rate.
+- **Decision requested.** Request 16.
+
+## Dependency evidence (P0-FINAL-GATE-CLOSURE)
+
+[PENDING: DEP final] The counts below were measured on the reliability
+workstream's component; they must be re-measured on the final candidate. The
+composed lockfiles at this documentation's base are byte-identical to the
+ones measured.
+
+**Method.** Security advisories were measured on the closure candidate's own
+lockfiles, never on `main`'s: before (the approved candidate `71c47acb`) and
+after the minimal updates, with cargo-audit 0.22.1 and cargo-deny 0.19.6
+against one advisory-database snapshot (`ef036051`, 1,273 advisories), and
+`npm audit --package-lock-only`. The internal review re-checked the lockfile
+changes independently.
+
+| Lockfile | Tool | Before (`71c47acb`) | After |
+|---|---|---|---|
+| `Cargo.lock` | cargo-audit | 19 vulnerabilities, 26 warnings, 1,110 packages | 8 vulnerabilities, 26 warnings, 1,106 packages |
+| `Cargo.lock` | cargo-deny (advisories) | 16 errors (13 vulnerability, 3 unmaintained) | 10 errors (7 vulnerability, 3 unmaintained) |
+| `app/package-lock.json` | npm audit | 14 (2 low, 6 moderate, 6 high) | 6 (5 moderate, 1 high) |
+| `nexus-website/package-lock.json` | npm audit | 12 (1 low, 2 moderate, 9 high) | 12, unchanged |
+| `scripts/page-audit/package-lock.json` | npm audit | 8 (high) | 8, unchanged |
+| `packaging/builder-toolchain/package-lock.json` | npm audit | 0 | 0 |
+
+cargo-deny's bans, licenses and sources checks report no error. cargo-deny
+shows one vulnerability fewer than cargo-audit because `deny.toml` ignores
+RUSTSEC-2023-0071 (rsa); it reports the three unmaintained crates as errors,
+cargo-audit as warnings.
+
+**Updates taken** (precise and semver-compatible; `Cargo.toml` unchanged
+except the removal):
+
+- crossbeam-epoch 0.9.18 → 0.9.20 (RUSTSEC-2026-0204);
+- h2 0.4.13 → 0.4.16 (RUSTSEC-2026-0258 on the 0.4 line);
+- quinn-proto 0.11.14 → 0.11.15 (RUSTSEC-2026-0185);
+- tar 0.4.44 → 0.4.45 (RUSTSEC-2026-0067, RUSTSEC-2026-0068);
+- rustls 0.23.37 → 0.23.45 (RUSTSEC-2026-0285), with aws-lc-rs 1.16.1 →
+  1.18.1, aws-lc-sys 0.38.0 → 0.45.0 (RUSTSEC-2026-0044, RUSTSEC-2026-0048)
+  and rustls-webpki 0.103.13 → 0.103.15;
+- plist 1.8.0 → 1.10.0, with quick-xml 0.38.4 → 0.41.0 (RUSTSEC-2026-0194,
+  RUSTSEC-2026-0195 on 0.38.4);
+- the unused `rmcp` dependency of `nexus-protocols` removed (RUSTSEC-2026-0189),
+  which also dropped rmcp-macros, pastey and schemars_derive 1.2.1;
+- npm: 29 development-only entries of `app/package-lock.json`; `package.json`
+  unchanged.
+
+Cargo re-resolved 16 unrelated ranged dependency edges while applying the
+updates; the workstream kept those edges at their base versions and verified
+them against each parent's published requirements and with `--locked` builds.
+
+**Residual advisories: proposed dispositions for the Architect.** The
+implementer accepts no risk; each line is a proposal (decision request 3).
+
+| Advisory | Package | Dependency path | Reachability | Proposed disposition |
+|---|---|---|---|---|
+| RUSTSEC-2026-0193, RUSTSEC-2026-0213 (sanitizer bypasses) | ammonia 4.1.2 | `web-builder-agent` → desktop | Only `design_import::import_design` uses it, and no production code calls that; its desktop command `builder_import_design` is closed | Update to 4.1.4 (adds four crates), or accept for Phase Zero with this reason |
+| RUSTSEC-2026-0258 (unbounded empty DATA frames) | h2 0.3.27 | `readability` 0.3 → `reqwest` 0.11 → `hyper` 0.14 → `nexus-kernel` | The kernel calls only `readability::extractor::extract` on text it already holds and builds no reqwest 0.11 client; no fix exists on the 0.3 line | Accept until `readability` is replaced |
+| RUSTSEC-2026-0194, RUSTSEC-2026-0195 | quick-xml 0.30.0 | `zbus_xml` → `atspi` 0.24 → `nexus-ui-repair` | Developer tool only, not shipped (D3) | Accept with D3, or withdraw the tool |
+| RUSTSEC-2023-0071 (timing side channel) | rsa 0.9.10 | `openidconnect` 4.0.1 → `nexus-auth` → desktop | No workspace source uses `openidconnect` (declared in `auth/Cargo.toml`, never imported), so no RSA operation is reachable from workspace code; no fixed release exists | Remove the unused dependency (as `rmcp` was), or accept |
+| RUSTSEC-2026-0269, RUSTSEC-2026-0222 | wasmtime 43.0.2 | `nexus-sdk`, `nexus-protocols`, `nexus-benchmarks` | `wasmtime-wasi` is not in the lockfile; the SDK's WASM sandbox is latent (C5A) | Accept until a planned major upgrade (46.0.3+ or 47.0.4+) |
+| RUSTSEC-2026-0247, RUSTSEC-2026-0250, RUSTSEC-2026-0251 (unmaintained) | bitmaps 2.1.0, im-rc 15.1.0, sized-chunks 0.6.5 | `wasm-compose` → wasmtime 43.0.2 | As wasmtime | Accept with wasmtime |
+
+Warning-level entries (26) are unchanged in number. Fixes exist but were not
+taken for anyhow, event-listener, memmap2, rand 0.8, 0.9 and 0.10, and the
+yanked spin 0.9.8; lru, glib, scc and rand 0.7 have no semver-compatible fix
+(decision request 3).
+
+npm residue in `app/package-lock.json` (6, all but two development tooling):
+vite 5 and esbuild (fix is a major upgrade), vitest and `@vitest/mocker`;
+`monaco-editor` and its `dompurify` are runtime packages of the Monaco editor,
+which item D makes unavailable [PENDING: S1 final] (decision request 5).
+`nexus-website` and `scripts/page-audit` are measured only (decision request
+6).
+
+**Audit governance** (decision request 4). `audit.yml` runs on pushes to
+`main` and weekly only, so it never scans a closure candidate, and its five
+`--ignore` IDs match nothing in the candidate's audit. cargo-audit does not
+read the root `audit.toml` (it reads `.cargo/audit.toml`, which does not
+exist). `deny.toml` holds 12 ignores that match nothing any more (eight GTK3
+IDs, and RUSTSEC-2026-0044, -0048, -0067 and -0068, fixed by the updates), and
+its note that RUSTSEC-2026-0097 has "no semver-compatible bump" is
+contradicted by the advisory, which lists rand 0.8.6, 0.9.3 and 0.10.1 as
+fixed. `.gitlab-ci.yml` ignores RUSTSEC-2026-0114, which matches nothing, and
+installs both scanners unpinned with `|| true`. The four ignore lists
+(`audit.yml`, `audit.toml`, `deny.toml`, `.gitlab-ci.yml`) diverge.
 
 ## Unavailable features (Phase Zero closures)
 
