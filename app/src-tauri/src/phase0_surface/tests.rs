@@ -2852,6 +2852,8 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
     let fg_secrets = include_str!("fg_secrets/tests.rs");
     let kernel_config = include_str!("../../../../kernel/src/config.rs");
     let fg_standalone = include_str!("fg_standalone/tests.rs");
+    let bench_withdrawal =
+        include_str!("../../../../benchmarks/conductor-bench/tests/phase0_withdrawal.rs");
     let fg_reliability = include_str!("fg_reliability/tests.rs");
     let fg_approval = include_str!("fg_approval/tests.rs");
     let computer_use_loop =
@@ -3057,6 +3059,18 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
                 "p0_fg_standalone_computer_use_is_not_re_exposed",
                 "p0_fg_standalone_every_recipe_is_inventoried",
                 "p0_fg_standalone_no_workflow_ships_a_standalone_binary",
+                "p0_fg_standalone_every_bench_target_is_inventoried",
+                "p0_fg_standalone_withdrawn_packages_run_no_other_build_script",
+                "p0_fg_standalone_readme_names_every_withdrawn_binary",
+            ][..],
+        ),
+        (
+            "a withdrawn standalone binary, alias, recipe or workflow reactivated",
+            bench_withdrawal,
+            &[
+                "p0_bench_every_withdrawn_benchmark_invocation_is_withdrawn",
+                "p0_bench_withdrawn_entries_and_package_targets_are_pinned",
+                "p0_bench_docs_describe_the_withdrawn_benchmarks_as_withdrawn",
             ][..],
         ),
         (
@@ -3180,6 +3194,8 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
         "const ALIAS_NEEDLES: &[(&str, &[&str])]",
         "const RECIPE_FILES: &[&str]",
         "const WITHDRAWN_BINARIES: &[&str]",
+        "const BENCH_TARGETS: &[(&str, &str, &str)]",
+        "const PROTOCOLS_BUILD_SCRIPT: &str",
     ] {
         assert!(
             fg_standalone.contains(registry),
