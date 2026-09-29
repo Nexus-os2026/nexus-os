@@ -392,61 +392,119 @@ fn p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database() {
     assert!(!written, "the identity home's nexus.db was written");
 }
 
-/// Rust source with comments removed (line, nested block, doc) and string
-/// and character literals kept verbatim, so text inside a literal is still
-/// scanned (fail-closed) but a comment cannot hide or fake a use.
+/// Rust source with comments removed (line, nested block, doc) and every
+/// literal kept verbatim, so text inside a literal is still scanned
+/// (fail-closed: a forbidden spelling inside a string is a false positive,
+/// never a miss) while a comment cannot hide or fake a use. The lexer knows
+/// each literal form that can hold an unescaped quote or a comment marker,
+/// so no literal can shift it out of step with the real code that follows
+/// (P0-LINUX-FINAL-R2C): raw strings `r"…"`, `r#"…"#` with any number of
+/// hashes, and their `br` and `cr` forms (no escapes; they end only at a
+/// quote followed by the same number of hashes); strings `"…"`, `b"…"` and
+/// `c"…"` with escapes; and character literals `'"'`, `b'"'` and escaped
+/// ones such as `'\''`, told apart from lifetimes. It is a lexer for this
+/// guard, not a Rust parser; an unterminated literal runs to the end.
 fn without_comments(src: &str) -> String {
     let b = src.as_bytes();
-    let mut out = Vec::with_capacity(b.len());
+    let mut out = String::with_capacity(src.len());
     let mut i = 0;
     while i < b.len() {
-        match (b[i], b.get(i + 1).copied()) {
-            (b'/', Some(b'/')) => {
-                while i < b.len() && b[i] != b'\n' {
-                    i += 1;
-                }
-            }
-            (b'/', Some(b'*')) => {
-                let mut depth = 0usize;
-                while i < b.len() {
-                    if b[i] == b'/' && b.get(i + 1) == Some(&b'*') {
-                        depth += 1;
-                        i += 2;
-                    } else if b[i] == b'*' && b.get(i + 1) == Some(&b'/') {
-                        depth -= 1;
-                        i += 2;
-                        if depth == 0 {
-                            break;
-                        }
-                    } else {
-                        i += 1;
+        let rest = &src[i..];
+        if rest.starts_with("//") {
+            i += rest.find('\n').unwrap_or(rest.len());
+        } else if rest.starts_with("/*") {
+            let mut depth = 0usize;
+            while i < b.len() {
+                if b[i] == b'/' && b.get(i + 1) == Some(&b'*') {
+                    depth += 1;
+                    i += 2;
+                } else if b[i] == b'*' && b.get(i + 1) == Some(&b'/') {
+                    depth -= 1;
+                    i += 2;
+                    if depth == 0 {
+                        break;
                     }
-                }
-                out.push(b' ');
-            }
-            (b'"', _) => {
-                out.push(b'"');
-                i += 1;
-                while i < b.len() && b[i] != b'"' {
-                    if b[i] == b'\\' && i + 1 < b.len() {
-                        out.push(b[i]);
-                        i += 1;
-                    }
-                    out.push(b[i]);
-                    i += 1;
-                }
-                if i < b.len() {
-                    out.push(b'"');
+                } else {
                     i += 1;
                 }
             }
-            (c, _) => {
-                out.push(c);
-                i += 1;
-            }
+            out.push(' ');
+        } else if let Some(len) = raw_literal_len(rest).filter(|_| i == 0 || !ident_byte(b[i - 1]))
+        {
+            out.push_str(&rest[..len]);
+            i += len;
+        } else if b[i] == b'"' {
+            let len = quoted_literal_len(rest);
+            out.push_str(&rest[..len]);
+            i += len;
+        } else if let Some(len) = char_literal_len(rest) {
+            out.push_str(&rest[..len]);
+            i += len;
+        } else {
+            let c = rest.chars().next().unwrap();
+            out.push(c);
+            i += c.len_utf8();
         }
     }
-    String::from_utf8_lossy(&out).into_owned()
+    out
+}
+
+/// Length of the raw string literal `rest` starts with (`r`, `br` or `cr`,
+/// any number of `#`, then `"`), through its closing quote and the same
+/// number of hashes. `None` when `rest` is not one, e.g. a raw identifier
+/// such as `r#component`.
+fn raw_literal_len(rest: &str) -> Option<usize> {
+    let b = rest.as_bytes();
+    let mut at = usize::from(matches!(b.first(), Some(b'b' | b'c')));
+    if b.get(at) != Some(&b'r') {
+        return None;
+    }
+    at += 1;
+    let hashes = b[at..].iter().take_while(|&&c| c == b'#').count();
+    at += hashes;
+    if b.get(at) != Some(&b'"') {
+        return None;
+    }
+    at += 1;
+    let close = format!("\"{}", "#".repeat(hashes));
+    Some(
+        rest[at..]
+            .find(&close)
+            .map_or(rest.len(), |end| at + end + close.len()),
+    )
+}
+
+/// Length of the escaped string literal `rest` starts with (its opening
+/// `"`; a `b` or `c` prefix is ordinary text before it), through the
+/// closing quote.
+fn quoted_literal_len(rest: &str) -> usize {
+    let b = rest.as_bytes();
+    let mut at = 1;
+    while at < b.len() {
+        match b[at] {
+            b'\\' => at += 2,
+            b'"' => return at + 1,
+            _ => at += 1,
+        }
+    }
+    b.len()
+}
+
+/// Length of the character literal `rest` starts with (`'x'`, `'"'`, or an
+/// escape such as `'\''` or `'\u{22}'`; a `b` prefix is ordinary text
+/// before it). `None` for a lifetime or label such as `'a`.
+fn char_literal_len(rest: &str) -> Option<usize> {
+    let b = rest.as_bytes();
+    if b.first() != Some(&b'\'') {
+        return None;
+    }
+    if b.get(1) == Some(&b'\\') {
+        let end = b.iter().skip(3).position(|&c| c == b'\'' || c == b'\n')? + 3;
+        return (b[end] == b'\'').then_some(end + 1);
+    }
+    let c = rest[1..].chars().next()?;
+    let after = 1 + c.len_utf8();
+    (c != '\'' && c != '\n' && rest[after..].starts_with('\'')).then_some(after + 1)
 }
 
 fn ident_byte(c: u8) -> bool {
@@ -670,6 +728,61 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
             "the raw component-module probe was not caught: {probe:?}"
         );
     }
+    // ... and a literal never hides the code after it: raw strings (any
+    // hash count, `br`, `cr`), escaped strings and character literals keep
+    // the lexer in step, so a comment marker inside one cannot swallow a
+    // later use (P0-LINUX-FINAL-R2C). The `/*` string after an odd-quote
+    // literal is the shape that hid a use from the R2B lexer.
+    let use_ = "#[cfg(any())]\nuse wasmtime::r#component::Val;\n";
+    let tail = "const OPEN: &str = \"/*\";\n#[cfg(any())]\nuse wasmtime::r#component::Val;\nconst CLOSE: &str = \"*/\";";
+    for probe in [
+        format!("const X: &str =\n    r#\"x\" // still raw\"#;\n{use_}"),
+        format!("const X: &str = r#\"x\" \"#;\n{tail}"),
+        format!("const X: &str = r##\"a \"# b\"##;\n{tail}"),
+        format!("const X: &str = r###\"a \"## \" // b\"###;\n{tail}"),
+        format!("const X: &[u8] = br#\"x\" \"#;\n{tail}"),
+        format!("const X: &[u8] = br##\"x\" // \"##;\n{use_}"),
+        format!("const X: &core::ffi::CStr = cr#\"x\" \"#;\n{tail}"),
+        format!("const X: &core::ffi::CStr = cr##\"x\" /* \"##;\n{use_}"),
+        format!("const X: &str = r\"x\\\";\n{tail}"),
+        format!("const X: &str = r#\"x\" /* \"#;\n{use_}const CLOSE: &str = \"*/\";"),
+        format!("const X: &str = r#\"/* a \" b */\"#;\n{use_}"),
+        format!("const X: &str = r#\"he said \"hi\" and \"\"#;\n{tail}"),
+        format!("const X: &str = \"a \\\" b\";\n{tail}"),
+        format!("const X: &[u8] = b\"a \\\" b\";\n{tail}"),
+        format!("const X: &core::ffi::CStr = c\"a \\\" b\";\n{tail}"),
+        format!("const Q: char = '\"';\n{tail}"),
+        format!("const Q: u8 = b'\"';\n{tail}"),
+        format!("const Q: char = '\\'';\nconst R: &str = \"x\";\n{tail}"),
+    ] {
+        assert!(
+            wasmtime_forbidden_uses(&probe)
+                .iter()
+                .any(|use_| use_.starts_with("component: ")),
+            "a literal hid the component-module use: {probe:?}"
+        );
+    }
+    // The lexer keeps literals whole and removes only real comments.
+    for (src, kept, removed) in [
+        ("r#\"a\" // b\"# x", "r#\"a\" // b\"# x", ""),
+        ("br##\"a\"# /* b\"## x", "br##\"a\"# /* b\"## x", ""),
+        ("cr\"a /* b\" x", "cr\"a /* b\" x", ""),
+        ("\"a \\\" // b\" x // c", "\"a \\\" // b\" x ", "// c"),
+        ("'\"' x /* c */ y", "'\"' x", "/* c */"),
+        (
+            "fn f<'a>(x: &'a str) {} // c",
+            "fn f<'a>(x: &'a str) {} ",
+            "// c",
+        ),
+        ("r#component /* c */ x", "r#component", "/* c */"),
+    ] {
+        let plain = without_comments(src);
+        assert!(plain.contains(kept), "{src:?} lost {kept:?}: {plain:?}");
+        assert!(
+            removed.is_empty() || !plain.contains(removed),
+            "{src:?} kept the comment {removed:?}: {plain:?}"
+        );
+    }
     // ... while it accepts the core API the SDK sandbox uses, and comments.
     for safe in [
         "use wasmtime::{Engine, Linker, Module, Store, StoreLimits, StoreLimitsBuilder};",
@@ -682,6 +795,12 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
         "use wasmtime::{Engine as WasmEngine, Store};",
         "extern crate wasmtime;",
         "let x = wasmtime::r#componentx;",
+        "const X: &str = r#\"see // here\"#;\nuse wasmtime::Engine;",
+        "const X: &str = r##\"a \"# // b\"##;\nuse wasmtime::Linker;",
+        "const X: &str = r#\"/* not a comment */\"#;\nuse wasmtime::Store;",
+        "const X: &[u8] = br#\"/* \" */\"#;\nuse wasmtime::Module;",
+        "const X: &str = \"say \\\"hi\\\" // not a comment\";\nuse wasmtime::Module;",
+        "const Q: char = '\"'; fn f<'a>(x: &'a str) {}\nuse wasmtime::Engine;",
     ] {
         assert_eq!(
             wasmtime_forbidden_uses(safe),
