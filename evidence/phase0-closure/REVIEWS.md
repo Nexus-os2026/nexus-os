@@ -144,3 +144,31 @@ weaken no assertion; the composed bounds satisfy both streams' guards.
 | 2 | should-fix | Warden fail-closed is satisfied by any caller-created agent named `nexus-warden` (the only agent that can match in production). No authority gain (the review toggle is interface-owned), but the claim and the audit trail are wrong. | S5: in Phase Zero an enabled review denies without any name lookup; the test updated; toggle ownership recorded as a non-claim. |
 | 3-8 | note | `resume_agent` without an L6 check; raw id comparison in the stored-record check; `== 6`; a goal-assignment guard scanning two files; the directory walker's use not pinned; `review_consent_batch` resolving transcendent rows. | S5 follow-up. |
 | 9, 10 | note | Disabled startup-scheduling code without an L6 filter; a pre-existing cron-interval bug in the moved loop code. | Recorded. |
+
+### S3 repairs (`c028a625..6f54fb8a`, composed at `a629b0cf`)
+
+Ten commits, each with a recorded negative control: total time bound on the
+in-process credentialed POST (a dripping body now fails after the timeout);
+guards read CRLF and LF forms identically (each guard runs on both); model
+registration only at the authorized Ollama address; credential-bearing
+reqwest providers follow no redirect; messaging send/poll bounded in time and
+size; tests use their own download registry and the exit claim is scoped to a
+normal exit; the six refused tools are refused before availability is
+reported; search redirects only to https; the desktop build's TLS stack
+(native-tls, OS trust store, system proxy) stated; pull progress callbacks
+panic-guarded. Re-review assigned to S4.
+
+## S6 (items K, DEP), reviewed by S3 — range `63eb0d07..61dd2321`
+
+Verdict: **ready for composition; no blocker**. Dependency changes verified
+independently: lockfile package diff exactly the precise updates plus the rmcp
+prune; checksums match; unified feature sets unchanged except an unused
+schemars feature; cargo-audit 19 -> 8 vulnerabilities on the same database;
+npm changes development-only with sha512 integrity.
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| 1 | should-fix | A sub-minute agent schedule is refused with only a stderr line while `create_agent`/`start_agent` succeed, so it silently never runs. | S5 (owns those functions): validate before saving and report the refusal. |
+| 2 | should-fix | The governed plan path drops a whole cost record when the model-supplied project name exceeds the new bounds or history is full. | S6: sanitise the name to the bound and report refusals. |
+| 3 | should-fix | The voice probe fix is not shown on the GPU-mismatch host; voice tests may download models. | S6: offline test environment; local evidence with and without the GPU mask; the workflow mask decision stays with the coordinator. |
+| 4-10 | note | Variant guard asserts text only (the composed branch has a zero-model-call test); aws-lc-sys system library auto-detection; frontend error stderr not rate-limited; the cron refusal echoes caller text; latent sub-minute CronTrigger; benchmark NaN on a refused arena run; a FIFO at the budget file blocks. | S6 truncates the echo; the rest recorded. |
