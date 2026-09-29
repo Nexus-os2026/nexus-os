@@ -1,10 +1,38 @@
 use async_trait::async_trait;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use crate::error::NxError;
 use crate::llm::provider::LlmProvider;
 use crate::llm::streaming::parse_openai_sse_stream;
 use crate::llm::types::{LlmRequest, LlmResponse, Role, StreamChunk, TokenUsage};
+
+/// Connecting to the provider may take at most this long.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// No wait for a response's headers, and no read of its body (a stream's
+/// included), may take longer than this. A non-streaming answer arrives only
+/// when it is complete, so this also bounds its generation.
+const READ_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// A non-streaming completion ends within this, from connecting until its
+/// last byte. (A stream may run longer; each of its reads is bounded.)
+const COMPLETE_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// The provider's client (Final Gate items B and C): bounded as above, with
+/// reads bounded by `read_timeout`, and following no redirect. reqwest drops
+/// the bearer token on a redirect to another host, but on 307 and 308 it
+/// would re-send the prompt there; a redirect is reported as its status
+/// instead. Like `Client::new()` before, building it panics only when no TLS
+/// backend can be initialized.
+fn bounded_client(read_timeout: Duration) -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(read_timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("failed to initialize the HTTP client")
+}
 
 /// A generic OpenAI-compatible provider.
 /// Used by: OpenAI, Ollama, OpenRouter, Groq, DeepSeek.
@@ -31,7 +59,7 @@ impl OpenAiCompatibleProvider {
     ) -> Self {
         Self {
             provider_name: name.to_string(),
-            client: reqwest::Client::new(),
+            client: bounded_client(READ_TIMEOUT),
             base_url: base_url.to_string(),
             api_key_env: api_key_env.to_string(),
             extra_headers,
@@ -120,7 +148,11 @@ impl LlmProvider for OpenAiCompatibleProvider {
         }
 
         let body = self.build_body(request, false);
-        let response = self.build_http_request(&body)?.send().await?;
+        let response = self
+            .build_http_request(&body)?
+            .timeout(COMPLETE_TIMEOUT)
+            .send()
+            .await?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -250,5 +282,154 @@ impl LlmProvider for OpenAiCompatibleProvider {
             return true;
         }
         self.api_key().is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llm::types::Message;
+    use std::io::{Read, Write};
+
+    fn request() -> LlmRequest {
+        LlmRequest {
+            messages: vec![Message {
+                role: Role::User,
+                content: "fg prompt".to_string(),
+            }],
+            model: "m".to_string(),
+            max_tokens: 16,
+            temperature: None,
+            system: None,
+            tools: None,
+            stream: false,
+        }
+    }
+
+    /// A provider for `base` (no API key is read: the variable is unset and
+    /// none is required) whose reads wait at most `read_timeout`.
+    fn stand_in_provider(base: &str, read_timeout: Duration) -> OpenAiCompatibleProvider {
+        let mut provider = OpenAiCompatibleProvider::new(
+            "fg",
+            base,
+            "NEXUS_FG_UNSET_API_KEY",
+            "m",
+            vec![],
+            vec!["m".to_string()],
+            false,
+        );
+        provider.client = bounded_client(read_timeout);
+        provider
+    }
+
+    /// Serve `connections` loopback requests: read each request whole, answer
+    /// it with `answer` (nothing when it is empty) and keep the connection
+    /// open until the returned sender is dropped. Returns the base URL.
+    fn serve(
+        connections: usize,
+        answer: String,
+    ) -> (
+        String,
+        std::sync::mpsc::Sender<()>,
+        std::thread::JoinHandle<()>,
+    ) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let server = std::thread::spawn(move || {
+            let mut open = Vec::new();
+            for _ in 0..connections {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(30)))
+                    .unwrap();
+                let mut head = Vec::new();
+                let mut byte = [0u8; 1];
+                while !head.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                    head.push(byte[0]);
+                }
+                let length = String::from_utf8_lossy(&head)
+                    .to_ascii_lowercase()
+                    .lines()
+                    .find_map(|line| line.strip_prefix("content-length:").map(str::to_string))
+                    .and_then(|value| value.trim().parse::<usize>().ok())
+                    .unwrap_or(0);
+                let mut body = vec![0u8; length];
+                stream.read_exact(&mut body).unwrap();
+                stream.write_all(answer.as_bytes()).unwrap();
+                open.push(stream);
+            }
+            // Returns when the test drops the sender.
+            let _ = released.recv();
+        });
+        (base, release, server)
+    }
+
+    /// Final Gate items B and C: the calls follow no redirect, so the prompt
+    /// (which reqwest re-sends on 307 and 308) never reaches the redirect
+    /// target, which is never contacted; the redirect is reported as its
+    /// status.
+    #[tokio::test]
+    async fn p0_fg_openai_compatible_calls_follow_no_redirect() {
+        let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        target.set_nonblocking(true).unwrap();
+        let location = format!("http://{}/chat/completions", target.local_addr().unwrap());
+        for code in [
+            "301 Moved Permanently",
+            "302 Found",
+            "307 Temporary Redirect",
+            "308 Permanent Redirect",
+        ] {
+            let answer = format!(
+                "HTTP/1.1 {code}\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            let (base, release, server) = serve(2, answer);
+            // A short read timeout: a followed redirect to the silent target
+            // fails in seconds rather than after READ_TIMEOUT.
+            let provider = stand_in_provider(&base, Duration::from_secs(5));
+            let complete = provider.complete(&request()).await.unwrap_err().to_string();
+            assert!(
+                complete.contains(&format!("HTTP {}", &code[..3])),
+                "{complete}"
+            );
+            let streamed = provider
+                .stream_raw(&request())
+                .await
+                .unwrap_err()
+                .to_string();
+            assert!(
+                streamed.contains(&format!("HTTP {}", &code[..3])),
+                "{streamed}"
+            );
+            drop(release);
+            server.join().unwrap();
+        }
+        assert!(matches!(
+            target.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+    }
+
+    /// The client's read timeout bounds a server that never answers and a
+    /// stream that stalls after its head (here 1 s instead of 600 s).
+    #[tokio::test]
+    async fn p0_fg_openai_compatible_reads_are_bounded() {
+        let (base, release, server) = serve(1, String::new());
+        let provider = stand_in_provider(&base, Duration::from_secs(1));
+        let started = std::time::Instant::now();
+        assert!(provider.complete(&request()).await.is_err());
+        assert!(started.elapsed() < Duration::from_secs(20));
+        drop(release);
+        server.join().unwrap();
+
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n".to_string();
+        let (base, release, server) = serve(1, head);
+        let provider = stand_in_provider(&base, Duration::from_secs(1));
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let started = std::time::Instant::now();
+        assert!(provider.stream(&request(), tx).await.is_err());
+        assert!(started.elapsed() < Duration::from_secs(20));
+        drop(release);
+        server.join().unwrap();
     }
 }

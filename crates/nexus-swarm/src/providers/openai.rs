@@ -20,6 +20,21 @@ use std::time::{Duration, Instant};
 // for the rewrite rationale.
 const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 
+/// The client for the credentialed calls (Final Gate item C): a 60 s
+/// timeout and no redirect. reqwest drops the bearer token on a redirect to
+/// another host, but on 307 and 308 it would re-send the prompt there; a
+/// redirect is reported as its status instead. Like the `Client::new()`
+/// fallback before, building it panics only when no TLS backend can be
+/// initialized.
+fn credential_client() -> Client {
+    let no_redirect = || Client::builder().redirect(reqwest::redirect::Policy::none());
+    no_redirect()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .or_else(|_| no_redirect().build())
+        .expect("failed to initialize the HTTP client")
+}
+
 pub struct OpenAiSwarmProvider {
     base_url: String,
     client: Client,
@@ -29,26 +44,18 @@ pub struct OpenAiSwarmProvider {
 
 impl OpenAiSwarmProvider {
     pub fn new() -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(60))
-            .build()
-            .unwrap_or_else(|_| Client::new());
         Self {
             base_url: DEFAULT_BASE_URL.into(),
-            client,
+            client: credential_client(),
             key_override: None,
         }
     }
 
     /// Test helper — point at a mock server with a dummy key.
     pub fn with_base_and_key(base_url: impl Into<String>, key: impl Into<String>) -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(60))
-            .build()
-            .unwrap_or_else(|_| Client::new());
         Self {
             base_url: base_url.into(),
-            client,
+            client: credential_client(),
             key_override: Some(key.into()),
         }
     }
@@ -334,5 +341,47 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, ProviderError::Http(_, 429, _)));
+    }
+
+    /// Final Gate item C: the calls follow no redirect, so the prompt (which
+    /// reqwest re-sends on 307 and 308) never reaches the redirect target,
+    /// which is never contacted; the redirect is reported as its status.
+    #[tokio::test]
+    async fn p0_fg_calls_follow_no_redirect() {
+        let target = MockServer::start().await;
+        for code in [301u16, 302, 307, 308] {
+            let origin = MockServer::start().await;
+            for route in ["/chat/completions", "/models"] {
+                Mock::given(path(route))
+                    .respond_with(
+                        ResponseTemplate::new(code)
+                            .insert_header("location", format!("{}{route}", target.uri())),
+                    )
+                    .mount(&origin)
+                    .await;
+            }
+            let p = OpenAiSwarmProvider::with_base_and_key(origin.uri(), "sk-fg-secret");
+            let err = p
+                .invoke(InvokeRequest {
+                    model_id: "gpt-4o-mini".into(),
+                    prompt: "fg prompt".into(),
+                    max_tokens: 8,
+                    temperature: None,
+                    metadata: serde_json::Value::Null,
+                })
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(&err, ProviderError::Http(_, status, _) if *status == code),
+                "{code}: {err:?}"
+            );
+            let health = p.health_check().await;
+            assert_eq!(health.status, ProviderHealthStatus::Unhealthy, "{code}");
+            assert_eq!(origin.received_requests().await.unwrap().len(), 2, "{code}");
+        }
+        assert!(
+            target.received_requests().await.unwrap().is_empty(),
+            "the redirect target was contacted"
+        );
     }
 }

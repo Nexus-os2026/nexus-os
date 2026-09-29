@@ -351,11 +351,26 @@ pub(crate) fn is_setup_complete() -> bool {
 }
 
 pub(crate) fn run_setup_wizard(ollama_url: Option<String>) -> Result<SetupResult, String> {
-    // Final Gate item B: an address from the interface must name the
-    // authorized Ollama address, before anything is detected or saved. Only
-    // that address is persisted below; the persisted value is a record for
-    // display, and no request reads it.
-    let ollama_url = ollama_base_url_for("run_setup_wizard", ollama_url)?;
+    setup_wizard_after_address_check(ollama_url, run_setup_wizard_at)
+}
+
+/// Final Gate item B: an address from the interface must name the authorized
+/// Ollama address before anything is detected or saved; only then does
+/// `setup` run (hardware detection, the Ollama probe and the configuration
+/// save), with the authorized address. Tests pass a stand-in `setup`, so a
+/// regressed check is reported without touching the operator's
+/// configuration.
+pub(crate) fn setup_wizard_after_address_check(
+    ollama_url: Option<String>,
+    setup: impl FnOnce(String) -> Result<SetupResult, String>,
+) -> Result<SetupResult, String> {
+    setup(ollama_base_url_for("run_setup_wizard", ollama_url)?)
+}
+
+/// The setup wizard at the authorized Ollama address. Only that address is
+/// persisted below; the persisted value is a record for display, and no
+/// request reads it.
+fn run_setup_wizard_at(ollama_url: String) -> Result<SetupResult, String> {
     let hw_info = detect_hardware()?;
     let ollama_status = check_ollama(Some(ollama_url))?;
 
