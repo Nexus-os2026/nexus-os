@@ -14,7 +14,8 @@
 //!   a frontend-supplied field: the URL it checks is the request's `Origin`
 //!   header on the custom-protocol IPC path (`ipc/protocol.rs` 490-498), or
 //!   the URL wry reports on the `postMessage` fallback path (on Linux that is
-//!   the main frame's URL, `webkitgtk/mod.rs` 640-650). The request is
+//!   the main frame's URL when the message is handled, `webkitgtk/mod.rs`
+//!   640-650 — see the race below). The request is
 //!   `Origin::Local` only if that URL is the app origin (`is_local_url`,
 //!   `webview/mod.rs` 1680-1720; this app registers no custom URI scheme);
 //!   anything else is `Origin::Remote`, matches no capability and is refused
@@ -34,8 +35,8 @@
 //!     `Origin: null`, which tauri rejects before the ACL ("Origin header is
 //!     not a valid URL").
 //!   - **All platforms:** a main-frame document at a non-app origin (one the
-//!     navigation guard below failed to cancel) holds the key and is refused
-//!     by the ACL. A **same-origin, non-sandboxed** frame — an `about:blank` or
+//!     navigation guard below failed to cancel) holds the key; the ACL
+//!     refuses its requests, except the `postMessage` race described below. A **same-origin, non-sandboxed** frame — an `about:blank` or
 //!     `srcdoc` frame without `sandbox`, or an app-origin `src` — counts as
 //!     `Origin::Local` on every platform: it can reach the parent's bridge
 //!     (Linux/macOS) or holds the key itself (Windows). The frontend rule is
@@ -52,12 +53,15 @@
 //!   denies every request. The guard is consulted for main-frame navigations
 //!   on every platform, and for subframe navigations on Linux (observed) and
 //!   macOS (wry routes every navigation action to it there); on Windows it
-//!   sees `NavigationStarting`, the main frame only. For new windows, wry 0.54.4
-//!   already refuses them when no handler is set (WebKitGTK's `create` signal
-//!   is connected only with a handler, `webkitgtk/mod.rs` 486-489; WebView2
-//!   marks the request handled, `webview2/mod.rs` 784-786; the WKWebView UI
-//!   delegate returns no webview), so the explicit `Deny` handler is a
-//!   safeguard against a change of that default, not the closure itself.
+//!   sees `NavigationStarting`, the main frame only. For new windows, the
+//!   pinned wry 0.54.4 source refuses them when no handler is set
+//!   (WebKitGTK's `create` signal is connected only with a handler,
+//!   `webkitgtk/mod.rs` 486-489; WebView2 marks the request handled,
+//!   `webview2/mod.rs` 784-786; the WKWebView UI delegate returns no
+//!   webview), so the explicit `Deny` handler is a safeguard against a change
+//!   of that default, not the closure itself. That default is observed live
+//!   only on Linux (the harness passes with the handler removed); for Windows
+//!   and macOS it rests on reading the source, not on observation.
 //!
 //! Redirects and subframes, as observed live on Linux by
 //! `tests/webview_boundary_live.rs`: WebKitGTK consults the guard for server
@@ -73,10 +77,25 @@
 //! tauri serves from the embedded assets and never answers with a redirect
 //! (tauri 2.10.3 `protocol/tauri.rs` 212-219); in a dev build the configured
 //! `devUrl` dev server. `about:blank`, `about:srcdoc` and `blob:` documents
-//! make no HTTP request. A document that nevertheless lands on a non-app
-//! origin is still refused every application command by the origin ACL
-//! (observed live with the guard removed): the ACL, not the navigation guard,
-//! is the IPC boundary.
+//! make no HTTP request.
+//!
+//! Neither layer is sufficient alone; together they are the boundary. With
+//! the guard removed (a live negative control on Linux), a non-app document
+//! in the main frame is refused by the ACL on the custom-protocol path
+//! (the request's own `Origin` header) and on the `postMessage` path while it
+//! is still the loaded document — but a `postMessage` invoke that is handled
+//! after the main frame has started navigating back to the app origin is
+//! ACCEPTED, because wry's WebKitGTK handler attributes the message to
+//! `webview.uri()` at handling time (`webkitgtk/mod.rs` 640-650), not to the
+//! sending document. A non-app document can trigger that navigation itself
+//! (the guard admits the app origin). So the ACL alone does not bound a
+//! non-app main-frame document; the navigation guard, which keeps every
+//! non-app document out of the main frame (observed on Linux for script
+//! navigations, redirects and subframes), is load-bearing, and the ACL
+//! refuses callers that reach IPC by another route (a keyed Windows
+//! subframe, a request carrying a non-app `Origin`). Windows (the URL comes
+//! from WebView2's `WebMessageReceived` source) and macOS (the sending
+//! frame's request URL) were not observed.
 //!
 //! Neither layer trusts the CSP to prove the boundary; the CSP is a separate
 //! defence-in-depth control in `tauri.conf.json`.
@@ -241,6 +260,7 @@ mod live {
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
 ))]
+#[doc(hidden)]
 pub use live::build_main_window;
 
 #[cfg(all(

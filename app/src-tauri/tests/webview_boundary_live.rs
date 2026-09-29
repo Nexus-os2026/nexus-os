@@ -8,7 +8,16 @@
 //! real effects: request logs of loopback servers the harness runs, marker
 //! files written by a benign handler bound to the real command name
 //! `list_agents`, page-load events, the window list and, on Linux, the
-//! engine's `create` signal. No signal is elapsed time.
+//! engine's `create` signal. Every positive outcome is such an observed
+//! event. A refusal has no event of its own: the refusals in checks 4 (on
+//! Windows/macOS), 5 and 6 are inferred from the absence of every effect
+//! within a bounded window (`REFUSAL_WINDOW`), after a reachability control,
+//! and backed by settle checks (`SETTLE_WINDOW`) after the navigation targets
+//! and at the end of each mode, which re-assert on the cumulative logs that no
+//! refused target was ever requested or loaded, that the app document was not
+//! re-requested, that no other window exists, and that the app document is
+//! still the live main document — so a late navigation on a loaded runner
+//! fails instead of passing.
 //!
 //! # Origin modes and build profiles, one process per mode
 //!
@@ -62,15 +71,22 @@
 //!    WebView2 does not consult the guard for subframes and injects the key
 //!    into every frame, so the frame must report "bridge present" and its
 //!    invoke must be rejected with the ACL's text — DISCRIMINATING for the
-//!    ACL. Linux/macOS: REGRESSION — the guard is consulted for subframe
-//!    navigations and cancels it (observed on Linux), and without the guard
-//!    it loads without a key (main-frame-only injection; observed on Linux).
+//!    ACL. The frame then also tries the raw postMessage path with the
+//!    injected key (tauri's own fallback payload, and a direct
+//!    `window.chrome.webview.postMessage`): it must report that it posted
+//!    (or had no `chrome.webview`) and no command may run — wry subscribes
+//!    only to the top-level `WebMessageReceived`. Linux/macOS: REGRESSION —
+//!    the guard is consulted for subframe navigations and cancels it
+//!    (observed on Linux), and without the guard it loads without a key
+//!    (main-frame-only injection; observed on Linux).
 //! 4. New windows, `window.open` and `<a target=_blank>` (both modes): no
 //!    window appears and the target is never fetched. On Linux the harness
 //!    lets script popups reach the engine's `create` signal and observes it.
-//!    REGRESSION: wry 0.54.4 already refuses new windows when no handler is
-//!    set, on all three platforms; the production `Deny` handler is a
-//!    safeguard.
+//!    REGRESSION: the pinned wry 0.54.4 source refuses new windows when no
+//!    handler is set, on all three platforms, so the production `Deny`
+//!    handler is a safeguard. Observed only on Linux (this check passes with
+//!    the handler removed); for Windows and macOS that is source reading,
+//!    not observation.
 //! 5. Script navigations of the privileged document (both modes) are
 //!    cancelled before any request or page load: to the non-app origin
 //!    `http://[::1]:1421` (DISCRIMINATING for `on_navigation`), and to
@@ -92,8 +108,15 @@
 //! 5) or a redirect (check 6), the failure also reports what the ACL did with
 //! the non-app document's invoke. With the production guard in place no
 //! non-app document reaches IPC on Linux, so the ACL is exercised live there
-//! only as a backstop, in the negative-control runs (guard removed: the ACL
-//! rejects; guard and ACL removed: the invoke is accepted).
+//! only in the negative-control runs. Guard removed: the ACL rejects the
+//! custom-protocol invoke and a postMessage invoke handled while the
+//! document is still loaded; but a postMessage invoke that is handled after
+//! the main frame has started navigating back to the app origin is
+//! ACCEPTED — wry (WebKitGTK) attributes a postMessage to the webview's URL
+//! at handling time, not to the sending document. So on the postMessage
+//! path the navigation guard, which keeps non-app documents out of the main
+//! frame, is load-bearing. The settle checks fail if any marker other than
+//! MAIN (and the SAMEORIGIN observation) appears, so this is reported.
 //!
 //! An informational observation (dev-origin) documents the remaining
 //! limitation: a same-origin, NON-sandboxed `srcdoc` frame counts as the local
@@ -111,7 +134,8 @@
 //! runners or a throw-away account there. Readiness is event-driven with
 //! bounded deadlines; a refusal has no positive signal, so each refusal is
 //! observed over a bounded window, after a reachability control (dev-origin)
-//! showed that the target answers this webview. Every check runs and every
+//! showed that the target answers this webview, and re-checked by the settle
+//! checks described above. Every check runs and every
 //! failure is reported; a failed precondition, or a missed deadline (each
 //! child has a watchdog; the parent bounds each child too), is a FAILURE.
 //!
@@ -137,6 +161,16 @@ const CHILD_DEADLINE: Duration = Duration::from_secs(150);
 const PARENT_DEADLINE: Duration = Duration::from_secs(210);
 /// Observation window for a refusal (no positive signal exists for it).
 const REFUSAL_WINDOW: Duration = Duration::from_secs(2);
+/// Settle interval before the cumulative re-checks of every refusal.
+const SETTLE_WINDOW: Duration = Duration::from_secs(3);
+/// Request paths of refused targets (checks 4 and 5); none may ever be
+/// requested from any harness server.
+const REFUSED_TARGET_MARKS: [&str; 4] = [
+    "/?role=navigated",
+    "?nav=",
+    "/?role=winopen",
+    "/?role=anchor",
+];
 
 static MARKER_DIR: OnceLock<PathBuf> = OnceLock::new();
 
@@ -149,14 +183,39 @@ const APP_DOC: &str = "<!doctype html><html><head><meta charset=\"utf-8\">\
 // Served from the NON-app origin. It reports whether it holds the injected
 // bridge, attempts a governed invoke, and reports the outcome — on rejection
 // with the rejection text — to its own server. `role` names the check.
+//
+// Then (function M) it tries the raw postMessage path with the injected key:
+// it makes tauri's custom-protocol IPC fetch fail (capturing the invoke key
+// from that request's `Tauri-Invoke-Key` header), so tauri falls back to
+// `window.ipc.postMessage` with its own well-formed payload (marker
+// `<ROLE>PM`), and, where `window.chrome.webview` exists (WebView2), it also
+// posts a well-formed invoke message carrying that key directly (marker
+// `<ROLE>RAW`). It reports `pm=1` once posted, or why it could not
+// (`pm=nowebview`, `pm=nokey`, `pm=threw`).
 const REMOTE_DOC: &str = "<!doctype html><html><head><meta charset=\"utf-8\">\
 <title>nexus-live-remote</title></head><body>remote origin<script>\
 var R=(new URLSearchParams(location.search).get('role')||'none').replace(/[^a-z]/g,'');\
+var F=window.fetch.bind(window);\
+function P(q){return F('/probe?role='+R+'&'+q)}\
+function E(e){return encodeURIComponent(String(e)).slice(0,1800)}\
 var I=window.__TAURI_INTERNALS__;var b=(I&&I.invoke)?1:0;\
-fetch('/probe?role='+R+'&bridge='+b);\
+P('bridge='+b);\
+function M(){var K=null;\
+window.fetch=function(u,o){var s=String(u);\
+if(s.indexOf('ipc.localhost')>=0||s.indexOf('ipc:')==0){\
+try{K=o.headers.get('Tauri-Invoke-Key')}catch(x){}\
+return Promise.reject(new Error('blocked by the harness'))}return F(u,o)};\
+I.invoke('list_agents',{tag:R.toUpperCase()+'PM'}).then(\
+function(){P('pmaccepted=1')},function(e){P('pmrejected='+E(e))});\
+var C=window.chrome&&window.chrome.webview;\
+if(!C||!C.postMessage){P('pm=nowebview');return}\
+if(!K){P('pm=nokey');return}\
+try{C.postMessage(JSON.stringify({cmd:'list_agents',callback:4242,error:4243,\
+payload:{tag:R.toUpperCase()+'RAW'},options:{},__TAURI_INVOKE_KEY__:K}));P('pm=1')}\
+catch(e){P('pm=threw&e='+E(e))}}\
 if(b){I.invoke('list_agents',{tag:R.toUpperCase()}).then(\
-function(){fetch('/probe?role='+R+'&accepted=1')},\
-function(e){fetch('/probe?role='+R+'&rejected='+encodeURIComponent(String(e)).slice(0,1800))});}\
+function(){P('accepted=1');M()},\
+function(e){P('rejected='+E(e));M()});}\
 </script></body></html>";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -481,7 +540,9 @@ fn pump_once<R: Runtime>(app: &mut tauri::App<R>) {
 }
 
 /// Pump the event loop until `cond` holds or `budget` elapses; returns whether
-/// `cond` held. The signal is always `cond`, never elapsed time.
+/// `cond` held. `false` means only that nothing was observed within `budget`;
+/// where that absence is the evidence (a refusal), the settle checks re-assert
+/// it later on the cumulative logs.
 fn pump_until<R: Runtime>(
     app: &mut tauri::App<R>,
     budget: Duration,
@@ -633,6 +694,9 @@ struct Live<'a, R: Runtime> {
     expected_origin: &'static str,
     failures: Vec<String>,
     probes: usize,
+    /// Page loads and app-document requests before check 5.
+    loads_before_navigations: usize,
+    index_before_navigations: usize,
     #[cfg(target_os = "linux")]
     create_count: Arc<std::sync::atomic::AtomicUsize>,
 }
@@ -681,6 +745,97 @@ impl<R: Runtime> Live<'_, R> {
             Mode::AppOrigin => assets.lock().map(|l| l.contains(&key)).unwrap_or(false),
         };
         pump_until(&mut self.app, Duration::from_secs(10), from_app_origin)
+    }
+
+    /// Settle check (`when` names the point): after `SETTLE_WINDOW` — or as
+    /// soon as a violation appears — assert on the cumulative logs that no
+    /// refused target was ever requested, no non-app document loaded since
+    /// check 5 began (check 6's own redirect target excepted; that check
+    /// reports it), the app document was not re-requested, no other window
+    /// exists and the app document is still the live main document.
+    fn settle_check(&mut self, when: &str) {
+        let (app_log, remote_log) = (
+            self.servers.app_log.clone(),
+            self.servers.remote_log.clone(),
+        );
+        let (loads, assets) = (self.page_loads.clone(), self.asset_log.clone());
+        let (loads_from, index_at) = (self.loads_before_navigations, self.index_before_navigations);
+        let origin = self.expected_origin;
+        let violations = move || -> Vec<String> {
+            let mut v = Vec::new();
+            for log in [&app_log, &remote_log] {
+                if let Ok(l) = log.lock() {
+                    for path in l.iter() {
+                        if REFUSED_TARGET_MARKS.iter().any(|mark| path.contains(mark)) {
+                            v.push(format!("a refused target was requested: {path}"));
+                        }
+                    }
+                }
+            }
+            if let Ok(l) = loads.lock() {
+                for (_, url) in l.iter().skip(loads_from) {
+                    // about:blank / about:srcdoc are admitted and inert.
+                    if origin_of(url) != origin
+                        && !url.starts_with("about:")
+                        && !url.contains("role=redirect")
+                    {
+                        v.push(format!("a non-app document loaded: {url}"));
+                    }
+                }
+            }
+            let index_now = index_requests(&assets);
+            if index_now != index_at {
+                v.push(format!(
+                    "the app document was re-requested ({index_at} -> {index_now})"
+                ));
+            }
+            v
+        };
+        let seen = violations.clone();
+        self.pump_until(SETTLE_WINDOW, move || !seen().is_empty());
+        let mut found = violations();
+        // Only the app document's own invoke (MAIN) and the documented
+        // same-origin observation (SAMEORIGIN) may ever have reached the
+        // command; any other marker is a non-app document or frame that did.
+        if let Some(dir) = MARKER_DIR.get() {
+            let mut reached: Vec<String> = std::fs::read_dir(dir)
+                .map(|rd| {
+                    rd.flatten()
+                        .map(|e| e.file_name().to_string_lossy().into_owned())
+                        .filter(|n| n.starts_with("marker_"))
+                        .filter(|n| n != "marker_MAIN" && n != "marker_SAMEORIGIN")
+                        .collect()
+                })
+                .unwrap_or_default();
+            reached.sort();
+            for marker in reached {
+                found.push(format!(
+                    "a governed command ran for a non-app caller ({marker})"
+                ));
+            }
+        }
+        let windows = self.app.webview_windows().len();
+        if windows != 1 {
+            found.push(format!("{windows} windows exist"));
+        }
+        if self.document_origin() != self.expected_origin {
+            found.push(format!(
+                "the main document is at {}, not the app origin",
+                self.document_origin()
+            ));
+        } else if !self.prove_live() {
+            found.push("the app document is not live".into());
+        }
+        if found.is_empty() {
+            eprintln!(
+                "[live] {} settle ({when}): no refused target requested or loaded, app document \
+                 unchanged and live [refusals re-asserted]",
+                self.m()
+            );
+        }
+        for f in found {
+            self.check_failed(format!("settle ({when}): {f}"));
+        }
     }
 
     /// Bring the app document back after a navigation that should have been
@@ -841,6 +996,8 @@ fn run_live(mode: Mode, phase: &Mutex<String>, servers: &Servers) -> Vec<String>
         expected_origin,
         failures: Vec::new(),
         probes: 0,
+        loads_before_navigations: 0,
+        index_before_navigations: 0,
         #[cfg(target_os = "linux")]
         create_count,
     };
@@ -855,6 +1012,8 @@ fn run_live(mode: Mode, phase: &Mutex<String>, servers: &Servers) -> Vec<String>
         check_redirect(&mut live);
     }
 
+    set_phase(phase, "settle");
+    live.settle_check("end of run");
     set_phase(phase, "done");
     if live.failures.is_empty() {
         eprintln!("[live] {m}: all boundary checks passed");
@@ -973,6 +1132,7 @@ fn check_subframes<R: Runtime>(live: &mut Live<'_, R>) {
                 report.acl_outcome(&url_prefix)
             )),
         }
+        check_frame_post_message(live, &remote_log);
     } else if cfg!(windows) {
         live.check_failed(format!(
             "3: the cross-origin subframe loaded without a bridge on Windows (expected WebView2 \
@@ -997,6 +1157,57 @@ fn check_subframes<R: Runtime>(live: &mut Live<'_, R>) {
             "did not reach"
         }
     );
+}
+
+/// Check 3, raw postMessage path (runs where the cross-origin subframe held
+/// the bridge, i.e. Windows): tauri's own postMessage fallback and a direct
+/// `window.chrome.webview.postMessage` with the injected key must reach no
+/// command (wry subscribes only to the top-level `WebMessageReceived`,
+/// `webview2/mod.rs` 892-893). The frame must report that it posted, or that
+/// it had no `chrome.webview` to post with; anything else is vacuous.
+fn check_frame_post_message<R: Runtime>(live: &mut Live<'_, R>, remote_log: &Log) {
+    let m = live.m();
+    let log = remote_log.clone();
+    let reported = move || {
+        ["pm=1", "pm=nowebview", "pm=nokey", "pm=threw"]
+            .iter()
+            .find_map(|q| logged_prefix(&log, &format!("/probe?role=frame&{q}")))
+    };
+    let seen = reported.clone();
+    live.pump_until(Duration::from_secs(5), move || seen().is_some());
+    // A message that got through would write its marker: observe over the
+    // bounded window (the settle checks follow later).
+    live.pump_until(REFUSAL_WINDOW, || {
+        marker_path("FRAMEPM").exists() || marker_path("FRAMERAW").exists()
+    });
+    let outcome = reported();
+    if marker_path("FRAMEPM").exists() || marker_path("FRAMERAW").exists() {
+        live.check_failed(format!(
+            "3: a postMessage invoke from the cross-origin subframe reached a governed \
+             command ({outcome:?})"
+        ));
+        return;
+    }
+    match outcome.as_deref() {
+        Some(p) if p.starts_with("/probe?role=frame&pm=1") => eprintln!(
+            "[live] {m} 3: cross-origin subframe: tauri's postMessage fallback and a direct \
+             chrome.webview.postMessage with the injected key reached no command [discriminating \
+             for the raw path]"
+        ),
+        Some(p) if p.starts_with("/probe?role=frame&pm=nowebview") => eprintln!(
+            "[live] {m} 3: cross-origin subframe: no window.chrome.webview in the frame; tauri's \
+             postMessage fallback reached no command"
+        ),
+        Some(p) if p.starts_with("/probe?role=frame&pm=threw") => eprintln!(
+            "[live] {m} 3: cross-origin subframe: chrome.webview.postMessage threw ({}); no \
+             command reached",
+            percent_decode(p)
+        ),
+        other => live.check_failed(format!(
+            "3: the cross-origin subframe did not exercise the raw postMessage path (report \
+             {other:?}); the check would be vacuous"
+        )),
+    }
 }
 
 /// Check 4.
@@ -1075,6 +1286,8 @@ fn check_script_navigations<R: Runtime>(live: &mut Live<'_, R>) {
     let app_log = live.servers.app_log.clone();
     let remote_log = live.servers.remote_log.clone();
     set_phase(live.phase, "5 script navigations to non-app origins");
+    live.loads_before_navigations = live.page_loads.lock().map(|l| l.len()).unwrap_or(0);
+    live.index_before_navigations = index_requests(&live.asset_log);
     let target = |what: &'static str, url: &str, log: Option<&Log>| NavTarget {
         what,
         url: url.to_string(),
@@ -1214,6 +1427,7 @@ fn check_script_navigations<R: Runtime>(live: &mut Live<'_, R>) {
         ));
         live.restore_app_document();
     }
+    live.settle_check("after the check-5 targets");
 }
 
 /// Check 6 (dev-origin only: in app-origin mode the app document is served by
@@ -1289,6 +1503,7 @@ fn check_redirect<R: Runtime>(live: &mut Live<'_, R>) {
              that document held the bridge and {} [regression check on this platform]",
             report.acl_outcome(&url_prefix)
         );
+        live.restore_app_document();
     } else {
         live.check_failed(format!(
             "6: the redirect was followed and the non-app document's outcome is not an ACL \

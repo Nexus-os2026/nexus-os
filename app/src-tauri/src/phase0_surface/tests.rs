@@ -3255,6 +3255,111 @@ const FRONTEND_HTML_SINKS: &[(&str, usize, &str)] = &[
     ),
 ];
 
+/// The top-level, trimmed arguments of the JS call whose `(` is at byte
+/// `open`, honouring quotes, template literals and bracket nesting (`None` if
+/// the call is unterminated). `f()` has no arguments.
+fn js_call_args(text: &str, open: usize) -> Option<Vec<String>> {
+    let b = text.as_bytes();
+    if b.get(open) != Some(&b'(') {
+        return None;
+    }
+    let mut args = Vec::new();
+    let mut depth = 0usize;
+    let mut quote: Option<u8> = None;
+    let mut start = open + 1;
+    let mut i = open + 1;
+    while i < b.len() {
+        let c = b[i];
+        if let Some(q) = quote {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            if c == q {
+                quote = None;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            b'"' | b'\'' | b'`' => quote = Some(c),
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' if depth > 0 => depth -= 1,
+            b')' => {
+                let last = text[start..i].trim();
+                if !last.is_empty() || !args.is_empty() {
+                    args.push(last.to_owned());
+                }
+                return Some(args);
+            }
+            b',' if depth == 0 => {
+                args.push(text[start..i].trim().to_owned());
+                start = i + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+/// `text` with its JS comments (`// ..` and `/* .. */`, including
+/// `/*@vite-ignore*/`) removed and string and template literals kept. Regex
+/// literals are not recognised, so a quote inside one can keep a later comment
+/// in place; callers check the raw text as well.
+fn strip_js_comments(text: &str) -> String {
+    let b = text.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len());
+    let mut quote: Option<u8> = None;
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        if let Some(q) = quote {
+            out.push(c);
+            if c == b'\\' && i + 1 < b.len() {
+                out.push(b[i + 1]);
+                i += 2;
+                continue;
+            }
+            if c == q {
+                quote = None;
+            }
+            i += 1;
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'/') {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if c == b'/' && b.get(i + 1) == Some(&b'*') {
+            i = text[i + 2..]
+                .find("*/")
+                .map_or(b.len(), |end| i + 2 + end + 2);
+            out.push(b' ');
+            continue;
+        }
+        if matches!(c, b'"' | b'\'' | b'`') {
+            quote = Some(c);
+        }
+        out.push(c);
+        i += 1;
+    }
+    String::from_utf8(out).expect("comment stripping keeps UTF-8 boundaries")
+}
+
+/// Whether `arg` is exactly one string literal ('..', ".." or a template
+/// literal without substitutions), so the value is fixed in the source.
+fn is_js_string_literal(arg: &str) -> bool {
+    let b = arg.as_bytes();
+    b.len() >= 2
+        && matches!(b[0], b'"' | b'\'' | b'`')
+        && b[b.len() - 1] == b[0]
+        && !arg[1..arg.len() - 1].contains(b[0] as char)
+        && !(b[0] == b'`' && arg.contains("${"))
+}
+
 /// The opening tag of the JSX/HTML element starting at `at` (`<iframe ...>` or
 /// `<iframe ... />`), with comments removed. Quoted strings, template
 /// literals and `{..}` expressions are honoured, so a `>` inside an
@@ -3343,6 +3448,7 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
 
     let mut sinks = Vec::new();
     let mut previews = 0;
+    let mut object_urls = 0;
     for (relative, text) in &files {
         let count = text.matches("dangerouslySetInnerHTML={").count();
         if count > 0 {
@@ -3398,32 +3504,124 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
                 "{relative}: iframes must not be created from script ({literal})"
             );
         }
-        // P0 item D: the navigation guard admits `blob:` URLs created by the
-        // app origin (downloads). Every Blob the frontend builds must declare
-        // its type, and never a type a browser renders as a scriptable
-        // document, so no object URL can put untrusted markup at the app
-        // origin.
-        for (at, _) in text.match_indices("new Blob(") {
-            let rest = &text[at..];
-            let end = rest
-                .find(");")
-                .unwrap_or_else(|| panic!("{relative}: end of a `new Blob(` statement"));
-            let args = &rest[..end];
+        // Script may not create an element whose tag is not fixed in the
+        // source, nor a frame-like element, nor touch any element's sandbox:
+        // no `.sandbox` access, and no set/remove/toggle of a `sandbox`
+        // attribute.
+        for (at, _) in text.match_indices("createElement") {
+            let rest = &text[at + "createElement".len()..];
+            let name_end = if rest.starts_with("NS(") { 2 } else { 0 };
+            if !rest[name_end..].starts_with('(') {
+                continue;
+            }
+            let args = js_call_args(text, at + "createElement".len() + name_end)
+                .unwrap_or_else(|| panic!("{relative}: unterminated createElement call"));
+            let tag_index = usize::from(name_end == 2);
+            let tag = args.get(tag_index).map(String::as_str).unwrap_or_default();
             assert!(
-                args.contains("type:"),
-                "{relative}: a Blob must declare its MIME type"
+                is_js_string_literal(tag),
+                "{relative}: createElement needs a literal tag, not `{tag}`"
             );
-            for scriptable in [
-                "text/html",
-                "image/svg",
-                "xhtml",
-                "text/xml",
-                "application/xml",
-                "text/xsl",
-            ] {
+            let tag = tag[1..tag.len() - 1].to_ascii_lowercase();
+            assert!(
+                ![
+                    "iframe",
+                    "frame",
+                    "frameset",
+                    "object",
+                    "embed",
+                    "portal",
+                    "fencedframe"
+                ]
+                .contains(&tag.as_str()),
+                "{relative}: script may not create a `{tag}` element"
+            );
+        }
+        for (at, _) in text.match_indices(".sandbox") {
+            let next = text[at + ".sandbox".len()..].chars().next().unwrap_or(' ');
+            // `.sandboxed`, `.sandboxId` etc. are other identifiers.
+            assert!(
+                next.is_ascii_alphanumeric() || next == '_' || next == '$',
+                "{relative}: script may not read or change an element's sandbox"
+            );
+        }
+        let compact_lower: String = lower.split_whitespace().collect();
+        for api in [
+            "setattribute(",
+            "removeattribute(",
+            "toggleattribute(",
+            "setattributens(",
+        ] {
+            for quote in ['"', '\'', '`'] {
+                let needle = format!("{api}{quote}sandbox");
                 assert!(
-                    !args.contains(scriptable),
-                    "{relative}: a Blob must not be a scriptable document type ({scriptable})"
+                    !compact_lower.contains(&needle),
+                    "{relative}: script may not change a sandbox attribute ({needle})"
+                );
+            }
+        }
+        // P0 item D: the navigation guard admits `blob:` URLs created by the
+        // app origin (downloads), and a scriptable document at such a URL
+        // would run as the local app origin with the invoke key. So every
+        // object URL comes from a `new Blob(parts, { type: "<literal>" })`
+        // whose type is a reviewed, non-scriptable literal (a ternary between
+        // such literals is allowed); nothing can re-type or wrap one: no
+        // `new File(`, no `Response(..).blob()`, no three-argument `slice(`
+        // (whose third argument is a content type); and the number of
+        // `createObjectURL(` call sites is pinned, so a new one is reviewed.
+        object_urls += text.matches("createObjectURL(").count();
+        for forbidden in ["new File(", ".blob()", "new Response("] {
+            assert!(
+                !text.contains(forbidden),
+                "{relative}: `{forbidden}` could create an untyped or re-typed Blob"
+            );
+        }
+        for (at, _) in text.match_indices(".slice(") {
+            let args = js_call_args(text, at + ".slice".len())
+                .unwrap_or_else(|| panic!("{relative}: unterminated `.slice(` call"));
+            assert!(
+                args.len() <= 2,
+                "{relative}: a three-argument `.slice(` can re-type a Blob: {args:?}"
+            );
+        }
+        for (at, _) in text.match_indices("new Blob(") {
+            let args = js_call_args(text, at + "new Blob".len())
+                .unwrap_or_else(|| panic!("{relative}: unterminated `new Blob(` call"));
+            assert_eq!(
+                args.len(),
+                2,
+                "{relative}: a Blob takes its parts and a literal `{{ type }}`: {args:?}"
+            );
+            let options = args[1]
+                .strip_prefix('{')
+                .and_then(|o| o.strip_suffix('}'))
+                .unwrap_or_else(|| panic!("{relative}: Blob options must be an object literal"))
+                .trim();
+            let expr = options
+                .strip_prefix("type:")
+                .unwrap_or_else(|| {
+                    panic!("{relative}: Blob options must be exactly `{{ type: .. }}`: {options}")
+                })
+                .trim();
+            let results = expr.split_once('?').map_or(expr, |(_, branches)| branches);
+            for value in results.split(':').map(str::trim) {
+                let literal = value
+                    .strip_prefix('"')
+                    .and_then(|v| v.strip_suffix('"'))
+                    .filter(|v| !v.contains('"'))
+                    .unwrap_or_else(|| {
+                        panic!("{relative}: a Blob type must be a string literal: {expr}")
+                    });
+                assert!(
+                    [
+                        "text/plain",
+                        "text/csv",
+                        "application/json",
+                        "text/markdown;charset=utf-8",
+                        "application/octet-stream",
+                    ]
+                    .contains(&literal),
+                    "{relative}: Blob type `{literal}` is not a reviewed, non-scriptable type"
                 );
             }
         }
@@ -3443,7 +3641,25 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
         // whitespace removed, in every quote style, for static, side-effect,
         // re-export, dynamic `import(..)` and `require(..)` forms. (The packages
         // stay in package.json, unused.)
-        let compact: String = text.split_whitespace().collect();
+        // Comments (e.g. `/*@vite-ignore*/`) are removed before matching,
+        // and the raw text is checked too. Every dynamic `import(..)` must
+        // name one string literal (no concatenation, variable or comment),
+        // except the one pinned dialog-plugin importer in KnowledgeGraph.tsx.
+        for (at, _) in text.match_indices("import(") {
+            let before = text[..at].chars().next_back().unwrap_or(' ');
+            if before.is_ascii_alphanumeric() || before == '_' || before == '$' || before == '.' {
+                continue;
+            }
+            let args = js_call_args(text, at + "import".len())
+                .unwrap_or_else(|| panic!("{relative}: unterminated import("));
+            let pinned = relative == "src/pages/KnowledgeGraph.tsx" && args == ["specifier"];
+            assert!(
+                pinned || (args.len() == 1 && is_js_string_literal(&args[0])),
+                "{relative}: a dynamic import must name one string literal: {args:?}"
+            );
+        }
+        let stripped: String = strip_js_comments(text).split_whitespace().collect();
+        let raw: String = text.split_whitespace().collect();
         for module in [
             "@monaco-editor/",
             "monaco-editor",
@@ -3455,7 +3671,7 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
                 for form in ["from", "import", "import(", "require("] {
                     let needle = format!("{form}{quote}{module}");
                     assert!(
-                        !compact.contains(&needle),
+                        !raw.contains(&needle) && !stripped.contains(&needle),
                         "{relative}: `{module}` is unavailable in Phase Zero ({needle})"
                     );
                 }
@@ -3502,6 +3718,10 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
         .collect();
     assert_eq!(sinks, expected, "a raw-HTML sink must be classified");
     assert!(previews >= 6, "{previews}");
+    assert_eq!(
+        object_urls, 8,
+        "the reviewed createObjectURL( call sites (all typed downloads); review any new one"
+    );
 
     let source = |file: &str| {
         &files
