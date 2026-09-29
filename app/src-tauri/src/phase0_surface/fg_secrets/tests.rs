@@ -104,8 +104,19 @@ fn p0_fg_a_configuration_writes_check_key_material_before_writing() {
         ),
         "{checked}"
     );
-    assert!(compact(&body(production, "pub fn save_config_to_path("))
-        .starts_with("save_config_checked_to_path("));
+    // A save whose caller does not receive the outcome reports it.
+    assert_eq!(
+        compact(&body(production, "pub fn save_config_to_path(")),
+        "save_config_to_path_with(path,config,&ConfigKeyMaterial::from_launch_environment(),report_protection_change,)"
+    );
+    assert_eq!(
+        compact(&body(production, "fn save_config_to_path_with(")),
+        "letoutcome=save_config_checked_to_path(path,config,keys)?;report(outcome);Ok(())"
+    );
+    assert_eq!(
+        compact(&body(production, "pub fn save_config(")),
+        "save_config_to_path(config_path()?.as_path(),config)"
+    );
     assert!(compact(&body(production, "pub fn save_config_checked("))
         .contains("save_config_checked_to_path(&path,config,"));
     // A file already on disk that does not open refuses the write.
@@ -117,8 +128,13 @@ fn p0_fg_a_configuration_writes_check_key_material_before_writing() {
     ] {
         assert!(stored.contains(needle), "{needle}: {stored}");
     }
-    // Only non-blank material is an operator key.
-    assert!(body(production, "fn operator_key(").contains(".trim().is_empty()"));
+    // Only non-blank material is an operator key, and never material that
+    // derives the ambient key.
+    assert!(body(production, "fn operator_candidate(").contains(".trim().is_empty()"));
+    assert_eq!(
+        compact(&body(production, "fn operator_key(")),
+        "self.operator_candidate().filter(|key|key.bytes!=self.ambient_key().bytes)"
+    );
     // A load writes only when the file is missing.
     let load = compact(&body(production, "pub fn load_config_from_path_with("));
     assert_eq!(load.matches("save_config_checked_to_path(").count(), 1);
@@ -128,6 +144,58 @@ fn p0_fg_a_configuration_writes_check_key_material_before_writing() {
             &["ErrorKind::NotFound", "save_config_checked_to_path("]
         ),
         "{load}"
+    );
+}
+
+/// Final Gate item A (stream 6 review): a backend configuration save that
+/// changes how the file is protected is audited in the state's chain. The
+/// state installs the kernel's protection recorder before the migration can
+/// re-save the file, and the recorder appends one bounded event, by reason
+/// class, to the trail and to the persisted audit table.
+#[test]
+fn p0_fg_a_backend_protection_changes_are_audited() {
+    use nexus_persistence::StateStore;
+    use std::sync::{Arc, Mutex};
+    let audit = Arc::new(Mutex::new(nexus_kernel::audit::AuditTrail::new()));
+    let db = Arc::new(nexus_persistence::NexusDatabase::in_memory().unwrap());
+    let record = crate::config_protection_recorder(Arc::clone(&audit), Arc::clone(&db));
+    record("encrypted_legacy_plaintext");
+    let payloads: Vec<serde_json::Value> = audit
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .events()
+        .iter()
+        .map(|event| event.payload.clone())
+        .collect();
+    assert_eq!(
+        payloads,
+        vec![serde_json::json!({
+            "action": "save_config",
+            "outcome": "written",
+            "protection": "encrypted_legacy_plaintext"
+        })]
+    );
+    assert_eq!(db.get_audit_count().unwrap(), 1);
+
+    let lib = normalized(include_str!("../../lib.rs"));
+    let new = compact(&body(
+        &lib,
+        "    pub fn new() -> Self {\n        #[cfg(not(test))]\n        maybe_cleanup_legacy_agent_db();",
+    ));
+    assert!(
+        in_order(
+            &new,
+            &[
+                "letaudit=Arc::new(Mutex::new(AuditTrail::new()));",
+                "nexus_kernel::config::install_protection_recorder(config_protection_recorder(audit.clone(),db.clone(),));",
+                "nexus_kernel::startup::run_migrations(",
+            ],
+        ),
+        "{new}"
+    );
+    assert_eq!(
+        compact(&body(&lib, "fn log_event(")),
+        "append_audit_event(&self.audit,&self.db,agent_id,event_type,payload);"
     );
 }
 
@@ -356,14 +424,21 @@ fn p0_fg_h_sign_in_flows_persist_no_token() {
 #[test]
 fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
     let apps = normalized(include_str!("../../commands/apps.rs"));
-    let connect = compact(&body(&apps, "pub(crate) fn messaging_connect_platform("));
+    // The command reads the configuration's token and the platforms' real
+    // endpoints only through its one call to the injected seam.
+    assert_eq!(
+        compact(&body(&apps, "pub(crate) fn messaging_connect_platform(")),
+        "messaging_connect_with(state,platform,token_value,stored_messaging_token,&MESSAGING_ENDPOINTS,)"
+    );
+    let connect = compact(&body(&apps, "fn messaging_connect_with("));
     assert!(
         in_order(
             &connect,
             &[
                 "messaging_platform(state,\"messaging_connect\",&platform)?;",
                 "iftoken_value!=STORED_SECRET{returnErr(deny(state,\"messaging_connect\",\"token_must_be_saved_first\"",
-                "stored_messaging_token(known)?",
+                "stored_token(known)?",
+                "check_messaging_connectivity(known,&token_value,endpoints)",
             ],
         ),
         "{connect}"
@@ -391,10 +466,29 @@ fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
     );
     assert!(!read.contains("fs::write("), "{read}");
     // A connectivity error never carries the request URL, which holds the
-    // Telegram token.
+    // Telegram token. The request is bounded in time (one client, built with
+    // the endpoints' timeout) and every body is read through the size cap.
     let check = body(&apps, "async fn check_messaging_connectivity(");
     assert!(!check.contains("{e}"), "{check}");
-    assert_eq!(check.matches("e.without_url()").count(), 6, "{check}");
+    assert_eq!(check.matches("e.without_url()").count(), 4, "{check}");
+    let compact_check = compact(&check);
+    assert!(
+        compact_check
+            .starts_with("letclient=reqwest::Client::builder().timeout(endpoints.timeout).build()"),
+        "{check}"
+    );
+    assert_eq!(check.matches("reqwest::Client").count(), 1, "{check}");
+    assert_eq!(
+        compact_check.matches("capped_body(resp,max,").count(),
+        3,
+        "{check}"
+    );
+    for unbounded in [".text()", ".bytes()", ".json("] {
+        assert!(!check.contains(unbounded), "{unbounded}");
+    }
+    let capped = body(&apps, "async fn capped_body(");
+    assert!(!capped.contains("{e}"), "{capped}");
+    assert_eq!(capped.matches("e.without_url()").count(), 1, "{capped}");
 }
 
 /// Final Gate item H: API Client collections are checked for authentication
@@ -402,13 +496,17 @@ fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
 #[test]
 fn p0_fg_h_api_client_collections_are_checked_before_writing() {
     let apps = normalized(include_str!("../../commands/apps.rs"));
-    let save = compact(&body(&apps, "pub(crate) fn api_client_save_collections("));
+    assert_eq!(
+        compact(&body(&apps, "pub(crate) fn api_client_save_collections(")),
+        "save_api_collections_to(data_json,api_collections_path)"
+    );
+    let save = compact(&body(&apps, "fn save_api_collections_to("));
     assert!(
         in_order(
             &save,
             &[
                 "refuse_api_client_secrets(&data_json)?;",
-                "api_collections_path()?",
+                "letpath=path()?;",
                 "std::fs::write(",
             ],
         ),

@@ -343,7 +343,8 @@ pub fn load_config() -> Result<NexusConfig, AgentError> {
 }
 
 /// Writes the configuration file under the launch environment's key material
-/// (see [`save_config_checked_to_path`]).
+/// (see [`save_config_checked_to_path`]). A save that changes how the file is
+/// protected is reported (see [`save_config_to_path`]).
 pub fn save_config(config: &NexusConfig) -> Result<(), AgentError> {
     save_config_to_path(config_path()?.as_path(), config)
 }
@@ -438,10 +439,58 @@ fn security_baseline_from_text(
         .map_err(|_| SecurityBaselineUnavailable)
 }
 
+/// Writes `config` to `path` under the launch environment's key material. Its
+/// caller does not receive the outcome, so a save that changes how the file
+/// is protected (a legacy plaintext file encrypted, or a file moved to the
+/// operator key) is reported here: a bounded line on standard error and the
+/// process's protection recorder, by reason class only (Final Gate item A).
 pub fn save_config_to_path(path: &Path, config: &NexusConfig) -> Result<(), AgentError> {
-    save_config_checked_to_path(path, config, &ConfigKeyMaterial::from_launch_environment())
-        .map(|_| ())
-        .map_err(AgentError::from)
+    save_config_to_path_with(
+        path,
+        config,
+        &ConfigKeyMaterial::from_launch_environment(),
+        report_protection_change,
+    )
+}
+
+/// [`save_config_to_path`] with the key material and the report injected.
+fn save_config_to_path_with(
+    path: &Path,
+    config: &NexusConfig,
+    keys: &ConfigKeyMaterial,
+    report: impl FnOnce(SaveOutcome),
+) -> Result<(), AgentError> {
+    let outcome = save_config_checked_to_path(path, config, keys)?;
+    report(outcome);
+    Ok(())
+}
+
+/// Records the reason class of a configuration save that changed how the
+/// file is protected (Final Gate item A). The application that owns the audit
+/// trail installs one per process ([`install_protection_recorder`]).
+pub type ProtectionRecorder = Box<dyn Fn(&'static str) + Send + Sync>;
+
+static PROTECTION_RECORDER: std::sync::OnceLock<ProtectionRecorder> = std::sync::OnceLock::new();
+
+/// Installs the process's recorder for protection changes reported by
+/// [`save_config`] and [`save_config_to_path`]. Only the first installation
+/// takes effect; a later one returns `false`. The recorder must not save the
+/// configuration itself.
+pub fn install_protection_recorder(recorder: ProtectionRecorder) -> bool {
+    PROTECTION_RECORDER.set(recorder).is_ok()
+}
+
+/// Reports a protection change: a bounded line on standard error for the
+/// operator, and the installed recorder, if any. A plain write reports
+/// nothing.
+fn report_protection_change(outcome: SaveOutcome) {
+    let Some(protection) = outcome.protection_change() else {
+        return;
+    };
+    eprintln!("nexus_kernel::config: the configuration file's protection changed: {protection}");
+    if let Some(record) = PROTECTION_RECORDER.get() {
+        record(protection);
+    }
 }
 
 /// Writes `config` to `path` (Final Gate item A).
@@ -465,9 +514,19 @@ pub fn save_config_checked_to_path(
     let stored = read_stored_for_write(path, keys)?;
     let operator = keys.operator_key();
     let (key, outcome) = if introduces_credentials(stored.as_ref().map(|s| &s.config), config) {
-        let key = operator.ok_or(ConfigSaveError::Refused(
-            ConfigWriteRefusal::OperatorKeyRequired,
-        ))?;
+        let key = match operator {
+            Some(key) => key,
+            None if keys.operator_key_is_ambient() => {
+                return Err(ConfigSaveError::Refused(
+                    ConfigWriteRefusal::OperatorKeyIsAmbient,
+                ));
+            }
+            None => {
+                return Err(ConfigSaveError::Refused(
+                    ConfigWriteRefusal::OperatorKeyRequired,
+                ));
+            }
+        };
         let rekeyed = stored.as_ref().is_some_and(|stored| {
             stored.key.as_ref().map(|opened| opened.bytes) != Some(key.bytes)
         });
@@ -511,12 +570,28 @@ pub enum SaveOutcome {
     EncryptedLegacyPlaintext,
 }
 
+impl SaveOutcome {
+    /// The audit reason class of a save that changed how the file is
+    /// protected, or `None` for a plain write.
+    pub const fn protection_change(self) -> Option<&'static str> {
+        match self {
+            Self::Written => None,
+            Self::RekeyedToOperatorKey => Some("rekeyed_to_operator_key"),
+            Self::EncryptedLegacyPlaintext => Some("encrypted_legacy_plaintext"),
+        }
+    }
+}
+
 /// Why a configuration save wrote nothing (Final Gate item A). The reasons are
 /// bounded: no path, key material or configuration text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigWriteRefusal {
     /// A new or changed credential, and no operator configuration key.
     OperatorKeyRequired,
+    /// A new or changed credential, and `NEXUS_CONFIG_KEY` derives exactly
+    /// the ambient key (the account and host names run together), which is
+    /// no secret.
+    OperatorKeyIsAmbient,
     /// The configuration on disk cannot be read with the available key
     /// material, so it is not overwritten.
     ExistingUnreadable,
@@ -527,6 +602,7 @@ impl ConfigWriteRefusal {
     pub const fn reason_class(self) -> &'static str {
         match self {
             Self::OperatorKeyRequired => "configuration_key_required",
+            Self::OperatorKeyIsAmbient => "configuration_key_is_ambient",
             Self::ExistingUnreadable => "existing_configuration_unreadable",
         }
     }
@@ -535,6 +611,9 @@ impl ConfigWriteRefusal {
         match self {
             Self::OperatorKeyRequired => {
                 "configuration not saved: a new or changed credential needs the operator configuration key (NEXUS_CONFIG_KEY)"
+            }
+            Self::OperatorKeyIsAmbient => {
+                "configuration not saved: NEXUS_CONFIG_KEY derives the same key as the account and host names, which is not secret; choose another value"
             }
             Self::ExistingUnreadable => {
                 "configuration not saved: the configuration on disk cannot be read, so it is not overwritten"
@@ -626,7 +705,24 @@ impl ConfigKeyMaterial {
         self.operator_key().is_some()
     }
 
+    /// Whether `NEXUS_CONFIG_KEY` is non-blank but derives exactly the
+    /// ambient key. Both derivations hash their inputs run together, with no
+    /// separator, so a value equal to HOME, USER, USERNAME and HOSTNAME
+    /// concatenated gives the key anyone who knows those names can derive.
+    /// Such a value is no operator key.
+    pub fn operator_key_is_ambient(&self) -> bool {
+        self.operator_candidate()
+            .is_some_and(|key| key.bytes == self.ambient_key().bytes)
+    }
+
+    /// The operator key: non-blank `NEXUS_CONFIG_KEY` material that does not
+    /// derive the ambient key.
     fn operator_key(&self) -> Option<UserKey> {
+        self.operator_candidate()
+            .filter(|key| key.bytes != self.ambient_key().bytes)
+    }
+
+    fn operator_candidate(&self) -> Option<UserKey> {
         self.legacy_explicit
             .as_ref()
             .filter(|value| !value.trim().is_empty())
@@ -786,6 +882,17 @@ fn read_stored_for_write(
     open_config_text(&raw, keys)
         .map(Some)
         .map_err(|_| refused())
+}
+
+/// Whether `raw` is a configuration encryption envelope: exactly the
+/// envelope's fields, whatever version or key it names (Final Gate item H).
+/// Legacy or hand-written plaintext configuration is not, and neither is a
+/// file that adds anything to the envelope.
+pub fn is_config_envelope(raw: &str) -> bool {
+    const FIELDS: [&str; 4] = ["version", "key_id", "nonce", "ciphertext"];
+    toml::from_str::<toml::Table>(raw).is_ok_and(|table| {
+        table.len() == FIELDS.len() && FIELDS.iter().all(|field| table.contains_key(*field))
+    }) && toml::from_str::<EncryptedConfigEnvelope>(raw).is_ok()
 }
 
 /// Opens configuration text: a version 1 envelope through the explicit legacy
@@ -1539,6 +1646,246 @@ mod tests {
         assert_eq!(mode & 0o777, 0o600);
         let entries = fs::read_dir(path.parent().unwrap()).unwrap().count();
         assert_eq!(entries, 1, "no temporary file is left behind");
+        cleanup(&path);
+    }
+
+    /// Final Gate item A: a save whose caller does not receive the outcome
+    /// hands every outcome to its report, so each protection change is
+    /// reported: a legacy plaintext file encrypted under the ambient key, a
+    /// plain rewrite, and a plaintext file moved to the operator key.
+    #[test]
+    fn p0_fg_a_unreturned_save_outcomes_are_reported() {
+        use super::save_config_to_path_with;
+        let plaintext = toml::to_string(&NexusConfig::default()).unwrap();
+        let mut seen = Vec::new();
+        let ambient = temp_config_path();
+        fs::create_dir_all(ambient.parent().unwrap()).unwrap();
+        fs::write(&ambient, &plaintext).unwrap();
+        for _ in 0..2 {
+            save_config_to_path_with(&ambient, &NexusConfig::default(), &ambient_only(), |o| {
+                seen.push(o)
+            })
+            .unwrap();
+        }
+        cleanup(&ambient);
+        let operator = temp_config_path();
+        fs::create_dir_all(operator.parent().unwrap()).unwrap();
+        fs::write(&operator, &plaintext).unwrap();
+        save_config_to_path_with(
+            &operator,
+            &NexusConfig::default(),
+            &with_operator_key(),
+            |o| seen.push(o),
+        )
+        .unwrap();
+        cleanup(&operator);
+        assert_eq!(
+            seen,
+            [
+                SaveOutcome::EncryptedLegacyPlaintext,
+                SaveOutcome::Written,
+                SaveOutcome::RekeyedToOperatorKey,
+            ]
+        );
+        assert_eq!(SaveOutcome::Written.protection_change(), None);
+        assert_eq!(
+            SaveOutcome::EncryptedLegacyPlaintext.protection_change(),
+            Some("encrypted_legacy_plaintext")
+        );
+        assert_eq!(
+            SaveOutcome::RekeyedToOperatorKey.protection_change(),
+            Some("rekeyed_to_operator_key")
+        );
+    }
+
+    /// Final Gate item A: the production report hands each protection change
+    /// to the process's recorder by reason class, and the recorder is
+    /// installed once. (Other tests in this process may add entries, so only
+    /// presence is asserted; `protection_change` pins that a plain write has
+    /// no reason class.)
+    #[test]
+    fn p0_fg_a_protection_changes_reach_the_installed_recorder() {
+        use super::{install_protection_recorder, report_protection_change};
+        static SEEN: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+        let seen = || SEEN.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        assert!(install_protection_recorder(Box::new(|protection| {
+            SEEN.lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .push(protection)
+        })));
+        assert!(!install_protection_recorder(Box::new(|_| {})));
+        report_protection_change(SaveOutcome::Written);
+        report_protection_change(SaveOutcome::EncryptedLegacyPlaintext);
+        report_protection_change(SaveOutcome::RekeyedToOperatorKey);
+        let seen = seen();
+        assert!(seen.contains(&"encrypted_legacy_plaintext"), "{seen:?}");
+        assert!(seen.contains(&"rekeyed_to_operator_key"), "{seen:?}");
+    }
+
+    /// Final Gate item A (stream 6 review): every configuration field whose
+    /// name says it holds a key, token, secret or password is either a
+    /// credential the writer protects (`credential_fields`, or a provider's
+    /// `api_key`, which `introduces_credentials` checks) or on an explicit
+    /// list of fields that hold none. A new field of that kind fails here
+    /// until it is classified. Every collection gets one entry, so the fields
+    /// of its items are walked too; map keys are `{}`.
+    #[test]
+    fn p0_fg_a_every_secret_named_field_is_classified() {
+        use super::{AgentLlmAssignment, AgentLlmConfig, CliProviderEntry};
+        use std::collections::BTreeSet;
+
+        /// Provider API keys: credentials, checked by `introduces_credentials`.
+        const PROVIDER_CREDENTIALS: &[&str] = &["llm.providers[].api_key"];
+        /// Fields named like a secret that hold none.
+        const NOT_CREDENTIALS: &[&str] = &[
+            // "env" or "file": where the vault key comes from.
+            "security.key_source",
+            // The name of the variable that holds the vault key.
+            "security.key_env",
+            // The path of the vault key file.
+            "security.key_file",
+            // Token budgets.
+            "agents.{}.max_tokens",
+            "agent_llm_assignments.{}.budget_tokens",
+        ];
+        fn secret_named(path: &str) -> bool {
+            let name = path.rsplit('.').next().unwrap().to_ascii_lowercase();
+            ["key", "token", "secret", "password"]
+                .iter()
+                .any(|word| name.contains(word))
+        }
+        fn walk(value: &serde_json::Value, path: &str, out: &mut Vec<(String, serde_json::Value)>) {
+            match value {
+                serde_json::Value::Object(map) => {
+                    for (name, field) in map {
+                        let path = if path.is_empty() {
+                            name.clone()
+                        } else {
+                            format!("{path}.{name}")
+                        };
+                        out.push((path.clone(), field.clone()));
+                        walk(field, &path, out);
+                    }
+                }
+                serde_json::Value::Array(items) => {
+                    for item in items {
+                        walk(item, &format!("{path}[]"), out);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut config = NexusConfig::default();
+        config.llm.providers.push(LlmProviderEntry {
+            id: "p".into(),
+            provider_type: "t".into(),
+            display_name: "d".into(),
+            api_key: String::new(),
+            base_url: String::new(),
+            enabled: true,
+            priority: 0,
+        });
+        config.llm.cli_providers.push(CliProviderEntry {
+            id: "c".into(),
+            enabled: true,
+            last_detected: String::new(),
+        });
+        config.agents.insert(
+            "{}".into(),
+            AgentLlmConfig {
+                model: String::new(),
+                temperature: 0.0,
+                max_tokens: 0,
+            },
+        );
+        config.agent_llm_assignments.insert(
+            "{}".into(),
+            AgentLlmAssignment {
+                provider_id: String::new(),
+                local_only: false,
+                budget_dollars: 0,
+                budget_tokens: 0,
+            },
+        );
+        for (index, field) in credential_fields_mut(&mut config).into_iter().enumerate() {
+            *field = format!("classified-credential-{index}");
+        }
+        let mut fields = Vec::new();
+        walk(&serde_json::to_value(&config).unwrap(), "", &mut fields);
+        let credentials: BTreeSet<&str> = fields
+            .iter()
+            .filter(|(_, value)| {
+                value
+                    .as_str()
+                    .is_some_and(|text| text.starts_with("classified-credential-"))
+            })
+            .map(|(path, _)| path.as_str())
+            .collect();
+        assert_eq!(credentials.len(), 17, "{credentials:?}");
+
+        for (path, _) in &fields {
+            if secret_named(path) {
+                assert!(
+                    credentials.contains(path.as_str())
+                        || PROVIDER_CREDENTIALS.contains(&path.as_str())
+                        || NOT_CREDENTIALS.contains(&path.as_str()),
+                    "{path}: add it to credential_fields, or to NOT_CREDENTIALS if it holds no secret"
+                );
+            }
+        }
+        // Every listed field exists and is named like a secret.
+        for listed in PROVIDER_CREDENTIALS.iter().chain(NOT_CREDENTIALS) {
+            assert!(
+                fields.iter().any(|(path, _)| path == listed),
+                "{listed} is not a configuration field"
+            );
+            assert!(secret_named(listed), "{listed} needs no classification");
+        }
+    }
+
+    /// Final Gate item A (stream 6 review): both derivations hash their inputs
+    /// run together, so a NEXUS_CONFIG_KEY equal to HOME, USER, USERNAME and
+    /// HOSTNAME concatenated derives the ambient key, which anyone who knows
+    /// the account and host names can derive. It is no operator key: a
+    /// credential save under it is refused with its own reason and writes
+    /// nothing, and every other value still is one.
+    #[test]
+    fn p0_fg_a_an_operator_key_that_derives_the_ambient_key_is_refused() {
+        let run_together = format!("{HOME}synthetic-usersynthetic-host");
+        let keys = ConfigKeyMaterial::from_values(
+            Some(&run_together),
+            [
+                Some(HOME),
+                Some("synthetic-user"),
+                None,
+                Some("synthetic-host"),
+            ],
+        );
+        assert!(keys.operator_key_is_ambient());
+        assert!(!keys.has_operator_key());
+        assert!(with_operator_key().has_operator_key());
+        assert!(!with_operator_key().operator_key_is_ambient());
+        assert!(!ambient_only().operator_key_is_ambient());
+
+        let path = temp_config_path();
+        let mut config = NexusConfig::default();
+        config.llm.anthropic_api_key = "synthetic-credential".into();
+        assert_eq!(
+            save_config_checked_to_path(&path, &config, &keys),
+            Err(ConfigSaveError::Refused(
+                ConfigWriteRefusal::OperatorKeyIsAmbient
+            ))
+        );
+        assert!(!path.exists());
+        let message = ConfigWriteRefusal::OperatorKeyIsAmbient.message();
+        assert!(!message.contains("synthetic"), "{message}");
+        // A save that adds no credential is still written, under the key
+        // that opens the file (here a first write under the ambient key).
+        assert_eq!(
+            save_config_checked_to_path(&path, &NexusConfig::default(), &keys),
+            Ok(SaveOutcome::Written)
+        );
         cleanup(&path);
     }
 }

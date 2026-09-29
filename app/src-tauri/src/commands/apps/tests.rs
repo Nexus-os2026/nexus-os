@@ -510,26 +510,84 @@ fn p0_002c5c_email_header_values_cannot_add_headers() {
     );
 }
 
+/// A loopback listener standing in for the messaging platforms in a test that
+/// must never reach them, with the endpoints that point at it.
+fn unreached_platforms() -> (std::net::TcpListener, [String; 3]) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let endpoints = [
+        base.clone(),
+        format!("{base}/api/auth.test"),
+        format!("{base}/api/v10/users/@me"),
+    ];
+    (listener, endpoints)
+}
+
+/// No connection reached the listener: its accept queue is empty.
+fn assert_never_contacted(listener: &std::net::TcpListener) {
+    match listener.accept() {
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+        other => panic!("a platform endpoint was contacted: {other:?}"),
+    }
+}
+
+/// A file location in the temporary directory, removed when dropped.
+struct TempFile(PathBuf);
+
+impl TempFile {
+    fn new(name: &str) -> Self {
+        Self(std::env::temp_dir().join(format!("nexus-{name}-{}", Uuid::new_v4())))
+    }
+}
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        // Best-effort cleanup of this test's own temporary file.
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// Final Gate item H: messaging connect accepts only the token stored in the
 /// configuration. Any other value is refused and audited by reason class
 /// before anything is read, written or sent, so no plaintext token file can
-/// result from it.
+/// result from it. The stored-token source must not be read and the
+/// endpoints are an unanswered loopback listener, so even a regressed check
+/// reads no real configuration and contacts no platform.
 #[test]
 fn p0_fg_h_messaging_connect_takes_only_the_stored_token() {
     let state = AppState::new_in_memory();
+    let (listener, [telegram, slack, discord]) = unreached_platforms();
+    let endpoints = MessagingEndpoints {
+        telegram: &telegram,
+        slack: &slack,
+        discord: &discord,
+        timeout: std::time::Duration::from_secs(5),
+        max_body_bytes: 1024,
+    };
+    let connect = |platform: &str, token: &str| {
+        messaging_connect_with(
+            &state,
+            platform.into(),
+            token.into(),
+            |_| panic!("the stored token was read"),
+            &endpoints,
+        )
+    };
     for platform in ["telegram", "discord", "slack"] {
         for token in ["123:synthetic-token", "", "xapp-synthetic"] {
             assert_eq!(
-                messaging_connect_platform(&state, platform.into(), token.into()),
+                connect(platform, token),
                 Err("messaging_connect: token must be saved first".to_string()),
                 "{platform} {token:?}"
             );
         }
     }
     assert_eq!(
-        messaging_connect_platform(&state, "matrix".into(), STORED_SECRET.into()),
+        connect("matrix", STORED_SECRET),
         Err("messaging_connect: unsupported platform".to_string())
     );
+    assert_never_contacted(&listener);
     let audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
     let logged = serde_json::to_string(
         &audit
@@ -545,9 +603,18 @@ fn p0_fg_h_messaging_connect_takes_only_the_stored_token() {
 
 /// Final Gate item H: API Client collections holding an authentication
 /// secret are refused before the file is resolved or written; collections
-/// without one pass the check.
+/// without one pass the check. The save runs against a temporary location, so
+/// even a regressed check writes nothing under a real home.
 #[test]
 fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
+    let target = TempFile::new("api-collections");
+    let resolved = std::cell::Cell::new(0_u32);
+    let save = |data: String| {
+        save_api_collections_to(data, || {
+            resolved.set(resolved.get() + 1);
+            Ok(target.0.clone())
+        })
+    };
     let request = |auth: serde_json::Value| {
         let mut request = serde_json::json!({
             "id": "r1", "name": "req", "method": "GET", "url": "https://example.test/",
@@ -575,19 +642,49 @@ fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
         serde_json::json!({"authType": "none", "authToken": "synthetic-token"}),
         serde_json::json!({"headers": [{"key": "Authorization", "value": "Bearer synthetic", "enabled": false}]}),
         serde_json::json!({"headers": [{"key": " cookie ", "value": "session=synthetic", "enabled": true}]}),
+        // Field and header names match in any letter case (stream 6 review).
+        serde_json::json!({"AUTHTOKEN": "synthetic-token"}),
+        serde_json::json!({"AuthPass": "synthetic-pass"}),
+        serde_json::json!({"headers": [{"Key": "Authorization", "Value": "Bearer synthetic", "enabled": true}]}),
+        // Common API-key headers.
+        serde_json::json!({"headers": [{"key": "X-API-Key", "value": "synthetic", "enabled": true}]}),
+        serde_json::json!({"headers": [{"key": "api-key", "value": "synthetic", "enabled": true}]}),
+        serde_json::json!({"headers": [{"key": "X-Auth-Token", "value": "synthetic", "enabled": true}]}),
+        serde_json::json!({"headers": [{"key": "PRIVATE-TOKEN", "value": "synthetic", "enabled": true}]}),
     ] {
         let data = request(auth.clone());
         let error = refuse_api_client_secrets(&data).unwrap_err();
         assert!(error.contains("not stored in Phase Zero"), "{auth}");
         assert!(!error.contains("synthetic"), "{error}");
-        // The command refuses before resolving or writing the file.
-        assert_eq!(api_client_save_collections(data), Err(error));
+        // The save refuses before resolving or writing the file.
+        assert_eq!(save(data), Err(error));
+        assert_eq!(resolved.get(), 0, "{auth}");
+        assert!(!target.0.exists(), "{auth}");
+    }
+    // Not claimed: a secret under any other header name, a parameter, the
+    // URL or the body is user content and is not detected.
+    for undetected in [
+        serde_json::json!({"headers": [{"key": "X-Custom", "value": "synthetic", "enabled": true}]}),
+        serde_json::json!({"params": [{"key": "api_key", "value": "synthetic", "enabled": true}]}),
+        serde_json::json!({"url": "https://example.test/?token=synthetic"}),
+    ] {
+        assert_eq!(
+            refuse_api_client_secrets(&request(undetected.clone())),
+            Ok(()),
+            "{undetected}"
+        );
     }
     let not_json = refuse_api_client_secrets("authToken=synthetic").unwrap_err();
     assert_eq!(
         not_json,
         "api_client_save_collections: collections must be JSON"
     );
+    assert_eq!(save("authToken=synthetic".into()), Err(not_json));
+    assert!(!target.0.exists());
+    // Collections without a secret are written where the location says.
+    assert_eq!(save(clean.clone()), Ok(()));
+    assert_eq!(resolved.get(), 1);
+    assert_eq!(std::fs::read_to_string(&target.0).unwrap(), clean);
 }
 
 /// Final Gate item H (stream 3 report): a failed connectivity check never
@@ -613,6 +710,8 @@ fn p0_fg_h_messaging_connect_errors_never_carry_the_token() {
         telegram: &telegram,
         slack: &slack,
         discord: &discord,
+        timeout: std::time::Duration::from_secs(5),
+        max_body_bytes: 1024,
     };
     let token = "123456789:markerSecretToken";
     for platform in ["telegram", "slack", "discord"] {
@@ -623,4 +722,133 @@ fn p0_fg_h_messaging_connect_errors_never_carry_the_token() {
             assert!(!error.contains(leaked), "{platform}: {leaked}: {error}");
         }
     }
+}
+
+/// A loopback HTTP server standing in for a messaging platform, with the
+/// platform URLs that point at it. Every request is answered with `response`
+/// and the connection closed; with `None` no request is ever answered (each
+/// connection is held open until the test process ends).
+fn loopback_platform(response: Option<Vec<u8>>) -> [String; 3] {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        let mut held = Vec::new();
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let Some(response) = &response else {
+                held.push(stream);
+                continue;
+            };
+            let (mut request, mut buf) = (Vec::new(), [0_u8; 1024]);
+            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                match stream.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => request.extend_from_slice(&buf[..n]),
+                }
+            }
+            // The client may stop reading early; a failed write is fine.
+            let _ = stream.write_all(response);
+        }
+    });
+    [
+        base.clone(),
+        format!("{base}/api/auth.test"),
+        format!("{base}/api/v10/users/@me"),
+    ]
+}
+
+/// An HTTP/1.1 response with `body`, its length declared or (`declared`
+/// false) delimited by closing the connection.
+fn http_response(body: &str, declared: bool) -> Vec<u8> {
+    let length = if declared {
+        format!("Content-Length: {}\r\n", body.len())
+    } else {
+        String::new()
+    };
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n{length}Connection: close\r\n\r\n{body}"
+    )
+    .into_bytes()
+}
+
+/// Final Gate item H (stream 4 review): the connectivity check is bounded in
+/// time. A platform that accepts the connection and never answers fails the
+/// check once the request timeout passes, without the token in the error.
+#[test]
+fn p0_fg_h_messaging_connect_is_bounded_in_time() {
+    let urls = loopback_platform(None);
+    for platform in ["telegram", "slack", "discord"] {
+        let urls = urls.clone();
+        let (sent, received) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let endpoints = MessagingEndpoints {
+                telegram: &urls[0],
+                slack: &urls[1],
+                discord: &urls[2],
+                timeout: std::time::Duration::from_millis(200),
+                max_body_bytes: 1024,
+            };
+            let _ = sent.send(block_on_async(check_messaging_connectivity(
+                platform,
+                "123456789:markerSecretToken",
+                &endpoints,
+            )));
+        });
+        // Far beyond the 200 ms bound: an unbounded request never returns.
+        let error = received
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("the check ended within its time bound")
+            .expect_err("an unanswered request fails");
+        assert!(error.starts_with(&format!("{platform} test: ")), "{error}");
+        assert!(!error.contains("markerSecretToken"), "{error}");
+    }
+}
+
+/// Final Gate item H (stream 4 review): the connectivity check reads a
+/// bounded response body. A body over the bound, declared or streamed until
+/// the connection closes, fails the check without being read; a body within
+/// it is read and used.
+#[test]
+fn p0_fg_h_messaging_connect_reads_a_bounded_body() {
+    let max = 1024;
+    let oversized = "x".repeat(max + 1);
+    for declared in [true, false] {
+        let urls = loopback_platform(Some(http_response(&oversized, declared)));
+        let endpoints = MessagingEndpoints {
+            telegram: &urls[0],
+            slack: &urls[1],
+            discord: &urls[2],
+            timeout: std::time::Duration::from_secs(10),
+            max_body_bytes: max,
+        };
+        for platform in ["telegram", "slack", "discord"] {
+            assert_eq!(
+                block_on_async(check_messaging_connectivity(
+                    platform,
+                    "123456789:markerSecretToken",
+                    &endpoints
+                )),
+                Err(format!("{platform} body: response too large")),
+                "declared: {declared}"
+            );
+        }
+    }
+    let bot = r#"{"ok":true,"result":{"username":"synthetic_bot"}}"#;
+    let urls = loopback_platform(Some(http_response(bot, true)));
+    let endpoints = MessagingEndpoints {
+        telegram: &urls[0],
+        slack: &urls[1],
+        discord: &urls[2],
+        timeout: std::time::Duration::from_secs(10),
+        max_body_bytes: max,
+    };
+    assert_eq!(
+        block_on_async(check_messaging_connectivity(
+            "telegram",
+            "123456789:markerSecretToken",
+            &endpoints
+        )),
+        Ok(json!({"connected": true, "bot_name": "synthetic_bot"}).to_string())
+    );
 }

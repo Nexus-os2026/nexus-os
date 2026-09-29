@@ -244,18 +244,38 @@ pub(crate) fn api_client_list_collections() -> Result<String, String> {
 /// already stored is left as it was. Collections that are not JSON cannot be
 /// checked and are refused too.
 pub(crate) fn api_client_save_collections(data_json: String) -> Result<(), String> {
+    save_api_collections_to(data_json, api_collections_path)
+}
+
+/// [`api_client_save_collections`] with the file location injected. The
+/// secret check runs before `path` is resolved, so a refused save neither
+/// resolves nor writes the file (tests pass a temporary location, so no test
+/// can reach a real home even if the check regresses).
+fn save_api_collections_to(
+    data_json: String,
+    path: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<(), String> {
     refuse_api_client_secrets(&data_json)?;
-    let path = api_collections_path()?;
+    let path = path()?;
     std::fs::write(&path, data_json).map_err(|e| format!("write error: {e}"))
 }
 
 /// The API Client's authentication secret fields: the bearer token, the basic
-/// password and the API key value.
+/// password and the API key value. Field names match in any letter case.
 const API_CLIENT_SECRET_FIELDS: &[&str] = &["authToken", "authPass", "authKeyValue"];
 
-/// Standard HTTP headers that carry credentials. Secrets typed into other
-/// headers, parameters, URLs or bodies are user content and are not detected.
-const API_CLIENT_CREDENTIAL_HEADERS: &[&str] = &["authorization", "proxy-authorization", "cookie"];
+/// Headers that carry credentials: the standard ones and common API-key
+/// headers, matched in any letter case. Secrets typed into other headers,
+/// parameters, URLs or bodies are user content and are not detected.
+const API_CLIENT_CREDENTIAL_HEADERS: &[&str] = &[
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "x-api-key",
+    "api-key",
+    "x-auth-token",
+    "private-token",
+];
 
 /// Refuses collections that hold a non-empty authentication secret, with a
 /// bounded reason that echoes nothing.
@@ -273,26 +293,32 @@ fn refuse_api_client_secrets(data_json: &str) -> Result<(), String> {
 
 /// Whether any object in `value` holds a non-empty secret field, or a
 /// credential header entry (`{"key": "Authorization", "value": "..."}`) with
-/// a non-empty value.
+/// a non-empty value. Field and header names match in any letter case.
 fn holds_api_client_secret(value: &serde_json::Value) -> bool {
     let filled = |field: &serde_json::Value| match field {
         serde_json::Value::Null => false,
         serde_json::Value::String(text) => !text.is_empty(),
         _ => true,
     };
+    let named = |name: &str, candidates: &[&str]| {
+        candidates
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(name.trim()))
+    };
     match value {
         serde_json::Value::Object(map) => {
-            let credential_header = map
-                .get("key")
+            let field = |name: &str| {
+                map.iter()
+                    .find(|(key, _)| named(key, &[name]))
+                    .map(|(_, field)| field)
+            };
+            let credential_header = field("key")
                 .and_then(serde_json::Value::as_str)
-                .is_some_and(|key| {
-                    API_CLIENT_CREDENTIAL_HEADERS
-                        .contains(&key.trim().to_ascii_lowercase().as_str())
-                })
-                && map.get("value").is_some_and(filled);
+                .is_some_and(|key| named(key, API_CLIENT_CREDENTIAL_HEADERS))
+                && field("value").is_some_and(filled);
             credential_header
                 || map.iter().any(|(key, field)| {
-                    (API_CLIENT_SECRET_FIELDS.contains(&key.as_str()) && filled(field))
+                    (named(key, API_CLIENT_SECRET_FIELDS) && filled(field))
                         || holds_api_client_secret(field)
                 })
         }
@@ -1224,6 +1250,26 @@ pub(crate) fn messaging_connect_platform(
     platform: String,
     token_value: String,
 ) -> Result<String, String> {
+    messaging_connect_with(
+        state,
+        platform,
+        token_value,
+        stored_messaging_token,
+        &MESSAGING_ENDPOINTS,
+    )
+}
+
+/// [`messaging_connect_platform`] with the stored-token source and the
+/// platform endpoints injected. Tests pass a token source that must not be
+/// read and loopback endpoints, so no test reads a real configuration or
+/// contacts a platform even if a check regresses.
+fn messaging_connect_with(
+    state: &AppState,
+    platform: String,
+    token_value: String,
+    stored_token: impl FnOnce(&'static str) -> Result<String, String>,
+    endpoints: &MessagingEndpoints<'_>,
+) -> Result<String, String> {
     let known = messaging_platform(state, "messaging_connect", &platform)?;
     if token_value != STORED_SECRET {
         return Err(deny(
@@ -1232,7 +1278,7 @@ pub(crate) fn messaging_connect_platform(
             "token_must_be_saved_first",
         ));
     }
-    let token_value = stored_messaging_token(known)?;
+    let token_value = stored_token(known)?;
     if token_value.is_empty() {
         return Err(deny(state, "messaging_connect", "no_stored_token"));
     }
@@ -1245,14 +1291,10 @@ pub(crate) fn messaging_connect_platform(
         json!({"action": "messaging_connect", "platform": known}),
     );
 
-    block_on_async(check_messaging_connectivity(
-        known,
-        &token_value,
-        &MESSAGING_ENDPOINTS,
-    ))
+    block_on_async(check_messaging_connectivity(known, &token_value, endpoints))
 }
 
-/// Where the connectivity check sends its one request.
+/// Where the connectivity check sends its one request, and its bounds.
 struct MessagingEndpoints<'a> {
     /// Base URL; the bot token goes in the path.
     telegram: &'a str,
@@ -1260,34 +1302,43 @@ struct MessagingEndpoints<'a> {
     slack: &'a str,
     /// `users/@me` URL; the token goes in the Authorization header.
     discord: &'a str,
+    /// Bound on the whole request, from connecting to the last body byte.
+    timeout: std::time::Duration,
+    /// Largest response body read; a longer one fails the check unread.
+    max_body_bytes: usize,
 }
 
 const MESSAGING_ENDPOINTS: MessagingEndpoints<'static> = MessagingEndpoints {
     telegram: "https://api.telegram.org",
     slack: "https://slack.com/api/auth.test",
     discord: "https://discord.com/api/v10/users/@me",
+    timeout: std::time::Duration::from_secs(10),
+    max_body_bytes: 64 * 1024,
 };
 
-/// Tests a stored bot token against its platform. A transport or body error
-/// is reported without its URL (`without_url`): Telegram carries the token in
-/// the URL path, and an error returns to the interface (Final Gate item H).
+/// Tests a stored bot token against its platform. The request is bounded in
+/// time and its response body in size. A transport or body error is reported
+/// without its URL (`without_url`): Telegram carries the token in the URL
+/// path, and an error returns to the interface (Final Gate item H).
 async fn check_messaging_connectivity(
     platform: &'static str,
     token_value: &str,
     endpoints: &MessagingEndpoints<'_>,
 ) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(endpoints.timeout)
+        .build()
+        .map_err(|e| format!("{platform} test: {}", e.without_url()))?;
+    let max = endpoints.max_body_bytes;
     match platform {
         "telegram" => {
             let url = format!("{}/bot{}/getMe", endpoints.telegram, token_value);
-            let resp = reqwest::Client::new()
+            let resp = client
                 .get(&url)
                 .send()
                 .await
                 .map_err(|e| format!("telegram test: {}", e.without_url()))?;
-            let body = resp
-                .text()
-                .await
-                .map_err(|e| format!("telegram body: {}", e.without_url()))?;
+            let body = capped_body(resp, max, "telegram body").await?;
             let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
             if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
                 let bot_name = data
@@ -1301,16 +1352,13 @@ async fn check_messaging_connectivity(
             }
         }
         "slack" => {
-            let resp = reqwest::Client::new()
+            let resp = client
                 .post(endpoints.slack)
                 .bearer_auth(token_value)
                 .send()
                 .await
                 .map_err(|e| format!("slack test: {}", e.without_url()))?;
-            let body = resp
-                .text()
-                .await
-                .map_err(|e| format!("slack body: {}", e.without_url()))?;
+            let body = capped_body(resp, max, "slack body").await?;
             let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
             if data.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
                 let team = data
@@ -1332,17 +1380,14 @@ async fn check_messaging_connectivity(
             }
         }
         "discord" => {
-            let resp = reqwest::Client::new()
+            let resp = client
                 .get(endpoints.discord)
                 .header("Authorization", format!("Bot {}", token_value))
                 .send()
                 .await
                 .map_err(|e| format!("discord test: {}", e.without_url()))?;
             let status = resp.status();
-            let body = resp
-                .text()
-                .await
-                .map_err(|e| format!("discord body: {}", e.without_url()))?;
+            let body = capped_body(resp, max, "discord body").await?;
             if status.is_success() {
                 let data: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
                 let name = data
@@ -1424,6 +1469,35 @@ pub(crate) async fn messaging_body_bounded(
         .map_err(|e| messaging_transport_error("body", e))?
     {
         if body.len() + chunk.len() > max {
+            return Err(too_large());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(String::from_utf8_lossy(&body).into_owned())
+}
+
+/// A connectivity response body of at most `max` bytes, as text. A longer
+/// body (declared or streamed) fails the check without the rest being read.
+/// Errors carry `context` and never the request URL.
+async fn capped_body(
+    mut resp: reqwest::Response,
+    max: usize,
+    context: &str,
+) -> Result<String, String> {
+    let too_large = || format!("{context}: response too large");
+    if resp
+        .content_length()
+        .is_some_and(|declared| declared > max as u64)
+    {
+        return Err(too_large());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| format!("{context}: {}", e.without_url()))?
+    {
+        if chunk.len() > max - body.len() {
             return Err(too_large());
         }
         body.extend_from_slice(&chunk);
