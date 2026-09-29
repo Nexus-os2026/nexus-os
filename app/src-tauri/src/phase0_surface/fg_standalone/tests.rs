@@ -241,74 +241,62 @@ const BENCH_TARGETS: &[(&str, &str, &str)] = &[
     ("benchmarks", "replay_bench", "benches/replay_bench.rs"),
 ];
 
+/// A manifest, parsed as TOML (so spacing, quoting and table layout cannot
+/// hide a key from these guards).
+fn parse_manifest(path: &Path) -> toml::Table {
+    read(path)
+        .parse::<toml::Table>()
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+/// The manifest of workspace member `member`.
+fn member_manifest(member: &str) -> toml::Table {
+    parse_manifest(&workspace_root().join(member).join("Cargo.toml"))
+}
+
 /// The `members` of the workspace manifest.
 fn workspace_members() -> Vec<String> {
-    let manifest = read(&workspace_root().join("Cargo.toml"));
-    let mut members = Vec::new();
-    let mut inside = false;
-    for line in manifest.lines().map(str::trim) {
-        if line.starts_with("members = [") {
-            inside = true;
-            continue;
-        }
-        if inside {
-            if line.starts_with(']') {
-                break;
-            }
-            let member = line.trim_end_matches(',').trim_matches('"');
-            if !member.is_empty() {
-                members.push(member.to_string());
-            }
-        }
-    }
+    let manifest = parse_manifest(&workspace_root().join("Cargo.toml"));
+    let members: Vec<String> = manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("members"))
+        .and_then(toml::Value::as_array)
+        .expect("workspace members")
+        .iter()
+        .map(|member| member.as_str().expect("a member path").to_string())
+        .collect();
     assert!(members.len() > 50, "workspace members not found");
     members
 }
 
 /// A manifest's `[package]` value for `key`, if it is set there.
-fn package_value(manifest: &str, key: &str) -> Option<String> {
-    let mut in_package = false;
-    for line in manifest.lines().map(str::trim) {
-        if line.starts_with('[') {
-            in_package = line == "[package]";
-            continue;
-        }
-        if in_package {
-            if let Some(value) = line.strip_prefix(&format!("{key} = ")) {
-                return Some(value.trim_matches('"').to_string());
-            }
-        }
-    }
-    None
+fn package_value<'a>(manifest: &'a toml::Table, key: &str) -> Option<&'a toml::Value> {
+    manifest.get("package")?.as_table()?.get(key)
+}
+
+/// Whether the manifest switches a target auto-discovery key off.
+fn autodiscovery_off(manifest: &toml::Table, key: &str) -> bool {
+    package_value(manifest, key).and_then(toml::Value::as_bool) == Some(false)
 }
 
 /// Explicit `[[section]]` targets of a manifest as (name, optional path).
-fn explicit_targets(manifest: &str, section: &str) -> Vec<(String, Option<String>)> {
-    let header = format!("[[{section}]]");
-    let mut targets = Vec::new();
-    let mut current: Option<(String, Option<String>)> = None;
-    for line in manifest.lines().map(str::trim) {
-        if line.starts_with('[') {
-            if let Some(target) = current.take() {
-                targets.push(target);
-            }
-            if line == header {
-                current = Some((String::new(), None));
-            }
-            continue;
-        }
-        if let Some((name, path)) = current.as_mut() {
-            if let Some(value) = line.strip_prefix("name = ") {
-                *name = value.trim_matches('"').to_string();
-            } else if let Some(value) = line.strip_prefix("path = ") {
-                *path = Some(value.trim_matches('"').to_string());
-            }
-        }
-    }
-    if let Some(target) = current.take() {
-        targets.push(target);
-    }
+fn explicit_targets(manifest: &toml::Table, section: &str) -> Vec<(String, Option<String>)> {
+    let Some(targets) = manifest.get(section) else {
+        return Vec::new();
+    };
+    let targets = targets
+        .as_array()
+        .unwrap_or_else(|| panic!("[[{section}]] must be an array of tables"));
     targets
+        .iter()
+        .map(|target| {
+            let field = |key: &str| target.get(key).and_then(toml::Value::as_str);
+            (
+                field("name").unwrap_or_default().to_string(),
+                field("path").map(str::to_string),
+            )
+        })
+        .collect()
 }
 
 fn sorted_dir(dir: &Path) -> Vec<PathBuf> {
@@ -368,9 +356,12 @@ fn merge_targets(
 /// The effective binary targets of one member, as (name, path).
 fn effective_binaries(member: &str) -> Vec<(String, String)> {
     let package = workspace_root().join(member);
-    let manifest = read(&package.join("Cargo.toml"));
-    let name = package_value(&manifest, "name").expect("package name");
-    let autodiscover = package_value(&manifest, "autobins").as_deref() != Some("false");
+    let manifest = member_manifest(member);
+    let name = package_value(&manifest, "name")
+        .and_then(toml::Value::as_str)
+        .expect("package name")
+        .to_string();
+    let autodiscover = !autodiscovery_off(&manifest, "autobins");
     let mut inferred = Vec::new();
     if package.join("src").join("main.rs").is_file() {
         inferred.push((name.clone(), "src/main.rs".to_string()));
@@ -397,8 +388,8 @@ fn effective_binaries(member: &str) -> Vec<(String, String)> {
 /// The effective example targets of one member, as (name, path).
 fn effective_examples(member: &str) -> Vec<(String, String)> {
     let package = workspace_root().join(member);
-    let manifest = read(&package.join("Cargo.toml"));
-    let autodiscover = package_value(&manifest, "autoexamples").as_deref() != Some("false");
+    let manifest = member_manifest(member);
+    let autodiscover = !autodiscovery_off(&manifest, "autoexamples");
     let explicit = explicit_targets(&manifest, "example")
         .into_iter()
         .map(|(example, path)| {
@@ -412,8 +403,8 @@ fn effective_examples(member: &str) -> Vec<(String, String)> {
 /// The effective bench targets of one member, as (name, path).
 fn effective_benches(member: &str) -> Vec<(String, String)> {
     let package = workspace_root().join(member);
-    let manifest = read(&package.join("Cargo.toml"));
-    let autodiscover = package_value(&manifest, "autobenches").as_deref() != Some("false");
+    let manifest = member_manifest(member);
+    let autodiscover = !autodiscovery_off(&manifest, "autobenches");
     let explicit = explicit_targets(&manifest, "bench")
         .into_iter()
         .map(|(bench, path)| {
@@ -586,10 +577,17 @@ fn p0_fg_standalone_every_example_target_is_inventoried() {
 }
 
 /// Every Cargo bench target of the workspace is inventoried: a bench is an
-/// entry point too (`cargo bench`), so a new one needs review. Each runs in
-/// process: it reads no credential or other environment variable, starts no
-/// process and opens no network connection (none meets the criterion under
-/// which six benchmark binaries were withdrawn).
+/// entry point too (`cargo bench`), so a new one needs review. Each bench
+/// file, comments aside, names no credential or environment read, process
+/// spawn or network API from the list below (the criterion under which six
+/// benchmark binaries were withdrawn).
+///
+/// Not a claim: this is a text check on the bench file only. It does not
+/// follow the code a bench calls (its own package or its dependencies), so
+/// it does not show that running a bench reads no environment variable,
+/// starts no process or opens no network connection; a spelling not in the
+/// list (a re-export, an alias, a macro) is not seen either. The inventory
+/// makes any new or changed bench target a reviewed change.
 #[test]
 fn p0_fg_standalone_every_bench_target_is_inventoried() {
     let mut found: Vec<(String, String, String)> = Vec::new();
@@ -658,7 +656,7 @@ fn p0_fg_standalone_withdrawn_packages_run_no_other_build_script() {
     );
     for member in packages {
         let package = workspace_root().join(member);
-        let manifest = read(&package.join("Cargo.toml"));
+        let manifest = member_manifest(member);
         assert_eq!(
             package_value(&manifest, "build"),
             None,
@@ -910,11 +908,22 @@ impl IgnoredDirectory {
     }
 }
 
+/// The anchored ignored directories the walk may skip, pinned: their number
+/// and the SHA-256 of their sorted entries (`path`, or `path*` for a
+/// prefix), joined by line feeds. A new or changed anchored entry in
+/// `.gitignore` could hide a recipe or a pipeline file from the walk, so it
+/// fails here until it is reviewed and the pin is updated.
+const IGNORED_DIRECTORIES_PIN: (usize, &str) = (
+    10,
+    "6fa2a363ee77a556134b6c454da1eb3e830e243905cebc6fa315693d0e356ce5",
+);
+
 /// The anchored ignored directories of the root `.gitignore`: ignored build
 /// output and local state, such as the Builder toolchain that the packaging
 /// step assembles, cloned upstream sources and agent worktrees (other
 /// checkouts of this repository, each guarded by its own copy of these
-/// tests). Read at run time, so the walk never names them itself.
+/// tests). Read at run time, so the walk never names them itself, and pinned
+/// ([`IGNORED_DIRECTORIES_PIN`]).
 fn ignored_anchored_directories() -> Vec<IgnoredDirectory> {
     let mut directories = Vec::new();
     for line in read(&workspace_root().join(".gitignore")).lines() {
@@ -941,15 +950,63 @@ fn ignored_anchored_directories() -> Vec<IgnoredDirectory> {
             prefix,
         });
     }
+    let mut entries: Vec<String> = directories
+        .iter()
+        .map(|directory| {
+            format!(
+                "{}{}",
+                directory.path,
+                if directory.prefix { "*" } else { "" }
+            )
+        })
+        .collect();
+    entries.sort();
+    let digest = hex::encode(<sha2::Sha256 as sha2::Digest>::digest(
+        entries.join("\n").as_bytes(),
+    ));
+    assert_eq!(
+        (entries.len(), digest.as_str()),
+        IGNORED_DIRECTORIES_PIN,
+        "the anchored ignored directories of .gitignore changed: check that none can hide a \
+         recipe or a pipeline file, then update IGNORED_DIRECTORIES_PIN"
+    );
     directories
+}
+
+/// The files git tracks in this checkout, when git and a checkout are
+/// available; `None` otherwise (a source archive, or no git). The walk skips
+/// build output, dependencies and ignored local state, so a recipe or
+/// pipeline file tracked there anyway (for example force-added) is found
+/// through this list instead.
+fn tracked_files(root: &Path) -> Option<Vec<String>> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "-z"])
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    output.status.success().then(|| {
+        output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| String::from_utf8_lossy(path).into_owned())
+            .collect()
+    })
 }
 
 /// Every file of the repository as a workspace-relative path, in sorted
 /// order. Dot directories (`.github`, `.gitlab`, `.cargo`, `.claude` and any
-/// new one) are walked like the others. Skipped are version-control
-/// internals, build output and dependencies by name (`target`,
-/// `node_modules`, `dist`), and the anchored ignored directories of the root
-/// `.gitignore` (see [`ignored_anchored_directories`]).
+/// new one) are walked like the others. The walk skips version-control
+/// internals and build output and dependencies by name (`.git`, `target`,
+/// `node_modules`), and the pinned anchored ignored directories of the root
+/// `.gitignore` (see [`ignored_anchored_directories`]); every file git tracks
+/// is added, wherever it is ([`tracked_files`]).
 fn repository_files() -> Vec<String> {
     fn walk(root: &Path, dir: &Path, ignored: &[IgnoredDirectory], out: &mut Vec<String>) {
         for path in sorted_dir(dir) {
@@ -964,7 +1021,7 @@ fn repository_files() -> Vec<String> {
                 .to_string_lossy()
                 .replace('\\', "/");
             if path.is_dir() {
-                let skipped = [".git", "target", "node_modules", "dist"].contains(&name.as_str())
+                let skipped = [".git", "target", "node_modules"].contains(&name.as_str())
                     || ignored.iter().any(|directory| directory.matches(&relative));
                 if !skipped {
                     walk(root, &path, ignored, out);
@@ -980,8 +1037,9 @@ fn repository_files() -> Vec<String> {
     let mut out = Vec::new();
     walk(&root, &root, &ignored, &mut out);
     assert!(out.len() > 1000, "repository files not found");
-    out.sort();
-    out
+    let mut files: BTreeSet<String> = out.into_iter().collect();
+    files.extend(tracked_files(&root).unwrap_or_default());
+    files.into_iter().collect()
 }
 
 fn file_name(relative: &str) -> &str {
@@ -1004,13 +1062,21 @@ fn p0_fg_standalone_every_recipe_is_inventoried() {
 }
 
 /// Whether a file configures a continuous-integration pipeline (which could
-/// build, ship or publish a binary): GitHub workflows and actions, GitLab CI
-/// (including included files by the conventional names), and the pipeline
+/// build, ship or publish a binary): any `workflows/*.yml` or `.yaml` under a
+/// dot directory (GitHub, Gitea and Forgejo Actions, and any other service
+/// that reads them there), GitHub actions (`action.yml`), GitLab CI
+/// (including included files by the conventional names), sourcehut
+/// (`.build.yml`, `.builds/`), TeamCity (`.teamcity/`), and the pipeline
 /// files of other CI services.
 fn is_ci_config(relative: &str) -> bool {
     let name = file_name(relative).to_ascii_lowercase();
     let yaml = name.ends_with(".yml") || name.ends_with(".yaml");
-    (relative.starts_with(".github/workflows/") && yaml)
+    let components: Vec<&str> = relative.split('/').collect();
+    let workflows_under_dot_directory = yaml
+        && components
+            .windows(3)
+            .any(|window| window[0].starts_with('.') && window[1] == "workflows");
+    workflows_under_dot_directory
         || name == "action.yml"
         || name == "action.yaml"
         || name.ends_with("gitlab-ci.yml")
@@ -1024,6 +1090,8 @@ fn is_ci_config(relative: &str) -> bool {
             ".drone/",
             ".semaphore/",
             ".cirrus/",
+            ".builds/",
+            ".teamcity/",
         ]
         .iter()
         .any(|dir| relative.starts_with(dir))
@@ -1043,8 +1111,45 @@ fn is_ci_config(relative: &str) -> bool {
             "codemagic.yaml",
             ".cirrus.yml",
             "wercker.yml",
+            ".build.yml",
         ]
         .contains(&name.as_str())
+}
+
+/// The `include` recognizer used by the workflow guard: every spelling a
+/// YAML parser reads as an `include` key is refused, and ordinary lines that
+/// only mention the word are not.
+#[test]
+fn p0_fg_standalone_gitlab_includes_are_recognized() {
+    for yaml in [
+        "include: ci/build.yml",
+        "include : ci/build.yml",
+        "  include:\n    - local: ci/build.yml",
+        "\"include\": ci/build.yml",
+        "'include': ci/build.yml",
+        "'include' : ci/build.yml",
+        "Include: ci/build.yml",
+        "- include: ci/build.yml",
+        "? include\n: ci/build.yml",
+        "&base include: ci/build.yml",
+        "!!str include: ci/build.yml",
+        "{include: ci/build.yml}",
+        "job: {script: build, include: ci/build.yml}",
+        "jobs: [ {\"include\": ci/build.yml} ]",
+        "\"inc\\x6cude\": ci/build.yml",
+        "trigger:\n  include: ci/child.yml",
+    ] {
+        assert!(declares_include(yaml), "{yaml:?}");
+    }
+    for yaml in [
+        "# include: ci/build.yml",
+        "script:\n  - echo include the tests",
+        "name: include",
+        "includes_nothing: true",
+        "stages: [build, test]",
+    ] {
+        assert!(!declares_include(yaml), "{yaml:?}");
+    }
 }
 
 /// Names of the withdrawn binaries, as a workflow would name them.
@@ -1098,9 +1203,345 @@ fn p0_fg_standalone_readme_names_every_withdrawn_binary() {
     );
 }
 
+/// Whether YAML text declares an `include` key (GitLab CI's way of adding
+/// jobs from other files, also inside `trigger:`), in any form a YAML parser
+/// accepts on one line: a block mapping key, optionally after a list-item
+/// dash, a complex-key `?`, an anchor or a tag, bare or quoted, with any
+/// spacing before the colon; a complex key `? include` whose colon follows
+/// on the next line; or any mention of `include` after a `{` or `[` on the
+/// line (a flow mapping). A double-quoted key holding an escape counts too,
+/// since an escape can spell `include`. Letter case is ignored. Lines that
+/// hold only a comment are skipped; text inside block scalars is read like
+/// any other line, which errs on the side of refusing.
+fn declares_include(yaml: &str) -> bool {
+    yaml.lines().any(|raw| {
+        let mut line = raw.trim_start();
+        if line.is_empty() || line.starts_with('#') {
+            return false;
+        }
+        if let Some(flow) = line.find(['{', '[']) {
+            if line[flow..].to_ascii_lowercase().contains("include") {
+                return true;
+            }
+        }
+        let mut complex_key = false;
+        loop {
+            if let Some(rest) = line
+                .strip_prefix('-')
+                .filter(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+            {
+                line = rest.trim_start();
+            } else if let Some(rest) = line
+                .strip_prefix('?')
+                .filter(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+            {
+                complex_key = true;
+                line = rest.trim_start();
+            } else if line.starts_with('&') || line.starts_with('!') {
+                line = line
+                    .find(char::is_whitespace)
+                    .map_or("", |end| line[end..].trim_start());
+            } else {
+                break;
+            }
+        }
+        let (key, rest) = match line.chars().next() {
+            Some(quote @ ('"' | '\'')) => match line[1..].find(quote) {
+                Some(end) => (&line[1..=end], &line[end + 2..]),
+                None => (&line[1..], ""),
+            },
+            _ => match line.find(':') {
+                Some(colon) => (line[..colon].trim_end(), &line[colon..]),
+                None => (line.trim_end(), ""),
+            },
+        };
+        let escaped = line.starts_with('"') && key.contains('\\');
+        let is_key = rest.trim_start().starts_with(':') || complex_key;
+        is_key && (escaped || key.eq_ignore_ascii_case("include"))
+    })
+}
+
+/// The `uses:` references CI configurations may make: the actions the
+/// existing workflows use, by exact reference. Any other action (or a
+/// reference in any other spelling) fails the workflow guard until reviewed.
+const ALLOWED_ACTIONS: &[&str] = &[
+    "actions/checkout@v4",
+    "actions/download-artifact@v4",
+    "actions/setup-node@v4",
+    "actions/setup-python@v5",
+    "actions/upload-artifact@v4",
+    "dtolnay/rust-toolchain@1.94.0",
+    "dtolnay/rust-toolchain@stable",
+    "peaceiris/actions-gh-pages@v4",
+    "softprops/action-gh-release@v2",
+    "Swatinem/rust-cache@v2",
+];
+
+/// The build outputs under a `release` or `debug` profile directory that CI
+/// configurations may name: the desktop bundle and its bundled toolchain.
+const DESKTOP_BUILD_OUTPUTS: &[&str] = &["bundle", "toolchain"];
+
+/// Cargo subcommands that compile or check code without producing a binary
+/// to ship. A withdrawn package may be selected only by one of these.
+const NON_SHIPPING_CARGO_SUBCOMMANDS: &[&str] = &[
+    "audit", "bench", "c", "check", "clippy", "d", "deny", "doc", "fetch", "fmt", "llvm-cov",
+    "metadata", "nextest", "t", "test", "tree",
+];
+
+/// Every `uses:` reference on a line (any quoting, block or flow style),
+/// as written; an empty reference stands for one on a later line.
+fn action_references(line: &str) -> Vec<&str> {
+    let lower = line.to_ascii_lowercase();
+    lower
+        .match_indices("uses")
+        .filter(|(at, _)| {
+            !line[..*at]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        })
+        .filter_map(|(at, _)| {
+            let rest = line[at + "uses".len()..].trim_start_matches(['"', '\'']);
+            let rest = rest.trim_start().strip_prefix(':')?;
+            let rest = rest.trim_start().trim_start_matches(['"', '\'']);
+            let end = rest
+                .find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ',' | '}' | ']'))
+                .unwrap_or(rest.len());
+            Some(&rest[..end])
+        })
+        .collect()
+}
+
+/// The path-like words of a line (backslashes read as slashes, case folded)
+/// that name build output other than the desktop bundle: anything under a
+/// `release` or `debug` profile directory but the allowlisted outputs, the
+/// profile directory itself, the target directory itself, or a glob in the
+/// target directory.
+fn undesktop_build_outputs(line: &str) -> Vec<String> {
+    let normalized = line.to_ascii_lowercase().replace('\\', "/");
+    normalized
+        .split(|c: char| {
+            c.is_whitespace()
+                || matches!(
+                    c,
+                    '"' | '\''
+                        | '`'
+                        | ','
+                        | ';'
+                        | '('
+                        | ')'
+                        | '='
+                        | '|'
+                        | '<'
+                        | '>'
+                        | '&'
+                        | '{'
+                        | '}'
+                )
+        })
+        .filter(|word| {
+            let components: Vec<&str> = word.split('/').collect();
+            components.iter().enumerate().any(|(index, component)| {
+                let next = components.get(index + 1).copied();
+                let profile = index > 0 && matches!(*component, "release" | "debug");
+                let target = *component == "target" && word.contains('/');
+                (profile && !next.is_some_and(|next| DESKTOP_BUILD_OUTPUTS.contains(&next)))
+                    || (target
+                        && next
+                            .is_none_or(|next| next.is_empty() || next.contains(['*', '?', '['])))
+            })
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+/// The shipping cargo invocations in a CI configuration that select a
+/// withdrawn package, as (subcommand, selector). The configuration is read
+/// as one word stream (so continued and folded lines join); an invocation
+/// runs from a `cargo` (or `cross`) word to the next shell separator or the
+/// next invocation. A package is selected by `-p NAME`, `-pNAME`,
+/// `-p=NAME`, `--package NAME`, `--package=NAME` (a package id spec names
+/// its package; a glob counts as selecting every package) or by
+/// `--manifest-path` to a withdrawn package's manifest. Not a claim: a
+/// build selected by working directory, by `cd`, or through a variable or
+/// script is not seen here (the upload and publish checks bound those).
+fn shipped_withdrawn_packages(
+    text: &str,
+    packages: &BTreeSet<String>,
+    directories: &BTreeSet<String>,
+) -> Vec<(String, String)> {
+    let words: Vec<&str> = text
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .flat_map(str::split_whitespace)
+        .map(|word| {
+            word.trim_matches(|c: char| {
+                matches!(
+                    c,
+                    '"' | '\'' | '`' | '(' | ')' | '{' | '}' | '[' | ']' | ','
+                )
+            })
+        })
+        .collect();
+    let is_cargo = |word: &str| {
+        let word = word.to_ascii_lowercase();
+        let word = word.trim_start_matches('$');
+        let word = word.rsplit('/').next().unwrap_or(word);
+        let word = word.strip_suffix(".exe").unwrap_or(word);
+        word == "cargo" || word == "cross"
+    };
+    let is_separator =
+        |word: &str| matches!(word, "&&" | "||" | ";" | "|" | "then" | "do") || word.ends_with(';');
+    let selects_withdrawn = |spec: &str| {
+        let spec = spec.trim_matches(['"', '\'']);
+        let spec = spec.rsplit('#').next().unwrap_or(spec);
+        let name = spec.split(['@', ':']).next().unwrap_or(spec);
+        spec.contains(['*', '?', '[']) || packages.contains(name)
+    };
+    let manifest_is_withdrawn = |path: &str| {
+        let path = path.trim_matches(['"', '\'']).replace('\\', "/");
+        directories.iter().any(|directory| {
+            let manifest = format!("{directory}/Cargo.toml");
+            path == manifest
+                || path == format!("./{manifest}")
+                || path.ends_with(&format!("/{manifest}"))
+        })
+    };
+    let mut found = Vec::new();
+    let mut index = 0;
+    while index < words.len() {
+        if !is_cargo(words[index]) {
+            index += 1;
+            continue;
+        }
+        let mut end = index + 1;
+        while end < words.len() && !is_cargo(words[end]) && !is_separator(words[end]) {
+            end += 1;
+        }
+        let invocation = &words[index + 1..end];
+        let subcommand = invocation
+            .iter()
+            .find(|word| !word.starts_with('-') && !word.starts_with('+'))
+            .copied()
+            .unwrap_or_default();
+        if !NON_SHIPPING_CARGO_SUBCOMMANDS.contains(&subcommand) {
+            let value_after = |at: usize| invocation.get(at + 1).copied().unwrap_or_default();
+            for (at, word) in invocation.iter().enumerate() {
+                let selected = if *word == "-p" || *word == "--package" {
+                    selects_withdrawn(value_after(at))
+                } else if let Some(spec) = word.strip_prefix("--package=") {
+                    selects_withdrawn(spec)
+                } else if let Some(spec) =
+                    word.strip_prefix("-p").filter(|_| !word.starts_with("--"))
+                {
+                    selects_withdrawn(spec.strip_prefix('=').unwrap_or(spec))
+                } else if *word == "--manifest-path" {
+                    manifest_is_withdrawn(value_after(at))
+                } else if let Some(path) = word.strip_prefix("--manifest-path=") {
+                    manifest_is_withdrawn(path)
+                } else {
+                    false
+                };
+                if selected {
+                    found.push((subcommand.to_string(), invocation.join(" ")));
+                }
+            }
+        }
+        index = end;
+    }
+    found
+}
+
+/// The shipping recognizers used by the workflow guard catch every
+/// spelling of a package selector, a profile-directory or glob upload, and
+/// an action reference, and pass what the workflows legitimately use.
+#[test]
+fn p0_fg_standalone_shipping_recognizers_catch_probes() {
+    let packages: BTreeSet<String> = ["nexus-cli".to_string()].into();
+    let directories: BTreeSet<String> = ["cli".to_string()].into();
+    let ships = |text: &str| !shipped_withdrawn_packages(text, &packages, &directories).is_empty();
+    for text in [
+        "cargo build --release -p nexus-cli",
+        "cargo build --release -pnexus-cli",
+        "cargo build --release -p=nexus-cli",
+        "cargo build --package nexus-cli",
+        "cargo build --package=nexus-cli",
+        "run: \"cargo build --package 'nexus-cli'\"",
+        "cargo +stable build --locked -p nexus-cli@10.6.0",
+        "cargo install -p nexus-c*",
+        "cargo build --release \\\n  -p nexus-cli",
+        "run: >\n  cargo rustc\n  --package nexus-cli",
+        "cargo run --manifest-path cli/Cargo.toml",
+        "$CARGO build --manifest-path=./cli/Cargo.toml",
+        "cross build -p nexus-cli",
+        "cargo --config x build -p nexus-cli",
+    ] {
+        assert!(ships(text), "not recognized as shipping: {text}");
+    }
+    for text in [
+        "cargo test -p nexus-kernel -p nexus-sdk -p nexus-cli",
+        "cargo clippy -p nexus-cli -- -D warnings",
+        "cargo build --release && mkdir -p nexus-cli",
+        "cargo build -p nexus-desktop-backend",
+        "# cargo build -p nexus-cli",
+    ] {
+        assert!(!ships(text), "wrongly recognized as shipping: {text}");
+    }
+    for line in [
+        "path: target/release/nexus-server",
+        "path: target/release",
+        "path: target/release/",
+        "path: target/release/*",
+        "path: target/debug/**",
+        "path: 'target/*/nexus-server'",
+        "path: target/",
+        "path: app/src-tauri/target",
+        "Copy-Item target\\release\\nexus-server.exe out",
+        "path: Target/Release/nexus-server.exe",
+        "path: target/x86_64-unknown-linux-gnu/release/nexus-server",
+        "path: ${{ env.CARGO_TARGET_DIR }}/release/nexus-server",
+        "path: target/release/{bundle,nexus-server}",
+    ] {
+        assert!(
+            !undesktop_build_outputs(line).is_empty(),
+            "not recognized as a build-output upload: {line}"
+        );
+    }
+    for line in [
+        "bundled=target/release/toolchain",
+        "Get-ChildItem -Recurse target\\release\\bundle -ErrorAction SilentlyContinue",
+        "ls -R target/release/bundle || true",
+        "find target/release/bundle/deb -mindepth 2",
+        "cargo build --release --target x86_64-pc-windows-msvc",
+    ] {
+        assert!(
+            undesktop_build_outputs(line).is_empty(),
+            "wrongly recognized as a build-output upload: {line}"
+        );
+    }
+    assert_eq!(
+        action_references("- uses: actions/checkout@v4"),
+        ["actions/checkout@v4"]
+    );
+    assert_eq!(
+        action_references("  \"uses\": 'evil/x@v1' # c"),
+        ["evil/x@v1"]
+    );
+    assert_eq!(
+        action_references("- {name: a, uses: evil/y@main}"),
+        ["evil/y@main"]
+    );
+    assert_eq!(action_references("uses:"), [""]);
+    assert!(action_references("run: echo causes: x").is_empty());
+}
+
 /// No workflow builds, installs, uploads or publishes a withdrawn binary, a
 /// container image or a chart, and the release publishes only the desktop
 /// installers. (Workflows still compile and test the withdrawn packages.)
+/// A withdrawn package is selected only by a non-shipping cargo subcommand,
+/// no path names build output under a profile directory other than the
+/// desktop bundle (nor the profile or target directory itself, nor a glob
+/// there), and every action referenced is in [`ALLOWED_ACTIONS`].
 /// Every CI configuration in the repository, dot directories included, is
 /// one this guard reads: the GitHub workflows and `.gitlab-ci.yml`, which
 /// includes no other file. A pipeline file of any other kind or place fails
@@ -1134,12 +1575,24 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
     );
     let gitlab = read(&root.join(".gitlab-ci.yml"));
     assert!(
-        !gitlab
-            .lines()
-            .map(str::trim_start)
-            .any(|line| line.starts_with("include:")),
+        !declares_include(&gitlab),
         ".gitlab-ci.yml must include no other file"
     );
+    let withdrawn_directories: BTreeSet<String> = BINARY_TARGETS
+        .iter()
+        .filter(|(_, _, _, disposition)| *disposition == Withdrawn)
+        .map(|(member, _, _, _)| member.to_string())
+        .collect();
+    let withdrawn_packages: BTreeSet<String> = withdrawn_directories
+        .iter()
+        .map(|member| {
+            package_value(&member_manifest(member), "name")
+                .and_then(toml::Value::as_str)
+                .expect("a package name")
+                .to_string()
+        })
+        .collect();
+    assert_eq!(withdrawn_packages.len(), 8, "{withdrawn_packages:?}");
     for config in &configs {
         let workflow = root.join(config);
         let text = read(&workflow);
@@ -1184,7 +1637,24 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
                 !(line.contains("cargo build") && line.contains("-p nexus-cli")),
                 "{name}: nexus-cli is built for shipping by {line}"
             );
+            let outputs = undesktop_build_outputs(line);
+            assert!(
+                outputs.is_empty(),
+                "{name}: build output other than the desktop bundle {outputs:?} in {line}"
+            );
+            for action in action_references(line) {
+                assert!(
+                    ALLOWED_ACTIONS.contains(&action),
+                    "{name}: action `{action}` is not allowlisted in {line}"
+                );
+            }
         }
+        let shipped =
+            shipped_withdrawn_packages(&text, &withdrawn_packages, &withdrawn_directories);
+        assert!(
+            shipped.is_empty(),
+            "{name}: a withdrawn package is built for shipping by {shipped:?}"
+        );
     }
 
     // The release publishes the desktop installers and nothing else.
