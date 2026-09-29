@@ -901,11 +901,22 @@ impl IgnoredDirectory {
     }
 }
 
+/// The anchored ignored directories the walk may skip, pinned: their number
+/// and the SHA-256 of their sorted entries (`path`, or `path*` for a
+/// prefix), joined by line feeds. A new or changed anchored entry in
+/// `.gitignore` could hide a recipe or a pipeline file from the walk, so it
+/// fails here until it is reviewed and the pin is updated.
+const IGNORED_DIRECTORIES_PIN: (usize, &str) = (
+    10,
+    "6fa2a363ee77a556134b6c454da1eb3e830e243905cebc6fa315693d0e356ce5",
+);
+
 /// The anchored ignored directories of the root `.gitignore`: ignored build
 /// output and local state, such as the Builder toolchain that the packaging
 /// step assembles, cloned upstream sources and agent worktrees (other
 /// checkouts of this repository, each guarded by its own copy of these
-/// tests). Read at run time, so the walk never names them itself.
+/// tests). Read at run time, so the walk never names them itself, and pinned
+/// ([`IGNORED_DIRECTORIES_PIN`]).
 fn ignored_anchored_directories() -> Vec<IgnoredDirectory> {
     let mut directories = Vec::new();
     for line in read(&workspace_root().join(".gitignore")).lines() {
@@ -932,15 +943,63 @@ fn ignored_anchored_directories() -> Vec<IgnoredDirectory> {
             prefix,
         });
     }
+    let mut entries: Vec<String> = directories
+        .iter()
+        .map(|directory| {
+            format!(
+                "{}{}",
+                directory.path,
+                if directory.prefix { "*" } else { "" }
+            )
+        })
+        .collect();
+    entries.sort();
+    let digest = hex::encode(<sha2::Sha256 as sha2::Digest>::digest(
+        entries.join("\n").as_bytes(),
+    ));
+    assert_eq!(
+        (entries.len(), digest.as_str()),
+        IGNORED_DIRECTORIES_PIN,
+        "the anchored ignored directories of .gitignore changed: check that none can hide a \
+         recipe or a pipeline file, then update IGNORED_DIRECTORIES_PIN"
+    );
     directories
+}
+
+/// The files git tracks in this checkout, when git and a checkout are
+/// available; `None` otherwise (a source archive, or no git). The walk skips
+/// build output, dependencies and ignored local state, so a recipe or
+/// pipeline file tracked there anyway (for example force-added) is found
+/// through this list instead.
+fn tracked_files(root: &Path) -> Option<Vec<String>> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "-z"])
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    output.status.success().then(|| {
+        output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| String::from_utf8_lossy(path).into_owned())
+            .collect()
+    })
 }
 
 /// Every file of the repository as a workspace-relative path, in sorted
 /// order. Dot directories (`.github`, `.gitlab`, `.cargo`, `.claude` and any
-/// new one) are walked like the others. Skipped are version-control
-/// internals, build output and dependencies by name (`target`,
-/// `node_modules`, `dist`), and the anchored ignored directories of the root
-/// `.gitignore` (see [`ignored_anchored_directories`]).
+/// new one) are walked like the others. The walk skips version-control
+/// internals and build output and dependencies by name (`.git`, `target`,
+/// `node_modules`), and the pinned anchored ignored directories of the root
+/// `.gitignore` (see [`ignored_anchored_directories`]); every file git tracks
+/// is added, wherever it is ([`tracked_files`]).
 fn repository_files() -> Vec<String> {
     fn walk(root: &Path, dir: &Path, ignored: &[IgnoredDirectory], out: &mut Vec<String>) {
         for path in sorted_dir(dir) {
@@ -955,7 +1014,7 @@ fn repository_files() -> Vec<String> {
                 .to_string_lossy()
                 .replace('\\', "/");
             if path.is_dir() {
-                let skipped = [".git", "target", "node_modules", "dist"].contains(&name.as_str())
+                let skipped = [".git", "target", "node_modules"].contains(&name.as_str())
                     || ignored.iter().any(|directory| directory.matches(&relative));
                 if !skipped {
                     walk(root, &path, ignored, out);
@@ -971,8 +1030,9 @@ fn repository_files() -> Vec<String> {
     let mut out = Vec::new();
     walk(&root, &root, &ignored, &mut out);
     assert!(out.len() > 1000, "repository files not found");
-    out.sort();
-    out
+    let mut files: BTreeSet<String> = out.into_iter().collect();
+    files.extend(tracked_files(&root).unwrap_or_default());
+    files.into_iter().collect()
 }
 
 fn file_name(relative: &str) -> &str {
