@@ -3721,8 +3721,8 @@ fn p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed() {
         // WebSocket (yjs / y-websocket), and no direct remote fetch carrying
         // secrets from the privileged origin. Imports are matched with all
         // whitespace removed, in every quote style, for static, side-effect,
-        // re-export, dynamic `import(..)` and `require(..)` forms. (The packages
-        // stay in package.json, unused.)
+        // re-export, dynamic `import(..)` and `require(..)` forms. (None of
+        // these packages is a dependency in package.json.)
         // Comments (e.g. `/*@vite-ignore*/`) are removed before matching,
         // and the raw text is checked too. Every dynamic `import(..)` must
         // name one string literal (no concatenation, variable or comment),

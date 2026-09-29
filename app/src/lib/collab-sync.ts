@@ -6,8 +6,7 @@
  * server directly from the privileged app origin. There is no governed
  * transport for it and the restrictive CSP's `connect-src` does not permit it.
  * No production module imports this file, and it imports neither `yjs` nor
- * `y-websocket`: those packages remain listed in app/package.json but are
- * unused (kept to avoid churning the lockfile).
+ * `y-websocket`; neither package is a dependency of the app.
  */
 
 // ─── Types ────────────────────────────────────────────────────────────────
