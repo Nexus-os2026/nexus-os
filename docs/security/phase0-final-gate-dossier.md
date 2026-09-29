@@ -51,7 +51,7 @@ numbered decision requests are collected at the end of this dossier.
 | A | Configuration encryption key | A new or changed credential is written only under the operator key `NEXUS_CONFIG_KEY`; legacy files open through an explicit two-key read path; a load never rewrites a file; protection changes are reported and audited | Repaired on the closure candidate (P0-FINAL-GATE-CLOSURE); Architect review pending. Decision requests 9 and 10 |
 | B | Egress policy | The 11 IPC commands that sent requests to a caller-chosen destination are closed; the Ollama address is `OLLAMA_URL` or the fixed local default; agent web fetch and caller-destination external tools are refused; SearXNG only at `SEARXNG_URL`; search redirects https only | Repaired on the closure candidate; Architect review pending. No address or DNS policy was added (remaining destinations are backend constants or operator configuration). Decision request 13 |
 | C | Secrets in subprocess argv | Reachable credentials leave the command line: four hosted providers post in process with no redirect and total time and size bounds; `perception_init`, the credential-bearing external tools and credentialed MCP servers are closed or refused; remaining credential curl sites are counted, each CLI-only, latent or behind a closed route | Partly repaired on the closure candidate; Architect review pending. Decision request 12 (the in-process transport) |
-| C5 (contract) | Residual capability-measurement route | `cm_run_ab_validation` closed (`AmbientResource`) before any input use; the Groq-endpoint client takes only `GROQ_API_KEY` | Closed on the closure candidate; Architect review pending. Decision request 15 |
+| C5 (contract) | Residual capability-measurement route | `cm_run_ab_validation` closed (`AmbientResource`) before any input use; the Groq-endpoint client takes only `GROQ_API_KEY` | Repaired on the closure candidate (the route denies before any input use); Architect review pending. Decision request 15 |
 | D | Privileged webview, navigation and IPC origin | Not composed on this base [PENDING: S1 final]: an app ACL limiting application commands to the `main` window at the app origin, a navigation guard and new-window denial, frames removed or script-free, a restrictive CSP as defence in depth | Pending stream 1; no redirect protection is claimed. Decision request 18 |
 | E | Operator overrides | The vault key file is validated on the opened file (Linux, macOS) and refused elsewhere; the vault key must open every stored secret before the vault is used; `key_env` other than `NEXUS_ENCRYPTION_KEY` is refused | Repaired on the closure candidate; Architect review pending. Decision request 11 |
 | F | Network peers (Nexus Link) | `nexus_link_send_model` closed; the library admits no peer under an empty policy, matches exact IP socket addresses only, resolves no names and requires a shared secret and a key | Repaired on the closure candidate; transfer unavailable (no pairing exists); Architect review pending |
@@ -60,7 +60,7 @@ numbered decision requests are collected at the end of this dossier.
 | I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the Nexus Code diagnostics' `which` probes remain [PENDING: S3 final], and helpers still resolve from `PATH`; Architect review pending. Decision requests 1 and 17 |
 | J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: post-integration run #108 succeeded, Architect review of that evidence pending. J2–J5: withdrawn on the closure candidate; Architect review pending. Decision requests 2 (D3: the 7 benchmark and 4 developer binaries, 5 bench targets and 2 examples kept) and 19 |
 | K | Reliability signals and resource bounds | `executes_python_code`: no retained hosted failure (evidence corrected); GPU-host voice stderr repaired; the duplicate binary name repaired by P0-FG1-R1 (integrated); resource surfaces bounded by refusal (see "Resource bounds") | Repaired or bounded on the closure candidate; Architect review pending. Proposed: `executes_python_code` as monitored debt (decision request 7); decision request 16 |
-| L | Screen observation from the interface | Unchanged since C5C | Closed at C5C (Architect repair A); a brokered mechanism is future work |
+| L | Screen observation from the interface | Unchanged since C5C: unbrokered observation is unavailable (Architect repair A) | No change in P0-FINAL-GATE-CLOSURE; a brokered mechanism is future work |
 | DEP (contract) | Dependency advisories | Cargo.lock 19 → 8 cargo-audit vulnerabilities; npm (app) 14 → 6; residual advisories with proposed dispositions [PENDING: DEP final] | Minimal updates on the closure candidate; residual advisories and audit governance for Architect decision (requests 3 to 6) |
 
 ### At C5C (historical)
@@ -186,9 +186,10 @@ per item. J concerns a separately deployed server, not the desktop.
     (`rekeyed_to_operator_key`). The first explicit save of a legacy
     plaintext file encrypts it, under the operator key when one is set,
     otherwise under the legacy ambient key (`encrypted_legacy_plaintext`).
-  - Every save reports such a protection change: one bounded line on standard
-    error, and the desktop's recorder, which appends a `save_config` audit
-    event by reason class (`install_protection_recorder`, installed in
+  - The kernel's `save_config` and `save_config_to_path`, which the backend's
+    other saves use, report such a protection change: one bounded line on
+    standard error, and the desktop's recorder, which appends a `save_config`
+    audit event by reason class (`install_protection_recorder`, installed in
     `AppState::new` before the credential migration can re-save the file).
     The interface save audits its own outcome.
   - A file on disk that does not open (unreadable, empty, malformed,
@@ -509,7 +510,7 @@ pending).**
     redirects with its key [PENDING: S3 final].
 - **Decision requested.** Request 12.
 
-**Closed in P0-FINAL-GATE-CLOSURE: the residual capability-measurement
+**Repaired in P0-FINAL-GATE-CLOSURE: the residual capability-measurement
 route (contract C5; Architect review pending).**
 
 - **Before.** `cm_run_ab_validation` was open. It read `GROQ_API_KEY`, else
@@ -1286,10 +1287,10 @@ release workflow also packaged `nexus-cli` until `39701bff`.]
   - [Corrections (P0-FINAL-GATE-CLOSURE): the unauthenticated list omitted the
     router's fallback, `serve_frontend`, which served `NEXUS_FRONTEND_DIST` or
     else the working directory's `app/dist`. And the root `helm/nexus-os`
-    chart built nothing: it deployed a prebuilt image
-    (`registry.gitlab.com/nexaiceo/nexus-os`, tag defaulting to the chart's
-    `appVersion` `10.5.0`), with CORS open to any origin and the JWT secret
-    `changeme` by default.]
+    chart built nothing: it deployed a prebuilt image from the project's
+    GitLab container registry (tag defaulting to the chart's `appVersion`,
+    `10.5.0`), with CORS open to any origin and the JWT secret `changeme` by
+    default.]
 - **`nexus-cli` (`cli/`), shipped.** The GitLab `release-build` job and the
   Homebrew, WiX, systemd and launchd packaging ship it.
   - `run_voice_python` runs `python3 jarvis.py` in a `voice/` directory
@@ -1476,9 +1477,9 @@ checks are unchanged.
 pending).**
 
 - **Windows `executes_python_code`: evidence corrected.** No retained hosted
-  log shows this test failing. The 26 hosted Windows job logs kept with the
-  mission's evidence (runs #79–#108, including #107 and #108 on `71c47acb`)
-  all show it passing; the reliability workstream counted 43 such jobs from
+  log shows this test failing. The 26 hosted Windows job logs the workstream
+  retained (runs #79–#108, including #107 and #108 on `71c47acb`) all show
+  it passing; the reliability workstream counted 43 such jobs from
   runs #16–#108. The `CommandTimeout { seconds: 5 }` recorded above has no
   retained hosted evidence. The only timeout in this test family is the
   sibling `native_python_and_node_execute_within_workspace` (10 s,
@@ -1497,10 +1498,10 @@ pending).**
   without CTranslate2 only the `nvidia-smi -L` hint remains, for the model
   tier. A stand-in torch that warns like that host holds the contract in
   `voice/tests/test_stt_cli.py`. Every voice test module now keeps the
-  Hugging Face hub offline (`voice/tests/_offline.py`), so tests never
-  download a model. The fast-local workflow keeps its CUDA mask
-  (coordinator decision), and the host driver is an Owner matter (decision
-  request 7).
+  Hugging Face hub offline (`voice/tests/_offline.py`), so the tests fetch
+  no model from the hub; a test that needs an uncached model skips. The
+  fast-local workflow keeps its CUDA mask (coordinator decision), and the
+  host driver is an Owner matter (decision request 7).
 - **Resource bounds:** see "Resource bounds" below.
 
 ## L. Screen observation from the interface
