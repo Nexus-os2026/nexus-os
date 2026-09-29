@@ -1723,12 +1723,14 @@ mod tests {
     }
 
     /// Final Gate item A (stream 6 review): every configuration field whose
-    /// name says it holds a key, token, secret or password is either a
-    /// credential the writer protects (`credential_fields`, or a provider's
-    /// `api_key`, which `introduces_credentials` checks) or on an explicit
-    /// list of fields that hold none. A new field of that kind fails here
-    /// until it is classified. Every collection gets one entry, so the fields
-    /// of its items are walked too; map keys are `{}`.
+    /// name says it holds a key, token, secret, password, passphrase,
+    /// credential, auth value, bearer token or cookie (the last five added in
+    /// stream 4's review) is either a credential the writer protects
+    /// (`credential_fields`, or a provider's `api_key`, which
+    /// `introduces_credentials` checks) or on an explicit list of fields that
+    /// hold none. A new field of that kind fails here until it is classified.
+    /// Every collection gets one entry, so the fields of its items are walked
+    /// too; map keys are `{}`.
     #[test]
     fn p0_fg_a_every_secret_named_field_is_classified() {
         use super::{AgentLlmAssignment, AgentLlmConfig, CliProviderEntry};
@@ -1747,12 +1749,24 @@ mod tests {
             // Token budgets.
             "agents.{}.max_tokens",
             "agent_llm_assignments.{}.budget_tokens",
+            // The secrets facade's lookup-order settings (a section).
+            "credential_facade",
         ];
         fn secret_named(path: &str) -> bool {
             let name = path.rsplit('.').next().unwrap().to_ascii_lowercase();
-            ["key", "token", "secret", "password"]
-                .iter()
-                .any(|word| name.contains(word))
+            [
+                "key",
+                "token",
+                "secret",
+                "password",
+                "passphrase",
+                "credential",
+                "auth",
+                "bearer",
+                "cookie",
+            ]
+            .iter()
+            .any(|word| name.contains(word))
         }
         fn walk(value: &serde_json::Value, path: &str, out: &mut Vec<(String, serde_json::Value)>) {
             match value {
