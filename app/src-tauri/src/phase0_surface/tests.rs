@@ -2856,6 +2856,7 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
         include_str!("../../../../benchmarks/conductor-bench/tests/phase0_withdrawal.rs");
     let fg_reliability = include_str!("fg_reliability/tests.rs");
     let fg_approval = include_str!("fg_approval/tests.rs");
+    let scheduled_tests = include_str!("../commands/cognitive/scheduled_tests.rs");
     let computer_use_loop =
         include_str!("../../../../crates/nexus-computer-use/src/agent/loop_controller.rs");
     let measurement_client = include_str!(
@@ -3093,7 +3094,20 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
         (
             "an unbounded resource surface reachable from the interface",
             fg_approval,
-            &["p0_fg_k_simulation_and_arena_bounds_precede_any_work"][..],
+            &[
+                "p0_fg_k_simulation_and_arena_bounds_precede_any_work",
+                "p0_fg_manifest_schedules_are_checked_before_any_state_change",
+            ][..],
+        ),
+        (
+            "an unbounded resource surface reachable from the interface",
+            scheduled_tests,
+            &["p0_fg_sub_minute_manifest_schedules_fail_create_and_start"][..],
+        ),
+        (
+            "a caller's boolean, name or IPC call treated as human approval",
+            scheduled_tests,
+            &["p0_fg_scheduled_ticks_refuse_a_transcendent_agent_before_any_state_change"][..],
         ),
         (
             "an unbounded resource surface reachable from the interface",
@@ -3101,6 +3115,7 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
             &[
                 "p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call",
                 "p0_fg_adversarial_session_rounds_are_bounded_before_any_work",
+                "p0_fg_refused_manifest_schedules_fail_create_and_start",
             ][..],
         ),
         (
@@ -3111,6 +3126,7 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
                 "p0_fg_c5_measurement_clients_take_only_the_groq_key",
                 "p0_fg_c5_desktop_reaches_only_in_memory_measurement",
                 "p0_fg_source_lists_follow_their_directories",
+                "p0_fg_directory_guards_read_their_directories",
             ][..],
         ),
         (
@@ -3124,7 +3140,8 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
             &[
                 "p0_fg_g_transcendent_agents_are_refused_before_any_state_change",
                 "p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first",
-                "p0_fg_g_enabled_warden_review_without_a_warden_denies",
+                "p0_fg_g_enabled_warden_review_denies_without_any_lookup",
+                "p0_fg_g_l6_checks_use_the_named_bound",
                 "p0_fg_g_caller_asserted_approval_commands_only_deny",
                 "p0_fg_g_consent_decisions_record_no_caller_identity",
                 "p0_fg_g_self_improvement_acceptance_is_recorded_truthfully",
@@ -3142,7 +3159,10 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
                 "p0_fg_stored_transcendent_records_are_not_registered_and_stay_stored",
                 "p0_fg_startup_registers_no_transcendent_agent_on_any_run",
                 "p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent",
-                "p0_fg_enabled_warden_review_fails_closed_without_a_warden",
+                "p0_fg_enabled_warden_review_denies_and_no_stand_in_can_allow",
+                "p0_fg_stored_levels_above_l6_count_as_transcendent",
+                "p0_fg_transcendent_check_matches_every_spelling_of_a_stored_id",
+                "p0_fg_transcendent_resume_is_refused_and_changes_nothing",
                 "p0_fg_desktop_consent_resolutions_record_the_interface_label",
                 "p0_fg_desktop_approvals_do_not_reach_the_kernel_consent_queue",
                 "p0_fg_self_improvement_acceptance_claims_no_hitl_approval",
