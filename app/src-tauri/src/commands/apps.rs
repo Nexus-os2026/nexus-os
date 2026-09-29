@@ -387,12 +387,21 @@ fn save_api_collections_to(
 }
 
 /// The API Client's authentication secret fields: the bearer token, the basic
-/// password and the API key value.
+/// password and the API key value. Field names match in any letter case.
 const API_CLIENT_SECRET_FIELDS: &[&str] = &["authToken", "authPass", "authKeyValue"];
 
-/// Standard HTTP headers that carry credentials. Secrets typed into other
-/// headers, parameters, URLs or bodies are user content and are not detected.
-const API_CLIENT_CREDENTIAL_HEADERS: &[&str] = &["authorization", "proxy-authorization", "cookie"];
+/// Headers that carry credentials: the standard ones and common API-key
+/// headers, matched in any letter case. Secrets typed into other headers,
+/// parameters, URLs or bodies are user content and are not detected.
+const API_CLIENT_CREDENTIAL_HEADERS: &[&str] = &[
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "x-api-key",
+    "api-key",
+    "x-auth-token",
+    "private-token",
+];
 
 /// Refuses collections that hold a non-empty authentication secret, with a
 /// bounded reason that echoes nothing.
@@ -410,26 +419,32 @@ fn refuse_api_client_secrets(data_json: &str) -> Result<(), String> {
 
 /// Whether any object in `value` holds a non-empty secret field, or a
 /// credential header entry (`{"key": "Authorization", "value": "..."}`) with
-/// a non-empty value.
+/// a non-empty value. Field and header names match in any letter case.
 fn holds_api_client_secret(value: &serde_json::Value) -> bool {
     let filled = |field: &serde_json::Value| match field {
         serde_json::Value::Null => false,
         serde_json::Value::String(text) => !text.is_empty(),
         _ => true,
     };
+    let named = |name: &str, candidates: &[&str]| {
+        candidates
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(name.trim()))
+    };
     match value {
         serde_json::Value::Object(map) => {
-            let credential_header = map
-                .get("key")
+            let field = |name: &str| {
+                map.iter()
+                    .find(|(key, _)| named(key, &[name]))
+                    .map(|(_, field)| field)
+            };
+            let credential_header = field("key")
                 .and_then(serde_json::Value::as_str)
-                .is_some_and(|key| {
-                    API_CLIENT_CREDENTIAL_HEADERS
-                        .contains(&key.trim().to_ascii_lowercase().as_str())
-                })
-                && map.get("value").is_some_and(filled);
+                .is_some_and(|key| named(key, API_CLIENT_CREDENTIAL_HEADERS))
+                && field("value").is_some_and(filled);
             credential_header
                 || map.iter().any(|(key, field)| {
-                    (API_CLIENT_SECRET_FIELDS.contains(&key.as_str()) && filled(field))
+                    (named(key, API_CLIENT_SECRET_FIELDS) && filled(field))
                         || holds_api_client_secret(field)
                 })
         }

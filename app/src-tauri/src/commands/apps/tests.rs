@@ -677,6 +677,15 @@ fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
         serde_json::json!({"authType": "none", "authToken": "synthetic-token"}),
         serde_json::json!({"headers": [{"key": "Authorization", "value": "Bearer synthetic", "enabled": false}]}),
         serde_json::json!({"headers": [{"key": " cookie ", "value": "session=synthetic", "enabled": true}]}),
+        // Field and header names match in any letter case (stream 6 review).
+        serde_json::json!({"AUTHTOKEN": "synthetic-token"}),
+        serde_json::json!({"AuthPass": "synthetic-pass"}),
+        serde_json::json!({"headers": [{"Key": "Authorization", "Value": "Bearer synthetic", "enabled": true}]}),
+        // Common API-key headers.
+        serde_json::json!({"headers": [{"key": "X-API-Key", "value": "synthetic", "enabled": true}]}),
+        serde_json::json!({"headers": [{"key": "api-key", "value": "synthetic", "enabled": true}]}),
+        serde_json::json!({"headers": [{"key": "X-Auth-Token", "value": "synthetic", "enabled": true}]}),
+        serde_json::json!({"headers": [{"key": "PRIVATE-TOKEN", "value": "synthetic", "enabled": true}]}),
     ] {
         let data = request(auth.clone());
         let error = refuse_api_client_secrets(&data).unwrap_err();
@@ -686,6 +695,19 @@ fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
         assert_eq!(save(data), Err(error));
         assert_eq!(resolved.get(), 0, "{auth}");
         assert!(!target.0.exists(), "{auth}");
+    }
+    // Not claimed: a secret under any other header name, a parameter, the
+    // URL or the body is user content and is not detected.
+    for undetected in [
+        serde_json::json!({"headers": [{"key": "X-Custom", "value": "synthetic", "enabled": true}]}),
+        serde_json::json!({"params": [{"key": "api_key", "value": "synthetic", "enabled": true}]}),
+        serde_json::json!({"url": "https://example.test/?token=synthetic"}),
+    ] {
+        assert_eq!(
+            refuse_api_client_secrets(&request(undetected.clone())),
+            Ok(()),
+            "{undetected}"
+        );
     }
     let not_json = refuse_api_client_secrets("authToken=synthetic").unwrap_err();
     assert_eq!(
