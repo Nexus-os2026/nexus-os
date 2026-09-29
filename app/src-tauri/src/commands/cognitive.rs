@@ -1286,140 +1286,54 @@ impl nexus_kernel::scheduler::ScheduleGoalCallback for RunnerGoalCallback {
     }
 }
 
-/// P0-FINAL-GATE (item G): the bounded reason an enabled Warden review gives
-/// when no Warden agent can run.
+/// P0-FINAL-GATE (item G): the bounded reason an enabled Warden review gives.
+/// In Phase Zero no agent can be verified as the Warden: the prebuilt Warden
+/// is L6 and never registered, and an agent that is merely named
+/// "nexus-warden" (any caller can create one) is not the Warden.
 pub(crate) const WARDEN_REVIEW_UNAVAILABLE: &str =
-    "Warden review is unavailable in Phase Zero: no Warden agent can run";
+    "Warden review is unavailable in Phase Zero: no agent can be verified as the Warden";
 
 pub(crate) struct WardenReviewEngine {
+    // Kept so the executor's construction is unchanged; the Phase Zero
+    // decision below reads no state.
+    #[allow(dead_code)]
     pub(crate) state: AppState,
 }
 
 impl nexus_kernel::actuators::ActionReviewEngine for WardenReviewEngine {
     fn review(
         &self,
-        actor_agent_id: &str,
-        actor_name: &str,
-        action: &PlannedAction,
+        _actor_agent_id: &str,
+        _actor_name: &str,
+        _action: &PlannedAction,
     ) -> Result<nexus_kernel::actuators::ActionReviewDecision, String> {
         let config = load_config().map_err(agent_error)?;
-        self.review_with(
-            actor_agent_id,
-            actor_name,
-            action,
-            config.governance.enable_warden_review,
-            get_default_model,
-            |prompt, model| {
-                let provider =
-                    select_provider(&build_provider_config(&config)).map_err(|e| e.to_string())?;
-                provider
-                    .query(prompt, 256, model)
-                    .map_err(agent_error)
-                    .map(|response| response.output_text)
-            },
-        )
+        Ok(self.review_with(config.governance.enable_warden_review))
     }
 }
 
 impl WardenReviewEngine {
-    // Keep the network boundary injectable while exercising real review/audit/consent logic.
+    /// The Phase Zero review decision.
+    ///
+    /// P0-FINAL-GATE (item G): a disabled review allows, as before. An enabled
+    /// review is denied with the bounded `WARDEN_REVIEW_UNAVAILABLE` reason
+    /// and nothing else happens: no Warden is looked up, by name or
+    /// otherwise; no model is resolved or queried; and the engine writes no
+    /// audit event or consent request of its own. It used to take any running
+    /// agent named "nexus-warden" as the Warden, whose model's YES allowed the
+    /// action and was audited as a Warden review.
     pub(crate) fn review_with(
         &self,
-        actor_agent_id: &str,
-        actor_name: &str,
-        action: &PlannedAction,
         enabled: bool,
-        default_model: impl FnOnce() -> String,
-        query: impl FnOnce(&str, &str) -> Result<String, String>,
-    ) -> Result<nexus_kernel::actuators::ActionReviewDecision, String> {
+    ) -> nexus_kernel::actuators::ActionReviewDecision {
         if !enabled {
-            return Ok(nexus_kernel::actuators::ActionReviewDecision::Allow {
+            return nexus_kernel::actuators::ActionReviewDecision::Allow {
                 reason: "Warden governance review disabled".to_string(),
-            });
-        }
-
-        let (warden_id, warden_model, warden_name) = {
-            let supervisor = self
-                .state
-                .supervisor
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
-            let Some((id, model, name)) =
-                supervisor.health_check().into_iter().find_map(|status| {
-                    supervisor.get_agent(status.id).and_then(|handle| {
-                        if handle.manifest.name.eq_ignore_ascii_case("nexus-warden")
-                            && matches!(
-                                status.state,
-                                AgentState::Running | AgentState::Starting | AgentState::Paused
-                            )
-                        {
-                            Some((
-                                status.id,
-                                handle.manifest.llm_model.clone(),
-                                handle.manifest.name.clone(),
-                            ))
-                        } else {
-                            None
-                        }
-                    })
-                })
-            else {
-                // P0-FINAL-GATE (item G): an enabled review that no Warden
-                // can give is not an approval. The prebuilt Warden is L6 and
-                // is never registered in Phase Zero, so this fails closed with
-                // a bounded reason. No model is resolved or queried, and the
-                // engine audits and enqueues nothing.
-                return Ok(nexus_kernel::actuators::ActionReviewDecision::Deny {
-                    reason: WARDEN_REVIEW_UNAVAILABLE.to_string(),
-                });
             };
-            (id, model, name)
-        };
-
-        // Model fallback may access the secrets facade, which appends to audit.
-        // Resolve it only after releasing the supervisor snapshot guard.
-        let warden_model = warden_model.unwrap_or_else(default_model);
-        let prompt = format!(
-            "Agent {actor_name} wants to execute {}. Is this safe? Respond YES or NO with reason.",
-            format_hitl_action_summary(action)
-        );
-        let response = query(&prompt, &warden_model)?;
-        let trimmed = response.trim();
-        self.state.log_event(
-            warden_id,
-            EventType::LlmCall,
-            json!({
-                "action": "warden_review",
-                "actor_agent_id": actor_agent_id,
-                "actor_name": actor_name,
-                "warden_name": warden_name,
-                "review_prompt": prompt,
-                "review_response": trimmed,
-            }),
-        );
-
-        if trimmed.to_ascii_uppercase().starts_with("NO") {
-            let reason = trimmed
-                .split_once(' ')
-                .map(|(_, rest)| rest.trim().to_string())
-                .filter(|value| !value.is_empty())
-                .unwrap_or_else(|| "Warden denied the action".to_string());
-            create_warden_consent_request(
-                &self.state,
-                actor_agent_id,
-                actor_name,
-                action,
-                &reason,
-            )?;
-            return Ok(nexus_kernel::actuators::ActionReviewDecision::Deny { reason });
         }
-
-        let reason = trimmed
-            .split_once(' ')
-            .map(|(_, rest)| rest.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| "Warden approved the action".to_string());
-        Ok(nexus_kernel::actuators::ActionReviewDecision::Allow { reason })
+        nexus_kernel::actuators::ActionReviewDecision::Deny {
+            reason: WARDEN_REVIEW_UNAVAILABLE.to_string(),
+        }
     }
 }
 

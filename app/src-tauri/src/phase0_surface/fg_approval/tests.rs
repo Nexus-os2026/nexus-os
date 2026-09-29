@@ -548,34 +548,89 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
     }
 }
 
-/// P0-FINAL-GATE (item G): an enabled Warden review with no Warden able to
-/// run denies with the bounded reason. It used to allow the action as
-/// "Warden inactive", and the only prebuilt Warden is L6, which is never
-/// registered. A disabled review (the default) still allows.
+/// P0-FINAL-GATE (item G): in Phase Zero an enabled Warden review denies with
+/// the bounded reason and does nothing else. It looks up no Warden, by name
+/// or otherwise, resolves and queries no model, and writes no audit event or
+/// consent request. This is the test that the model is never resolved or
+/// queried: the engine's whole code is pinned, and it holds no model,
+/// supervisor, audit or consent code at all. A disabled review (the default)
+/// still allows.
+///
+/// History:
+/// - The engine used to allow as "Warden inactive" when no agent named
+///   "nexus-warden" was running.
+/// - After F2 it denied in that case, but any running agent so named, which
+///   a caller can create, still reviewed, and its YES allowed.
 #[test]
-fn p0_fg_g_enabled_warden_review_without_a_warden_denies() {
+fn p0_fg_g_enabled_warden_review_denies_without_any_lookup() {
     let cognitive = include_str!("../../commands/cognitive.rs");
-    let (_, review) = fn_shape(cognitive, "review_with");
-    assert!(
-        review.starts_with(concat!(
-            "if!enabled{returnOk(nexus_kernel::actuators::ActionReviewDecision::Allow{",
-            "reason:\"Wardengovernancereviewdisabled\".to_string(),});}",
-        )),
-        "{review}"
+    let (params, decision) = fn_shape(cognitive, "review_with");
+    assert_eq!(params, "(&self,enabled:bool,)");
+    assert_eq!(
+        decision,
+        concat!(
+            "if!enabled{returnnexus_kernel::actuators::ActionReviewDecision::Allow{",
+            "reason:\"Wardengovernancereviewdisabled\".to_string(),};}",
+            "nexus_kernel::actuators::ActionReviewDecision::Deny{",
+            "reason:WARDEN_REVIEW_UNAVAILABLE.to_string(),}",
+        )
     );
-    let unavailable = concat!(
-        "else{returnOk(nexus_kernel::actuators::ActionReviewDecision::Deny{",
-        "reason:WARDEN_REVIEW_UNAVAILABLE.to_string(),});};",
+    let (params, review) = fn_shape(cognitive, "review");
+    assert_eq!(
+        params,
+        "(&self,_actor_agent_id:&str,_actor_name:&str,_action:&PlannedAction,)"
     );
-    let deny = position(&review, unavailable);
-    assert!(deny < position(&review, "default_model"), "{review}");
-    assert!(deny < position(&review, "query("), "{review}");
+    assert_eq!(
+        review,
+        concat!(
+            "letconfig=load_config().map_err(agent_error)?;",
+            "Ok(self.review_with(config.governance.enable_warden_review))",
+        )
+    );
+
+    // The engine's whole region holds no lookup, model, audit or consent code.
+    let start = cognitive
+        .find("pub(crate) struct WardenReviewEngine {")
+        .expect("engine");
+    let open = start
+        + cognitive[start..]
+            .find("impl WardenReviewEngine {")
+            .expect("engine impl")
+        + "impl WardenReviewEngine ".len();
+    let region = code_lines(&cognitive[start..block_end(cognitive, open)]);
+    for forbidden in [
+        "nexus-warden",
+        "health_check(",
+        "get_agent(",
+        "get_default_model",
+        "select_provider",
+        ".query(",
+        "log_event(",
+        "enqueue_consent(",
+        "create_warden_consent_request",
+        "self.state",
+    ] {
+        assert!(!region.contains(forbidden), "Warden review: {forbidden}");
+    }
     let code = without_whitespace(&code_lines(cognitive));
     assert!(code.contains(concat!(
         "pub(crate)constWARDEN_REVIEW_UNAVAILABLE:&str=",
-        "\"WardenreviewisunavailableinPhaseZero:noWardenagentcanrun\";",
+        "\"WardenreviewisunavailableinPhaseZero:noagentcanbeverifiedastheWarden\";",
     )));
     assert!(!code.contains("\"Wardeninactive\""));
+    // The consent helper that recorded a Warden's NO is gone.
+    for (file, src) in [
+        (
+            "commands/chat_llm.rs",
+            include_str!("../../commands/chat_llm.rs"),
+        ),
+        ("commands/cognitive.rs", cognitive),
+    ] {
+        assert!(
+            !src.contains("create_warden_consent_request"),
+            "{file}: create_warden_consent_request"
+        );
+    }
 }
 
 /// Entries of the desktop command registration, whitespace-free.
