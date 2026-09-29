@@ -28,7 +28,10 @@ except where P0-FG1 or P0-FINAL-GATE-CLOSURE is named. An
 **untrusted surface** means one of:
 
 - a script running in the desktop webview (the CSP is `null`, item D, so every
-  registered IPC command is callable by any script there);
+  registered IPC command is callable by any script there) [P0-FINAL-GATE-CLOSURE:
+  item D restricts application commands to the privileged window's own origin
+  [PENDING: S1 final]; a script that runs inside that document still reaches
+  every registered command];
 - model output (planner steps, agent actions, generated text);
 - remote content (fetched pages, API responses, peers);
 - a persisted record (database rows, stored files).
@@ -49,6 +52,7 @@ numbered decision requests are collected at the end of this dossier.
 | B | Egress policy | The 11 IPC commands that sent requests to a caller-chosen destination are closed; the Ollama address is `OLLAMA_URL` or the fixed local default; agent web fetch and caller-destination external tools are refused; SearXNG only at `SEARXNG_URL`; search redirects https only | Repaired on the closure candidate; Architect review pending. No address or DNS policy was added (remaining destinations are backend constants or operator configuration). Decision request 13 |
 | C | Secrets in subprocess argv | Reachable credentials leave the command line: four hosted providers post in process with no redirect and total time and size bounds; `perception_init`, the credential-bearing external tools and credentialed MCP servers are closed or refused; remaining credential curl sites are counted, each CLI-only, latent or behind a closed route | Partly repaired on the closure candidate; Architect review pending. Decision request 12 (the in-process transport) |
 | C5 (contract) | Residual capability-measurement route | `cm_run_ab_validation` closed (`AmbientResource`) before any input use; the Groq-endpoint client takes only `GROQ_API_KEY` | Closed on the closure candidate; Architect review pending. Decision request 15 |
+| D | Privileged webview, navigation and IPC origin | Not composed on this base [PENDING: S1 final]: an app ACL limiting application commands to the `main` window at the app origin, a navigation guard and new-window denial, frames removed or script-free, a restrictive CSP as defence in depth | Pending stream 1; no redirect protection is claimed. Decision request 18 |
 | E | Operator overrides | The vault key file is validated on the opened file (Linux, macOS) and refused elsewhere; the vault key must open every stored secret before the vault is used; `key_env` other than `NEXUS_ENCRYPTION_KEY` is refused | Repaired on the closure candidate; Architect review pending. Decision request 11 |
 | F | Network peers (Nexus Link) | `nexus_link_send_model` closed; the library admits no peer under an empty policy, matches exact IP socket addresses only, resolves no names and requires a shared secret and a key | Repaired on the closure candidate; transfer unavailable (no pairing exists); Architect review pending |
 | G | Approval channel | L6 agents refused at create, start, approve, restore, prebuilt load, goal, loop, scheduled tick and tool call; caller-asserted approval commands closed; consent resolutions labelled `desktop-ui (unverified)`; self-improvement recorded truthfully; enabled Warden review with no Warden denies | Repaired on the closure candidate, with S5 follow-ups [PENDING: S5 final]; no out-of-band approval exists (non-claim); Architect review pending. Decision request 14 |
@@ -596,6 +600,59 @@ the placeholder keeps the stored value (`redacted_config`,
 - **Decision needed.** A restrictive CSP (script sources, `connect-src`,
   `frame-src`), a check of IPC reachability from sandboxed frames, and the
   frontend changes a CSP requires.
+
+**Corrections (P0-FINAL-GATE-CLOSURE) to the C5C text above** (checked on the
+closure candidate's base, where item D is not yet composed).
+
+- The "Open" list named only the scriptable srcdoc previews. It omitted:
+  - the Research view's frame, which embedded arbitrary remote pages with
+    `allow-scripts allow-same-origin allow-forms allow-popups`
+    (`app/src/components/browser/ResearchMode.tsx`);
+  - the React-mode Builder frame, which embedded a loopback dev server with
+    `allow-scripts allow-same-origin`
+    (`app/src/components/builder/VisualEditor.tsx`);
+  - the code editor (`app/src/pages/CodeEditor.tsx`), whose
+    `@monaco-editor/react` loader fetches the Monaco script from a public CDN
+    into the privileged document at run time (its default configuration);
+  - the remote font stylesheet the privileged document loads
+    (`app/index.html`);
+  - the Settings page, which sent provider keys from the webview with
+    `fetch` to test them (`app/src/pages/Settings.tsx`).
+- The C5C guard `p0_002c5c_frontend_html_sinks_are_escaped_and_previews_sandboxed`
+  inspected `srcDoc` frames only, so the `src` frames above were outside it.
+- No application-command ACL existed: `app/src-tauri/build.rs` calls
+  `tauri_build::build()` with no app manifest, so Tauri checked no origin for
+  application commands, and the invoke key injected into the page was the only
+  gate.
+
+**P0-FINAL-GATE-CLOSURE: item D [PENDING: S1 final].** Item D is not composed
+on this documentation's base; stream 1 is repairing its internal review's
+findings. The design being implemented (a coordinator decision applying
+contract D), to be confirmed against the final code:
+
+- **Application-command origin (primary control).** An app ACL: the build
+  script emits an app manifest listing every registered command, and one
+  capability grants them only to the `main` window at the app's own origin.
+  Tauri then refuses an application command from any other origin, window or
+  webview, using native request context, never a frontend field.
+- **Privileged window.** Built with a navigation guard that admits only the
+  exact app origin, and a denial of every new window.
+- **Frontend.** No remote or loopback frame; generated previews without
+  script (`sandbox=""`); the Monaco editor, the collaboration WebSocket and
+  the Settings live key test unavailable; no remote font stylesheet.
+- **CSP** as defence in depth; it is not claimed to prove the IPC boundary.
+- **Native evidence.** A live native harness on Linux, Windows and macOS
+  [PENDING: S1 final].
+- **Non-claims known now.**
+  - No protection against a server redirect navigating the privileged
+    document off its origin is claimed. On Linux the engine followed a server
+    redirect without consulting the navigation guard (live harness); the ACL,
+    not the navigation guard, is the IPC boundary.
+  - A script that runs inside the privileged document itself still reaches
+    every registered command.
+  - Tauri 2.10.3 exempts its IPC channel fetch command from the ACL; the app
+    uses no IPC channels.
+- **Decision requested.** Request 18.
 
 ## E. Operator overrides
 
