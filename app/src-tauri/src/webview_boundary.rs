@@ -52,12 +52,15 @@
 //!   denies every request. The guard is consulted for main-frame navigations
 //!   on every platform, and for subframe navigations on Linux (observed) and
 //!   macOS (wry routes every navigation action to it there); on Windows it
-//!   sees `NavigationStarting`, the main frame only. For new windows, wry 0.54.4
-//!   already refuses them when no handler is set (WebKitGTK's `create` signal
-//!   is connected only with a handler, `webkitgtk/mod.rs` 486-489; WebView2
-//!   marks the request handled, `webview2/mod.rs` 784-786; the WKWebView UI
-//!   delegate returns no webview), so the explicit `Deny` handler is a
-//!   safeguard against a change of that default, not the closure itself.
+//!   sees `NavigationStarting`, the main frame only. For new windows, the
+//!   pinned wry 0.54.4 source refuses them when no handler is set
+//!   (WebKitGTK's `create` signal is connected only with a handler,
+//!   `webkitgtk/mod.rs` 486-489; WebView2 marks the request handled,
+//!   `webview2/mod.rs` 784-786; the WKWebView UI delegate returns no
+//!   webview), so the explicit `Deny` handler is a safeguard against a change
+//!   of that default, not the closure itself. That default is observed live
+//!   only on Linux (the harness passes with the handler removed); for Windows
+//!   and macOS it rests on reading the source, not on observation.
 //!
 //! Redirects and subframes, as observed live on Linux by
 //! `tests/webview_boundary_live.rs`: WebKitGTK consults the guard for server

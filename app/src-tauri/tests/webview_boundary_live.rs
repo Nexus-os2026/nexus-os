@@ -68,9 +68,11 @@
 //! 4. New windows, `window.open` and `<a target=_blank>` (both modes): no
 //!    window appears and the target is never fetched. On Linux the harness
 //!    lets script popups reach the engine's `create` signal and observes it.
-//!    REGRESSION: wry 0.54.4 already refuses new windows when no handler is
-//!    set, on all three platforms; the production `Deny` handler is a
-//!    safeguard.
+//!    REGRESSION: the pinned wry 0.54.4 source refuses new windows when no
+//!    handler is set, on all three platforms, so the production `Deny`
+//!    handler is a safeguard. Observed only on Linux (this check passes with
+//!    the handler removed); for Windows and macOS that is source reading,
+//!    not observation.
 //! 5. Script navigations of the privileged document (both modes) are
 //!    cancelled before any request or page load: to the non-app origin
 //!    `http://[::1]:1421` (DISCRIMINATING for `on_navigation`), and to
