@@ -453,6 +453,18 @@ fn ident_byte(c: u8) -> bool {
     c.is_ascii_alphanumeric() || c == b'_'
 }
 
+/// Whether `rest`, the text after a `wasmtime` root, starts with the path
+/// segment `::component` or its raw-identifier spelling `::r#component`
+/// (which names the same module), ending at an identifier boundary
+/// (P0-LINUX-FINAL-R2B). Only this segment is matched; `r#` is not stripped
+/// elsewhere, so raw strings are unaffected.
+fn starts_with_component_segment(rest: &str) -> bool {
+    ["::component", "::r#component"].iter().any(|segment| {
+        rest.strip_prefix(segment)
+            .is_some_and(|after| !after.bytes().next().is_some_and(ident_byte))
+    })
+}
+
 /// Byte offsets where `word` occurs in `text` as a whole identifier.
 fn word_at(text: &str, word: &str) -> Vec<usize> {
     let b = text.as_bytes();
@@ -529,7 +541,7 @@ fn wasmtime_forbidden_uses(src: &str) -> Vec<String> {
         if rest.starts_with("::self as ") {
             found.push("alias: wasmtime::self as".to_string());
         }
-        if rest.starts_with("::component") && !rest[11..].bytes().next().is_some_and(ident_byte) {
+        if starts_with_component_segment(rest) {
             found.push("component: wasmtime::component".to_string());
         }
         if rest.starts_with("::*") {
@@ -638,6 +650,26 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
             "the component-module probe was not caught: {probe:?}"
         );
     }
+    // ... including its raw-identifier spelling `r#component`, which names the
+    // same module (P0-LINUX-FINAL-R2B) ...
+    for probe in [
+        "use wasmtime::r#component::Val;",
+        "fn f() { let _: wasmtime::r#component::Val = todo!(); }",
+        "use ::wasmtime::r#component as component_api;",
+        "use r#wasmtime::r#component::Func;",
+        "use wasmtime :: r#component :: Val;",
+        "use wasmtime\n    ::\n    r#component\n    ::\n    Val;",
+        "#[cfg(any())]\nuse wasmtime::r#component::Val;",
+        "use wasmtime::{r#component::Val};",
+        "use wasmtime::{Engine, r#component as c};",
+    ] {
+        assert!(
+            wasmtime_forbidden_uses(probe)
+                .iter()
+                .any(|use_| use_.starts_with("component: ")),
+            "the raw component-module probe was not caught: {probe:?}"
+        );
+    }
     // ... while it accepts the core API the SDK sandbox uses, and comments.
     for safe in [
         "use wasmtime::{Engine, Linker, Module, Store, StoreLimits, StoreLimitsBuilder};",
@@ -649,6 +681,7 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
         "mod my_component { pub struct Val; }",
         "use wasmtime::{Engine as WasmEngine, Store};",
         "extern crate wasmtime;",
+        "let x = wasmtime::r#componentx;",
     ] {
         assert_eq!(
             wasmtime_forbidden_uses(safe),
