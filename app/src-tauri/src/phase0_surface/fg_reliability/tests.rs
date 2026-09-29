@@ -463,21 +463,11 @@ fn word_at(text: &str, word: &str) -> Vec<usize> {
         .collect()
 }
 
-/// Every way `src` names Wasmtime's component module, or reaches it through
-/// an alias or a glob import. P0-LINUX-FINAL-R2: while RUSTSEC-2026-0316 is
-/// accepted, production Nexus uses no part of the component module (the
-/// affected dynamic `Val`/`Func` API lives there); any spelling of it fails,
-/// fail-closed, whether a path (`wasmtime::component`, with any whitespace),
-/// a grouped or nested import (`use wasmtime::{Engine, component::{Val}}`),
-/// an alias of the module (`wasmtime::{component as c}`) or of the crate
-/// (`use wasmtime as w; w::component`), or a glob import of the crate
-/// followed by a `component::` path. This is a text check over comment-free
-/// source, not a name resolver; it proves Nexus's non-use of the module on
-/// which the bounded exception depends, not that Wasmtime is safe.
-fn wasmtime_component_uses(src: &str) -> Vec<String> {
-    // Whitespace is dropped except a single space between two identifier
-    // characters, so `wasmtime :: component` and multiline groups compare
-    // as `wasmtime::component` while `use wasmtime` keeps its boundary.
+/// Comment-free `src` with whitespace dropped except a single space between
+/// two identifier characters, so `wasmtime :: component`, multiline groups
+/// and `use wasmtime\n    as w` compare in one spelling while `use wasmtime`
+/// keeps its boundary.
+fn normalized_rust(src: &str) -> String {
     let plain = without_comments(src);
     let mut code = String::with_capacity(plain.len());
     let mut chars = plain.chars().peekable();
@@ -500,52 +490,76 @@ fn wasmtime_component_uses(src: &str) -> Vec<String> {
             code.push(c);
         }
     }
-    let mut roots = vec!["wasmtime".to_string()];
-    for at in word_at(&code, "wasmtime") {
-        // `wasmtime as alias` and `wasmtime::{self as alias}`.
-        for prefix in ["wasmtime as ", "wasmtime::{self as ", "wasmtime::self as "] {
-            if code[at..].starts_with(prefix) {
-                let alias: String = code[at + prefix.len()..]
-                    .chars()
-                    .take_while(|&c| c.is_ascii_alphanumeric() || c == '_')
-                    .collect();
-                if !alias.is_empty() {
-                    roots.push(alias);
-                }
-            }
-        }
-    }
+    code
+}
+
+/// The Wasmtime spellings production Nexus may not use while
+/// RUSTSEC-2026-0316 is accepted, each tagged with its rule:
+///
+/// - `alias`: the crate renamed or re-exported under another name
+///   (`[pub] use wasmtime as w`, `[pub] use wasmtime::{self as w}`,
+///   `[pub] extern crate wasmtime as w`, raw identifiers included). The
+///   declaration itself is refused, so no other file can reach the component
+///   module through a name that does not spell `wasmtime`
+///   (P0-LINUX-FINAL-R2A).
+/// - `glob`: a glob import of the crate (`wasmtime::*`, `wasmtime::{*}`),
+///   which would bring `component` into scope under its bare name.
+/// - `component`: any path to Wasmtime's component module, where the
+///   affected dynamic `Val`/`Func` API lives, whether direct, spaced,
+///   multiline, grouped or nested (`use wasmtime::{Engine, component::{Val}}`)
+///   or renamed inside a group (`wasmtime::{component as c}`).
+///
+/// Direct core-Wasm use (`wasmtime::{Engine, Linker, Module, Store}`,
+/// `get_typed_func`) stays allowed. This is a text check over comment-free
+/// source, not a name resolver: it pins Nexus's non-use of the component
+/// module on which the bounded exception depends, not that wasmtime 43.0.2
+/// is generally safe.
+fn wasmtime_forbidden_uses(src: &str) -> Vec<String> {
+    let code = normalized_rust(src);
     let mut found = Vec::new();
-    for root in &roots {
-        for at in word_at(&code, root) {
-            let rest = &code[at + root.len()..];
-            if rest.starts_with("::component") && !rest[11..].bytes().next().is_some_and(ident_byte)
+    for at in word_at(&code, "wasmtime") {
+        let rest = &code[at + "wasmtime".len()..];
+        if let Some(alias) = rest.strip_prefix(" as ") {
+            let alias: String = alias
+                .chars()
+                .take_while(|&c| c.is_ascii_alphanumeric() || c == '_' || c == '#')
+                .collect();
+            found.push(format!("alias: wasmtime as {alias}"));
+        }
+        if rest.starts_with("::self as ") {
+            found.push("alias: wasmtime::self as".to_string());
+        }
+        if rest.starts_with("::component") && !rest[11..].bytes().next().is_some_and(ident_byte) {
+            found.push("component: wasmtime::component".to_string());
+        }
+        if rest.starts_with("::*") {
+            found.push("glob: wasmtime::*".to_string());
+        }
+        if let Some(group) = rest.strip_prefix("::{") {
+            let mut depth = 1usize;
+            let end = group
+                .char_indices()
+                .find(|&(_, c)| {
+                    match c {
+                        '{' => depth += 1,
+                        '}' => depth -= 1,
+                        _ => {}
+                    }
+                    depth == 0
+                })
+                .map_or(group.len(), |(end, _)| end);
+            let group = &group[..end];
+            if word_at(group, "self")
+                .iter()
+                .any(|&at| group[at + 4..].starts_with(" as "))
             {
-                found.push(format!("{root}::component"));
+                found.push("alias: wasmtime::{self as …}".to_string());
             }
-            if let Some(group) = rest.strip_prefix("::{") {
-                let mut depth = 1usize;
-                let end = group
-                    .char_indices()
-                    .find(|&(_, c)| {
-                        match c {
-                            '{' => depth += 1,
-                            '}' => depth -= 1,
-                            _ => {}
-                        }
-                        depth == 0
-                    })
-                    .map_or(group.len(), |(end, _)| end);
-                let group = &group[..end];
-                if !word_at(group, "component").is_empty() {
-                    found.push(format!("{root}::{{…component…}}"));
-                }
-                if group.contains('*') && !word_at(&code, "component").is_empty() {
-                    found.push(format!("{root}::{{*}} with component"));
-                }
+            if group.contains('*') {
+                found.push("glob: wasmtime::{*}".to_string());
             }
-            if rest.starts_with("::*") && !word_at(&code, "component").is_empty() {
-                found.push(format!("{root}::* with component"));
+            if !word_at(group, "component").is_empty() {
+                found.push("component: wasmtime::{…component…}".to_string());
             }
         }
     }
@@ -556,14 +570,52 @@ fn wasmtime_component_uses(src: &str) -> Vec<String> {
 /// 43.0.2, dynamic `Val` lifting into host allocations can exceed the
 /// hostcall fuel limit) is accepted only while its reasoning holds. The
 /// exception is the one deny.toml entry; no production source uses
-/// Wasmtime's component module at all (the affected dynamic `Val`/`Func` API
-/// lives there), in any import spelling (P0-LINUX-FINAL-R2), and no
-/// manifest renames the wasmtime crate; the SDK sandbox runs core-Wasm
-/// modules through typed entry functions; and the SDK sandbox stays a latent
-/// API the desktop must not call.
+/// Wasmtime's component module (the affected dynamic `Val`/`Func` API lives
+/// there) through a path, group or glob (P0-LINUX-FINAL-R2); no production
+/// source aliases or re-exports the crate under another name, and no
+/// workspace package renames the wasmtime dependency in Cargo's effective
+/// metadata (P0-LINUX-FINAL-R2A); the SDK sandbox runs core-Wasm modules
+/// through typed entry functions; and the SDK sandbox stays a latent API the
+/// desktop must not call. Direct core-Wasm use stays allowed. This is a
+/// Nexus non-use and reachability invariant, not proof that wasmtime 43.0.2
+/// is generally safe.
 #[test]
 fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
-    // The scanner rejects every spelling of the component module ...
+    // The scanner rejects every alias of the crate, whether or not the same
+    // file names `component` (another file could use the alias) ...
+    for probe in [
+        "use wasmtime as wt;",
+        "pub use wasmtime as wt;",
+        "pub(crate) use wasmtime as wt;",
+        "use wasmtime::{self as wt};",
+        "pub use wasmtime::{self as wt, Engine};",
+        "extern crate wasmtime as wt;",
+        "pub extern crate wasmtime as wt;",
+        "use r#wasmtime as wt;",
+        "pub use wasmtime as r#wt;",
+        "use ::wasmtime as wt;",
+        "use {wasmtime as wt};",
+        "pub use wasmtime\n    as\n    wt;",
+        "#[cfg(any())]\npub use wasmtime as wt;",
+        "use wasmtime as _;",
+    ] {
+        assert!(
+            wasmtime_forbidden_uses(probe)
+                .iter()
+                .any(|use_| use_.starts_with("alias: ")),
+            "the crate-alias probe was not caught: {probe:?}"
+        );
+    }
+    // ... every glob import of the crate ...
+    for probe in ["pub use wasmtime::*;", "use wasmtime::{Engine, *};"] {
+        assert!(
+            wasmtime_forbidden_uses(probe)
+                .iter()
+                .any(|use_| use_.starts_with("glob: ")),
+            "the glob probe was not caught: {probe:?}"
+        );
+    }
+    // ... and every spelling of the component module (the R2 probes) ...
     for probe in [
         "use wasmtime::component::Val;",
         "use wasmtime::{component::Val};",
@@ -582,21 +634,24 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
         "#[cfg(any())]\nuse wasmtime::{component::{Val}};",
     ] {
         assert!(
-            !wasmtime_component_uses(probe).is_empty(),
+            !wasmtime_forbidden_uses(probe).is_empty(),
             "the component-module probe was not caught: {probe:?}"
         );
     }
-    // ... and accepts the core API the SDK sandbox uses, and comments.
+    // ... while it accepts the core API the SDK sandbox uses, and comments.
     for safe in [
         "use wasmtime::{Engine, Linker, Module, Store, StoreLimits, StoreLimitsBuilder};",
         "let f = instance.get_typed_func::<(), ()>(&mut store, \"_start\")?;",
         "use wasmtime::Linker; let x = wasmtime::Val::I32(1);",
         "// wasmtime::component::Val is not used here\nuse wasmtime::Engine;",
         "/* use wasmtime::{component::Val}; */ use wasmtime::Module;",
+        "/* pub use wasmtime as wt; */ use wasmtime::Store;",
         "mod my_component { pub struct Val; }",
+        "use wasmtime::{Engine as WasmEngine, Store};",
+        "extern crate wasmtime;",
     ] {
         assert_eq!(
-            wasmtime_component_uses(safe),
+            wasmtime_forbidden_uses(safe),
             Vec::<String>::new(),
             "a core-API or comment-only source was rejected: {safe:?}"
         );
@@ -619,8 +674,7 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
                 {
                     walk(&path, out);
                 }
-            } else if (name.ends_with(".rs") && !name.ends_with("tests.rs")) || name == "Cargo.toml"
-            {
+            } else if name.ends_with(".rs") && !name.ends_with("tests.rs") {
                 out.push(path);
             }
         }
@@ -631,22 +685,78 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
     assert!(sources.len() > 100, "workspace sources not found");
     for path in &sources {
         let text = std::fs::read_to_string(path).unwrap_or_default();
-        if path.file_name().is_some_and(|name| name == "Cargo.toml") {
-            // A renamed dependency would hide the crate behind another name.
-            assert!(
-                !text.replace(' ', "").contains("package=\"wasmtime\""),
-                "{}: wasmtime renamed (RUSTSEC-2026-0316 guard)",
-                path.display()
-            );
-            continue;
-        }
-        let uses = wasmtime_component_uses(&text);
+        let uses = wasmtime_forbidden_uses(&text);
+        let aliases: Vec<&String> = uses.iter().filter(|u| u.starts_with("alias: ")).collect();
+        assert!(
+            aliases.is_empty(),
+            "{}: {aliases:?} (the wasmtime crate is not aliased or renamed while RUSTSEC-2026-0316 is accepted)",
+            path.display()
+        );
         assert!(
             uses.is_empty(),
             "{}: {uses:?} (Wasmtime's component module is not used while RUSTSEC-2026-0316 is accepted)",
             path.display()
         );
     }
+
+    // A dependency rename would hide the crate behind another name. Cargo's
+    // effective metadata for this exact workspace, from the Cargo that built
+    // this test (not one the caller selects), lists each package's
+    // dependencies with their `rename`; none of the wasmtime entries may
+    // carry one.
+    let output = std::process::Command::new(env!("CARGO"))
+        .args([
+            "metadata",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--locked",
+            "--manifest-path",
+        ])
+        .arg(root.join("Cargo.toml"))
+        .output()
+        .expect("cargo metadata");
+    assert!(
+        output.status.success(),
+        "cargo metadata failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("cargo metadata JSON");
+    assert_eq!(metadata["version"], 1, "cargo metadata format");
+    assert_eq!(
+        std::path::Path::new(metadata["workspace_root"].as_str().expect("workspace_root")),
+        root.canonicalize().unwrap(),
+        "cargo metadata describes another workspace"
+    );
+    let packages = metadata["packages"].as_array().expect("packages");
+    assert_eq!(
+        packages.len(),
+        metadata["workspace_members"]
+            .as_array()
+            .expect("workspace_members")
+            .len(),
+        "cargo metadata lists every workspace member"
+    );
+    let mut wasmtime_dependencies = 0;
+    for package in packages {
+        for dependency in package["dependencies"].as_array().expect("dependencies") {
+            if dependency["name"] != "wasmtime" {
+                continue;
+            }
+            wasmtime_dependencies += 1;
+            let rename = dependency.get("rename").expect("dependency rename field");
+            assert!(
+                rename.is_null(),
+                "{}: wasmtime dependency renamed to {rename} (the wasmtime crate is not aliased or renamed while RUSTSEC-2026-0316 is accepted)",
+                package["name"]
+            );
+        }
+    }
+    assert!(
+        wasmtime_dependencies > 0,
+        "cargo metadata shows no wasmtime dependency"
+    );
 
     let sandbox = include_str!("../../../../../sdk/src/wasmtime_sandbox.rs");
     assert!(sandbox.contains("use wasmtime::{Engine, Linker, Module, Store"));

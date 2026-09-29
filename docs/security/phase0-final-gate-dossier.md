@@ -5,12 +5,10 @@ the evidence for the Phase Zero Final Gate. It does not decide any item and
 does not claim that Phase Zero is complete. Items that C5C repaired are named
 as such; everything else is open for the Final Gate.
 
-P0-FG1 updates item J1 only: the withdrawal of `crates/nexus-server` is
-implemented on its validation branch, and Architect review is pending.
-[Update (P0-FINAL-GATE-CLOSURE), corrected by P0-LINUX-FINAL-R2: P0-FG1 is
-integrated into the authoritative branch at `71c47acb`, and its designated
-post-integration validation (hosted run #108) passed. J1 no longer waits for
-integration or Architect review. See item J.]
+P0-FG1 (item J1) withdrew `crates/nexus-server`. It is integrated into the
+authoritative branch at `71c47acb`, and its designated post-integration hosted
+validation, run #108, passed. J1 does not await integration or Architect
+review. P0-FG1-R1's duplicate-name repair is integrated with it. See item J.
 
 **P0-FINAL-GATE-CLOSURE (internal work, not approval).** The Architect's
 closure mission implements contracts A–K, C5 and DEP on local component
@@ -83,7 +81,7 @@ were.
 | G | Approval channel | L6 (autonomy 6 or above) refused at create, start, resume, approve and review-each, never registered by restore or the prebuilt load, and refused for goals, autonomous loops, scheduled ticks and tool calls; caller-asserted approval commands closed; consent resolutions labelled `desktop-ui (unverified)`; self-improvement recorded truthfully; an enabled Warden review denies | Repaired on the closure candidate; no out-of-band approval exists (non-claim). Stored L6 records stay untouched but inert, and `desktop-ui (unverified)` is an audit channel label, not a verified identity (decision G). Request 14 (R2): IPC HITL approval is not security authority and not verified human identity; it is only a UX/consent signal whose released operation is bounded by the backend-owned Phase Zero executor policy |
 | H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged. Request 10 (R2): not an active Phase Zero blocker while these flows stay closed; reopening any of them needs a separately approved secret-store design and mission; not permanently solved |
 | I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the desktop's Nexus Code checks start no process, but fixed-argument helpers still resolve from `PATH`, which the Architect accepted as operator launch configuration for fixed-name, fixed-argument helpers (decision A); owned-download cleanup covers a normal managed exit only (decision J) |
-| J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: integrated at `71c47acb`; its designated post-integration validation (run #108) passed. J2–J5: withdrawn on the closure candidate; the withdrawal accepted (decision L); the fixed wording, status 69 and the coordinator closure of D1, D2 and D4–D7 accepted for the current closure candidate under the inventory and withdrawal guards (request 19, R2); J2–J5 are not declared complete until the candidate is integrated and validated; the developer and benchmark binaries may remain, not shipped, inventory-guarded and not documented as runtime entry points (decision M) |
+| J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: integrated at `71c47acb`; its designated post-integration hosted validation (run #108) passed; J1 does not await integration or Architect review. J2–J5: withdrawn on the closure candidate; the withdrawal accepted (decision L); the fixed wording, status 69 and the coordinator closure of D1, D2 and D4–D7 accepted for the current closure candidate under the inventory and withdrawal guards (request 19, R2); J2–J5 are not declared complete until the candidate is integrated and validated; the developer and benchmark binaries may remain, not shipped, inventory-guarded and not documented as runtime entry points (decision M) |
 | K | Reliability signals and resource bounds | `executes_python_code`: no retained hosted failure (evidence corrected); GPU-host voice stderr repaired; the duplicate binary name repaired by P0-FG1-R1 (integrated); resource surfaces bounded by refusal (see "Resource bounds") | Repaired or bounded on the closure candidate; the voice tests install from a hash-pinned Linux lock (R1); `ArenaRun` and the one-token minimum accepted as bounded compatibility debt (decision I); request 7 (R2): not a Linux Phase Zero blocker; `executes_python_code` is monitored debt, unreachable from the Phase Zero desktop executor, and the self-hosted GPU driver/library condition is Owner infrastructure; no general reliability claim for that actuator or that GPU host |
 | L | Screen observation from the interface | Unchanged since C5C: unbrokered observation is unavailable (Architect repair A) | No change in P0-FINAL-GATE-CLOSURE; a brokered mechanism is future work |
 | DEP (contract) | Dependency advisories | Measured on the final candidate's lockfiles: Cargo.lock 19 → 7 cargo-audit vulnerabilities (rsa removed with the unused `openidconnect`); cargo-deny advisory errors 16 → 10; npm (app) 14 → 6. R1: one pinned gate (`scripts/security-audit.sh`) with one exception set in `deny.toml` (10 IDs, then 11 with RUSTSEC-2026-0316); six unsound fixes; npm (app) 4, development-only | Governed by the R1 gate (see "Linux security gate"). RUSTSEC-2026-0316 (wasmtime 43.0.2, dynamic `Val` API, unused and unreachable) accepted narrowly by the Architect; 11-ID exception set |
@@ -101,7 +99,7 @@ were.
 | G | Approval channel | Approvals arrive over webview IPC; the desktop swarm only drafts (C5C) | Open: design |
 | H | Secrets at rest outside the vault | OAuth token files are plaintext | Open: design |
 | I | PATH-resolved helper programs | Fixed arguments; `ollama serve` detached | Open: review |
-| J | Shipped non-desktop binaries | `crates/nexus-server` is unauthenticated on all interfaces | **Blocker**; J1 withdrawal implemented on the P0-FG1 validation branch, review pending [P0-LINUX-FINAL-R2: integrated at `71c47acb`; post-integration validation passed] |
+| J | Shipped non-desktop binaries | `crates/nexus-server` is unauthenticated on all interfaces | **Blocker** at C5C. Since withdrawn by P0-FG1, integrated at `71c47acb`; post-integration run #108 passed |
 | K | Reliability signals | Windows `executes_python_code`, retained as debt | Open: debt |
 | L | Screen observation from the interface | Unbrokered observation is unavailable: the four capture routes are closed and enabling is refused (Architect decision) | Closed; a brokered mechanism is future work |
 
@@ -1355,17 +1353,14 @@ scripts, the Homebrew formula, the WiX source, the systemd and launchd files,
 `scripts/build_windows_msi.ps1` and the GitLab `release-build` job. The GitHub
 release workflow also packaged `nexus-cli` until `39701bff`.]
 
-- **`crates/nexus-server` (`nexus-server`): BLOCKER at C5C. Withdrawal
-  implemented by P0-FG1 and integrated at `71c47acb` (P0-LINUX-FINAL-R2
-  correction of "on the validation branch; Architect review pending").**
-  - **Status update (P0-FINAL-GATE-CLOSURE).** P0-FG1, with P0-FG1-R1 and the
-    reviewed CI composition, is integrated into `rebuild/phase0-trust-boundary`
-    at `71c47acb` by fast-forward (the Architect-approved candidate). The one
-    designated post-integration hosted run, #108, succeeded on all five jobs
+- **`crates/nexus-server` (`nexus-server`): a BLOCKER at C5C; withdrawn by
+  P0-FG1, integrated at `71c47acb`.**
+  - **Status.** P0-FG1, with P0-FG1-R1 and the reviewed CI composition, is
+    integrated into `rebuild/phase0-trust-boundary` at `71c47acb` by
+    fast-forward (the Architect-approved candidate). Its designated
+    post-integration hosted validation, run #108, passed on all five jobs
     (Linux, Windows, macOS, frontend, Python) and tested that exact commit.
-    [Corrected by P0-LINUX-FINAL-R2: the designated post-integration
-    validation passed; J1 no longer waits for integration or Architect
-    review. This dossier itself declares nothing complete.]
+    J1 does not await integration or Architect review.
   - **Before P0-FG1.**
     - `src/main.rs` bound `0.0.0.0` on ports 3000, 3001 and 3002 with no
       authentication and a permissive CORS layer (`Any` origin, method and
@@ -1436,15 +1431,15 @@ release workflow also packaged `nexus-cli` until `39701bff`.]
     - **Architect decision (P0-FG1).** The Windows fallback is accepted for
       this checkpoint only, because the same tests pin the package to its one
       withdrawal-only source file. It does not make direct-`rustc`
-      substitutes a normal testing pattern, and it does not resolve the
-      duplicate binary name, which stays build debt (item K).
+      substitutes a normal testing pattern, and it did not resolve the
+      duplicate binary name, which was then build debt (item K; repaired
+      since by P0-FG1-R1, integrated at `71c47acb`).
     - **Hosted failure (run #106).** The first complete hosted run of the
       composed FG1 and CI candidate (`2b47bb09`) failed on Windows before any
       test ran. Linking this package's binary stopped with `LNK1104: cannot
       open file ...\target\debug\deps\nexus_server.exe`, the output path the
       two binaries shared (item K).
-    - **Naming repair (P0-FG1-R1; integrated at `71c47acb`, corrected by
-      P0-LINUX-FINAL-R2).** The protocols binary target is renamed
+    - **Naming repair (P0-FG1-R1; integrated at `71c47acb`).** The protocols binary target is renamed
       `nexus-protocols-server`; its source file is unchanged. J1 is then the
       only workspace binary named `nexus-server`. The identification and the
       Windows fallback above are unchanged and stay as defensive checks; the
@@ -1527,13 +1522,12 @@ release workflow also packaged `nexus-cli` until `39701bff`.]
   member except `nexus-code/`, which is a member, so its image build appears
   unable to load the workspace. `deploy/Dockerfile` had the same omission;
   P0-FG1 withdrew it.
-- **Decision needed.**
-  - J1 (`crates/nexus-server`): withdrawal implemented on the P0-FG1
-    validation branch. [Corrected by P0-LINUX-FINAL-R2: integrated at
-    `71c47acb`; its designated post-integration validation (run #108) passed.
-    J1 no longer waits for integration or Architect review.]
-  - The others need review. [Update: withdrawn on the closure candidate,
-    below.]
+- **Decisions (as asked at C5C, and their current state).**
+  - J1 (`crates/nexus-server`): withdrawn by P0-FG1, integrated at
+    `71c47acb`; its designated post-integration hosted validation (run #108)
+    passed. J1 does not await integration or Architect review.
+  - The others needed review; they are withdrawn on the closure candidate,
+    below.
 
 **Repaired in P0-FINAL-GATE-CLOSURE (contracts J2–J5: standalone surfaces
 withdrawn; accepted by decision L, request 19 dispositioned by
@@ -1645,9 +1639,8 @@ checks are unchanged.
   - The production code and the finalize-exactly-once invariant are
     unchanged.
 - **`nexus-ui-repair` `HOME` race** (`crates/nexus-ui-repair/tests/report_format.rs`).
-  Repaired on the P0-FG1 validation branch (test-only; Architect scope
-  extension); integrated with P0-FG1 at `71c47acb` (P0-LINUX-FINAL-R2
-  correction of "review pending").
+  Repaired by P0-FG1 (test-only; Architect scope extension) and integrated
+  with it at `71c47acb`.
   - A test defect: the tests of that binary run in parallel in one process,
     and each set and restored the process-wide `HOME`. One test could remove
     or change `HOME` while another built `Acl::default_scout()` from it.
@@ -1663,9 +1656,9 @@ checks are unchanged.
     alive.
   - The ACL code and the test assertions are unchanged.
 - **Duplicate binary name `nexus-server`** (`crates/nexus-server` and
-  `nexus-protocols`). Build debt for the Final Gate; repaired by P0-FG1-R1,
-  integrated at `71c47acb` (P0-LINUX-FINAL-R2 correction of "verification and
-  integration pending").
+  `nexus-protocols`). Build debt at C5C; repaired by P0-FG1-R1, integrated
+  at `71c47acb`, and covered by the designated post-integration hosted
+  validation (run #108).
   - Before P0-FG1-R1, one Cargo invocation that built both wrote them to the
     same output paths: `target/<profile>/nexus-server`, and on Windows also
     `deps\nexus_server.exe`. Cargo warns that this may become a hard error.
@@ -1679,13 +1672,12 @@ checks are unchanged.
     renamed `nexus-protocols-server`; its source file is unchanged. A
     target-identity test (`protocols/tests/binary_target_identity.rs`) checks
     that `nexus-protocols` builds `nexus-protocols-server` and `nexus-os` and
-    no `nexus-server`. The item stays open until a complete hosted run on the
-    repaired candidate is green and the repair is reviewed and integrated.
-  - [Update (P0-FINAL-GATE-CLOSURE): P0-FG1-R1 is integrated at `71c47acb`.
-    Hosted runs #107 and #108 on that commit succeeded, and the #108 logs show
-    no output-filename collision warning. Corrected by P0-LINUX-FINAL-R2: the
-    designated post-integration validation passed, and this no longer waits
-    for Architect review.]
+    no `nexus-server`.
+  - **Status.** P0-FG1-R1 is integrated at `71c47acb`. Hosted runs #107 and
+    #108 on that commit succeeded, #108 being the designated
+    post-integration validation, and the #108 logs show no output-filename
+    collision warning. The repair does not await integration or Architect
+    review.
 
 **Corrections and repairs (P0-FINAL-GATE-CLOSURE, contract K; Architect review
 pending).**
@@ -2075,21 +2067,46 @@ are historical. At the R1 head:
   production source uses Wasmtime's component API, if the SDK sandbox stops
   using typed entry functions, if the latent-API needles are removed, or if
   the exception's recorded reasons change. The acceptance lapses if that API
-  use or reachability changes. [P0-LINUX-FINAL-R2: the guard now fails if
-  production Nexus Rust uses or imports Wasmtime's `component` module at all,
-  in any spelling: a direct path, grouped or nested imports
-  (`wasmtime::{component::{Val}}`), `component as …` inside a group, an alias
-  of the crate (`use wasmtime as …`, `wasmtime::{self as …}`,
-  `extern crate wasmtime as …`) followed by `component`, whitespace or line
-  breaks inside the path, a glob import of the crate in a file that names
-  `component`, or a `Cargo.toml` that renames the `wasmtime` package. It
-  removes comments first, keeps `cfg`-disabled code in scope, and adds no
-  parser dependency. Its test-side probes check 15 spellings that must be
-  caught and 6 core uses that must be accepted. Negative controls on
-  `sdk/src/wasm_agent.rs` (a `cfg`-disabled nested group, and a grouped
-  alias) each failed the guard and were restored byte for byte. The pins on
-  the core `Engine`/`Linker`/`Module`/`Store` import, `get_typed_func` and the
-  latent-API needles are unchanged.]
+  use or reachability changes.
+
+  **The guard's invariant (P0-LINUX-FINAL-R2, narrowed by
+  P0-LINUX-FINAL-R2A).** While the exception is accepted:
+
+  - production Nexus does not use Wasmtime's `component` module, where the
+    affected dynamic `Val`/`Func` API lives: no direct, spaced, multiline,
+    grouped or nested path to it, and no `component as …` inside a group;
+  - production Nexus does not alias, rename or glob-import the Wasmtime
+    crate while the exception is accepted: `[pub] use wasmtime as …`,
+    `[pub] use wasmtime::{self as …}` and `[pub] extern crate wasmtime as …`
+    (raw identifiers included) are refused as declarations, whether or not
+    the same file names `component`, so no other file can reach the module
+    through a name that does not spell `wasmtime`; `wasmtime::*` and
+    `wasmtime::{*}` are refused;
+  - no workspace package renames its `wasmtime` dependency, as read from
+    Cargo's effective metadata (`cargo metadata --no-deps --format-version 1
+    --locked` for this workspace, run with the Cargo that built the test);
+  - direct core-Wasm use (`Engine`, `Linker`, `Module`, `Store`,
+    `get_typed_func`) stays allowed.
+
+  - The source check removes comments first and keeps `cfg`-disabled code in
+    scope. It is a text check, not a Rust name resolver, and adds no parser
+    dependency. Refusing every crate alias is what closes a cross-file
+    re-export (`pub use wasmtime as wt;` in one file, `wt::component` in
+    another).
+  - Its probes: 14 crate aliases, 2 glob imports and 15 component-module
+    spellings must be caught, and 9 core, item-rename or comment-only sources
+    must be accepted.
+  - Negative controls, each restored byte for byte, all failed the guard for
+    the named reason:
+    - `sdk/src/wasm_agent.rs`: a `cfg`-disabled nested component group and a
+      grouped `component as` alias (component module);
+    - the same file: `#[cfg(any())] pub use wasmtime as wt;` (crate alias);
+    - `sdk/Cargo.toml`: `wt = { package = "wasmtime", version = "43.0.2" }`
+      ("nexus-sdk": wasmtime dependency renamed; `Cargo.lock` untouched).
+  - The pins on the core import, `get_typed_func`, the latent-API needles and
+    the exception's recorded reasons are unchanged.
+  - This is a Nexus non-use and reachability invariant. It is not proof that
+    wasmtime 43.0.2 is generally safe.
 
 Evidence: the gate's exit 0 against the reviewed snapshot, the two negative
 controls (a removed exception and a stale exception each fail the gate) and
@@ -2487,8 +2504,11 @@ the Final Gate or Phase Zero complete or approved.
 
 **Correction: P0-FG1 (J1).** P0-FG1 is integrated at the authoritative
 `71c47acb`, and its designated post-integration validation (hosted run #108)
-passed. J1 does not wait for integration or Architect review; earlier
-"pending" statements about it are corrected in place.
+passed. J1 does not wait for integration or Architect review, and
+P0-FG1-R1's duplicate-name repair is integrated. The current-status text in
+the header, the Summary, item J and item K states this directly
+(P0-LINUX-FINAL-R2A). Only explicitly historical text (the C5C table, "Before
+P0-FG1", dated runs) keeps the earlier status.
 
 **Final-Gate guard counts.** The figure "244 Final Gate guards" in earlier
 evidence was a name-pattern count over the Linux workspace test step: every
