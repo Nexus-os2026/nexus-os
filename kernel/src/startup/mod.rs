@@ -35,7 +35,7 @@ use crate::secrets::backend_keyring::KeyringBackendAdapter;
 use crate::secrets::backend_memory::MemoryBackend;
 use crate::secrets::backend_sqlite::SqliteEnvelopeBackend;
 use crate::secrets::migrate::{migrate_config_to_vault, MigrationError, MigrationReport};
-use crate::secrets::{SecretBackend, SecretsFacade};
+use crate::secrets::{SecretBackend, SecretError, SecretsFacade};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -49,7 +49,12 @@ pub enum StartupError {
     /// the vault, so the vault is not used with it.
     #[error("the vault key does not open the stored secrets; the vault is not used")]
     VaultKeyMismatch,
-    #[error("the stored vault secrets could not be listed; the vault is not used")]
+    /// Final Gate item E: a stored secret's row is damaged whatever the key:
+    /// its nonce has the wrong length, or it opens to a value that is not
+    /// text. Reported apart from a key that does not open the vault.
+    #[error("a stored vault secret is damaged and cannot be read; the vault is not used")]
+    VaultSecretDamaged,
+    #[error("the stored vault secrets could not be listed or read; the vault is not used")]
     VaultUnreadable,
 }
 
@@ -78,9 +83,18 @@ fn verify_vault_key(sqlite: &SqliteEnvelopeBackend) -> Result<(), StartupError> 
             .map_err(|_| StartupError::VaultUnreadable)?;
         for name in names {
             // The decrypted value is dropped (and zeroized) at once.
-            sqlite
-                .get(scope, &name)
-                .map_err(|_| StartupError::VaultKeyMismatch)?;
+            match sqlite.get(scope, &name) {
+                Ok(_) => {}
+                // The authenticated decryption failed: this key does not
+                // open the row.
+                Err(SecretError::DecryptionFailed) => {
+                    return Err(StartupError::VaultKeyMismatch);
+                }
+                // The row itself is malformed (wrong nonce length, or a
+                // value that is not text).
+                Err(SecretError::Crypto(_)) => return Err(StartupError::VaultSecretDamaged),
+                Err(_) => return Err(StartupError::VaultUnreadable),
+            }
         }
     }
     Ok(())
@@ -274,6 +288,47 @@ mod tests {
                 Err(StartupError::VaultKeyMismatch)
             ));
         }
+    }
+
+    /// Final Gate item E (stream 6 review): a damaged row is reported apart
+    /// from a key that does not open the vault: a nonce of the wrong length,
+    /// or a row that the key opens to a value that is not text.
+    #[test]
+    fn p0_fg_e_a_damaged_vault_row_is_reported_as_damaged() {
+        use crate::secrets::Zeroizing;
+        let key = || EncryptionKey::from_raw_for_test([0x11; 32]);
+        let good = || Zeroizing::new("synthetic-llm".to_string());
+
+        let short_nonce =
+            Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        let backend = SqliteEnvelopeBackend::new(Arc::clone(&short_nonce), &key());
+        backend.set("llm", "anthropic", good()).unwrap();
+        short_nonce
+            .record_secret("llm", "openai", &[0_u8; 5], b"synthetic-ciphertext")
+            .unwrap();
+        assert!(matches!(
+            verify_vault_key(&backend),
+            Err(StartupError::VaultSecretDamaged)
+        ));
+
+        let not_text =
+            Arc::new(nexus_persistence::NexusDatabase::in_memory().expect("in-memory db"));
+        let backend = SqliteEnvelopeBackend::new(Arc::clone(&not_text), &key());
+        let (nonce, ciphertext) = backend.encrypt_for_migration(&[0xff, 0xfe, 0x00]).unwrap();
+        not_text
+            .record_secret("social", "x_consumer_key", &nonce, &ciphertext)
+            .unwrap();
+        assert!(matches!(
+            verify_vault_key(&backend),
+            Err(StartupError::VaultSecretDamaged)
+        ));
+
+        let messages = [
+            StartupError::VaultKeyMismatch.to_string(),
+            StartupError::VaultSecretDamaged.to_string(),
+        ];
+        assert_ne!(messages[0], messages[1]);
+        assert!(messages[1].contains("damaged"), "{}", messages[1]);
     }
 
     /// Final Gate item E: startup refuses a key file whose key does not open
