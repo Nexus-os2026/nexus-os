@@ -2,68 +2,38 @@
 all-features = true
 
 [advisories]
+# The Linux security gate's one exception set (P0-LINUX-FINAL-R1, repair B).
+#
+# scripts/security-audit.sh runs cargo-deny with this file and passes the same
+# IDs (read from the `id = "RUSTSEC-..."` entries below) to cargo-audit, which
+# does not read this file. Keep one entry per line in this form.
+#
+# Policy, the same for both scanners when run through the script:
+# - a vulnerability fails the gate unless its ID is listed here;
+# - unmaintained, unsound and yanked findings are reported for every crate in
+#   the graph (the scopes below) as warnings, which is cargo-audit's default;
+#   the script passes `-W unmaintained -W unsound` to cargo-deny for the same
+#   levels. Each is recorded with its dependency path in the Final Gate
+#   dossier;
+# - a listed ID that no longer matches anything fails the gate (the script
+#   passes `-D advisory-not-detected`), so the list cannot go stale.
+#
+# Each entry: package, what it is, how it reaches the workspace, and why it is
+# accepted for Phase Zero (Architect decision; dossier, "Dependencies").
+unmaintained = "all"
+unsound = "all"
+yanked = "warn"
 ignore = [
-    # ── Vulnerabilities (accepted risk, upgrade when dependency tree allows) ──
-
-    # aws-lc-sys 0.38.0: X.509 name constraints bypass via wildcard/unicode CN.
-    # Nexus does not perform direct X.509 name constraint validation.
-    { id = "RUSTSEC-2026-0044", reason = "No direct X.509 name constraint validation in Nexus" },
-
-    # aws-lc-sys 0.38.0: CRL distribution point scope check logic error.
-    # TLS-only impact; Nexus does not use CRL distribution points.
-    { id = "RUSTSEC-2026-0048", reason = "TLS-only CRL impact; no CRL distribution points used" },
-
-    # rsa 0.9.x: Marvin Attack — timing sidechannel on PKCS#1 v1.5 decryption.
-    # Nexus uses Ed25519, not RSA decryption. Transitive dep via oauth2.
-    { id = "RUSTSEC-2023-0071", reason = "Nexus uses Ed25519, not RSA decryption" },
-
-    # tar 0.4.44: unpack_in symlink chmod and PAX size header issues.
-    # tar used only in kernel for trusted package extraction.
-    { id = "RUSTSEC-2026-0067", reason = "tar used only for trusted package extraction in kernel" },
-    { id = "RUSTSEC-2026-0068", reason = "tar used only for trusted package extraction; trusted inputs" },
-
-    # ── Unmaintained crates (transitive deps, no direct replacement available) ──
-
-    # gtk-rs GTK3 bindings — pulled by Tauri on Linux. GTK4 migration is a Tauri concern.
-    { id = "RUSTSEC-2024-0411", reason = "Transitive Tauri/GTK3 dep; GTK4 migration is upstream" },
-    { id = "RUSTSEC-2024-0412", reason = "Transitive Tauri/GTK3 dep" },
-    { id = "RUSTSEC-2024-0413", reason = "Transitive Tauri/GTK3 dep" },
-    { id = "RUSTSEC-2024-0415", reason = "Transitive Tauri/GTK3 dep" },
-    { id = "RUSTSEC-2024-0416", reason = "Transitive Tauri/GTK3 dep" },
-    { id = "RUSTSEC-2024-0418", reason = "Transitive Tauri/GTK3 dep" },
-    { id = "RUSTSEC-2024-0419", reason = "Transitive Tauri/GTK3 dep" },
-    { id = "RUSTSEC-2024-0420", reason = "Transitive Tauri/GTK3 dep" },
-
-    # proc-macro-error: unmaintained. Transitive dep, no replacement yet.
-    { id = "RUSTSEC-2024-0370", reason = "Transitive proc-macro dep; no drop-in replacement" },
-
-    # paste: unmaintained. Widely used, stable, no security impact.
-    { id = "RUSTSEC-2024-0436", reason = "Stable transitive dep; no security impact" },
-
-    # fxhash: unmaintained. Used transitively; foldhash is the replacement but not adopted upstream.
-    { id = "RUSTSEC-2025-0057", reason = "Transitive dep; upstream hasn't migrated to foldhash" },
-
-    # unic-* crates: unmaintained Unicode helpers. Transitive deps.
-    { id = "RUSTSEC-2025-0075", reason = "Transitive Unicode helper dep" },
-    { id = "RUSTSEC-2025-0080", reason = "Transitive Unicode helper dep" },
-    { id = "RUSTSEC-2025-0081", reason = "Transitive Unicode helper dep" },
-    { id = "RUSTSEC-2025-0098", reason = "Transitive Unicode helper dep" },
-    { id = "RUSTSEC-2025-0100", reason = "Transitive Unicode helper dep" },
-
-    # number_prefix: unmaintained. Transitive dep for human-readable byte formatting.
-    { id = "RUSTSEC-2025-0119", reason = "Transitive dep; stable, no security impact" },
-
-    # rustls-pemfile 1.0.4: unmaintained as of August 2025; repo archived.
-    # Transitive dep via reqwest 0.11 → readability → nexus-kernel.
-    # TODO: upgrade readability or replace with reqwest 0.12 (drops rustls-pemfile).
-    { id = "RUSTSEC-2025-0134", reason = "Transitive via reqwest 0.11; upgrade pending readability dep refresh" },
-
-    # rand 0.8.5: unsoundness when a custom logger calls rand::rng() / rand::thread_rng()
-    # from inside the logger AND ThreadRng reseeds during that call. Nexus has zero
-    # rand::rng() callsites (verified with rg) and tracing_subscriber formatters do not
-    # call into rand. Trigger condition is unreachable. No semver-compatible bump exists.
-    { id = "RUSTSEC-2026-0097", reason = "Nexus has zero rand::rng() callsites; tracing_subscriber loggers do not call into rand; unsoundness path unreachable" },
-
+    { id = "RUSTSEC-2026-0193", reason = "ammonia 4.1.2 sanitizer bypass; web-builder-agent -> desktop; only design_import::import_design uses it, no production code calls it, and builder_import_design is closed in Phase Zero" },
+    { id = "RUSTSEC-2026-0213", reason = "ammonia 4.1.2 sanitizer bypass; same path and reachability as RUSTSEC-2026-0193" },
+    { id = "RUSTSEC-2026-0258", reason = "h2 0.3.27 unbounded empty DATA frames; readability 0.3 -> reqwest 0.11 -> hyper 0.14 -> nexus-kernel; the kernel calls only readability::extractor::extract on text it holds and builds no reqwest 0.11 client; no fix on the 0.3 line" },
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.30.0; zbus_xml -> atspi 0.24 -> nexus-ui-repair, a developer tool that is not shipped (D3)" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.30.0; same path and reachability as RUSTSEC-2026-0194" },
+    { id = "RUSTSEC-2026-0269", reason = "wasmtime 43.0.2; nexus-sdk, nexus-protocols, nexus-benchmarks; wasmtime-wasi is not in the lockfile and the SDK's WASM sandbox is latent (C5A); fix needs a major upgrade (46.0.3+ or 47.0.4+)" },
+    { id = "RUSTSEC-2026-0222", reason = "wasmtime 43.0.2; same path and reachability as RUSTSEC-2026-0269" },
+    { id = "RUSTSEC-2026-0247", reason = "bitmaps 2.1.0 unmaintained; wasm-compose -> wasmtime 43.0.2; accepted with wasmtime" },
+    { id = "RUSTSEC-2026-0250", reason = "im-rc 15.1.0 unmaintained; wasm-compose -> wasmtime 43.0.2; accepted with wasmtime" },
+    { id = "RUSTSEC-2026-0251", reason = "sized-chunks 0.6.5 unmaintained; wasm-compose -> wasmtime 43.0.2; accepted with wasmtime" },
 ]
 
 [licenses]
