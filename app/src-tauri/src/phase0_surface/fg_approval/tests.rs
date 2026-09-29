@@ -505,19 +505,21 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
         "{execute}"
     );
     // The runtime's goal assignment is reached only through
-    // `assign_agent_goal`.
-    let code = without_whitespace(&code_lines(cognitive));
-    assert_eq!(
-        code.matches(".assign_goal(").count(),
-        1,
-        "one goal assignment"
-    );
-    assert_eq!(
-        without_whitespace(&code_lines(include_str!("../../lib.rs")))
-            .matches(".assign_goal(")
-            .count(),
-        0
-    );
+    // `assign_agent_goal` (review W6). Every desktop production source is
+    // read: every file under app/src-tauri/src except test files named
+    // `*tests.rs`. The one call is the one in `assign_agent_goal`.
+    let assignments: Vec<String> = rust_sources_under(&workspace_dir("app/src-tauri/src"))
+        .into_iter()
+        .filter(|(path, _)| !path.ends_with("tests.rs"))
+        .flat_map(|(path, src)| {
+            let calls = without_whitespace(&code_lines(&src))
+                .matches(".assign_goal(")
+                .count();
+            std::iter::repeat_n(path, calls)
+        })
+        .collect();
+    assert_eq!(assignments, ["commands/cognitive.rs"], "goal assignments");
+    assert!(assign.contains(".assign_goal(&agent_id,goal)"), "{assign}");
 
     let (_, looping) = fn_shape(cognitive, "start_autonomous_loop");
     assert!(
