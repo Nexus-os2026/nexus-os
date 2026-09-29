@@ -23,6 +23,21 @@ use std::time::{Duration, Instant};
 const DEFAULT_BASE_URL: &str = "https://api-inference.huggingface.co";
 const DEFAULT_MODEL_FALLBACK: &str = "meta-llama/Llama-3.2-3B-Instruct";
 
+/// The client for the credentialed calls (Final Gate item C): a 60 s
+/// timeout and no redirect. reqwest drops the bearer token on a redirect to
+/// another host, but on 307 and 308 it would re-send the prompt there; a
+/// redirect is reported as its status instead. Like the `Client::new()`
+/// fallback before, building it panics only when no TLS backend can be
+/// initialized.
+fn credential_client() -> Client {
+    let no_redirect = || Client::builder().redirect(reqwest::redirect::Policy::none());
+    no_redirect()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .or_else(|_| no_redirect().build())
+        .expect("failed to initialize the HTTP client")
+}
+
 pub struct HuggingFaceProvider {
     base_url: String,
     client: Client,
@@ -32,10 +47,7 @@ pub struct HuggingFaceProvider {
 
 impl HuggingFaceProvider {
     pub fn new() -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(60))
-            .build()
-            .unwrap_or_else(|_| Client::new());
+        let client = credential_client();
         let default_model = std::env::var("NEXUS_HF_DEFAULT_MODEL")
             .unwrap_or_else(|_| DEFAULT_MODEL_FALLBACK.into());
         Self {
@@ -47,10 +59,7 @@ impl HuggingFaceProvider {
     }
 
     pub fn with_base_and_token(base_url: impl Into<String>, token: impl Into<String>) -> Self {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(60))
-            .build()
-            .unwrap_or_else(|_| Client::new());
+        let client = credential_client();
         let default_model = std::env::var("NEXUS_HF_DEFAULT_MODEL")
             .unwrap_or_else(|_| DEFAULT_MODEL_FALLBACK.into());
         Self {
@@ -324,5 +333,46 @@ mod tests {
         let p = HuggingFaceProvider::with_base_and_token(mock.uri(), "t");
         let h = p.health_check().await;
         assert_eq!(h.status, ProviderHealthStatus::Degraded);
+    }
+
+    /// Final Gate item C: invoke and the health probe follow no redirect, so
+    /// the prompt (which reqwest re-sends on 307 and 308) never reaches the
+    /// redirect target, which is never contacted; the redirect is reported
+    /// as its status.
+    #[tokio::test]
+    async fn p0_fg_calls_follow_no_redirect() {
+        let target = MockServer::start().await;
+        for code in [301u16, 302, 307, 308] {
+            let origin = MockServer::start().await;
+            Mock::given(method("POST"))
+                .respond_with(
+                    ResponseTemplate::new(code)
+                        .insert_header("location", format!("{}/collect", target.uri())),
+                )
+                .mount(&origin)
+                .await;
+            let p = HuggingFaceProvider::with_base_and_token(origin.uri(), "hf-fg-secret");
+            let err = p
+                .invoke(InvokeRequest {
+                    model_id: "meta-llama/Llama-3.2-3B-Instruct".into(),
+                    prompt: "fg prompt".into(),
+                    max_tokens: 8,
+                    temperature: None,
+                    metadata: serde_json::Value::Null,
+                })
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(&err, ProviderError::Http(_, status, _) if *status == code),
+                "{code}: {err:?}"
+            );
+            let health = p.health_check().await;
+            assert_eq!(health.status, ProviderHealthStatus::Unhealthy, "{code}");
+            assert_eq!(origin.received_requests().await.unwrap().len(), 2, "{code}");
+        }
+        assert!(
+            target.received_requests().await.unwrap().is_empty(),
+            "the redirect target was contacted"
+        );
     }
 }
