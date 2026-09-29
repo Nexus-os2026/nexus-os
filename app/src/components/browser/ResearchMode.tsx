@@ -279,13 +279,25 @@ export function ResearchMode({
                   {activeAgent?.current_url ?? iframeSrc}
                 </span>
               </div>
-              <div className="browser-iframe-shell">
-                <iframe
-                  className="browser-iframe"
-                  src={activeAgent?.current_url ?? iframeSrc ?? undefined}
-                  title="Research Browser"
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                />
+              {/*
+                P0 item D: the live web view is unavailable in Phase Zero.
+                Embedding an arbitrary remote page here (allow-scripts +
+                allow-same-origin + allow-popups) put untrusted remote content
+                inside the privileged app window. Research still runs and its
+                findings stream into the activity panel; only the embedded
+                render is closed. The current URL is shown as text above.
+              */}
+              <div className="browser-iframe-shell browser-iframe-shell--placeholder">
+                <div className="browser-placeholder">
+                  <span className="browser-placeholder-icon">⌁</span>
+                  <span className="browser-placeholder-text">
+                    Live page view unavailable in Phase Zero
+                  </span>
+                  <span className="browser-placeholder-hint">
+                    Research continues and findings appear in the activity
+                    stream; embedded rendering of remote pages is disabled.
+                  </span>
+                </div>
               </div>
             </>
           ) : (

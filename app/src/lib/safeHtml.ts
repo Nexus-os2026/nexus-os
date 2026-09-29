@@ -104,7 +104,14 @@ export function renderNoteMarkdown(md: string): string {
       isHttpUrl(url) ? `<img alt="${alt}" src="${url}" class="na-img" />` : match,
     )
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (match, text: string, url: string) =>
-      isHttpUrl(url) ? `<a href="${url}" class="na-link">${text}</a>` : match,
+      // P0 item D: a note link must never navigate the privileged document.
+      // `target="_blank"` turns a click into a new-window request, which the
+      // main window's `on_new_window` handler denies on every platform, so the
+      // app document is preserved; `rel="noopener noreferrer"` drops any opener
+      // reference. Only http(s) URLs reach here (isHttpUrl).
+      isHttpUrl(url)
+        ? `<a href="${url}" class="na-link" target="_blank" rel="noopener noreferrer">${text}</a>`
+        : match,
     )
     .replace(/\n\n/g, "</p><p>")
     .replace(/\n/g, "<br />");

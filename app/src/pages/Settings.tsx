@@ -39,7 +39,9 @@ interface SettingsProps {
 }
 
 type SettingsSection = "general" | "llm" | "api" | "privacy" | "voice" | "models" | "tools" | "about";
-type ServiceStatus = "unknown" | "testing" | "ok" | "error";
+// "format-ok" / "format-error" come from a local format check only; no key is
+// verified with its provider from the webview (see testKey).
+type ServiceStatus = "unknown" | "format-ok" | "format-error";
 
 interface ApiKeyDef {
   id: string;
@@ -210,55 +212,26 @@ export function Settings({
     },
   ];
 
-  async function testKey(id: string, value: string): Promise<void> {
-    if (!value || value.trim().length < 4) {
-      setStatuses((prev) => ({ ...prev, [id]: "error" }));
-      return;
-    }
-    setStatuses((prev) => ({ ...prev, [id]: "testing" }));
-    try {
-      if (id === "openai") {
-        const res = await fetch("https://api.openai.com/v1/models", {
-          method: "GET",
-          headers: { Authorization: `Bearer ${value.trim()}` },
-        });
-        setStatuses((prev) => ({ ...prev, [id]: res.ok ? "ok" : "error" }));
-      } else if (id === "anthropic") {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "x-api-key": value.trim(),
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
-        });
-        setStatuses((prev) => ({ ...prev, [id]: (res.ok || res.status === 400) ? "ok" : "error" }));
-      } else {
-        // For other keys (Brave, X, GitHub), validate length heuristic as fallback
-        setStatuses((prev) => ({ ...prev, [id]: value.trim().length > 4 ? "ok" : "error" }));
-      }
-    } catch {
-      // Network error — check Ollama (localhost) separately
-      if (id === "openai" || id === "anthropic") {
-        setStatuses((prev) => ({ ...prev, [id]: "error" }));
-      } else {
-        setStatuses((prev) => ({ ...prev, [id]: value.trim().length > 4 ? "ok" : "error" }));
-      }
-    }
+  function testKey(id: string, value: string): void {
+    // P0 item D / item C: the interface no longer sends the API key to the
+    // provider from the webview. That was a direct `fetch` to api.openai.com /
+    // api.anthropic.com carrying the secret straight from the privileged
+    // origin (credential egress), and the restrictive CSP's `connect-src` no
+    // longer permits it. A live provider check must go through a governed
+    // backend path; until one exists, this is a local format check only, and
+    // the result says so: it never reports a key as connected or verified.
+    const ok = !!value && value.trim().length > 4;
+    setStatuses((prev) => ({ ...prev, [id]: ok ? "format-ok" : "format-error" }));
   }
 
   function statusLabel(s: ServiceStatus): JSX.Element {
-    if (s === "testing") return <><RefreshCw size={12} className="inline-icon spin" /> Testing...</>;
-    if (s === "ok") return <><Check size={12} className="inline-icon" /> Connected</>;
-    if (s === "error") return <><X size={12} className="inline-icon" /> Invalid</>;
+    if (s === "format-ok") return <>Format looks valid (not verified)</>;
+    if (s === "format-error") return <><X size={12} className="inline-icon" /> Invalid format</>;
     return <>Not Set</>;
   }
 
   function statusClass(s: ServiceStatus): string {
-    if (s === "ok") return "status-ok";
-    if (s === "error") return "status-error";
-    if (s === "testing") return "status-testing";
+    if (s === "format-error") return "status-error";
     return "status-none";
   }
 
@@ -1078,8 +1051,13 @@ export function Settings({
                     <button type="button" className="st-api-save-btn cursor-pointer" onClick={onSave} disabled={saving}>
                       Save
                     </button>
-                    <button type="button" className="st-api-test-btn cursor-pointer" onClick={() => testKey(key.id, key.value)}>
-                      Test Connection
+                    <button
+                      type="button"
+                      className="st-api-test-btn cursor-pointer"
+                      title="Checks the key's format only; it is not sent to the provider or verified"
+                      onClick={() => testKey(key.id, key.value)}
+                    >
+                      Check Format
                     </button>
                   </div>
                 </div>
@@ -1109,8 +1087,13 @@ export function Settings({
                   <button type="button" className="st-api-save-btn cursor-pointer" onClick={onSave} disabled={saving}>
                     Save
                   </button>
-                  <button type="button" className="st-api-test-btn cursor-pointer" onClick={() => testKey(key.id, key.value)}>
-                    Validate
+                  <button
+                    type="button"
+                    className="st-api-test-btn cursor-pointer"
+                    title="Checks the token's format only; it is not sent to the service or verified"
+                    onClick={() => testKey(key.id, key.value)}
+                  >
+                    Check Format
                   </button>
                 </div>
               </div>

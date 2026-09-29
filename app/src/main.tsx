@@ -24,6 +24,10 @@ window.addEventListener("error", (e) => {
   } catch { /* */ }
   const root = document.getElementById("root");
   if (root && root.innerHTML.trim() === "") {
+    // P0 item D: the recovery UI carries no inline event handlers. Under the
+    // restrictive CSP (`script-src 'self'`, no `'unsafe-inline'`) inline
+    // `onclick=` attributes never run, so the buttons are wired with
+    // addEventListener after the markup is set. The error text is escaped.
     root.innerHTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0e1a;color:#e2e8f0;font-family:system-ui;padding:32px">
       <div style="max-width:480px;background:rgba(30,41,59,0.6);border:1px solid rgba(248,113,113,0.3);border-radius:16px;padding:32px">
         <div style="color:rgba(248,113,113,0.75);font-size:12px;text-transform:uppercase;letter-spacing:0.15em;margin-bottom:8px">System Recovery</div>
@@ -31,11 +35,20 @@ window.addEventListener("error", (e) => {
         <p style="color:#94a3b8;font-size:14px;margin:0 0 16px">The app crashed but your data is safe.</p>
         <pre style="background:rgba(0,0,0,0.3);border:1px solid rgba(248,113,113,0.2);border-radius:8px;padding:12px;font-size:11px;color:rgba(248,113,113,0.85);overflow:auto;max-height:100px;margin:0 0 16px">${escapeHtml(e.message || "Unknown error")}</pre>
         <div style="display:flex;gap:10px">
-          <button type="button" onclick="location.reload()" style="padding:10px 20px;background:rgba(74,247,211,0.15);border:1px solid rgba(74,247,211,0.3);border-radius:8px;color:#4af7d3;cursor:pointer;font-weight:600">Reload</button>
-          <button type="button" onclick="try{localStorage.removeItem('nexus-chat-conversations')}catch(e){};location.reload()" style="padding:10px 20px;background:rgba(100,116,139,0.15);border:1px solid rgba(100,116,139,0.3);border-radius:8px;color:#94a3b8;cursor:pointer;font-weight:600">Clear Cache & Reload</button>
+          <button type="button" id="nexus-recovery-reload" style="padding:10px 20px;background:rgba(74,247,211,0.15);border:1px solid rgba(74,247,211,0.3);border-radius:8px;color:#4af7d3;cursor:pointer;font-weight:600">Reload</button>
+          <button type="button" id="nexus-recovery-clear" style="padding:10px 20px;background:rgba(100,116,139,0.15);border:1px solid rgba(100,116,139,0.3);border-radius:8px;color:#94a3b8;cursor:pointer;font-weight:600">Clear Cache & Reload</button>
         </div>
       </div>
     </div>`;
+    document
+      .getElementById("nexus-recovery-reload")
+      ?.addEventListener("click", () => location.reload());
+    document.getElementById("nexus-recovery-clear")?.addEventListener("click", () => {
+      try {
+        localStorage.removeItem("nexus-chat-conversations");
+      } catch { /* ignore */ }
+      location.reload();
+    });
   }
 });
 

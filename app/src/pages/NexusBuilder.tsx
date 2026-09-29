@@ -764,7 +764,11 @@ export default function NexusBuilder() {
 
   const doDownload = useCallback(() => {
     if (!html) return;
-    const b = new Blob([html], { type: "text/html" }); const u = URL.createObjectURL(b);
+    // P0 item D: an opaque type, so the Builder output is only ever saved as a
+    // file; a text/html object URL would render untrusted markup at the app
+    // origin if it were ever navigated to (the navigation guard admits blob:
+    // URLs created by the app origin, for downloads).
+    const b = new Blob([html], { type: "application/octet-stream" }); const u = URL.createObjectURL(b);
     const a = document.createElement("a"); a.href = u; a.download = "nexus-build.html";
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u);
   }, [html]);
@@ -1499,7 +1503,8 @@ export default function NexusBuilder() {
                   />
                 ) : (
                   <div style={{ width: "100%", maxWidth: vpMax, height: "100%", margin: "0 auto", border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden", background: "#fff", transition: "max-width 0.3s ease" }}>
-                    <iframe ref={iframeRef} srcDoc={html} sandbox="allow-scripts" style={{ width: "100%", height: "100%", border: "none" }} title="Preview" />
+                    {/* P0 item D: empty sandbox — no scripts, opaque origin, no IPC reach. */}
+                    <iframe ref={iframeRef} srcDoc={html} sandbox="" style={{ width: "100%", height: "100%", border: "none" }} title="Preview" />
                   </div>
                 )
               ) : (

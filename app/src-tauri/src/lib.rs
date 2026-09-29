@@ -6,6 +6,11 @@ mod nx_bridge;
 pub mod oracle_runtime;
 mod phase0_surface;
 pub mod swarm_caller_identity;
+// P0 item D: privileged webview boundary (navigation/new-window guards) and the
+// app-command list backing the app ACL manifest. See webview_boundary.rs.
+// `pub` so the native boundary harness (tests/webview_boundary_live.rs) can call
+// the production build_main_window; build_main_window is #[doc(hidden)].
+pub mod webview_boundary;
 use base64::Engine;
 use chrono::TimeZone;
 use nexus_adaptation::evolution::{EvolutionConfig, EvolutionEngine, MutationType, Strategy};
@@ -7754,6 +7759,14 @@ pub mod runtime {
             .manage(nx_bridge::init_nx_state().expect("Failed to initialize Nexus Code bridge"));
 
         let builder = builder.setup(|app| {
+            // P0 item D: build the single privileged window with its navigation
+            // and new-window boundary. `tauri.conf.json` sets the `main` window
+            // to `"create": false` so Tauri does not auto-create it without
+            // these guards; `webview_boundary::build_main_window` builds it from
+            // the same config, denying non-app-origin navigation and every new
+            // window on all platforms.
+            crate::webview_boundary::build_main_window(app)?;
+
             let state = app.state::<AppState>();
             state.set_app_handle(app.handle().clone());
 

@@ -262,7 +262,9 @@ export default function VariantComparison({
                     border: "none",
                     background: "#fff",
                   }}
-                  sandbox="allow-same-origin"
+                  /* P0 item D: empty sandbox — an opaque origin with no scripts,
+                     never the app origin (allow-same-origin is dropped). */
+                  sandbox=""
                   title={`Variant preview: ${v.label}`}
                 />
               </div>
