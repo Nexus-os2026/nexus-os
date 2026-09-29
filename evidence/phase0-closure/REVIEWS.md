@@ -235,3 +235,23 @@ Further repairs since the previous entries:
   a crate-wide client guard. Residual no-redirect for the remaining desktop
   nx and swarm provider clients and a hermetic setup-wizard test are being
   done by S3.
+
+### Re-review of the S5 follow-up and composition commits, by S6
+
+Verdict: **no blocker, no should-fix.** Every earlier finding (Warden stand-in,
+resume, id spellings, `== 6`, guard scope, walker pin, review-each, the
+scheduled-tick restart) is fixed and pinned so that a revert fails. The
+Warden denial reads no agent, name or model and cannot be bypassed; nothing
+depends on the deleted Warden consent path; the adapted P0-001 lock tests keep
+their harness and watchdog byte-identical. The schedule refusal composes with
+the bounded `validate_cron` (bounded texts; nothing saved, registered,
+scheduled or audited). Composition commits `b09c63b4`, `55ae7959`, `08892f21`
+and `636356fd` weaken nothing.
+
+Notes: a stored agent whose schedule the bounded scheduler now refuses cannot
+be started again (no route edits a stored manifest; dossier consequence);
+the lock tests no longer exercise consent denial after a blocked cycle (other
+coverage remains); the goal-assignment guard counts one call spelling (queued
+to S5); a commit-message over-claim about reviewed actions is corrected in a
+later message (the dossier uses the corrected statement: of the actions the
+Phase Zero executor permits, only knowledge-graph updates reach the review).
