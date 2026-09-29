@@ -311,6 +311,23 @@ fn position(body: &str, needle: &str) -> usize {
         .unwrap_or_else(|| panic!("{needle} not found in {body}"))
 }
 
+/// How many times `code` uses `assign_goal` as a whole identifier: a method
+/// call (`.assign_goal(`), a fully qualified call
+/// (`CognitiveRuntime::assign_goal(`, with or without spaces) or the path
+/// used as a value. Identifiers that merely contain it do not count.
+fn assign_goal_mentions(code: &str) -> usize {
+    let is_identifier = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    code.match_indices("assign_goal")
+        .filter(|(at, needle)| {
+            !code[..*at].chars().next_back().is_some_and(is_identifier)
+                && !code[at + needle.len()..]
+                    .chars()
+                    .next()
+                    .is_some_and(is_identifier)
+        })
+        .count()
+}
+
 /// P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human approval
 /// the backend cannot verify, so L6 is unavailable. Before any state
 /// changes, the desktop routes that create, start, register or load an agent
@@ -507,19 +524,31 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
     // The runtime's goal assignment is reached only through
     // `assign_agent_goal` (review W6). Every desktop production source is
     // read: every file under app/src-tauri/src except test files named
-    // `*tests.rs`. The one call is the one in `assign_agent_goal`.
+    // `*tests.rs`. Any use of the `assign_goal` identifier is counted: a
+    // method call, a fully qualified call such as
+    // `CognitiveRuntime::assign_goal(&runtime, …)`, or the path used as a
+    // value. The one use is the call in `assign_agent_goal`.
     let assignments: Vec<String> = rust_sources_under(&workspace_dir("app/src-tauri/src"))
         .into_iter()
         .filter(|(path, _)| !path.ends_with("tests.rs"))
-        .flat_map(|(path, src)| {
-            let calls = without_whitespace(&code_lines(&src))
-                .matches(".assign_goal(")
-                .count();
-            std::iter::repeat_n(path, calls)
-        })
+        .flat_map(|(path, src)| std::iter::repeat_n(path, assign_goal_mentions(&code_lines(&src))))
         .collect();
     assert_eq!(assignments, ["commands/cognitive.rs"], "goal assignments");
     assert!(assign.contains(".assign_goal(&agent_id,goal)"), "{assign}");
+    // In memory: each form counts, and other identifiers do not.
+    for (code, mentions) in [
+        ("state.cognitive_runtime.assign_goal(&id, goal)", 1),
+        ("CognitiveRuntime::assign_goal(&runtime, &id, goal)", 1),
+        (
+            "nexus_kernel::cognitive::CognitiveRuntime :: assign_goal (&runtime, &id, goal)",
+            1,
+        ),
+        ("let assign = CognitiveRuntime::assign_goal;", 1),
+        ("assign_agent_goal(state, id, goal, 5, None)", 0),
+        ("reassign_goal(); assign_goals(); assign_goal_count", 0),
+    ] {
+        assert_eq!(assign_goal_mentions(code), mentions, "{code}");
+    }
 
     let (_, looping) = fn_shape(cognitive, "start_autonomous_loop");
     assert!(
