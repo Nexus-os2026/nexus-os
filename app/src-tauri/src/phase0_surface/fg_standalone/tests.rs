@@ -889,24 +889,69 @@ fn is_recipe(name: &str) -> bool {
         .any(|extension| lower.ends_with(extension))
 }
 
-/// Whether a directory is skipped by the repository walk: version-control
-/// internals, build output and dependencies, the Builder toolchain that the
-/// packaging step assembles, and ignored agent state that can hold other
-/// checkouts of this repository (each guarded by its own copy of these
-/// tests). Every other directory is walked, dot directories included.
-fn skipped_by_repository_walk(name: &str, relative: &str) -> bool {
-    [".git", "target", "node_modules", "dist"].contains(&name)
-        || relative == "app/src-tauri/builder-toolchain"
-        || relative.starts_with("app/src-tauri/builder-toolchain.assembly-")
-        || relative == ".claude/worktrees"
-        || relative == ".codex"
+/// A directory the root `.gitignore` anchors as ignored: a directory entry
+/// (ending in `/`) with a `/` at its start or in its middle, as a
+/// workspace-relative path, or as a path prefix when its last component ends
+/// in a `*` glob. Negated, file, unanchored and other glob entries are not
+/// used.
+#[derive(Debug)]
+struct IgnoredDirectory {
+    path: String,
+    prefix: bool,
+}
+
+impl IgnoredDirectory {
+    fn matches(&self, relative: &str) -> bool {
+        if self.prefix {
+            relative.starts_with(&self.path) && !relative[self.path.len()..].contains('/')
+        } else {
+            relative == self.path
+        }
+    }
+}
+
+/// The anchored ignored directories of the root `.gitignore`: ignored build
+/// output and local state, such as the Builder toolchain that the packaging
+/// step assembles, cloned upstream sources and agent worktrees (other
+/// checkouts of this repository, each guarded by its own copy of these
+/// tests). Read at run time, so the walk never names them itself.
+fn ignored_anchored_directories() -> Vec<IgnoredDirectory> {
+    let mut directories = Vec::new();
+    for line in read(&workspace_root().join(".gitignore")).lines() {
+        let entry = line.trim();
+        if entry.is_empty() || entry.starts_with('#') || entry.starts_with('!') {
+            continue;
+        }
+        let Some(body) = entry.strip_suffix('/') else {
+            continue;
+        };
+        if !body.contains('/') {
+            continue;
+        }
+        let body = body.trim_start_matches('/');
+        let (path, prefix) = match body.strip_suffix('*') {
+            Some(stem) => (stem, true),
+            None => (body, false),
+        };
+        if path.is_empty() || path.contains(['*', '?', '[', '\\']) {
+            continue;
+        }
+        directories.push(IgnoredDirectory {
+            path: path.to_string(),
+            prefix,
+        });
+    }
+    directories
 }
 
 /// Every file of the repository as a workspace-relative path, in sorted
-/// order: dot directories (`.github`, `.gitlab`, `.cargo`, `.claude` and any
-/// new one) are walked like the others; see [`skipped_by_repository_walk`].
+/// order. Dot directories (`.github`, `.gitlab`, `.cargo`, `.claude` and any
+/// new one) are walked like the others. Skipped are version-control
+/// internals, build output and dependencies by name (`target`,
+/// `node_modules`, `dist`), and the anchored ignored directories of the root
+/// `.gitignore` (see [`ignored_anchored_directories`]).
 fn repository_files() -> Vec<String> {
-    fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    fn walk(root: &Path, dir: &Path, ignored: &[IgnoredDirectory], out: &mut Vec<String>) {
         for path in sorted_dir(dir) {
             let name = path
                 .file_name()
@@ -919,8 +964,10 @@ fn repository_files() -> Vec<String> {
                 .to_string_lossy()
                 .replace('\\', "/");
             if path.is_dir() {
-                if !skipped_by_repository_walk(&name, &relative) {
-                    walk(root, &path, out);
+                let skipped = [".git", "target", "node_modules", "dist"].contains(&name.as_str())
+                    || ignored.iter().any(|directory| directory.matches(&relative));
+                if !skipped {
+                    walk(root, &path, ignored, out);
                 }
             } else {
                 out.push(relative);
@@ -929,8 +976,9 @@ fn repository_files() -> Vec<String> {
     }
     let root = workspace_root();
     let root = root.canonicalize().unwrap_or(root);
+    let ignored = ignored_anchored_directories();
     let mut out = Vec::new();
-    walk(&root, &root, &mut out);
+    walk(&root, &root, &ignored, &mut out);
     assert!(out.len() > 1000, "repository files not found");
     out.sort();
     out
