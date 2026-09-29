@@ -1776,6 +1776,49 @@ These are unavailable rather than working unsafely. The C5 inventory lists each 
     by default. A `flash/<path>` chat model id is refused.
   - Simulations report nothing about the host's files or environment.
 
+**P0-FINAL-GATE-CLOSURE update.**
+
+- **154 IPC commands closed** on this documentation's base (counted from
+  `CLOSED_COMMANDS` in `app/src-tauri/src/phase0_surface/tests.rs`): C5A 125,
+  C5C 7, P0-FINAL-GATE-CLOSURE 22. Of the 804 registered commands, 650 stay
+  open. Item D's design closes no command [PENDING: S1 final: recount when
+  composed]. The 22, each taking no input and returning one bounded reason:
+  - `NetworkDestination` (11): `api_client_request`; `a2a_discover_agent`,
+    `a2a_send_task`, `a2a_get_task_status`, `a2a_cancel_task`;
+    `a2a_crate_send_task`, `a2a_crate_get_task`, `a2a_crate_discover_agent`;
+    `mcp_host_connect`, `mcp_host_call_tool`;
+    `builder_theme_extract_from_url`;
+  - `PeerTransfer` (1): `nexus_link_send_model`;
+  - `CredentialTransport` (1): `perception_init`;
+  - `HelperLaunch` (1): `is_ollama_installed`;
+  - `SecretStorage` (4): `builder_deploy_store_credentials`,
+    `builder_backend_connect`, `email_start_oauth`,
+    `integration_start_oauth`;
+  - `AmbientResource` (1): `cm_run_ab_validation` (C5);
+  - `ApprovalRequired` (3): `nx_consent_respond`, `nx_agent_approve`,
+    `self_rewrite_apply_patch`.
+- **Refused without closing a command.**
+  - Transcendent (L6) agents, on every route (item G); an enabled Warden
+    review with no Warden denies.
+  - Agent web fetch; Ollama at any address but `OLLAMA_URL` or the default;
+    pulls from registries other than Ollama's default; SearXNG without
+    `SEARXNG_URL` (item B).
+  - The external tools `rest_api`, `webhook`, `file_storage`, `github`,
+    `slack` and `jira` (items B and C); MCP servers that need credentials
+    (item C).
+  - Starting Ollama from Nexus: `ensure_ollama` connects only (item I).
+  - A new or changed credential without a usable `NEXUS_CONFIG_KEY` (item
+    A); a vault key file that fails its checks, or on a platform other than
+    Linux and macOS (item E).
+  - Storing a messaging token except through the settings save; API Client
+    collections holding secrets; credential stores in backups (item H).
+  - The 18 withdrawn standalone binaries and their recipes (item J).
+  - Schedules firing more than once per minute, and inputs outside the
+    resource bounds (item K).
+  - [PENDING: S1 final] The Monaco editor, Builder collaboration, the
+    Settings live key test, scripted Builder previews and click-to-edit, and
+    remote images in notes.
+
 ## TOCTOU non-claims
 
 - `governed_path` checks are point-in-time pathname checks: grammars,
@@ -1789,6 +1832,24 @@ These are unavailable rather than working unsafely. The C5 inventory lists each 
   state.
 - DNS answers are not pinned between an egress check and the request (item B).
 
+**P0-FINAL-GATE-CLOSURE additions.**
+
+- The OAuth line above is superseded: the sign-in flows are closed (item H).
+  Correction: while they were open, the flow's `state` was also on the
+  browser launcher's command line (the authorization URL was passed as an
+  argument), and the flows used no PKCE.
+- The vault key file's checks bind to the descriptor that is read, so the
+  file checked is the file read. Intermediate directories are not examined,
+  and a same-user process can replace the file between startups (item E).
+- The configuration writer reads the stored file, decides, and renames a new
+  file over it without a lock. A same-user process changing the file in
+  between is not detected, and two desktop processes saving at once can lose
+  one update (item A).
+- The scheduled-tick check and the loop spawn are not atomic (item K).
+- DNS: agent web fetch is refused (item B). The remaining destinations
+  (provider constants, fixed hosts, operator configuration) are resolved when
+  each request is made and not pinned. Nexus Link resolves no names (item F).
+
 ## No OS sandbox
 
 Phase Zero builds no filesystem, process or network sandbox. Permitted agent
@@ -1797,6 +1858,17 @@ HITL, web search and fetch, and knowledge graph. Helper programs run with the
 user's full authority. The Builder's sealed spawn and resource limits (C4)
 constrain a dev server's arguments, environment and resources; they do not
 isolate its filesystem or network.
+
+**P0-FINAL-GATE-CLOSURE update.** The closure mission adds no sandbox.
+
+- Web fetch is no longer a permitted agent action (item B). The permitted set
+  is LLM, memory, notification, agent message, HITL request, web search and
+  knowledge graph.
+- The in-process credential transport and the owned download registry are
+  not isolation. Credentialed requests run inside the desktop process, and
+  child processes still inherit its environment, including the provider keys
+  `save_provider_api_key` sets.
+- Withdrawing a standalone binary does not contain its library (item J).
 
 ## Corrections to earlier checkpoint claims
 
@@ -1815,3 +1887,103 @@ isolate its filesystem or network.
   connect and stall bounds only. C5C adds the size bound (64 GiB, enforced on
   the bytes written) and fixes the flash downloader's redirect, stall and
   resume handling.
+
+**P0-FINAL-GATE-CLOSURE corrections to C5C claims.** Each is labelled at its
+item; in brief:
+
+- **Item A.** The key description omitted three cases that gave a constant
+  or ambient key; the deploy store and Supabase connect commands were open,
+  not closed by C5A.
+- **Item B.** The rows of caller-chosen destinations did add authority beyond
+  `api_client_request` (the persisted Ollama address, and responses read
+  back). The web actuator's stale comment is corrected; the API actuator's is
+  not.
+- **Item C.** The table named the wrong provider set and command, missed the
+  credential-bearing external tools, and called every `cm_*` command closed
+  while `cm_run_ab_validation` was open.
+- **Item D.** The open list missed the remote and loopback frames, the Monaco
+  CDN script, the remote fonts and the Settings key test; the C5C guard saw
+  `srcDoc` frames only; no application-command ACL existed.
+- **Item E.** The provider base-URL overrides set no desktop destination.
+- **Item H.** The list of secrets at rest missed messaging tokens, the Slack
+  Socket Mode URL, API Client collections, the XOR store and backups.
+- **Item I.** The helper list missed the hardware probes, `which sd` and the
+  OAuth browser launcher.
+- **Item J.** The intro missed the repository's install and packaging
+  recipes; the protocols server's unauthenticated list missed its frontend
+  fallback; the root chart deployed a prebuilt image rather than building
+  one.
+- **Item K.** The recorded `executes_python_code` timeout has no retained
+  hosted evidence.
+- **TOCTOU.** The OAuth state was also on the launcher's command line, and the
+  flows had no PKCE.
+- The authority inventory's §11.7 lists the corrections to its own earlier
+  sections and the notes recorded for the documentation audit.
+
+## Architect decision requests (P0-FINAL-GATE-CLOSURE)
+
+Collected from the workstream reports and the coordinator's decision record.
+Each is for the Architect; none is accepted by the implementer. The numbers
+are those cited in the items above.
+
+1. **PATH as operator configuration (item I).** Treat the launch environment's
+   `PATH` as operator configuration, so the fixed-argument helpers found
+   through it (curl, notifications, the hardware and disk probes, the
+   remaining `which` probes) stay, while unowned launches stay removed.
+2. **D3 (item J).** Keep as developer and benchmark tools, pinned by the
+   inventory guard: 7 benchmark binaries (`audit-retention-bench`,
+   `audit-throughput-bench`, `conductor-bench`, `darwin-drift-bench`,
+   `genesis-protocol-bench`, `memory-profile`,
+   `multiagent-coordination-bench`), 4 developer binaries (`nexus-ui-repair`,
+   `scout`, `sg5_probe`, `nexus-swarm-healthcheck`), the 5 bench targets of
+   `benchmarks` and the 2 kernel examples. Evidence: the swarm healthcheck
+   runs `sh -c "command -v codex"` and reads `~/.codex/auth.json`;
+   `sg5_probe` reads the session's accessibility registry; no kept binary's
+   source binds a listener.
+3. **Residual advisories (DEP).** The dispositions proposed in "Dependency
+   evidence", and the warning-level entries not updated.
+4. **Audit governance (DEP).** How a closure candidate is audited
+   (`audit.yml` never scans one), and the four divergent ignore lists.
+5. **npm residue (DEP).** vite 5 and esbuild, vitest and `@vitest/mocker`
+   (development-only; majors or large updates); `monaco-editor` and
+   `dompurify` with item D.
+6. **Scope (DEP).** Whether the `nexus-website` and `scripts/page-audit`
+   lockfiles belong to Phase Zero.
+7. **Item K.** `executes_python_code` as monitored debt; the self-hosted
+   runner's GPU driver mismatch as an Owner matter.
+8. **Voice.** The Python voice dependencies are unpinned (model downloads in
+   tests are now kept offline).
+9. **Item A.** `NEXUS_CONFIG_KEY` as the configuration key source; any
+   key-quality minimum beyond "not blank and not the ambient derivation";
+   whether the first explicit save of a legacy plaintext file may use the
+   ambient key when no operator key is set (the current, audited
+   interpretation); whether loads reachable from IPC keep creating the
+   first-run default for a missing file.
+10. **Items A and H.** Whether an approved secret store later reopens OAuth
+    sign-in, deploy and Supabase storage, and new messaging tokens.
+11. **Item E.** Whether to implement an access-control check that would accept
+    key files on Windows (refused now), and whether to verify every vault
+    scope (six are verified).
+12. **Item C.** The in-process transport for credentialed provider calls,
+    including the desktop build's TLS stack (platform TLS, the operating
+    system's trust store and proxy settings).
+13. **Item B.** A non-loopback `OLLAMA_URL` as acceptable operator
+    configuration.
+14. **Item G.** The `desktop-ui (unverified)` label as the audit semantics;
+    the proposed statement that neither a loop's HITL allowance nor an
+    agent's lifecycle state is authority in Phase Zero (the executor alone
+    decides); stored L6 records and pending transcendent requests (left
+    untouched); the inert deny forward; whether HITL-gated Phase Zero steps
+    should be refused rather than released by an IPC approval.
+15. **Contract C5.** `AmbientResource` as the closure reason; a dedicated
+    variant is an option.
+16. **Item K.** The `ArenaRun` compatibility type, whose refusal surfaces as a
+    serialization error to the older API; the 1-token minimum budget; the
+    interface's input limits aligned with the bounds [PENDING: S1 final].
+17. **Item I (I5).** Download termination at a normal exit only; a crash or a
+    kill is a non-claim.
+18. **Item D** [PENDING: S1 final]. Live native evidence in CI, and the
+    feature reductions item D makes.
+19. **Item J.** The withdrawal message wording and the uniform status 69; the
+    coordinator decisions D1 (alternate agent binaries), D2 (the computer-use
+    harness) and D4 to D7 (the GitLab release job, recipes and packaging).
