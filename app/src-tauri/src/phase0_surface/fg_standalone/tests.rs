@@ -577,10 +577,17 @@ fn p0_fg_standalone_every_example_target_is_inventoried() {
 }
 
 /// Every Cargo bench target of the workspace is inventoried: a bench is an
-/// entry point too (`cargo bench`), so a new one needs review. Each runs in
-/// process: it reads no credential or other environment variable, starts no
-/// process and opens no network connection (none meets the criterion under
-/// which six benchmark binaries were withdrawn).
+/// entry point too (`cargo bench`), so a new one needs review. Each bench
+/// file, comments aside, names no credential or environment read, process
+/// spawn or network API from the list below (the criterion under which six
+/// benchmark binaries were withdrawn).
+///
+/// Not a claim: this is a text check on the bench file only. It does not
+/// follow the code a bench calls (its own package or its dependencies), so
+/// it does not show that running a bench reads no environment variable,
+/// starts no process or opens no network connection; a spelling not in the
+/// list (a re-export, an alias, a macro) is not seen either. The inventory
+/// makes any new or changed bench target a reviewed change.
 #[test]
 fn p0_fg_standalone_every_bench_target_is_inventoried() {
     let mut found: Vec<(String, String, String)> = Vec::new();
