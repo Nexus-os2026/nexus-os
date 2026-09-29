@@ -275,10 +275,12 @@ fn normalize_cron_expression(expression: &str) -> Result<String, String> {
     };
     let seconds = normalized.split_whitespace().next().unwrap_or_default();
     if !is_single_second(seconds) {
-        return Err(format!(
+        // The refused field is caller text of any length, so it is not echoed.
+        return Err(
             "invalid cron expression: an agent schedule fires at most once per minute, \
-             so its seconds field must be one value from 0 to 59, got '{seconds}'"
-        ));
+             so its seconds field must be one value from 0 to 59"
+                .to_string(),
+        );
     }
     Ok(normalized)
 }
@@ -356,6 +358,30 @@ mod tests {
                 error.contains("at most once per minute"),
                 "'{expression}': {error}"
             );
+        }
+    }
+
+    /// The refusal states the rule and never echoes the caller's seconds
+    /// field, whatever its length.
+    #[test]
+    fn p0_fg_k_a_refused_seconds_field_is_not_echoed() {
+        let long = "5".repeat(10_000);
+        for expression in [
+            format!("{long} * * * * *"),
+            format!("*/{long} * * * * *"),
+            "p0fg-marker * * * * *".to_string(),
+        ] {
+            let error = AgentScheduler::validate_cron(&expression).unwrap_err();
+            assert_eq!(
+                error,
+                "invalid cron expression: an agent schedule fires at most once per minute, \
+                 so its seconds field must be one value from 0 to 59"
+            );
+            let registered = scheduler()
+                .register_agent("p0fg-agent", &expression, "goal")
+                .unwrap_err()
+                .to_string();
+            assert_eq!(registered, format!("supervisor error: {error}"));
         }
     }
 
