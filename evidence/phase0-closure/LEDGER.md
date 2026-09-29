@@ -76,3 +76,7 @@ reports no textual conflicts.
   was still running and holding a build slot; it was terminated. Repairs and
   reviews resumed from each worktree's verified state. Hosted budget
   unchanged: closure candidate 0 of 3.
+- ~02:05Z: a third usage limit stopped the agents; resumed ~09:00Z from the
+  verified worktree states (no CI or build was active).
+- Closure candidate 1 `9ed607f8` pushed to GitHub (see RUNS.md); fast-local
+  run `36557040915` triggered by that push.
