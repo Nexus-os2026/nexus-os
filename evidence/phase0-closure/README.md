@@ -16,5 +16,6 @@ declare a checkpoint or Phase Zero complete.
 | `FINDINGS-MAP.md` | Final-Gate findings mapped to components and files |
 | `RUNS.md` | Fast-local and hosted runs with measured results |
 | `DECISIONS.md` | Outstanding Architect decisions and proposed dispositions |
+| `PHASE-ZERO-COMPLETION-RECORD.md` | Phase Zero Linux completion evidence record for the Architect's final review (declaration pending) |
 
 No secrets, environment dumps or credential-bearing logs belong here.
