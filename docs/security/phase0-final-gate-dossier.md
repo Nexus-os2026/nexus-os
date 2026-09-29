@@ -45,8 +45,10 @@ numbered decision requests are collected at the end of this dossier.
 | A | Configuration encryption key | A new or changed credential is written only under the operator key `NEXUS_CONFIG_KEY`; legacy files open through an explicit two-key read path; a load never rewrites a file; protection changes are reported and audited | Repaired on the closure candidate (P0-FINAL-GATE-CLOSURE); Architect review pending. Decision requests 9 and 10 |
 | B | Egress policy | The 11 IPC commands that sent requests to a caller-chosen destination are closed; the Ollama address is `OLLAMA_URL` or the fixed local default; agent web fetch and caller-destination external tools are refused; SearXNG only at `SEARXNG_URL`; search redirects https only | Repaired on the closure candidate; Architect review pending. No address or DNS policy was added (remaining destinations are backend constants or operator configuration). Decision request 13 |
 | C | Secrets in subprocess argv | Reachable credentials leave the command line: four hosted providers post in process with no redirect and total time and size bounds; `perception_init`, the credential-bearing external tools and credentialed MCP servers are closed or refused; remaining credential curl sites are counted, each CLI-only, latent or behind a closed route | Partly repaired on the closure candidate; Architect review pending. Decision request 12 (the in-process transport) |
+| C5 (contract) | Residual capability-measurement route | `cm_run_ab_validation` closed (`AmbientResource`) before any input use; the Groq-endpoint client takes only `GROQ_API_KEY` | Closed on the closure candidate; Architect review pending. Decision request 15 |
 | E | Operator overrides | The vault key file is validated on the opened file (Linux, macOS) and refused elsewhere; the vault key must open every stored secret before the vault is used; `key_env` other than `NEXUS_ENCRYPTION_KEY` is refused | Repaired on the closure candidate; Architect review pending. Decision request 11 |
 | F | Network peers (Nexus Link) | `nexus_link_send_model` closed; the library admits no peer under an empty policy, matches exact IP socket addresses only, resolves no names and requires a shared secret and a key | Repaired on the closure candidate; transfer unavailable (no pairing exists); Architect review pending |
+| G | Approval channel | L6 agents refused at create, start, approve, restore, prebuilt load, goal, loop, scheduled tick and tool call; caller-asserted approval commands closed; consent resolutions labelled `desktop-ui (unverified)`; self-improvement recorded truthfully; enabled Warden review with no Warden denies | Repaired on the closure candidate, with S5 follow-ups [PENDING: S5 final]; no out-of-band approval exists (non-claim); Architect review pending. Decision request 14 |
 | H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged; Architect review pending. Decision request 10 |
 | I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the Nexus Code diagnostics' `which` probes remain [PENDING: S3 final], and helpers still resolve from `PATH`; Architect review pending. Decision requests 1 and 17 |
 
@@ -496,6 +498,37 @@ pending).**
     redirects with its key [PENDING: S3 final].
 - **Decision requested.** Request 12.
 
+**Closed in P0-FINAL-GATE-CLOSURE: the residual capability-measurement
+route (contract C5; Architect review pending).**
+
+- **Before.** `cm_run_ab_validation` was open. It read `GROQ_API_KEY`, else
+  `NVIDIA_NIM_API_KEY`, else `OPENROUTER_API_KEY` from the process
+  environment (which `save_provider_api_key` fills), and built clients whose
+  endpoint is fixed at Groq's, so an NVIDIA or OpenRouter key was addressed to
+  Groq. Argument use, the supervisor read, the credential read and client
+  construction all ran; only the desktop's empty battery kept a request from
+  being sent.
+- **Now.** `cm_run_ab_validation` takes no input and returns only the bounded
+  `Closure::AmbientResource` reason, before any argument use, credential
+  read, client construction or provider contact
+  (`app/src-tauri/src/commands/crate_bridges.rs`). In the crate, the
+  Groq-endpoint client's key comes only from `GROQ_API_KEY` (`groq_api_key`,
+  `evaluation/nim_client.rs`), and the NVIDIA and OpenRouter fall-throughs
+  are removed from `run_ab_validation`, `run_batch_evaluation` and
+  `execute_validation_run_real`. The evaluator is unchanged; no other `cm_*`
+  command changed.
+- **Guards.** `p0_fg_c5_ab_validation_route_is_closed_before_any_input`,
+  `p0_fg_c5_measurement_clients_take_only_the_groq_key`,
+  `p0_fg_c5_desktop_reaches_only_in_memory_measurement`,
+  `p0_fg_source_lists_follow_their_directories` (`fg_approval`), the crate's
+  `p0_fg_groq_client_key_never_falls_back_to_another_provider`, and six new
+  latent-API needles for the runners, the clients and the messaging consent
+  reply parser.
+- **Non-claims.** The runners and clients stay compiled, with no desktop
+  caller. When a client runs outside the desktop, its key is still a curl
+  argument.
+- **Decision requested.** Request 15.
+
 ## D. `null` webview CSP
 
 - **Where.** `app/src-tauri/tauri.conf.json`, `app.security.csp: null`.
@@ -773,6 +806,97 @@ pending).**
 - **Decision needed.** Whether approvals need an out-of-band confirmation
   (for example a native dialog), and whether a plan approval should bind the
   generated content.
+
+**Repaired in P0-FINAL-GATE-CLOSURE (contract G; Architect review
+pending).** A caller's boolean, name, `approved_by` value or webview message
+is not independent human approval, and no desktop mechanism verifies a human
+approver. Operations that need one are unavailable; the approvals that stay
+available release only what backend-owned policy already bounds.
+
+- **Transcendent (L6) agents.** Before, one caller could create and approve an
+  L6 agent at once; restore registered stored L6 records; and startup
+  registered the 12 prebuilt autonomy-6 manifests, which a goal could then
+  run. Now each route refuses an L6 agent with `Closure::ApprovalRequired`
+  before any state change:
+  - `create_agent` at level 6, and `start_agent` for an agent whose stored
+    record or registration says L6 (`app/src-tauri/src/commands/agents.rs`);
+  - `approve_consent_request` and `batch_approve_consents` for a
+    `transcendent_creation` request (`commands/consent.rs`); such a request
+    can still be denied;
+  - goal assignment (`assign_agent_goal`, reached by `execute_agent_goal` and
+    every caller of it), `start_autonomous_loop` and a scheduled tick
+    (`ScheduledGoalExecutor::execute`, before anything is audited, restarted
+    or assigned), in `commands/cognitive.rs`, through `is_transcendent_agent`;
+  - tool calls (`tool_call_autonomy`, `commands/crate_bridges.rs`), at any
+    claimed level.
+  - Restore registers no L6 record, and the prebuilt load
+    (`load_prebuilt_agents`, `chat_llm.rs`) loads no L6 manifest, on the
+    first run or any later one: each run registers the same prebuilt agents,
+    all but the 12 L6 manifests. Stored records are left untouched.
+  - [PENDING: S5 final] `resume_agent` refusing an L6 agent, the stored-record
+    check under any spelling of an agent id and for any level above 6, and
+    `review_consent_batch` refusing a transcendent request.
+- **Commands that took a caller's word as approval** are closed with
+  `Closure::ApprovalRequired`: `nx_consent_respond` and `nx_agent_approve`
+  (they answered the closed nx loops' consents with a caller boolean;
+  `app/src-tauri/src/nx_bridge/commands.rs`) and `self_rewrite_apply_patch`
+  (it applied a patch because the interface asked).
+- **Consent resolutions** take no approver name. The consent module records
+  the fixed label `desktop-ui (unverified)` (`DESKTOP_UI_RESOLVER`) as
+  `resolved_by` and in the audit event, and approvals are no longer forwarded
+  to the kernel consent queue as an approver identity.
+- **Self-improvement.** `self_improve_approve_proposal` no longer asserts
+  `hitl_approved: true` for invariant 9, fabricates a signature, or records a
+  canary and an application. The acceptance is recorded as `Proposed` (no
+  checkpoint, no canary) and audited as `self_improvement_recorded` with
+  `hitl_approved: false` and `applied: false`; the other nine invariants are
+  still checked. The report counts only entries whose status says a change
+  was applied (none, with this pipeline), `cycles_run` counts runs, and
+  `fuel_consumed` is 0.
+- **Warden review.** With `governance.enable_warden_review` set (off by
+  default), an action is denied with the bounded reason "Warden review is
+  unavailable in Phase Zero: no Warden agent can run" when no running agent
+  named `nexus-warden` exists [PENDING: S5 final: the review denies without
+  looking up any agent]. Before, an inactive Warden meant Allow.
+- **Stays available (bounded, not human approval).**
+  - HITL and Warden step approvals and denials, batch, review-each and review
+    mode. An approval releases a step only as far as `Phase0AgentExecutor`
+    permits: LLM, memory, notification, agent message, HITL request, web
+    search and knowledge graph. No actuator reads the `hitl_approved` flag
+    (guard).
+  - Swarm plan, approve, reject and cancel: a server-held plan under a
+    backend-issued ticket, run with LLM-only adapters and the drafts-only
+    Herald (C5C).
+  - `create_agent` and `start_agent` for levels 0 to 5,
+    `override_security_block` (it records a statistic), and permission edits.
+  - E6: end of input and read errors abort a computer-use step approval.
+- **Guards and tests.** `phase0_surface/fg_approval/tests.rs`
+  (`p0_fg_g_transcendent_agents_are_refused_before_any_state_change`,
+  `p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first`,
+  `p0_fg_g_enabled_warden_review_without_a_warden_denies`,
+  `p0_fg_g_caller_asserted_approval_commands_only_deny`,
+  `p0_fg_g_consent_decisions_record_no_caller_identity`,
+  `p0_fg_g_self_improvement_acceptance_is_recorded_truthfully`,
+  `p0_fg_g_self_improvement_report_counts_only_applied_changes`,
+  `p0_fg_g_no_actuator_reads_the_hitl_approval_flag`,
+  `p0_fg_g_eof_or_a_read_error_is_never_an_approval`); behavioural tests in
+  `lib_tests.rs`, among them
+  `p0_fg_startup_registers_no_transcendent_agent_on_any_run` (the real
+  startup order) and `p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent`.
+- **Non-claims.**
+  - There is no out-of-band approval. Approvals still arrive over webview
+    IPC, and a script running in the privileged document can deliver them
+    (item D). An IPC approval still releases HITL-gated Phase Zero steps; it
+    is not verified approval.
+  - `create_agent` accepts levels 0 to 5 without approval; the registered
+    level bounds `tools_execute`, whose credential-bearing and
+    caller-destination tools are refused at every level (items B and C).
+  - The label names a channel, not a person.
+  - Stored L6 records and pending transcendent requests stay in the database,
+    neither registered nor approvable.
+  - Denials are still forwarded to the kernel consent queue.
+  - The Warden review setting itself is interface-editable.
+- **Decision requested.** Request 14.
 
 ## H. Secrets at rest outside the vault
 
