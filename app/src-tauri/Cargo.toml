@@ -97,7 +97,34 @@ tauri-plugin-global-shortcut = "2.3.1"
 tauri = { version = "2.5.5", optional = true, default-features = false, features = ["tray-icon", "wry"] }
 tauri-plugin-global-shortcut = "2.3.1"
 
+# P0 item D native boundary harness (tests/webview_boundary_live.rs): it drives
+# the real Wry runtime with the production context and build_main_window, so it
+# needs tauri as a (non-optional) dev-dependency. Same version and features as
+# the app dependency above: no new package and no Cargo.lock change.
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dev-dependencies]
+tauri = { version = "2.5.5", default-features = false, features = ["tray-icon", "wry"] }
+
+# The harness enables WebKitGTK's `javascript-can-open-windows-automatically` on
+# the test webview, so a script-initiated window.open reaches the engine's
+# `create` signal (wry's new-window handler, i.e. the production on_new_window)
+# instead of being stopped earlier by the default popup policy, and it observes
+# that signal. Same pinned version/feature wry already uses: no new package or
+# version. Cargo.lock gains one line, this crate's dependency edge on the
+# already-locked webkit2gtk.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
+
 [build-dependencies]
 tauri-build = { version = "2.5.5" }
 # P0-002C4D2: the build script hashes the packaged Builder toolchain.
 sha2 = "0.10"
+
+# P0 item D: the live native boundary harness runs the real Wry event loop on
+# the process main thread, so it uses its own `fn main` (harness = false) rather
+# than libtest worker threads (required for the macOS UI event loop). It is
+# gated behind `--ignored`: a bare `cargo test` run prints an ignored line and
+# exits; it runs with `cargo test --test webview_boundary_live -- --ignored`
+# (under `xvfb-run -a` on Linux).
+[[test]]
+name = "webview_boundary_live"
+harness = false

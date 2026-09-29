@@ -171,7 +171,12 @@ mod live {
     /// New windows are denied on every platform; the app never opens a second
     /// window, and it must not open URLs in the OS browser (that would be a
     /// PATH-helper launch, item I).
-    pub(crate) fn build_main_window(app: &tauri::App) -> tauri::Result<()> {
+    ///
+    /// `pub` (but `#[doc(hidden)]`) only so the native boundary harness
+    /// (`tests/webview_boundary_live.rs`) can build the real privileged window
+    /// with the production guards; it is not a stable public API.
+    #[doc(hidden)]
+    pub fn build_main_window(app: &tauri::App) -> tauri::Result<()> {
         let config = app
             .config()
             .app
@@ -196,7 +201,7 @@ mod live {
     feature = "tauri-runtime",
     any(target_os = "windows", target_os = "macos", target_os = "linux")
 ))]
-pub(crate) use live::build_main_window;
+pub use live::build_main_window;
 
 #[cfg(all(
     test,
