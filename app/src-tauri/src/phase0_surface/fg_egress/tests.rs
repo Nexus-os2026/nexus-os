@@ -644,7 +644,11 @@ fn p0_fg_desktop_tool_calls_reach_no_caller_chosen_destination() {
 /// Final Gate item I: Nexus starts no Ollama service and runs no helper
 /// program to find one. `ensure_ollama` only probes the authorized address:
 /// a service that answers is used, and one that does not is refused with the
-/// `HelperLaunch` reason, with nothing started, waited for or cleaned up.
+/// `HelperLaunch` reason, with nothing started, waited for or cleaned up. The
+/// desktop's Nexus Code diagnostic and configuration (the nx bridge start and
+/// the nx IPC commands) look `ollama`, `git` and `rg` up on `PATH` in process
+/// (their behaviour is tested in `nexus-code/src/setup.rs`); the standalone
+/// `nx` terminal keeps its `which` lookups.
 #[test]
 fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
     use crate::commands::chat_llm::ollama_service_answers;
@@ -671,6 +675,64 @@ fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
     let chat_llm = include_str!("../../commands/chat_llm.rs");
     assert_no_ollama_helper(chat_llm, LIB_RS);
     assert_no_ollama_helper(&crlf(chat_llm), &crlf(LIB_RS));
+
+    let nexus_code = [
+        include_str!("../../../../../nexus-code/src/setup.rs"),
+        include_str!("../../../../../nexus-code/src/config.rs"),
+        include_str!("../../nx_bridge/mod.rs"),
+        include_str!("../../nx_bridge/commands.rs"),
+    ];
+    assert_desktop_nexus_code_runs_no_program(nexus_code);
+    assert_desktop_nexus_code_runs_no_program(nexus_code.map(crlf).each_ref().map(String::as_str));
+}
+
+/// The desktop's Nexus Code side of the guard above, for either line ending:
+/// `[setup.rs, config.rs, nx_bridge/mod.rs, nx_bridge/commands.rs]`.
+fn assert_desktop_nexus_code_runs_no_program(sources: [&str; 4]) {
+    let [setup, config, bridge, commands] = sources.map(|source| production_text(&lf(source)));
+    let (_, desktop) = handler_shape(&setup, "diagnose_for_desktop");
+    assert_eq!(desktop, "diagnose_with(false,false)");
+    let (_, diagnose) = handler_shape(&setup, "diagnose_with");
+    assert!(
+        diagnose.starts_with("letinstalled=|name:&str|program_installed(name,project);"),
+        "{diagnose}"
+    );
+    assert!(!diagnose.contains("check_command_exists("), "{diagnose}");
+    let (_, installed) = handler_shape(&setup, "program_installed");
+    assert_eq!(
+        installed,
+        "ifrun_which{check_command_exists(name)}else{program_on_path(name)}"
+    );
+    for lookup in [
+        "program_on_path",
+        "program_on_path_in",
+        "program_file_names",
+        "is_program",
+    ] {
+        let (_, body) = handler_shape(&setup, lookup);
+        for spawn in ["Command", "spawn(", ".output(", ".status("] {
+            assert!(!body.contains(spawn), "{lookup}: {spawn}");
+        }
+    }
+    let (_, detect) = handler_shape(&config, "auto_detect_provider");
+    assert!(
+        detect.contains("program_installed(\"ollama\",cli_agents)"),
+        "{detect}"
+    );
+    assert!(!detect.contains("check_command_exists("), "{detect}");
+    for (file, text) in [
+        ("nx_bridge/mod.rs", &bridge),
+        ("nx_bridge/commands.rs", &commands),
+    ] {
+        assert!(text.contains("setup::diagnose_for_desktop()"), "{file}");
+        for other in [
+            "check_command_exists(",
+            "program_installed(",
+            "Command::new(\"which\")",
+        ] {
+            assert!(!text.contains(other), "{file}: {other}");
+        }
+    }
 }
 
 /// The source side of the guard above, for either line ending.

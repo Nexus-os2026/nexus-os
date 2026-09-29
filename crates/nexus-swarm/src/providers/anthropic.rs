@@ -190,10 +190,19 @@ impl AnthropicProvider {
         spend_path: PathBuf,
         cap_usd: f64,
     ) -> Self {
-        let client = Client::builder()
+        // Final Gate item C: no redirect is followed, so `x-api-key` reaches
+        // only the configured endpoint. On a redirect to another host reqwest
+        // drops only authorization, cookie, proxy-authorization and
+        // www-authenticate, and would re-send `x-api-key` (and, on 307 and
+        // 308, the prompt) to the target. A redirect is reported as its
+        // status. The fallback keeps the policy; like `Client::new()` before,
+        // it panics only when no TLS backend can be initialized.
+        let no_redirect = || Client::builder().redirect(reqwest::redirect::Policy::none());
+        let client = no_redirect()
             .timeout(Duration::from_secs(60))
             .build()
-            .unwrap_or_else(|_| Client::new());
+            .or_else(|_| no_redirect().build())
+            .expect("failed to initialize the HTTP client");
         Self {
             base_url: base_url.into(),
             client,
@@ -583,6 +592,55 @@ mod tests {
         assert_eq!(resp.text, "hi!");
         let store = AnthropicSpendStore::at(ledger_path);
         assert!(store.read().cumulative_usd > 0.0);
+    }
+
+    /// Final Gate item C: the swarm's Anthropic calls (invoke and the health
+    /// probe) follow no redirect, so neither `x-api-key` nor the prompt
+    /// reaches the redirect target, which is never contacted; the redirect
+    /// is reported as its status.
+    #[tokio::test]
+    async fn p0_fg_anthropic_calls_follow_no_redirect() {
+        let target = MockServer::start().await;
+        for code in [301u16, 302, 307, 308] {
+            let origin = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/messages"))
+                .respond_with(
+                    ResponseTemplate::new(code)
+                        .insert_header("location", format!("{}/messages", target.uri())),
+                )
+                .mount(&origin)
+                .await;
+            let dir = tempdir().unwrap();
+            let p = AnthropicProvider::with(
+                origin.uri(),
+                Some("fg-secret".into()),
+                dir.path().join("sp.json"),
+                HARD_CAP_USD,
+            );
+            let err = p
+                .invoke(InvokeRequest {
+                    model_id: HAIKU_MODEL.into(),
+                    prompt: "fg prompt".into(),
+                    max_tokens: 16,
+                    temperature: None,
+                    metadata: serde_json::Value::Null,
+                })
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(&err, ProviderError::Http(_, status, _) if *status == code),
+                "{code}: {err:?}"
+            );
+            let health = p.health_check().await;
+            assert_eq!(health.status, ProviderHealthStatus::Unhealthy, "{code}");
+            assert!(health.notes.contains(&code.to_string()), "{}", health.notes);
+            assert_eq!(origin.received_requests().await.unwrap().len(), 2, "{code}");
+        }
+        assert!(
+            target.received_requests().await.unwrap().is_empty(),
+            "the redirect target was contacted"
+        );
     }
 
     #[tokio::test]

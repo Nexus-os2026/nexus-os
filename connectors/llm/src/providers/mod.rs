@@ -1203,13 +1203,73 @@ mod tests {
             server.join().unwrap();
         }
         assert_never_contacted(&target);
-        for (file, source) in [
-            ("claude.rs", include_str!("claude.rs")),
-            ("cohere.rs", include_str!("cohere.rs")),
-            ("openai_compatible.rs", include_str!("openai_compatible.rs")),
+    }
+
+    /// Final Gate item C: in `providers/` the only HTTP client that is built
+    /// is `credential_client`'s (a timeout and no redirect), and the
+    /// credentialed reqwest providers and `send_bounded` build theirs through
+    /// it. Any other construction (`Client::builder()`, `Client::new()`,
+    /// `Client::default()`, `ClientBuilder`, `reqwest::get`) in any provider
+    /// file's production code, including a file added later, fails this.
+    #[test]
+    fn p0_fg_providers_build_http_clients_only_through_credential_client() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/providers");
+        let mut sources = std::collections::BTreeMap::new();
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|extension| extension == "rs") {
+                let source = std::fs::read_to_string(&path)
+                    .unwrap()
+                    .replace("\r\n", "\n");
+                let production = source
+                    .split("#[cfg(test)]\nmod tests")
+                    .next()
+                    .unwrap()
+                    .to_string();
+                let name = path.file_name().unwrap().to_string_lossy().into_owned();
+                sources.insert(name, production);
+            }
+        }
+        assert!(sources.len() >= 20, "{:?}", sources.keys());
+        let mut builders = Vec::new();
+        for (name, production) in &sources {
+            for forbidden in [
+                "Client::new()",
+                "Client::default()",
+                "ClientBuilder",
+                "reqwest::get(",
+                "blocking::get(",
+            ] {
+                assert!(!production.contains(forbidden), "{name}: {forbidden}");
+            }
+            for _ in production.matches("Client::builder()") {
+                builders.push(name.clone());
+            }
+        }
+        assert_eq!(
+            builders,
+            ["mod.rs"],
+            "only credential_client builds a client"
+        );
+        let helper = sources["mod.rs"]
+            .split("pub(crate) fn credential_client(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap();
+        assert!(
+            helper.contains("Client::builder()")
+                && helper.contains(".redirect(reqwest::redirect::Policy::none())"),
+            "{helper}"
+        );
+        for (name, users) in [
+            ("claude.rs", 2),
+            ("cohere.rs", 1),
+            ("openai_compatible.rs", 1),
+            ("mod.rs", 1),
         ] {
-            assert!(!source.contains("Client::builder()"), "{file}");
-            assert!(source.contains("super::credential_client("), "{file}");
+            let calls =
+                sources[name].matches("credential_client(").count() - usize::from(name == "mod.rs");
+            assert_eq!(calls, users, "{name}");
         }
     }
 
@@ -1297,6 +1357,16 @@ mod tests {
             while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
                 request.push(byte[0]);
             }
+            // Read the request body too: closing a socket with unread input
+            // resets the connection on Windows.
+            let length = String::from_utf8_lossy(&request)
+                .to_ascii_lowercase()
+                .lines()
+                .find_map(|line| line.strip_prefix("content-length:").map(str::to_string))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            let mut sent = vec![0u8; length];
+            stream.read_exact(&mut sent).unwrap();
             let body = br#"{"dripped":"slow"}"#;
             let head = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
