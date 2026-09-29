@@ -858,3 +858,69 @@ fn p0_fg_h_messaging_connect_reads_a_bounded_body() {
         Ok(json!({"connected": true, "bot_name": "synthetic_bot"}).to_string())
     );
 }
+
+/// Final Gate items C and H: the messaging clients (connectivity check, and
+/// send/poll) follow no redirect and send no Referer. A Telegram URL holds
+/// the bot token in its path, and reqwest's default policy would follow a
+/// redirect with a Referer naming that URL.
+#[test]
+fn p0_fg_messaging_clients_follow_no_redirect_and_send_no_referer() {
+    use std::io::{Read, Write};
+    let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    target.set_nonblocking(true).unwrap();
+    let target_url = format!("http://{}/landed", target.local_addr().unwrap());
+    let origin = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", origin.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let mut requests = Vec::new();
+        for _ in 0..2 {
+            let (mut stream, _) = origin.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                .unwrap();
+            let mut buf = [0u8; 8192];
+            let n = stream.read(&mut buf).unwrap_or(0);
+            requests.push(String::from_utf8_lossy(&buf[..n]).into_owned());
+            let _ = stream.write_all(
+                format!(
+                    "HTTP/1.1 307 Temporary Redirect\r\nLocation: {target_url}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                .as_bytes(),
+            );
+        }
+        requests
+    });
+    let token = "123456:P0FG-SYNTHETIC-TOKEN";
+    let endpoints = MessagingEndpoints {
+        telegram: &base,
+        slack: "http://127.0.0.1:9/unused",
+        discord: "http://127.0.0.1:9/unused",
+        timeout: std::time::Duration::from_secs(10),
+        max_body_bytes: 64 * 1024,
+    };
+    let connect = block_on_async(check_messaging_connectivity("telegram", token, &endpoints));
+    let client = messaging_client_with(std::time::Duration::from_secs(10)).unwrap();
+    let url = format!("{base}/bot{token}/getUpdates");
+    let status = block_on_async(async { client.get(&url).send().await.map(|r| r.status()) });
+    let requests = server.join().unwrap();
+
+    assert_eq!(
+        status.unwrap().as_u16(),
+        307,
+        "the redirect is not followed"
+    );
+    if let Err(error) = &connect {
+        assert!(!error.contains(token), "{error}");
+    }
+    assert_eq!(requests.len(), 2);
+    for request in &requests {
+        assert!(
+            !request.to_ascii_lowercase().contains("\r\nreferer:"),
+            "{request}"
+        );
+    }
+    match target.accept() {
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+        other => panic!("the redirect target was contacted: {other:?}"),
+    }
+}

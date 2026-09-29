@@ -1329,8 +1329,13 @@ async fn check_messaging_connectivity(
     token_value: &str,
     endpoints: &MessagingEndpoints<'_>,
 ) -> Result<String, String> {
+    // No redirect is followed and no Referer is sent: a Telegram URL holds
+    // the bot token, and reqwest's default Referer would carry it to a
+    // redirect target (Final Gate items C and H).
     let client = reqwest::Client::builder()
         .timeout(endpoints.timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .referer(false)
         .build()
         .map_err(|e| format!("{platform} test: {}", e.without_url()))?;
     let max = endpoints.max_body_bytes;
@@ -1442,8 +1447,12 @@ pub(crate) fn messaging_client() -> Result<reqwest::Client, String> {
 pub(crate) fn messaging_client_with(
     timeout: std::time::Duration,
 ) -> Result<reqwest::Client, String> {
+    // No redirect and no Referer, for the same reason as the connectivity
+    // check: a Telegram URL holds the bot token.
     reqwest::Client::builder()
         .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .referer(false)
         .build()
         .map_err(|e| messaging_transport_error("client", e))
 }
