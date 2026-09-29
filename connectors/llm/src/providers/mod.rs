@@ -1211,6 +1211,11 @@ mod tests {
     /// it. Any other construction (`Client::builder()`, `Client::new()`,
     /// `Client::default()`, `ClientBuilder`, `reqwest::get`) in any provider
     /// file's production code, including a file added later, fails this.
+    ///
+    /// Non-claim: this is a text guard, not a name resolver. A construction
+    /// through an aliased import (`use reqwest::Client as Http;` then
+    /// `Http::builder()`) or a re-exported path it does not spell out is not
+    /// seen.
     #[test]
     fn p0_fg_providers_build_http_clients_only_through_credential_client() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/providers");
