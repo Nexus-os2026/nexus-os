@@ -267,18 +267,9 @@
 - Seed: 42
 - Timeout: 120s local, 180s cloud
 
-## How to Run
+## How to Run (withdrawn)
 
-```bash
-# Local battle only (all Ollama models)
-cargo run -p nexus-conductor-benchmark --bin local-vs-cloud-battle --release
-
-# Full LOCAL vs CLOUD battle (free NVIDIA NIM key)
-NVIDIA_NIM_API_KEY=nvapi-xxx \
-  cargo run -p nexus-conductor-benchmark --bin local-vs-cloud-battle --release
-```
-
-Get a free NVIDIA NIM API key: https://build.nvidia.com (1000 credits on signup)
+`local-vs-cloud-battle` is withdrawn during Phase Zero: it sent the `GROQ_API_KEY` value to NVIDIA NIM as a bearer token on curl's command line. Running it now only prints a withdrawal message and exits with status 69. The results above are historical.
 
 ---
 

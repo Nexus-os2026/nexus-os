@@ -664,6 +664,28 @@ fn p0_bench_docs_describe_the_withdrawn_benchmarks_as_withdrawn() {
         &["cargo run", "--release"],
     );
     assert_doc(
+        "docs/reports/LOCAL_vs_CLOUD_BATTLE_RESULTS.md",
+        &[
+            "## How to Run (withdrawn)",
+            "`local-vs-cloud-battle` is withdrawn during Phase Zero: it sent the \
+             `GROQ_API_KEY` value to NVIDIA NIM as a bearer token on curl's command line. \
+             Running it now only prints a withdrawal message and exits with status 69. The \
+             results above are historical.",
+        ],
+        &["cargo run", "--release"],
+    );
+    assert_doc(
+        "docs/reports/REAL_AGENT_VALIDATION_RESULTS.md",
+        &[
+            "## How to Run (withdrawn)",
+            "`real-agent-validation` is withdrawn during Phase Zero: it sent the \
+             `GROQ_API_KEY` value to NVIDIA NIM as a bearer token on curl's command line. \
+             Running it now only prints a withdrawal message and exits with status 69. The \
+             results above are historical.",
+        ],
+        &["cargo run", "--release"],
+    );
+    assert_doc(
         "data/validation_runs/README.md",
         &[
             "Re-running is withdrawn during Phase Zero: `real-battery-validation` sent the \
