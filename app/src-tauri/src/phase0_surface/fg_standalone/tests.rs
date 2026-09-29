@@ -1254,9 +1254,287 @@ fn declares_include(yaml: &str) -> bool {
     })
 }
 
+/// The `uses:` references CI configurations may make: the actions the
+/// existing workflows use, by exact reference. Any other action (or a
+/// reference in any other spelling) fails the workflow guard until reviewed.
+const ALLOWED_ACTIONS: &[&str] = &[
+    "actions/checkout@v4",
+    "actions/download-artifact@v4",
+    "actions/setup-node@v4",
+    "actions/setup-python@v5",
+    "actions/upload-artifact@v4",
+    "dtolnay/rust-toolchain@1.94.0",
+    "dtolnay/rust-toolchain@stable",
+    "peaceiris/actions-gh-pages@v4",
+    "softprops/action-gh-release@v2",
+    "Swatinem/rust-cache@v2",
+];
+
+/// The build outputs under a `release` or `debug` profile directory that CI
+/// configurations may name: the desktop bundle and its bundled toolchain.
+const DESKTOP_BUILD_OUTPUTS: &[&str] = &["bundle", "toolchain"];
+
+/// Cargo subcommands that compile or check code without producing a binary
+/// to ship. A withdrawn package may be selected only by one of these.
+const NON_SHIPPING_CARGO_SUBCOMMANDS: &[&str] = &[
+    "audit", "bench", "c", "check", "clippy", "d", "deny", "doc", "fetch", "fmt", "llvm-cov",
+    "metadata", "nextest", "t", "test", "tree",
+];
+
+/// Every `uses:` reference on a line (any quoting, block or flow style),
+/// as written; an empty reference stands for one on a later line.
+fn action_references(line: &str) -> Vec<&str> {
+    let lower = line.to_ascii_lowercase();
+    lower
+        .match_indices("uses")
+        .filter(|(at, _)| {
+            !line[..*at]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        })
+        .filter_map(|(at, _)| {
+            let rest = line[at + "uses".len()..].trim_start_matches(['"', '\'']);
+            let rest = rest.trim_start().strip_prefix(':')?;
+            let rest = rest.trim_start().trim_start_matches(['"', '\'']);
+            let end = rest
+                .find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ',' | '}' | ']'))
+                .unwrap_or(rest.len());
+            Some(&rest[..end])
+        })
+        .collect()
+}
+
+/// The path-like words of a line (backslashes read as slashes, case folded)
+/// that name build output other than the desktop bundle: anything under a
+/// `release` or `debug` profile directory but the allowlisted outputs, the
+/// profile directory itself, the target directory itself, or a glob in the
+/// target directory.
+fn undesktop_build_outputs(line: &str) -> Vec<String> {
+    let normalized = line.to_ascii_lowercase().replace('\\', "/");
+    normalized
+        .split(|c: char| {
+            c.is_whitespace()
+                || matches!(
+                    c,
+                    '"' | '\''
+                        | '`'
+                        | ','
+                        | ';'
+                        | '('
+                        | ')'
+                        | '='
+                        | '|'
+                        | '<'
+                        | '>'
+                        | '&'
+                        | '{'
+                        | '}'
+                )
+        })
+        .filter(|word| {
+            let components: Vec<&str> = word.split('/').collect();
+            components.iter().enumerate().any(|(index, component)| {
+                let next = components.get(index + 1).copied();
+                let profile = index > 0 && matches!(*component, "release" | "debug");
+                let target = *component == "target" && word.contains('/');
+                (profile && !next.is_some_and(|next| DESKTOP_BUILD_OUTPUTS.contains(&next)))
+                    || (target
+                        && next
+                            .is_none_or(|next| next.is_empty() || next.contains(['*', '?', '['])))
+            })
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+/// The shipping cargo invocations in a CI configuration that select a
+/// withdrawn package, as (subcommand, selector). The configuration is read
+/// as one word stream (so continued and folded lines join); an invocation
+/// runs from a `cargo` (or `cross`) word to the next shell separator or the
+/// next invocation. A package is selected by `-p NAME`, `-pNAME`,
+/// `-p=NAME`, `--package NAME`, `--package=NAME` (a package id spec names
+/// its package; a glob counts as selecting every package) or by
+/// `--manifest-path` to a withdrawn package's manifest. Not a claim: a
+/// build selected by working directory, by `cd`, or through a variable or
+/// script is not seen here (the upload and publish checks bound those).
+fn shipped_withdrawn_packages(
+    text: &str,
+    packages: &BTreeSet<String>,
+    directories: &BTreeSet<String>,
+) -> Vec<(String, String)> {
+    let words: Vec<&str> = text
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .flat_map(str::split_whitespace)
+        .map(|word| {
+            word.trim_matches(|c: char| {
+                matches!(
+                    c,
+                    '"' | '\'' | '`' | '(' | ')' | '{' | '}' | '[' | ']' | ','
+                )
+            })
+        })
+        .collect();
+    let is_cargo = |word: &str| {
+        let word = word.to_ascii_lowercase();
+        let word = word.trim_start_matches('$');
+        let word = word.rsplit('/').next().unwrap_or(word);
+        let word = word.strip_suffix(".exe").unwrap_or(word);
+        word == "cargo" || word == "cross"
+    };
+    let is_separator =
+        |word: &str| matches!(word, "&&" | "||" | ";" | "|" | "then" | "do") || word.ends_with(';');
+    let selects_withdrawn = |spec: &str| {
+        let spec = spec.trim_matches(['"', '\'']);
+        let spec = spec.rsplit('#').next().unwrap_or(spec);
+        let name = spec.split(['@', ':']).next().unwrap_or(spec);
+        spec.contains(['*', '?', '[']) || packages.contains(name)
+    };
+    let manifest_is_withdrawn = |path: &str| {
+        let path = path.trim_matches(['"', '\'']).replace('\\', "/");
+        directories.iter().any(|directory| {
+            let manifest = format!("{directory}/Cargo.toml");
+            path == manifest
+                || path == format!("./{manifest}")
+                || path.ends_with(&format!("/{manifest}"))
+        })
+    };
+    let mut found = Vec::new();
+    let mut index = 0;
+    while index < words.len() {
+        if !is_cargo(words[index]) {
+            index += 1;
+            continue;
+        }
+        let mut end = index + 1;
+        while end < words.len() && !is_cargo(words[end]) && !is_separator(words[end]) {
+            end += 1;
+        }
+        let invocation = &words[index + 1..end];
+        let subcommand = invocation
+            .iter()
+            .find(|word| !word.starts_with('-') && !word.starts_with('+'))
+            .copied()
+            .unwrap_or_default();
+        if !NON_SHIPPING_CARGO_SUBCOMMANDS.contains(&subcommand) {
+            let value_after = |at: usize| invocation.get(at + 1).copied().unwrap_or_default();
+            for (at, word) in invocation.iter().enumerate() {
+                let selected = if *word == "-p" || *word == "--package" {
+                    selects_withdrawn(value_after(at))
+                } else if let Some(spec) = word.strip_prefix("--package=") {
+                    selects_withdrawn(spec)
+                } else if let Some(spec) =
+                    word.strip_prefix("-p").filter(|_| !word.starts_with("--"))
+                {
+                    selects_withdrawn(spec.strip_prefix('=').unwrap_or(spec))
+                } else if *word == "--manifest-path" {
+                    manifest_is_withdrawn(value_after(at))
+                } else if let Some(path) = word.strip_prefix("--manifest-path=") {
+                    manifest_is_withdrawn(path)
+                } else {
+                    false
+                };
+                if selected {
+                    found.push((subcommand.to_string(), invocation.join(" ")));
+                }
+            }
+        }
+        index = end;
+    }
+    found
+}
+
+/// The shipping recognizers used by the workflow guard catch every
+/// spelling of a package selector, a profile-directory or glob upload, and
+/// an action reference, and pass what the workflows legitimately use.
+#[test]
+fn p0_fg_standalone_shipping_recognizers_catch_probes() {
+    let packages: BTreeSet<String> = ["nexus-cli".to_string()].into();
+    let directories: BTreeSet<String> = ["cli".to_string()].into();
+    let ships = |text: &str| !shipped_withdrawn_packages(text, &packages, &directories).is_empty();
+    for text in [
+        "cargo build --release -p nexus-cli",
+        "cargo build --release -pnexus-cli",
+        "cargo build --release -p=nexus-cli",
+        "cargo build --package nexus-cli",
+        "cargo build --package=nexus-cli",
+        "run: \"cargo build --package 'nexus-cli'\"",
+        "cargo +stable build --locked -p nexus-cli@10.6.0",
+        "cargo install -p nexus-c*",
+        "cargo build --release \\\n  -p nexus-cli",
+        "run: >\n  cargo rustc\n  --package nexus-cli",
+        "cargo run --manifest-path cli/Cargo.toml",
+        "$CARGO build --manifest-path=./cli/Cargo.toml",
+        "cross build -p nexus-cli",
+        "cargo --config x build -p nexus-cli",
+    ] {
+        assert!(ships(text), "not recognized as shipping: {text}");
+    }
+    for text in [
+        "cargo test -p nexus-kernel -p nexus-sdk -p nexus-cli",
+        "cargo clippy -p nexus-cli -- -D warnings",
+        "cargo build --release && mkdir -p nexus-cli",
+        "cargo build -p nexus-desktop-backend",
+        "# cargo build -p nexus-cli",
+    ] {
+        assert!(!ships(text), "wrongly recognized as shipping: {text}");
+    }
+    for line in [
+        "path: target/release/nexus-server",
+        "path: target/release",
+        "path: target/release/",
+        "path: target/release/*",
+        "path: target/debug/**",
+        "path: 'target/*/nexus-server'",
+        "path: target/",
+        "path: app/src-tauri/target",
+        "Copy-Item target\\release\\nexus-server.exe out",
+        "path: Target/Release/nexus-server.exe",
+        "path: target/x86_64-unknown-linux-gnu/release/nexus-server",
+        "path: ${{ env.CARGO_TARGET_DIR }}/release/nexus-server",
+        "path: target/release/{bundle,nexus-server}",
+    ] {
+        assert!(
+            !undesktop_build_outputs(line).is_empty(),
+            "not recognized as a build-output upload: {line}"
+        );
+    }
+    for line in [
+        "bundled=target/release/toolchain",
+        "Get-ChildItem -Recurse target\\release\\bundle -ErrorAction SilentlyContinue",
+        "ls -R target/release/bundle || true",
+        "find target/release/bundle/deb -mindepth 2",
+        "cargo build --release --target x86_64-pc-windows-msvc",
+    ] {
+        assert!(
+            undesktop_build_outputs(line).is_empty(),
+            "wrongly recognized as a build-output upload: {line}"
+        );
+    }
+    assert_eq!(
+        action_references("- uses: actions/checkout@v4"),
+        ["actions/checkout@v4"]
+    );
+    assert_eq!(
+        action_references("  \"uses\": 'evil/x@v1' # c"),
+        ["evil/x@v1"]
+    );
+    assert_eq!(
+        action_references("- {name: a, uses: evil/y@main}"),
+        ["evil/y@main"]
+    );
+    assert_eq!(action_references("uses:"), [""]);
+    assert!(action_references("run: echo causes: x").is_empty());
+}
+
 /// No workflow builds, installs, uploads or publishes a withdrawn binary, a
 /// container image or a chart, and the release publishes only the desktop
 /// installers. (Workflows still compile and test the withdrawn packages.)
+/// A withdrawn package is selected only by a non-shipping cargo subcommand,
+/// no path names build output under a profile directory other than the
+/// desktop bundle (nor the profile or target directory itself, nor a glob
+/// there), and every action referenced is in [`ALLOWED_ACTIONS`].
 /// Every CI configuration in the repository, dot directories included, is
 /// one this guard reads: the GitHub workflows and `.gitlab-ci.yml`, which
 /// includes no other file. A pipeline file of any other kind or place fails
@@ -1293,6 +1571,21 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
         !declares_include(&gitlab),
         ".gitlab-ci.yml must include no other file"
     );
+    let withdrawn_directories: BTreeSet<String> = BINARY_TARGETS
+        .iter()
+        .filter(|(_, _, _, disposition)| *disposition == Withdrawn)
+        .map(|(member, _, _, _)| member.to_string())
+        .collect();
+    let withdrawn_packages: BTreeSet<String> = withdrawn_directories
+        .iter()
+        .map(|member| {
+            package_value(&member_manifest(member), "name")
+                .and_then(toml::Value::as_str)
+                .expect("a package name")
+                .to_string()
+        })
+        .collect();
+    assert_eq!(withdrawn_packages.len(), 8, "{withdrawn_packages:?}");
     for config in &configs {
         let workflow = root.join(config);
         let text = read(&workflow);
@@ -1337,7 +1630,24 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
                 !(line.contains("cargo build") && line.contains("-p nexus-cli")),
                 "{name}: nexus-cli is built for shipping by {line}"
             );
+            let outputs = undesktop_build_outputs(line);
+            assert!(
+                outputs.is_empty(),
+                "{name}: build output other than the desktop bundle {outputs:?} in {line}"
+            );
+            for action in action_references(line) {
+                assert!(
+                    ALLOWED_ACTIONS.contains(&action),
+                    "{name}: action `{action}` is not allowlisted in {line}"
+                );
+            }
         }
+        let shipped =
+            shipped_withdrawn_packages(&text, &withdrawn_packages, &withdrawn_directories);
+        assert!(
+            shipped.is_empty(),
+            "{name}: a withdrawn package is built for shipping by {shipped:?}"
+        );
     }
 
     // The release publishes the desktop installers and nothing else.
