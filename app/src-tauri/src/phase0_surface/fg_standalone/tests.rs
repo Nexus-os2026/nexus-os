@@ -1082,6 +1082,10 @@ fn p0_fg_standalone_every_recipe_is_inventoried() {
 /// (including included files by the conventional names), sourcehut
 /// (`.build.yml`, `.builds/`), TeamCity (`.teamcity/`), and the pipeline
 /// files of other CI services.
+///
+/// Not a claim: detection covers the names and places listed here only. A
+/// CI service configured under another name or place, or outside the
+/// repository (in a service's own settings), is not detected.
 fn is_ci_config(relative: &str) -> bool {
     let name = file_name(relative).to_ascii_lowercase();
     let yaml = name.ends_with(".yml") || name.ends_with(".yaml");
@@ -1655,6 +1659,12 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
 /// one this guard reads: the GitHub workflows and `.gitlab-ci.yml`, which
 /// includes no other file. A pipeline file of any other kind or place fails
 /// until it is reviewed.
+///
+/// Not a claim: the checks are text recognizers over shell and YAML, not
+/// parsers of either; they refuse the spellings their unit tests list and
+/// err towards refusing, but a spelling they do not model (see
+/// [`shipped_withdrawn_packages`], [`declares_include`] and
+/// [`is_ci_config`]) is not seen.
 #[test]
 fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
     let root = workspace_root();
