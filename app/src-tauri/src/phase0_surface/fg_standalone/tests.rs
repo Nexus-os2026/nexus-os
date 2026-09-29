@@ -1227,6 +1227,11 @@ fn p0_fg_standalone_readme_names_every_withdrawn_binary() {
 /// since an escape can spell `include`. Letter case is ignored. Lines that
 /// hold only a comment are skipped; text inside block scalars is read like
 /// any other line, which errs on the side of refusing.
+///
+/// Not a claim: this is a line-level text recognizer, not a YAML parser. A
+/// key given through an alias (`*name :`), a complex key whose text is a
+/// block scalar (`? |` with `include` on a later line), and an escaped key
+/// inside a flow mapping (`{"\x69nclude": …}`) are not recognized.
 fn declares_include(yaml: &str) -> bool {
     yaml.lines().any(|raw| {
         let mut line = raw.trim_start();
