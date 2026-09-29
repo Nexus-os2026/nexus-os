@@ -33,6 +33,10 @@ pub trait ScheduledGoalExecutor: Send + Sync {
     fn execute(&self, agent_id: &str, default_goal: &str) -> Result<(), String>;
 }
 
+/// Why a schedule the cron parser rejects is refused (`validate_cron`,
+/// `register_agent`). It names no part of the expression.
+const UNPARSABLE_SCHEDULE: &str = "invalid cron expression: the schedule could not be parsed";
+
 /// Handle for a running schedule loop — holds the cancel flag and join handle.
 struct ScheduleHandle {
     handle: JoinHandle<()>,
@@ -69,11 +73,11 @@ impl AgentScheduler {
         *guard = Some(executor);
     }
 
-    /// Validate a cron expression without registering anything.
+    /// Validate a cron expression without registering anything. It accepts
+    /// and refuses exactly as `register_agent` does, with the same bounded
+    /// reasons, none of which names any part of the expression.
     pub fn validate_cron(expression: &str) -> Result<(), String> {
-        Schedule::from_str(&normalize_cron_expression(expression)?)
-            .map(|_| ())
-            .map_err(|e| format!("invalid cron expression: {e}"))
+        parse_schedule(expression).map(|_| ())
     }
 
     /// Register an agent for scheduled execution.
@@ -86,11 +90,7 @@ impl AgentScheduler {
         cron_expression: &str,
         default_goal: &str,
     ) -> Result<(), AgentError> {
-        let normalized_cron = normalize_cron_expression(cron_expression)
-            .map_err(|e| AgentError::SupervisorError(e.to_string()))?;
-        let schedule = Schedule::from_str(&normalized_cron).map_err(|e| {
-            AgentError::SupervisorError(format!("invalid cron expression '{cron_expression}': {e}"))
-        })?;
+        let schedule = parse_schedule(cron_expression).map_err(AgentError::SupervisorError)?;
 
         // Cancel any existing schedule for this agent.
         self.unregister_agent(agent_id);
@@ -285,6 +285,17 @@ fn normalize_cron_expression(expression: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
+/// Normalize and parse an agent schedule (`validate_cron`, `register_agent`).
+///
+/// Every refusal is a bounded reason that names no part of the expression.
+/// The cron parser's own error repeats the whole expression (and a caret line
+/// as long as it), which is caller text of any length, so a schedule the
+/// parser rejects gets `UNPARSABLE_SCHEDULE` instead.
+fn parse_schedule(expression: &str) -> Result<Schedule, String> {
+    let normalized = normalize_cron_expression(expression)?;
+    Schedule::from_str(&normalized).map_err(|_| UNPARSABLE_SCHEDULE.to_string())
+}
+
 /// One second of the minute: one or two ASCII digits, at most 59. Lists,
 /// ranges, steps and wildcards are refused.
 fn is_single_second(field: &str) -> bool {
@@ -383,6 +394,68 @@ mod tests {
                 .to_string();
             assert_eq!(registered, format!("supervisor error: {error}"));
         }
+    }
+
+    /// A schedule that passes the once-per-minute check but that the cron
+    /// parser rejects is refused with a fixed reason. The parser's own error
+    /// repeats the whole expression; none of it is echoed, whatever its
+    /// length, and nothing is registered.
+    #[test]
+    fn p0_fg_k_an_unparsable_schedule_is_refused_without_echo() {
+        let scheduler = scheduler();
+        for expression in [
+            "0 p0fg-marker * * * *".to_string(),
+            format!("0 {} * * * *", "p0fg".repeat(2_500)),
+            "0 0 0 * P0fgmonth *".to_string(),
+        ] {
+            let error = scheduler
+                .register_agent("p0fg-agent", &expression, "goal")
+                .unwrap_err()
+                .to_string();
+            assert_eq!(
+                error,
+                "supervisor error: invalid cron expression: the schedule could not be parsed"
+            );
+        }
+        assert!(scheduler.list().is_empty());
+    }
+
+    /// `validate_cron` refuses with exactly the bounded reasons
+    /// `register_agent` gives, and neither names any part of the caller's
+    /// expression, whatever its length. What each accepts is unchanged (see
+    /// the acceptance tests above).
+    #[test]
+    fn p0_fg_k_validate_cron_refuses_with_the_bounded_reasons() {
+        let marker = "p0fgmarker";
+        let long = marker.repeat(1_000);
+        let cases = [
+            ("   ".to_string(), "invalid cron expression: empty"),
+            (
+                format!("{marker} {long}"),
+                "invalid cron expression: expected 5, 6, or 7 fields, got 2",
+            ),
+            (
+                format!("*/{long} * * * * *"),
+                "invalid cron expression: an agent schedule fires at most once per minute, \
+                 so its seconds field must be one value from 0 to 59",
+            ),
+            (format!("0 {long} * * * *"), UNPARSABLE_SCHEDULE),
+            (format!("0 0 0 * {marker} *"), UNPARSABLE_SCHEDULE),
+        ];
+        let scheduler = scheduler();
+        for (expression, reason) in &cases {
+            assert_eq!(
+                AgentScheduler::validate_cron(expression),
+                Err(reason.to_string())
+            );
+            let registered = scheduler
+                .register_agent("p0fg-agent", expression, "goal")
+                .unwrap_err()
+                .to_string();
+            assert_eq!(registered, format!("supervisor error: {reason}"));
+            assert!(!registered.contains(marker), "{registered}");
+        }
+        assert!(scheduler.list().is_empty());
     }
 
     #[test]
