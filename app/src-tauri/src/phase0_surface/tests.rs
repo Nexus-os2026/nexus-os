@@ -3232,7 +3232,10 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
         (
             "an unbounded resource surface reachable from the interface",
             fg_reliability,
-            &["p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database"][..],
+            &[
+                "p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database",
+                "p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api",
+            ][..],
         ),
     ] {
         for guard in guards {

@@ -31,6 +31,7 @@ ignore = [
     { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.30.0; same path and reachability as RUSTSEC-2026-0194" },
     { id = "RUSTSEC-2026-0269", reason = "wasmtime 43.0.2; nexus-sdk, nexus-protocols, nexus-benchmarks; wasmtime-wasi is not in the lockfile and the SDK's WASM sandbox is latent (C5A); fix needs a major upgrade (46.0.3+ or 47.0.4+)" },
     { id = "RUSTSEC-2026-0222", reason = "wasmtime 43.0.2; same path and reachability as RUSTSEC-2026-0269" },
+    { id = "RUSTSEC-2026-0316", reason = "wasmtime 43.0.2; dynamic Val lifting into host allocations can exceed the hostcall fuel limit (GHSA-jqpg-j7w6-42pr, low); Nexus runs core-Wasm modules through typed entry functions (get_typed_func) and never the dynamic component Val API (guard p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api); the SDK WASM sandbox is latent and unreachable from the Linux Phase Zero desktop; no patched 43.x release exists; the major Wasmtime migration is deferred; Architect acceptance lapses if that API use or reachability changes" },
     { id = "RUSTSEC-2026-0247", reason = "bitmaps 2.1.0 unmaintained; wasm-compose -> wasmtime 43.0.2; accepted with wasmtime" },
     { id = "RUSTSEC-2026-0250", reason = "im-rc 15.1.0 unmaintained; wasm-compose -> wasmtime 43.0.2; accepted with wasmtime" },
     { id = "RUSTSEC-2026-0251", reason = "sized-chunks 0.6.5 unmaintained; wasm-compose -> wasmtime 43.0.2; accepted with wasmtime" },

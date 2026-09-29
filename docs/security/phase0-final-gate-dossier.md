@@ -76,7 +76,7 @@ numbered decision requests are collected at the end of this dossier.
 | J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: post-integration run #108 succeeded, Architect review of that evidence pending. J2–J5: withdrawn on the closure candidate; the withdrawal accepted (decision L); the developer and benchmark binaries may remain, not shipped, inventory-guarded and not documented as runtime entry points (decision M) |
 | K | Reliability signals and resource bounds | `executes_python_code`: no retained hosted failure (evidence corrected); GPU-host voice stderr repaired; the duplicate binary name repaired by P0-FG1-R1 (integrated); resource surfaces bounded by refusal (see "Resource bounds") | Repaired or bounded on the closure candidate; the voice tests install from a hash-pinned Linux lock (R1); `ArenaRun` and the one-token minimum accepted as bounded compatibility debt (decision I); `executes_python_code` and the GPU host (request 7) not covered by A–M |
 | L | Screen observation from the interface | Unchanged since C5C: unbrokered observation is unavailable (Architect repair A) | No change in P0-FINAL-GATE-CLOSURE; a brokered mechanism is future work |
-| DEP (contract) | Dependency advisories | Measured on the final candidate's lockfiles: Cargo.lock 19 → 7 cargo-audit vulnerabilities (rsa removed with the unused `openidconnect`); cargo-deny advisory errors 16 → 10; npm (app) 14 → 6. R1: one pinned gate (`scripts/security-audit.sh`) with one 10-ID exception set in `deny.toml`; six unsound fixes; npm (app) 4, development-only | Governed by the R1 gate (see "Linux security gate"). Open: RUSTSEC-2026-0316 (wasmtime 43.0.2) is not accepted, and the gate fails on it until the Architect decides |
+| DEP (contract) | Dependency advisories | Measured on the final candidate's lockfiles: Cargo.lock 19 → 7 cargo-audit vulnerabilities (rsa removed with the unused `openidconnect`); cargo-deny advisory errors 16 → 10; npm (app) 14 → 6. R1: one pinned gate (`scripts/security-audit.sh`) with one exception set in `deny.toml` (10 IDs, then 11 with RUSTSEC-2026-0316); six unsound fixes; npm (app) 4, development-only | Governed by the R1 gate (see "Linux security gate"). RUSTSEC-2026-0316 (wasmtime 43.0.2, dynamic `Val` API, unused and unreachable) accepted narrowly by the Architect; 11-ID exception set |
 
 ### At C5C (historical)
 
@@ -1980,12 +1980,13 @@ are historical. At the R1 head:
   databases; `ci-fast-local.yml`, `audit.yml`, the GitLab `security-audit`
   job (`allow_failure: false`) and `scripts/ci-local.sh` run the same script.
   No scanner call is masked with `|| true`.
-- **One exception set.** `deny.toml` holds the only exception set, 10 IDs,
+- **One exception set.** `deny.toml` holds the only exception set, 11 IDs,
   each with its package, path and Phase Zero reachability:
   - RUSTSEC-2026-0193 and -0213 (ammonia 4.1.2);
   - RUSTSEC-2026-0258 (h2 0.3.27);
   - RUSTSEC-2026-0194 and -0195 (quick-xml 0.30.0);
   - RUSTSEC-2026-0269 and -0222 (wasmtime 43.0.2);
+  - RUSTSEC-2026-0316 (wasmtime 43.0.2; accepted narrowly, see below);
   - the unmaintained RUSTSEC-2026-0247, -0250 and -0251 (bitmaps, im-rc and
     sized-chunks, through wasmtime's `wasm-compose`).
 
@@ -2028,12 +2029,25 @@ are historical. At the R1 head:
   vitest 4.1.2 and `@vitest/mocker` (moderate).
 - **Scope.** `nexus-website` and `scripts/page-audit` are not built or
   shipped by the Linux product and are out of Phase Zero scope.
-- **Open: RUSTSEC-2026-0316.** wasmtime 43.0.2, low severity ("Dynamic
-  record lifting can allocate beyond the hostcall fuel limit"), published on
-  2026-09-29, after the reviewed advisory-database snapshot. It is **not
-  accepted** and is not in the exception set, so the gate fails on it against
-  a current database until the Architect decides: accept it, or upgrade
-  wasmtime (patched in >=48.0.3,<49 and >=49.0.1).
+- **RUSTSEC-2026-0316: accepted for Linux Phase Zero (Architect decision,
+  P0-LINUX-FINAL-R1), narrowly.** wasmtime 43.0.2, low severity
+  (GHSA-jqpg-j7w6-42pr, CVSS 1.0): Wasmtime's dynamically typed `Val` API can
+  allocate beyond the hostcall fuel limit when lifting guest values into host
+  allocations ("Dynamic record lifting can allocate beyond the hostcall fuel
+  limit"); statically typed APIs are unaffected. Nexus's Wasmtime use is the
+  core `Module`/`Linker`/`Store` path with typed entry functions
+  (`get_typed_func::<(), ()>`), not the component-model `Val`/`Func` API, and
+  the SDK WASM sandbox is latent, unreachable from the Linux Phase Zero
+  desktop (`WasmtimeSandbox`, `WasmAgent` are latent-API needles). No patched
+  43.x release exists; the patched lines are 36.0.16, 48.0.3 and 49.0.1, and
+  the move off 43.x (a major-version transition) is deferred; nothing here
+  suggests a downgrade to 36 or claims wasmtime 43.0.2 is generally safe. It
+  is the one additional entry in `deny.toml` (11 IDs); the guard
+  `p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api` fails if a
+  production source uses Wasmtime's component API, if the SDK sandbox stops
+  using typed entry functions, if the latent-API needles are removed, or if
+  the exception's recorded reasons change. The acceptance lapses if that API
+  use or reachability changes.
 
 Evidence: the gate's exit 0 against the reviewed snapshot, the two negative
 controls (a removed exception and a stale exception each fail the gate) and
@@ -2347,7 +2361,7 @@ holds only within the limits it states.
 |---|---|
 | 1 | Decision A |
 | 2 | Decision M |
-| 3, 4, 5, 6 | Addressed by R1 repair B ("Linux security gate" under "Dependency evidence"); RUSTSEC-2026-0316 open |
+| 3, 4, 5, 6 | Addressed by R1 repair B ("Linux security gate" under "Dependency evidence"); RUSTSEC-2026-0316 accepted narrowly (Architect) |
 | 7 | Not covered by A–M: `executes_python_code` monitoring and the self-hosted GPU host |
 | 8 | Addressed by R1: the hash-pinned Linux voice lock (item K) |
 | 9 | Decisions B and C; the first-run default for a missing file and the ambient-key first save are not covered |
@@ -2363,8 +2377,7 @@ holds only within the limits it states.
 | 19 | Decision L; the withdrawal wording and the coordinator decisions D1, D2 and D4 to D7 are not restated by it |
 
 **Open after P0-LINUX-FINAL-R1.**
-- RUSTSEC-2026-0316 (wasmtime 43.0.2): not accepted; the gate fails on it
-  until the Architect accepts it or wasmtime is upgraded (>=48.0.3 or
-  >=49.0.1).
+- None for dependencies: RUSTSEC-2026-0316 (wasmtime 43.0.2) was accepted
+  narrowly by the Architect (see "Linux security gate").
 - The parts of requests 7, 9, 10, 11, 14 and 19 listed as not covered above.
 - Windows and macOS, all items: deferred.

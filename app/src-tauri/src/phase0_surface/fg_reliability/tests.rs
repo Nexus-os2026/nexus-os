@@ -391,3 +391,85 @@ fn p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database() {
     );
     assert!(!written, "the identity home's nexus.db was written");
 }
+
+/// DEP (Architect decision, P0-LINUX-FINAL-R1): RUSTSEC-2026-0316 (wasmtime
+/// 43.0.2, dynamic `Val` lifting into host allocations can exceed the
+/// hostcall fuel limit) is accepted only while its reasoning holds. The
+/// exception is the one deny.toml entry; no production source uses
+/// Wasmtime's component model (the affected dynamic `Val`/`Func` API); the
+/// SDK sandbox runs core-Wasm modules through typed entry functions; and the
+/// SDK sandbox stays a latent API the desktop must not call.
+#[test]
+fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !name.starts_with('.')
+                    && !matches!(
+                        name.as_str(),
+                        "target" | "node_modules" | "tests" | "benches" | "dist"
+                    )
+                {
+                    walk(&path, out);
+                }
+            } else if name.ends_with(".rs") && !name.ends_with("tests.rs") {
+                out.push(path);
+            }
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut sources = Vec::new();
+    walk(&root, &mut sources);
+    assert!(sources.len() > 100, "workspace sources not found");
+    for path in &sources {
+        let text = std::fs::read_to_string(path).unwrap_or_default();
+        let code: String = text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for needle in ["wasmtime::component", "component::Val", "component::Func"] {
+            assert!(
+                !code.contains(needle),
+                "{}: {needle} (the Wasmtime component API affected by RUSTSEC-2026-0316 needs review)",
+                path.display()
+            );
+        }
+    }
+
+    let sandbox = include_str!("../../../../../sdk/src/wasmtime_sandbox.rs");
+    assert!(sandbox.contains("use wasmtime::{Engine, Linker, Module, Store"));
+    assert!(sandbox.contains(".get_typed_func::<(), ()>("));
+
+    let registry = include_str!("../tests.rs");
+    for latent in ["(\"WasmtimeSandbox\",", "(\"WasmAgent\","] {
+        assert!(
+            registry.contains(latent),
+            "latent-API needle {latent} removed"
+        );
+    }
+
+    let deny = include_str!("../../../../../deny.toml").replace("\r\n", "\n");
+    let entries: Vec<&str> = deny
+        .lines()
+        .filter(|line| line.contains("RUSTSEC-2026-0316"))
+        .collect();
+    assert_eq!(entries.len(), 1, "exactly one RUSTSEC-2026-0316 exception");
+    for reason in [
+        "wasmtime 43.0.2",
+        "get_typed_func",
+        "p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api",
+        "latent",
+    ] {
+        assert!(
+            entries[0].contains(reason),
+            "exception reason lacks {reason}"
+        );
+    }
+}

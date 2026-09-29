@@ -1390,12 +1390,14 @@ an item or declares FG1, the Final Gate or Phase Zero complete.
   check covers 82 fg guards: `fg_approval` 18, `fg_egress` 18,
   `fg_reliability` 12, `fg_secrets` 11, `fg_standalone` 12, `fg_webview` 11.
   The IPC counts of §11.3 are unchanged (804 registered, 154 closed).
-- **Dependency governance.** One exception set of 10 IDs in `deny.toml`,
+- **Dependency governance.** One exception set of 11 IDs in `deny.toml`,
   applied by `scripts/security-audit.sh` with pinned cargo-audit 0.22.1 and
   cargo-deny 0.19.6; the root `audit.toml` (never read by cargo-audit) and the
   stale ignores are removed (the §11.7 note on them is resolved).
-  RUSTSEC-2026-0316 (wasmtime 43.0.2) is not accepted; the gate fails on it
-  until the Architect decides. Details: dossier, "Linux security gate".
+  RUSTSEC-2026-0316 (wasmtime 43.0.2) is accepted narrowly by the Architect
+  (the dynamic component `Val` API is unused and the SDK sandbox unreachable;
+  pinned by `p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api`; the
+  acceptance lapses if either changes). Details: dossier, "Linux security gate".
 - **Correction to a mission note.** The mission's platform-scope evidence
   file says the Windows and macOS jobs and harness steps remain in `ci.yml`;
   at the R1 head they are in `ci-portability.yml`, and `ci.yml` has no
