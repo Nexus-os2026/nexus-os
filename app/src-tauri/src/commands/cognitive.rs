@@ -1216,6 +1216,15 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
         const LOOP_ACTIVE: &str =
             "scheduled run skipped: the agent's cognitive loop is still running";
 
+        // P0-FINAL-GATE (item G): a scheduled tick for a transcendent (L6)
+        // agent is refused before anything is audited, restarted or assigned,
+        // with the refusal `assign_agent_goal` would give the goal.
+        if is_transcendent_agent(&self.state, agent_id) {
+            return Err(crate::phase0_surface::closed(
+                "assign_agent_goal",
+                crate::phase0_surface::Closure::ApprovalRequired,
+            ));
+        }
         let agent_uuid = Uuid::parse_str(agent_id).map_err(|e| format!("invalid agent id: {e}"))?;
         // P0-FG resource bound: a scheduled tick never starts a second loop
         // beside the agent's running one. A desktop loop holds its
@@ -2597,3 +2606,5 @@ pub(crate) fn set_default_agent(
 
 #[cfg(test)]
 mod lock_tests;
+#[cfg(test)]
+mod scheduled_tests;
