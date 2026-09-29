@@ -1098,6 +1098,42 @@ fn is_ci_config(relative: &str) -> bool {
         .contains(&name.as_str())
 }
 
+/// The `include` recognizer used by the workflow guard: every spelling a
+/// YAML parser reads as an `include` key is refused, and ordinary lines that
+/// only mention the word are not.
+#[test]
+fn p0_fg_standalone_gitlab_includes_are_recognized() {
+    for yaml in [
+        "include: ci/build.yml",
+        "include : ci/build.yml",
+        "  include:\n    - local: ci/build.yml",
+        "\"include\": ci/build.yml",
+        "'include': ci/build.yml",
+        "'include' : ci/build.yml",
+        "Include: ci/build.yml",
+        "- include: ci/build.yml",
+        "? include\n: ci/build.yml",
+        "&base include: ci/build.yml",
+        "!!str include: ci/build.yml",
+        "{include: ci/build.yml}",
+        "job: {script: build, include: ci/build.yml}",
+        "jobs: [ {\"include\": ci/build.yml} ]",
+        "\"inc\\x6cude\": ci/build.yml",
+        "trigger:\n  include: ci/child.yml",
+    ] {
+        assert!(declares_include(yaml), "{yaml:?}");
+    }
+    for yaml in [
+        "# include: ci/build.yml",
+        "script:\n  - echo include the tests",
+        "name: include",
+        "includes_nothing: true",
+        "stages: [build, test]",
+    ] {
+        assert!(!declares_include(yaml), "{yaml:?}");
+    }
+}
+
 /// Names of the withdrawn binaries, as a workflow would name them.
 const WITHDRAWN_BINARIES: &[&str] = &[
     "nexus-server",
@@ -1149,6 +1185,64 @@ fn p0_fg_standalone_readme_names_every_withdrawn_binary() {
     );
 }
 
+/// Whether YAML text declares an `include` key (GitLab CI's way of adding
+/// jobs from other files, also inside `trigger:`), in any form a YAML parser
+/// accepts on one line: a block mapping key, optionally after a list-item
+/// dash, a complex-key `?`, an anchor or a tag, bare or quoted, with any
+/// spacing before the colon; a complex key `? include` whose colon follows
+/// on the next line; or any mention of `include` after a `{` or `[` on the
+/// line (a flow mapping). A double-quoted key holding an escape counts too,
+/// since an escape can spell `include`. Letter case is ignored. Lines that
+/// hold only a comment are skipped; text inside block scalars is read like
+/// any other line, which errs on the side of refusing.
+fn declares_include(yaml: &str) -> bool {
+    yaml.lines().any(|raw| {
+        let mut line = raw.trim_start();
+        if line.is_empty() || line.starts_with('#') {
+            return false;
+        }
+        if let Some(flow) = line.find(['{', '[']) {
+            if line[flow..].to_ascii_lowercase().contains("include") {
+                return true;
+            }
+        }
+        let mut complex_key = false;
+        loop {
+            if let Some(rest) = line
+                .strip_prefix('-')
+                .filter(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+            {
+                line = rest.trim_start();
+            } else if let Some(rest) = line
+                .strip_prefix('?')
+                .filter(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+            {
+                complex_key = true;
+                line = rest.trim_start();
+            } else if line.starts_with('&') || line.starts_with('!') {
+                line = line
+                    .find(char::is_whitespace)
+                    .map_or("", |end| line[end..].trim_start());
+            } else {
+                break;
+            }
+        }
+        let (key, rest) = match line.chars().next() {
+            Some(quote @ ('"' | '\'')) => match line[1..].find(quote) {
+                Some(end) => (&line[1..=end], &line[end + 2..]),
+                None => (&line[1..], ""),
+            },
+            _ => match line.find(':') {
+                Some(colon) => (line[..colon].trim_end(), &line[colon..]),
+                None => (line.trim_end(), ""),
+            },
+        };
+        let escaped = line.starts_with('"') && key.contains('\\');
+        let is_key = rest.trim_start().starts_with(':') || complex_key;
+        is_key && (escaped || key.eq_ignore_ascii_case("include"))
+    })
+}
+
 /// No workflow builds, installs, uploads or publishes a withdrawn binary, a
 /// container image or a chart, and the release publishes only the desktop
 /// installers. (Workflows still compile and test the withdrawn packages.)
@@ -1185,10 +1279,7 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
     );
     let gitlab = read(&root.join(".gitlab-ci.yml"));
     assert!(
-        !gitlab
-            .lines()
-            .map(str::trim_start)
-            .any(|line| line.starts_with("include:")),
+        !declares_include(&gitlab),
         ".gitlab-ci.yml must include no other file"
     );
     for config in &configs {
