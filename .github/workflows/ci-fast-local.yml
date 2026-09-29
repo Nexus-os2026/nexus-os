@@ -133,6 +133,16 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked
 
+      # P0-FINAL-GATE item D: the live native webview boundary harness (see
+      # ci.yml). It binds loopback ports 1420 and 1421 on this runner.
+      - name: Live webview boundary harness (item D)
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v xvfb-run >/dev/null || { echo "::error::xvfb-run is missing on this runner"; exit 1; }
+          xvfb-run -a -s "-screen 0 1280x1024x24" cargo test -p nexus-desktop-backend --locked --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live.log
+          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live.log
+
       # P0-002C4D2 / P0-002C4C3: the same packaged-toolchain checks as ci.yml.
       # The checkout above was cleaned, so the toolchain is always assembled
       # fresh (assemble.mjs refuses an existing output directory and checks
@@ -158,6 +168,16 @@ jobs:
           set -o pipefail
           cargo test -p nexus-desktop-backend --locked --lib -- p0_002c4d2_assembled_ p0_002c4c3_packaged_ 2>&1 | tee packaged-toolchain.log
           grep -q 'test result: ok. 13 passed' packaged-toolchain.log
+
+      # P0-FINAL-GATE item D: the same harness on tauri's release path.
+      - name: Live webview boundary harness, release profile (item D)
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd app && npm ci && npm run build)
+          xvfb-run -a -s "-screen 0 1280x1024x24" cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live-release.log
+          grep -q '^\[live\] tauri profile: release' webview-boundary-live-release.log
+          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live-release.log
 
   fast-frontend:
     runs-on: [self-hosted, Linux, X64, nexus-local]

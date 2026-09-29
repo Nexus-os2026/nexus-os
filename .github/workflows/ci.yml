@@ -116,7 +116,8 @@ jobs:
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev \
             glib-2.0 \
-            pkg-config
+            pkg-config \
+            xvfb
 
       - name: Install Rust 1.94.0
         uses: dtolnay/rust-toolchain@1.94.0
@@ -142,6 +143,17 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --locked
+
+      # P0-FINAL-GATE item D: the live native webview boundary harness (real
+      # Wry runtime, production context and main-window builder, dev profile):
+      # navigation and redirects to a non-app origin are refused, and a
+      # non-app document gets no application command.
+      - name: Live webview boundary harness (item D)
+        shell: bash
+        run: |
+          set -o pipefail
+          xvfb-run -a -s "-screen 0 1280x1024x24" cargo test -p nexus-desktop-backend --locked --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live.log
+          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live.log
 
       # P0-002C4D2: assemble this target's packaged Builder toolchain, run the
       # trusted-entry tests with its own Node, and verify the real assembled
@@ -170,6 +182,17 @@ jobs:
           set -o pipefail
           cargo test -p nexus-desktop-backend --locked --lib -- p0_002c4d2_assembled_ p0_002c4c3_packaged_ 2>&1 | tee packaged-toolchain.log
           grep -q 'test result: ok. 13 passed' packaged-toolchain.log
+
+      # P0-FINAL-GATE item D: the same harness on tauri's release path
+      # (custom-protocol build with the embedded frontend and production CSP).
+      - name: Live webview boundary harness, release profile (item D)
+        shell: bash
+        run: |
+          set -o pipefail
+          (cd app && npm ci && npm run build)
+          xvfb-run -a -s "-screen 0 1280x1024x24" cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live-release.log
+          grep -q '^\[live\] tauri profile: release' webview-boundary-live-release.log
+          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live-release.log
 
   test-frontend:
     runs-on: ubuntu-latest
@@ -350,6 +373,17 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked
 
+      # P0-FINAL-GATE item D: the live native webview boundary harness (real
+      # Wry runtime, production context and main-window builder, dev profile):
+      # navigation and redirects to a non-app origin are refused, and a
+      # non-app document gets no application command.
+      - name: Live webview boundary harness (item D)
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p nexus-desktop-backend --locked --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live.log
+          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live.log
+
       # P0-002C4D2: assemble this target's packaged Builder toolchain, run the
       # trusted-entry tests with its own Node, and verify the real assembled
       # bytes through the embedded manifest (packaged backend test build).
@@ -377,6 +411,17 @@ jobs:
           set -o pipefail
           cargo test -p nexus-desktop-backend --locked --lib -- p0_002c4d2_assembled_ p0_002c4c3_packaged_ 2>&1 | tee packaged-toolchain.log
           grep -q 'test result: ok. 13 passed' packaged-toolchain.log
+
+      # P0-FINAL-GATE item D: the same harness on tauri's release path
+      # (custom-protocol build with the embedded frontend and production CSP).
+      - name: Live webview boundary harness, release profile (item D)
+        shell: bash
+        run: |
+          set -o pipefail
+          (cd app && npm ci && npm run build)
+          cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live-release.log
+          grep -q '^\[live\] tauri profile: release' webview-boundary-live-release.log
+          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live-release.log
 
   test-windows:
     runs-on: windows-latest
@@ -469,6 +514,17 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked
 
+      # P0-FINAL-GATE item D: the live native webview boundary harness (real
+      # Wry runtime, production context and main-window builder, dev profile):
+      # navigation and redirects to a non-app origin are refused, and a
+      # non-app document gets no application command.
+      - name: Live webview boundary harness (item D)
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p nexus-desktop-backend --locked --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live.log
+          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live.log
+
       # P0-002C4D2: assemble this target's packaged Builder toolchain, run the
       # trusted-entry tests with its own Node, and verify the real assembled
       # bytes through the embedded manifest (packaged backend test build).
@@ -496,6 +552,17 @@ jobs:
           set -o pipefail
           cargo test -p nexus-desktop-backend --locked --lib -- p0_002c4d2_assembled_ p0_002c4c3_packaged_ 2>&1 | tee packaged-toolchain.log
           grep -q 'test result: ok. 13 passed' packaged-toolchain.log
+
+      # P0-FINAL-GATE item D: the same harness on tauri's release path
+      # (custom-protocol build with the embedded frontend and production CSP).
+      - name: Live webview boundary harness, release profile (item D)
+        shell: bash
+        run: |
+          set -o pipefail
+          (cd app && npm ci && npm run build)
+          cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee webview-boundary-live-release.log
+          grep -q '^\[live\] tauri profile: release' webview-boundary-live-release.log
+          grep -q '^test webview_boundary_live ... ok$' webview-boundary-live-release.log
 
   test-python:
     runs-on: ubuntu-latest
