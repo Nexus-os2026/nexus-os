@@ -101,3 +101,76 @@ fn p0_fg_scheduled_ticks_refuse_a_transcendent_agent_before_any_state_change() {
         Some(AgentState::Stopped)
     );
 }
+
+/// P0-FINAL-GATE (items G and K, composed): stream 5 made `create_agent` and
+/// `start_agent` refuse a manifest schedule the scheduler rejects, and stream
+/// 6 bounded agent schedules to at most once per minute. Composed, a
+/// sub-minute schedule is refused at both with the scheduler's bounded
+/// reason, and nothing is saved, registered, scheduled or audited.
+#[test]
+fn p0_fg_sub_minute_manifest_schedules_fail_create_and_start() {
+    let state = AppState::new_in_memory();
+    // Registration may start a scheduler task; nothing here polls it.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let scheduled = |name: &str, schedule: Option<&str>| {
+        json!({
+            "name": name,
+            "version": "1.0.0",
+            "capabilities": ["llm.query"],
+            "fuel_budget": 1000,
+            "schedule": schedule,
+            "default_goal": "p0fg scheduled goal",
+        })
+        .to_string()
+    };
+    let snapshot = |state: &AppState| {
+        (
+            state.db.list_agents().unwrap().len(),
+            state.supervisor.lock().unwrap().health_check().len(),
+            state.meta.lock().unwrap().len(),
+            state.agent_scheduler.list().len(),
+            state.audit.lock().unwrap().events().len(),
+        )
+    };
+    const ONCE_PER_MINUTE: &str = "invalid cron expression: an agent schedule fires at most once per minute, so its seconds field must be one value from 0 to 59";
+    let sub_minute = "*/30 * * * * *";
+
+    let before = snapshot(&state);
+    assert_eq!(
+        crate::create_agent(&state, scheduled("sub-minute-created", Some(sub_minute))),
+        Err(ONCE_PER_MINUTE.to_string())
+    );
+    assert_eq!(snapshot(&state), before);
+
+    let stored = crate::create_agent(&state, scheduled("sub-minute-stored", None)).unwrap();
+    crate::stop_agent(&state, stored.clone()).unwrap();
+    state
+        .db
+        .save_agent(
+            &stored,
+            &scheduled("sub-minute-stored", Some(sub_minute)),
+            "stopped",
+            0,
+            "native",
+        )
+        .unwrap();
+    let before = snapshot(&state);
+    assert_eq!(
+        crate::start_agent(&state, stored.clone()),
+        Err(ONCE_PER_MINUTE.to_string())
+    );
+    assert_eq!(snapshot(&state), before);
+    assert_eq!(
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .get_agent(Uuid::parse_str(&stored).unwrap())
+            .map(|handle| handle.state),
+        Some(AgentState::Stopped)
+    );
+}
