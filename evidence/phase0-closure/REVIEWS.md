@@ -172,3 +172,31 @@ npm changes development-only with sha512 integrity.
 | 2 | should-fix | The governed plan path drops a whole cost record when the model-supplied project name exceeds the new bounds or history is full. | S6: sanitise the name to the bound and report refusals. |
 | 3 | should-fix | The voice probe fix is not shown on the GPU-mismatch host; voice tests may download models. | S6: offline test environment; local evidence with and without the GPU mask; the workflow mask decision stays with the coordinator. |
 | 4-10 | note | Variant guard asserts text only (the composed branch has a zero-model-call test); aws-lc-sys system library auto-detection; frontend error stderr not rate-limited; the cron refusal echoes caller text; latent sub-minute CronTrigger; benchmark NaN on a refused arena run; a FIFO at the budget file blocks. | S6 truncates the echo; the rest recorded. |
+
+### S4 repairs (`9b19d6c5..5dc2229a`, composed at `35b3b26f`)
+
+Six conductor benchmarks that sent a provider key as a bearer token on
+curl's command line are withdrawn on the J1 pattern (18 withdrawn binaries in
+total: the protocols server and alias, nexus-cli, nx, coding-agent,
+social-poster-agent, the nx-* harness binaries and these six); gateway module
+and router constructor pinned as withdrawn entry APIs; build scripts of the
+packages with a withdrawn entry point pinned; bench targets inventoried;
+recipes and CI configurations in dot directories covered; README and
+benchmark reports updated (historical results kept); the recipe walk derives
+skipped build output from the root `.gitignore` (resolving a composition
+conflict with the P0-002C4D2 toolchain guard, which S4's earlier walk had
+tripped by naming the toolchain directory). Coordinator commits `2ac27366`
+(empty benchmark process-site registry) and `51240bee` (guard rows).
+Composed desktop suite: 413 passed, 0 failed. Re-review assigned to S5.
+
+### Re-review of the S3 repairs, by S4
+
+Verdict: **B2, B3 and SF4 fixed and tested** (each fails when reverted, also
+verified by the reviewer's own reverts); no weakened assertion; in-region
+edits. Follow-up assigned to S3: the desktop Nexus Code diagnostics and
+provider auto-detection still run `which` from PATH (the "runs no program to
+find Ollama" claim was too broad); a test stand-in that does not read the
+request body (Windows reset risk); no-redirect for the desktop swarm's
+Anthropic client; a crate-wide no-client guard; a doc correction. Response
+size caps for the remaining credentialed providers are optional (else a
+non-claim).
