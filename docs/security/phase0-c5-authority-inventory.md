@@ -1247,7 +1247,8 @@ The guard also requires the registries `CREDENTIAL_CURL_SITES`
 (`fg_approval` 18, `fg_egress` 16, `fg_reliability` 12, `fg_secrets` 11,
 `fg_standalone` 12, `fg_webview` 11: 80 guards) must be named in the rows
 above, so a guard cannot be removed, renamed or added unreviewed without
-failing the final guard. Item-level tests elsewhere (the kernel, connector,
+failing the final guard. [P0-LINUX-FINAL-R1: now 45 rows naming 141 guards,
+and 82 fg guards (`fg_egress` 18); see §11.8.] Item-level tests elsewhere (the kernel, connector,
 crate and package tests the dossier names) are pinned only where a row names
 them.
 
@@ -1344,7 +1345,8 @@ stage; not changed here):
 - `deny.toml`: the RUSTSEC-2026-0097 note ("no semver-compatible bump")
   contradicts the advisory's fixed versions, and its RUSTSEC-2023-0071 (rsa)
   ignore, like those in `audit.toml` and `.gitlab-ci.yml`, is stale since rsa
-  left the lockfile.
+  left the lockfile. [Resolved in P0-LINUX-FINAL-R1: the note and the stale
+  ignores are gone and `audit.toml` is removed; see §11.8.]
 - `voice/`: `python -m pytest` runs the repository's unittest shim
   (`voice/pytest.py`), not pytest.
 - Documents that still describe withdrawn surfaces: `docs/NIST_800_53_MAPPING.md`
@@ -1355,3 +1357,46 @@ stage; not changed here):
   `http://localhost:3000`, the withdrawn J1 server's former port.
 - `.github/MIRROR_ONLY.md` says GitHub is a mirror and CI runs on GitLab;
   the checkpoint evidence comes from the GitHub workflows.
+
+### 11.8 P0-LINUX-FINAL-R1
+
+This section records what P0-LINUX-FINAL-R1 changed. Nothing here approves
+an item or declares FG1, the Final Gate or Phase Zero complete.
+
+- **Platform scope.** By the Owner's decision the Phase Zero target is Linux
+  only. `.github/workflows/ci.yml` is the Linux final gate (`test-linux`,
+  `security-audit-linux`, `test-frontend`, `test-python`); the Windows and
+  macOS jobs are kept unchanged in the manual-only
+  `.github/workflows/ci-portability.yml`. This inventory makes no Windows or
+  macOS claim: where it describes their behaviour (for example the vault key
+  file on Windows), it records code that was read.
+- **Architect decisions.** Decisions A to M for Linux Phase Zero are
+  recorded as dispositions in the dossier, "Architect decisions
+  (P0-LINUX-FINAL-R1)". For this inventory: `PATH` for fixed-name,
+  fixed-argument helpers is operator launch configuration (A);
+  `AmbientResource` is acceptable as the C5 closure reason (H); the
+  developer and benchmark binaries may remain, not shipped, pinned by the
+  inventory guard and not documented as runtime entry points (M); item D is
+  accepted on Linux only as the combined boundary, with the navigation guard
+  load-bearing (K).
+- **Network clients.** Every credential-bearing HTTP client reachable in the
+  Linux desktop runtime now follows no redirect and is bounded in total time
+  and size; the final inventory is in dossier item C. Two guards were added
+  to `fg_egress` and pinned in the "helper, download or messaging request
+  left unowned or unbounded" row:
+  `p0_r1_email_requests_are_bounded_and_follow_no_redirect` and
+  `p0_r1_deploy_token_requests_use_the_bounded_client`.
+- **Final trust-surface guard.** 45 rows naming 141 guards. The completeness
+  check covers 82 fg guards: `fg_approval` 18, `fg_egress` 18,
+  `fg_reliability` 12, `fg_secrets` 11, `fg_standalone` 12, `fg_webview` 11.
+  The IPC counts of §11.3 are unchanged (804 registered, 154 closed).
+- **Dependency governance.** One exception set of 10 IDs in `deny.toml`,
+  applied by `scripts/security-audit.sh` with pinned cargo-audit 0.22.1 and
+  cargo-deny 0.19.6; the root `audit.toml` (never read by cargo-audit) and the
+  stale ignores are removed (the §11.7 note on them is resolved).
+  RUSTSEC-2026-0316 (wasmtime 43.0.2) is not accepted; the gate fails on it
+  until the Architect decides. Details: dossier, "Linux security gate".
+- **Correction to a mission note.** The mission's platform-scope evidence
+  file says the Windows and macOS jobs and harness steps remain in `ci.yml`;
+  at the R1 head they are in `ci-portability.yml`, and `ci.yml` has no
+  Windows or macOS job.
