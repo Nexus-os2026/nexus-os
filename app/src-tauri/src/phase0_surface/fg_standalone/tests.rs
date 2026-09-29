@@ -973,13 +973,18 @@ fn ignored_anchored_directories() -> Vec<IgnoredDirectory> {
     directories
 }
 
-/// The files git tracks in this checkout, when git and a checkout are
-/// available; `None` otherwise (a source archive, or no git). The walk skips
-/// build output, dependencies and ignored local state, so a recipe or
-/// pipeline file tracked there anyway (for example force-added) is found
-/// through this list instead.
+/// The files git tracks in this checkout. `None` when there is no checkout
+/// (`root` has no `.git`, as in a source archive) or git is not installed.
+/// In a checkout with git installed, a git that fails (for example a
+/// `safe.directory` refusal or a broken index) fails the guard: the walk
+/// alone is not trusted there. The walk skips build output, dependencies and
+/// ignored local state, so a recipe or pipeline file tracked there anyway
+/// (for example force-added) is found through this list instead.
 fn tracked_files(root: &Path) -> Option<Vec<String>> {
-    let output = std::process::Command::new("git")
+    if !root.join(".git").exists() {
+        return None;
+    }
+    let output = match std::process::Command::new("git")
         .arg("-C")
         .arg(root)
         .args(["ls-files", "-z"])
@@ -987,17 +992,26 @@ fn tracked_files(root: &Path) -> Option<Vec<String>> {
         .env_remove("GIT_WORK_TREE")
         .env_remove("GIT_INDEX_FILE")
         .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
         .output()
-        .ok()?;
-    output.status.success().then(|| {
+    {
+        Ok(output) => output,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => panic!("git could not be run in this checkout: {error}"),
+    };
+    assert!(
+        output.status.success(),
+        "`git ls-files` failed in this checkout ({}): {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    Some(
         output
             .stdout
             .split(|byte| *byte == 0)
             .filter(|path| !path.is_empty())
             .map(|path| String::from_utf8_lossy(path).into_owned())
-            .collect()
-    })
+            .collect(),
+    )
 }
 
 /// Every file of the repository as a workspace-relative path, in sorted
