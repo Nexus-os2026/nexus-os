@@ -130,3 +130,17 @@ six stores with owner-only archives; all hunks within granted regions.
 - Coordinator composition commit `910063d0`: the consent module checks the
   kernel's simulation and arena limits (no desktop copies); `093c5642`
   registers the S5 closures and guards. Re-review assigned to S6.
+
+### Re-review of the S5 repairs and the composition commits, by S6
+
+Verdict: **no blocker**. No remaining route registers, restores, starts,
+schedules or gives a goal or tool call to an autonomy-6 agent (each route
+checked). The composition commits `0d08a380`, `910063d0` and `093c5642`
+weaken no assertion; the composed bounds satisfy both streams' guards.
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| 1 | should-fix (unreachable today) | The scheduled executor restarts a stopped registered agent (and records a skip audit) before the goal refusal. | Coordinator composition commit: the L6 check first in `ScheduledGoalExecutor::execute`, with a test. |
+| 2 | should-fix | Warden fail-closed is satisfied by any caller-created agent named `nexus-warden` (the only agent that can match in production). No authority gain (the review toggle is interface-owned), but the claim and the audit trail are wrong. | S5: in Phase Zero an enabled review denies without any name lookup; the test updated; toggle ownership recorded as a non-claim. |
+| 3-8 | note | `resume_agent` without an L6 check; raw id comparison in the stored-record check; `== 6`; a goal-assignment guard scanning two files; the directory walker's use not pinned; `review_consent_batch` resolving transcendent rows. | S5 follow-up. |
+| 9, 10 | note | Disabled startup-scheduling code without an L6 filter; a pre-existing cron-interval bug in the moved loop code. | Recorded. |
