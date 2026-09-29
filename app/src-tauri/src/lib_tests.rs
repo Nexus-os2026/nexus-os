@@ -2946,8 +2946,9 @@ fn test_approve_consent_request() {
 /// P0-FINAL-GATE (item G): approving a transcendent request (one enqueued
 /// before this closure) used to create or restart an L6 agent on any caller's
 /// word. It is now refused before the request is resolved: nothing is
-/// created, started, resolved or audited as approved, and a batch approval
-/// cannot resolve it either. The request can still be denied.
+/// created, started, resolved or audited as approved. A batch approval
+/// cannot resolve it either, nor can a review-each resolution (review W8).
+/// The request can still be denied.
 #[test]
 fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
     use crate::phase0_surface::{closed, Closure};
@@ -3005,6 +3006,17 @@ fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
         batch_approve_consents(&state, "goal-transcendent".into()).map(|_| ()),
         Err(closed("batch_approve_consents", Closure::ApprovalRequired))
     );
+    // Review W8: nor can it be resolved into review-each mode.
+    for id in ["c-transcendent-create", "c-transcendent-activate"] {
+        assert_eq!(
+            review_consent_batch(&state, id.into()).map(|_| ()),
+            Err(closed("review_consent_batch", Closure::ApprovalRequired))
+        );
+    }
+    assert!(!state
+        .cognitive_runtime
+        .review_each_mode(&pending_agent_id)
+        .unwrap_or(false));
 
     let pending = state.db.load_pending_consent().unwrap();
     assert_eq!(pending.len(), 2);
@@ -3020,6 +3032,7 @@ fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
     for approval in [
         "consent_approved",
         "consent_batch_approved",
+        "consent_batch_review_each",
         "transcendent_creation_approved",
     ] {
         assert!(

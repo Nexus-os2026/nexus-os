@@ -321,9 +321,9 @@ fn position(body: &str, needle: &str) -> usize {
 /// - restore registers no level-6 record and writes nothing to it;
 /// - the prebuilt load skips a level-6 manifest before the manifest is
 ///   registered, stored, named or published;
-/// - `approve_consent_request` and `batch_approve_consents` refuse a
-///   transcendent request before resolving anything, and nothing in the
-///   consent module creates or starts an agent;
+/// - `approve_consent_request`, `batch_approve_consents` and
+///   `review_consent_batch` refuse a transcendent request before resolving
+///   anything, and nothing in the consent module creates or starts an agent;
 /// - nothing enqueues a transcendent request any more.
 ///
 /// (The earlier version of this guard said each such route refused first.
@@ -416,17 +416,23 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
     assert!(skip < position(&restore, "start_agent_with_id("));
     assert!(skip > position(&restore, "validate_stored_manifest(&manifest)"));
 
-    for (surface, name) in [
-        ("approve_consent_request", "approve_consent_request"),
-        ("batch_approve_consents", "batch_approve_consents"),
+    let single = "ifconsent_row.operation_type==TRANSCENDENT_CREATION{";
+    let batch = "ifconsent_rows.iter().any(|row|row.operation_type==TRANSCENDENT_CREATION){";
+    for (surface, name, condition) in [
+        ("approve_consent_request", "approve_consent_request", single),
+        ("batch_approve_consents", "batch_approve_consents", batch),
+        // Review W8: review-each does not resolve one either.
+        ("review_consent_batch", "review_consent_batch", single),
     ] {
         let (_, body) = fn_shape(consent, name);
-        let refusal = position(&body, &denial(surface, "ApprovalRequired"));
+        let refusal = position(
+            &body,
+            &format!("{condition}{}}}", denial(surface, "ApprovalRequired")),
+        );
         assert!(
             refusal < position(&body, "resolve_consent("),
             "{name}: refused after resolving"
         );
-        assert!(body.contains("TRANSCENDENT_CREATION"), "{name}");
     }
     let consent_code = code_lines(consent);
     for forbidden in [

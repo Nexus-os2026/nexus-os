@@ -496,6 +496,15 @@ pub(crate) fn review_consent_batch(
         .iter()
         .find(|row| row.id == consent_id)
         .ok_or_else(|| format!("consent request '{consent_id}' not found or already resolved"))?;
+    // P0-FINAL-GATE (item G, review W8): a transcendent request is not
+    // resolved into review-each mode either, as it cannot be approved: it is
+    // refused before anything changes, stays pending and can still be denied.
+    if consent_row.operation_type == TRANSCENDENT_CREATION {
+        return Err(crate::phase0_surface::closed(
+            "review_consent_batch",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
+    }
     let op_json: serde_json::Value =
         serde_json::from_str(&consent_row.operation_json).unwrap_or(json!({}));
     let source_surface = op_json
