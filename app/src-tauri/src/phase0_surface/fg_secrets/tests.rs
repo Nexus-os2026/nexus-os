@@ -352,6 +352,110 @@ fn p0_fg_e_vault_key_sources_are_validated_on_what_is_read() {
         ),
         "{run}"
     );
+
+    // P0-LINUX-FINAL-R2: the vault-scope inventory. Exactly the six current
+    // scopes are verified, verify_vault_key walks that list, and it runs
+    // before the only production SecretsFacade is built. A new scope cannot
+    // join the startup inventory without failing here; this is an inventory
+    // invariant, not proof that future code cannot misuse the generic API.
+    const CURRENT_VAULT_SCOPES: [&str; 6] = [
+        "llm",
+        "social",
+        "messaging.whatsapp",
+        "messaging.matrix",
+        "http",
+        "auth.oidc",
+    ];
+    let production = before_tests(&startup);
+    let declared = compact(production);
+    let declared = declared
+        .split("constVAULT_SCOPES:&[&str]=&[")
+        .nth(1)
+        .and_then(|rest| rest.split("];").next())
+        .expect("VAULT_SCOPES");
+    let scopes: Vec<&str> = declared
+        .trim_end_matches(',')
+        .split(',')
+        .map(|scope| scope.trim_matches('"'))
+        .collect();
+    assert_eq!(scopes, CURRENT_VAULT_SCOPES, "{declared}");
+    let verify = compact(&body(production, "fn verify_vault_key("));
+    assert!(verify.starts_with("forscopeinVAULT_SCOPES{"), "{verify}");
+    assert_eq!(
+        production.matches("SecretsFacade::new(").count(),
+        1,
+        "one production vault facade"
+    );
+    assert!(
+        compact(production).find("verify_vault_key(&sqlite)?;")
+            < compact(production).find("SecretsFacade::new("),
+        "the vault key is verified before the facade is built"
+    );
+
+    // Every scope a production source passes to the facade as a literal is
+    // one of the six (read and written stores alike).
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !name.starts_with('.')
+                    && !matches!(
+                        name.as_str(),
+                        "target" | "node_modules" | "tests" | "benches" | "dist"
+                    )
+                {
+                    walk(&path, out);
+                }
+            } else if name.ends_with(".rs") && !name.ends_with("tests.rs") {
+                out.push(path);
+            }
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut sources = Vec::new();
+    walk(&root, &mut sources);
+    let mut literal_scopes = std::collections::BTreeSet::new();
+    for path in &sources {
+        let text = normalized(&std::fs::read_to_string(path).unwrap_or_default());
+        let code = compact(before_tests(&text));
+        for call in ["get_secret(", "set_secret(", "delete_secret("] {
+            for (at, _) in code.match_indices(call) {
+                if code[..at].ends_with("fn") {
+                    continue;
+                }
+                // The call's argument list, parentheses balanced.
+                let args = &code[at + call.len()..];
+                let mut depth = 1usize;
+                let end = args
+                    .char_indices()
+                    .find(|&(_, c)| {
+                        match c {
+                            '(' => depth += 1,
+                            ')' => depth -= 1,
+                            _ => {}
+                        }
+                        depth == 0
+                    })
+                    .map_or(args.len(), |(end, _)| end);
+                // The scope is the first string literal argument.
+                if let Some(scope) = args[..end].split('"').nth(1) {
+                    literal_scopes.insert(scope.to_string());
+                }
+            }
+        }
+    }
+    assert!(!literal_scopes.is_empty(), "no facade call found");
+    for scope in &literal_scopes {
+        assert!(
+            CURRENT_VAULT_SCOPES.contains(&scope.as_str()),
+            "facade scope {scope:?} is not in the verified vault-scope inventory"
+        );
+    }
 }
 
 /// The Final Gate items A and H closure reason is bounded and echoes no

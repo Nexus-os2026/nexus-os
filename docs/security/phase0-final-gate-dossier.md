@@ -7,9 +7,10 @@ as such; everything else is open for the Final Gate.
 
 P0-FG1 updates item J1 only: the withdrawal of `crates/nexus-server` is
 implemented on its validation branch, and Architect review is pending.
-[Update (P0-FINAL-GATE-CLOSURE): P0-FG1 is integrated into the authoritative
-branch at `71c47acb`, and its post-integration hosted run succeeded; Architect
-review of that evidence is pending. See item J.]
+[Update (P0-FINAL-GATE-CLOSURE), corrected by P0-LINUX-FINAL-R2: P0-FG1 is
+integrated into the authoritative branch at `71c47acb`, and its designated
+post-integration validation (hosted run #108) passed. J1 no longer waits for
+integration or Architect review. See item J.]
 
 **P0-FINAL-GATE-CLOSURE (internal work, not approval).** The Architect's
 closure mission implements contracts A–K, C5 and DEP on local component
@@ -20,7 +21,11 @@ are claims for Architect review, checked against the code; the internal
 reviews are recorded on the mission's evidence branch. Nothing here approves
 an item, accepts a risk, integrates a change, or declares FG1, the Final Gate
 or Phase Zero complete. Earlier text stays as it was; where it is now stale, a
-labelled correction or note says so.
+labelled correction or note says so. [P0-LINUX-FINAL-R2: headings below that
+say "Architect review pending" were written before the Architect's decisions.
+The current disposition of each item is in the Summary and in "Architect
+decisions (P0-LINUX-FINAL-R1)" and "Architect dispositions
+(P0-LINUX-FINAL-R2)" at the end of this dossier.]
 
 **P0-LINUX-FINAL-R1 (platform scope and Architect decisions).** By the
 Owner's decision, the Phase Zero active target is **Linux only**; Windows and
@@ -58,23 +63,28 @@ without a local same-user foothold or an operator mistake.
 
 ### On the closure candidate (P0-FINAL-GATE-CLOSURE)
 
-No row is closed, complete or approved: each awaits Architect review. The
-numbered decision requests are collected at the end of this dossier.
+No row declares the Final Gate or Phase Zero complete. [P0-LINUX-FINAL-R2
+correction: the rows no longer simply await Architect review.] The Architect's
+Linux Phase Zero dispositions are collected at the end of this dossier:
+decisions A–M (P0-LINUX-FINAL-R1) and the dispositions of requests 7, 9, 10,
+11, 14 and 19 (P0-LINUX-FINAL-R2). Each holds only within the limits and
+non-claims it states. The numbered decision requests are kept there as they
+were.
 
 | Item | Topic | Closure candidate | Status |
 |---|---|---|---|
-| A | Configuration encryption key | A new or changed credential is written only under the operator key `NEXUS_CONFIG_KEY`; legacy files open through an explicit two-key read path; a load never rewrites a file; protection changes are reported and audited | Repaired on the closure candidate (P0-FINAL-GATE-CLOSURE). For Linux Phase Zero the Architect accepted `NEXUS_CONFIG_KEY` as the operator key source (decision B) and legacy-read compatibility (decision C); the parts of decision requests 9 and 10 that A–M do not cover stay open |
+| A | Configuration encryption key | A new or changed credential is written only under the operator key `NEXUS_CONFIG_KEY`; legacy files open through an explicit two-key read path; a load never rewrites a file; protection changes are reported and audited | Repaired on the closure candidate (P0-FINAL-GATE-CLOSURE). For Linux Phase Zero the Architect accepted `NEXUS_CONFIG_KEY` as the operator key source (decision B) and legacy-read compatibility (decision C). Request 9 (R2): the legacy ambient derivation is bounded legacy compatibility only and never secret protection; every new or changed credential needs the operator key. Request 10 (R2): the closed token flows stay closed; reopening one needs a separately approved secret-store design |
 | B | Egress policy | The 11 IPC commands that sent requests to a caller-chosen destination are closed; the Ollama address is `OLLAMA_URL` or the fixed local default; agent web fetch and caller-destination external tools are refused; SearXNG only at `SEARXNG_URL`; search redirects https only | Repaired on the closure candidate. No address or DNS policy was added (remaining destinations are backend constants or operator configuration). A launch-time non-loopback `OLLAMA_URL` is operator configuration (decision F; plaintext HTTP risk stated in item B) |
 | C | Secrets in subprocess argv | Reachable credentials leave the command line; every reachable credential-bearing HTTP client follows no redirect and is bounded in total time and size (final Linux network-client inventory); `perception_init`, the credential-bearing external tools and credentialed MCP servers are closed or refused; remaining credential curl sites are counted, each CLI-only, latent or behind a closed route | Repaired on the closure candidate for Linux; the in-process transport is accepted by the Architect (decision E) |
 | C5 (contract) | Residual capability-measurement route | `cm_run_ab_validation` closed (`AmbientResource`) before any input use; the Groq-endpoint client takes only `GROQ_API_KEY` | Repaired on the closure candidate (the route denies before any input use); `AmbientResource` accepted as the closure reason (decision H) |
 | D | Privileged webview, navigation and IPC origin | On Linux: an app ACL grants all 804 application commands only to the `main` window at the local app origin; a navigation guard admits only the exact app origin (redirects included) and every new window is denied; frames are script-free or removed; a CSP with no third-party origin; a live native harness in the Linux gate | Accepted by the Architect for Linux Phase Zero as the combined boundary (decision K): the guard is load-bearing and the ACL alone is not sufficient. Windows and macOS deferred |
-| E | Operator overrides | The vault key file is validated on the opened file (Linux, macOS) and refused elsewhere; the vault key must open every stored secret before the vault is used; `key_env` other than `NEXUS_ENCRYPTION_KEY` is refused | Repaired on the closure candidate; the Linux vault key-file semantics accepted (decision D), Windows deferred; verification of every vault scope (request 11) not covered by A–M |
-| F | Network peers (Nexus Link) | `nexus_link_send_model` closed; the library admits no peer under an empty policy, matches exact IP socket addresses only, resolves no names and requires a shared secret and a key | Repaired on the closure candidate; transfer unavailable (no pairing exists); Architect review pending |
-| G | Approval channel | L6 (autonomy 6 or above) refused at create, start, resume, approve and review-each, never registered by restore or the prebuilt load, and refused for goals, autonomous loops, scheduled ticks and tool calls; caller-asserted approval commands closed; consent resolutions labelled `desktop-ui (unverified)`; self-improvement recorded truthfully; an enabled Warden review denies | Repaired on the closure candidate; no out-of-band approval exists (non-claim). Stored L6 records stay untouched but inert, and `desktop-ui (unverified)` is an audit channel label, not a verified identity (decision G); the other parts of request 14 are not covered by A–M |
-| H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged. Decision request 10 (reopening these flows) is not covered by A–M |
+| E | Operator overrides | The vault key file is validated on the opened file (Linux, macOS) and refused elsewhere; the vault key must open every stored secret before the vault is used; `key_env` other than `NEXUS_ENCRYPTION_KEY` is refused | Repaired on the closure candidate; the Linux vault key-file semantics accepted (decision D), Windows deferred. Request 11 (R2): accepted for Linux after the inventory guard; the six current vault scopes are verified before the facade is installed; no protection is claimed for a future scope that is not added to and verified by that inventory |
+| F | Network peers (Nexus Link) | `nexus_link_send_model` closed; the library admits no peer under an empty policy, matches exact IP socket addresses only, resolves no names and requires a shared secret and a key | Repaired on the closure candidate; transfer unavailable (no pairing exists); no separate Architect disposition is recorded for this item |
+| G | Approval channel | L6 (autonomy 6 or above) refused at create, start, resume, approve and review-each, never registered by restore or the prebuilt load, and refused for goals, autonomous loops, scheduled ticks and tool calls; caller-asserted approval commands closed; consent resolutions labelled `desktop-ui (unverified)`; self-improvement recorded truthfully; an enabled Warden review denies | Repaired on the closure candidate; no out-of-band approval exists (non-claim). Stored L6 records stay untouched but inert, and `desktop-ui (unverified)` is an audit channel label, not a verified identity (decision G). Request 14 (R2): IPC HITL approval is not security authority and not verified human identity; it is only a UX/consent signal whose released operation is bounded by the backend-owned Phase Zero executor policy |
+| H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged. Request 10 (R2): not an active Phase Zero blocker while these flows stay closed; reopening any of them needs a separately approved secret-store design and mission; not permanently solved |
 | I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the desktop's Nexus Code checks start no process, but fixed-argument helpers still resolve from `PATH`, which the Architect accepted as operator launch configuration for fixed-name, fixed-argument helpers (decision A); owned-download cleanup covers a normal managed exit only (decision J) |
-| J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: post-integration run #108 succeeded, Architect review of that evidence pending. J2–J5: withdrawn on the closure candidate; the withdrawal accepted (decision L); the developer and benchmark binaries may remain, not shipped, inventory-guarded and not documented as runtime entry points (decision M) |
-| K | Reliability signals and resource bounds | `executes_python_code`: no retained hosted failure (evidence corrected); GPU-host voice stderr repaired; the duplicate binary name repaired by P0-FG1-R1 (integrated); resource surfaces bounded by refusal (see "Resource bounds") | Repaired or bounded on the closure candidate; the voice tests install from a hash-pinned Linux lock (R1); `ArenaRun` and the one-token minimum accepted as bounded compatibility debt (decision I); `executes_python_code` and the GPU host (request 7) not covered by A–M |
+| J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: integrated at `71c47acb`; its designated post-integration validation (run #108) passed. J2–J5: withdrawn on the closure candidate; the withdrawal accepted (decision L); the fixed wording, status 69 and the coordinator closure of D1, D2 and D4–D7 accepted for the current closure candidate under the inventory and withdrawal guards (request 19, R2); J2–J5 are not declared complete until the candidate is integrated and validated; the developer and benchmark binaries may remain, not shipped, inventory-guarded and not documented as runtime entry points (decision M) |
+| K | Reliability signals and resource bounds | `executes_python_code`: no retained hosted failure (evidence corrected); GPU-host voice stderr repaired; the duplicate binary name repaired by P0-FG1-R1 (integrated); resource surfaces bounded by refusal (see "Resource bounds") | Repaired or bounded on the closure candidate; the voice tests install from a hash-pinned Linux lock (R1); `ArenaRun` and the one-token minimum accepted as bounded compatibility debt (decision I); request 7 (R2): not a Linux Phase Zero blocker; `executes_python_code` is monitored debt, unreachable from the Phase Zero desktop executor, and the self-hosted GPU driver/library condition is Owner infrastructure; no general reliability claim for that actuator or that GPU host |
 | L | Screen observation from the interface | Unchanged since C5C: unbrokered observation is unavailable (Architect repair A) | No change in P0-FINAL-GATE-CLOSURE; a brokered mechanism is future work |
 | DEP (contract) | Dependency advisories | Measured on the final candidate's lockfiles: Cargo.lock 19 → 7 cargo-audit vulnerabilities (rsa removed with the unused `openidconnect`); cargo-deny advisory errors 16 → 10; npm (app) 14 → 6. R1: one pinned gate (`scripts/security-audit.sh`) with one exception set in `deny.toml` (10 IDs, then 11 with RUSTSEC-2026-0316); six unsound fixes; npm (app) 4, development-only | Governed by the R1 gate (see "Linux security gate"). RUSTSEC-2026-0316 (wasmtime 43.0.2, dynamic `Val` API, unused and unreachable) accepted narrowly by the Architect; 11-ID exception set |
 
@@ -91,7 +101,7 @@ numbered decision requests are collected at the end of this dossier.
 | G | Approval channel | Approvals arrive over webview IPC; the desktop swarm only drafts (C5C) | Open: design |
 | H | Secrets at rest outside the vault | OAuth token files are plaintext | Open: design |
 | I | PATH-resolved helper programs | Fixed arguments; `ollama serve` detached | Open: review |
-| J | Shipped non-desktop binaries | `crates/nexus-server` is unauthenticated on all interfaces | **Blocker**; J1 withdrawal implemented on the P0-FG1 validation branch, review pending |
+| J | Shipped non-desktop binaries | `crates/nexus-server` is unauthenticated on all interfaces | **Blocker**; J1 withdrawal implemented on the P0-FG1 validation branch, review pending [P0-LINUX-FINAL-R2: integrated at `71c47acb`; post-integration validation passed] |
 | K | Reliability signals | Windows `executes_python_code`, retained as debt | Open: debt |
 | L | Screen observation from the interface | Unbrokered observation is unavailable: the four capture routes are closed and enabling is refused (Architect decision) | Closed; a brokered mechanism is future work |
 
@@ -242,7 +252,9 @@ per item. J concerns a separately deployed server, not the desktop.
   - No key strength is measured.
   - Key material outside the configuration file is outside this contract.
 - **Decision requested.** Requests 9 and 10. [P0-LINUX-FINAL-R1: decisions B
-  and C for Linux Phase Zero; the uncovered parts stay open. See "Architect decisions (P0-LINUX-FINAL-R1)".]
+  and C for Linux Phase Zero. P0-LINUX-FINAL-R2: requests 9 and 10 are
+  dispositioned, with their non-claims, under "Architect dispositions
+  (P0-LINUX-FINAL-R2)".]
 
 ## B. Egress policy
 
@@ -448,7 +460,7 @@ example `/proc/<pid>/cmdline`) while the request runs. On Linux without
 | `protocols/src/mcp_client.rs`, `send_http` | MCP bearer token | yes: `mcp_host_*` with bearer auth |
 | `crates/nexus-perception/src/vision.rs`, `call_api` | Groq or NIM key, supplied by the interface to `perception_init_provider` | yes: the `perception_*` commands |
 | `kernel/src/actuators/image_gen.rs`, `kernel/src/actuators/tts.rs` | provider keys | no: the actuators are refused by the Phase Zero executor |
-| `crates/nexus-mcp/src/tools.rs` (`nexus_github`) | `GITHUB_TOKEN` | no: `mcp2_server_handle` is closed; `crates/nexus-server` reached it until its withdrawal (item J, P0-FG1, review pending) |
+| `crates/nexus-mcp/src/tools.rs` (`nexus_github`) | `GITHUB_TOKEN` | no: `mcp2_server_handle` is closed; `crates/nexus-server` reached it until its withdrawal (item J, P0-FG1, integrated at `71c47acb`) |
 | `crates/nexus-capability-measurement` (NIM, OpenRouter clients) | provider keys | no: the `cm_*` commands are closed |
 
 - **Exploitability.** Not from an untrusted surface of the desktop: a webview
@@ -940,7 +952,12 @@ selection stay closed.
   - The Architect's operator-trust decision above still applies: this is
     validation of an operator source, not proof of secure secret storage.
 - **Decision requested.** Request 11. [P0-LINUX-FINAL-R1: decision D, Linux
-  only; verification of every vault scope is not covered. See "Architect decisions (P0-LINUX-FINAL-R1)".]
+  only. P0-LINUX-FINAL-R2: accepted for Linux after the vault-scope inventory
+  guard (`p0_fg_e_vault_key_sources_are_validated_on_what_is_read`), which pins
+  exactly the six `VAULT_SCOPES`, that `verify_vault_key` iterates them and
+  runs before the one production `SecretsFacade::new`, and that every scope
+  literal a production caller passes to the facade is one of the six. See
+  "Architect dispositions (P0-LINUX-FINAL-R2)".]
 
 **Update and correction (P0-FINAL-GATE-CLOSURE, item B) to the endpoint list
 above.**
@@ -1138,7 +1155,7 @@ available release only what backend-owned policy already bounds.
   - The Warden review setting itself is interface-editable.
   - A stored agent whose manifest schedule the bounded scheduler now refuses
     cannot be started again: no route edits a stored manifest.
-- **Decision requested.** Request 14. [P0-LINUX-FINAL-R1: decision G. See "Architect decisions (P0-LINUX-FINAL-R1)".]
+- **Decision requested.** Request 14. [P0-LINUX-FINAL-R1: decision G. See "Architect decisions (P0-LINUX-FINAL-R1)". P0-LINUX-FINAL-R2: IPC HITL approval is not security authority; see "Architect dispositions (P0-LINUX-FINAL-R2)".]
 
 ## H. Secrets at rest outside the vault
 
@@ -1229,7 +1246,8 @@ left as they are.
     are user content and are not detected.
   - Backup exclusion is by name, directly under the data directory.
 - **Decision requested.** Request 10. [P0-LINUX-FINAL-R1: not covered by
-  decisions A to M; open.]
+  decisions A to M. P0-LINUX-FINAL-R2: not an active Phase Zero blocker while
+  these flows stay closed; see "Architect dispositions (P0-LINUX-FINAL-R2)".]
 
 ## I. PATH-resolved helper programs
 
@@ -1337,15 +1355,17 @@ scripts, the Homebrew formula, the WiX source, the systemd and launchd files,
 `scripts/build_windows_msi.ps1` and the GitLab `release-build` job. The GitHub
 release workflow also packaged `nexus-cli` until `39701bff`.]
 
-- **`crates/nexus-server` (`nexus-server`): BLOCKER. Withdrawal implemented
-  on the P0-FG1 validation branch; Architect review pending.**
+- **`crates/nexus-server` (`nexus-server`): BLOCKER at C5C. Withdrawal
+  implemented by P0-FG1 and integrated at `71c47acb` (P0-LINUX-FINAL-R2
+  correction of "on the validation branch; Architect review pending").**
   - **Status update (P0-FINAL-GATE-CLOSURE).** P0-FG1, with P0-FG1-R1 and the
     reviewed CI composition, is integrated into `rebuild/phase0-trust-boundary`
     at `71c47acb` by fast-forward (the Architect-approved candidate). The one
     designated post-integration hosted run, #108, succeeded on all five jobs
     (Linux, Windows, macOS, frontend, Python) and tested that exact commit.
-    Architect review of that evidence is pending; J1 is not declared
-    complete.
+    [Corrected by P0-LINUX-FINAL-R2: the designated post-integration
+    validation passed; J1 no longer waits for integration or Architect
+    review. This dossier itself declares nothing complete.]
   - **Before P0-FG1.**
     - `src/main.rs` bound `0.0.0.0` on ports 3000, 3001 and 3002 with no
       authentication and a permissive CORS layer (`Any` origin, method and
@@ -1423,8 +1443,8 @@ release workflow also packaged `nexus-cli` until `39701bff`.]
       test ran. Linking this package's binary stopped with `LNK1104: cannot
       open file ...\target\debug\deps\nexus_server.exe`, the output path the
       two binaries shared (item K).
-    - **Naming repair (P0-FG1-R1; hosted verification, review and integration
-      pending).** The protocols binary target is renamed
+    - **Naming repair (P0-FG1-R1; integrated at `71c47acb`, corrected by
+      P0-LINUX-FINAL-R2).** The protocols binary target is renamed
       `nexus-protocols-server`; its source file is unchanged. J1 is then the
       only workspace binary named `nexus-server`. The identification and the
       Windows fallback above are unchanged and stay as defensive checks; the
@@ -1461,7 +1481,7 @@ release workflow also packaged `nexus-cli` until `39701bff`.]
       J2/J3 disposition is unchanged and unresolved.
 - **protocols `nexus-server` (`protocols/src/bin/`, built by the root
   `Dockerfile`, compose and helm); renamed `nexus-protocols-server` by
-  P0-FG1-R1 (review and integration pending).**
+  P0-FG1-R1 (integrated at `71c47acb`).**
   - `protocols/src/server_runtime.rs` binds `NEXUS_HTTP_ADDR`, default
     `0.0.0.0:8080`.
   - Routes sit behind EdDSA JWT verification against a per-process gateway
@@ -1509,15 +1529,16 @@ release workflow also packaged `nexus-cli` until `39701bff`.]
   P0-FG1 withdrew it.
 - **Decision needed.**
   - J1 (`crates/nexus-server`): withdrawal implemented on the P0-FG1
-    validation branch; Architect review pending. It remains a Final-Gate
-    blocker until that review, integration and final verification.
-    [Update (P0-FINAL-GATE-CLOSURE): integrated at `71c47acb`; post-integration
-    run #108 succeeded; the Architect's review of that evidence is pending.]
+    validation branch. [Corrected by P0-LINUX-FINAL-R2: integrated at
+    `71c47acb`; its designated post-integration validation (run #108) passed.
+    J1 no longer waits for integration or Architect review.]
   - The others need review. [Update: withdrawn on the closure candidate,
     below.]
 
 **Repaired in P0-FINAL-GATE-CLOSURE (contracts J2–J5: standalone surfaces
-withdrawn; Architect review pending).** The Architect's disposition for
+withdrawn; accepted by decision L, request 19 dispositioned by
+P0-LINUX-FINAL-R2; J2–J5 not declared complete until the closure candidate is
+integrated and validated).** The Architect's disposition for
 Phase Zero is withdrawal of standalone execution and deployment paths that
 bypass the governed desktop, on the J1 pattern. J1's own identification
 checks are unchanged.
@@ -1625,7 +1646,8 @@ checks are unchanged.
     unchanged.
 - **`nexus-ui-repair` `HOME` race** (`crates/nexus-ui-repair/tests/report_format.rs`).
   Repaired on the P0-FG1 validation branch (test-only; Architect scope
-  extension); review pending.
+  extension); integrated with P0-FG1 at `71c47acb` (P0-LINUX-FINAL-R2
+  correction of "review pending").
   - A test defect: the tests of that binary run in parallel in one process,
     and each set and restored the process-wide `HOME`. One test could remove
     or change `HOME` while another built `Acl::default_scout()` from it.
@@ -1641,8 +1663,9 @@ checks are unchanged.
     alive.
   - The ACL code and the test assertions are unchanged.
 - **Duplicate binary name `nexus-server`** (`crates/nexus-server` and
-  `nexus-protocols`). Build debt for the Final Gate; naming repair on the
-  P0-FG1-R1 repair branch, verification and integration pending.
+  `nexus-protocols`). Build debt for the Final Gate; repaired by P0-FG1-R1,
+  integrated at `71c47acb` (P0-LINUX-FINAL-R2 correction of "verification and
+  integration pending").
   - Before P0-FG1-R1, one Cargo invocation that built both wrote them to the
     same output paths: `target/<profile>/nexus-server`, and on Windows also
     `deps\nexus_server.exe`. Cargo warns that this may become a hard error.
@@ -1660,8 +1683,9 @@ checks are unchanged.
     repaired candidate is green and the repair is reviewed and integrated.
   - [Update (P0-FINAL-GATE-CLOSURE): P0-FG1-R1 is integrated at `71c47acb`.
     Hosted runs #107 and #108 on that commit succeeded, and the #108 logs show
-    no output-filename collision warning; the Architect's review of the
-    post-integration evidence is pending.]
+    no output-filename collision warning. Corrected by P0-LINUX-FINAL-R2: the
+    designated post-integration validation passed, and this no longer waits
+    for Architect review.]
 
 **Corrections and repairs (P0-FINAL-GATE-CLOSURE, contract K; Architect review
 pending).**
@@ -1678,7 +1702,10 @@ pending).**
   mechanism: the deadline starts at spawn and covers interpreter start-up
   while about 2,100 kernel tests run in parallel. The Phase Zero executor
   never calls this actuator. No code or test changed. Proposed disposition:
-  monitored debt (decision request 7).
+  monitored debt (decision request 7). [P0-LINUX-FINAL-R2: the Architect's
+  disposition of request 7 is under "Architect dispositions
+  (P0-LINUX-FINAL-R2)"; no general reliability claim is made for this
+  actuator.]
 - **GPU-host voice CLI: repaired.** On the self-hosted runner, a GPU driver
   and library mismatch made torch's CUDA probe print a warning (CUDA Error
   804, seen in the fast-local Python job log), which broke the voice CLI's
@@ -1691,7 +1718,8 @@ pending).**
   Hugging Face hub offline (`voice/tests/_offline.py`), so the tests fetch
   no model from the hub; a test that needs an uncached model skips. The
   fast-local workflow keeps its CUDA mask (coordinator decision), and the
-  host driver is an Owner matter (decision request 7).
+  host driver is an Owner matter (decision request 7). [P0-LINUX-FINAL-R2:
+  Owner infrastructure; no reliability claim for that GPU host.]
 - **Voice dependencies pinned (P0-LINUX-FINAL-R1).** Both Linux gates
   (`test-python` in `ci.yml` and `fast-python` in `ci-fast-local.yml`)
   install the voice test environment from
@@ -2047,7 +2075,21 @@ are historical. At the R1 head:
   production source uses Wasmtime's component API, if the SDK sandbox stops
   using typed entry functions, if the latent-API needles are removed, or if
   the exception's recorded reasons change. The acceptance lapses if that API
-  use or reachability changes.
+  use or reachability changes. [P0-LINUX-FINAL-R2: the guard now fails if
+  production Nexus Rust uses or imports Wasmtime's `component` module at all,
+  in any spelling: a direct path, grouped or nested imports
+  (`wasmtime::{component::{Val}}`), `component as …` inside a group, an alias
+  of the crate (`use wasmtime as …`, `wasmtime::{self as …}`,
+  `extern crate wasmtime as …`) followed by `component`, whitespace or line
+  breaks inside the path, a glob import of the crate in a file that names
+  `component`, or a `Cargo.toml` that renames the `wasmtime` package. It
+  removes comments first, keeps `cfg`-disabled code in scope, and adds no
+  parser dependency. Its test-side probes check 15 spellings that must be
+  caught and 6 core uses that must be accepted. Negative controls on
+  `sdk/src/wasm_agent.rs` (a `cfg`-disabled nested group, and a grouped
+  alias) each failed the guard and were restored byte for byte. The pins on
+  the core `Engine`/`Linker`/`Module`/`Store` import, `get_typed_func` and the
+  latent-API needles are unchanged.]
 
 Evidence: the gate's exit 0 against the reviewed snapshot, the two negative
 controls (a removed exception and a stale exception each fail the gate) and
@@ -2362,22 +2404,119 @@ holds only within the limits it states.
 | 1 | Decision A |
 | 2 | Decision M |
 | 3, 4, 5, 6 | Addressed by R1 repair B ("Linux security gate" under "Dependency evidence"); RUSTSEC-2026-0316 accepted narrowly (Architect) |
-| 7 | Not covered by A–M: `executes_python_code` monitoring and the self-hosted GPU host |
+| 7 | Not covered by A–M; dispositioned by P0-LINUX-FINAL-R2 (below) |
 | 8 | Addressed by R1: the hash-pinned Linux voice lock (item K) |
-| 9 | Decisions B and C; the first-run default for a missing file and the ambient-key first save are not covered |
-| 10 | Not covered: whether an approved secret store later reopens the closed token flows |
-| 11 | Decision D (Linux); verification of every vault scope is not covered |
+| 9 | Decisions B and C; the rest dispositioned by P0-LINUX-FINAL-R2 (below) |
+| 10 | Not covered by A–M; dispositioned by P0-LINUX-FINAL-R2 (below) |
+| 11 | Decision D (Linux); vault-scope verification dispositioned by P0-LINUX-FINAL-R2 (below) |
 | 12 | Decision E |
 | 13 | Decision F |
-| 14 | Decision G; the other questions of the request are not covered |
+| 14 | Decision G; the rest dispositioned by P0-LINUX-FINAL-R2 (below) |
 | 15 | Decision H |
 | 16 | Decision I |
 | 17 | Decision J |
 | 18 | Decision K (Linux); Windows and macOS deferred |
-| 19 | Decision L; the withdrawal wording and the coordinator decisions D1, D2 and D4 to D7 are not restated by it |
+| 19 | Decision L; the withdrawal wording and the coordinator decisions D1, D2 and D4 to D7 dispositioned by P0-LINUX-FINAL-R2 (below) |
 
-**Open after P0-LINUX-FINAL-R1.**
+**Open after P0-LINUX-FINAL-R1.** [Historical; superseded by
+P0-LINUX-FINAL-R2, below.]
 - None for dependencies: RUSTSEC-2026-0316 (wasmtime 43.0.2) was accepted
   narrowly by the Architect (see "Linux security gate").
 - The parts of requests 7, 9, 10, 11, 14 and 19 listed as not covered above.
 - Windows and macOS, all items: deferred.
+
+## Architect dispositions (P0-LINUX-FINAL-R2)
+
+The Architect's dispositions of the parts of requests 7, 9, 10, 11, 14 and 19
+that decisions A–M did not cover. They replace the earlier statement that
+those parts were simply open. Each applies to **Linux Phase Zero** only and
+holds only within the limits and non-claims it states. None of them declares
+the Final Gate or Phase Zero complete or approved.
+
+- **Request 7 (item K).** Not a Linux Phase Zero blocker.
+  `executes_python_code` is monitored debt and is unreachable from the Phase
+  Zero desktop executor. The self-hosted runner's GPU driver and library
+  condition is Owner infrastructure. No general reliability claim is made for
+  that actuator or for that GPU host.
+- **Request 9 (item A).** Accepted only as bounded legacy compatibility. A
+  legacy plaintext or configuration file may remain, or may be explicitly
+  saved under the legacy ambient derivation, only when no credential is new
+  or changed. The ambient derivation is **not** secret protection and must
+  never be described as such. Every new or changed credential still requires
+  the operator key `NEXUS_CONFIG_KEY`, which must not be blank and must not
+  be the ambient derivation. The missing-file bootstrap is acceptable only
+  because it creates the default configuration, which contains no
+  credential; interface updates gain no bootstrap authority. No KDF-strength
+  or password-hardening claim is made.
+- **Request 10 (items A and H).** Not an active Phase Zero blocker while
+  OAuth sign-in, deploy and Supabase storage, and new messaging credential
+  persistence stay closed. Reopening any of those flows requires a separately
+  approved secret-store design and mission. They are not permanently solved.
+- **Request 11 (item E).** Accepted for Linux after the vault-scope inventory
+  guard: the six current vault scopes are verified before the facade is
+  installed. Windows remains deferred. No protection is claimed for a future
+  new scope unless it is added to, and verified by, that inventory.
+  - The guard is `p0_fg_e_vault_key_sources_are_validated_on_what_is_read`
+    (`fg_secrets`). It pins `VAULT_SCOPES` in `kernel/src/startup/mod.rs` to
+    exactly `llm`, `social`, `messaging.whatsapp`, `messaging.matrix`, `http`
+    and `auth.oidc`; checks that `verify_vault_key` iterates `VAULT_SCOPES`
+    and runs before the one production `SecretsFacade::new`; and checks that
+    every scope literal a production `get_secret`, `set_secret` or
+    `delete_secret` call passes is one of the six. Adding a seventh scope, or
+    a facade call with a scope outside the six, fails the guard until the
+    inventory and this disposition are updated.
+  - Production facade callers at the R2 head, all inside the six: `llm`
+    (the four swarm providers, `agents.rs`, `chat_llm.rs`, which also writes,
+    and the legacy migration, which writes), `social` (`twitter.rs` and the
+    legacy migration), `messaging.whatsapp`, `messaging.matrix`, `http`
+    (`http_connector.rs`) and `auth.oidc` (`auth/src/config.rs`).
+- **Request 14 (item G).** IPC HITL approval is **not** security authority
+  and is not verified human identity. It is acceptable in Linux Phase Zero
+  only as a UX and consent signal whose released operation is independently
+  bounded by the backend-owned Phase Zero executor policy. No actuator may
+  use `hitl_approved` as authority (pinned by
+  `p0_fg_g_no_actuator_reads_the_hitl_approval_flag`). Any future operation
+  that needs independent human authorization requires a separately approved
+  mechanism. Stored L6 records stay inert, as decision G records.
+- **Request 19 (item J).** The fixed withdrawal wording, the uniform status
+  69 and the coordinator closure of D1, D2 and D4 to D7 are accepted for the
+  current Phase Zero closure candidate, subject to the existing inventory and
+  withdrawal guards. J2–J5 are not declared complete until the closure
+  candidate is integrated and validated. Historical descriptions stay
+  historical.
+
+**Correction: P0-FG1 (J1).** P0-FG1 is integrated at the authoritative
+`71c47acb`, and its designated post-integration validation (hosted run #108)
+passed. J1 does not wait for integration or Architect review; earlier
+"pending" statements about it are corrected in place.
+
+**Final-Gate guard counts.** The figure "244 Final Gate guards" in earlier
+evidence was a name-pattern count over the Linux workspace test step: every
+test named with `p0_fg`, plus every test in the six `phase0_surface::fg_*`
+modules. It is not one module or one test binary. At `b8402283` (hosted run
+#110), the workspace test step (`cargo test --workspace --locked`) executed:
+
+| Selection | Count | Test binaries |
+|---|---|---|
+| `p0_fg_*` | 231 | desktop backend 116 (80 in the six `fg_*` modules), `nexus_kernel` 58, `nexus_connectors_llm` 25, `web_builder_agent` 13, `nexus_code` 8, `nexus_external_tools` 5, `nexus_swarm` 4, `nexus_capability_measurement` 1, `nexus_protocols` 1 |
+| `p0_fg1_*` (J1 withdrawal) | 11 | `phase0_withdrawal` 10, `binary_target_identity` 1 |
+| `p0_r1_*` (network-client bounds) | 8 | 2 of them in `fg_egress`; the others in `nexus_connectors_llm` 3, `nexus_swarm` 2, `web_builder_agent` 1 |
+
+- The earlier figure is 231 + 11 + the 2 `fg_egress` `p0_r1_*` tests = 244.
+- The Architect's framing is 231 `p0_fg_*` workspace test executions plus
+  the separate 13-test packaged Builder gate (a later step of the same Linux
+  job: 11 `p0_002c4c3_packaged_*` and 2 `p0_002c4d2_assembled_*` tests) =
+  244 selected checks.
+- The two totals are equal only numerically; they are different selections.
+  All the tests above passed in run #110.
+- P0-LINUX-FINAL-R2 adds no test function (its checks extend two existing
+  guards), so these counts are unchanged at the R2 head. The R2 evidence
+  recomputes them from the fast-local run on the R2 commit.
+
+**Open after P0-LINUX-FINAL-R2.**
+- No part of requests 7, 9, 10, 11, 14 or 19 is left undispositioned for
+  Linux Phase Zero. Each disposition keeps its non-claims, and the flows
+  request 10 names stay closed.
+- J2–J5 wait for the closure candidate's integration and validation.
+- Windows and macOS, all items: deferred.
+- This dossier declares neither the Final Gate nor Phase Zero complete.

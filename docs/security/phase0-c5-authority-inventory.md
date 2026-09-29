@@ -717,7 +717,8 @@ also forbids enabling the engine anywhere that holds it.
 The installers ship only the desktop app. See §10.8 for the recount, and
 dossier item J for the shipped non-desktop binaries: `crates/nexus-server`
 (a Final-Gate blocker; its withdrawal is implemented on the P0-FG1
-validation branch, review pending), the protocols server, `nexus-cli` and
+validation branch, review pending [P0-LINUX-FINAL-R2: integrated at
+`71c47acb`; post-integration validation passed]), the protocols server, `nexus-cli` and
 `nx`. None is reachable from desktop IPC or agents. The desktop depends on the libraries of
 `nexus-code` and `protocols`, never on their binaries.
 [P0-FINAL-GATE-CLOSURE: J1 is integrated and J2–J5 are withdrawn; see §11.2 and §11.7.]
@@ -887,14 +888,16 @@ is in §11.2.]
   - `nexus-cli`, with the coding-agent and self-improve libraries it links;
   - `crates/nexus-server` (`deploy/Dockerfile`);
   - protocols `nexus-server` (root `Dockerfile`; P0-FG1-R1, repair pending,
-    renames it `nexus-protocols-server`);
+    renames it `nexus-protocols-server` [P0-LINUX-FINAL-R2: integrated at
+    `71c47acb`]);
   - protocols `nexus-os` (`Makefile`, `install.sh`);
   - `nx` (`nexus-code/Dockerfile`, `nexus-code/install.sh`).
 
   Dossier item J classifies them. `crates/nexus-server` is a Final-Gate
   blocker.
-  - P0-FG1 (validation branch, review pending) withdraws `crates/nexus-server`
-    and its `deploy/` recipes. Its binary now reaches no filesystem, process
+  - P0-FG1 (validation branch, review pending [P0-LINUX-FINAL-R2: integrated
+    at `71c47acb`; post-integration validation passed]) withdraws
+    `crates/nexus-server` and its `deploy/` recipes. Its binary now reaches no filesystem, process
     or network site.
   - The SHIPPED counts above are the C5C recount. They are not recomputed
     for P0-FG1.
@@ -1039,7 +1042,9 @@ effective port and whole leading path segments. It uses the `url` parser and
   - A: configuration key derivation;
   - J1: the unauthenticated `crates/nexus-server`, a blocker; its
     withdrawal is implemented on the P0-FG1 validation branch, review
-    pending;
+    pending [P0-LINUX-FINAL-R2: integrated at `71c47acb`; post-integration
+    validation passed; J1 no longer waits for integration or Architect
+    review];
   - B: destination, address and DNS policy;
   - C: secrets in argv;
   - D: the CSP;
@@ -1098,7 +1103,7 @@ accepts a risk or declares FG1, the Final Gate or Phase Zero complete.
 | G | Repaired: L6 (autonomy 6 or above, any id spelling) refused at create, start, resume, approve and review-each, never registered, and refused for goals, loops, scheduled ticks and tool calls; caller-asserted approval commands closed; fixed resolver label; truthful self-improvement records; an enabled Warden review denies with no lookup; rejected manifest schedules refused at create and start | `commands/{agents,consent,cognitive,crate_bridges,chat_llm,self_improvement}.rs`; `nx_bridge/commands.rs`; `lib.rs` | `fg_approval/tests.rs`; `lib_tests.rs`; `commands/cognitive/scheduled_tests.rs` |
 | H | Repaired for new writes: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored token; API Client secrets refused; backups exclude credential stores | `commands/apps.rs`; `lib.rs`; `agents/web-builder/src/{deploy,backend}/credentials.rs`; `kernel/src/backup.rs` | `fg_secrets/tests.rs`; `p0_fg_h_*` |
 | I | Partly repaired: no unowned `ollama serve`; `is_ollama_installed` closed; in-flight downloads ended at a normal exit; the desktop's Nexus Code checks use an in-process `PATH` lookup; fixed-argument helpers still resolve from `PATH` | `commands/chat_llm.rs`; `connectors/llm/src/model_hub.rs`; `nexus-code/src/setup.rs`; `lib.rs` | `fg_egress/tests.rs`; `model_hub` tests |
-| J | J1 integrated at `71c47acb` (run #108 green; Architect review pending). J2–J5 withdrawn: 18 withdrawn binaries in all | entry points of the withdrawn targets; the 14 recipe files | `fg_standalone/tests.rs`; per-package `tests/phase0_withdrawal.rs` |
+| J | J1 integrated at `71c47acb`; its designated post-integration validation (run #108) passed (P0-LINUX-FINAL-R2 correction of "Architect review pending"). J2–J5 withdrawn: 18 withdrawn binaries in all | entry points of the withdrawn targets; the 14 recipe files | `fg_standalone/tests.rs`; per-package `tests/phase0_withdrawal.rs` |
 | K | Evidence corrected (`executes_python_code`); voice stderr repaired; resource surfaces bounded by refusal | dossier "Resource bounds" | `fg_reliability/tests.rs`; kernel, budget and desktop tests |
 | L | Unchanged since C5C | — | C5C guards |
 | DEP | Minimal updates and two unused dependencies removed (`rmcp`, `openidconnect`): cargo-audit 19 → 7, cargo-deny advisory errors 16 → 10, npm (app) 14 → 6 on the final lockfiles; residual advisories proposed to the Architect | `Cargo.lock`; `app/package-lock.json`; `protocols/Cargo.toml`; `auth/Cargo.toml` | — |
@@ -1110,7 +1115,9 @@ The two filesystem entries §10.8 left open:
    file that gains no credential under the key that opened it; it never keys
    a new or changed credential. `APPROVED_STATE_ROOTS` records the reason
    ("legacy configuration key input"). Repaired on the candidate; Architect
-   review pending.
+   review pending. [P0-LINUX-FINAL-R2: request 9 is dispositioned as bounded
+   legacy compatibility only; the ambient derivation is not secret
+   protection. See §11.9.]
 2. **`EncryptionKey::from_file`** stays the approved operator trust
    assumption, and is now validated on the opened file (item E).
 
@@ -1248,7 +1255,9 @@ The guard also requires the registries `CREDENTIAL_CURL_SITES`
 `fg_standalone` 12, `fg_webview` 11: 80 guards) must be named in the rows
 above, so a guard cannot be removed, renamed or added unreviewed without
 failing the final guard. [P0-LINUX-FINAL-R1: now 45 rows naming 141 guards,
-and 82 fg guards (`fg_egress` 18); see §11.8.] Item-level tests elsewhere (the kernel, connector,
+and 82 fg guards (`fg_egress` 18); see §11.8. P0-LINUX-FINAL-R2 correction:
+45 rows naming 142 guards and 82 fg guards at `b8402283` and at the R2 head;
+see §11.9.] Item-level tests elsewhere (the kernel, connector,
 crate and package tests the dossier names) are pinned only where a row names
 them.
 
@@ -1389,6 +1398,7 @@ an item or declares FG1, the Final Gate or Phase Zero complete.
 - **Final trust-surface guard.** 45 rows naming 141 guards. The completeness
   check covers 82 fg guards: `fg_approval` 18, `fg_egress` 18,
   `fg_reliability` 12, `fg_secrets` 11, `fg_standalone` 12, `fg_webview` 11.
+  [P0-LINUX-FINAL-R2 correction: see §11.9 for the recount.]
   The IPC counts of §11.3 are unchanged (804 registered, 154 closed).
 - **Dependency governance.** One exception set of 11 IDs in `deny.toml`,
   applied by `scripts/security-audit.sh` with pinned cargo-audit 0.22.1 and
@@ -1398,7 +1408,74 @@ an item or declares FG1, the Final Gate or Phase Zero complete.
   (the dynamic component `Val` API is unused and the SDK sandbox unreachable;
   pinned by `p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api`; the
   acceptance lapses if either changes). Details: dossier, "Linux security gate".
+  [P0-LINUX-FINAL-R2: the guard now refuses any production use or import of
+  Wasmtime's `component` module, in any spelling; see §11.9.]
 - **Correction to a mission note.** The mission's platform-scope evidence
   file says the Windows and macOS jobs and harness steps remain in `ci.yml`;
   at the R1 head they are in `ci-portability.yml`, and `ci.yml` has no
   Windows or macOS job.
+
+### 11.9 P0-LINUX-FINAL-R2
+
+This section records what P0-LINUX-FINAL-R2 changed: two guards were
+strengthened, and the Architect's dispositions were recorded. No production
+code changed. Nothing here approves an item or declares the Final Gate or
+Phase Zero complete. Windows and macOS stay deferred.
+
+- **P0-FG1 status corrected.** P0-FG1 is integrated at the authoritative
+  `71c47acb`, and its designated post-integration validation (hosted run
+  #108) passed. J1 no longer waits for integration or Architect review; the
+  "review pending" notes in §10.6, §10.8, §10.10 and §11.2 are corrected in
+  place.
+- **Architect dispositions.** Requests 7, 9, 10, 11, 14 and 19 are
+  dispositioned in the dossier, "Architect dispositions (P0-LINUX-FINAL-R2)".
+  For this inventory:
+  - the legacy ambient derivation of `config_user_key` is bounded legacy
+    compatibility only, never secret protection (request 9);
+  - OAuth sign-in, deploy and Supabase storage, and new messaging credential
+    persistence stay closed, and reopening one needs a separately approved
+    secret-store design (request 10);
+  - IPC HITL approval is not security authority, and no actuator may use
+    `hitl_approved` as authority (request 14);
+  - the withdrawal wording, status 69 and the coordinator closure of D1, D2
+    and D4 to D7 are accepted for the current closure candidate under the
+    inventory and withdrawal guards (request 19). J2–J5 are not declared
+    complete until the candidate is integrated and validated.
+- **Vault-scope inventory (request 11).** Accepted for Linux after this
+  guard. `p0_fg_e_vault_key_sources_are_validated_on_what_is_read` now pins
+  `VAULT_SCOPES` (`kernel/src/startup/mod.rs`) to exactly `llm`, `social`,
+  `messaging.whatsapp`, `messaging.matrix`, `http` and `auth.oidc`. It also
+  checks that `verify_vault_key` iterates `VAULT_SCOPES` and runs before the
+  one production `SecretsFacade::new`, and that every scope literal a
+  production `get_secret`, `set_secret` or `delete_secret` call passes is one
+  of the six. No production credential scope outside the six writes through
+  the vault facade. Protection is not claimed for a future scope until it is
+  added to, and verified by, the inventory.
+- **Wasmtime component module (RUSTSEC-2026-0316).**
+  `p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api` now refuses any
+  production use or import of Wasmtime's `component` module, in any spelling:
+  - direct, grouped and nested paths;
+  - `component as …` inside a group;
+  - crate aliases (`use wasmtime as …`, `wasmtime::{self as …}`,
+    `extern crate wasmtime as …`);
+  - whitespace or line breaks inside the path;
+  - glob imports in a file that names `component`;
+  - a renamed `wasmtime` package in a `Cargo.toml`.
+
+  It removes comments first, keeps `cfg`-disabled code in scope and adds no
+  parser dependency. The core `Engine`/`Linker`/`Module`/`Store` import and
+  `get_typed_func` pins are unchanged.
+- **Guard counts (recount).**
+  - The final trust-surface guard has 45 rows naming 142 guards at
+    `b8402283` and at the R2 head. The Wasmtime guard, added at `b8402283`,
+    was not included in §11.8's 141.
+  - The six Final-Gate guard modules hold 82 guards: `fg_approval` 17,
+    `fg_egress` 18, `fg_reliability` 13, `fg_secrets` 11, `fg_standalone` 12
+    and `fg_webview` 11.
+  - §11.8's `fg_approval` 18 counted a `#[test]` string inside that module's
+    source as a test, and its `fg_reliability` 12 predates the Wasmtime
+    guard.
+  - R2 adds no test function; its checks extend two existing guards.
+  - The workspace totals behind the earlier "244 Final Gate guards", and the
+    Architect's 231 + 13 framing, are set out in the dossier ("Final-Gate
+    guard counts").

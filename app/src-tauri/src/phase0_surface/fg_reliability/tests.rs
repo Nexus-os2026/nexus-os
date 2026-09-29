@@ -392,15 +392,216 @@ fn p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database() {
     assert!(!written, "the identity home's nexus.db was written");
 }
 
+/// Rust source with comments removed (line, nested block, doc) and string
+/// and character literals kept verbatim, so text inside a literal is still
+/// scanned (fail-closed) but a comment cannot hide or fake a use.
+fn without_comments(src: &str) -> String {
+    let b = src.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        match (b[i], b.get(i + 1).copied()) {
+            (b'/', Some(b'/')) => {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            (b'/', Some(b'*')) => {
+                let mut depth = 0usize;
+                while i < b.len() {
+                    if b[i] == b'/' && b.get(i + 1) == Some(&b'*') {
+                        depth += 1;
+                        i += 2;
+                    } else if b[i] == b'*' && b.get(i + 1) == Some(&b'/') {
+                        depth -= 1;
+                        i += 2;
+                        if depth == 0 {
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                out.push(b' ');
+            }
+            (b'"', _) => {
+                out.push(b'"');
+                i += 1;
+                while i < b.len() && b[i] != b'"' {
+                    if b[i] == b'\\' && i + 1 < b.len() {
+                        out.push(b[i]);
+                        i += 1;
+                    }
+                    out.push(b[i]);
+                    i += 1;
+                }
+                if i < b.len() {
+                    out.push(b'"');
+                    i += 1;
+                }
+            }
+            (c, _) => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn ident_byte(c: u8) -> bool {
+    c.is_ascii_alphanumeric() || c == b'_'
+}
+
+/// Byte offsets where `word` occurs in `text` as a whole identifier.
+fn word_at(text: &str, word: &str) -> Vec<usize> {
+    let b = text.as_bytes();
+    text.match_indices(word)
+        .map(|(at, _)| at)
+        .filter(|&at| at == 0 || !ident_byte(b[at - 1]))
+        .filter(|&at| b.get(at + word.len()).is_none_or(|&c| !ident_byte(c)))
+        .collect()
+}
+
+/// Every way `src` names Wasmtime's component module, or reaches it through
+/// an alias or a glob import. P0-LINUX-FINAL-R2: while RUSTSEC-2026-0316 is
+/// accepted, production Nexus uses no part of the component module (the
+/// affected dynamic `Val`/`Func` API lives there); any spelling of it fails,
+/// fail-closed, whether a path (`wasmtime::component`, with any whitespace),
+/// a grouped or nested import (`use wasmtime::{Engine, component::{Val}}`),
+/// an alias of the module (`wasmtime::{component as c}`) or of the crate
+/// (`use wasmtime as w; w::component`), or a glob import of the crate
+/// followed by a `component::` path. This is a text check over comment-free
+/// source, not a name resolver; it proves Nexus's non-use of the module on
+/// which the bounded exception depends, not that Wasmtime is safe.
+fn wasmtime_component_uses(src: &str) -> Vec<String> {
+    // Whitespace is dropped except a single space between two identifier
+    // characters, so `wasmtime :: component` and multiline groups compare
+    // as `wasmtime::component` while `use wasmtime` keeps its boundary.
+    let plain = without_comments(src);
+    let mut code = String::with_capacity(plain.len());
+    let mut chars = plain.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c.is_whitespace() {
+            while chars.peek().is_some_and(|n| n.is_whitespace()) {
+                chars.next();
+            }
+            let before = code
+                .chars()
+                .last()
+                .is_some_and(|p| p.is_ascii_alphanumeric() || p == '_');
+            let after = chars
+                .peek()
+                .is_some_and(|n| n.is_ascii_alphanumeric() || *n == '_');
+            if before && after {
+                code.push(' ');
+            }
+        } else {
+            code.push(c);
+        }
+    }
+    let mut roots = vec!["wasmtime".to_string()];
+    for at in word_at(&code, "wasmtime") {
+        // `wasmtime as alias` and `wasmtime::{self as alias}`.
+        for prefix in ["wasmtime as ", "wasmtime::{self as ", "wasmtime::self as "] {
+            if code[at..].starts_with(prefix) {
+                let alias: String = code[at + prefix.len()..]
+                    .chars()
+                    .take_while(|&c| c.is_ascii_alphanumeric() || c == '_')
+                    .collect();
+                if !alias.is_empty() {
+                    roots.push(alias);
+                }
+            }
+        }
+    }
+    let mut found = Vec::new();
+    for root in &roots {
+        for at in word_at(&code, root) {
+            let rest = &code[at + root.len()..];
+            if rest.starts_with("::component") && !rest[11..].bytes().next().is_some_and(ident_byte)
+            {
+                found.push(format!("{root}::component"));
+            }
+            if let Some(group) = rest.strip_prefix("::{") {
+                let mut depth = 1usize;
+                let end = group
+                    .char_indices()
+                    .find(|&(_, c)| {
+                        match c {
+                            '{' => depth += 1,
+                            '}' => depth -= 1,
+                            _ => {}
+                        }
+                        depth == 0
+                    })
+                    .map_or(group.len(), |(end, _)| end);
+                let group = &group[..end];
+                if !word_at(group, "component").is_empty() {
+                    found.push(format!("{root}::{{…component…}}"));
+                }
+                if group.contains('*') && !word_at(&code, "component").is_empty() {
+                    found.push(format!("{root}::{{*}} with component"));
+                }
+            }
+            if rest.starts_with("::*") && !word_at(&code, "component").is_empty() {
+                found.push(format!("{root}::* with component"));
+            }
+        }
+    }
+    found
+}
+
 /// DEP (Architect decision, P0-LINUX-FINAL-R1): RUSTSEC-2026-0316 (wasmtime
 /// 43.0.2, dynamic `Val` lifting into host allocations can exceed the
 /// hostcall fuel limit) is accepted only while its reasoning holds. The
 /// exception is the one deny.toml entry; no production source uses
-/// Wasmtime's component model (the affected dynamic `Val`/`Func` API); the
-/// SDK sandbox runs core-Wasm modules through typed entry functions; and the
-/// SDK sandbox stays a latent API the desktop must not call.
+/// Wasmtime's component module at all (the affected dynamic `Val`/`Func` API
+/// lives there), in any import spelling (P0-LINUX-FINAL-R2), and no
+/// manifest renames the wasmtime crate; the SDK sandbox runs core-Wasm
+/// modules through typed entry functions; and the SDK sandbox stays a latent
+/// API the desktop must not call.
 #[test]
 fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
+    // The scanner rejects every spelling of the component module ...
+    for probe in [
+        "use wasmtime::component::Val;",
+        "use wasmtime::{component::Val};",
+        "use wasmtime::{component::{Val}};",
+        "use wasmtime::{Engine, component::{Val, Func}};",
+        "use wasmtime::{component as component_api};",
+        "use wasmtime :: component :: Val;",
+        "use wasmtime::{\n    Engine,\n    component::{\n        Val,\n    },\n};",
+        "use wasmtime\n    ::\n    component\n    ::\n    Func;",
+        "fn f() { let v: wasmtime::component::Val = todo!(); }",
+        "use wasmtime as wt; fn f() { let _ = wt::component::Linker::<()>::new; }",
+        "use wasmtime::{self as wt}; use wt::component::Val;",
+        "extern crate wasmtime as wasm; use wasm::{component::Val};",
+        "use wasmtime::*; fn f(v: component::Val) {}",
+        "use wasmtime::{*}; use component::Func;",
+        "#[cfg(any())]\nuse wasmtime::{component::{Val}};",
+    ] {
+        assert!(
+            !wasmtime_component_uses(probe).is_empty(),
+            "the component-module probe was not caught: {probe:?}"
+        );
+    }
+    // ... and accepts the core API the SDK sandbox uses, and comments.
+    for safe in [
+        "use wasmtime::{Engine, Linker, Module, Store, StoreLimits, StoreLimitsBuilder};",
+        "let f = instance.get_typed_func::<(), ()>(&mut store, \"_start\")?;",
+        "use wasmtime::Linker; let x = wasmtime::Val::I32(1);",
+        "// wasmtime::component::Val is not used here\nuse wasmtime::Engine;",
+        "/* use wasmtime::{component::Val}; */ use wasmtime::Module;",
+        "mod my_component { pub struct Val; }",
+    ] {
+        assert_eq!(
+            wasmtime_component_uses(safe),
+            Vec::<String>::new(),
+            "a core-API or comment-only source was rejected: {safe:?}"
+        );
+    }
+
     fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
         let mut entries: Vec<_> = std::fs::read_dir(dir)
             .unwrap()
@@ -418,7 +619,8 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
                 {
                     walk(&path, out);
                 }
-            } else if name.ends_with(".rs") && !name.ends_with("tests.rs") {
+            } else if (name.ends_with(".rs") && !name.ends_with("tests.rs")) || name == "Cargo.toml"
+            {
                 out.push(path);
             }
         }
@@ -429,18 +631,21 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
     assert!(sources.len() > 100, "workspace sources not found");
     for path in &sources {
         let text = std::fs::read_to_string(path).unwrap_or_default();
-        let code: String = text
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        for needle in ["wasmtime::component", "component::Val", "component::Func"] {
+        if path.file_name().is_some_and(|name| name == "Cargo.toml") {
+            // A renamed dependency would hide the crate behind another name.
             assert!(
-                !code.contains(needle),
-                "{}: {needle} (the Wasmtime component API affected by RUSTSEC-2026-0316 needs review)",
+                !text.replace(' ', "").contains("package=\"wasmtime\""),
+                "{}: wasmtime renamed (RUSTSEC-2026-0316 guard)",
                 path.display()
             );
+            continue;
         }
+        let uses = wasmtime_component_uses(&text);
+        assert!(
+            uses.is_empty(),
+            "{}: {uses:?} (Wasmtime's component module is not used while RUSTSEC-2026-0316 is accepted)",
+            path.display()
+        );
     }
 
     let sandbox = include_str!("../../../../../sdk/src/wasmtime_sandbox.rs");
