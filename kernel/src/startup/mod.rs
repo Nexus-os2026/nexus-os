@@ -180,7 +180,7 @@ mod tests {
         // succeeds without a file dependency.
         config.security.enabled = true;
         config.security.key_source = "env".into();
-        std::env::set_var(
+        let _key_env = crate::secrets::tests::EnvVarGuard::set(
             "NEXUS_ENCRYPTION_KEY",
             "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
         );
@@ -201,7 +201,7 @@ mod tests {
             std::env::temp_dir().join(format!("nexus_ak_startup_test_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&tmpdir).unwrap();
         let cfg_path = tmpdir.join("config.toml");
-        std::env::set_var("NEXUS_CONFIG_PATH", &cfg_path);
+        let _path_env = crate::secrets::tests::EnvVarGuard::set("NEXUS_CONFIG_PATH", &cfg_path);
 
         // Build facade + migrate WITHOUT touching the global
         // singleton (so concurrent tests don't trip OnceLock).
@@ -240,8 +240,6 @@ mod tests {
         assert!(config.llm.openrouter_api_key.is_empty());
         assert_eq!(db.schema_version("credential_vault_v1").unwrap(), Some(1));
 
-        std::env::remove_var("NEXUS_CONFIG_PATH");
-        std::env::remove_var("NEXUS_ENCRYPTION_KEY");
         let _ = std::fs::remove_dir_all(&tmpdir);
     }
 

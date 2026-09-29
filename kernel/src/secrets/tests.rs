@@ -47,7 +47,7 @@ fn build_facade(
 #[test]
 fn keyring_wins_over_stale_env_under_default() {
     // Refinement D #1.
-    std::env::set_var("ANTHROPIC_API_KEY", "stale-env-value");
+    let _env = EnvVarGuard::set("ANTHROPIC_API_KEY", "stale-env-value");
     let mock = MockKeyring::new();
     mock.set(
         "llm",
@@ -64,13 +64,12 @@ fn keyring_wins_over_stale_env_under_default() {
         .expect("ok");
     assert_eq!(got.value.to_string(), "sk-live-keyring");
     assert_eq!(got.source, ResolvedFrom::Keyring);
-    std::env::remove_var("ANTHROPIC_API_KEY");
 }
 
 #[test]
 fn env_wins_when_provider_in_override_list() {
     // Refinement D #2.
-    std::env::set_var("OPENAI_API_KEY", "sk-env-value");
+    let _env = EnvVarGuard::set("OPENAI_API_KEY", "sk-env-value");
     let mock = MockKeyring::new();
     mock.set("llm", "openai_api_key", Zeroizing::new("sk-keyring".into()))
         .unwrap();
@@ -83,14 +82,13 @@ fn env_wins_when_provider_in_override_list() {
         .expect("ok");
     assert_eq!(got.value.to_string(), "sk-env-value");
     assert_eq!(got.source, ResolvedFrom::Env);
-    std::env::remove_var("OPENAI_API_KEY");
 }
 
 #[test]
 fn keyring_miss_falls_through_to_env_for_llm_providers() {
     // Refinement D #3 — locks the fallback expansion documented
     // in ADR 0004 Consequences (Subtle fallback expansion).
-    std::env::set_var("HUGGINGFACE_API_KEY", "env-fallback-value");
+    let _env = EnvVarGuard::set("HUGGINGFACE_API_KEY", "env-fallback-value");
     let mock = MockKeyring::new(); // empty
     let (facade, _db) = build_facade(
         CredentialFacadeConfig::default(),
@@ -101,13 +99,12 @@ fn keyring_miss_falls_through_to_env_for_llm_providers() {
         .expect("ok");
     assert_eq!(got.value.to_string(), "env-fallback-value");
     assert_eq!(got.source, ResolvedFrom::Env);
-    std::env::remove_var("HUGGINGFACE_API_KEY");
 }
 
 #[test]
 fn keyring_miss_returns_not_found_when_no_env_set() {
     // Refinement D #4.
-    std::env::remove_var("OPENROUTER_API_KEY");
+    let _env = EnvVarGuard::remove("OPENROUTER_API_KEY");
     let mock = MockKeyring::new(); // empty
     let (facade, _db) = build_facade(
         CredentialFacadeConfig::default(),
@@ -209,7 +206,7 @@ fn migrate_config_to_vault_happy_path_clears_fields_and_bumps_version() {
     let tmpdir = std::env::temp_dir().join(format!("nexus_ak_test_{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&tmpdir).unwrap();
     let cfg_path = tmpdir.join("config.toml");
-    std::env::set_var("NEXUS_CONFIG_PATH", &cfg_path);
+    let _config_path = EnvVarGuard::set("NEXUS_CONFIG_PATH", &cfg_path);
 
     let report = migrate_config_to_vault(&mut config, &facade).expect("ok");
     match report {
@@ -266,7 +263,6 @@ fn migrate_config_to_vault_happy_path_clears_fields_and_bumps_version() {
     let report2 = migrate_config_to_vault(&mut config, &facade).unwrap();
     assert!(matches!(report2, MigrationReport::AlreadyRun));
 
-    std::env::remove_var("NEXUS_CONFIG_PATH");
     let _ = std::fs::remove_dir_all(&tmpdir);
 }
 
@@ -337,17 +333,16 @@ fn migrate_records_resave_failure_but_treats_facade_as_authoritative() {
     impl Drop for Cleanup {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
-            std::env::remove_var("NEXUS_CONFIG_PATH");
         }
     }
-    let _guard = Cleanup(tmpdir.clone());
+    let _cleanup = Cleanup(tmpdir.clone());
 
     // Regular FILE at the intermediate path: any attempt to
     // create_dir_all a child fails with ENOTDIR.
     let blocker = tmpdir.join("blocker");
     std::fs::write(&blocker, b"x").unwrap();
     let bad_path = blocker.join("subdir").join("config.toml");
-    std::env::set_var("NEXUS_CONFIG_PATH", &bad_path);
+    let _config_path = EnvVarGuard::set("NEXUS_CONFIG_PATH", &bad_path);
 
     let (facade, db) = build_facade(
         CredentialFacadeConfig::default(),
@@ -559,6 +554,12 @@ impl EnvVarGuard {
         std::env::set_var(name, value);
         Self { name, previous }
     }
+
+    pub(crate) fn remove(name: &'static str) -> Self {
+        let previous = std::env::var_os(name);
+        std::env::remove_var(name);
+        Self { name, previous }
+    }
 }
 
 impl Drop for EnvVarGuard {
@@ -568,4 +569,34 @@ impl Drop for EnvVarGuard {
             None => std::env::remove_var(self.name),
         }
     }
+}
+
+/// The guard restores the previous value, or the variable's absence, when it
+/// is dropped, including when the test panics. The variable is unique to
+/// this test.
+#[test]
+fn env_var_guard_restores_the_previous_state() {
+    const NAME: &str = "NEXUS_TEST_ENV_VAR_GUARD_ONLY";
+    let value = || std::env::var_os(NAME);
+    {
+        let _absent = EnvVarGuard::remove(NAME);
+        {
+            let _set = EnvVarGuard::set(NAME, "during");
+            assert_eq!(value().as_deref(), Some("during".as_ref()));
+        }
+        assert_eq!(value(), None);
+        let _before = EnvVarGuard::set(NAME, "before");
+        let panicked = std::panic::catch_unwind(|| {
+            let _set = EnvVarGuard::set(NAME, "during");
+            panic!("synthetic test panic");
+        });
+        assert!(panicked.is_err());
+        assert_eq!(value().as_deref(), Some("before".as_ref()));
+        {
+            let _removed = EnvVarGuard::remove(NAME);
+            assert_eq!(value(), None);
+        }
+        assert_eq!(value().as_deref(), Some("before".as_ref()));
+    }
+    assert_eq!(value(), None);
 }
