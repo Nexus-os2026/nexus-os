@@ -529,9 +529,18 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
         "is_transcendent_agent",
     );
     assert_eq!(params, "(state:&AppState,agent_id:&str)");
-    assert!(helper.contains(
-        "find_manifest(state,agent_id).is_some_and(|manifest|manifest.autonomy_level==Some(6));"
-    ));
+    // Stored records are looked up by the text given and by the canonical
+    // form of the id (review W4).
+    assert!(
+        helper.starts_with(concat!(
+            "letparsed=Uuid::parse_str(agent_id).ok();",
+            "letcanonical=parsed.map(|id|id.to_string());",
+            "letstored=std::iter::once(agent_id).chain(canonical.as_deref()).any(|id|{",
+            "find_manifest(state,id).is_some_and(|manifest|manifest.autonomy_level==Some(6))});",
+            "letregistered=parsed.is_some_and(|id|{",
+        )),
+        "{helper}"
+    );
     assert!(helper.contains(".get_agent(id).is_some_and(|handle|handle.autonomy_level==6)"));
     assert!(helper.ends_with("stored||registered"));
     for write in [

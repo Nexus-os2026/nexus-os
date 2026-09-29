@@ -418,10 +418,20 @@ pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
 /// agent, by its stored record or its registration. It only reads. The
 /// goal, autonomous-loop and tool routes refuse such an agent with it before
 /// they change anything.
+///
+/// A UUID can be written several ways (upper case, braced, as a URN). The
+/// stored records are looked up both by the text given and by the canonical
+/// form, as `start_agent` does, so another spelling of a stored L6 record's
+/// id cannot miss it.
 pub(crate) fn is_transcendent_agent(state: &AppState, agent_id: &str) -> bool {
-    let stored =
-        find_manifest(state, agent_id).is_some_and(|manifest| manifest.autonomy_level == Some(6));
-    let registered = Uuid::parse_str(agent_id).is_ok_and(|id| {
+    let parsed = Uuid::parse_str(agent_id).ok();
+    let canonical = parsed.map(|id| id.to_string());
+    let stored = std::iter::once(agent_id)
+        .chain(canonical.as_deref())
+        .any(|id| {
+            find_manifest(state, id).is_some_and(|manifest| manifest.autonomy_level == Some(6))
+        });
+    let registered = parsed.is_some_and(|id| {
         state
             .supervisor
             .lock()

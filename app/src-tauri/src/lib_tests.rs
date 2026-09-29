@@ -875,6 +875,59 @@ fn p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent() {
     assert_eq!(tool_call_autonomy(&state, &sovereign, 6), Ok(5));
 }
 
+/// P0-FINAL-GATE (item G, review W4): the L6 check finds a stored L6 record
+/// under any spelling of its id: canonical, upper case, braced, as a URN or
+/// without hyphens. The stored branch used to compare the text given with
+/// the stored id, so another spelling of a stored-only L6 record's id passed
+/// the check. A goal for it then reached the rate limit, and an autonomous
+/// loop for it was registered with the scheduler.
+#[test]
+fn p0_fg_transcendent_check_matches_every_spelling_of_a_stored_id() {
+    use crate::commands::agents::is_transcendent_agent;
+    use crate::commands::cognitive::assign_agent_goal;
+    use crate::phase0_surface::{closed, Closure};
+    let state = AppState::new_in_memory();
+    // The scheduler starts a task per registration; nothing here polls it.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let id = Uuid::new_v4();
+    state
+        .db
+        .save_agent(
+            &id.to_string(),
+            &build_transcendent_manifest("transcendent-spelling"),
+            "running",
+            6,
+            "native",
+        )
+        .unwrap();
+    for spelling in [
+        id.to_string(),
+        id.to_string().to_uppercase(),
+        format!("{{{id}}}"),
+        format!("urn:uuid:{id}"),
+        id.simple().to_string(),
+    ] {
+        assert!(is_transcendent_agent(&state, &spelling), "{spelling}");
+        assert_eq!(
+            assign_agent_goal(&state, spelling.clone(), "p0fg".into(), 5, None),
+            Err(closed("assign_agent_goal", Closure::ApprovalRequired)),
+            "{spelling}"
+        );
+        assert_eq!(
+            super::start_autonomous_loop(&state, spelling.clone(), Some(120), None),
+            Err(closed("start_autonomous_loop", Closure::ApprovalRequired)),
+            "{spelling}"
+        );
+    }
+    assert!(state.agent_scheduler.list().is_empty());
+    assert!(!is_transcendent_agent(&state, &Uuid::new_v4().to_string()));
+    assert!(!is_transcendent_agent(&state, "not-an-agent-id"));
+}
+
 /// P0-FINAL-GATE (item G): in Phase Zero an enabled Warden review denies
 /// with the bounded `WARDEN_REVIEW_UNAVAILABLE` reason, and nothing can stand
 /// in for the Warden. That holds in each of these cases:
