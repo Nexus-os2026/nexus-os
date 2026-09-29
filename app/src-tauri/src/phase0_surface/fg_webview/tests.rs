@@ -435,20 +435,43 @@ fn p0_fg_webview_conf_has_restrictive_csp_and_guarded_window() {
         "the production app document is the embedded dist, never a URL"
     );
 
-    let merge: serde_json::Value = serde_json::from_str(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tauri.builder-toolchain.conf.json"
-    )))
-    .expect("builder-toolchain conf parses");
-    assert_eq!(
-        merge
-            .as_object()
-            .expect("merge object")
-            .keys()
-            .collect::<Vec<_>>(),
-        ["bundle"],
-        "the release-time config merge must not change the app, window or security"
-    );
+    // Every other config file tauri can merge over this one — the
+    // platform-specific `tauri.<platform>.conf.json` files it merges
+    // automatically, and the `--config` files the release workflow passes —
+    // may only touch the bundle. (Found by scanning, so a new merge file is
+    // checked too.)
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut merges = 0;
+    for entry in std::fs::read_dir(dir).expect("app/src-tauri") {
+        let name = entry
+            .expect("app/src-tauri entry")
+            .file_name()
+            .to_string_lossy()
+            .into_owned();
+        let lower = name.to_ascii_lowercase();
+        if lower == "tauri.conf.json" || !lower.starts_with("tauri") {
+            continue;
+        }
+        assert!(
+            lower.starts_with("tauri.") && lower.ends_with(".conf.json"),
+            "{name}: only JSON tauri.<name>.conf.json config files are reviewed"
+        );
+        let merge: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.join(&name)).expect("read merge config"),
+        )
+        .unwrap_or_else(|e| panic!("{name} parses: {e}"));
+        assert_eq!(
+            merge
+                .as_object()
+                .expect("merge object")
+                .keys()
+                .collect::<Vec<_>>(),
+            ["bundle"],
+            "{name}: a merged config must not change the app, window or security"
+        );
+        merges += 1;
+    }
+    assert_eq!(merges, 1, "the one reviewed release-time config merge");
 }
 
 /// The privileged document loads nothing from a third party: `index.html`
