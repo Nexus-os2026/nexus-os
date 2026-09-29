@@ -128,8 +128,13 @@ fn p0_fg_a_configuration_writes_check_key_material_before_writing() {
     ] {
         assert!(stored.contains(needle), "{needle}: {stored}");
     }
-    // Only non-blank material is an operator key.
-    assert!(body(production, "fn operator_key(").contains(".trim().is_empty()"));
+    // Only non-blank material is an operator key, and never material that
+    // derives the ambient key.
+    assert!(body(production, "fn operator_candidate(").contains(".trim().is_empty()"));
+    assert_eq!(
+        compact(&body(production, "fn operator_key(")),
+        "self.operator_candidate().filter(|key|key.bytes!=self.ambient_key().bytes)"
+    );
     // A load writes only when the file is missing.
     let load = compact(&body(production, "pub fn load_config_from_path_with("));
     assert_eq!(load.matches("save_config_checked_to_path(").count(), 1);

@@ -816,6 +816,9 @@ fn write_keeping_stored_credentials(
             ConfigSaveError::Refused(ConfigWriteRefusal::OperatorKeyRequired) => {
                 InterfaceWriteError::Refused(CONFIGURATION_KEY_REQUIRED)
             }
+            ConfigSaveError::Refused(ConfigWriteRefusal::OperatorKeyIsAmbient) => {
+                InterfaceWriteError::Refused(CONFIGURATION_KEY_IS_AMBIENT)
+            }
             ConfigSaveError::Refused(ConfigWriteRefusal::ExistingUnreadable) => {
                 InterfaceWriteError::Refused(EXISTING_CONFIGURATION_UNREADABLE)
             }
@@ -897,6 +900,10 @@ const SECURITY_BACKEND_OWNED: (&str, &str) = (
 const CONFIGURATION_KEY_REQUIRED: (&str, &str) = (
     "configuration_key_required",
     "save_config: a new or changed credential needs the operator configuration key (NEXUS_CONFIG_KEY); nothing was saved",
+);
+const CONFIGURATION_KEY_IS_AMBIENT: (&str, &str) = (
+    "configuration_key_is_ambient",
+    "save_config: NEXUS_CONFIG_KEY derives the same key as the account and host names, which is not secret; nothing was saved",
 );
 const EXISTING_CONFIGURATION_UNREADABLE: (&str, &str) = (
     "existing_configuration_unreadable",
@@ -1331,6 +1338,52 @@ fn p0_fg_a_interface_credential_edits_need_the_operator_key() {
         EXISTING_CONFIGURATION_UNREADABLE.0,
         ConfigWriteRefusal::ExistingUnreadable.reason_class()
     );
+    assert_eq!(
+        CONFIGURATION_KEY_IS_AMBIENT.0,
+        ConfigWriteRefusal::OperatorKeyIsAmbient.reason_class()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Final Gate item A (stream 6 review): an operator key whose value is the
+/// account and host names run together derives the ambient key, which is no
+/// secret. An interface credential save under it is refused with its own
+/// reason, audited by class, and writes nothing.
+#[cfg(test)]
+#[test]
+fn p0_fg_a_an_operator_key_equal_to_the_ambient_key_keys_no_credential() {
+    use nexus_kernel::config::{load_security_baseline_from_path_with, ConfigKeyMaterial};
+    let state = AppState::new_in_memory();
+    let dir = std::env::temp_dir().join(format!("nexus-fg-a-ambient-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    let ambient = [
+        Some("/home/synthetic-nexus"),
+        Some("synthetic-user"),
+        None,
+        None,
+    ];
+    let keys = ConfigKeyMaterial::from_values(Some("/home/synthetic-nexussynthetic-user"), ambient);
+    assert!(keys.operator_key_is_ambient());
+    std::fs::write(&path, toml::to_string(&NexusConfig::default()).unwrap()).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    let mut requested = NexusConfig::default();
+    requested.search.brave_api_key = "synthetic-brave".into();
+    assert_eq!(
+        save_config_with(
+            &state,
+            requested,
+            || load_security_baseline_from_path_with(&path, &keys),
+            |config| write_keeping_stored_credentials(&path, config, &keys),
+        ),
+        Err(CONFIGURATION_KEY_IS_AMBIENT.1.to_string())
+    );
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    let logged = audited_payloads(&state);
+    assert!(logged.contains(CONFIGURATION_KEY_IS_AMBIENT.0), "{logged}");
+    for leaked in ["synthetic-brave", "synthetic-user", "synthetic-nexus"] {
+        assert!(!logged.contains(leaked), "{leaked}: {logged}");
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 

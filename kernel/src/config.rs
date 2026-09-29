@@ -514,9 +514,19 @@ pub fn save_config_checked_to_path(
     let stored = read_stored_for_write(path, keys)?;
     let operator = keys.operator_key();
     let (key, outcome) = if introduces_credentials(stored.as_ref().map(|s| &s.config), config) {
-        let key = operator.ok_or(ConfigSaveError::Refused(
-            ConfigWriteRefusal::OperatorKeyRequired,
-        ))?;
+        let key = match operator {
+            Some(key) => key,
+            None if keys.operator_key_is_ambient() => {
+                return Err(ConfigSaveError::Refused(
+                    ConfigWriteRefusal::OperatorKeyIsAmbient,
+                ));
+            }
+            None => {
+                return Err(ConfigSaveError::Refused(
+                    ConfigWriteRefusal::OperatorKeyRequired,
+                ));
+            }
+        };
         let rekeyed = stored.as_ref().is_some_and(|stored| {
             stored.key.as_ref().map(|opened| opened.bytes) != Some(key.bytes)
         });
@@ -578,6 +588,10 @@ impl SaveOutcome {
 pub enum ConfigWriteRefusal {
     /// A new or changed credential, and no operator configuration key.
     OperatorKeyRequired,
+    /// A new or changed credential, and `NEXUS_CONFIG_KEY` derives exactly
+    /// the ambient key (the account and host names run together), which is
+    /// no secret.
+    OperatorKeyIsAmbient,
     /// The configuration on disk cannot be read with the available key
     /// material, so it is not overwritten.
     ExistingUnreadable,
@@ -588,6 +602,7 @@ impl ConfigWriteRefusal {
     pub const fn reason_class(self) -> &'static str {
         match self {
             Self::OperatorKeyRequired => "configuration_key_required",
+            Self::OperatorKeyIsAmbient => "configuration_key_is_ambient",
             Self::ExistingUnreadable => "existing_configuration_unreadable",
         }
     }
@@ -596,6 +611,9 @@ impl ConfigWriteRefusal {
         match self {
             Self::OperatorKeyRequired => {
                 "configuration not saved: a new or changed credential needs the operator configuration key (NEXUS_CONFIG_KEY)"
+            }
+            Self::OperatorKeyIsAmbient => {
+                "configuration not saved: NEXUS_CONFIG_KEY derives the same key as the account and host names, which is not secret; choose another value"
             }
             Self::ExistingUnreadable => {
                 "configuration not saved: the configuration on disk cannot be read, so it is not overwritten"
@@ -687,7 +705,24 @@ impl ConfigKeyMaterial {
         self.operator_key().is_some()
     }
 
+    /// Whether `NEXUS_CONFIG_KEY` is non-blank but derives exactly the
+    /// ambient key. Both derivations hash their inputs run together, with no
+    /// separator, so a value equal to HOME, USER, USERNAME and HOSTNAME
+    /// concatenated gives the key anyone who knows those names can derive.
+    /// Such a value is no operator key.
+    pub fn operator_key_is_ambient(&self) -> bool {
+        self.operator_candidate()
+            .is_some_and(|key| key.bytes == self.ambient_key().bytes)
+    }
+
+    /// The operator key: non-blank `NEXUS_CONFIG_KEY` material that does not
+    /// derive the ambient key.
     fn operator_key(&self) -> Option<UserKey> {
+        self.operator_candidate()
+            .filter(|key| key.bytes != self.ambient_key().bytes)
+    }
+
+    fn operator_candidate(&self) -> Option<UserKey> {
         self.legacy_explicit
             .as_ref()
             .filter(|value| !value.trim().is_empty())
@@ -1807,5 +1842,50 @@ mod tests {
             );
             assert!(secret_named(listed), "{listed} needs no classification");
         }
+    }
+
+    /// Final Gate item A (stream 6 review): both derivations hash their inputs
+    /// run together, so a NEXUS_CONFIG_KEY equal to HOME, USER, USERNAME and
+    /// HOSTNAME concatenated derives the ambient key, which anyone who knows
+    /// the account and host names can derive. It is no operator key: a
+    /// credential save under it is refused with its own reason and writes
+    /// nothing, and every other value still is one.
+    #[test]
+    fn p0_fg_a_an_operator_key_that_derives_the_ambient_key_is_refused() {
+        let run_together = format!("{HOME}synthetic-usersynthetic-host");
+        let keys = ConfigKeyMaterial::from_values(
+            Some(&run_together),
+            [
+                Some(HOME),
+                Some("synthetic-user"),
+                None,
+                Some("synthetic-host"),
+            ],
+        );
+        assert!(keys.operator_key_is_ambient());
+        assert!(!keys.has_operator_key());
+        assert!(with_operator_key().has_operator_key());
+        assert!(!with_operator_key().operator_key_is_ambient());
+        assert!(!ambient_only().operator_key_is_ambient());
+
+        let path = temp_config_path();
+        let mut config = NexusConfig::default();
+        config.llm.anthropic_api_key = "synthetic-credential".into();
+        assert_eq!(
+            save_config_checked_to_path(&path, &config, &keys),
+            Err(ConfigSaveError::Refused(
+                ConfigWriteRefusal::OperatorKeyIsAmbient
+            ))
+        );
+        assert!(!path.exists());
+        let message = ConfigWriteRefusal::OperatorKeyIsAmbient.message();
+        assert!(!message.contains("synthetic"), "{message}");
+        // A save that adds no credential is still written, under the key
+        // that opens the file (here a first write under the ambient key).
+        assert_eq!(
+            save_config_checked_to_path(&path, &NexusConfig::default(), &keys),
+            Ok(SaveOutcome::Written)
+        );
+        cleanup(&path);
     }
 }
