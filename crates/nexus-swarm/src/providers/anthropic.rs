@@ -424,16 +424,17 @@ impl Provider for AnthropicProvider {
             ));
         }
         if !status.is_success() {
-            let text = resp.text().await.unwrap_or_default();
+            let text = super::error_text(resp, super::MAX_ERROR_BODY_BYTES).await;
             return Err(ProviderError::Http(
                 "anthropic".into(),
                 status.as_u16(),
                 text,
             ));
         }
-        let parsed: MsgResp = resp
-            .json()
+        let raw = super::read_capped(resp, super::MAX_RESPONSE_BYTES)
             .await
+            .map_err(|e| ProviderError::Malformed("anthropic".into(), e))?;
+        let parsed: MsgResp = serde_json::from_slice(&raw)
             .map_err(|e| ProviderError::Malformed("anthropic".into(), e.to_string()))?;
         let text = parsed
             .content

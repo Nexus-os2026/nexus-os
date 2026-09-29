@@ -250,12 +250,13 @@ impl Provider for HuggingFaceProvider {
             return Err(ProviderError::Http(
                 "huggingface".into(),
                 status.as_u16(),
-                resp.text().await.unwrap_or_default(),
+                super::error_text(resp, super::MAX_ERROR_BODY_BYTES).await,
             ));
         }
-        let parsed: InferResp = resp
-            .json()
+        let raw = super::read_capped(resp, super::MAX_RESPONSE_BYTES)
             .await
+            .map_err(|e| ProviderError::Malformed("huggingface".into(), e))?;
+        let parsed: InferResp = serde_json::from_slice(&raw)
             .map_err(|e| ProviderError::Malformed("huggingface".into(), e.to_string()))?;
         let text = match parsed {
             InferResp::Array(mut v) => v.pop().map(|g| g.generated_text).unwrap_or_default(),
