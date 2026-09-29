@@ -973,13 +973,18 @@ fn ignored_anchored_directories() -> Vec<IgnoredDirectory> {
     directories
 }
 
-/// The files git tracks in this checkout, when git and a checkout are
-/// available; `None` otherwise (a source archive, or no git). The walk skips
-/// build output, dependencies and ignored local state, so a recipe or
-/// pipeline file tracked there anyway (for example force-added) is found
-/// through this list instead.
+/// The files git tracks in this checkout. `None` when there is no checkout
+/// (`root` has no `.git`, as in a source archive) or git is not installed.
+/// In a checkout with git installed, a git that fails (for example a
+/// `safe.directory` refusal or a broken index) fails the guard: the walk
+/// alone is not trusted there. The walk skips build output, dependencies and
+/// ignored local state, so a recipe or pipeline file tracked there anyway
+/// (for example force-added) is found through this list instead.
 fn tracked_files(root: &Path) -> Option<Vec<String>> {
-    let output = std::process::Command::new("git")
+    if !root.join(".git").exists() {
+        return None;
+    }
+    let output = match std::process::Command::new("git")
         .arg("-C")
         .arg(root)
         .args(["ls-files", "-z"])
@@ -987,17 +992,26 @@ fn tracked_files(root: &Path) -> Option<Vec<String>> {
         .env_remove("GIT_WORK_TREE")
         .env_remove("GIT_INDEX_FILE")
         .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
         .output()
-        .ok()?;
-    output.status.success().then(|| {
+    {
+        Ok(output) => output,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => panic!("git could not be run in this checkout: {error}"),
+    };
+    assert!(
+        output.status.success(),
+        "`git ls-files` failed in this checkout ({}): {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    Some(
         output
             .stdout
             .split(|byte| *byte == 0)
             .filter(|path| !path.is_empty())
             .map(|path| String::from_utf8_lossy(path).into_owned())
-            .collect()
-    })
+            .collect(),
+    )
 }
 
 /// Every file of the repository as a workspace-relative path, in sorted
@@ -1068,6 +1082,10 @@ fn p0_fg_standalone_every_recipe_is_inventoried() {
 /// (including included files by the conventional names), sourcehut
 /// (`.build.yml`, `.builds/`), TeamCity (`.teamcity/`), and the pipeline
 /// files of other CI services.
+///
+/// Not a claim: detection covers the names and places listed here only. A
+/// CI service configured under another name or place, or outside the
+/// repository (in a service's own settings), is not detected.
 fn is_ci_config(relative: &str) -> bool {
     let name = file_name(relative).to_ascii_lowercase();
     let yaml = name.ends_with(".yml") || name.ends_with(".yaml");
@@ -1213,6 +1231,11 @@ fn p0_fg_standalone_readme_names_every_withdrawn_binary() {
 /// since an escape can spell `include`. Letter case is ignored. Lines that
 /// hold only a comment are skipped; text inside block scalars is read like
 /// any other line, which errs on the side of refusing.
+///
+/// Not a claim: this is a line-level text recognizer, not a YAML parser. A
+/// key given through an alias (`*name :`), a complex key whose text is a
+/// block scalar (`? |` with `include` on a later line), and an escaped key
+/// inside a flow mapping (`{"\x69nclude": …}`) are not recognized.
 fn declares_include(yaml: &str) -> bool {
     yaml.lines().any(|raw| {
         let mut line = raw.trim_start();
@@ -1316,7 +1339,9 @@ fn action_references(line: &str) -> Vec<&str> {
 /// that name build output other than the desktop bundle: anything under a
 /// `release` or `debug` profile directory but the allowlisted outputs, the
 /// profile directory itself, the target directory itself, or a glob in the
-/// target directory.
+/// target directory. Each word is checked as written and with its `.` and
+/// `..` segments resolved, and any `..` segment in a word that names
+/// `target/` fails it (`target/release/bundle/../nexus-server`).
 fn undesktop_build_outputs(line: &str) -> Vec<String> {
     let normalized = line.to_ascii_lowercase().replace('\\', "/");
     normalized
@@ -1340,40 +1365,90 @@ fn undesktop_build_outputs(line: &str) -> Vec<String> {
                 )
         })
         .filter(|word| {
-            let components: Vec<&str> = word.split('/').collect();
-            components.iter().enumerate().any(|(index, component)| {
-                let next = components.get(index + 1).copied();
-                let profile = index > 0 && matches!(*component, "release" | "debug");
-                let target = *component == "target" && word.contains('/');
-                (profile && !next.is_some_and(|next| DESKTOP_BUILD_OUTPUTS.contains(&next)))
-                    || (target
-                        && next
-                            .is_none_or(|next| next.is_empty() || next.contains(['*', '?', '['])))
-            })
+            let offends = |components: &[&str]| {
+                components.iter().enumerate().any(|(index, component)| {
+                    let next = components.get(index + 1).copied();
+                    let profile = index > 0 && matches!(*component, "release" | "debug");
+                    let target = *component == "target" && word.contains('/');
+                    (profile && !next.is_some_and(|next| DESKTOP_BUILD_OUTPUTS.contains(&next)))
+                        || (target
+                            && next.is_none_or(|next| {
+                                next.is_empty() || next.contains(['*', '?', '['])
+                            }))
+                })
+            };
+            let written: Vec<&str> = word.split('/').collect();
+            let mut resolved: Vec<&str> = Vec::new();
+            for component in &written {
+                match *component {
+                    "." => {}
+                    ".." => {
+                        resolved.pop();
+                    }
+                    other => resolved.push(other),
+                }
+            }
+            (word.contains("target/") && written.contains(&".."))
+                || offends(&written)
+                || offends(&resolved)
         })
         .map(str::to_string)
         .collect()
 }
 
-/// The shipping cargo invocations in a CI configuration that select a
-/// withdrawn package, as (subcommand, selector). The configuration is read
-/// as one word stream (so continued and folded lines join); an invocation
-/// runs from a `cargo` (or `cross`) word to the next shell separator or the
-/// next invocation. A package is selected by `-p NAME`, `-pNAME`,
-/// `-p=NAME`, `--package NAME`, `--package=NAME` (a package id spec names
-/// its package; a glob counts as selecting every package) or by
-/// `--manifest-path` to a withdrawn package's manifest. Not a claim: a
-/// build selected by working directory, by `cd`, or through a variable or
-/// script is not seen here (the upload and publish checks bound those).
+/// Cargo options that take a value as the next word, so that word is not
+/// the subcommand.
+const CARGO_VALUE_OPTIONS: &[&str] = &[
+    "--color",
+    "--config",
+    "--manifest-path",
+    "--target-dir",
+    "-C",
+    "-Z",
+];
+
+/// The cargo invocations in a CI configuration that ship a withdrawn entry
+/// point, as (what, invocation). The configuration is read as one word
+/// stream (so continued and folded lines join): shell operators (`;`, `&`,
+/// `|`, in any run) are separate words even when written against another
+/// word, and continuation marks (`\`, a PowerShell backtick) are dropped.
+/// An invocation runs from a `cargo` (or `cross`) word to the next shell
+/// separator or the next invocation; its subcommand is its first word that
+/// is neither an option nor the value of one in [`CARGO_VALUE_OPTIONS`].
+/// Found are:
+/// - a shipping subcommand (not in [`NON_SHIPPING_CARGO_SUBCOMMANDS`]) that
+///   selects a withdrawn package by `-p NAME`, `-pNAME`, `-p=NAME`,
+///   `--package NAME`, `--package=NAME` (a package id spec names its
+///   package; a glob counts as selecting every package) or by
+///   `--manifest-path` to a withdrawn package's manifest;
+/// - any subcommand naming a withdrawn binary by `--bin NAME` or
+///   `--bin=NAME`, quoted or not;
+/// - `cargo install` from a path (`--path DIR`, `--path=DIR`).
+///
+/// Not a claim: this is a word-level recognizer, not a shell or YAML
+/// parser. A build selected by working directory, by `cd`, or through a
+/// variable, alias or script is not seen here (the upload and publish
+/// checks bound those).
 fn shipped_withdrawn_packages(
     text: &str,
     packages: &BTreeSet<String>,
     directories: &BTreeSet<String>,
+    binaries: &[&str],
 ) -> Vec<(String, String)> {
-    let words: Vec<&str> = text
+    let spaced: String = text
         .lines()
         .filter(|line| !line.trim_start().starts_with('#'))
-        .flat_map(str::split_whitespace)
+        .flat_map(|line| line.chars().chain(['\n']))
+        .flat_map(|c| {
+            if matches!(c, ';' | '&' | '|') {
+                vec![' ', c, ' ']
+            } else {
+                vec![c]
+            }
+        })
+        .collect();
+    let words: Vec<&str> = spaced
+        .split_whitespace()
         .map(|word| {
             word.trim_matches(|c: char| {
                 matches!(
@@ -1382,6 +1457,7 @@ fn shipped_withdrawn_packages(
                 )
             })
         })
+        .filter(|word| !word.is_empty() && *word != "\\")
         .collect();
     let is_cargo = |word: &str| {
         let word = word.to_ascii_lowercase();
@@ -1390,16 +1466,18 @@ fn shipped_withdrawn_packages(
         let word = word.strip_suffix(".exe").unwrap_or(word);
         word == "cargo" || word == "cross"
     };
-    let is_separator =
-        |word: &str| matches!(word, "&&" | "||" | ";" | "|" | "then" | "do") || word.ends_with(';');
+    let is_separator = |word: &str| {
+        word.chars().all(|c| matches!(c, ';' | '&' | '|')) || matches!(word, "then" | "do")
+    };
+    let unquoted = |value: &str| value.trim_matches(['"', '\'']).to_string();
     let selects_withdrawn = |spec: &str| {
-        let spec = spec.trim_matches(['"', '\'']);
-        let spec = spec.rsplit('#').next().unwrap_or(spec);
+        let spec = unquoted(spec);
+        let spec = spec.rsplit('#').next().unwrap_or(&spec);
         let name = spec.split(['@', ':']).next().unwrap_or(spec);
         spec.contains(['*', '?', '[']) || packages.contains(name)
     };
     let manifest_is_withdrawn = |path: &str| {
-        let path = path.trim_matches(['"', '\'']).replace('\\', "/");
+        let path = unquoted(path).replace('\\', "/");
         directories.iter().any(|directory| {
             let manifest = format!("{directory}/Cargo.toml");
             path == manifest
@@ -1407,6 +1485,7 @@ fn shipped_withdrawn_packages(
                 || path.ends_with(&format!("/{manifest}"))
         })
     };
+    let names_withdrawn_binary = |name: &str| binaries.contains(&unquoted(name).as_str());
     let mut found = Vec::new();
     let mut index = 0;
     while index < words.len() {
@@ -1419,32 +1498,40 @@ fn shipped_withdrawn_packages(
             end += 1;
         }
         let invocation = &words[index + 1..end];
-        let subcommand = invocation
-            .iter()
-            .find(|word| !word.starts_with('-') && !word.starts_with('+'))
-            .copied()
-            .unwrap_or_default();
-        if !NON_SHIPPING_CARGO_SUBCOMMANDS.contains(&subcommand) {
-            let value_after = |at: usize| invocation.get(at + 1).copied().unwrap_or_default();
-            for (at, word) in invocation.iter().enumerate() {
-                let selected = if *word == "-p" || *word == "--package" {
-                    selects_withdrawn(value_after(at))
-                } else if let Some(spec) = word.strip_prefix("--package=") {
-                    selects_withdrawn(spec)
-                } else if let Some(spec) =
-                    word.strip_prefix("-p").filter(|_| !word.starts_with("--"))
-                {
-                    selects_withdrawn(spec.strip_prefix('=').unwrap_or(spec))
-                } else if *word == "--manifest-path" {
-                    manifest_is_withdrawn(value_after(at))
-                } else if let Some(path) = word.strip_prefix("--manifest-path=") {
-                    manifest_is_withdrawn(path)
-                } else {
-                    false
-                };
-                if selected {
-                    found.push((subcommand.to_string(), invocation.join(" ")));
-                }
+        let mut subcommand = "";
+        let mut at = 0;
+        while let Some(word) = invocation.get(at) {
+            if CARGO_VALUE_OPTIONS.contains(word) {
+                at += 2;
+            } else if word.starts_with('-') || word.starts_with('+') {
+                at += 1;
+            } else {
+                subcommand = word;
+                break;
+            }
+        }
+        let shipping = !NON_SHIPPING_CARGO_SUBCOMMANDS.contains(&subcommand);
+        let value_after = |at: usize| invocation.get(at + 1).copied().unwrap_or_default();
+        for (at, word) in invocation.iter().enumerate() {
+            let selected = if *word == "-p" || *word == "--package" {
+                shipping && selects_withdrawn(value_after(at))
+            } else if let Some(spec) = word.strip_prefix("--package=") {
+                shipping && selects_withdrawn(spec)
+            } else if let Some(spec) = word.strip_prefix("-p").filter(|_| !word.starts_with("--")) {
+                shipping && selects_withdrawn(spec.strip_prefix('=').unwrap_or(spec))
+            } else if *word == "--manifest-path" {
+                shipping && manifest_is_withdrawn(value_after(at))
+            } else if let Some(path) = word.strip_prefix("--manifest-path=") {
+                shipping && manifest_is_withdrawn(path)
+            } else if *word == "--bin" {
+                names_withdrawn_binary(value_after(at))
+            } else if let Some(name) = word.strip_prefix("--bin=") {
+                names_withdrawn_binary(name)
+            } else {
+                subcommand == "install" && (*word == "--path" || word.starts_with("--path="))
+            };
+            if selected {
+                found.push((subcommand.to_string(), invocation.join(" ")));
             }
         }
         index = end;
@@ -1459,7 +1546,10 @@ fn shipped_withdrawn_packages(
 fn p0_fg_standalone_shipping_recognizers_catch_probes() {
     let packages: BTreeSet<String> = ["nexus-cli".to_string()].into();
     let directories: BTreeSet<String> = ["cli".to_string()].into();
-    let ships = |text: &str| !shipped_withdrawn_packages(text, &packages, &directories).is_empty();
+    let binaries = ["fg-withdrawn-bin"];
+    let ships = |text: &str| {
+        !shipped_withdrawn_packages(text, &packages, &directories, &binaries).is_empty()
+    };
     for text in [
         "cargo build --release -p nexus-cli",
         "cargo build --release -pnexus-cli",
@@ -1475,6 +1565,16 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
         "$CARGO build --manifest-path=./cli/Cargo.toml",
         "cross build -p nexus-cli",
         "cargo --config x build -p nexus-cli",
+        "cargo build --release -p nexus-cli;echo done",
+        "cargo build -p nexus-cli&&echo done",
+        "cargo --color always build -p nexus-cli",
+        "cargo -Z unstable-options build -p nexus-cli",
+        "cargo `\n  build -p nexus-cli",
+        "cargo build --release --bin 'fg-withdrawn-bin'",
+        "cargo build --release --bin=\"fg-withdrawn-bin\"",
+        "cargo test --bin fg-withdrawn-bin",
+        "cargo install --locked --path cli",
+        "cargo install --path=cli",
     ] {
         assert!(ships(text), "not recognized as shipping: {text}");
     }
@@ -1484,6 +1584,13 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
         "cargo build --release && mkdir -p nexus-cli",
         "cargo build -p nexus-desktop-backend",
         "# cargo build -p nexus-cli",
+        "cargo --color always test -p nexus-cli",
+        "cargo --config net.offline=true check -p nexus-cli",
+        "cargo \\\n  test -p nexus-cli",
+        "cargo `\n  clippy -p nexus-cli",
+        "cargo test -p nexus-cli | tee log",
+        "cargo build --release --bin fg-withdrawn-bin-2",
+        "cargo install ripgrep --version 14.1.1 --locked --root \"$root\"",
     ] {
         assert!(!ships(text), "wrongly recognized as shipping: {text}");
     }
@@ -1501,6 +1608,11 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
         "path: target/x86_64-unknown-linux-gnu/release/nexus-server",
         "path: ${{ env.CARGO_TARGET_DIR }}/release/nexus-server",
         "path: target/release/{bundle,nexus-server}",
+        "path: target/release/bundle/../nexus-server",
+        "path: target/release/bundle/../../release/nexus-server",
+        "path: target/release/./nexus-server",
+        "path: target/release/bundle/..",
+        "Copy-Item target\\release\\bundle\\..\\nexus-server.exe out",
     ] {
         assert!(
             !undesktop_build_outputs(line).is_empty(),
@@ -1512,6 +1624,7 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
         "Get-ChildItem -Recurse target\\release\\bundle -ErrorAction SilentlyContinue",
         "ls -R target/release/bundle || true",
         "find target/release/bundle/deb -mindepth 2",
+        "ls ./target/release/bundle",
         "cargo build --release --target x86_64-pc-windows-msvc",
     ] {
         assert!(
@@ -1546,6 +1659,12 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
 /// one this guard reads: the GitHub workflows and `.gitlab-ci.yml`, which
 /// includes no other file. A pipeline file of any other kind or place fails
 /// until it is reviewed.
+///
+/// Not a claim: the checks are text recognizers over shell and YAML, not
+/// parsers of either; they refuse the spellings their unit tests list and
+/// err towards refusing, but a spelling they do not model (see
+/// [`shipped_withdrawn_packages`], [`declares_include`] and
+/// [`is_ci_config`]) is not seen.
 #[test]
 fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
     let root = workspace_root();
@@ -1649,8 +1768,12 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
                 );
             }
         }
-        let shipped =
-            shipped_withdrawn_packages(&text, &withdrawn_packages, &withdrawn_directories);
+        let shipped = shipped_withdrawn_packages(
+            &text,
+            &withdrawn_packages,
+            &withdrawn_directories,
+            WITHDRAWN_BINARIES,
+        );
         assert!(
             shipped.is_empty(),
             "{name}: a withdrawn package is built for shipping by {shipped:?}"
