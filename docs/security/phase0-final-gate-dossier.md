@@ -8,8 +8,20 @@ as such; everything else is open for the Final Gate.
 P0-FG1 updates item J1 only: the withdrawal of `crates/nexus-server` is
 implemented on its validation branch, and Architect review is pending.
 
+**P0-FINAL-GATE-CLOSURE (internal work, not approval).** The Architect's
+closure mission implements contracts A–K, C5 and DEP on local component
+branches, composed into the closure candidate
+(`implement/p0-final-gate-closure`). Blocks headed "P0-FINAL-GATE-CLOSURE"
+describe that candidate as composed for this update: every workstream except
+item D. They are claims for Architect review, checked against the code; the
+internal reviews are recorded on the mission's evidence branch. Nothing here
+approves an item, accepts a risk, integrates a change, or declares FG1, the
+Final Gate or Phase Zero complete. Earlier text stays as it was; where it is
+now stale, a labelled correction or note says so. Text marked `[PENDING: …]`
+describes work that is not yet composed.
+
 Every location below is a repository path and function at the C5C head,
-except where P0-FG1 is named. An
+except where P0-FG1 or P0-FINAL-GATE-CLOSURE is named. An
 **untrusted surface** means one of:
 
 - a script running in the desktop webview (the CSP is `null`, item D, so every
@@ -22,6 +34,19 @@ except where P0-FG1 is named. An
 without a local same-user foothold or an operator mistake.
 
 ## Summary
+
+### On the closure candidate (P0-FINAL-GATE-CLOSURE)
+
+No row is closed, complete or approved: each awaits Architect review. The
+numbered decision requests are collected at the end of this dossier.
+
+| Item | Topic | Closure candidate | Status |
+|---|---|---|---|
+| A | Configuration encryption key | A new or changed credential is written only under the operator key `NEXUS_CONFIG_KEY`; legacy files open through an explicit two-key read path; a load never rewrites a file; protection changes are reported and audited | Repaired on the closure candidate (P0-FINAL-GATE-CLOSURE); Architect review pending. Decision requests 9 and 10 |
+| E | Operator overrides | The vault key file is validated on the opened file (Linux, macOS) and refused elsewhere; the vault key must open every stored secret before the vault is used; `key_env` other than `NEXUS_ENCRYPTION_KEY` is refused | Repaired on the closure candidate; Architect review pending. Decision request 11 |
+| H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged; Architect review pending. Decision request 10 |
+
+### At C5C (historical)
 
 | Item | Topic | State at C5C | Final-Gate status |
 |---|---|---|---|
@@ -88,6 +113,100 @@ per item. J concerns a separately deployed server, not the desktop.
   user secret, and how existing files migrate. This stays unresolved after
   C5C. The Architect's repair review authorized no crypto, vault or server
   redesign.
+
+**Corrections (P0-FINAL-GATE-CLOSURE) to the C5C text above.**
+
+- The key description omitted three cases. An empty `NEXUS_CONFIG_KEY` gave
+  the constant key `SHA-256("nexus-config-key-v1")`. A value that is not valid
+  UTF-8 was ignored in favour of the ambient derivation. With none of the
+  ambient values set, the key was that same constant.
+- "The legacy deploy commands that used them are closed (C5A)" was
+  incomplete. C5A closed `builder_deploy`, but `builder_deploy_store_credentials`
+  and `builder_backend_connect` (the Supabase service key) stayed open and
+  wrote the XOR store until P0-FINAL-GATE-CLOSURE (item H).
+  `builder_deploy_check_credentials` and `builder_deploy_list_sites` still
+  read it.
+- "What protects the file today": the configuration writer no longer calls
+  `set_restrictive_permissions`. It creates each new file owner-only before
+  writing (see below).
+
+**Repaired in P0-FINAL-GATE-CLOSURE (contract A; Architect review pending).**
+
+- **Where.** `kernel/src/config.rs`: `ConfigKeyMaterial`,
+  `save_config_checked_to_path`, `load_config_from_path_with`,
+  `credential_fields`. The interface writer is `save_config_with` and
+  `write_keeping_stored_credentials`
+  (`app/src-tauri/src/commands/chat_llm.rs`). The CLI setup library
+  (`cli/src/setup.rs`) uses the same kernel writer; its binary is withdrawn
+  (item J).
+- **Operator key.** A new or changed credential is written only under the
+  operator key: `NEXUS_CONFIG_KEY` from the launch environment, when it is
+  valid UTF-8, not empty or whitespace-only, and does not derive the ambient
+  key (the account and host names run together). The credentials are the 17
+  fields of `credential_fields` and every provider `api_key`. Otherwise the
+  save is refused and nothing is written (`configuration_key_required`,
+  `configuration_key_is_ambient`). Clearing a credential, or a save that adds
+  or changes none, needs no key.
+- **Key quality (what is enforced).** Presence, non-blank content and not the
+  ambient derivation; nothing else. The key is
+  `SHA-256("nexus-config-key-v1" || value)` with no salt and no stretching, so
+  a short or guessable value gives a correspondingly weak key.
+- **Legacy read path (explicit and tested).** A version 1 envelope is tried
+  with at most two keys, and the AES-GCM tag decides: the legacy explicit
+  derivation (`NEXUS_CONFIG_KEY` as any valid UTF-8 value, even empty) and the
+  ambient derivation (`HOME`, `USER`, `USERNAME`, `HOSTNAME`, each when set).
+  No other key is tried. Both derivations are byte-for-byte those of earlier
+  builds (`p0_fg_a_legacy_key_derivations_are_unchanged`, independent
+  vectors). Legacy plaintext is read as it is.
+- **No silent migration.**
+  - A load never rewrites an existing file. Before, a load re-encrypted a
+    plaintext file and replaced an empty file with the default.
+  - A missing file is still created with the default configuration, which
+    holds no credential. An empty or whitespace-only file is refused, not
+    replaced.
+  - A save keeps the key that opened the file, with two exceptions. A
+    credential save moves the file to the operator key
+    (`rekeyed_to_operator_key`). The first explicit save of a legacy
+    plaintext file encrypts it, under the operator key when one is set,
+    otherwise under the legacy ambient key (`encrypted_legacy_plaintext`).
+  - Every save reports such a protection change: one bounded line on standard
+    error, and the desktop's recorder, which appends a `save_config` audit
+    event by reason class (`install_protection_recorder`, installed in
+    `AppState::new` before the credential migration can re-save the file).
+    The interface save audits its own outcome.
+  - A file on disk that does not open (unreadable, empty, malformed,
+    undecryptable or another envelope) is never overwritten
+    (`existing_configuration_unreadable`).
+- **Writes.** A new owner-only file (0600 on Unix) with a unique name, synced,
+  then renamed over the configuration. On Windows it keeps the directory's
+  inherited access. Load errors carry no configuration text.
+- **Interface.** `save_config` keeps the C5B rule that an existing, loadable
+  security baseline is required, and refuses a changed `llm.ollama_url`
+  (`ollama_endpoint_backend_owned`, item B).
+- **Coverage.** A kernel test walks every configuration field and requires
+  each field named like a secret (key, token, secret, password) to be a listed
+  credential, a provider key, or on an explicit list of non-secret fields.
+- **Vault master key (related).** `EncryptionKey::from_env`
+  (`kernel/src/crypto.rs`) refuses an unset, empty or whitespace-only
+  `NEXUS_ENCRYPTION_KEY`, which gave a constant key. `from_config` refuses a
+  `key_env` other than `NEXUS_ENCRYPTION_KEY`, which it used to ignore.
+- **Consequence.** Without a usable `NEXUS_CONFIG_KEY`, no new credential can
+  be saved from the desktop's settings, including messaging bot tokens. Once
+  a credential save moves a file to the operator key, the file opens only
+  while the same key is set.
+- **Tests and guards.** `p0_fg_a_*` in `kernel/src/config.rs`,
+  `kernel/tests/phase0_config_key.rs` (unset, empty, whitespace-only and, on
+  Unix, non-UTF-8 values), the desktop's
+  `p0_fg_a_interface_credential_edits_need_the_operator_key`, and the
+  `phase0_surface/fg_secrets/tests.rs` guards.
+- **Non-claims.**
+  - Credentials already under the ambient key stay under it until a
+    credential save. Historical files are not re-encrypted.
+  - A same-user process can still read or replace the file, derive the
+    ambient key of a legacy file, or change the launch environment.
+  - No key strength is measured.
+  - Key material outside the configuration file is outside this contract.
+- **Decision requested.** Requests 9 and 10.
 
 ## B. Egress policy
 
@@ -341,6 +460,60 @@ all `*_API_KEY` (guard
 - **Decision needed.** Which of these survive into a shipped configuration
   model, and whether endpoint overrides need the egress policy of item B.
 
+**Repaired in P0-FINAL-GATE-CLOSURE (contract E: the vault key source;
+Architect review pending).** The key file stays an operator-controlled
+startup source only; security-section editing and frontend key-file
+selection stay closed.
+
+- **Where.** `EncryptionKey::from_file`, `key_file::open`, `key_file::read`
+  and `check_opened_key_file` (`kernel/src/crypto.rs`); `verify_vault_key`
+  and `run_migrations` (`kernel/src/startup/mod.rs`).
+- **Validated on what is read.** The file is opened once, with `O_NOFOLLOW`,
+  `O_NONBLOCK` and `O_NOCTTY`, and every check applies to that open
+  descriptor, never to the path resolved again:
+  - a regular file owned by the effective user, with no access for group or
+    others, of 1 to 4,096 bytes, not all whitespace;
+  - after a bounded read, the file is unchanged (device, inode, size,
+    modification time, mode and owner) and the bytes read equal its size.
+- **Derivation unchanged.** Exactly 32 bytes are the raw key; other contents
+  are hashed once with SHA-256.
+- **Refused.** A symbolic link as the last path component; directories,
+  FIFOs and devices; a file owned by another user or accessible to group or
+  others; an empty, whitespace-only or oversized file; a file that changes
+  during the read; and any key file on a platform other than Linux and macOS
+  (Windows included), where these checks are not implemented (use
+  `key_source = "env"`). Reasons are bounded and never name the file.
+- **Stored-row check.** Before the vault is used, the master key must open
+  every secret stored in the scopes `llm`, `social`, `messaging.whatsapp`,
+  `messaging.matrix`, `http` and `auth.oidc`. A failed authenticated
+  decryption reports a key that does not open the vault; a malformed row
+  reports a damaged secret; a storage error reports an unreadable vault. In
+  each case the vault is not used, and nothing is migrated or written. An
+  empty vault accepts its first key.
+- **Key material.** `NEXUS_ENCRYPTION_KEY` must be set and not empty or
+  whitespace-only, and `key_env` must name it (item A).
+- **Consequence.** A symlinked key file (for example a projected secret
+  mount), one accessible to others, an empty one, a key file on another
+  platform, or a key that does not open the stored rows leaves the vault
+  unavailable until the operator fixes it. Startup then prints
+  "secrets vault unavailable: …; vault-backed operations are refused", and
+  `save_api_key` refuses the six vault-backed providers ("vault not
+  initialized"); `groq` is written only to the process environment, as
+  before. Nexus never modifies the key file or re-encrypts the vault.
+- **Tests.** `p0_fg_e_*` in `kernel/src/crypto.rs` (Linux and macOS: symlink,
+  swap after open, change during the read, FIFO without blocking, device,
+  directory, sizes, modes, owner; elsewhere: refusal) and in
+  `kernel/src/startup/mod.rs`; guard
+  `p0_fg_e_vault_key_sources_are_validated_on_what_is_read`.
+- **Non-claims.**
+  - Intermediate directories, their permissions and macOS extended ACLs are
+    not examined.
+  - A same-user process can still replace the key file between startups.
+  - Only the six scopes above are verified.
+  - The Architect's operator-trust decision above still applies: this is
+    validation of an operator source, not proof of secure secret storage.
+- **Decision requested.** Request 11.
+
 ## F. Network peers (Nexus Link)
 
 - **Where.** `connectors/llm/src/nexus_link.rs`; IPC `nexus_link_send_model`
@@ -413,6 +586,71 @@ all `*_API_KEY` (guard
 - **Exploitability.** No open IPC command reads these files back. A local
   same-user process can.
 - **Decision needed.** Move the tokens into the secrets facade.
+
+**Correction (P0-FINAL-GATE-CLOSURE) to the C5C text above.** The list of
+secrets at rest was incomplete. It omitted: the messaging bot tokens, which
+`messaging_connect_platform` copied in plaintext to
+`messaging_tokens/<platform>.json`; the Slack Socket Mode URL it cached in
+`slack_ws_url.txt`; the API Client collections, which could hold tokens,
+passwords and API keys; the XOR deploy store of item A; and backups, which
+copied all of these.
+
+**Repaired in P0-FINAL-GATE-CLOSURE (contract H: new writes; Architect review
+pending).** No approved secret store exists for these credentials, so the
+operations that would persist them are closed or refuse, and stored files are
+left as they are.
+
+- **OAuth sign-in.** `email_start_oauth` and `integration_start_oauth` are
+  closed (`Closure::SecretStorage`) before any listener, browser launch,
+  request or write. The C5C loopback helpers are compiled for their tests
+  only, and no production code opens a browser (`open::that`). The email
+  commands still read token files stored earlier, and `email_disconnect`
+  still removes one on request.
+- **Deploy and Supabase credentials.** `builder_deploy_store_credentials` and
+  `builder_backend_connect` are closed (`Closure::SecretStorage`), and the
+  store refuses new entries (`agents/web-builder/src/deploy/credentials.rs`,
+  `agents/web-builder/src/backend/credentials.rs`). Entries stored earlier
+  stay readable; a deletion never rewrites a store it cannot read or parse.
+- **Messaging.** `messaging_connect_platform`
+  (`app/src-tauri/src/commands/apps.rs`) accepts only the stored
+  configuration token, which the interface sees as the placeholder; a new
+  token is saved by the settings save, which needs the operator key (item
+  A). It writes no token file and no Socket Mode URL. `read_messaging_token`
+  uses the configuration's token first, then reads a legacy token file as it
+  is. Connect, send and poll errors carry no URL, so the Telegram token in the
+  URL path never reaches the interface. The connectivity check is bounded
+  (10 s in total, 64 KiB per body); send and poll too (30 s, 4 MiB).
+- **API Client collections.** `api_client_save_collections` refuses
+  collections that are not JSON or that hold a non-empty `authToken`,
+  `authPass` or `authKeyValue`, or a credential header entry
+  (`Authorization`, `Proxy-Authorization`, `Cookie`, `X-Api-Key`, `Api-Key`,
+  `X-Auth-Token`, `Private-Token`); field and header names match in any
+  letter case. The stored file is left as it was.
+- **Backups.** `create_backup` (`kernel/src/backup.rs`, IPC `backup_create`)
+  never copies `email_oauth/`, `integrations/`, `messaging_tokens/`,
+  `deploy_credentials.json`, `oauth_settings.json` or
+  `api_collections.json`. It copies the configuration file only when that
+  file is an exact configuration encryption envelope or the archive is
+  encrypted; otherwise it skips it and says so in the backup metadata. An
+  encrypted backup checks for its key before writing anything. The archive
+  is created owner-only (0600 on Unix); on Windows it keeps the directory's
+  inherited access.
+- **Example program.** `kernel/examples/dump_config.rs` prints only whether an
+  NVIDIA key is stored, never the key.
+- **Tests and guards.** `p0_fg_h_*` in `commands/apps/tests.rs` and
+  `kernel/src/backup.rs`, `p0_fg_a_*` in the web-builder stores, and the
+  `fg_secrets` guards (`p0_fg_h_sign_in_flows_persist_no_token`,
+  `p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files`,
+  `p0_fg_h_api_client_collections_are_checked_before_writing`,
+  `p0_fg_a_deploy_credentials_are_never_newly_stored`).
+- **Non-claims.**
+  - Closing new writes does not encrypt anything written earlier: OAuth token
+    files, messaging token files, the XOR store, API Client collections and
+    earlier backups stay as they are, readable by a same-user process.
+  - Secrets typed into other API Client headers, parameters, URLs or bodies
+    are user content and are not detected.
+  - Backup exclusion is by name, directly under the data directory.
+- **Decision requested.** Request 10.
 
 ## I. PATH-resolved helper programs
 
