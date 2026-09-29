@@ -70,7 +70,7 @@ These are audit-base totals. Neither C5A nor C5B re-ran the class audit, so the
 table is not re-derived here. §4 and §5 record the transitions site by site,
 and the C5C inventory recounts.
 
-The desktop registered 804 IPC commands. `capabilities/default.json` is core-only and the webview CSP is `null`, so every registered command is callable by any script running in the webview. A frontend value is therefore never evidence of user intent. [P0-FINAL-GATE-CLOSURE: still 804 registered; item D is pending. See §11.7.]
+The desktop registered 804 IPC commands. `capabilities/default.json` is core-only and the webview CSP is `null`, so every registered command is callable by any script running in the webview. A frontend value is therefore never evidence of user intent. [P0-FINAL-GATE-CLOSURE: still 804 registered; item D restricts them to the privileged document. See §11.7.]
 
 ## 2. Families
 
@@ -474,7 +474,7 @@ Also recorded for the final inventory:
 - **Secrets in curl arguments.** Some provider calls pass API keys in `-H` arguments, where a same-user process listing can see them. This is unchanged. [P0-FINAL-GATE-CLOSURE: changed; see dossier item C and §11.7.]
 - **PATH-resolved helper binaries run with fixed arguments.** This includes curl, git, and `which` presence probes for git, ripgrep and ollama at nx bridge startup. No external CLI agent is among them. [See dossier item I and §11.7.]
 - **OS input** by the kernel computer-control commands. The E6 decision covered only the EOF approval bug.
-- The `null` webview CSP. [P0-FINAL-GATE-CLOSURE: item D is pending; see §11.7.]
+- The `null` webview CSP. [P0-FINAL-GATE-CLOSURE: replaced by a restrictive CSP, with an app ACL (item D); see §11.7.]
 
 ## 8. Reachability guard
 
@@ -1057,17 +1057,16 @@ effective port and whole leading path segments. It uses the `url` parser and
 
 Internal work, not approval. The Architect's closure mission implements the
 Final-Gate contracts on the closure candidate
-(`implement/p0-final-gate-closure`). This section records the candidate as
-composed for this documentation update: every workstream except item D.
-Nothing here approves an item, accepts a risk or declares FG1, the Final Gate
-or Phase Zero complete. Text marked `[PENDING: …]` describes work that is not
-yet composed. `phase0-final-gate-dossier.md` gives the evidence per item.
+(`implement/p0-final-gate-closure`). This section records the candidate with
+every workstream composed (`d1735577`). Nothing here approves an item,
+accepts a risk or declares FG1, the Final Gate or Phase Zero complete.
+`phase0-final-gate-dossier.md` gives the evidence per item.
 
 ### 11.1 Scope and method
 
 - **Compared states.** The approved candidate `71c47acb` (the authoritative
-  head after P0-FG1's integration) and the closure candidate at this
-  documentation's base.
+  head after P0-FG1's integration) and the final closure candidate
+  `d1735577`.
 - **Counts come from the code, not from reports.**
   - The registries of `app/src-tauri/src/phase0_surface/tests.rs`
     (`CLOSED_COMMANDS`, `LATENT_UNSAFE_APIS`, `CURL_SITES`,
@@ -1091,18 +1090,18 @@ yet composed. `phase0-final-gate-dossier.md` gives the evidence per item.
 |---|---|---|---|
 | A | Repaired: a new or changed credential only under the operator key `NEXUS_CONFIG_KEY` (not blank, not the ambient derivation); explicit two-key legacy read path; no load-time rewrite; protection changes reported and audited; owner-only atomic writes | `kernel/src/config.rs`; `app/src-tauri/src/commands/chat_llm.rs` | `fg_secrets/tests.rs`; `p0_fg_a_*` in `kernel/src/config.rs` |
 | B | Repaired: 11 caller-destination commands closed; the Ollama address from `OLLAMA_URL` or the fixed default only; agent web fetch and caller-destination tools refused; SearXNG only at `SEARXNG_URL`; search redirects https only | `commands/{apps,governance,crate_bridges,tools_infra,chat_llm,agents,cognitive}.rs`; `connectors/llm/src/providers/ollama.rs`; `crates/nexus-external-tools/src/execution.rs`; `kernel/src/actuators/web.rs` | `fg_egress/tests.rs` |
-| C | Partly repaired: four hosted providers post in process (no redirect; total time and size bounds); other credentialed reqwest providers follow no redirect; perception closed; credential-bearing tools and MCP servers refused; remaining curl sites counted | `connectors/llm/src/providers/*`; `protocols/src/mcp_client.rs` | `fg_egress/tests.rs` (`CREDENTIAL_CURL_SITES`); provider tests |
-| C5 | Closed: `cm_run_ab_validation` (`AmbientResource`); the Groq-endpoint client takes only `GROQ_API_KEY` | `commands/crate_bridges.rs`; `crates/nexus-capability-measurement` | `fg_approval/tests.rs`; `nim_client.rs` test |
-| D | [PENDING: S1 final] | — | — |
+| C | Partly repaired: four hosted providers post in process (no redirect; total time and size bounds); every other credentialed reqwest client in `connectors/llm`, the desktop's Nexus Code bridge and the desktop swarm follows no redirect; perception closed; credential-bearing tools and MCP servers refused; remaining curl sites counted | `connectors/llm/src/providers/*`; `nexus-code/src/llm/providers/*`; `crates/nexus-swarm/src/providers/*`; `protocols/src/mcp_client.rs` | `fg_egress/tests.rs` (`CREDENTIAL_CURL_SITES`); provider tests |
+| C5 | Repaired (route closed): `cm_run_ab_validation` (`AmbientResource`); the Groq-endpoint client takes only `GROQ_API_KEY` | `commands/crate_bridges.rs`; `crates/nexus-capability-measurement` | `fg_approval/tests.rs`; `nim_client.rs` test |
+| D | Repaired: an app ACL grants all 804 application commands only to the `main` window at the local app origin; a navigation guard admits only the exact app origin, and new windows are denied; frames script-free or removed; CSP with no third-party origin; live native harness in CI on Linux, Windows and macOS. Finding: on Linux neither the ACL nor the guard is sufficient alone | `app/src-tauri/build.rs`; `capabilities/app-commands.json`; `src/webview_boundary.rs`; `tauri.conf.json`; `app/src/**` | `fg_webview/tests.rs`; `tests/webview_boundary_live.rs` |
 | E | Repaired: the vault key file validated on the opened descriptor (Linux, macOS), refused elsewhere; the key must open every stored secret; `key_env` enforced | `kernel/src/crypto.rs`; `kernel/src/startup/mod.rs` | `fg_secrets/tests.rs`; `p0_fg_e_*` |
 | F | Repaired: send closed; empty policy denies; exact socket addresses; no name resolution; secret and key required | `connectors/llm/src/nexus_link.rs` | `nexus_link` tests; `fg_egress/tests.rs` |
-| G | Repaired, with follow-ups [PENDING: S5 final]: L6 refused on every route; caller-asserted approval commands closed; fixed resolver label; truthful self-improvement records; enabled Warden review with no Warden denies | `commands/{agents,consent,cognitive,crate_bridges,chat_llm,self_improvement}.rs`; `nx_bridge/commands.rs`; `lib.rs` | `fg_approval/tests.rs`; `lib_tests.rs` |
+| G | Repaired: L6 (autonomy 6 or above, any id spelling) refused at create, start, resume, approve and review-each, never registered, and refused for goals, loops, scheduled ticks and tool calls; caller-asserted approval commands closed; fixed resolver label; truthful self-improvement records; an enabled Warden review denies with no lookup; rejected manifest schedules refused at create and start | `commands/{agents,consent,cognitive,crate_bridges,chat_llm,self_improvement}.rs`; `nx_bridge/commands.rs`; `lib.rs` | `fg_approval/tests.rs`; `lib_tests.rs`; `commands/cognitive/scheduled_tests.rs` |
 | H | Repaired for new writes: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored token; API Client secrets refused; backups exclude credential stores | `commands/apps.rs`; `lib.rs`; `agents/web-builder/src/{deploy,backend}/credentials.rs`; `kernel/src/backup.rs` | `fg_secrets/tests.rs`; `p0_fg_h_*` |
-| I | Partly repaired: no unowned `ollama serve`; `is_ollama_installed` closed; in-flight downloads ended at a normal exit; Nexus Code `which` probes [PENDING: S3 final] | `commands/chat_llm.rs`; `connectors/llm/src/model_hub.rs`; `lib.rs` | `fg_egress/tests.rs`; `model_hub` tests |
+| I | Partly repaired: no unowned `ollama serve`; `is_ollama_installed` closed; in-flight downloads ended at a normal exit; the desktop's Nexus Code checks use an in-process `PATH` lookup; fixed-argument helpers still resolve from `PATH` | `commands/chat_llm.rs`; `connectors/llm/src/model_hub.rs`; `nexus-code/src/setup.rs`; `lib.rs` | `fg_egress/tests.rs`; `model_hub` tests |
 | J | J1 integrated at `71c47acb` (run #108 green; Architect review pending). J2–J5 withdrawn: 18 withdrawn binaries in all | entry points of the withdrawn targets; the 14 recipe files | `fg_standalone/tests.rs`; per-package `tests/phase0_withdrawal.rs` |
 | K | Evidence corrected (`executes_python_code`); voice stderr repaired; resource surfaces bounded by refusal | dossier "Resource bounds" | `fg_reliability/tests.rs`; kernel, budget and desktop tests |
 | L | Unchanged since C5C | — | C5C guards |
-| DEP | Minimal updates; residual advisories proposed to the Architect [PENDING: DEP final] | `Cargo.lock`; `app/package-lock.json` | — |
+| DEP | Minimal updates and two unused dependencies removed (`rmcp`, `openidconnect`): cargo-audit 19 → 7, cargo-deny advisory errors 16 → 10, npm (app) 14 → 6 on the final lockfiles; residual advisories proposed to the Architect | `Cargo.lock`; `app/package-lock.json`; `protocols/Cargo.toml`; `auth/Cargo.toml` | — |
 
 The two filesystem entries §10.8 left open:
 
@@ -1127,7 +1126,7 @@ Registered commands: 804 at `71c47acb` and on the candidate (the
 | Stream 2 (items A, H) | +4 | |
 | Stream 5 (items G, C5) | +4 | |
 | On the closure candidate | 154 | 650 |
-| Stream 1 (item D) | none in its design [PENDING: S1 final] | |
+| Stream 1 (item D) | none (item D restricts callers, not commands) | |
 
 - Stream 3: `NetworkDestination` 11 (`api_client_request`, the four `a2a_*`,
   the three `a2a_crate_*`, `mcp_host_connect`, `mcp_host_call_tool`,
@@ -1211,46 +1210,51 @@ scanners skip; the scanners are unchanged.
 ### 11.5 Final trust-surface guard
 
 `p0_002c5c_final_trust_surface_guard_is_complete` grows from 20 rows naming
-31 guards to 38 rows naming 111. The rows added:
+31 guards to 45 rows naming 139. Rows with the same regression and source are
+merged below; the guards each adds:
 
-| Regression | Source | Guards |
+| Regression | Source | Guards added |
 |---|---|---|
 | A caller-chosen destination or peer reached from the desktop | `fg_egress/tests.rs` | `p0_fg_caller_chosen_destinations_are_closed_commands`, `p0_fg_closed_destination_handlers_return_only_their_reason`, `p0_fg_the_desktop_calls_no_caller_chosen_destination_client`, `p0_fg_agent_web_fetch_is_not_egress_authority`, `p0_fg_desktop_tool_calls_reach_no_caller_chosen_destination` |
 | An Ollama address from the interface or a stored record | `fg_egress/tests.rs` | `p0_fg_the_ollama_address_is_backend_configuration`, `p0_fg_caller_ollama_addresses_are_refused_before_anything_connects`, `p0_fg_the_persisted_ollama_address_chooses_no_destination` |
 | A credential on a process command line or in a returned error | `fg_egress/tests.rs` | `p0_fg_no_reachable_credential_reaches_a_curl_command_line`, `p0_fg_perception_takes_no_key_and_sends_nothing`, `p0_fg_messaging_errors_never_carry_the_bot_token` |
 | A helper started or run from PATH | `fg_egress/tests.rs` | `p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it` |
 | An egress closure reason that echoes input | `fg_egress/tests.rs` | `p0_fg_egress_closure_reasons_are_bounded_and_echo_no_input` |
-| A new or changed credential under an ambient key, an unvalidated vault key source, or a token persisted outside an approved secret store | `fg_secrets/tests.rs` | `p0_fg_a_configuration_writes_check_key_material_before_writing`, `p0_fg_a_desktop_config_key_material_comes_from_the_launch_environment`, `p0_fg_interface_saves_keep_the_ollama_endpoint_backend_owned`, `p0_fg_e_vault_key_sources_are_validated_on_what_is_read`, `p0_fg_secret_storage_closure_reason_is_bounded`, `p0_fg_a_deploy_credentials_are_never_newly_stored`, `p0_fg_h_sign_in_flows_persist_no_token`, `p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files`, `p0_fg_h_api_client_collections_are_checked_before_writing` |
-| (same) | `kernel/src/config.rs` | `p0_fg_a_new_or_changed_credentials_need_the_operator_key`, `p0_fg_a_legacy_ciphertext_still_reads_and_is_never_rewritten`, `p0_fg_a_an_unreadable_configuration_is_never_overwritten` |
-| A withdrawn standalone binary, alias, recipe or workflow reactivated | `fg_standalone/tests.rs` | `p0_fg_standalone_every_binary_target_is_inventoried`, `p0_fg_standalone_every_example_target_is_inventoried`, `p0_fg_standalone_no_alias_reaches_a_withdrawn_entry`, `p0_fg_standalone_only_the_desktop_embeds_nexus_code`, `p0_fg_standalone_computer_use_is_not_re_exposed`, `p0_fg_standalone_every_recipe_is_inventoried`, `p0_fg_standalone_no_workflow_ships_a_standalone_binary`, `p0_fg_standalone_every_bench_target_is_inventoried`, `p0_fg_standalone_withdrawn_packages_run_no_other_build_script`, `p0_fg_standalone_readme_names_every_withdrawn_binary` |
-| (same) | `benchmarks/conductor-bench/tests/phase0_withdrawal.rs` | `p0_bench_every_withdrawn_benchmark_invocation_is_withdrawn`, `p0_bench_withdrawn_entries_and_package_targets_are_pinned`, `p0_bench_docs_describe_the_withdrawn_benchmarks_as_withdrawn` |
-| An unbounded resource surface reachable from the interface | `fg_reliability/tests.rs` | `p0_fg_k_approved_limits_are_pinned`, `p0_fg_k_stress_persona_count_is_refused_outside_its_bound`, `p0_fg_k_parallel_simulation_count_is_refused_outside_its_bound`, `p0_fg_k_dilated_session_iterations_are_refused_outside_their_bound`, `p0_fg_k_agent_schedules_fire_at_most_once_per_minute`, `p0_fg_k_a_scheduled_tick_never_overlaps_the_agents_running_loop`, `p0_fg_k_the_frontend_error_command_uses_the_bounded_log`, `p0_fg_k_build_records_outside_the_bounds_are_refused`, `p0_fg_k_adversarial_rounds_are_refused_outside_their_bound`, `p0_fg_k_temporal_fork_limits_are_refused_and_never_stored`, `p0_fg_k_an_older_loops_exit_keeps_a_newer_loops_cancellation_entry` |
-| (same) | `fg_approval/tests.rs` | `p0_fg_k_simulation_and_arena_bounds_precede_any_work` |
-| (same) | `lib_tests.rs` | `p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call`, `p0_fg_adversarial_session_rounds_are_bounded_before_any_work` |
-| A closed capability-measurement route reopened, or a provider key sent to another provider's endpoint | `fg_approval/tests.rs` | `p0_fg_c5_ab_validation_route_is_closed_before_any_input`, `p0_fg_c5_measurement_clients_take_only_the_groq_key`, `p0_fg_c5_desktop_reaches_only_in_memory_measurement`, `p0_fg_source_lists_follow_their_directories` |
-| (same) | `crates/nexus-capability-measurement/src/evaluation/nim_client.rs` | `p0_fg_groq_client_key_never_falls_back_to_another_provider` |
-| A caller's boolean, name or IPC call treated as human approval | `fg_approval/tests.rs` | `p0_fg_g_transcendent_agents_are_refused_before_any_state_change`, `p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first`, `p0_fg_g_enabled_warden_review_without_a_warden_denies`, `p0_fg_g_caller_asserted_approval_commands_only_deny`, `p0_fg_g_consent_decisions_record_no_caller_identity`, `p0_fg_g_self_improvement_acceptance_is_recorded_truthfully`, `p0_fg_g_self_improvement_report_counts_only_applied_changes`, `p0_fg_g_no_actuator_reads_the_hitl_approval_flag` |
-| (same) | `lib_tests.rs` | `p0_fg_transcendent_creation_is_refused_and_changes_nothing`, `p0_fg_transcendent_activation_is_refused_and_changes_nothing`, `p0_fg_transcendent_approval_is_refused_and_changes_nothing`, `p0_fg_stored_transcendent_records_are_not_registered_and_stay_stored`, `p0_fg_startup_registers_no_transcendent_agent_on_any_run`, `p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent`, `p0_fg_enabled_warden_review_fails_closed_without_a_warden`, `p0_fg_desktop_consent_resolutions_record_the_interface_label`, `p0_fg_desktop_approvals_do_not_reach_the_kernel_consent_queue`, `p0_fg_self_improvement_acceptance_claims_no_hitl_approval`, `p0_fg_self_improvement_report_counts_no_recorded_acceptance_as_applied` |
+| A new or changed credential under an ambient key, an unvalidated vault key source, or a token persisted outside an approved secret store | `fg_secrets/tests.rs` | `p0_fg_a_configuration_writes_check_key_material_before_writing`, `p0_fg_a_desktop_config_key_material_comes_from_the_launch_environment`, `p0_fg_interface_saves_keep_the_ollama_endpoint_backend_owned`, `p0_fg_e_vault_key_sources_are_validated_on_what_is_read`, `p0_fg_secret_storage_closure_reason_is_bounded`, `p0_fg_a_deploy_credentials_are_never_newly_stored`, `p0_fg_h_sign_in_flows_persist_no_token`, `p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files`, `p0_fg_h_api_client_collections_are_checked_before_writing`, `p0_fg_a_backend_protection_changes_are_audited`, `p0_fg_a_no_desktop_test_builds_the_real_application_state` |
+| A new or changed credential under an ambient key, an unvalidated vault key source, or a token persisted outside an approved secret store | `kernel/src/config.rs` | `p0_fg_a_new_or_changed_credentials_need_the_operator_key`, `p0_fg_a_legacy_ciphertext_still_reads_and_is_never_rewritten`, `p0_fg_a_an_unreadable_configuration_is_never_overwritten` |
+| A withdrawn standalone binary, alias, recipe or workflow reactivated | `fg_standalone/tests.rs` | `p0_fg_standalone_every_binary_target_is_inventoried`, `p0_fg_standalone_every_example_target_is_inventoried`, `p0_fg_standalone_no_alias_reaches_a_withdrawn_entry`, `p0_fg_standalone_only_the_desktop_embeds_nexus_code`, `p0_fg_standalone_computer_use_is_not_re_exposed`, `p0_fg_standalone_every_recipe_is_inventoried`, `p0_fg_standalone_no_workflow_ships_a_standalone_binary`, `p0_fg_standalone_every_bench_target_is_inventoried`, `p0_fg_standalone_withdrawn_packages_run_no_other_build_script`, `p0_fg_standalone_readme_names_every_withdrawn_binary`, `p0_fg_standalone_gitlab_includes_are_recognized`, `p0_fg_standalone_shipping_recognizers_catch_probes` |
+| A withdrawn standalone binary, alias, recipe or workflow reactivated | `benchmarks/conductor-bench/tests/phase0_withdrawal.rs` | `p0_bench_every_withdrawn_benchmark_invocation_is_withdrawn`, `p0_bench_withdrawn_entries_and_package_targets_are_pinned`, `p0_bench_docs_describe_the_withdrawn_benchmarks_as_withdrawn` |
+| An unbounded resource surface reachable from the interface | `fg_reliability/tests.rs` | `p0_fg_k_approved_limits_are_pinned`, `p0_fg_k_stress_persona_count_is_refused_outside_its_bound`, `p0_fg_k_parallel_simulation_count_is_refused_outside_its_bound`, `p0_fg_k_dilated_session_iterations_are_refused_outside_their_bound`, `p0_fg_k_agent_schedules_fire_at_most_once_per_minute`, `p0_fg_k_a_scheduled_tick_never_overlaps_the_agents_running_loop`, `p0_fg_k_the_frontend_error_command_uses_the_bounded_log`, `p0_fg_k_build_records_outside_the_bounds_are_refused`, `p0_fg_k_adversarial_rounds_are_refused_outside_their_bound`, `p0_fg_k_temporal_fork_limits_are_refused_and_never_stored`, `p0_fg_k_an_older_loops_exit_keeps_a_newer_loops_cancellation_entry`, `p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database` |
+| An unbounded resource surface reachable from the interface | `fg_approval/tests.rs` | `p0_fg_k_simulation_and_arena_bounds_precede_any_work`, `p0_fg_manifest_schedules_are_checked_before_any_state_change` |
+| An unbounded resource surface reachable from the interface | `commands/cognitive/scheduled_tests.rs` | `p0_fg_sub_minute_manifest_schedules_fail_create_and_start` |
+| A caller's boolean, name or IPC call treated as human approval | `commands/cognitive/scheduled_tests.rs` | `p0_fg_scheduled_ticks_refuse_a_transcendent_agent_before_any_state_change` |
+| An unbounded resource surface reachable from the interface | `lib_tests.rs` | `p0_fg_parallel_simulation_variants_are_bounded_before_any_model_call`, `p0_fg_adversarial_session_rounds_are_bounded_before_any_work`, `p0_fg_refused_manifest_schedules_fail_create_and_start` |
+| A closed capability-measurement route reopened, or a provider key sent to another provider's endpoint | `fg_approval/tests.rs` | `p0_fg_c5_ab_validation_route_is_closed_before_any_input`, `p0_fg_c5_measurement_clients_take_only_the_groq_key`, `p0_fg_c5_desktop_reaches_only_in_memory_measurement`, `p0_fg_source_lists_follow_their_directories`, `p0_fg_directory_guards_read_their_directories` |
+| A closed capability-measurement route reopened, or a provider key sent to another provider's endpoint | `crates/nexus-capability-measurement/src/evaluation/nim_client.rs` | `p0_fg_groq_client_key_never_falls_back_to_another_provider` |
+| A caller's boolean, name or IPC call treated as human approval | `fg_approval/tests.rs` | `p0_fg_g_transcendent_agents_are_refused_before_any_state_change`, `p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first`, `p0_fg_g_enabled_warden_review_denies_without_any_lookup`, `p0_fg_g_l6_checks_use_the_named_bound`, `p0_fg_g_caller_asserted_approval_commands_only_deny`, `p0_fg_g_consent_decisions_record_no_caller_identity`, `p0_fg_g_self_improvement_acceptance_is_recorded_truthfully`, `p0_fg_g_self_improvement_report_counts_only_applied_changes`, `p0_fg_g_no_actuator_reads_the_hitl_approval_flag` |
+| A caller's boolean, name or IPC call treated as human approval | `lib_tests.rs` | `p0_fg_transcendent_creation_is_refused_and_changes_nothing`, `p0_fg_transcendent_activation_is_refused_and_changes_nothing`, `p0_fg_transcendent_approval_is_refused_and_changes_nothing`, `p0_fg_stored_transcendent_records_are_not_registered_and_stay_stored`, `p0_fg_startup_registers_no_transcendent_agent_on_any_run`, `p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent`, `p0_fg_enabled_warden_review_denies_and_no_stand_in_can_allow`, `p0_fg_stored_levels_above_l6_count_as_transcendent`, `p0_fg_transcendent_check_matches_every_spelling_of_a_stored_id`, `p0_fg_transcendent_resume_is_refused_and_changes_nothing`, `p0_fg_desktop_consent_resolutions_record_the_interface_label`, `p0_fg_desktop_approvals_do_not_reach_the_kernel_consent_queue`, `p0_fg_self_improvement_acceptance_claims_no_hitl_approval`, `p0_fg_self_improvement_report_counts_no_recorded_acceptance_as_applied` |
 | End of input or a read error taken as approval (E6) | `crates/nexus-computer-use/src/agent/loop_controller.rs` | `test_approval_eof_aborts_instead_of_approving`, `test_approval_read_error_aborts`, `test_approval_modify_requires_an_entered_replacement` |
-| (same) | `fg_approval/tests.rs` | `p0_fg_g_eof_or_a_read_error_is_never_an_approval` |
+| End of input or a read error taken as approval (E6) | `fg_approval/tests.rs` | `p0_fg_g_eof_or_a_read_error_is_never_an_approval` |
+| A non-app origin, frame or navigation reaching an application command | `fg_webview/tests.rs` | `p0_fg_webview_app_manifest_lists_every_registered_command`, `p0_fg_webview_build_script_emits_the_app_manifest`, `p0_fg_webview_capability_is_local_main_only`, `p0_fg_webview_conf_has_restrictive_csp_and_guarded_window`, `p0_fg_webview_privileged_document_loads_no_third_party_resources`, `p0_fg_webview_app_origin_is_resolved_like_tauri_resolves_the_app_url`, `p0_fg_webview_navigation_admits_only_the_exact_app_origin`, `p0_fg_webview_main_window_wires_navigation_and_newwindow_guards`, `p0_fg_webview_boundary_exposes_only_build_main_window`, `p0_fg_webview_app_command_ipc_is_local_main_only`, `p0_fg_webview_comment_stripper_drops_only_comments` |
+| A helper, download or messaging request left unowned or unbounded | `fg_egress/tests.rs` | `p0_fg_the_application_exit_ends_in_flight_model_downloads`, `p0_fg_model_registration_uses_the_authorized_ollama_address`, `p0_fg_messaging_requests_are_bounded_in_time_and_size` |
 
 The guard also requires the registries `CREDENTIAL_CURL_SITES`
 (`fg_egress`) and `BINARY_TARGETS`, `EXAMPLE_TARGETS`, `ALIAS_NEEDLES`,
 `RECIPE_FILES`, `WITHDRAWN_BINARIES`, `BENCH_TARGETS` and
 `PROTOCOLS_BUILD_SCRIPT` (`fg_standalone`).
 
-Final-Gate tests that run in the suites but that the final guard does not
-name: `p0_fg_the_application_exit_ends_in_flight_model_downloads`,
-`p0_fg_model_registration_uses_the_authorized_ollama_address` and
-`p0_fg_messaging_requests_are_bounded_in_time_and_size` (`fg_egress`), and
-the item-level tests named in the dossier. Item D's guards are not composed
-[PENDING: S1 final].
+**Completeness check.** Every `#[test]` in the six Final-Gate guard modules
+(`fg_approval` 18, `fg_egress` 16, `fg_reliability` 12, `fg_secrets` 11,
+`fg_standalone` 12, `fg_webview` 11: 80 guards) must be named in the rows
+above, so a guard cannot be removed, renamed or added unreviewed without
+failing the final guard. Item-level tests elsewhere (the kernel, connector,
+crate and package tests the dossier names) are pinned only where a row names
+them.
 
 ### 11.6 Explicit non-claims
 
 - Nothing here is approval. FG1, the Final Gate and Phase Zero are not
-  declared complete; the candidate awaits Architect review, and item D is not
-  composed.
+  declared complete; the candidate awaits Architect review.
 - The closure mission adds no filesystem, process or network sandbox, no
   destination, address or DNS policy, no out-of-band approval, no pairing or
   peer authentication, and no secret store.
@@ -1263,16 +1267,20 @@ the item-level tests named in the dossier. Item D's guards are not composed
 - The resource bounds are per request, not rate limits.
 - The guards cover the named commands, registries, needles and files; they
   are not a complete call graph.
-- The counts are for this documentation's base. The dependency counts are to
-  be re-measured on the final candidate [PENDING: DEP final].
+- The counts are those of the final closure candidate `d1735577`, the
+  dependency counts included (measured on its lockfiles).
+- Item D keeps non-app documents away from application commands; it does not
+  narrow what the app document itself may call. On Linux neither the ACL nor
+  the navigation guard is sufficient alone (dossier item D).
 
 ### 11.7 Corrections to earlier sections, and notes for the documentation audit
 
 Corrections (each earlier section carries a short note pointing here):
 
-- **§1.** Still 804 registered commands. That every one is callable by any
-  script in the webview holds until item D is composed [PENDING: S1 final];
-  after it, a script inside the privileged document still reaches them all.
+- **§1.** Still 804 registered commands. The CSP is no longer `null`, and an
+  app ACL grants the commands only to the `main` window at the app's own
+  origin (item D), so a document at another origin no longer reaches them; a
+  script inside the privileged document still reaches them all.
 - **§5.6 and §7, "prefix-based" egress.** Stale since C5C: `endpoint_admits`
   compares whole hosts and path segments (§10.2), and schemes and effective
   ports (§10.10). The closure also removes the external tools' substring
@@ -1306,7 +1314,7 @@ Corrections (each earlier section carries a short note pointing here):
     commands that do, and their state now: `approve_consent_request`,
     `deny_consent_request`, `batch_approve_consents`, `batch_deny_consents`,
     `review_consent_batch` and `set_agent_review_mode` (open; transcendent
-    requests refused on approval; fixed label); `swarm_approve` and
+    requests refused on approval and review-each; fixed label); `swarm_approve` and
     `swarm_reject` (open; bounded plan, drafts-only Herald);
     `nx_consent_respond` and `nx_agent_approve` (closed);
     `self_improve_approve_proposal` and `self_improve_reject_proposal` (open;
@@ -1334,7 +1342,9 @@ stage; not changed here):
   "the runner's NVIDIA driver"; the failure came from a driver and library
   mismatch together with the torch probe (dossier item K).
 - `deny.toml`: the RUSTSEC-2026-0097 note ("no semver-compatible bump")
-  contradicts the advisory's fixed versions.
+  contradicts the advisory's fixed versions, and its RUSTSEC-2023-0071 (rsa)
+  ignore, like those in `audit.toml` and `.gitlab-ci.yml`, is stale since rsa
+  left the lockfile.
 - `voice/`: `python -m pytest` runs the repository's unittest shim
   (`voice/pytest.py`), not pytest.
 - Documents that still describe withdrawn surfaces: `docs/NIST_800_53_MAPPING.md`
