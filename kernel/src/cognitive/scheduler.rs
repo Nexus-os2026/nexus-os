@@ -33,6 +33,10 @@ pub trait ScheduledGoalExecutor: Send + Sync {
     fn execute(&self, agent_id: &str, default_goal: &str) -> Result<(), String>;
 }
 
+/// Why `register_agent` refused a schedule the cron parser rejects. It names
+/// no part of the expression.
+const UNPARSABLE_SCHEDULE: &str = "invalid cron expression: the schedule could not be parsed";
+
 /// Handle for a running schedule loop — holds the cancel flag and join handle.
 struct ScheduleHandle {
     handle: JoinHandle<()>,
@@ -88,9 +92,11 @@ impl AgentScheduler {
     ) -> Result<(), AgentError> {
         let normalized_cron = normalize_cron_expression(cron_expression)
             .map_err(|e| AgentError::SupervisorError(e.to_string()))?;
-        let schedule = Schedule::from_str(&normalized_cron).map_err(|e| {
-            AgentError::SupervisorError(format!("invalid cron expression '{cron_expression}': {e}"))
-        })?;
+        // The parser's error repeats the whole expression (and a caret line as
+        // long as it), which is caller text of any length, so the refusal
+        // gives a fixed reason instead.
+        let schedule = Schedule::from_str(&normalized_cron)
+            .map_err(|_| AgentError::SupervisorError(UNPARSABLE_SCHEDULE.to_string()))?;
 
         // Cancel any existing schedule for this agent.
         self.unregister_agent(agent_id);
@@ -383,6 +389,30 @@ mod tests {
                 .to_string();
             assert_eq!(registered, format!("supervisor error: {error}"));
         }
+    }
+
+    /// A schedule that passes the once-per-minute check but that the cron
+    /// parser rejects is refused with a fixed reason. The parser's own error
+    /// repeats the whole expression; none of it is echoed, whatever its
+    /// length, and nothing is registered.
+    #[test]
+    fn p0_fg_k_an_unparsable_schedule_is_refused_without_echo() {
+        let scheduler = scheduler();
+        for expression in [
+            "0 p0fg-marker * * * *".to_string(),
+            format!("0 {} * * * *", "p0fg".repeat(2_500)),
+            "0 0 0 * P0fgmonth *".to_string(),
+        ] {
+            let error = scheduler
+                .register_agent("p0fg-agent", &expression, "goal")
+                .unwrap_err()
+                .to_string();
+            assert_eq!(
+                error,
+                "supervisor error: invalid cron expression: the schedule could not be parsed"
+            );
+        }
+        assert!(scheduler.list().is_empty());
     }
 
     #[test]
