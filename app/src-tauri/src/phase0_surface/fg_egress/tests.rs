@@ -1208,6 +1208,29 @@ fn assert_email_clients_are_bounded(apps: &str) {
     );
 }
 
+/// Final Gate decisions C and E: the open deploy commands that send the
+/// stored deploy token (`builder_deploy_check_credentials`,
+/// `builder_deploy_list_sites`) build their client with
+/// `web_builder_agent::deploy::api_client` (no redirect, bounded; its
+/// behaviour is tested in the deploy module), never a default client.
+#[test]
+fn p0_r1_deploy_token_requests_use_the_bounded_client() {
+    for lib_rs in [lf(LIB_RS), crlf(LIB_RS)] {
+        let lib_rs = lf(&lib_rs);
+        for handler in [
+            "builder_deploy_check_credentials",
+            "builder_deploy_list_sites",
+        ] {
+            let (_, body) = handler_shape(&lib_rs, handler);
+            assert!(
+                body.contains("web_builder_agent::deploy::api_client()"),
+                "{handler}: {body}"
+            );
+            assert!(!body.contains("reqwest::Client"), "{handler}: {body}");
+        }
+    }
+}
+
 // ── Final Gate item C: credential-bearing process arguments ──────────────
 //
 // The production-text reader below is the same algorithm as the one in

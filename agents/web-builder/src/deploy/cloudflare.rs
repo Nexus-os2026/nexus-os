@@ -111,17 +111,15 @@ pub async fn list_sites(
         return Err(DeployError::InvalidToken);
     }
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
+        let body = super::error_text(resp, super::MAX_API_ERROR_BODY_BYTES).await;
         return Err(DeployError::ProviderApi {
             status,
             message: body,
         });
     }
 
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| DeployError::Network(e.to_string()))?;
+    let json: serde_json::Value =
+        super::read_json_capped(resp, super::MAX_API_RESPONSE_BYTES).await?;
 
     let sites = json["result"]
         .as_array()

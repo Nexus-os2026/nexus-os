@@ -4153,7 +4153,7 @@ pub mod runtime {
             None => return Ok(false),
         };
 
-        let client = reqwest::Client::new();
+        let client = web_builder_agent::deploy::api_client().map_err(|e| format!("client: {e}"))?;
         let valid = match provider.as_str() {
             "netlify" => web_builder_agent::deploy::netlify::check_token(&creds, &client)
                 .await
@@ -4176,7 +4176,7 @@ pub mod runtime {
             .map_err(|e| format!("load: {e}"))?
             .ok_or_else(|| format!("No credentials for {provider}"))?;
 
-        let client = reqwest::Client::new();
+        let client = web_builder_agent::deploy::api_client().map_err(|e| format!("client: {e}"))?;
         let sites = match provider.as_str() {
             "netlify" => web_builder_agent::deploy::netlify::list_sites(&creds, &client)
                 .await
