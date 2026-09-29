@@ -96,6 +96,19 @@ fn without_whitespace(text: &str) -> String {
     text.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
+/// A source with LF line endings. On a CRLF checkout (Windows CI checks out
+/// with `core.autocrlf=true`), every `include_str!` text has `\r\n`, so the
+/// guards that match across lines read their sources through this.
+fn lf(source: &str) -> String {
+    source.replace("\r\n", "\n")
+}
+
+/// The same source as a CRLF checkout gives it. The guards that match across
+/// lines run on both forms.
+fn crlf(source: &str) -> String {
+    lf(source).replace('\n', "\r\n")
+}
+
 /// Index just past the brace closing the block that opens at `open`. String
 /// literals are skipped; the handler bodies read here contain no others.
 fn block_end(src: &str, open: usize) -> usize {
@@ -656,6 +669,13 @@ fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
     );
 
     let chat_llm = include_str!("../../commands/chat_llm.rs");
+    assert_no_ollama_helper(chat_llm, LIB_RS);
+    assert_no_ollama_helper(&crlf(chat_llm), &crlf(LIB_RS));
+}
+
+/// The source side of the guard above, for either line ending.
+fn assert_no_ollama_helper(chat_llm: &str, lib_rs: &str) {
+    let chat_llm = lf(chat_llm);
     for helper in [
         "Command::new(\"ollama\")",
         "Command::new(\"which\")",
@@ -663,7 +683,7 @@ fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
     ] {
         assert!(!chat_llm.contains(helper), "chat_llm.rs: {helper}");
     }
-    assert!(!LIB_RS.contains("Command::new(\"ollama\")"));
+    assert!(!lf(lib_rs).contains("Command::new(\"ollama\")"));
     let ensure = chat_llm
         .split("pub(crate) fn ensure_ollama(")
         .nth(1)
@@ -674,18 +694,29 @@ fn p0_fg_nexus_starts_no_ollama_and_runs_no_helper_to_find_it() {
     }
 }
 
-/// Final Gate item I: model downloads do not outlive the application. The
-/// normal-exit hook ends the downloads in flight (bounded, through their
-/// owned handles; see the `model_hub` tests) and reports a failure by counts
-/// only. A download's transfer is started only by the in-flight registry, so
-/// none escapes it.
+/// Final Gate item I: at a normal exit, model downloads do not outlive the
+/// application. The normal-exit hook ends the downloads in flight (bounded,
+/// through their owned handles; see the `model_hub` tests) and reports a
+/// failure by counts only. A download's transfer is started only by the
+/// in-flight registry, so none escapes it.
+///
+/// Non-claim: if the application crashes or is killed (SIGKILL, a forced end
+/// of task), the hook does not run and a transfer in flight can outlive it.
 #[test]
 fn p0_fg_the_application_exit_ends_in_flight_model_downloads() {
+    let model_hub = include_str!("../../../../../connectors/llm/src/model_hub.rs");
+    assert_downloads_end_at_exit(LIB_RS, model_hub);
+    assert_downloads_end_at_exit(&crlf(LIB_RS), &crlf(model_hub));
+}
+
+/// The guard above, for either line ending.
+fn assert_downloads_end_at_exit(lib_rs: &str, model_hub: &str) {
+    let lib_rs = lf(lib_rs);
     let needle = "if let tauri::RunEvent::Exit = event {";
-    assert_eq!(LIB_RS.matches(needle).count(), 1);
-    let open = LIB_RS.find(needle).unwrap() + needle.len() - 1;
+    assert_eq!(lib_rs.matches(needle).count(), 1);
+    let open = lib_rs.find(needle).unwrap() + needle.len() - 1;
     assert_eq!(
-        without_whitespace(&production_text(&LIB_RS[open..block_end(LIB_RS, open)])),
+        without_whitespace(&production_text(&lib_rs[open..block_end(&lib_rs, open)])),
         without_whitespace(
             "{
                 super::builder_workspace::shutdown_dev_servers(&app.state::<AppState>());
@@ -697,9 +728,7 @@ fn p0_fg_the_application_exit_ends_in_flight_model_downloads() {
         "the exit arm"
     );
 
-    let model_hub = production_text(include_str!(
-        "../../../../../connectors/llm/src/model_hub.rs"
-    ));
+    let model_hub = production_text(&lf(model_hub));
     assert_eq!(
         model_hub.matches(".spawn()").count(),
         1,
@@ -721,6 +750,43 @@ fn p0_fg_the_application_exit_ends_in_flight_model_downloads() {
         start < spawn && spawn < started,
         "spawned inside the registry"
     );
+}
+
+/// Final Gate item B: a downloaded model is registered with Ollama only at
+/// the authorized Ollama address (the operator's `OLLAMA_URL` or the fixed
+/// default), and not at all when that address is unavailable. `model_hub.rs`
+/// names no Ollama address of its own (its registration test posts to a
+/// loopback stand-in).
+#[test]
+fn p0_fg_model_registration_uses_the_authorized_ollama_address() {
+    let model_hub = include_str!("../../../../../connectors/llm/src/model_hub.rs");
+    assert_model_registration_is_authorized(LIB_RS, model_hub);
+    assert_model_registration_is_authorized(&crlf(LIB_RS), &crlf(model_hub));
+}
+
+/// The guard above, for either line ending.
+fn assert_model_registration_is_authorized(lib_rs: &str, model_hub: &str) {
+    let model_hub = production_text(&lf(model_hub));
+    assert!(
+        !model_hub.contains("11434"),
+        "model_hub.rs names an address"
+    );
+    assert!(
+        !model_hub.contains("localhost"),
+        "model_hub.rs names a host"
+    );
+    let lib_rs = without_whitespace(&production_text(&lf(lib_rs)));
+    assert_eq!(
+        lib_rs
+            .matches("register_downloaded_model_with_ollama(")
+            .count(),
+        1
+    );
+    assert!(lib_rs.contains(&without_whitespace(
+        "if let Ok(ollama_base) = super::authorized_ollama_base_url() {
+            let _ = super::model_hub::register_downloaded_model_with_ollama(
+                &ollama_base,"
+    )));
 }
 
 /// Final Gate item C (redaction): a messaging transport error names no
@@ -746,23 +812,159 @@ fn p0_fg_messaging_errors_never_carry_the_bot_token() {
     assert!(!reported.contains("sendMessage"), "{reported}");
 
     let apps = include_str!("../../commands/apps.rs");
+    assert_messaging_errors_are_redacted(apps);
+    assert_messaging_errors_are_redacted(&crlf(apps));
+}
+
+/// The source side of the guard above, for either line ending: every
+/// request error goes through `messaging_transport_error`, and every client
+/// and body read through the bounded helpers, which redact the same way.
+fn assert_messaging_errors_are_redacted(apps: &str) {
+    let apps = lf(apps);
+    let helpers = apps
+        .find("pub(crate) fn messaging_transport_error(")
+        .unwrap();
     let start = apps.find("pub(crate) fn messaging_send(").unwrap();
     let end = apps[start..]
         .find("pub(crate) fn messaging_poll_messages(")
         .map(|at| start + at)
         .unwrap();
     let poll_end = apps[end..].find("\n}\n").map(|at| end + at).unwrap();
+    let helper_text = &apps[helpers..start];
+    assert_eq!(
+        helper_text.matches("messaging_transport_error(").count(),
+        3,
+        "the definition, the client and the body read"
+    );
+    assert!(
+        !helper_text.contains("{e}\"))"),
+        "a helper formats a raw error"
+    );
     for (name, body) in [
         ("messaging_send", &apps[start..end]),
         ("messaging_poll_messages", &apps[end..poll_end]),
     ] {
         assert_eq!(
             body.matches("messaging_transport_error(").count(),
-            6,
+            3,
             "{name}"
         );
+        assert_eq!(body.matches("messaging_client()?").count(), 3, "{name}");
+        assert_eq!(
+            body.matches("messaging_body(resp).await").count(),
+            3,
+            "{name}"
+        );
+        for unbounded in ["reqwest::Client::new()", ".text()"] {
+            assert!(!body.contains(unbounded), "{name}: {unbounded}");
+        }
         assert!(!body.contains("{e}\"))"), "{name} formats a raw error");
     }
+}
+
+/// Answer one loopback request with `head` and then `body`, all at once or,
+/// with `drip`, one byte per interval until the client gives up.
+fn serve_answer(
+    head: String,
+    body: Vec<u8>,
+    drip: Option<std::time::Duration>,
+) -> (String, std::thread::JoinHandle<()>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+            .unwrap();
+        let mut request = Vec::new();
+        let mut byte = [0u8; 1];
+        while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+            request.push(byte[0]);
+        }
+        if stream.write_all(head.as_bytes()).is_err() {
+            return;
+        }
+        match drip {
+            None => {
+                let _ = stream.write_all(&body);
+            }
+            Some(interval) => {
+                for byte in body {
+                    std::thread::sleep(interval);
+                    if stream.write_all(&[byte]).is_err() {
+                        return;
+                    }
+                }
+            }
+        }
+    });
+    (base, server)
+}
+
+/// Final Gate resource bound: messaging sends and polls are bounded in total
+/// time and in the response they read, and a timeout says so without naming
+/// the URL. (Loopback stand-ins answer; no platform is contacted.)
+#[test]
+fn p0_fg_messaging_requests_are_bounded_in_time_and_size() {
+    use crate::commands::apps::{
+        messaging_body_bounded, messaging_client, messaging_client_with, messaging_transport_error,
+        MAX_MESSAGING_RESPONSE_BYTES, MESSAGING_REQUEST_TIMEOUT,
+    };
+    assert_eq!(
+        MESSAGING_REQUEST_TIMEOUT,
+        std::time::Duration::from_secs(30)
+    );
+    assert_eq!(MAX_MESSAGING_RESPONSE_BYTES, 4 * 1024 * 1024);
+
+    let chunk = "b".repeat(1000);
+    for (head, body) in [
+        (
+            "HTTP/1.1 200 OK\r\nContent-Length: 2048\r\nConnection: close\r\n\r\n".to_string(),
+            "a".repeat(2048),
+        ),
+        (
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+                .to_string(),
+            format!("3e8\r\n{chunk}\r\n3e8\r\n{chunk}\r\n0\r\n\r\n"),
+        ),
+    ] {
+        let (base, server) = serve_answer(head, body.into_bytes(), None);
+        let result = crate::block_on_async(async {
+            let response = messaging_client()?
+                .get(format!("{base}/bot1:fg-secret/getUpdates"))
+                .send()
+                .await
+                .map_err(|e| messaging_transport_error("poll", e))?;
+            messaging_body_bounded(response, 1024).await
+        });
+        assert_eq!(
+            result,
+            Err("body: the response is larger than 1024 bytes".to_string())
+        );
+        server.join().unwrap();
+    }
+
+    // An answer that drips its 18-byte body over 5.4 s is abandoned at a
+    // 1 s timeout.
+    let body = br#"{"ok":true,"r":[]}"#.to_vec();
+    let head = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    let (base, server) = serve_answer(head, body, Some(std::time::Duration::from_millis(300)));
+    let result = crate::block_on_async(async {
+        let response = messaging_client_with(std::time::Duration::from_secs(1))?
+            .get(format!("{base}/bot1:fg-secret/getUpdates"))
+            .send()
+            .await
+            .map_err(|e| messaging_transport_error("poll", e))?;
+        messaging_body_bounded(response, 1024).await
+    });
+    let error = result.expect_err("a 5.4 s body must not be read within a 1 s timeout");
+    assert!(error.contains("timed out"), "{error}");
+    assert!(!error.contains("fg-secret"), "{error}");
+    server.join().unwrap();
 }
 
 // ── Final Gate item C: credential-bearing process arguments ──────────────
@@ -1032,7 +1234,7 @@ const CREDENTIAL_CURL_SITES: &[(&str, usize, &str)] = &[
     (
         "crates/nexus-capability-measurement/src/evaluation/nim_client.rs",
         2,
-        "the validation-run commands are closed; the A/B command's battery is empty in the desktop, so no query is sent",
+        "the validation-run commands are closed, and cm_run_ab_validation is closed by the C5 closure (item G workstream), so no query is sent",
     ),
     (
         "crates/nexus-capability-measurement/src/evaluation/openrouter_client.rs",

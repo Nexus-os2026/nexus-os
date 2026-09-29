@@ -1,7 +1,6 @@
 use super::openai_compatible::{bearer_headers, extract_content_text, extract_tool_calls};
 use super::{LlmProvider, LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
-use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::env;
@@ -66,14 +65,13 @@ impl LlmProvider for CohereProvider {
         };
 
         let request = CohereProvider::new(Some(api_key)).build_request(prompt, max_tokens, model);
-        let client = Client::builder()
-            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
-            .build()
-            .map_err(|error| {
+        let client = super::credential_client(Duration::from_secs(REQUEST_TIMEOUT_SECS)).map_err(
+            |error| {
                 AgentError::SupervisorError(format!(
                     "failed to build HTTP client for cohere: {error}"
                 ))
-            })?;
+            },
+        )?;
 
         eprintln!(
             "[nexus-llm][governance] cohere::complete endpoint={}",

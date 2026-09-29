@@ -432,7 +432,15 @@ impl OllamaProvider {
                 let total = obj.get("total").and_then(Value::as_u64).unwrap_or(0);
                 let completed = obj.get("completed").and_then(Value::as_u64).unwrap_or(0);
                 last_status = status.to_string();
-                on_progress(status, completed, total);
+                // Panic-safe callback invocation, as in `chat_stream`: a
+                // panicking callback does not leave the curl child unreaped.
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    on_progress(status, completed, total);
+                }))
+                .is_err()
+                {
+                    eprintln!("warning: on_progress callback panicked, continuing pull");
+                }
             }
         }
 
@@ -768,6 +776,46 @@ mod tests {
             listener.accept(),
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
         ));
+    }
+
+    /// A panicking progress callback does not unwind out of `pull_model`
+    /// (which would leave the curl child unreaped): the pull reads to its
+    /// end, as `chat_stream` does with its token callback. The "Ollama"
+    /// here is a loopback stand-in.
+    #[test]
+    fn p0_fg_a_panicking_pull_progress_callback_does_not_unwind() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let provider = OllamaProvider::new(format!("http://{}", listener.local_addr().unwrap()));
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0u8; 1];
+            while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                request.push(byte[0]);
+            }
+            let body =
+                "{\"status\":\"pulling\",\"completed\":1,\"total\":2}\n{\"status\":\"success\"}\n";
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        });
+        let mut calls = 0;
+        let status = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            provider.pull_model("llama3", |_, _, _| {
+                calls += 1;
+                panic!("progress callback failure");
+            })
+        }))
+        .expect("pull_model must not unwind from its callback");
+        assert_eq!(status.unwrap(), "success");
+        assert_eq!(calls, 2);
+        server.join().unwrap();
     }
 
     #[test]

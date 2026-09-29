@@ -385,9 +385,11 @@ const MAX_PROVIDER_RESPONSE_BYTES: u64 = 32 * 1024 * 1024;
 ///   and line-break checks; credential header values are marked sensitive;
 /// - no redirect is followed, so a credential reaches only the checked
 ///   endpoint (a redirect response is returned as its status);
-/// - `timeout_secs` bounds the whole exchange, and at most 32 MiB of
+/// - `timeout_secs` bounds the whole exchange, from connecting until the
+///   last response byte is read (as curl's `-m` did), and at most 32 MiB of
 ///   response is read;
-/// - TLS certificates are verified;
+/// - TLS certificates are verified (see [`credential_client`] for which TLS
+///   implementation, trust roots and proxy settings apply);
 /// - an error names what failed, never a header value or the URL.
 ///
 /// The request runs on its own thread: the blocking client must not run on
@@ -451,6 +453,30 @@ fn post_json_bounded(
     Ok((status, json_response(text.trim())?))
 }
 
+/// A blocking client for requests that carry a credential header (Final
+/// Gate item C). It follows no redirect, so the credential reaches only the
+/// endpoint it was meant for: on a redirect to another host reqwest drops
+/// only `authorization`, `cookie`, `proxy-authorization` and
+/// `www-authenticate`, and would re-send `x-api-key` (and, on 307 and 308,
+/// the body) to the target. A redirect comes back as its status, which the
+/// callers report as a failed request.
+///
+/// Certificate verification is always on. Which TLS implementation, trust
+/// roots and proxy settings apply follows the build's unified reqwest
+/// features: in the desktop build other crates enable reqwest's
+/// `default-tls` and `system-proxy`, so the platform TLS (OpenSSL, SChannel
+/// or Security.framework) with the operating system's trust store is used and
+/// the system and environment proxy settings apply; this crate built on its
+/// own uses rustls with the bundled webpki roots.
+pub(crate) fn credential_client(
+    timeout: std::time::Duration,
+) -> reqwest::Result<reqwest::blocking::Client> {
+    reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+}
+
 /// Send one bounded request (see [`post_json_in_process`]) and read its
 /// status and at most `max_bytes` of body.
 fn send_bounded(
@@ -461,13 +487,14 @@ fn send_bounded(
     max_bytes: u64,
 ) -> Result<(u16, Vec<u8>), String> {
     use std::io::Read;
-    let client = reqwest::blocking::Client::builder()
-        .timeout(timeout)
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|error| request_error("could not start", error))?;
+    let client =
+        credential_client(timeout).map_err(|error| request_error("could not start", error))?;
+    // The client's timeout bounds each wait (the headers, then every read)
+    // separately; the request's own timeout bounds the whole exchange, from
+    // connecting until the body has been read.
     let response = client
         .post(endpoint)
+        .timeout(timeout)
         .headers(headers)
         .body(body)
         .send()
@@ -484,7 +511,20 @@ fn send_bounded(
     response
         .take(max_bytes + 1)
         .read_to_end(&mut raw)
-        .map_err(|error| format!("the response could not be read: {}", error.kind()))?;
+        .map_err(|error| {
+            // Only the kind is reported (an inner error could name the URL);
+            // the request's timeout surfaces here as a wrapped reqwest error.
+            let timed_out = error.kind() == std::io::ErrorKind::TimedOut
+                || error
+                    .get_ref()
+                    .and_then(|inner| inner.downcast_ref::<reqwest::Error>())
+                    .is_some_and(reqwest::Error::is_timeout);
+            if timed_out {
+                "the response could not be read (timed out)".to_string()
+            } else {
+                format!("the response could not be read: {}", error.kind())
+            }
+        })?;
     if raw.len() as u64 > max_bytes {
         return Err(too_large());
     }
@@ -1116,6 +1156,63 @@ mod tests {
         assert_never_contacted(&target);
     }
 
+    /// Final Gate item C: the reqwest providers that send a credential
+    /// header (Claude's `x-api-key`; Cohere's and the OpenAI-compatible
+    /// providers' bearer token) follow no redirect, so neither the credential
+    /// nor the prompt reaches a redirect target. reqwest itself would re-send
+    /// `x-api-key` to another host.
+    #[test]
+    fn p0_fg_credentialed_reqwest_providers_follow_no_redirect() {
+        use super::openai_compatible::{execute_openai_compatible_query, OpenAiCompatibleQuery};
+        let (target, target_url) = quiet_listener();
+        for code in [
+            "301 Moved Permanently",
+            "302 Found",
+            "307 Temporary Redirect",
+            "308 Permanent Redirect",
+        ] {
+            let answer = format!(
+                "HTTP/1.1 {code}\r\nLocation: {target_url}/collect\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            // The client the Claude and Cohere providers build.
+            let (base, server) = serve_once(answer.clone().into_bytes());
+            let response = super::credential_client(Duration::from_secs(10))
+                .unwrap()
+                .post(format!("{base}/v1/messages"))
+                .header("x-api-key", "fg-secret")
+                .body("{}")
+                .send()
+                .unwrap();
+            assert_eq!(response.status().as_u16().to_string(), code[..3], "{code}");
+            assert!(server.join().unwrap().contains("fg-secret"));
+
+            // An OpenAI-compatible provider, through its executor.
+            let (base, server) = serve_once(answer.into_bytes());
+            let endpoint = format!("{base}/v1/chat/completions");
+            let result = execute_openai_compatible_query(OpenAiCompatibleQuery {
+                provider_name: "groq",
+                missing_key_error: "no key",
+                api_key: Some("fg-secret".to_string()),
+                endpoint: &endpoint,
+                prompt: "p",
+                max_tokens: 1,
+                model: "m",
+                extra_headers: &[],
+            });
+            assert!(result.is_err(), "{code}: a redirect is not an answer");
+            server.join().unwrap();
+        }
+        assert_never_contacted(&target);
+        for (file, source) in [
+            ("claude.rs", include_str!("claude.rs")),
+            ("cohere.rs", include_str!("cohere.rs")),
+            ("openai_compatible.rs", include_str!("openai_compatible.rs")),
+        ] {
+            assert!(!source.contains("Client::builder()"), "{file}");
+            assert!(source.contains("super::credential_client("), "{file}");
+        }
+    }
+
     /// The response read is bounded, whether it declares its length or not.
     #[test]
     fn p0_fg_credentialed_posts_read_a_bounded_response() {
@@ -1181,6 +1278,55 @@ mod tests {
         }
     }
 
+    /// The timeout bounds the whole exchange, not each read: a server that
+    /// answers at once and then drips its body (18 bytes, one every 300 ms,
+    /// 5.4 s in all) is abandoned at the 1 s timeout instead of being read to
+    /// the end.
+    #[test]
+    fn p0_fg_credentialed_posts_are_bounded_in_total_time() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(30)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0u8; 1];
+            while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                request.push(byte[0]);
+            }
+            let body = br#"{"dripped":"slow"}"#;
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            if stream.write_all(head.as_bytes()).is_err() {
+                return;
+            }
+            for byte in body {
+                std::thread::sleep(Duration::from_millis(300));
+                // The client has given up once a write fails.
+                if stream.write_all(&[*byte]).is_err() {
+                    return;
+                }
+            }
+        });
+        let result = super::post_json_bounded(
+            &format!("{base}/v1"),
+            &BTreeMap::new(),
+            &json!({}),
+            Duration::from_secs(1),
+            1024,
+        );
+        let error = result
+            .expect_err("a body that takes 5.4 s must not be read to its end within a 1 s timeout")
+            .to_string();
+        assert!(error.contains("timed out"), "{error}");
+        server.join().unwrap();
+    }
+
     /// The migrated providers post their credential to a constant https
     /// endpoint, in process.
     #[test]
@@ -1218,15 +1364,26 @@ mod tests {
     /// running and unreaped. The pre-repair `?` returns are gone.
     #[test]
     fn p0_fg_curl_children_are_reaped_on_early_errors() {
-        let production = |source: &'static str| {
+        let (helpers, ollama) = (include_str!("mod.rs"), include_str!("ollama.rs"));
+        assert_curl_children_are_reaped(helpers, ollama);
+        // As a CRLF checkout (Windows CI, core.autocrlf=true) reads them.
+        let crlf = |source: &str| source.replace("\r\n", "\n").replace('\n', "\r\n");
+        assert_curl_children_are_reaped(&crlf(helpers), &crlf(ollama));
+    }
+
+    /// The guard above, for either line ending: the sources are read with LF
+    /// line endings before any match that spans lines.
+    fn assert_curl_children_are_reaped(helpers: &str, ollama: &str) {
+        let production = |source: &str| {
             source
+                .replace("\r\n", "\n")
                 .split("#[cfg(test)]\nmod tests")
                 .next()
                 .unwrap()
-                .replace("\r\n", "\n")
+                .to_string()
         };
-        let helpers = production(include_str!("mod.rs"));
-        let ollama = production(include_str!("ollama.rs"));
+        let helpers = production(helpers);
+        let ollama = production(ollama);
         assert_eq!(helpers.matches("reap_child(&mut child);").count(), 1);
         assert_eq!(ollama.matches("super::reap_child(&mut child);").count(), 5);
         for gone in [

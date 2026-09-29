@@ -474,6 +474,10 @@ trait Transfer {
 // `terminate_in_flight_downloads` ends every one: through the owned handle
 // only (kill, then reap), never by process id, name or port, within a bound,
 // reporting truthfully what it could not confirm. No download starts after it.
+//
+// Non-claim: this runs at the application's normal exit. If the process
+// crashes or is killed (SIGKILL, a forced end of task), no exit code runs and
+// a transfer in flight can outlive it, as any child process can.
 
 /// The total time `terminate_in_flight_downloads` waits for killed transfers
 /// to be reaped.
@@ -494,7 +498,7 @@ static IN_FLIGHT_DOWNLOADS: InFlightDownloads = InFlightDownloads::new();
 /// they stay registered, so a later call tries again. A second call after
 /// success finds nothing to do.
 pub fn terminate_in_flight_downloads() -> Result<usize, DownloadTermination> {
-    IN_FLIGHT_DOWNLOADS.terminate_all(std::time::Instant::now() + DOWNLOAD_TERMINATION_WAIT)
+    IN_FLIGHT_DOWNLOADS.terminate_for_exit()
 }
 
 /// Why `terminate_in_flight_downloads` could not confirm every transfer
@@ -639,6 +643,12 @@ impl InFlightDownloads {
             id,
             transfer,
         })
+    }
+
+    /// [`terminate_in_flight_downloads`] for this registry: one
+    /// [`DOWNLOAD_TERMINATION_WAIT`] from now.
+    fn terminate_for_exit(&self) -> Result<usize, DownloadTermination> {
+        self.terminate_all(std::time::Instant::now() + DOWNLOAD_TERMINATION_WAIT)
     }
 
     /// End every registered transfer by `deadline` and refuse new ones (see
@@ -997,12 +1007,20 @@ fn read_available_ram_mb() -> Option<usize> {
 
 /// Register a downloaded GGUF model with Ollama so it appears in model lists.
 ///
-/// Creates a Modelfile pointing at the downloaded GGUF and calls `POST /api/create`
-/// on the local Ollama server. This bridges ModelHub downloads to Chat.
+/// Creates a Modelfile pointing at the downloaded GGUF and calls
+/// `POST /api/create` on the Ollama service at `ollama_base_url`, which the
+/// caller takes from the backend's authorized Ollama address (the operator's
+/// `OLLAMA_URL` or the fixed local default), never from the interface. An
+/// address that is not an http(s) URL is refused before anything is written
+/// or sent. This bridges ModelHub downloads to Chat.
 pub fn register_downloaded_model_with_ollama(
+    ollama_base_url: &str,
     model_path: &std::path::Path,
     model_name: &str,
 ) -> Result<(), String> {
+    let endpoint = nexus_kernel::governed_http::http_url(ollama_base_url)
+        .map(|base| format!("{}/api/create", base.as_str().trim_end_matches('/')))
+        .map_err(|_| "Ollama registration refused: the Ollama address is not an http(s) URL")?;
     let modelfile_content = format!(
         "FROM {}\n\nPARAMETER temperature 0.7\nPARAMETER top_p 0.9\n",
         model_path.display()
@@ -1042,7 +1060,7 @@ pub fn register_downloaded_model_with_ollama(
             "--data-raw",
             &payload.to_string(),
             "--",
-            "http://localhost:11434/api/create",
+            &endpoint,
         ])
         .output();
 
@@ -1369,12 +1387,73 @@ mod tests {
         assert_eq!(registry.len(), 0);
     }
 
-    /// The application's exit cleanup, with nothing in flight, succeeds and
-    /// does nothing, twice.
+    /// The exit cleanup (as `terminate_in_flight_downloads` runs it, on a
+    /// registry of this test's own, so the process-wide one stays open for the
+    /// rest of the test binary), with nothing in flight, succeeds and does
+    /// nothing, twice.
     #[test]
     fn p0_fg_the_exit_cleanup_is_a_no_op_with_nothing_in_flight() {
-        assert_eq!(terminate_in_flight_downloads(), Ok(0));
-        assert_eq!(terminate_in_flight_downloads(), Ok(0));
+        let registry = InFlightDownloads::new();
+        assert_eq!(registry.terminate_for_exit(), Ok(0));
+        assert_eq!(registry.terminate_for_exit(), Ok(0));
+        assert_eq!(registry.len(), 0);
+    }
+
+    /// Final Gate item B: a downloaded model is registered with the Ollama
+    /// address the backend passes (here a loopback stand-in), never a fixed
+    /// one; an address that is not an http(s) URL is refused before anything
+    /// is written or sent.
+    #[test]
+    fn p0_fg_downloaded_models_register_at_the_given_ollama_address() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0u8; 1];
+            while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
+                request.push(byte[0]);
+            }
+            let head = String::from_utf8_lossy(&request).to_ascii_lowercase();
+            let length = head
+                .lines()
+                .find_map(|line| line.strip_prefix("content-length:"))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            let mut body = vec![0u8; length];
+            stream.read_exact(&mut body).unwrap();
+            request.extend_from_slice(&body);
+            let answer = "{\"status\":\"success\"}";
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}",
+                answer.len()
+            );
+            String::from_utf8_lossy(&request).into_owned()
+        });
+        let (dir, [model]) = partial_files(["model.gguf"]);
+        register_downloaded_model_with_ollama(&base, &model, "Org--Model").unwrap();
+        let request = server.join().unwrap();
+        assert!(
+            request.starts_with("POST /api/create HTTP/1.1\r\n"),
+            "{request}"
+        );
+        assert!(request.contains("\"name\":\"org--model\""), "{request}");
+
+        let modelfile = model.with_extension("Modelfile");
+        std::fs::remove_file(&modelfile).unwrap();
+        for unusable in ["", "localhost:11434", "file:///tmp/ollama", "ftp://host"] {
+            assert!(
+                register_downloaded_model_with_ollama(unusable, &model, "m").is_err(),
+                "{unusable:?}"
+            );
+        }
+        assert!(!modelfile.exists(), "a refused registration wrote nothing");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// P0-002C5C: the backend's model-file maximum is enforced on the bytes

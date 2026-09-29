@@ -291,11 +291,26 @@ impl Actuator for GovernedWeb {
 /// Marks where curl reports the redirect target of an unfollowed redirect.
 const REDIRECT_MARKER: &str = "\n__NEXUS_REDIRECT__:";
 
+/// curl's protocol options for a search that follows redirects: the request
+/// itself is http or https (an operator's SearXNG may be served over plain
+/// http; the DuckDuckGo and HackerNews addresses are https), and every
+/// redirect must be https, so no redirect moves a search, or its answer, to
+/// plain http.
+const CURL_HTTPS_REDIRECTS: [&str; 6] = [
+    "-q",
+    "--globoff",
+    "--proto",
+    "=http,https",
+    "--proto-redir",
+    "=https",
+];
+
 /// Perform a blocking HTTP GET via curl subprocess.
 /// Safe to call from async context — spawns a child process.
 ///
 /// With `follow_redirects` false (an agent's fetch), a redirect response is
-/// refused and names its target instead of being followed.
+/// refused and names its target instead of being followed. With it true (a
+/// search), redirects are followed to https addresses only.
 fn curl_get(url: &str, follow_redirects: bool) -> Result<String, ActuatorError> {
     // P0-002C5B: HTTP(S) only, including redirects, with the URL after `--`.
     let url = crate::governed_http::http_url(url)
@@ -303,7 +318,12 @@ fn curl_get(url: &str, follow_redirects: bool) -> Result<String, ActuatorError> 
     let timeout_str = REQUEST_TIMEOUT_SECS.to_string();
     let redirect_format = format!("{REDIRECT_MARKER}%{{redirect_url}}");
     let mut command = Command::new("curl");
-    command.args(crate::governed_http::CURL_HTTP_ONLY).args([
+    if follow_redirects {
+        command.args(CURL_HTTPS_REDIRECTS);
+    } else {
+        command.args(crate::governed_http::CURL_HTTP_ONLY);
+    }
+    command.args([
         "-sS",
         "--max-time",
         &timeout_str,
@@ -684,6 +704,41 @@ mod tests {
         ));
     }
 
+    /// Final Gate item B: a search follows redirects to https only, so a
+    /// redirect never moves it (or its answer) to plain http; here a
+    /// redirect to a plain-http target is not followed and the target is
+    /// never contacted. An answer without a redirect is read as before.
+    #[test]
+    fn p0_fg_search_redirects_are_followed_to_https_only() {
+        let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        target.set_nonblocking(true).unwrap();
+        let target_url = format!("http://{}/downgraded", target.local_addr().unwrap());
+        for code in [
+            "301 Moved Permanently",
+            "302 Found",
+            "307 Temporary Redirect",
+        ] {
+            let (base, server) = serve(vec![format!(
+                "HTTP/1.1 {code}\r\nLocation: {target_url}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .into_bytes()]);
+            assert!(curl_get(&format!("{base}/search"), true).is_err(), "{code}");
+            assert_eq!(server.join().unwrap(), 1);
+        }
+        assert!(matches!(
+            target.accept(),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+        ));
+        let (base, server) = serve(vec![
+            b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nresults".to_vec(),
+        ]);
+        assert_eq!(
+            curl_get(&format!("{base}/search"), true).unwrap(),
+            "results"
+        );
+        server.join().unwrap();
+    }
+
     /// P0-002C5C: remote text is cut on character boundaries. Invalid
     /// UTF-8 widens under lossy decoding (one byte to three), so the cut
     /// falls inside a character unless it is placed on a boundary.
@@ -1012,11 +1067,17 @@ mod tests {
         ] {
             assert_eq!(searxng_base(Some(unusable.into())), None, "{unusable:?}");
         }
-        let production = include_str!("web.rs")
-            .split("#[cfg(test)]\nmod tests")
-            .next()
-            .unwrap()
-            .replace("\r\n", "\n");
+        let source = include_str!("web.rs");
+        assert_no_guessed_searxng_address(source);
+        // As a CRLF checkout (Windows CI, core.autocrlf=true) reads it.
+        assert_no_guessed_searxng_address(&source.replace("\r\n", "\n").replace('\n', "\r\n"));
+    }
+
+    /// The source side of the guard above, for either line ending: the
+    /// source is read with LF line endings before the production cut.
+    fn assert_no_guessed_searxng_address(source: &str) {
+        let source = source.replace("\r\n", "\n");
+        let production = source.split("#[cfg(test)]\nmod tests").next().unwrap();
         for guessed in [
             "localhost:8080",
             "127.0.0.1:8080",

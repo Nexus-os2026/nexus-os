@@ -1364,7 +1364,71 @@ async fn check_messaging_connectivity(
 /// interface as given would hand it the stored token. The URL is dropped
 /// from every messaging error, whatever the platform.
 pub(crate) fn messaging_transport_error(context: &str, error: reqwest::Error) -> String {
-    format!("{context}: {}", error.without_url())
+    // reqwest's own message for a timeout does not say so.
+    let timed_out = if error.is_timeout() {
+        " (timed out)"
+    } else {
+        ""
+    };
+    format!("{context}: {}{timed_out}", error.without_url())
+}
+
+/// Final Gate resource bound: the longest one messaging request may take,
+/// from connecting until its whole body is read (reqwest's async client
+/// applies its timeout to the whole request). Telegram's poll asks the
+/// server to hold the request for up to 5 s.
+pub(crate) const MESSAGING_REQUEST_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(30);
+
+/// Final Gate resource bound: the most response bytes one messaging request
+/// reads; a page of 20 messages is far smaller. A longer response is refused,
+/// whether or not it declares its length.
+pub(crate) const MAX_MESSAGING_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+
+/// The client every messaging send and poll uses, bounded in total time.
+pub(crate) fn messaging_client() -> Result<reqwest::Client, String> {
+    messaging_client_with(MESSAGING_REQUEST_TIMEOUT)
+}
+
+pub(crate) fn messaging_client_with(
+    timeout: std::time::Duration,
+) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .map_err(|e| messaging_transport_error("client", e))
+}
+
+/// A messaging response's body: at most [`MAX_MESSAGING_RESPONSE_BYTES`].
+pub(crate) async fn messaging_body(response: reqwest::Response) -> Result<String, String> {
+    messaging_body_bounded(response, MAX_MESSAGING_RESPONSE_BYTES).await
+}
+
+/// At most `max` bytes of a response body, read chunk by chunk; decoded as
+/// `text()` did (lossy UTF-8). Errors name no URL.
+pub(crate) async fn messaging_body_bounded(
+    mut response: reqwest::Response,
+    max: usize,
+) -> Result<String, String> {
+    let too_large = || format!("body: the response is larger than {max} bytes");
+    if response
+        .content_length()
+        .is_some_and(|length| length > max as u64)
+    {
+        return Err(too_large());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|e| messaging_transport_error("body", e))?
+    {
+        if body.len() + chunk.len() > max {
+            return Err(too_large());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(String::from_utf8_lossy(&body).into_owned())
 }
 
 pub(crate) fn messaging_send(
@@ -1392,46 +1456,34 @@ pub(crate) fn messaging_send(
         match platform.as_str() {
             "telegram" => {
                 let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
-                let resp = reqwest::Client::new()
+                let resp = messaging_client()?
                     .post(&url)
                     .json(&json!({"chat_id": channel, "text": text}))
                     .send()
                     .await
                     .map_err(|e| messaging_transport_error("telegram send", e))?;
-                let body = resp
-                    .text()
-                    .await
-                    .map_err(|e| messaging_transport_error("body", e))?;
-                Ok(body)
+                messaging_body(resp).await
             }
             "slack" => {
-                let resp = reqwest::Client::new()
+                let resp = messaging_client()?
                     .post("https://slack.com/api/chat.postMessage")
                     .bearer_auth(&token)
                     .json(&json!({"channel": channel, "text": text}))
                     .send()
                     .await
                     .map_err(|e| messaging_transport_error("slack send", e))?;
-                let body = resp
-                    .text()
-                    .await
-                    .map_err(|e| messaging_transport_error("body", e))?;
-                Ok(body)
+                messaging_body(resp).await
             }
             "discord" => {
                 let url = format!("https://discord.com/api/v10/channels/{}/messages", channel);
-                let resp = reqwest::Client::new()
+                let resp = messaging_client()?
                     .post(&url)
                     .header("Authorization", format!("Bot {}", token))
                     .json(&json!({"content": text}))
                     .send()
                     .await
                     .map_err(|e| messaging_transport_error("discord send", e))?;
-                let body = resp
-                    .text()
-                    .await
-                    .map_err(|e| messaging_transport_error("body", e))?;
-                Ok(body)
+                messaging_body(resp).await
             }
             _ => Err(format!("Unknown platform: {platform}")),
         }
@@ -1468,41 +1520,35 @@ pub(crate) fn messaging_poll_messages(
                     "https://api.telegram.org/bot{}/getUpdates?offset={}&timeout=5&limit=20",
                     token, offset
                 );
-                let resp = reqwest::Client::new()
+                let resp = messaging_client()?
                     .get(&url)
                     .send()
                     .await
                     .map_err(|e| messaging_transport_error("telegram poll", e))?;
-                resp.text()
-                    .await
-                    .map_err(|e| messaging_transport_error("body", e))
+                messaging_body(resp).await
             }
             "slack" => {
-                let resp = reqwest::Client::new()
+                let resp = messaging_client()?
                     .get("https://slack.com/api/conversations.history")
                     .bearer_auth(&token)
                     .query(&[("channel", channel.as_str()), ("limit", "20")])
                     .send()
                     .await
                     .map_err(|e| messaging_transport_error("slack poll", e))?;
-                resp.text()
-                    .await
-                    .map_err(|e| messaging_transport_error("body", e))
+                messaging_body(resp).await
             }
             "discord" => {
                 let url = format!(
                     "https://discord.com/api/v10/channels/{}/messages?limit=20",
                     channel
                 );
-                let resp = reqwest::Client::new()
+                let resp = messaging_client()?
                     .get(&url)
                     .header("Authorization", format!("Bot {}", token))
                     .send()
                     .await
                     .map_err(|e| messaging_transport_error("discord poll", e))?;
-                resp.text()
-                    .await
-                    .map_err(|e| messaging_transport_error("body", e))
+                messaging_body(resp).await
             }
             _ => Err(format!("Unknown platform: {platform}")),
         }

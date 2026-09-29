@@ -3048,13 +3048,17 @@ pub mod runtime {
                         &model_dir.to_string_lossy(),
                     );
                     // Best-effort: register the downloaded file with Ollama so it
-                    // appears in Chat model list
+                    // appears in Chat model list, at the authorized Ollama address
+                    // only; registration is skipped when Ollama is unavailable.
                     let model_file_path = std::path::PathBuf::from(model_path);
                     let ollama_name = model_id_clone.replace('/', "--");
-                    let _ = super::model_hub::register_downloaded_model_with_ollama(
-                        &model_file_path,
-                        &ollama_name,
-                    );
+                    if let Ok(ollama_base) = super::authorized_ollama_base_url() {
+                        let _ = super::model_hub::register_downloaded_model_with_ollama(
+                            &ollama_base,
+                            &model_file_path,
+                            &ollama_name,
+                        );
+                    }
                     // Best-effort: emit model-downloaded event so Chat can refresh its model list
                     let _ = window.emit(
                         "model-downloaded",

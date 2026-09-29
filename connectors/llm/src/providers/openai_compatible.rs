@@ -1,6 +1,5 @@
 use super::{LlmResponse, ProviderRequest};
 use nexus_kernel::errors::AgentError;
-use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -73,10 +72,8 @@ pub(crate) fn execute_openai_compatible_query(
             .insert((*header_name).to_string(), header_value.clone());
     }
 
-    let client = Client::builder()
-        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
-        .build()
-        .map_err(|error| {
+    let client =
+        super::credential_client(Duration::from_secs(REQUEST_TIMEOUT_SECS)).map_err(|error| {
             AgentError::SupervisorError(format!(
                 "failed to build HTTP client for {}: {error}",
                 query.provider_name
