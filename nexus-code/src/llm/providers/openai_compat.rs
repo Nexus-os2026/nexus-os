@@ -13,11 +13,11 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 /// No wait for a response's headers, and no read of its body (a stream's
 /// included), may take longer than this. A non-streaming answer arrives only
 /// when it is complete, so this also bounds its generation.
-const READ_TIMEOUT: Duration = Duration::from_secs(600);
+pub(super) const READ_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// A non-streaming completion ends within this, from connecting until its
 /// last byte. (A stream may run longer; each of its reads is bounded.)
-const COMPLETE_TIMEOUT: Duration = Duration::from_secs(600);
+pub(super) const COMPLETE_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// The provider's client (Final Gate items B and C): bounded as above, with
 /// reads bounded by `read_timeout`, and following no redirect. reqwest drops
@@ -25,7 +25,7 @@ const COMPLETE_TIMEOUT: Duration = Duration::from_secs(600);
 /// would re-send the prompt there; a redirect is reported as its status
 /// instead. Like `Client::new()` before, building it panics only when no TLS
 /// backend can be initialized.
-fn bounded_client(read_timeout: Duration) -> reqwest::Client {
+pub(super) fn bounded_client(read_timeout: Duration) -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
         .read_timeout(read_timeout)

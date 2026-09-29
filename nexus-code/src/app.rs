@@ -83,7 +83,18 @@ impl App {
         registry.register(Box::new(AnthropicProvider::new()));
         registry.register(Box::new(crate::llm::providers::create_openai_provider()));
         registry.register(Box::new(GoogleProvider::new()));
-        registry.register(Box::new(crate::llm::providers::create_ollama_provider()));
+        // Final Gate item B: the desktop (no CLI agents) takes the Ollama
+        // address from its own authority; a set but unusable OLLAMA_URL leaves
+        // Ollama unregistered. The standalone terminal keeps OLLAMA_BASE_URL.
+        if let Some(base) = crate::llm::providers::ollama_api_base(
+            cli_agents,
+            std::env::var_os("OLLAMA_URL"),
+            std::env::var("OLLAMA_BASE_URL").ok(),
+        ) {
+            registry.register(Box::new(crate::llm::providers::create_ollama_provider_at(
+                &base,
+            )));
+        }
         registry.register(Box::new(crate::llm::providers::create_openrouter_provider()));
         registry.register(Box::new(crate::llm::providers::create_groq_provider()));
         registry.register(Box::new(crate::llm::providers::create_deepseek_provider()));

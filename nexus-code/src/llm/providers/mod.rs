@@ -25,13 +25,57 @@ pub fn create_openai_provider() -> OpenAiCompatibleProvider {
     )
 }
 
-/// Create the Ollama provider (no API key required).
+/// Create the Ollama provider (no API key required) at `OLLAMA_BASE_URL`,
+/// the standalone terminal's setting, or the local default.
 pub fn create_ollama_provider() -> OpenAiCompatibleProvider {
     let base_url = std::env::var("OLLAMA_BASE_URL")
         .unwrap_or_else(|_| "http://localhost:11434/v1".to_string());
+    create_ollama_provider_at(&base_url)
+}
+
+/// The Ollama API base URL a Nexus Code application uses, or `None` when
+/// Ollama is unavailable. The standalone terminal (`cli_agents`) keeps
+/// `OLLAMA_BASE_URL` (`ollama_base_url`) or the local default. The desktop
+/// uses the desktop's own Ollama authority ([`desktop_ollama_api_base`]).
+pub fn ollama_api_base(
+    cli_agents: bool,
+    ollama_url: Option<std::ffi::OsString>,
+    ollama_base_url: Option<String>,
+) -> Option<String> {
+    if cli_agents {
+        Some(ollama_base_url.unwrap_or_else(|| "http://localhost:11434/v1".to_string()))
+    } else {
+        desktop_ollama_api_base(ollama_url)
+    }
+}
+
+/// Final Gate item B: the Ollama address of the desktop's Nexus Code comes
+/// from the same authority as the rest of the desktop: the operator's
+/// `OLLAMA_URL` (`ollama_url`), an http(s) base URL with a host and no user
+/// information, query or fragment, or else the fixed
+/// `http://localhost:11434`. A set but unusable value leaves Ollama
+/// unavailable (`None`); nothing falls back to the default, and
+/// `OLLAMA_BASE_URL` is not read. The OpenAI-compatible API is under `/v1`.
+pub fn desktop_ollama_api_base(ollama_url: Option<std::ffi::OsString>) -> Option<String> {
+    let base = match ollama_url {
+        None => "http://localhost:11434".to_string(),
+        Some(value) => {
+            let url = nexus_kernel::governed_http::http_url(value.to_str()?).ok()?;
+            if url.query().is_some() || url.fragment().is_some() {
+                return None;
+            }
+            url.as_str().trim_end_matches('/').to_string()
+        }
+    };
+    Some(format!("{base}/v1"))
+}
+
+/// Create the Ollama provider (no API key required) at `base_url`, its
+/// OpenAI-compatible API base.
+pub fn create_ollama_provider_at(base_url: &str) -> OpenAiCompatibleProvider {
     OpenAiCompatibleProvider::new(
         "ollama",
-        &base_url,
+        base_url,
         "OLLAMA_API_KEY",
         "qwen3:8b",
         vec![],

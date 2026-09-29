@@ -378,7 +378,7 @@ fn p0_fg_the_ollama_address_is_backend_configuration() {
         use std::os::windows::ffi::OsStringExt;
         unusable.push(OsString::from_wide(&[0x68, 0xD800]));
     }
-    for operator in unusable {
+    for operator in &unusable {
         assert_eq!(
             authorized_ollama_base_url_from(Some(operator.clone())),
             Err(OLLAMA_ADDRESS_UNAVAILABLE.to_string()),
@@ -386,6 +386,55 @@ fn p0_fg_the_ollama_address_is_backend_configuration() {
         );
     }
     assert!(!OLLAMA_ADDRESS_UNAVAILABLE.contains("ollama.example"));
+
+    // The desktop's Nexus Code (the nx bridge) takes its Ollama address from
+    // the same authority: for every value above it names the authorized
+    // address (its OpenAI-compatible API under `/v1`), or none, and never
+    // reads the standalone terminal's OLLAMA_BASE_URL.
+    use nexus_code::llm::providers::ollama_api_base;
+    let standalone = Some("http://standalone.example:1/v1".to_string());
+    let mut operators: Vec<Option<OsString>> = vec![None];
+    operators.extend(
+        [
+            "http://127.0.0.1:12345",
+            "HTTP://Ollama.Example:11434/",
+            "https://ollama.example:443/",
+            "http://[::1]:11434",
+            "http://ollama.example/base/",
+        ]
+        .map(|value| Some(OsString::from(value))),
+    );
+    operators.extend(unusable.into_iter().map(Some));
+    for operator in operators {
+        assert_eq!(
+            ollama_api_base(false, operator.clone(), standalone.clone()),
+            authorized_ollama_base_url_from(operator.clone())
+                .ok()
+                .map(|base| format!("{base}/v1")),
+            "{operator:?}"
+        );
+    }
+    assert_eq!(ollama_api_base(true, None, standalone.clone()), standalone);
+    let app = production_text(&lf(include_str!("../../../../../nexus-code/src/app.rs")));
+    let (_, build) = handler_shape(&app, "build_with");
+    assert!(
+        build.contains(
+            &without_whitespace(
+                "if let Some(base) = crate::llm::providers::ollama_api_base(
+                cli_agents,
+                std::env::var_os(\"OLLAMA_URL\"),
+                std::env::var(\"OLLAMA_BASE_URL\").ok(),
+            ) {
+                registry.register(Box::new(
+                    crate::llm::providers::create_ollama_provider_at(&base),
+                ));
+            }"
+            )
+            .replace(",)", ")")
+        ),
+        "{build}"
+    );
+    assert!(!build.contains("create_ollama_provider()"), "{build}");
 }
 
 /// Final Gate item B: an address the interface passes is accepted only when
