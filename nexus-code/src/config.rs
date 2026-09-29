@@ -147,7 +147,9 @@ impl NxConfig {
         } else if std::env::var("OPENAI_API_KEY").is_ok() {
             self.default_provider = "openai".to_string();
             self.default_model = "gpt-4o".to_string();
-        } else if crate::setup::check_command_exists("ollama") {
+        } else if crate::setup::program_installed("ollama", cli_agents) {
+            // Final Gate item I: without CLI agents (the desktop), Ollama is
+            // looked up on PATH in process; no program is run to find it.
             self.default_provider = "ollama".to_string();
             self.default_model = "qwen3:8b".to_string();
         }

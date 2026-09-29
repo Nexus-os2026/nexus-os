@@ -32,12 +32,19 @@ pub fn diagnose_without_cli_agents() -> SetupStatus {
 
 /// The setup diagnostic for the Nexus OS desktop (P0-002C5C): no external CLI
 /// agent is run, and the process working directory is not inspected, because
-/// the desktop has no project `NEXUSCODE.md`.
+/// the desktop has no project `NEXUSCODE.md`. Final Gate item I: no program is
+/// run to find one either; `ollama`, `git` and `rg` are looked up on `PATH` in
+/// this process ([`program_on_path`]).
 pub fn diagnose_for_desktop() -> SetupStatus {
     diagnose_with(false, false)
 }
 
+/// `cli_agents`: the Claude CLI may be probed. `project`: the standalone
+/// terminal's project context: it reads the working directory's
+/// `NEXUSCODE.md` and finds programs by running `which`, as it always has.
+/// The desktop passes false for both.
 fn diagnose_with(cli_agents: bool, project: bool) -> SetupStatus {
+    let installed = |name: &str| program_installed(name, project);
     let provider_checks = [
         ("anthropic", "ANTHROPIC_API_KEY"),
         ("openai", "OPENAI_API_KEY"),
@@ -71,7 +78,7 @@ fn diagnose_with(cli_agents: bool, project: bool) -> SetupStatus {
     }
 
     // Ollama is always available if installed
-    if check_command_exists("ollama") {
+    if installed("ollama") {
         configured.push("ollama".to_string());
     } else {
         unconfigured.push((
@@ -84,8 +91,8 @@ fn diagnose_with(cli_agents: bool, project: bool) -> SetupStatus {
         has_any_provider: !configured.is_empty(),
         configured_providers: configured,
         unconfigured_providers: unconfigured,
-        has_git: check_command_exists("git"),
-        has_ripgrep: check_command_exists("rg"),
+        has_git: installed("git"),
+        has_ripgrep: installed("rg"),
         has_nexuscode_md: project && std::path::Path::new("NEXUSCODE.md").exists(),
     }
 }
@@ -134,6 +141,73 @@ pub fn check_command_exists(cmd: &str) -> bool {
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
+}
+
+/// Whether a program named `name` is installed: found by running `which`
+/// when `run_which` (the standalone terminal, as it always has), or else
+/// looked up on `PATH` in this process with no program run
+/// ([`program_on_path`]; the desktop).
+pub fn program_installed(name: &str, run_which: bool) -> bool {
+    if run_which {
+        check_command_exists(name)
+    } else {
+        program_on_path(name)
+    }
+}
+
+/// Whether a program named `name` is on the launch environment's `PATH`
+/// (Final Gate item I). The lookup runs in this process: no program, such as
+/// `which`, is started to find one. See [`program_on_path_in`].
+pub fn program_on_path(name: &str) -> bool {
+    program_on_path_in(name, std::env::var_os("PATH").as_deref())
+}
+
+/// [`program_on_path`] for a given `PATH` value. A relative entry, which would
+/// name a directory under the working directory, is skipped, and so is a name
+/// with a path separator. On Unix the file must be executable; on Windows the
+/// name is tried with each `PATHEXT` extension (by default `.COM`, `.EXE`,
+/// `.BAT` and `.CMD`).
+pub fn program_on_path_in(name: &str, path: Option<&std::ffi::OsStr>) -> bool {
+    if name.is_empty() || name.contains(['/', '\\']) {
+        return false;
+    }
+    let Some(path) = path else {
+        return false;
+    };
+    let names = program_file_names(name);
+    std::env::split_paths(path)
+        .filter(|dir| dir.is_absolute())
+        .any(|dir| names.iter().any(|file| is_program(&dir.join(file))))
+}
+
+/// The file names a program named `name` may have.
+fn program_file_names(name: &str) -> Vec<String> {
+    if cfg!(windows) {
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
+            .split(';')
+            .filter(|extension| !extension.is_empty())
+            .map(|extension| format!("{name}{extension}"))
+            .collect()
+    } else {
+        vec![name.to_string()]
+    }
+}
+
+/// Whether `file` is a regular file (links followed) that may be run; on
+/// Unix, one with an execute permission bit.
+fn is_program(file: &std::path::Path) -> bool {
+    std::fs::metadata(file).is_ok_and(|metadata| {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+        }
+        #[cfg(not(unix))]
+        {
+            metadata.is_file()
+        }
+    })
 }
 
 /// Display the first-run welcome when no provider is configured.
@@ -343,4 +417,140 @@ pub fn init_nexuscode_md(working_dir: &std::path::Path) -> Result<(), crate::err
         language
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::{Path, PathBuf};
+
+    /// The file a program named `name` has in `dir` on this platform.
+    fn program_file(dir: &Path, name: &str) -> PathBuf {
+        dir.join(if cfg!(windows) {
+            format!("{name}.EXE")
+        } else {
+            name.to_string()
+        })
+    }
+
+    /// Write a program file (a shell script on Unix) that records each run
+    /// by writing `<file>.ran` next to itself, with no program of its own.
+    fn write_program(dir: &Path, name: &str) -> PathBuf {
+        let file = program_file(dir, name);
+        std::fs::write(&file, "#!/bin/sh\necho ran > \"$0.ran\"\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        file
+    }
+
+    /// Final Gate item I: a program is found on `PATH` in process. Absent
+    /// names, directories, non-executable files (Unix), names with a
+    /// separator, a missing `PATH` and relative entries find nothing.
+    #[test]
+    fn p0_fg_programs_are_looked_up_on_path_in_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let program = write_program(dir.path(), "fg-tool");
+        std::fs::create_dir(program_file(dir.path(), "fg-dir")).unwrap();
+        let path =
+            std::env::join_paths([PathBuf::from("fg-relative-entry"), dir.path().to_path_buf()])
+                .unwrap();
+        assert!(program_on_path_in("fg-tool", Some(&path)));
+        for absent in ["fg-absent", "fg-dir", "", "sub/fg-tool", "sub\\fg-tool"] {
+            assert!(!program_on_path_in(absent, Some(&path)), "{absent:?}");
+        }
+        assert!(!program_on_path_in("fg-tool", None));
+        let ran = PathBuf::from(format!("{}.ran", program.display()));
+        assert!(!ran.exists(), "the lookup ran the program");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let plain = dir.path().join("fg-plain");
+            std::fs::write(&plain, "data").unwrap();
+            std::fs::set_permissions(&plain, std::fs::Permissions::from_mode(0o644)).unwrap();
+            assert!(!program_on_path_in("fg-plain", Some(&path)));
+
+            // A relative entry that names the program's directory from the
+            // working directory is skipped.
+            let cwd = std::env::current_dir().unwrap();
+            let up = cwd
+                .components()
+                .filter(|component| matches!(component, std::path::Component::Normal(_)))
+                .count();
+            let relative = std::iter::repeat_n("..", up)
+                .collect::<PathBuf>()
+                .join(dir.path().strip_prefix("/").unwrap());
+            assert!(relative.is_relative() && relative.join("fg-tool").exists());
+            let only_relative = std::env::join_paths([relative]).unwrap();
+            assert!(!program_on_path_in("fg-tool", Some(&only_relative)));
+        }
+    }
+
+    /// Set only in the environment of the stand-in below.
+    const STAND_IN_ENV: &str = "NEXUS_FG_DESKTOP_DIAGNOSTIC";
+
+    /// Not a check. Run by the test below in a child process whose `PATH` is
+    /// a scratch directory, it prints what the desktop's diagnostic and
+    /// configuration found. Run as a normal test, it returns at once.
+    #[test]
+    fn fg_desktop_diagnostic_stand_in() {
+        if std::env::var_os(STAND_IN_ENV).is_some() {
+            let status = diagnose_for_desktop();
+            let config = crate::config::NxConfig::load_for_desktop(None).unwrap();
+            println!(
+                "FG-DESKTOP git={} rg={} ollama={} provider={}",
+                status.has_git,
+                status.has_ripgrep,
+                status.configured_providers.iter().any(|p| p == "ollama"),
+                config.default_provider
+            );
+        }
+    }
+
+    /// Final Gate item I: the desktop's diagnostic and configuration run no
+    /// program to find one. In a child process whose `PATH` holds only
+    /// stand-in `which`, `git`, `rg` and `ollama` programs that record every
+    /// run, both find the three programs and none of the four runs.
+    #[cfg(unix)]
+    #[test]
+    fn p0_fg_the_desktop_diagnostic_runs_no_program_to_find_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let programs: Vec<PathBuf> = ["which", "git", "rg", "ollama"]
+            .iter()
+            .map(|name| write_program(dir.path(), name))
+            .collect();
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+        child
+            .args([
+                "--exact",
+                "setup::tests::fg_desktop_diagnostic_stand_in",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env("PATH", dir.path())
+            .env(STAND_IN_ENV, "1");
+        for key in [
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "NX_PROVIDER",
+            "NX_MODEL",
+            "NX_FUEL_BUDGET",
+        ] {
+            child.env_remove(key);
+        }
+        let output = child.output().unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success(), "{stdout}");
+        assert!(
+            stdout.contains("FG-DESKTOP git=true rg=true ollama=true provider=ollama"),
+            "{stdout}"
+        );
+        for program in programs {
+            let ran = PathBuf::from(format!("{}.ran", program.display()));
+            assert!(!ran.exists(), "{} was run", program.display());
+        }
+    }
 }
