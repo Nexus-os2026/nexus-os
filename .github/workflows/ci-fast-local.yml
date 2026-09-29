@@ -263,8 +263,11 @@ jobs:
           set -euo pipefail
           python -m venv "$RUNNER_TEMP/voice-venv"
           echo "$RUNNER_TEMP/voice-venv/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/voice-venv/bin/python" -m pip install --upgrade pip
-          "$RUNNER_TEMP/voice-venv/bin/python" -m pip install faster-whisper openwakeword silero-vad piper-tts pytest
+          # The committed, complete, hash-pinned Linux/Python 3.11 set (the
+          # same file as ci.yml): nothing is resolved at install time.
+          "$RUNNER_TEMP/voice-venv/bin/python" -m pip install pip==26.2.1
+          "$RUNNER_TEMP/voice-venv/bin/python" -m pip install --require-hashes --no-deps -r voice/requirements-linux-py311.lock
+          "$RUNNER_TEMP/voice-venv/bin/python" -m pip check
 
       # This lane intentionally matches the GPU-less GitHub-hosted Python
       # validation environment (ci.yml test-python): the runner's GPU is hidden
