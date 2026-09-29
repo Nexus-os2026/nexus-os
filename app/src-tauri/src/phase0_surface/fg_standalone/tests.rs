@@ -4,7 +4,7 @@
 //! alias (J3), `nexus-cli` (J4) and the standalone `nx` terminal (J5) are
 //! withdrawn, together with the alternate `coding-agent` and
 //! `social-poster-agent` entry points, the `nx-*` computer-use harness
-//! (coordinator decisions D1 and D2) and the five benchmarks that sent a
+//! (coordinator decisions D1 and D2) and the six benchmarks that sent a
 //! provider key on curl's command line (coordinator decision after internal
 //! review), on the pattern of `crates/nexus-server` (J1). Each package's
 //! `tests/phase0_withdrawal.rs` runs its withdrawn executables and pins their
@@ -149,7 +149,7 @@ const BINARY_TARGETS: &[(&str, &str, &str, Disposition)] = &[
         "benchmarks/conductor-bench",
         "real-battery-validation",
         "src/real_battery_validation.rs",
-        Benchmark,
+        Withdrawn,
     ),
     ("cli", "nexus-cli", "src/main.rs", Withdrawn),
     (
@@ -555,7 +555,7 @@ fn p0_fg_standalone_every_binary_target_is_inventoried() {
             ),
         }
     }
-    assert_eq!(messages.len(), 17, "seventeen binaries are withdrawn");
+    assert_eq!(messages.len(), 18, "eighteen binaries are withdrawn");
     for message in messages.keys() {
         for other in messages.keys().filter(|other| *other != message) {
             assert!(
@@ -589,7 +589,7 @@ fn p0_fg_standalone_every_example_target_is_inventoried() {
 /// entry point too (`cargo bench`), so a new one needs review. Each runs in
 /// process: it reads no credential or other environment variable, starts no
 /// process and opens no network connection (none meets the criterion under
-/// which five benchmark binaries were withdrawn).
+/// which six benchmark binaries were withdrawn).
 #[test]
 fn p0_fg_standalone_every_bench_target_is_inventoried() {
     let mut found: Vec<(String, String, String)> = Vec::new();
@@ -1066,6 +1066,7 @@ const WITHDRAWN_BINARIES: &[&str] = &[
     "inference-consistency-bench",
     "local-vs-cloud-battle",
     "real-agent-validation",
+    "real-battery-validation",
 ];
 
 /// The README's withdrawal section names exactly the withdrawn binaries (as

@@ -1,12 +1,15 @@
-//! P0-FINAL-GATE-CLOSURE (standalone surfaces, coordinator decision after
+//! P0-FINAL-GATE-CLOSURE (standalone surfaces, coordinator decisions after
 //! internal review): the benchmark executables `nim-cloud-bench`,
 //! `cloud-models-bench`, `inference-consistency-bench`,
-//! `local-vs-cloud-battle` and `real-agent-validation` are withdrawn. Each
-//! read a provider key from the environment and sent it as a bearer token on
-//! curl's command line, where any local process could read it, and each sent
-//! the `GROQ_API_KEY` value to NVIDIA NIM. The other benchmark binaries of
-//! this package stay (developer/benchmark use, pending the Architect's
-//! decision D3).
+//! `local-vs-cloud-battle`, `real-agent-validation` and
+//! `real-battery-validation` are withdrawn. Each read a provider key from the
+//! environment and sent it as a bearer token on curl's command line, where
+//! any local process could read it. The first five sent the `GROQ_API_KEY`
+//! value to NVIDIA NIM; `real-battery-validation`, whose usage told users to
+//! put an NVIDIA key there, sent it to Groq through
+//! `nexus-capability-measurement`. The other benchmark binaries of this
+//! package stay (developer/benchmark use, pending the Architect's decision
+//! D3).
 //!
 //! The behavioural tests run the executables built from this package, never
 //! a program found on `PATH`, and only after checking that each entry source
@@ -85,7 +88,19 @@ const AGENTS: Withdrawn = Withdrawn {
     ],
 };
 
-const ALL: [&Withdrawn; 5] = [&NIM, &CLOUD, &CONSISTENCY, &BATTLE, &AGENTS];
+const BATTERY: Withdrawn = Withdrawn {
+    name: "real-battery-validation",
+    source: "real_battery_validation.rs",
+    message: "real-battery-validation: unavailable during Phase Zero; standalone use withdrawn",
+    executable: env!("CARGO_BIN_EXE_real-battery-validation"),
+    decoys: &[
+        "crates/nexus-capability-measurement/data/battery_v1.json",
+        "agents/prebuilt/p0bench-decoy.json",
+        "data/validation_runs/p0bench-decoy.json",
+    ],
+};
+
+const ALL: [&Withdrawn; 6] = [&NIM, &CLOUD, &CONSISTENCY, &BATTLE, &AGENTS, &BATTERY];
 
 /// Invocations every executable gets. The benchmarks took no arguments;
 /// their retired runs are the environment below.
@@ -101,7 +116,7 @@ const INVOCATIONS: &[&[&str]] = &[
 ];
 
 /// Every binary target of this package, as (name, path), in manifest order:
-/// the five withdrawn entries and the benchmarks that stay.
+/// the six withdrawn entries and the benchmarks that stay.
 const PACKAGE_BINARIES: &[(&str, &str)] = &[
     ("conductor-bench", "src/main.rs"),
     ("memory-profile", "src/memory_profile.rs"),
@@ -593,4 +608,46 @@ fn p0_bench_withdrawn_entries_and_package_targets_are_pinned() {
             "Cargo.toml must not declare `{forbidden}`"
         );
     }
+}
+
+fn workspace_root() -> PathBuf {
+    manifest_dir().join("..").join("..")
+}
+
+/// Asserts that a Markdown document says each `required` phrase and none of
+/// the `forbidden` ones. Line breaks, CRLF line endings and blockquote
+/// markers in the source do not matter.
+fn assert_doc(path: &str, required: &[&str], forbidden: &[&str]) {
+    let text = read(&workspace_root().join(path))
+        .lines()
+        .map(|line| line.trim_start().trim_start_matches('>'))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let text = normalize_whitespace(&text);
+    for phrase in required {
+        assert!(text.contains(phrase), "{path} must say `{phrase}`");
+    }
+    for phrase in forbidden {
+        assert!(
+            !text.contains(phrase),
+            "{path} must not tell users to run a withdrawn benchmark (`{phrase}`)"
+        );
+    }
+}
+
+/// The notes that told users how to run a withdrawn benchmark say that it is
+/// withdrawn and that the results are historical, and no longer give the
+/// command.
+#[test]
+fn p0_bench_docs_describe_the_withdrawn_benchmarks_as_withdrawn() {
+    assert_doc(
+        "data/validation_runs/README.md",
+        &[
+            "Re-running is withdrawn during Phase Zero: `real-battery-validation` sent the \
+           provider key as a bearer token on curl's command line, and now only prints a \
+           withdrawal message and exits with status 69. The results in these files are \
+           historical.",
+        ],
+        &["cargo run", "--bin real-battery-validation"],
+    );
 }

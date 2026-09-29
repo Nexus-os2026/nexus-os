@@ -170,13 +170,13 @@ these standalone binaries: `nexus-server`, `nexus-protocols-server` and its
 `nexus-os` alias, `nexus-cli`, `nx`, `coding-agent`, `social-poster-agent`,
 the computer-use tools `nx-screen`, `nx-input`, `nx-agent`, `nx-govern` and
 `nx-learn`, and the benchmarks `nim-cloud-bench`, `cloud-models-bench`,
-`inference-consistency-bench`, `local-vs-cloud-battle` and
-`real-agent-validation`. Each now prints a fixed withdrawal message and exits
-with status 69. Developer and benchmark binaries remain in the repository,
-pending the Architect's decision on them (D3); no recipe ships them. The
-repository provides no supported server deployment at this point; Nexus OS
-runs as the desktop app above. An existing deployment is not stopped
-automatically. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+`inference-consistency-bench`, `local-vs-cloud-battle`,
+`real-agent-validation` and `real-battery-validation`. Each now prints a fixed
+withdrawal message and exits with status 69. Developer and benchmark binaries
+remain in the repository, pending the Architect's decision on them (D3); no
+recipe ships them. The repository provides no supported server deployment at
+this point; Nexus OS runs as the desktop app above. An existing deployment is
+not stopped automatically. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Post-Audit Status
 
