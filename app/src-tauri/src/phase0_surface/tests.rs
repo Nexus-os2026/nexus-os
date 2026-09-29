@@ -2856,12 +2856,14 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
         include_str!("../../../../benchmarks/conductor-bench/tests/phase0_withdrawal.rs");
     let fg_reliability = include_str!("fg_reliability/tests.rs");
     let fg_approval = include_str!("fg_approval/tests.rs");
+    let fg_webview = include_str!("fg_webview/tests.rs");
     let scheduled_tests = include_str!("../commands/cognitive/scheduled_tests.rs");
     let computer_use_loop =
         include_str!("../../../../crates/nexus-computer-use/src/agent/loop_controller.rs");
     let measurement_client = include_str!(
         "../../../../crates/nexus-capability-measurement/src/evaluation/nim_client.rs"
     );
+    let mut pinned = std::collections::HashSet::new();
     for (regression, source, guards) in [
         (
             "a closed command reopened",
@@ -3183,13 +3185,93 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
             fg_approval,
             &["p0_fg_g_eof_or_a_read_error_is_never_an_approval"][..],
         ),
+        (
+            "a non-app origin, frame or navigation reaching an application command",
+            fg_webview,
+            &[
+                "p0_fg_webview_app_manifest_lists_every_registered_command",
+                "p0_fg_webview_build_script_emits_the_app_manifest",
+                "p0_fg_webview_capability_is_local_main_only",
+                "p0_fg_webview_conf_has_restrictive_csp_and_guarded_window",
+                "p0_fg_webview_privileged_document_loads_no_third_party_resources",
+                "p0_fg_webview_app_origin_is_resolved_like_tauri_resolves_the_app_url",
+                "p0_fg_webview_navigation_admits_only_the_exact_app_origin",
+                "p0_fg_webview_main_window_wires_navigation_and_newwindow_guards",
+                "p0_fg_webview_boundary_exposes_only_build_main_window",
+                "p0_fg_webview_app_command_ipc_is_local_main_only",
+                "p0_fg_webview_comment_stripper_drops_only_comments",
+            ][..],
+        ),
+        (
+            "a helper, download or messaging request left unowned or unbounded",
+            fg_egress,
+            &[
+                "p0_fg_the_application_exit_ends_in_flight_model_downloads",
+                "p0_fg_model_registration_uses_the_authorized_ollama_address",
+                "p0_fg_messaging_requests_are_bounded_in_time_and_size",
+            ][..],
+        ),
+        (
+            "a new or changed credential under an ambient key, an unvalidated vault key source, or a token persisted outside an approved secret store",
+            fg_secrets,
+            &[
+                "p0_fg_a_backend_protection_changes_are_audited",
+                "p0_fg_a_no_desktop_test_builds_the_real_application_state",
+            ][..],
+        ),
+        (
+            "a withdrawn standalone binary, alias, recipe or workflow reactivated",
+            fg_standalone,
+            &[
+                "p0_fg_standalone_gitlab_includes_are_recognized",
+                "p0_fg_standalone_shipping_recognizers_catch_probes",
+            ][..],
+        ),
+        (
+            "an unbounded resource surface reachable from the interface",
+            fg_reliability,
+            &["p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database"][..],
+        ),
     ] {
         for guard in guards {
+            pinned.insert(*guard);
             assert!(
                 is_test(source, guard),
                 "{regression}: guard {guard} is missing"
             );
         }
+    }
+    // P0-FINAL-GATE: every test in a Final Gate guard module is pinned above,
+    // so no guard can be removed or renamed without failing this test.
+    for (module, source) in [
+        ("fg_approval", fg_approval),
+        ("fg_egress", fg_egress),
+        ("fg_reliability", fg_reliability),
+        ("fg_secrets", fg_secrets),
+        ("fg_standalone", fg_standalone),
+        ("fg_webview", fg_webview),
+    ] {
+        let source = source.replace("\r\n", "\n");
+        let mut lines = source.lines();
+        let mut found = 0;
+        while let Some(line) = lines.next() {
+            if line.trim() != "#[test]" {
+                continue;
+            }
+            let name = lines
+                .by_ref()
+                .map(str::trim)
+                .find(|next| !next.starts_with("#["))
+                .and_then(|next| next.strip_prefix("fn "))
+                .and_then(|rest| rest.split('(').next())
+                .unwrap_or_else(|| panic!("{module}: a #[test] without a following fn"));
+            found += 1;
+            assert!(
+                pinned.contains(name),
+                "{module}: guard {name} is not pinned in the final trust-surface guard"
+            );
+        }
+        assert!(found > 0, "{module}: no guard found");
     }
     for registry in [
         "const CLOSED_COMMANDS: &[(&str, Closure)]",
