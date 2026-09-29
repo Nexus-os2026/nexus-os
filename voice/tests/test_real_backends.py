@@ -1,3 +1,4 @@
+import _offline  # noqa: F401  (first: no test may download a model)
 import tempfile
 import unittest
 import wave

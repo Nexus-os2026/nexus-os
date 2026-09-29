@@ -1,3 +1,4 @@
+import _offline  # noqa: F401  (first: no test may download a model)
 import unittest
 from pathlib import Path
 import sys

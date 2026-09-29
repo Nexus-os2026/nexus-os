@@ -11,6 +11,8 @@ available — the JSON-shape and CLI-error tests still run.
 
 from __future__ import annotations
 
+import _offline  # noqa: F401  (first: no test may download a model)
+
 import json
 import os
 import subprocess

@@ -1,3 +1,4 @@
+import _offline  # noqa: F401  (first: no test may download a model)
 import importlib.abc
 import subprocess
 import types
