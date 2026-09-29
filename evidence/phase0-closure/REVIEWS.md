@@ -255,3 +255,27 @@ coverage remains); the goal-assignment guard counts one call spelling (queued
 to S5); a commit-message over-claim about reviewed actions is corrected in a
 later message (the dossier uses the corrected statement: of the actions the
 Phase Zero executor permits, only knowledge-graph updates reach the review).
+
+### Integration review of the full composition, by S2 (`6542788f`)
+
+Verdict: **no blocker.** Cross-stream interactions checked coherent: the
+main-window builder, download termination at exit, the audit refactor and the
+recorder in `lib.rs`; the Ollama authority with interface and setup-wizard
+saves; L6 refusals ahead of the loop-active skip; the consent module's kernel
+bounds; the two messaging body caps; the webview origin rules; the registry and
+final guard; CRLF handling and platform cfgs; the CI steps. One should-fix, an
+autonomous-loop interval the bounded scheduler cannot express, fixed by the
+coordinator in `4c310f77` (test and negative control). Notes: Windows and macOS
+lanes not yet run on the composition; two Node versions in CI; the desktop crate
+builds twice per job (release-profile harness); the fast-local harness binds
+loopback ports 1420/1421; web-builder dev-server tests are not hermetic
+(pre-existing); cognitive-loop identity-home writes in tests (assigned to S6).
+
+### Re-review of the S1 revision and the CI commit, by S5
+
+Verdict: **pass.** No non-app origin, frame or navigation reaches an application
+command on Linux, Windows or macOS (checked against the locked tauri 2.10.3 and
+wry 0.54.4 sources). The CI commit `83712a86` is correct. Repairs assigned to S1:
+settle checks so a late navigation in the release-profile run cannot pass as
+cancelled; stricter Blob, iframe and import guards; a Windows raw-postMessage
+subframe check; wording; narrower public exposure of the boundary module.
