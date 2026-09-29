@@ -29,4 +29,13 @@
   fast-frontend: node and vitest 461/461, tsc and vite build ok.
 - Hosted run 1 of 3: `gh workflow run ci.yml --ref implement/p0-final-gate-closure
   --raw-field candidate_sha=9ed607f8…`, dispatched once; run `36559976709`
-  (#109) — in progress.
+  (#109): **failure** on Windows and macOS only; test-linux, test-frontend
+  and test-python **success**. test-linux: fmt clean, clippy clean, workspace
+  7,675 passed / 0 failed / 43 ignored (293 test binaries), 241/241 Final
+  Gate guard tests, live webview harness ok in the dev and release profiles,
+  packaged-toolchain steps ok; test-frontend vitest 461/461; test-python voice
+  27 tests. Windows/macOS results: see PLATFORM-SCOPE.md (deferred).
+- Owner decision after run #109: Linux-only Phase Zero target; no further
+  hosted run. Hosted budget used: 1 of 3 (not continued).
+- Linux validation gate: candidate `9ed607f8` -> Linux fast-local #7 success
+  (above) -> Linux review.
