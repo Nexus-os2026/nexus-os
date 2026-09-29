@@ -7,6 +7,9 @@ as such; everything else is open for the Final Gate.
 
 P0-FG1 updates item J1 only: the withdrawal of `crates/nexus-server` is
 implemented on its validation branch, and Architect review is pending.
+[Update (P0-FINAL-GATE-CLOSURE): P0-FG1 is integrated into the authoritative
+branch at `71c47acb`, and its post-integration hosted run succeeded; Architect
+review of that evidence is pending. See item J.]
 
 **P0-FINAL-GATE-CLOSURE (internal work, not approval).** The Architect's
 closure mission implements contracts A–K, C5 and DEP on local component
@@ -51,6 +54,7 @@ numbered decision requests are collected at the end of this dossier.
 | G | Approval channel | L6 agents refused at create, start, approve, restore, prebuilt load, goal, loop, scheduled tick and tool call; caller-asserted approval commands closed; consent resolutions labelled `desktop-ui (unverified)`; self-improvement recorded truthfully; enabled Warden review with no Warden denies | Repaired on the closure candidate, with S5 follow-ups [PENDING: S5 final]; no out-of-band approval exists (non-claim); Architect review pending. Decision request 14 |
 | H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged; Architect review pending. Decision request 10 |
 | I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the Nexus Code diagnostics' `which` probes remain [PENDING: S3 final], and helpers still resolve from `PATH`; Architect review pending. Decision requests 1 and 17 |
+| J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: post-integration run #108 succeeded, Architect review of that evidence pending. J2–J5: withdrawn on the closure candidate; Architect review pending. Decision requests 2 (D3: the 7 benchmark and 4 developer binaries, 5 bench targets and 2 examples kept) and 19 |
 
 ### At C5C (historical)
 
@@ -1073,8 +1077,25 @@ pending).**
 The installers ship only the desktop app (`app/src-tauri/tauri.conf.json`
 bundle). The desktop never reaches the binaries below.
 
+[Correction (P0-FINAL-GATE-CLOSURE): the release workflow's installers ship
+only the desktop app (`.github/workflows/release.yml` publishes the Windows,
+Linux and macOS desktop installers; the bundle has no sidecar). Until
+P0-FINAL-GATE-CLOSURE the repository also held standalone install and
+packaging recipes for the binaries below: the root and `nexus-code` install
+scripts, the Homebrew formula, the WiX source, the systemd and launchd files,
+`scripts/build_linux_deb.sh`, `scripts/build_macos_release.sh`,
+`scripts/build_windows_msi.ps1` and the GitLab `release-build` job. The GitHub
+release workflow also packaged `nexus-cli` until `39701bff`.]
+
 - **`crates/nexus-server` (`nexus-server`): BLOCKER. Withdrawal implemented
   on the P0-FG1 validation branch; Architect review pending.**
+  - **Status update (P0-FINAL-GATE-CLOSURE).** P0-FG1, with P0-FG1-R1 and the
+    reviewed CI composition, is integrated into `rebuild/phase0-trust-boundary`
+    at `71c47acb` by fast-forward (the Architect-approved candidate). The one
+    designated post-integration hosted run, #108, succeeded on all five jobs
+    (Linux, Windows, macOS, frontend, Python) and tested that exact commit.
+    Architect review of that evidence is pending; J1 is not declared
+    complete.
   - **Before P0-FG1.**
     - `src/main.rs` bound `0.0.0.0` on ports 3000, 3001 and 3002 with no
       authentication and a permissive CORS layer (`Any` origin, method and
@@ -1157,7 +1178,9 @@ bundle). The desktop never reaches the binaries below.
       `nexus-protocols-server`; its source file is unchanged. J1 is then the
       only workspace binary named `nexus-server`. The identification and the
       Windows fallback above are unchanged and stay as defensive checks; the
-      fallback's narrow acceptance is not widened.
+      fallback's narrow acceptance is not widened. [Update
+      (P0-FINAL-GATE-CLOSURE): integrated at `71c47acb`; hosted runs #107 and
+      #108 on that commit succeeded.]
   - **What shipped.** Nothing published this binary or an image built from
     `deploy/`.
     - CI and the release workflow compile it as a workspace member
@@ -1200,6 +1223,13 @@ bundle). The desktop never reaches the binaries below.
   - Port 9090 is exposed, but nothing listens on it.
   - Needs Final-Gate review of its routes, token issuance and the actuator
     registry behind `/mcp/tools/invoke`.
+  - [Corrections (P0-FINAL-GATE-CLOSURE): the unauthenticated list omitted the
+    router's fallback, `serve_frontend`, which served `NEXUS_FRONTEND_DIST` or
+    else the working directory's `app/dist`. And the root `helm/nexus-os`
+    chart built nothing: it deployed a prebuilt image
+    (`registry.gitlab.com/nexaiceo/nexus-os`, tag defaulting to the chart's
+    `appVersion` `10.5.0`), with CORS open to any origin and the JWT secret
+    `changeme` by default.]
 - **`nexus-cli` (`cli/`), shipped.** The GitLab `release-build` job and the
   Homebrew, WiX, systemd and launchd packaging ship it.
   - `run_voice_python` runs `python3 jarvis.py` in a `voice/` directory
@@ -1216,11 +1246,13 @@ bundle). The desktop never reaches the binaries below.
   desktop uses `load_for_desktop`, `diagnose_for_desktop` and
   `new_for_desktop`, which read none of these files (C5C). Final-Gate review
   of the standalone agent's tools.
-- **protocols `nexus-os`.** The `Makefile` target `nexus-os` builds it
-  (`cargo build --release -p nexus-protocols --bin nexus-os`), and
-  `install.sh` installs a `nexus-os` binary from release assets. It runs the
-  same server runtime as the protocols server (`nexus-server`;
-  `nexus-protocols-server` after P0-FG1-R1).
+- **protocols `nexus-os` (as at C5C; withdrawn since, J3 below).** The
+  `Makefile` target `nexus-os` built it from the `nexus-protocols` package,
+  and `install.sh` installed a `nexus-os` binary from release assets. It ran
+  the same server runtime as the protocols server (`nexus-server`;
+  `nexus-protocols-server` after P0-FG1-R1). [P0-FINAL-GATE-CLOSURE: the
+  build command formerly quoted here is removed; both recipes now fail
+  without building or installing anything.]
 - **Build note, not executed.** The root `Dockerfile` copies every workspace
   member except `nexus-code/`, which is a member, so its image build appears
   unable to load the workspace. `deploy/Dockerfile` had the same omission;
@@ -1229,7 +1261,94 @@ bundle). The desktop never reaches the binaries below.
   - J1 (`crates/nexus-server`): withdrawal implemented on the P0-FG1
     validation branch; Architect review pending. It remains a Final-Gate
     blocker until that review, integration and final verification.
-  - The others need review.
+    [Update (P0-FINAL-GATE-CLOSURE): integrated at `71c47acb`; post-integration
+    run #108 succeeded; the Architect's review of that evidence is pending.]
+  - The others need review. [Update: withdrawn on the closure candidate,
+    below.]
+
+**Repaired in P0-FINAL-GATE-CLOSURE (contracts J2–J5: standalone surfaces
+withdrawn; Architect review pending).** The Architect's disposition for
+Phase Zero is withdrawal of standalone execution and deployment paths that
+bypass the governed desktop, on the J1 pattern. J1's own identification
+checks are unchanged.
+
+- **Withdrawn entry points (18 binaries in all, J1 included).** Each entry
+  point writes one fixed message naming itself (`<name>: unavailable during
+  Phase Zero; deployment withdrawn` for the servers, `…; standalone use
+  withdrawn` for the others) and exits with status 69. It reads no argument,
+  environment variable, configuration or credential first, and starts no
+  runtime, socket or process. No flag, variable or alias restores it; target
+  names and paths are unchanged, so workspace builds still compile them.
+  - J2 and J3: `nexus-protocols-server` (`protocols/src/bin/nexus-server.rs`)
+    and its alias `nexus-os` (`protocols/src/bin/nexus-os.rs`).
+  - J4: `nexus-cli` (`cli/src/main.rs`). Before, it ran every `nexus` command
+    with the invoking user's authority in its working directory: `voice` ran
+    `python3 jarvis.py` from the working directory's or the build checkout's
+    `voice/`; `agent start coding-agent` ran the manifest's test command
+    through `sh -lc` or `cmd /C` with every write and run approved; `agent
+    start social-poster` published unless `--dry-run`; `setup` rewrote the
+    Nexus configuration.
+  - J5: `nx` (`nexus-code/src/main.rs`). Before, it spawned `which claude` and
+    `claude --version` at startup and read the working directory's
+    `NEXUSCODE.md` and `.nxrc` (which could set `auto_approve`), and its tools,
+    MCP servers and computer use ran rooted at the working directory. The
+    desktop's Nexus Code entry points are unchanged (C5C, item I).
+  - Alternate entry points (coordinator decision D1): `coding-agent` and
+    `social-poster-agent`.
+  - The computer-use harness (coordinator decision D2): `nx-screen`,
+    `nx-input`, `nx-agent`, `nx-govern`, `nx-learn` (screen capture to any
+    path, OS input, an autonomous capture, vision and input loop).
+  - Six conductor benchmarks that put a provider key on curl's command line
+    (`benchmarks/conductor-bench`): `nim-cloud-bench`, `cloud-models-bench`,
+    `inference-consistency-bench`, `local-vs-cloud-battle` and
+    `real-agent-validation` read `GROQ_API_KEY` and sent it to the NVIDIA
+    endpoint as a bearer token; `real-battery-validation` sent it to Groq
+    through the capability-measurement client. Their reports stay as
+    historical results.
+- **Recipes and packaging withdrawn.** The root `Dockerfile` and
+  `nexus-code/Dockerfile` fail at their first build step; the root Compose
+  file defines no services; the root chart's only template is an
+  unconditional `fail` (its 13 templates are removed, and it is marked
+  deprecated); `make nexus-os`, both `install.sh` scripts,
+  `nexus-code/scripts/run_benchmarks.sh` and the three `scripts/build_*`
+  scripts print the withdrawal and exit 1; the systemd unit has no
+  `[Service]` or `[Install]` section; the launchd job names no program and is
+  disabled; the Homebrew formula raises when loaded; the WiX source stops at
+  `<?error?>`; the GitLab `release-build` job keeps its manual trigger but
+  fails with no artifact. The deployment guide, user guide, README and
+  benchmark documents say the surfaces are withdrawn and give no command for
+  them.
+- **Libraries preserved, not governed.** The libraries behind the withdrawn
+  binaries remain (the desktop uses some): `nexus_protocols` (including
+  `server_runtime` and `http_gateway`), `nexus_cli`, the standalone
+  `nexus_code` entry points, `coding_agent`, `social_poster_agent`,
+  `nexus_computer_use` and the capability-measurement clients. None is
+  claimed governed.
+- **Guards.** `phase0_surface/fg_standalone/tests.rs` (10 tests) inventories
+  every effective binary target (30: 18 withdrawn, 1 desktop, 4 developer,
+  7 benchmark), example target (2) and bench target (5), and requires every
+  withdrawn one to be a J1-pattern entry with a unique message; pins the entry
+  APIs no other production source may name (13 alias needles, including the
+  gateway module and its router constructor); pins the build scripts of the
+  packages with a withdrawn entry point; pins the 14 recipe files, searching
+  dot directories and CI configurations too; forbids any workflow to build,
+  install or publish a withdrawn binary, an image or a chart; and requires
+  the README to name every withdrawn binary. Per-package
+  `tests/phase0_withdrawal.rs` files run each withdrawn executable (after
+  identifying it by source and bytes, with a cleared environment and a
+  deadline) and pin its recipes and documents: `protocols` (11), `cli` (11),
+  `nexus-code` (8), `coding-agent`, `social-poster` and `nexus-computer-use`
+  (2 each), `conductor-bench` (3).
+- **Non-claims.**
+  - Nothing stops, removes or changes an existing deployment, container,
+    image, volume, Helm release, installed package, service unit or published
+    artifact, and no credential is revoked. Units installed earlier keep
+    running their binary as before.
+  - The withdrawn Dockerfiles still pull their base image before the failing
+    step.
+  - `nexus-mcp` is not made safe to expose.
+  - The kept developer and benchmark binaries are not governed (D3).
+- **Decision requested.** Requests 2 and 19.
 
 ## K. Reliability signals
 
