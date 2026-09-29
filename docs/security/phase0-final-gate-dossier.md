@@ -22,6 +22,22 @@ an item, accepts a risk, integrates a change, or declares FG1, the Final Gate
 or Phase Zero complete. Earlier text stays as it was; where it is now stale, a
 labelled correction or note says so.
 
+**P0-LINUX-FINAL-R1 (platform scope and Architect decisions).** By the
+Owner's decision, the Phase Zero active target is **Linux only**; Windows and
+macOS are deferred to later portability stages. `.github/workflows/ci.yml` is
+the Linux Phase Zero final gate (jobs `test-linux`, `security-audit-linux`,
+`test-frontend`, `test-python`). The Windows and macOS jobs are kept
+unchanged in `.github/workflows/ci-portability.yml`, which runs only on a
+manual dispatch. This dossier makes no Windows or macOS claim: where a block
+describes Windows or macOS behaviour, it records code that was read, not a
+Phase Zero property. The one hosted run of the closure work (run #109,
+commit `9ed607f8`) passed the Linux, frontend and Python jobs; its macOS
+compile error and single Windows test failure are deferred with those
+platforms (the mission's evidence file `PLATFORM-SCOPE.md`). The Architect's
+decisions for Linux Phase Zero are recorded as dispositions under
+"Architect decisions (P0-LINUX-FINAL-R1)" at the end of this dossier; they
+replace the corresponding decision requests.
+
 Every location below is a repository path and function at the C5C head,
 except where P0-FG1 or P0-FINAL-GATE-CLOSURE is named. An
 **untrusted surface** means one of:
@@ -47,20 +63,20 @@ numbered decision requests are collected at the end of this dossier.
 
 | Item | Topic | Closure candidate | Status |
 |---|---|---|---|
-| A | Configuration encryption key | A new or changed credential is written only under the operator key `NEXUS_CONFIG_KEY`; legacy files open through an explicit two-key read path; a load never rewrites a file; protection changes are reported and audited | Repaired on the closure candidate (P0-FINAL-GATE-CLOSURE); Architect review pending. Decision requests 9 and 10 |
-| B | Egress policy | The 11 IPC commands that sent requests to a caller-chosen destination are closed; the Ollama address is `OLLAMA_URL` or the fixed local default; agent web fetch and caller-destination external tools are refused; SearXNG only at `SEARXNG_URL`; search redirects https only | Repaired on the closure candidate; Architect review pending. No address or DNS policy was added (remaining destinations are backend constants or operator configuration). Decision request 13 |
-| C | Secrets in subprocess argv | Reachable credentials leave the command line: four hosted providers post in process with no redirect and total time and size bounds; `perception_init`, the credential-bearing external tools and credentialed MCP servers are closed or refused; remaining credential curl sites are counted, each CLI-only, latent or behind a closed route | Partly repaired on the closure candidate; Architect review pending. Decision request 12 (the in-process transport) |
-| C5 (contract) | Residual capability-measurement route | `cm_run_ab_validation` closed (`AmbientResource`) before any input use; the Groq-endpoint client takes only `GROQ_API_KEY` | Repaired on the closure candidate (the route denies before any input use); Architect review pending. Decision request 15 |
-| D | Privileged webview, navigation and IPC origin | An app ACL grants all 804 application commands only to the `main` window at the local app origin; a navigation guard admits only the exact app origin (redirects included) and every new window is denied; frames are script-free or removed; a CSP with no third-party origin; a live native harness in CI on all three platforms | Repaired on the closure candidate; Architect review pending. Finding: on Linux neither the ACL nor the guard is sufficient alone (the guard is load-bearing). Decision request 18 |
-| E | Operator overrides | The vault key file is validated on the opened file (Linux, macOS) and refused elsewhere; the vault key must open every stored secret before the vault is used; `key_env` other than `NEXUS_ENCRYPTION_KEY` is refused | Repaired on the closure candidate; Architect review pending. Decision request 11 |
+| A | Configuration encryption key | A new or changed credential is written only under the operator key `NEXUS_CONFIG_KEY`; legacy files open through an explicit two-key read path; a load never rewrites a file; protection changes are reported and audited | Repaired on the closure candidate (P0-FINAL-GATE-CLOSURE). For Linux Phase Zero the Architect accepted `NEXUS_CONFIG_KEY` as the operator key source (decision B) and legacy-read compatibility (decision C); the parts of decision requests 9 and 10 that A–M do not cover stay open |
+| B | Egress policy | The 11 IPC commands that sent requests to a caller-chosen destination are closed; the Ollama address is `OLLAMA_URL` or the fixed local default; agent web fetch and caller-destination external tools are refused; SearXNG only at `SEARXNG_URL`; search redirects https only | Repaired on the closure candidate. No address or DNS policy was added (remaining destinations are backend constants or operator configuration). A launch-time non-loopback `OLLAMA_URL` is operator configuration (decision F; plaintext HTTP risk stated in item B) |
+| C | Secrets in subprocess argv | Reachable credentials leave the command line; every reachable credential-bearing HTTP client follows no redirect and is bounded in total time and size (final Linux network-client inventory); `perception_init`, the credential-bearing external tools and credentialed MCP servers are closed or refused; remaining credential curl sites are counted, each CLI-only, latent or behind a closed route | Repaired on the closure candidate for Linux; the in-process transport is accepted by the Architect (decision E) |
+| C5 (contract) | Residual capability-measurement route | `cm_run_ab_validation` closed (`AmbientResource`) before any input use; the Groq-endpoint client takes only `GROQ_API_KEY` | Repaired on the closure candidate (the route denies before any input use); `AmbientResource` accepted as the closure reason (decision H) |
+| D | Privileged webview, navigation and IPC origin | On Linux: an app ACL grants all 804 application commands only to the `main` window at the local app origin; a navigation guard admits only the exact app origin (redirects included) and every new window is denied; frames are script-free or removed; a CSP with no third-party origin; a live native harness in the Linux gate | Accepted by the Architect for Linux Phase Zero as the combined boundary (decision K): the guard is load-bearing and the ACL alone is not sufficient. Windows and macOS deferred |
+| E | Operator overrides | The vault key file is validated on the opened file (Linux, macOS) and refused elsewhere; the vault key must open every stored secret before the vault is used; `key_env` other than `NEXUS_ENCRYPTION_KEY` is refused | Repaired on the closure candidate; the Linux vault key-file semantics accepted (decision D), Windows deferred; verification of every vault scope (request 11) not covered by A–M |
 | F | Network peers (Nexus Link) | `nexus_link_send_model` closed; the library admits no peer under an empty policy, matches exact IP socket addresses only, resolves no names and requires a shared secret and a key | Repaired on the closure candidate; transfer unavailable (no pairing exists); Architect review pending |
-| G | Approval channel | L6 (autonomy 6 or above) refused at create, start, resume, approve and review-each, never registered by restore or the prebuilt load, and refused for goals, autonomous loops, scheduled ticks and tool calls; caller-asserted approval commands closed; consent resolutions labelled `desktop-ui (unverified)`; self-improvement recorded truthfully; an enabled Warden review denies | Repaired on the closure candidate; no out-of-band approval exists (non-claim); Architect review pending. Decision request 14 |
-| H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged; Architect review pending. Decision request 10 |
-| I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the desktop's Nexus Code checks start no process, but fixed-argument helpers still resolve from `PATH`; Architect review pending. Decision requests 1 and 17 |
-| J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: post-integration run #108 succeeded, Architect review of that evidence pending. J2–J5: withdrawn on the closure candidate; Architect review pending. Decision requests 2 (D3: the 7 benchmark and 4 developer binaries, 5 bench targets and 2 examples kept) and 19 |
-| K | Reliability signals and resource bounds | `executes_python_code`: no retained hosted failure (evidence corrected); GPU-host voice stderr repaired; the duplicate binary name repaired by P0-FG1-R1 (integrated); resource surfaces bounded by refusal (see "Resource bounds") | Repaired or bounded on the closure candidate; Architect review pending. Proposed: `executes_python_code` as monitored debt (decision request 7); decision request 16 |
+| G | Approval channel | L6 (autonomy 6 or above) refused at create, start, resume, approve and review-each, never registered by restore or the prebuilt load, and refused for goals, autonomous loops, scheduled ticks and tool calls; caller-asserted approval commands closed; consent resolutions labelled `desktop-ui (unverified)`; self-improvement recorded truthfully; an enabled Warden review denies | Repaired on the closure candidate; no out-of-band approval exists (non-claim). Stored L6 records stay untouched but inert, and `desktop-ui (unverified)` is an audit channel label, not a verified identity (decision G); the other parts of request 14 are not covered by A–M |
+| H | Secrets at rest outside the vault | No new plaintext token or credential persistence: OAuth sign-in and deploy/Supabase storage closed; messaging uses the stored configuration token; API Client collections holding secrets refused; backups skip credential stores | Repaired for new writes on the closure candidate; historical files unchanged. Decision request 10 (reopening these flows) is not covered by A–M |
+| I | PATH-resolved helper programs | No unowned `ollama serve` launch; `is_ollama_installed` closed; no program run to report on Ollama from the desktop's own sources; curl children reaped on early errors; in-flight model downloads owned and ended at a normal exit | Partly repaired on the closure candidate: the desktop's Nexus Code checks start no process, but fixed-argument helpers still resolve from `PATH`, which the Architect accepted as operator launch configuration for fixed-name, fixed-argument helpers (decision A); owned-download cleanup covers a normal managed exit only (decision J) |
+| J | Shipped non-desktop binaries | J1 integrated at `71c47acb`. J2–J5: the protocols server and its `nexus-os` alias, `nexus-cli` and `nx` withdrawn on the J1 pattern, with the alternate agent binaries, the `nx-*` harness and six key-leaking benchmarks (18 withdrawn binaries); install, deploy and packaging recipes withdrawn; libraries kept, not governed | J1: post-integration run #108 succeeded, Architect review of that evidence pending. J2–J5: withdrawn on the closure candidate; the withdrawal accepted (decision L); the developer and benchmark binaries may remain, not shipped, inventory-guarded and not documented as runtime entry points (decision M) |
+| K | Reliability signals and resource bounds | `executes_python_code`: no retained hosted failure (evidence corrected); GPU-host voice stderr repaired; the duplicate binary name repaired by P0-FG1-R1 (integrated); resource surfaces bounded by refusal (see "Resource bounds") | Repaired or bounded on the closure candidate; the voice tests install from a hash-pinned Linux lock (R1); `ArenaRun` and the one-token minimum accepted as bounded compatibility debt (decision I); `executes_python_code` and the GPU host (request 7) not covered by A–M |
 | L | Screen observation from the interface | Unchanged since C5C: unbrokered observation is unavailable (Architect repair A) | No change in P0-FINAL-GATE-CLOSURE; a brokered mechanism is future work |
-| DEP (contract) | Dependency advisories | Measured on the final candidate's lockfiles: Cargo.lock 19 → 7 cargo-audit vulnerabilities (rsa removed with the unused `openidconnect`); cargo-deny advisory errors 16 → 10; npm (app) 14 → 6 | Minimal updates on the closure candidate; residual advisories and audit governance for Architect decision (requests 3 to 6) |
+| DEP (contract) | Dependency advisories | Measured on the final candidate's lockfiles: Cargo.lock 19 → 7 cargo-audit vulnerabilities (rsa removed with the unused `openidconnect`); cargo-deny advisory errors 16 → 10; npm (app) 14 → 6. R1: one pinned gate (`scripts/security-audit.sh`) with one 10-ID exception set in `deny.toml`; six unsound fixes; npm (app) 4, development-only | Governed by the R1 gate (see "Linux security gate"). Open: RUSTSEC-2026-0316 (wasmtime 43.0.2) is not accepted, and the gate fails on it until the Architect decides |
 
 ### At C5C (historical)
 
@@ -225,7 +241,8 @@ per item. J concerns a separately deployed server, not the desktop.
     ambient key of a legacy file, or change the launch environment.
   - No key strength is measured.
   - Key material outside the configuration file is outside this contract.
-- **Decision requested.** Requests 9 and 10.
+- **Decision requested.** Requests 9 and 10. [P0-LINUX-FINAL-R1: decisions B
+  and C for Linux Phase Zero; the uncovered parts stay open. See "Architect decisions (P0-LINUX-FINAL-R1)".]
 
 ## B. Egress policy
 
@@ -409,7 +426,13 @@ egress grant.
     authorized address names a host rather than an IP address, so
     `ensure_ollama` can report a local service while the operator's host is
     down. Requests still go to the operator's host.
-- **Decision requested.** Request 13.
+- **Decision requested.** Request 13. [P0-LINUX-FINAL-R1: decision F.]
+- **Disposition (P0-LINUX-FINAL-R1, decision F).** A non-loopback
+  `OLLAMA_URL` set at launch is operator configuration. Risk, stated
+  explicitly: with an `http://` address, prompts, model output and anything
+  else exchanged with Ollama cross the network in plaintext and can be read
+  or altered in transit; Nexus adds no transport protection or peer
+  authentication for it.
 
 ## C. Secrets in subprocess argv
 
@@ -518,17 +541,76 @@ pending).**
     which child processes inherit (not on their command line).
   - The CREDENTIAL_CURL_SITES guard sees only literal curl sites and a fixed
     list of credential markers.
-  - Response size caps and a total time bound apply to the in-process POST.
-    The other `connectors/llm` credentialed providers read their responses
-    without a size cap, and their timeout (the reqwest client's) bounds each
-    phase of the exchange rather than the whole of it.
-  - Other clients keep reqwest's default redirect policy, including the
-    desktop's email commands (Gmail, Outlook) and Builder deploy checks, and
-    the Slack and Discord clients of `connectors/messaging` and
-    `integrations`. On a redirect to another host reqwest drops
-    `Authorization`, but it re-sends the request body on 307 and 308; their
-    hosts are fixed.
-- **Decision requested.** Request 12.
+  - [Superseded by P0-LINUX-FINAL-R1: the other credentialed providers
+    had no size cap and a per-phase timeout, and the email, deploy and some
+    messaging clients kept reqwest's default redirects. The final inventory
+    below replaces this non-claim.]
+- **Decision requested.** Request 12. [Decided in P0-LINUX-FINAL-R1:
+  decision E.]
+
+**Network-client inventory (Linux, final; P0-LINUX-FINAL-R1 repair D).**
+Every HTTP client that carries a credential and is reachable in the Linux
+desktop runtime sends it from the process. No credential is on a process
+command line, and keys travel in request headers (Telegram's bot API, whose
+token is in the URL path, is the exception; see the non-claims). Each such
+request follows no redirect (a redirect is reported as its status), is
+bounded in total time from connecting until its body is read, and reads any
+body into memory under an explicit size cap. Errors carry no credential;
+read errors carry no URL.
+
+| Client | Where | Total time | Size cap |
+|---|---|---|---|
+| Hosted providers' in-process POST (OpenAI, DeepSeek, Gemini, NVIDIA) | `post_json_in_process`, `connectors/llm/src/providers/mod.rs` | 20 s (NVIDIA 120 or 300 s) | 32 MiB |
+| Claude query | `query_bounded`, `providers/claude.rs` | 120 s per attempt; up to 3 retries on 429/529 | 32 MiB |
+| Claude stream | `providers/claude.rs` | 300 s, connect to last byte | 32 MiB streamed; error bodies 64 KiB |
+| Cohere; OpenAI-compatible (Groq, Mistral, Together, Fireworks, Perplexity, OpenRouter) | `providers/cohere.rs`, `providers/openai_compatible.rs` (`credential_client`, `read_bounded`) | 20 s; 120 s | 32 MiB |
+| Desktop swarm: OpenAI, OpenRouter, Anthropic, Hugging Face | `crates/nexus-swarm/src/providers/` (`read_capped`) | 60 s | 32 MiB; error bodies 64 KiB |
+| Gmail and Outlook | `email_client`, `app/src-tauri/src/commands/apps.rs` (fetch, send, search) | 30 s per request | 16 MiB; error bodies 64 KiB |
+| Deploy token check and site listing (Netlify, Cloudflare, Vercel) | `api_client`, `agents/web-builder/src/deploy/mod.rs` | 30 s | 8 MiB; error bodies 64 KiB |
+| Messaging connectivity check | `commands/apps.rs` | 10 s | 64 KiB |
+| Messaging send and poll | `messaging_client_with`, `commands/apps.rs` | 30 s | 4 MiB |
+
+The email, deploy and messaging clients also send no `Referer`.
+Destinations are fixed provider hosts, or an operator's launch setting
+(`ANTHROPIC_URL` for the Claude stream; `OLLAMA_URL`, which carries no
+credential). The Cloudflare account id in a deploy path comes from stored
+credentials; the host stays fixed.
+
+The workstream's reachability audit classifies the other credential-bearing
+clients in the workspace as unreachable from the Linux desktop:
+- closed commands: perception, A2A, the MCP host, capability measurement,
+  Builder deploy upload and image generation, theme extraction, and the nx
+  chat, tool and agent commands;
+- refused actions: the external GitHub, Slack and Jira tools; the kernel API,
+  image and speech actuators;
+- empty or unused wiring: the integrations router is built with no provider,
+  the messaging gateway is never polled, and Herald is drafts-only;
+- withdrawn or developer-only binaries: the CLI's key validation, the
+  social-poster connectors and the ui-repair tools.
+
+Guards and tests: `p0_r1_credentialed_provider_answers_are_size_bounded`,
+`p0_r1_credentialed_provider_exchanges_are_bounded_in_total_time`,
+`p0_r1_capped_reader_allows_the_cap_and_refuses_more`
+(`connectors/llm/src/providers/mod.rs`);
+`p0_r1_swarm_bodies_are_read_within_their_cap` and
+`p0_r1_credentialed_swarm_answers_are_size_bounded` (`crates/nexus-swarm`);
+`p0_r1_deploy_api_requests_are_bounded_and_follow_no_redirect`
+(web-builder); `p0_r1_email_requests_are_bounded_and_follow_no_redirect` and
+`p0_r1_deploy_token_requests_use_the_bounded_client` (`fg_egress`, pinned by
+the final guard); `p0_fg_messaging_*`; `p0_fg_credentialed_*`;
+`p0_fg_providers_build_http_clients_only_through_credential_client` (a text
+guard); `p0_fg_no_reachable_credential_reaches_a_curl_command_line`.
+
+Non-claims:
+- The Claude query retries 429 and 529 up to three times, so its worst case
+  is four 120-second attempts plus 35 s of back-off waits, about 515 s.
+- A send error may name the endpoint's URL. Keys travel in headers; the one
+  URL that carries a credential, Telegram's (bot token in the path), is
+  dropped from every messaging error by `without_url`.
+- The unauthenticated GitLab marketplace search (`marketplace_search_gitlab`)
+  carries no credential and has no time or size bound.
+- The reachability classification above is the workstream's audit; the
+  bounds in the table were checked in the code.
 
 **Repaired in P0-FINAL-GATE-CLOSURE: the residual capability-measurement
 route (contract C5; Architect review pending).**
@@ -559,7 +641,7 @@ route (contract C5; Architect review pending).**
 - **Non-claims.** The runners and clients stay compiled, with no desktop
   caller. When a client runs outside the desktop, its key is still a curl
   argument.
-- **Decision requested.** Request 15.
+- **Decision requested.** Request 15. [P0-LINUX-FINAL-R1: decision H. See "Architect decisions (P0-LINUX-FINAL-R1)".]
 
 ## D. `null` webview CSP
 
@@ -690,10 +772,12 @@ cited in `app/src-tauri/src/webview_boundary.rs`.
   real Wry runtime with the production context and window builder, in the
   dev profile and the release (`custom-protocol`) profile. It re-checks every
   refusal after a settle interval, and on Windows exercises the raw
-  `postMessage` path from subframes. CI runs it as a blocking step in the
-  Linux (Xvfb), Windows and macOS jobs of `ci.yml`, in both profiles, and in
+  `postMessage` path from subframes. CI runs it as a blocking step, in both
+  profiles, in `test-linux` of `ci.yml` (under Xvfb) and in
   `ci-fast-local.yml`. The workstream reports 20 of 20 local Linux runs per
-  profile; Windows and macOS runs have not yet been observed.
+  profile. [P0-LINUX-FINAL-R1: the Windows and macOS harness steps are kept
+  in the manual-only `ci-portability.yml` and are deferred; no Windows or
+  macOS result is claimed.]
 - **Redirects (correction of the draft).** The draft recorded that on Linux
   the engine followed a server redirect without consulting the navigation
   guard. The final harness shows WebKitGTK consulting the guard for server
@@ -723,12 +807,14 @@ cited in `app/src-tauri/src/webview_boundary.rs`.
     load-bearing; its guards are source-text recognisers.
   - Tauri 2.10.3 exempts `plugin:__TAURI_CHANNEL__|fetch` from the ACL; the
     app uses no IPC channels.
-  - The Windows and macOS behaviour rests on reading the pinned sources until
-    their harness runs are observed.
+  - The Windows and macOS behaviour described above rests on reading the
+    pinned sources only, and is deferred with those platforms
+    (P0-LINUX-FINAL-R1).
   - Unavailable in Phase Zero: the Monaco editor, Builder collaboration, the
     Settings live key test, scripted Builder previews and click-to-edit, and
     remote images in notes (`img-src 'self' data:`).
-- **Decision requested.** Request 18.
+- **Decision requested.** Request 18. [P0-LINUX-FINAL-R1: decision K, Linux
+  only. See "Architect decisions (P0-LINUX-FINAL-R1)".]
 
 ## E. Operator overrides
 
@@ -853,7 +939,8 @@ selection stay closed.
   - Only the six scopes above are verified.
   - The Architect's operator-trust decision above still applies: this is
     validation of an operator source, not proof of secure secret storage.
-- **Decision requested.** Request 11.
+- **Decision requested.** Request 11. [P0-LINUX-FINAL-R1: decision D, Linux
+  only; verification of every vault scope is not covered. See "Architect decisions (P0-LINUX-FINAL-R1)".]
 
 **Update and correction (P0-FINAL-GATE-CLOSURE, item B) to the endpoint list
 above.**
@@ -1051,7 +1138,7 @@ available release only what backend-owned policy already bounds.
   - The Warden review setting itself is interface-editable.
   - A stored agent whose manifest schedule the bounded scheduler now refuses
     cannot be started again: no route edits a stored manifest.
-- **Decision requested.** Request 14.
+- **Decision requested.** Request 14. [P0-LINUX-FINAL-R1: decision G. See "Architect decisions (P0-LINUX-FINAL-R1)".]
 
 ## H. Secrets at rest outside the vault
 
@@ -1141,7 +1228,8 @@ left as they are.
   - Secrets typed into other API Client headers, parameters, URLs or bodies
     are user content and are not detected.
   - Backup exclusion is by name, directly under the data directory.
-- **Decision requested.** Request 10.
+- **Decision requested.** Request 10. [P0-LINUX-FINAL-R1: not covered by
+  decisions A to M; open.]
 
 ## I. PATH-resolved helper programs
 
@@ -1231,7 +1319,8 @@ pending).**
   - Ollama pull and chat curl children are not registered; each is bounded by
     curl's `-m` (900 s by default).
   - Every remaining helper, curl included, is still found through `PATH`.
-- **Decision requested.** Requests 1 and 17.
+- **Decision requested.** Requests 1 and 17. [P0-LINUX-FINAL-R1: decisions A
+  and J. See "Architect decisions (P0-LINUX-FINAL-R1)".]
 
 ## J. Shipped non-desktop binaries
 
@@ -1509,7 +1598,8 @@ checks are unchanged.
     step.
   - `nexus-mcp` is not made safe to expose.
   - The kept developer and benchmark binaries are not governed (D3).
-- **Decision requested.** Requests 2 and 19.
+- **Decision requested.** Requests 2 and 19. [P0-LINUX-FINAL-R1: decisions M
+  and L. See "Architect decisions (P0-LINUX-FINAL-R1)".]
 
 ## K. Reliability signals
 
@@ -1602,6 +1692,16 @@ pending).**
   no model from the hub; a test that needs an uncached model skips. The
   fast-local workflow keeps its CUDA mask (coordinator decision), and the
   host driver is an Owner matter (decision request 7).
+- **Voice dependencies pinned (P0-LINUX-FINAL-R1).** Both Linux gates
+  (`test-python` in `ci.yml` and `fast-python` in `ci-fast-local.yml`)
+  install the voice test environment from
+  `voice/requirements-linux-py311.lock`: a complete, hash-pinned set of 67
+  packages, installed with pip 26.2.1 as
+  `pip install --require-hashes --no-deps`, followed by `pip check`. Nothing
+  is resolved at install time and every downloaded file must match a listed
+  hash; the hashes are PyPI's sha256 digests for the pinned versions. The
+  tests stay offline for models. Only Linux x86_64 with Python 3.11 is
+  claimed. [This supersedes the "unpinned" note of decision request 8.]
 - **Resource bounds:** see "Resource bounds" below.
 
 ## L. Screen observation from the interface
@@ -1773,7 +1873,7 @@ refuses rather than clamps, and nothing is deleted to stay within one.
   - The Warden review reads the configuration (`load_config`), which creates
     a first-run `config.toml` under the identity home if none exists, so a
     test that reaches it can still write that file.
-- **Decision requested.** Request 16.
+- **Decision requested.** Request 16. [P0-LINUX-FINAL-R1: decision I. See "Architect decisions (P0-LINUX-FINAL-R1)".]
 
 ## Dependency evidence (P0-FINAL-GATE-CLOSURE)
 
@@ -1829,6 +1929,8 @@ them against each parent's published requirements and with `--locked` builds.
 
 **Residual advisories: proposed dispositions for the Architect.** The
 implementer accepts no risk; each line is a proposal (decision request 3).
+[P0-LINUX-FINAL-R1: these five rows are now the `deny.toml` exception set;
+see "Linux security gate" below.]
 
 | Advisory | Package | Dependency path | Reachability | Proposed disposition |
 |---|---|---|---|---|
@@ -1841,7 +1943,8 @@ implementer accepts no risk; each line is a proposal (decision request 3).
 Warning-level entries: 25 (13 unmaintained, 12 unsound); the yanked spin
 0.9.8 left with the `openidconnect` removal. Fixes exist but were not taken
 for anyhow, event-listener, memmap2 and rand 0.8, 0.9 and 0.10; lru, glib, scc
-and rand 0.7 have no semver-compatible fix (decision request 3).
+and rand 0.7 have no semver-compatible fix (decision request 3). [R1: the
+six fixes were taken; see below.]
 
 npm residue in `app/package-lock.json` (6, all but two development tooling):
 vite 5 and esbuild (fix is a major upgrade), vitest and `@vitest/mocker`;
@@ -1849,7 +1952,8 @@ vite 5 and esbuild (fix is a major upgrade), vitest and `@vitest/mocker`;
 item D no longer imports; `@monaco-editor/react` stays declared in
 `app/package.json`, so they stay in the lockfile (decision request 5).
 `nexus-website` and `scripts/page-audit` are measured only (decision request
-6).
+6). [R1: Monaco, yjs and y-websocket removed; 4 findings remain; both
+projects out of scope. See below.]
 
 **Audit governance** (decision request 4). `audit.yml` runs on pushes to
 `main` and weekly only, so it never scans a closure candidate, and its five
@@ -1864,6 +1968,77 @@ contradicted by the advisory, which lists rand 0.8.6, 0.9.3 and 0.10.1 as
 fixed. `.gitlab-ci.yml` ignores RUSTSEC-2026-0114, which matches nothing, and
 installs both scanners unpinned with `|| true`. The four ignore lists
 (`audit.yml`, `audit.toml`, `deny.toml`, `.gitlab-ci.yml`) diverge.
+[Superseded by P0-LINUX-FINAL-R1 repair B; see the next block.]
+
+**Linux security gate (P0-LINUX-FINAL-R1 repair B).** The measurements above
+are historical. At the R1 head:
+
+- **One gate.** `scripts/security-audit.sh` (`set -euo pipefail`) runs
+  cargo-audit 0.22.1 and cargo-deny 0.19.6, both pinned and installed with
+  `--locked`, over the candidate's `Cargo.lock`. The Linux final gate runs it
+  in the `security-audit-linux` job of `ci.yml` with fresh advisory
+  databases; `ci-fast-local.yml`, `audit.yml`, the GitLab `security-audit`
+  job (`allow_failure: false`) and `scripts/ci-local.sh` run the same script.
+  No scanner call is masked with `|| true`.
+- **One exception set.** `deny.toml` holds the only exception set, 10 IDs,
+  each with its package, path and Phase Zero reachability:
+  - RUSTSEC-2026-0193 and -0213 (ammonia 4.1.2);
+  - RUSTSEC-2026-0258 (h2 0.3.27);
+  - RUSTSEC-2026-0194 and -0195 (quick-xml 0.30.0);
+  - RUSTSEC-2026-0269 and -0222 (wasmtime 43.0.2);
+  - the unmaintained RUSTSEC-2026-0247, -0250 and -0251 (bitmaps, im-rc and
+    sized-chunks, through wasmtime's `wasm-compose`).
+
+  The script passes the same IDs to cargo-audit as `--ignore`; cargo-deny
+  runs with `-W unmaintained -W unsound -D advisory-not-detected`.
+- **What fails the gate.** Any vulnerability outside the set; a stale
+  exception; a missing scanner or one that is not the pinned version; any
+  install or scanner error; an empty exception set. Unmaintained, unsound and
+  yanked findings are warnings across the whole graph.
+- **Removed.** The root `audit.toml`, which cargo-audit never read (it reads
+  `.cargo/audit.toml` or `$CARGO_HOME/audit.toml`); the stale rsa
+  RUSTSEC-2023-0071 ignores; the 12 `deny.toml` ignores that matched nothing;
+  the unreferenced `scripts/refresh_rust_audit_toolchain.sh`.
+- **Six precise fixes** for crates flagged unsound (semver-compatible,
+  `Cargo.toml` unchanged): anyhow 1.0.102 → 1.0.103, event-listener 5.4.1 →
+  5.4.2, memmap2 0.9.10 → 0.9.11, rand 0.8.5 → 0.8.6, 0.9.2 → 0.9.3 and
+  0.10.0 → 0.10.1. This resolves the `deny.toml` note on RUSTSEC-2026-0097
+  quoted above.
+- **Residual warnings, recorded with their paths** (no compatible fix):
+
+  | Package | Kind | Path |
+  |---|---|---|
+  | glib 0.18.5 | unsound | `webkit2gtk` → desktop |
+  | lru 0.12.5 | unsound | `ratatui` → `nexus-code` |
+  | scc 2.4.0 | unsound | `serial_test` (tests only) |
+  | rand 0.7.3 | unsound | `tauri-build` → `tauri-utils` → `kuchikiki` → `phf_codegen` (build time) |
+  | sized-chunks | unsound | `wasm-compose` → wasmtime |
+  | fxhash | unmaintained | `scraper` → `nexus-ui-repair` |
+  | number_prefix | unmaintained | `hf-hub` → `indicatif` |
+  | paste | unmaintained | `ratatui` |
+  | proc-macro-error | unmaintained | `glib-macros` |
+  | rustls-pemfile | unmaintained | `reqwest` 0.11 → `readability` |
+  | unic-* (5 crates) | unmaintained | `tauri-build` → `urlpattern` (build time) |
+
+- **npm (`app/`).** `@monaco-editor/react`, `yjs` and `y-websocket` were
+  removed from `app/package.json` (nothing in `app/src` imported them),
+  which removed `monaco-editor` and `dompurify` from the lockfile. Four
+  findings remain, all development tooling outside the bundle: vite 5.4.21
+  (high) and esbuild 0.21.5 (moderate), whose fix is a major vite upgrade;
+  vitest 4.1.2 and `@vitest/mocker` (moderate).
+- **Scope.** `nexus-website` and `scripts/page-audit` are not built or
+  shipped by the Linux product and are out of Phase Zero scope.
+- **Open: RUSTSEC-2026-0316.** wasmtime 43.0.2, low severity ("Dynamic
+  record lifting can allocate beyond the hostcall fuel limit"), published on
+  2026-09-29, after the reviewed advisory-database snapshot. It is **not
+  accepted** and is not in the exception set, so the gate fails on it against
+  a current database until the Architect decides: accept it, or upgrade
+  wasmtime (patched in >=48.0.3,<49 and >=49.0.1).
+
+Evidence: the gate's exit 0 against the reviewed snapshot, the two negative
+controls (a removed exception and a stale exception each fail the gate) and
+the npm count of 4 are the workstream's recorded runs; this document did not
+re-run them.
 
 ## Unavailable features (Phase Zero closures)
 
@@ -2048,6 +2223,10 @@ Collected from the workstream reports and the coordinator's decision record.
 Each is for the Architect; none is accepted by the implementer. The numbers
 are those cited in the items above.
 
+[Historical. P0-LINUX-FINAL-R1 recorded the Architect's decisions for Linux
+Phase Zero; they are under "Architect decisions (P0-LINUX-FINAL-R1)" below,
+with a mapping from these numbers. The list is kept as it was.]
+
 1. **PATH as operator configuration (item I).** Treat the launch environment's
    `PATH` as operator configuration, so the fixed-argument helpers found
    through it (curl, notifications, the hardware and disk probes, the
@@ -2112,3 +2291,80 @@ are those cited in the items above.
 19. **Item J.** The withdrawal message wording and the uniform status 69; the
     coordinator decisions D1 (alternate agent binaries), D2 (the computer-use
     harness) and D4 to D7 (the GitLab release job, recipes and packaging).
+
+## Architect decisions (P0-LINUX-FINAL-R1)
+
+The Architect's decisions for **Linux Phase Zero**, recorded as dispositions.
+They replace the corresponding decision requests above. Each applies to Linux
+only; Windows and macOS are deferred with those platforms. None of them
+declares FG1, the Final Gate or Phase Zero complete or approved, and each
+holds only within the limits it states.
+
+- **A. `PATH` as operator launch configuration (item I; request 1).**
+  Helpers with a fixed name and fixed arguments (curl, notifications, the
+  hardware and disk probes, the remaining `which` probes) may be found
+  through the launch environment's `PATH`. The decision does not extend to a
+  path the interface selects, arbitrary arguments, secrets on a command line
+  or unowned launches.
+- **B. `NEXUS_CONFIG_KEY` as the Linux operator key source (item A;
+  request 9).** The key must not be blank and must not derive the ambient
+  key. The configuration key is derived from it with a SHA-256-labelled
+  derivation. There is no KDF stretching and no key-strength claim; a
+  high-entropy operator secret is recommended.
+- **C. Legacy-read compatibility (item A; request 9).** Accepted: legacy
+  files open through the explicit two-key read path.
+- **D. Linux vault key-file semantics (item E; request 11).** Accepted for
+  Linux. The Windows behaviour is deferred.
+- **E. In-process credentialed transport (item C; request 12).** reqwest
+  with native TLS and the system proxy is accepted, given: no credential on
+  a command line, no redirect followed by a credentialed request, the
+  endpoint's authority preserved, and bounds on time and size. The final
+  network-client inventory is in item C.
+- **F. Non-loopback `OLLAMA_URL` (item B; request 13).** An address set at
+  launch is operator configuration. The plaintext-HTTP risk is stated in
+  item B.
+- **G. Stored L6 records and the approval label (item G; request 14).**
+  Stored L6 records stay untouched but inert. `desktop-ui (unverified)` is an
+  audit channel label, not a verified identity.
+- **H. `AmbientResource` (contract C5; request 15).** Acceptable as the
+  closure reason for C5.
+- **I. `ArenaRun` and the one-token minimum (item K; request 16).** Accepted
+  as bounded compatibility debt.
+- **J. Owned-download cleanup (item I; request 17).** Covers a normal
+  managed exit only; a crash or a kill stays a non-claim.
+- **K. Item D (request 18).** Accepted on Linux only as the combined
+  boundary: the app ACL, the exact-origin navigation guard, the frame
+  restrictions, and the CSP and HTML controls. The navigation guard is
+  load-bearing; the ACL alone is not sufficient.
+- **L. J2–J5 withdrawal (item J; request 19).** Accepted.
+- **M. Developer and benchmark binaries (item J; request 2).** They may
+  remain, provided they are not shipped, stay pinned by the inventory guard
+  and are not documented as runtime entry points.
+
+**Mapping from the earlier requests.**
+
+| Request | Disposition |
+|---|---|
+| 1 | Decision A |
+| 2 | Decision M |
+| 3, 4, 5, 6 | Addressed by R1 repair B ("Linux security gate" under "Dependency evidence"); RUSTSEC-2026-0316 open |
+| 7 | Not covered by A–M: `executes_python_code` monitoring and the self-hosted GPU host |
+| 8 | Addressed by R1: the hash-pinned Linux voice lock (item K) |
+| 9 | Decisions B and C; the first-run default for a missing file and the ambient-key first save are not covered |
+| 10 | Not covered: whether an approved secret store later reopens the closed token flows |
+| 11 | Decision D (Linux); verification of every vault scope is not covered |
+| 12 | Decision E |
+| 13 | Decision F |
+| 14 | Decision G; the other questions of the request are not covered |
+| 15 | Decision H |
+| 16 | Decision I |
+| 17 | Decision J |
+| 18 | Decision K (Linux); Windows and macOS deferred |
+| 19 | Decision L; the withdrawal wording and the coordinator decisions D1, D2 and D4 to D7 are not restated by it |
+
+**Open after P0-LINUX-FINAL-R1.**
+- RUSTSEC-2026-0316 (wasmtime 43.0.2): not accepted; the gate fails on it
+  until the Architect accepts it or wasmtime is upgraded (>=48.0.3 or
+  >=49.0.1).
+- The parts of requests 7, 9, 10, 11, 14 and 19 listed as not covered above.
+- Windows and macOS, all items: deferred.
