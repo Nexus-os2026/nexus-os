@@ -115,7 +115,7 @@ pub(crate) fn restore_persisted_agents(state: &AppState) {
         // approval the backend cannot verify, so no L6 record is registered:
         // not one approved over IPC before this closure, and not a request
         // that was never approved. The stored record is left as it is.
-        if manifest.autonomy_level == Some(6) {
+        if manifest.autonomy_level.is_some_and(is_transcendent_level) {
             eprintln!(
                 "persistence: agent {} not restored: transcendent (L6) agents are unavailable in Phase Zero",
                 row.id
@@ -359,12 +359,16 @@ pub fn create_agent(state: &AppState, manifest_json: String) -> Result<String, S
     // approval the backend cannot verify, and an approval delivered over IPC
     // is not one. Creating an L6 agent is refused before any agent record,
     // meta entry, supervisor entry or consent request is written.
-    if manifest.autonomy_level == Some(6) {
+    if manifest.autonomy_level.is_some_and(is_transcendent_level) {
         return Err(crate::phase0_surface::closed(
             "create_agent",
             crate::phase0_surface::Closure::ApprovalRequired,
         ));
     }
+    // A schedule the scheduler refuses is refused here, with the scheduler's
+    // reason, before anything is registered or written. It used to be saved
+    // and then dropped with only a log line, while creation reported success.
+    check_manifest_schedule(manifest.schedule.as_deref())?;
 
     create_agent_immediately(state, manifest, manifest_json)
 }
@@ -375,21 +379,32 @@ pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     // P0-FINAL-GATE (item G): starting an L6 (transcendent) agent is refused
     // for the same reason, before its state is changed, whether the stored
     // record or the registered agent says L6.
-    let stored_transcendent =
-        find_manifest(state, &agent_id).is_some_and(|manifest| manifest.autonomy_level == Some(6));
-    let mut supervisor = match state.supervisor.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    let registered_transcendent = supervisor
+    let stored_transcendent = find_manifest(state, &agent_id)
+        .is_some_and(|manifest| manifest.autonomy_level.is_some_and(is_transcendent_level));
+    let registered_transcendent = state
+        .supervisor
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
         .get_agent(parsed)
-        .is_some_and(|handle| handle.autonomy_level == 6);
+        .is_some_and(|handle| is_transcendent_level(handle.autonomy_level));
     if stored_transcendent || registered_transcendent {
         return Err(crate::phase0_surface::closed(
             "start_agent",
             crate::phase0_surface::Closure::ApprovalRequired,
         ));
     }
+    // A stored schedule the scheduler refuses is refused here, with the
+    // scheduler's reason, before the agent is restarted. It used to be dropped
+    // with only a log line after a start reported as successful.
+    check_manifest_schedule(
+        find_manifest(state, &agent_id)
+            .and_then(|manifest| manifest.schedule)
+            .as_deref(),
+    )?;
+    let mut supervisor = match state.supervisor.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     supervisor.restart_agent(parsed).map_err(agent_error)?;
     drop(supervisor);
     // Best-effort: persist state to DB; in-memory supervisor is already updated
@@ -414,20 +429,43 @@ pub fn start_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// P0-FINAL-GATE (item G): the lowest transcendent (L6) autonomy level.
+/// Manifest validation admits no level above 6, and the supervisor registers
+/// an unknown level as L0. But a stored record is read without validation,
+/// so every L6 check treats this level and any higher one as transcendent
+/// (review W5).
+pub(crate) const TRANSCENDENT_AUTONOMY: u8 = 6;
+
+/// Whether an autonomy level is transcendent: L6 or above.
+pub(crate) fn is_transcendent_level(level: u8) -> bool {
+    level >= TRANSCENDENT_AUTONOMY
+}
+
 /// P0-FINAL-GATE (item G): whether `agent_id` names an L6 (transcendent)
 /// agent, by its stored record or its registration. It only reads. The
 /// goal, autonomous-loop and tool routes refuse such an agent with it before
 /// they change anything.
+///
+/// A UUID can be written several ways (upper case, braced, as a URN). The
+/// stored records are looked up both by the text given and by the canonical
+/// form, as `start_agent` does, so another spelling of a stored L6 record's
+/// id cannot miss it.
 pub(crate) fn is_transcendent_agent(state: &AppState, agent_id: &str) -> bool {
-    let stored =
-        find_manifest(state, agent_id).is_some_and(|manifest| manifest.autonomy_level == Some(6));
-    let registered = Uuid::parse_str(agent_id).is_ok_and(|id| {
+    let parsed = Uuid::parse_str(agent_id).ok();
+    let canonical = parsed.map(|id| id.to_string());
+    let stored = std::iter::once(agent_id)
+        .chain(canonical.as_deref())
+        .any(|id| {
+            find_manifest(state, id)
+                .is_some_and(|manifest| manifest.autonomy_level.is_some_and(is_transcendent_level))
+        });
+    let registered = parsed.is_some_and(|id| {
         state
             .supervisor
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .get_agent(id)
-            .is_some_and(|handle| handle.autonomy_level == 6)
+            .is_some_and(|handle| is_transcendent_level(handle.autonomy_level))
     });
     stored || registered
 }
@@ -507,6 +545,15 @@ pub(crate) fn pause_agent(state: &AppState, agent_id: String) -> Result<(), Stri
 
 pub(crate) fn resume_agent(state: &AppState, agent_id: String) -> Result<(), String> {
     let parsed = parse_agent_id(agent_id.as_str())?;
+    // P0-FINAL-GATE (item G, review W3): resuming an L6 (transcendent) agent
+    // is refused as starting one is, before its state changes, whether the
+    // stored record or the registration says L6.
+    if is_transcendent_agent(state, &agent_id) {
+        return Err(crate::phase0_surface::closed(
+            "resume_agent",
+            crate::phase0_surface::Closure::ApprovalRequired,
+        ));
+    }
     let mut supervisor = match state.supervisor.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),

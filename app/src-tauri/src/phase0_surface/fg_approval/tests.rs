@@ -321,9 +321,9 @@ fn position(body: &str, needle: &str) -> usize {
 /// - restore registers no level-6 record and writes nothing to it;
 /// - the prebuilt load skips a level-6 manifest before the manifest is
 ///   registered, stored, named or published;
-/// - `approve_consent_request` and `batch_approve_consents` refuse a
-///   transcendent request before resolving anything, and nothing in the
-///   consent module creates or starts an agent;
+/// - `approve_consent_request`, `batch_approve_consents` and
+///   `review_consent_batch` refuse a transcendent request before resolving
+///   anything, and nothing in the consent module creates or starts an agent;
 /// - nothing enqueues a transcendent request any more.
 ///
 /// (The earlier version of this guard said each such route refused first.
@@ -336,10 +336,13 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
     let chat = include_str!("../../commands/chat_llm.rs");
 
     let (_, load) = fn_shape(chat, "load_prebuilt_agents");
-    let skip = position(&load, "ifmanifest.autonomy_level==Some(6){");
+    let skip = position(
+        &load,
+        "ifmanifest.autonomy_level.is_some_and(is_transcendent_level){",
+    );
     assert!(
         load[skip..].starts_with(concat!(
-            "ifmanifest.autonomy_level==Some(6){eprintln!(",
+            "ifmanifest.autonomy_level.is_some_and(is_transcendent_level){eprintln!(",
             "\"prebuilt:{}notloaded:transcendent(L6)agentsareunavailableinPhaseZero\",",
             "manifest.name);continue;}",
         )),
@@ -367,7 +370,7 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
     let (_, create) = fn_shape(agents, "create_agent");
     assert!(
         create.starts_with(&format!(
-            "letmanifest=parse_agent_manifest_json(manifest_json.as_str())?;ifmanifest.autonomy_level==Some(6){{{}}}",
+            "letmanifest=parse_agent_manifest_json(manifest_json.as_str())?;ifmanifest.autonomy_level.is_some_and(is_transcendent_level){{{}}}",
             denial("create_agent", "ApprovalRequired")
         )),
         "{create}"
@@ -377,9 +380,11 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
     let (_, start) = fn_shape(agents, "start_agent");
     let refusal = position(&start, &denial("start_agent", "ApprovalRequired"));
     assert!(start.contains(
-        "letstored_transcendent=find_manifest(state,&agent_id).is_some_and(|manifest|manifest.autonomy_level==Some(6));"
+        "letstored_transcendent=find_manifest(state,&agent_id).is_some_and(|manifest|manifest.autonomy_level.is_some_and(is_transcendent_level));"
     ));
-    assert!(start.contains(".get_agent(parsed).is_some_and(|handle|handle.autonomy_level==6);"));
+    assert!(start.contains(
+        ".get_agent(parsed).is_some_and(|handle|is_transcendent_level(handle.autonomy_level));"
+    ));
     assert!(start.contains("ifstored_transcendent||registered_transcendent{"));
     for later in [
         "restart_agent(",
@@ -392,23 +397,42 @@ fn p0_fg_g_transcendent_agents_are_refused_before_any_state_change() {
         assert!(refusal < position(&start, later), "start_agent: {later}");
     }
 
+    // Resuming refuses an L6 agent first, as starting does (review W3).
+    let (_, resume) = fn_shape(agents, "resume_agent");
+    assert!(
+        resume.starts_with(&format!(
+            "letparsed=parse_agent_id(agent_id.as_str())?;ifis_transcendent_agent(state,&agent_id){{{}}}",
+            denial("resume_agent", "ApprovalRequired")
+        )),
+        "{resume}"
+    );
+
     let (_, restore) = fn_shape(agents, "restore_persisted_agents");
-    let skip = position(&restore, "ifmanifest.autonomy_level==Some(6){");
+    let skip = position(
+        &restore,
+        "ifmanifest.autonomy_level.is_some_and(is_transcendent_level){",
+    );
     assert!(restore[skip..].contains("continue;"));
     assert!(skip < position(&restore, "start_agent_with_id("));
     assert!(skip > position(&restore, "validate_stored_manifest(&manifest)"));
 
-    for (surface, name) in [
-        ("approve_consent_request", "approve_consent_request"),
-        ("batch_approve_consents", "batch_approve_consents"),
+    let single = "ifconsent_row.operation_type==TRANSCENDENT_CREATION{";
+    let batch = "ifconsent_rows.iter().any(|row|row.operation_type==TRANSCENDENT_CREATION){";
+    for (surface, name, condition) in [
+        ("approve_consent_request", "approve_consent_request", single),
+        ("batch_approve_consents", "batch_approve_consents", batch),
+        // Review W8: review-each does not resolve one either.
+        ("review_consent_batch", "review_consent_batch", single),
     ] {
         let (_, body) = fn_shape(consent, name);
-        let refusal = position(&body, &denial(surface, "ApprovalRequired"));
+        let refusal = position(
+            &body,
+            &format!("{condition}{}}}", denial(surface, "ApprovalRequired")),
+        );
         assert!(
             refusal < position(&body, "resolve_consent("),
             "{name}: refused after resolving"
         );
-        assert!(body.contains("TRANSCENDENT_CREATION"), "{name}");
     }
     let consent_code = code_lines(consent);
     for forbidden in [
@@ -481,19 +505,21 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
         "{execute}"
     );
     // The runtime's goal assignment is reached only through
-    // `assign_agent_goal`.
-    let code = without_whitespace(&code_lines(cognitive));
-    assert_eq!(
-        code.matches(".assign_goal(").count(),
-        1,
-        "one goal assignment"
-    );
-    assert_eq!(
-        without_whitespace(&code_lines(include_str!("../../lib.rs")))
-            .matches(".assign_goal(")
-            .count(),
-        0
-    );
+    // `assign_agent_goal` (review W6). Every desktop production source is
+    // read: every file under app/src-tauri/src except test files named
+    // `*tests.rs`. The one call is the one in `assign_agent_goal`.
+    let assignments: Vec<String> = rust_sources_under(&workspace_dir("app/src-tauri/src"))
+        .into_iter()
+        .filter(|(path, _)| !path.ends_with("tests.rs"))
+        .flat_map(|(path, src)| {
+            let calls = without_whitespace(&code_lines(&src))
+                .matches(".assign_goal(")
+                .count();
+            std::iter::repeat_n(path, calls)
+        })
+        .collect();
+    assert_eq!(assignments, ["commands/cognitive.rs"], "goal assignments");
+    assert!(assign.contains(".assign_goal(&agent_id,goal)"), "{assign}");
 
     let (_, looping) = fn_shape(cognitive, "start_autonomous_loop");
     assert!(
@@ -518,7 +544,7 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
     );
     assert!(
         tools.ends_with(&format!(
-            "ifagent.autonomy_level==6{{{}}}Ok(claimed.min(agent.autonomy_level))",
+            "ifcrate::commands::agents::is_transcendent_level(agent.autonomy_level){{{}}}Ok(claimed.min(agent.autonomy_level))",
             denial("tools_execute", "ApprovalRequired")
         )),
         "{tools}"
@@ -529,10 +555,21 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
         "is_transcendent_agent",
     );
     assert_eq!(params, "(state:&AppState,agent_id:&str)");
+    // Stored records are looked up by the text given and by the canonical
+    // form of the id (review W4).
+    assert!(
+        helper.starts_with(concat!(
+            "letparsed=Uuid::parse_str(agent_id).ok();",
+            "letcanonical=parsed.map(|id|id.to_string());",
+            "letstored=std::iter::once(agent_id).chain(canonical.as_deref()).any(|id|{",
+            "find_manifest(state,id).is_some_and(|manifest|manifest.autonomy_level.is_some_and(is_transcendent_level))});",
+            "letregistered=parsed.is_some_and(|id|{",
+        )),
+        "{helper}"
+    );
     assert!(helper.contains(
-        "find_manifest(state,agent_id).is_some_and(|manifest|manifest.autonomy_level==Some(6));"
+        ".get_agent(id).is_some_and(|handle|is_transcendent_level(handle.autonomy_level))"
     ));
-    assert!(helper.contains(".get_agent(id).is_some_and(|handle|handle.autonomy_level==6)"));
     assert!(helper.ends_with("stored||registered"));
     for write in [
         "start_agent",
@@ -548,34 +585,164 @@ fn p0_fg_g_goal_loop_and_tool_routes_check_for_transcendent_agents_first() {
     }
 }
 
-/// P0-FINAL-GATE (item G): an enabled Warden review with no Warden able to
-/// run denies with the bounded reason. It used to allow the action as
-/// "Warden inactive", and the only prebuilt Warden is L6, which is never
-/// registered. A disabled review (the default) still allows.
+/// P0-FINAL-GATE (schedule refusal): `create_agent` and `start_agent` check a
+/// manifest schedule with the scheduler's own `validate_cron` before they
+/// change anything, and pass its reason through. `create_agent` checks after
+/// the L6 refusal and before `create_agent_immediately`. `start_agent`
+/// checks after the L6 refusal and before the restart. So no refused
+/// schedule is saved or started and then dropped with only a log line.
 #[test]
-fn p0_fg_g_enabled_warden_review_without_a_warden_denies() {
-    let cognitive = include_str!("../../commands/cognitive.rs");
-    let (_, review) = fn_shape(cognitive, "review_with");
+fn p0_fg_manifest_schedules_are_checked_before_any_state_change() {
+    let (params, check) = fn_shape(
+        include_str!("../../commands/chat_llm.rs"),
+        "check_manifest_schedule",
+    );
+    assert_eq!(params, "(schedule:Option<&str>)");
+    assert_eq!(
+        check,
+        concat!(
+            "matchschedule{Some(expression)=>",
+            "nexus_kernel::cognitive::AgentScheduler::validate_cron(expression),",
+            "None=>Ok(()),}",
+        )
+    );
+    let agents = include_str!("../../commands/agents.rs");
+    let (_, create) = fn_shape(agents, "create_agent");
     assert!(
-        review.starts_with(concat!(
-            "if!enabled{returnOk(nexus_kernel::actuators::ActionReviewDecision::Allow{",
-            "reason:\"Wardengovernancereviewdisabled\".to_string(),});}",
+        create.ends_with(concat!(
+            "check_manifest_schedule(manifest.schedule.as_deref())?;",
+            "create_agent_immediately(state,manifest,manifest_json)",
         )),
-        "{review}"
+        "{create}"
     );
-    let unavailable = concat!(
-        "else{returnOk(nexus_kernel::actuators::ActionReviewDecision::Deny{",
-        "reason:WARDEN_REVIEW_UNAVAILABLE.to_string(),});};",
+    let (_, start) = fn_shape(agents, "start_agent");
+    let checked = position(
+        &start,
+        "check_manifest_schedule(find_manifest(state,&agent_id).and_then(|manifest|manifest.schedule).as_deref())?;",
     );
-    let deny = position(&review, unavailable);
-    assert!(deny < position(&review, "default_model"), "{review}");
-    assert!(deny < position(&review, "query("), "{review}");
+    assert!(checked > position(&start, &denial("start_agent", "ApprovalRequired")));
+    assert!(checked < position(&start, "restart_agent("));
+}
+
+/// P0-FINAL-GATE (item G, review W5): every L6 check uses the named bound
+/// `TRANSCENDENT_AUTONOMY` through `is_transcendent_level` (L6 or above),
+/// never an equality with 6, so a stored level above 6 cannot pass as
+/// ordinary.
+#[test]
+fn p0_fg_g_l6_checks_use_the_named_bound() {
+    let agents = include_str!("../../commands/agents.rs");
+    assert!(without_whitespace(&code_lines(agents))
+        .contains("pub(crate)constTRANSCENDENT_AUTONOMY:u8=6;"));
+    let (params, bound) = fn_shape(agents, "is_transcendent_level");
+    assert_eq!(params, "(level:u8)");
+    assert_eq!(bound, "level>=TRANSCENDENT_AUTONOMY");
+    for (file, src, function) in [
+        ("commands/agents.rs", agents, "create_agent"),
+        ("commands/agents.rs", agents, "start_agent"),
+        ("commands/agents.rs", agents, "restore_persisted_agents"),
+        ("commands/agents.rs", agents, "is_transcendent_agent"),
+        (
+            "commands/chat_llm.rs",
+            include_str!("../../commands/chat_llm.rs"),
+            "load_prebuilt_agents",
+        ),
+        (
+            "commands/crate_bridges.rs",
+            include_str!("../../commands/crate_bridges.rs"),
+            "tool_call_autonomy",
+        ),
+    ] {
+        let (_, body) = fn_shape(src, function);
+        assert!(body.contains("is_transcendent_level"), "{file} {function}");
+        for equality in ["autonomy_level==Some(6)", "autonomy_level==6"] {
+            assert!(!body.contains(equality), "{file} {function}: {equality}");
+        }
+    }
+}
+
+/// P0-FINAL-GATE (item G): in Phase Zero an enabled Warden review denies with
+/// the bounded reason and does nothing else. It looks up no Warden, by name
+/// or otherwise, resolves and queries no model, and writes no audit event or
+/// consent request. This is the test that the model is never resolved or
+/// queried: the engine's whole code is pinned, and it holds no model,
+/// supervisor, audit or consent code at all. A disabled review (the default)
+/// still allows.
+///
+/// History:
+/// - The engine used to allow as "Warden inactive" when no agent named
+///   "nexus-warden" was running.
+/// - After F2 it denied in that case, but any running agent so named, which
+///   a caller can create, still reviewed, and its YES allowed.
+#[test]
+fn p0_fg_g_enabled_warden_review_denies_without_any_lookup() {
+    let cognitive = include_str!("../../commands/cognitive.rs");
+    let (params, decision) = fn_shape(cognitive, "review_with");
+    assert_eq!(params, "(&self,enabled:bool,)");
+    assert_eq!(
+        decision,
+        concat!(
+            "if!enabled{returnnexus_kernel::actuators::ActionReviewDecision::Allow{",
+            "reason:\"Wardengovernancereviewdisabled\".to_string(),};}",
+            "nexus_kernel::actuators::ActionReviewDecision::Deny{",
+            "reason:WARDEN_REVIEW_UNAVAILABLE.to_string(),}",
+        )
+    );
+    let (params, review) = fn_shape(cognitive, "review");
+    assert_eq!(
+        params,
+        "(&self,_actor_agent_id:&str,_actor_name:&str,_action:&PlannedAction,)"
+    );
+    assert_eq!(
+        review,
+        concat!(
+            "letconfig=load_config().map_err(agent_error)?;",
+            "Ok(self.review_with(config.governance.enable_warden_review))",
+        )
+    );
+
+    // The engine's whole region holds no lookup, model, audit or consent code.
+    let start = cognitive
+        .find("pub(crate) struct WardenReviewEngine {")
+        .expect("engine");
+    let open = start
+        + cognitive[start..]
+            .find("impl WardenReviewEngine {")
+            .expect("engine impl")
+        + "impl WardenReviewEngine ".len();
+    let region = code_lines(&cognitive[start..block_end(cognitive, open)]);
+    for forbidden in [
+        "nexus-warden",
+        "health_check(",
+        "get_agent(",
+        "get_default_model",
+        "select_provider",
+        ".query(",
+        "log_event(",
+        "enqueue_consent(",
+        "create_warden_consent_request",
+        "self.state",
+    ] {
+        assert!(!region.contains(forbidden), "Warden review: {forbidden}");
+    }
     let code = without_whitespace(&code_lines(cognitive));
     assert!(code.contains(concat!(
         "pub(crate)constWARDEN_REVIEW_UNAVAILABLE:&str=",
-        "\"WardenreviewisunavailableinPhaseZero:noWardenagentcanrun\";",
+        "\"WardenreviewisunavailableinPhaseZero:noagentcanbeverifiedastheWarden\";",
     )));
     assert!(!code.contains("\"Wardeninactive\""));
+    // The consent helper that recorded a Warden's NO is gone.
+    for (file, src) in [
+        (
+            "commands/chat_llm.rs",
+            include_str!("../../commands/chat_llm.rs"),
+        ),
+        ("commands/cognitive.rs", cognitive),
+    ] {
+        assert!(
+            !src.contains("create_warden_consent_request"),
+            "{file}: create_warden_consent_request"
+        );
+    }
 }
 
 /// Entries of the desktop command registration, whitespace-free.
@@ -962,6 +1129,55 @@ fn p0_fg_source_lists_follow_their_directories() {
             "context.hitl_approved".to_string()
         )]
     );
+}
+
+/// P0-FINAL-GATE (review W7): the two directory-driven guards keep reading
+/// their directories:
+/// - the C5 and actuator source sets are exactly `sources_including` over
+///   their directories;
+/// - `sources_including` reads through the directory walker;
+/// - the C5 and actuator guards take their sources from these sets;
+/// - no compile-time source list or macro is left.
+///
+/// Reverting bd5ba357's walker, or narrowing a set to a fixed list or
+/// count, fails here. This file reads itself for that.
+#[test]
+fn p0_fg_directory_guards_read_their_directories() {
+    let own = include_str!("tests.rs");
+    let (params, measurement) = fn_shape(own, "measurement_sources");
+    assert_eq!(params, "()");
+    assert_eq!(
+        measurement,
+        concat!(
+            "sources_including(\"crates/nexus-capability-measurement/src\",",
+            "&[\"lib.rs\",\"tauri_commands.rs\",\"evaluation/nim_client.rs\"])",
+        )
+    );
+    let (params, actuators) = fn_shape(own, "actuator_sources");
+    assert_eq!(params, "()");
+    assert_eq!(
+        actuators,
+        "sources_including(\"kernel/src/actuators\",&[\"mod.rs\",\"shell.rs\",\"types.rs\"])"
+    );
+    let (_, including) = fn_shape(own, "sources_including");
+    assert!(
+        including.starts_with("letsources=rust_sources_under(&workspace_dir(relative));"),
+        "{including}"
+    );
+    let (_, c5) = fn_shape(own, "p0_fg_c5_measurement_clients_take_only_the_groq_key");
+    assert!(c5.starts_with("letsources=measurement_sources();"), "{c5}");
+    let (_, hitl) = fn_shape(own, "p0_fg_g_no_actuator_reads_the_hitl_approval_flag");
+    assert!(
+        hitl.starts_with("letactuators=actuator_sources();"),
+        "{hitl}"
+    );
+    // The needles are assembled here so that this test does not match itself.
+    for needle in [
+        ["macro", "_rules!"].concat(),
+        ["include_str!(", "concat!("].concat(),
+    ] {
+        assert!(!own.contains(&needle), "{needle}");
+    }
 }
 
 /// P0-FINAL-GATE (item K, cross-stream request from stream 6): both

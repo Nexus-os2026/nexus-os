@@ -775,6 +775,149 @@ fn p0_fg_transcendent_activation_is_refused_and_changes_nothing() {
     assert_eq!(start_agent(&state, below), Ok(()));
 }
 
+/// P0-FINAL-GATE (item G, review W3): resuming a paused L6 (transcendent)
+/// agent is refused before its state changes, as starting one is. No state,
+/// stored state or audit event changes. (No current route registers an L6
+/// agent; the direct registration stands in for one.) Resuming a paused
+/// agent below L6 is unchanged.
+#[test]
+fn p0_fg_transcendent_resume_is_refused_and_changes_nothing() {
+    use crate::phase0_surface::{closed, Closure};
+    use nexus_kernel::lifecycle::AgentState;
+    let state = AppState::new_in_memory();
+    let transcendent = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(
+            parse_agent_manifest_json(&build_transcendent_manifest("transcendent-resume")).unwrap(),
+        )
+        .unwrap();
+    state
+        .supervisor
+        .lock()
+        .unwrap()
+        .pause_agent(transcendent)
+        .unwrap();
+    let agent_state = |state: &AppState, id: Uuid| {
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .get_agent(id)
+            .map(|handle| handle.state)
+    };
+    assert_eq!(agent_state(&state, transcendent), Some(AgentState::Paused));
+    let events = state.audit.lock().unwrap().events().len();
+
+    assert_eq!(
+        resume_agent(&state, transcendent.to_string()),
+        Err(closed("resume_agent", Closure::ApprovalRequired))
+    );
+    assert_eq!(agent_state(&state, transcendent), Some(AgentState::Paused));
+    assert_eq!(state.audit.lock().unwrap().events().len(), events);
+
+    // Resuming a paused agent below L6 is unchanged.
+    let below = create_agent(&state, build_manifest("below-resume")).unwrap();
+    pause_agent(&state, below.clone()).unwrap();
+    assert_eq!(resume_agent(&state, below.clone()), Ok(()));
+    assert_eq!(
+        agent_state(&state, Uuid::parse_str(&below).unwrap()),
+        Some(AgentState::Running)
+    );
+}
+
+/// P0-FINAL-GATE (schedule refusal, a coordinator request following stream
+/// 3's review of stream 6): a manifest schedule the scheduler refuses is
+/// refused by `create_agent` before anything is registered or written, and
+/// by `start_agent` before the agent is restarted. The scheduler's reason is
+/// passed through: it begins "invalid cron expression". Both commands used
+/// to report success while `register_manifest_schedule` dropped the schedule
+/// with only a log line. An accepted schedule is still registered.
+///
+/// The expression here is malformed, so the scheduler refuses it on every
+/// branch. A sub-minute schedule is refused only once stream 6's
+/// once-per-minute bound is composed; that case is tested there.
+#[test]
+fn p0_fg_refused_manifest_schedules_fail_create_and_start() {
+    use nexus_kernel::lifecycle::AgentState;
+    let state = AppState::new_in_memory();
+    // The scheduler starts a task per registration; nothing here polls it.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let manifest = |name: &str, schedule: Option<&str>| {
+        json!({
+            "name": name,
+            "version": "1.0.0",
+            "capabilities": ["llm.query"],
+            "fuel_budget": 1000,
+            "schedule": schedule,
+            "default_goal": "p0fg scheduled goal",
+        })
+        .to_string()
+    };
+    let malformed = "p0fg is not a schedule";
+    let snapshot = |state: &AppState| {
+        (
+            state.db.list_agents().unwrap().len(),
+            state.supervisor.lock().unwrap().health_check().len(),
+            state.meta.lock().unwrap().len(),
+            state.agent_scheduler.list().len(),
+            state.audit.lock().unwrap().events().len(),
+        )
+    };
+
+    let before = snapshot(&state);
+    let refused = create_agent(&state, manifest("scheduled-refused", Some(malformed))).unwrap_err();
+    assert!(refused.starts_with("invalid cron expression"), "{refused}");
+    assert_eq!(snapshot(&state), before);
+
+    // A stored agent whose schedule the scheduler refuses is not started.
+    let stored = create_agent(&state, manifest("scheduled-stored", None)).unwrap();
+    stop_agent(&state, stored.clone()).unwrap();
+    state
+        .db
+        .save_agent(
+            &stored,
+            &manifest("scheduled-stored", Some(malformed)),
+            "stopped",
+            0,
+            "native",
+        )
+        .unwrap();
+    let before = snapshot(&state);
+    let refused = start_agent(&state, stored.clone()).unwrap_err();
+    assert!(refused.starts_with("invalid cron expression"), "{refused}");
+    assert_eq!(snapshot(&state), before);
+    let stored_id = Uuid::parse_str(&stored).unwrap();
+    assert_eq!(
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .get_agent(stored_id)
+            .map(|handle| handle.state),
+        Some(AgentState::Stopped)
+    );
+
+    // An accepted schedule is still registered.
+    let accepted =
+        create_agent(&state, manifest("scheduled-accepted", Some("0 0 9 * * *"))).unwrap();
+    assert_eq!(
+        state
+            .agent_scheduler
+            .list()
+            .iter()
+            .filter(|scheduled| scheduled.agent_id == accepted)
+            .count(),
+        1
+    );
+    state.agent_scheduler.unregister_agent(&accepted);
+}
+
 /// P0-FINAL-GATE (item G): the goal, autonomous-loop and tool routes refuse
 /// an L6 (transcendent) agent before anything changes, with the bounded
 /// `ApprovalRequired` reason:
@@ -875,61 +1018,168 @@ fn p0_fg_goal_loop_and_tool_routes_refuse_a_transcendent_agent() {
     assert_eq!(tool_call_autonomy(&state, &sovereign, 6), Ok(5));
 }
 
-/// P0-FINAL-GATE (item G): an enabled Warden review that no Warden can give
-/// fails closed. The prebuilt Warden is L6, so it is never registered. An
-/// enabled review then denies with the bounded `WARDEN_REVIEW_UNAVAILABLE`
-/// reason in each of these cases:
-/// - no Warden registered;
-/// - the prebuilt Warden's record stored by an earlier build and left
-///   unregistered by restore;
-/// - a Warden registered but stopped.
-///
-/// No model is resolved or queried, and no audit event or consent request
-/// is written. It used to allow the action as "Warden inactive". A disabled
-/// review (the default) is unchanged and allows, and a running Warden
-/// still reviews.
+/// P0-FINAL-GATE (item G, review W4): the L6 check finds a stored L6 record
+/// under any spelling of its id: canonical, upper case, braced, as a URN or
+/// without hyphens. The stored branch used to compare the text given with
+/// the stored id, so another spelling of a stored-only L6 record's id passed
+/// the check. A goal for it then reached the rate limit, and an autonomous
+/// loop for it was registered with the scheduler.
 #[test]
-fn p0_fg_enabled_warden_review_fails_closed_without_a_warden() {
+fn p0_fg_transcendent_check_matches_every_spelling_of_a_stored_id() {
+    use crate::commands::agents::is_transcendent_agent;
+    use crate::commands::cognitive::assign_agent_goal;
+    use crate::phase0_surface::{closed, Closure};
+    let state = AppState::new_in_memory();
+    // The scheduler starts a task per registration; nothing here polls it.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let id = Uuid::new_v4();
+    state
+        .db
+        .save_agent(
+            &id.to_string(),
+            &build_transcendent_manifest("transcendent-spelling"),
+            "running",
+            6,
+            "native",
+        )
+        .unwrap();
+    for spelling in [
+        id.to_string(),
+        id.to_string().to_uppercase(),
+        format!("{{{id}}}"),
+        format!("urn:uuid:{id}"),
+        id.simple().to_string(),
+    ] {
+        assert!(is_transcendent_agent(&state, &spelling), "{spelling}");
+        assert_eq!(
+            assign_agent_goal(&state, spelling.clone(), "p0fg".into(), 5, None),
+            Err(closed("assign_agent_goal", Closure::ApprovalRequired)),
+            "{spelling}"
+        );
+        assert_eq!(
+            super::start_autonomous_loop(&state, spelling.clone(), Some(120), None),
+            Err(closed("start_autonomous_loop", Closure::ApprovalRequired)),
+            "{spelling}"
+        );
+    }
+    assert!(state.agent_scheduler.list().is_empty());
+    assert!(!is_transcendent_agent(&state, &Uuid::new_v4().to_string()));
+    assert!(!is_transcendent_agent(&state, "not-an-agent-id"));
+}
+
+/// P0-FINAL-GATE (item G, review W5): a stored record above L6 counts as L6.
+/// Manifest validation admits no level above 6, but a stored record is read
+/// without it. The checks used to compare with 6 exactly, so a stored
+/// autonomy 7 passed:
+/// - `start_agent` went on to the supervisor;
+/// - a goal reached the rate limit;
+/// - an autonomous loop was registered.
+///
+/// Every check now uses the bound `TRANSCENDENT_AUTONOMY` (6 and above).
+/// Levels up to 5 are unaffected.
+#[test]
+fn p0_fg_stored_levels_above_l6_count_as_transcendent() {
+    use crate::commands::agents::{is_transcendent_agent, is_transcendent_level};
+    use crate::commands::cognitive::assign_agent_goal;
+    use crate::phase0_surface::{closed, Closure};
+    for level in 0..=5 {
+        assert!(!is_transcendent_level(level), "{level}");
+    }
+    for level in [6, 7, u8::MAX] {
+        assert!(is_transcendent_level(level), "{level}");
+    }
+
+    let state = AppState::new_in_memory();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let beyond = Uuid::new_v4().to_string();
+    let manifest = json!({
+        "name": "beyond-transcendent",
+        "version": "1.0.0",
+        "capabilities": ["llm.query"],
+        "fuel_budget": 1000,
+        "autonomy_level": 7,
+    })
+    .to_string();
+    state
+        .db
+        .save_agent(&beyond, &manifest, "stopped", 7, "native")
+        .unwrap();
+    assert!(is_transcendent_agent(&state, &beyond));
+    assert_eq!(
+        start_agent(&state, beyond.clone()),
+        Err(closed("start_agent", Closure::ApprovalRequired))
+    );
+    assert_eq!(
+        assign_agent_goal(&state, beyond.clone(), "p0fg".into(), 5, None),
+        Err(closed("assign_agent_goal", Closure::ApprovalRequired))
+    );
+    assert_eq!(
+        super::start_autonomous_loop(&state, beyond.clone(), Some(120), None),
+        Err(closed("start_autonomous_loop", Closure::ApprovalRequired))
+    );
+    assert!(state.agent_scheduler.list().is_empty());
+}
+
+/// P0-FINAL-GATE (item G): in Phase Zero an enabled Warden review denies
+/// with the bounded `WARDEN_REVIEW_UNAVAILABLE` reason, and nothing can stand
+/// in for the Warden. That holds in each of these cases:
+/// - no agent named "nexus-warden" exists;
+/// - the prebuilt Warden's record is stored by an earlier build and left
+///   unregistered by restore;
+/// - a caller-created agent named "nexus-warden" (L2, as `create_agent`
+///   accepts) is stopped;
+/// - that agent is running. Its model's YES used to allow the action and was
+///   audited as a Warden review.
+///
+/// The decision takes only the review flag. No Warden is looked up and no
+/// model is resolved or queried: the engine holds no model code, and the
+/// `fg_approval` guard pins its whole body. No audit event or consent
+/// request is written. A disabled review (the default) allows, as before.
+#[test]
+fn p0_fg_enabled_warden_review_denies_and_no_stand_in_can_allow() {
     use crate::commands::cognitive::{WardenReviewEngine, WARDEN_REVIEW_UNAVAILABLE};
     use nexus_kernel::actuators::ActionReviewDecision;
-    use nexus_kernel::cognitive::PlannedAction;
     let state = AppState::new_in_memory();
     let engine = WardenReviewEngine {
         state: state.clone(),
     };
-    let action = PlannedAction::FileWrite {
-        path: "p0fg-warden.txt".into(),
-        content: "p0fg".into(),
-    };
-    let review = |enabled: bool| {
-        engine.review_with(
-            "p0fg-actor",
-            "p0fg-actor",
-            &action,
-            enabled,
-            || panic!("no model may be resolved"),
-            |_, _| panic!("no model may be queried"),
-        )
-    };
-    let unchanged = |state: &AppState| {
-        (
+    let check = |case: &str| {
+        let before = (
             state.audit.lock().unwrap().events().len(),
             state.db.load_pending_consent().unwrap().len(),
-        )
+            state.db.get_audit_count().unwrap(),
+        );
+        assert_eq!(
+            engine.review_with(true),
+            ActionReviewDecision::Deny {
+                reason: WARDEN_REVIEW_UNAVAILABLE.to_string(),
+            },
+            "{case}"
+        );
+        assert_eq!(
+            engine.review_with(false),
+            ActionReviewDecision::Allow {
+                reason: "Warden governance review disabled".to_string(),
+            },
+            "{case}"
+        );
+        let after = (
+            state.audit.lock().unwrap().events().len(),
+            state.db.load_pending_consent().unwrap().len(),
+            state.db.get_audit_count().unwrap(),
+        );
+        assert_eq!(after, before, "{case}");
     };
-    let unavailable = Ok(ActionReviewDecision::Deny {
-        reason: WARDEN_REVIEW_UNAVAILABLE.to_string(),
-    });
 
-    let before = unchanged(&state);
-    assert_eq!(
-        review(false),
-        Ok(ActionReviewDecision::Allow {
-            reason: "Warden governance review disabled".to_string(),
-        })
-    );
-    assert_eq!(review(true), unavailable);
-    assert_eq!(unchanged(&state), before);
+    check("no Warden");
 
     let warden = list_prebuilt_manifest_paths()
         .into_iter()
@@ -953,9 +1203,7 @@ fn p0_fg_enabled_warden_review_fails_closed_without_a_warden() {
         )
         .unwrap();
     crate::commands::agents::restore_persisted_agents(&state);
-    let before = unchanged(&state);
-    assert_eq!(review(true), unavailable);
-    assert_eq!(unchanged(&state), before);
+    check("stored prebuilt Warden");
 
     let stand_in = create_agent(
         &state,
@@ -971,29 +1219,18 @@ fn p0_fg_enabled_warden_review_fails_closed_without_a_warden() {
     )
     .unwrap();
     stop_agent(&state, stand_in.clone()).unwrap();
-    let before = unchanged(&state);
-    assert_eq!(review(true), unavailable);
-    assert_eq!(unchanged(&state), before);
-
-    // A running Warden still reviews: its model is queried and decides.
-    start_agent(&state, stand_in).unwrap();
-    let decision = engine.review_with(
-        "p0fg-actor",
-        "p0fg-actor",
-        &action,
-        true,
-        || panic!("the Warden names its model"),
-        |_, model| {
-            assert_eq!(model, "p0fg-warden-model");
-            Ok("YES safe fixture write".to_string())
-        },
-    );
-    assert_eq!(
-        decision,
-        Ok(ActionReviewDecision::Allow {
-            reason: "safe fixture write".to_string(),
-        })
-    );
+    check("stopped stand-in");
+    start_agent(&state, stand_in.clone()).unwrap();
+    let running = Uuid::parse_str(&stand_in).unwrap();
+    assert!(state
+        .supervisor
+        .lock()
+        .unwrap()
+        .health_check()
+        .iter()
+        .any(|status| status.id == running
+            && status.state == nexus_kernel::lifecycle::AgentState::Running));
+    check("running stand-in");
 }
 
 #[test]
@@ -2800,8 +3037,9 @@ fn test_approve_consent_request() {
 /// P0-FINAL-GATE (item G): approving a transcendent request (one enqueued
 /// before this closure) used to create or restart an L6 agent on any caller's
 /// word. It is now refused before the request is resolved: nothing is
-/// created, started, resolved or audited as approved, and a batch approval
-/// cannot resolve it either. The request can still be denied.
+/// created, started, resolved or audited as approved. A batch approval
+/// cannot resolve it either, nor can a review-each resolution (review W8).
+/// The request can still be denied.
 #[test]
 fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
     use crate::phase0_surface::{closed, Closure};
@@ -2859,6 +3097,17 @@ fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
         batch_approve_consents(&state, "goal-transcendent".into()).map(|_| ()),
         Err(closed("batch_approve_consents", Closure::ApprovalRequired))
     );
+    // Review W8: nor can it be resolved into review-each mode.
+    for id in ["c-transcendent-create", "c-transcendent-activate"] {
+        assert_eq!(
+            review_consent_batch(&state, id.into()).map(|_| ()),
+            Err(closed("review_consent_batch", Closure::ApprovalRequired))
+        );
+    }
+    assert!(!state
+        .cognitive_runtime
+        .review_each_mode(&pending_agent_id)
+        .unwrap_or(false));
 
     let pending = state.db.load_pending_consent().unwrap();
     assert_eq!(pending.len(), 2);
@@ -2874,6 +3123,7 @@ fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
     for approval in [
         "consent_approved",
         "consent_batch_approved",
+        "consent_batch_review_each",
         "transcendent_creation_approved",
     ] {
         assert!(

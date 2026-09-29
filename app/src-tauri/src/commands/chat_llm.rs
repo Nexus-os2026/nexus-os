@@ -1594,7 +1594,7 @@ impl AppState {
             // named or published, as `create_agent` writes nothing for L6. A
             // record an earlier build stored stays as it is; restore
             // registers none.
-            if manifest.autonomy_level == Some(6) {
+            if manifest.autonomy_level.is_some_and(is_transcendent_level) {
                 eprintln!(
                     "prebuilt: {} not loaded: transcendent (L6) agents are unavailable in Phase Zero",
                     manifest.name
@@ -2065,72 +2065,23 @@ pub(crate) fn goal_with_manifest_context(
     }
 }
 
-pub(crate) fn create_warden_consent_request(
-    state: &AppState,
-    agent_id: &str,
-    agent_name: &str,
-    action: &PlannedAction,
-    reason: &str,
-) -> Result<String, String> {
-    let consent_id = Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().to_rfc3339();
-    let summary = format!(
-        "Warden blocked {} for {}",
-        format_hitl_action_summary(action),
-        agent_name
-    );
-    let operation_json = json!({
-        "summary": summary,
-        "fuel_cost": 0.0,
-        "side_effects": [format_hitl_action_summary(action)],
-        "warden_reason": reason,
-        // Warden runs inside the cycle's loop-state guard. Only goal identity
-        // is needed here; its published snapshot is synchronized with goal
-        // assignment/removal and can be read without re-entering loop-state.
-        "goal_id": state
-            .cognitive_runtime
-            .get_agent_status_fast(agent_id)
-            .and_then(|status| status.active_goal.map(|goal| goal.id)),
-        "source_surface": "chat",
-    });
-    let row = nexus_persistence::ConsentRow {
-        id: consent_id.clone(),
-        agent_id: agent_id.to_string(),
-        operation_type: "warden_review".to_string(),
-        operation_json: operation_json.to_string(),
-        hitl_tier: "Tier2".to_string(),
-        status: "pending".to_string(),
-        created_at: now,
-        resolved_at: None,
-        resolved_by: None,
-    };
-    state
-        .db
-        .enqueue_consent(&row)
-        .map_err(|e| format!("db error: {e}"))?;
-    #[cfg(all(
-        feature = "tauri-runtime",
-        any(target_os = "windows", target_os = "macos", target_os = "linux")
-    ))]
-    if let Some(app) = state.app_handle() {
-        let notification = consent_row_to_notification(&row, agent_name);
-        // Best-effort: notify frontend of pending consent; UI will see it on next poll
-        let _ = app.emit("consent-request-pending", notification);
+/// P0-FINAL-GATE: whether the scheduler accepts a manifest schedule. The
+/// scheduler's own check (`AgentScheduler::validate_cron`) decides, and its
+/// reason is passed through unchanged. `create_agent` and `start_agent` call
+/// this before they change anything. Otherwise a schedule the scheduler
+/// refuses would be saved, and `register_manifest_schedule` would drop it
+/// with only a log line while the command reported success.
+pub(crate) fn check_manifest_schedule(schedule: Option<&str>) -> Result<(), String> {
+    match schedule {
+        Some(expression) => nexus_kernel::cognitive::AgentScheduler::validate_cron(expression),
+        None => Ok(()),
     }
-    state.log_event(
-        Uuid::parse_str(agent_id).unwrap_or_default(),
-        EventType::StateChange,
-        json!({
-            "action": "warden_decision",
-            "decision": "NO",
-            "agent_name": agent_name,
-            "consent_id": consent_id,
-            "reason": reason,
-        }),
-    );
-    Ok(consent_id)
 }
 
+/// Register a manifest schedule with the scheduler. Its callers,
+/// `create_agent` and `start_agent`, check the schedule first with
+/// `check_manifest_schedule`, so a refusal here is not the only trace of a
+/// refused schedule.
 pub(crate) fn register_manifest_schedule(
     state: &AppState,
     agent_id: &str,

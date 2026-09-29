@@ -366,29 +366,32 @@ fn p0_001_cognitive_secret_reentry() {
     });
 }
 
+// P0-FINAL-GATE (item G): in Phase Zero an enabled Warden review denies with
+// the bounded WARDEN_REVIEW_UNAVAILABLE reason and looks up no Warden. The
+// engine resolves and queries no model and writes no audit event or consent
+// request of its own. These P0-001 lock regressions used to exercise the
+// lookup, model resolution, query and consent path, which a running agent
+// merely named "nexus-warden" could satisfy. They now check that the denial
+// takes no lock and does not re-enter the audit lock, with such an agent
+// running.
 struct TestWarden(WardenReviewEngine);
 
 impl ActionReviewEngine for TestWarden {
     fn review(
         &self,
-        id: &str,
-        name: &str,
-        action: &PlannedAction,
+        _id: &str,
+        _name: &str,
+        _action: &PlannedAction,
     ) -> Result<ActionReviewDecision, String> {
-        self.0.review_with(
-            id,
-            name,
-            action,
-            true,
-            || "p0-test-model".into(),
-            |_, _| Ok("YES safe test write".into()),
-        )
+        // The review as it runs when enabled in the configuration.
+        Ok(self.0.review_with(true))
     }
 }
 
 #[test]
 fn p0_001_warden_audit_reentry() {
     isolated("p0_001_warden_audit_reentry", || {
+        use nexus_kernel::cognitive::CognitivePhase;
         let state = AppState::new_in_memory();
         let id = agent(&state, "lock-test-agent", true);
         agent(&state, "nexus-warden", true);
@@ -406,22 +409,25 @@ fn p0_001_warden_audit_reentry() {
             response: r#"[{"action":{"type":"FileWrite","path":"result.txt","content":"lock regression"},"description":"write test fixture"}]"#.into(),
             access_secret: false,
         }, &executor);
-        assert!(result.success);
-        assert_eq!(result.steps_executed, 1);
-        assert_eq!(
-            std::fs::read_to_string(workspace.join("result.txt")).unwrap(),
-            "lock regression"
-        );
+        assert_eq!(result.phase, CognitivePhase::Blocked);
+        assert_eq!(result.steps_executed, 0);
+        assert!(result
+            .blocked_reason
+            .unwrap()
+            .contains(WARDEN_REVIEW_UNAVAILABLE));
+        assert!(!workspace.join("result.txt").exists());
         let audit = state.audit.lock().unwrap();
         assert!(audit.verify_integrity());
-        assert!(audit
+        assert!(!audit
             .events()
             .iter()
             .any(|e| e.payload["action"] == "warden_review"));
-        assert!(audit.events().iter().any(
-            |e| e.payload["event_kind"] == "warden.review" && e.payload["decision"] == "allow"
-        ));
-        assert_eq!(state.db.get_audit_count().unwrap(), 1);
+        assert!(audit.events().iter().any(|e| {
+            e.payload["event_kind"] == "warden.review"
+                && e.payload["decision"] == "deny"
+                && e.payload["reason"] == WARDEN_REVIEW_UNAVAILABLE
+        }));
+        assert_eq!(state.db.get_audit_count().unwrap(), 0);
         std::fs::remove_dir_all(workspace).unwrap();
     });
 }
@@ -435,40 +441,22 @@ fn p0_001_warden_supervisor_audit_order() {
         let warden = WardenReviewEngine {
             state: state.clone(),
         };
-        let fallback_calls = AtomicUsize::new(0);
-        let result = warden
-            .review_with(
-                &Uuid::nil().to_string(),
-                "actor",
-                &PlannedAction::Noop,
-                true,
-                || {
-                    // Deterministic: this callback must run after the supervisor snapshot
-                    // is released, before secrets access acquires the shared audit lock.
-                    assert!(
-                        state.supervisor.try_lock().is_ok(),
-                        "supervisor held during default-model resolution"
-                    );
-                    assert!(
-                        state.audit.try_lock().is_ok(),
-                        "audit held during default-model resolution"
-                    );
-                    assert!(build_provider_config(&NexusConfig::default())
-                        .deepseek_api_key
-                        .is_some());
-                    fallback_calls.fetch_add(1, Ordering::SeqCst);
-                    "p0-test-model".into()
-                },
-                |_, _| Ok("YES safe".into()),
-            )
-            .unwrap();
+        let events = state.audit.lock().unwrap().events().len();
+        // The denial holds no lock and resolves no model. It used to resolve
+        // the Warden's default model through the secrets facade once the
+        // supervisor snapshot was released.
+        let result = warden.review_with(true);
+        assert!(state.supervisor.try_lock().is_ok());
+        assert!(state.audit.try_lock().is_ok());
         assert_eq!(
-            fallback_calls.load(Ordering::SeqCst),
-            1,
-            "Warden must execute the lock-checking provider fallback exactly once"
+            result,
+            ActionReviewDecision::Deny {
+                reason: WARDEN_REVIEW_UNAVAILABLE.to_string(),
+            }
         );
-        assert!(matches!(result, ActionReviewDecision::Allow { .. }));
-        assert!(state.audit.lock().unwrap().verify_integrity());
+        let audit = state.audit.lock().unwrap();
+        assert_eq!(audit.events().len(), events);
+        assert!(audit.verify_integrity());
     });
 }
 
@@ -480,18 +468,11 @@ struct DenyingWarden {
 impl ActionReviewEngine for DenyingWarden {
     fn review(
         &self,
-        id: &str,
-        name: &str,
-        action: &PlannedAction,
+        _id: &str,
+        _name: &str,
+        _action: &PlannedAction,
     ) -> Result<ActionReviewDecision, String> {
-        let decision = self.engine.review_with(
-            id,
-            name,
-            action,
-            true,
-            || "p0-test-model".into(),
-            |_, _| Ok("NO requires human review".into()),
-        )?;
+        let decision = self.engine.review_with(true);
         assert!(matches!(decision, ActionReviewDecision::Deny { .. }));
         self.denials.fetch_add(1, Ordering::SeqCst);
         Ok(decision)
@@ -536,10 +517,10 @@ fn warden_denial_scenario(rounds: usize) {
         assert_eq!(result.phase, CognitivePhase::Blocked);
         assert_eq!(result.steps_executed, 0);
         assert!(result.should_continue);
-        assert!(result
-            .blocked_reason
-            .unwrap()
-            .contains("Warden blocked action"));
+        assert_eq!(
+            result.blocked_reason.unwrap(),
+            format!("human approval required: Warden blocked action: {WARDEN_REVIEW_UNAVAILABLE}")
+        );
         assert!(!workspace.join("denied.txt").exists());
 
         // These reads reacquire real loop-state after denial handling returns.
@@ -549,71 +530,29 @@ fn warden_denial_scenario(rounds: usize) {
         assert_eq!(status.steps_completed, 0);
         assert!(state.cognitive_runtime.pending_hitl_steps(&id).is_ok());
 
-        let pending = state.db.load_pending_consent().unwrap();
-        assert_eq!(pending.len(), 1);
-        let consent = &pending[0];
-        assert_eq!(consent.agent_id, id);
-        assert_eq!(consent.operation_type, "warden_review");
-        assert_eq!(consent.hitl_tier, "Tier2");
-        assert_eq!(consent.status, "pending");
-        let context: Value = serde_json::from_str(&consent.operation_json).unwrap();
-        assert_eq!(context["goal_id"], goal_id);
-        assert_eq!(context["warden_reason"], "requires human review");
-        assert_eq!(context["source_surface"], "chat");
-        assert!(context["summary"]
-            .as_str()
-            .unwrap()
-            .contains("denial-lock-test"));
-        assert_eq!(context["side_effects"].as_array().unwrap().len(), 1);
-
+        // The engine enqueues no consent request and writes no audit event
+        // of its own; the executor audits each denial.
+        assert!(state.db.load_pending_consent().unwrap().is_empty());
+        assert!(state.db.load_consent_by_agent(&id).unwrap().is_empty());
         let audit = state.audit.lock().unwrap();
         assert!(audit.verify_integrity());
-        assert_eq!(
-            audit
-                .events()
-                .iter()
-                .filter(|e| {
-                    e.payload["action"] == "warden_review"
-                        && e.payload["review_response"] == "NO requires human review"
-                })
-                .count(),
-            round + 1
-        );
-        assert!(audit.events().iter().any(|e| {
-            e.payload["action"] == "warden_decision"
-                && e.payload["decision"] == "NO"
-                && e.payload["consent_id"] == consent.id
+        assert!(!audit.events().iter().any(|e| {
+            e.payload["action"] == "warden_review" || e.payload["action"] == "warden_decision"
         }));
         assert_eq!(
             audit
                 .events()
                 .iter()
                 .filter(|e| {
-                    e.payload["event_kind"] == "warden.review" && e.payload["decision"] == "deny"
+                    e.payload["event_kind"] == "warden.review"
+                        && e.payload["decision"] == "deny"
+                        && e.payload["reason"] == WARDEN_REVIEW_UNAVAILABLE
                 })
                 .count(),
             round + 1
         );
         drop(audit);
-        assert_eq!(state.db.get_audit_count().unwrap(), (round * 3 + 2) as i64);
-
-        // Exercise the production resolution command, then replace this goal on
-        // the next round to detect stale consent goal IDs and leaked guards.
-        deny_consent_request(
-            &state,
-            consent.id.clone(),
-            Some("Do not write the fixture".into()),
-        )
-        .unwrap();
-        assert!(state.db.load_pending_consent().unwrap().is_empty());
-        assert_eq!(
-            state.cognitive_runtime.get_agent_status(&id).unwrap().phase,
-            CognitivePhase::Reason
-        );
-        assert_eq!(
-            state.db.load_consent_by_agent(&id).unwrap().len(),
-            round + 1
-        );
+        assert_eq!(state.db.get_audit_count().unwrap(), 0);
     }
     state.cognitive_runtime.stop_agent_loop(&id).unwrap();
     assert!(state.cognitive_runtime.get_agent_status(&id).is_none());
@@ -622,16 +561,15 @@ fn warden_denial_scenario(rounds: usize) {
 }
 
 #[test]
-fn p0_001b_warden_denial_creates_consent_without_reentry() {
-    isolated(
-        "p0_001b_warden_denial_creates_consent_without_reentry",
-        || warden_denial_scenario(1),
-    );
+fn p0_001b_warden_denial_blocks_without_reentry() {
+    isolated("p0_001b_warden_denial_blocks_without_reentry", || {
+        warden_denial_scenario(1)
+    });
 }
 
 #[test]
-fn p0_001b_repeated_denial_consent_and_status() {
-    isolated("p0_001b_repeated_denial_consent_and_status", || {
+fn p0_001b_repeated_denial_blocks_and_status() {
+    isolated("p0_001b_repeated_denial_blocks_and_status", || {
         warden_denial_scenario(3)
     });
 }

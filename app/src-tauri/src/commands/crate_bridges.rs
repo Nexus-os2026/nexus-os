@@ -942,7 +942,7 @@ pub(crate) fn tool_call_autonomy(
     // P0-FINAL-GATE (item G): an L6 (transcendent) agent needs a human
     // approval the backend cannot verify, so no tool call runs for one, at
     // any claimed level.
-    if agent.autonomy_level == 6 {
+    if crate::commands::agents::is_transcendent_level(agent.autonomy_level) {
         return Err(crate::phase0_surface::closed(
             "tools_execute",
             crate::phase0_surface::Closure::ApprovalRequired,
