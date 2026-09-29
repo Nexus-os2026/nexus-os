@@ -1387,25 +1387,59 @@ fn undesktop_build_outputs(line: &str) -> Vec<String> {
         .collect()
 }
 
-/// The shipping cargo invocations in a CI configuration that select a
-/// withdrawn package, as (subcommand, selector). The configuration is read
-/// as one word stream (so continued and folded lines join); an invocation
-/// runs from a `cargo` (or `cross`) word to the next shell separator or the
-/// next invocation. A package is selected by `-p NAME`, `-pNAME`,
-/// `-p=NAME`, `--package NAME`, `--package=NAME` (a package id spec names
-/// its package; a glob counts as selecting every package) or by
-/// `--manifest-path` to a withdrawn package's manifest. Not a claim: a
-/// build selected by working directory, by `cd`, or through a variable or
-/// script is not seen here (the upload and publish checks bound those).
+/// Cargo options that take a value as the next word, so that word is not
+/// the subcommand.
+const CARGO_VALUE_OPTIONS: &[&str] = &[
+    "--color",
+    "--config",
+    "--manifest-path",
+    "--target-dir",
+    "-C",
+    "-Z",
+];
+
+/// The cargo invocations in a CI configuration that ship a withdrawn entry
+/// point, as (what, invocation). The configuration is read as one word
+/// stream (so continued and folded lines join): shell operators (`;`, `&`,
+/// `|`, in any run) are separate words even when written against another
+/// word, and continuation marks (`\`, a PowerShell backtick) are dropped.
+/// An invocation runs from a `cargo` (or `cross`) word to the next shell
+/// separator or the next invocation; its subcommand is its first word that
+/// is neither an option nor the value of one in [`CARGO_VALUE_OPTIONS`].
+/// Found are:
+/// - a shipping subcommand (not in [`NON_SHIPPING_CARGO_SUBCOMMANDS`]) that
+///   selects a withdrawn package by `-p NAME`, `-pNAME`, `-p=NAME`,
+///   `--package NAME`, `--package=NAME` (a package id spec names its
+///   package; a glob counts as selecting every package) or by
+///   `--manifest-path` to a withdrawn package's manifest;
+/// - any subcommand naming a withdrawn binary by `--bin NAME` or
+///   `--bin=NAME`, quoted or not;
+/// - `cargo install` from a path (`--path DIR`, `--path=DIR`).
+///
+/// Not a claim: this is a word-level recognizer, not a shell or YAML
+/// parser. A build selected by working directory, by `cd`, or through a
+/// variable, alias or script is not seen here (the upload and publish
+/// checks bound those).
 fn shipped_withdrawn_packages(
     text: &str,
     packages: &BTreeSet<String>,
     directories: &BTreeSet<String>,
+    binaries: &[&str],
 ) -> Vec<(String, String)> {
-    let words: Vec<&str> = text
+    let spaced: String = text
         .lines()
         .filter(|line| !line.trim_start().starts_with('#'))
-        .flat_map(str::split_whitespace)
+        .flat_map(|line| line.chars().chain(['\n']))
+        .flat_map(|c| {
+            if matches!(c, ';' | '&' | '|') {
+                vec![' ', c, ' ']
+            } else {
+                vec![c]
+            }
+        })
+        .collect();
+    let words: Vec<&str> = spaced
+        .split_whitespace()
         .map(|word| {
             word.trim_matches(|c: char| {
                 matches!(
@@ -1414,6 +1448,7 @@ fn shipped_withdrawn_packages(
                 )
             })
         })
+        .filter(|word| !word.is_empty() && *word != "\\")
         .collect();
     let is_cargo = |word: &str| {
         let word = word.to_ascii_lowercase();
@@ -1422,16 +1457,18 @@ fn shipped_withdrawn_packages(
         let word = word.strip_suffix(".exe").unwrap_or(word);
         word == "cargo" || word == "cross"
     };
-    let is_separator =
-        |word: &str| matches!(word, "&&" | "||" | ";" | "|" | "then" | "do") || word.ends_with(';');
+    let is_separator = |word: &str| {
+        word.chars().all(|c| matches!(c, ';' | '&' | '|')) || matches!(word, "then" | "do")
+    };
+    let unquoted = |value: &str| value.trim_matches(['"', '\'']).to_string();
     let selects_withdrawn = |spec: &str| {
-        let spec = spec.trim_matches(['"', '\'']);
-        let spec = spec.rsplit('#').next().unwrap_or(spec);
+        let spec = unquoted(spec);
+        let spec = spec.rsplit('#').next().unwrap_or(&spec);
         let name = spec.split(['@', ':']).next().unwrap_or(spec);
         spec.contains(['*', '?', '[']) || packages.contains(name)
     };
     let manifest_is_withdrawn = |path: &str| {
-        let path = path.trim_matches(['"', '\'']).replace('\\', "/");
+        let path = unquoted(path).replace('\\', "/");
         directories.iter().any(|directory| {
             let manifest = format!("{directory}/Cargo.toml");
             path == manifest
@@ -1439,6 +1476,7 @@ fn shipped_withdrawn_packages(
                 || path.ends_with(&format!("/{manifest}"))
         })
     };
+    let names_withdrawn_binary = |name: &str| binaries.contains(&unquoted(name).as_str());
     let mut found = Vec::new();
     let mut index = 0;
     while index < words.len() {
@@ -1451,32 +1489,40 @@ fn shipped_withdrawn_packages(
             end += 1;
         }
         let invocation = &words[index + 1..end];
-        let subcommand = invocation
-            .iter()
-            .find(|word| !word.starts_with('-') && !word.starts_with('+'))
-            .copied()
-            .unwrap_or_default();
-        if !NON_SHIPPING_CARGO_SUBCOMMANDS.contains(&subcommand) {
-            let value_after = |at: usize| invocation.get(at + 1).copied().unwrap_or_default();
-            for (at, word) in invocation.iter().enumerate() {
-                let selected = if *word == "-p" || *word == "--package" {
-                    selects_withdrawn(value_after(at))
-                } else if let Some(spec) = word.strip_prefix("--package=") {
-                    selects_withdrawn(spec)
-                } else if let Some(spec) =
-                    word.strip_prefix("-p").filter(|_| !word.starts_with("--"))
-                {
-                    selects_withdrawn(spec.strip_prefix('=').unwrap_or(spec))
-                } else if *word == "--manifest-path" {
-                    manifest_is_withdrawn(value_after(at))
-                } else if let Some(path) = word.strip_prefix("--manifest-path=") {
-                    manifest_is_withdrawn(path)
-                } else {
-                    false
-                };
-                if selected {
-                    found.push((subcommand.to_string(), invocation.join(" ")));
-                }
+        let mut subcommand = "";
+        let mut at = 0;
+        while let Some(word) = invocation.get(at) {
+            if CARGO_VALUE_OPTIONS.contains(word) {
+                at += 2;
+            } else if word.starts_with('-') || word.starts_with('+') {
+                at += 1;
+            } else {
+                subcommand = word;
+                break;
+            }
+        }
+        let shipping = !NON_SHIPPING_CARGO_SUBCOMMANDS.contains(&subcommand);
+        let value_after = |at: usize| invocation.get(at + 1).copied().unwrap_or_default();
+        for (at, word) in invocation.iter().enumerate() {
+            let selected = if *word == "-p" || *word == "--package" {
+                shipping && selects_withdrawn(value_after(at))
+            } else if let Some(spec) = word.strip_prefix("--package=") {
+                shipping && selects_withdrawn(spec)
+            } else if let Some(spec) = word.strip_prefix("-p").filter(|_| !word.starts_with("--")) {
+                shipping && selects_withdrawn(spec.strip_prefix('=').unwrap_or(spec))
+            } else if *word == "--manifest-path" {
+                shipping && manifest_is_withdrawn(value_after(at))
+            } else if let Some(path) = word.strip_prefix("--manifest-path=") {
+                shipping && manifest_is_withdrawn(path)
+            } else if *word == "--bin" {
+                names_withdrawn_binary(value_after(at))
+            } else if let Some(name) = word.strip_prefix("--bin=") {
+                names_withdrawn_binary(name)
+            } else {
+                subcommand == "install" && (*word == "--path" || word.starts_with("--path="))
+            };
+            if selected {
+                found.push((subcommand.to_string(), invocation.join(" ")));
             }
         }
         index = end;
@@ -1491,7 +1537,10 @@ fn shipped_withdrawn_packages(
 fn p0_fg_standalone_shipping_recognizers_catch_probes() {
     let packages: BTreeSet<String> = ["nexus-cli".to_string()].into();
     let directories: BTreeSet<String> = ["cli".to_string()].into();
-    let ships = |text: &str| !shipped_withdrawn_packages(text, &packages, &directories).is_empty();
+    let binaries = ["fg-withdrawn-bin"];
+    let ships = |text: &str| {
+        !shipped_withdrawn_packages(text, &packages, &directories, &binaries).is_empty()
+    };
     for text in [
         "cargo build --release -p nexus-cli",
         "cargo build --release -pnexus-cli",
@@ -1507,6 +1556,16 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
         "$CARGO build --manifest-path=./cli/Cargo.toml",
         "cross build -p nexus-cli",
         "cargo --config x build -p nexus-cli",
+        "cargo build --release -p nexus-cli;echo done",
+        "cargo build -p nexus-cli&&echo done",
+        "cargo --color always build -p nexus-cli",
+        "cargo -Z unstable-options build -p nexus-cli",
+        "cargo `\n  build -p nexus-cli",
+        "cargo build --release --bin 'fg-withdrawn-bin'",
+        "cargo build --release --bin=\"fg-withdrawn-bin\"",
+        "cargo test --bin fg-withdrawn-bin",
+        "cargo install --locked --path cli",
+        "cargo install --path=cli",
     ] {
         assert!(ships(text), "not recognized as shipping: {text}");
     }
@@ -1516,6 +1575,13 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
         "cargo build --release && mkdir -p nexus-cli",
         "cargo build -p nexus-desktop-backend",
         "# cargo build -p nexus-cli",
+        "cargo --color always test -p nexus-cli",
+        "cargo --config net.offline=true check -p nexus-cli",
+        "cargo \\\n  test -p nexus-cli",
+        "cargo `\n  clippy -p nexus-cli",
+        "cargo test -p nexus-cli | tee log",
+        "cargo build --release --bin fg-withdrawn-bin-2",
+        "cargo install ripgrep --version 14.1.1 --locked --root \"$root\"",
     ] {
         assert!(!ships(text), "wrongly recognized as shipping: {text}");
     }
@@ -1687,8 +1753,12 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
                 );
             }
         }
-        let shipped =
-            shipped_withdrawn_packages(&text, &withdrawn_packages, &withdrawn_directories);
+        let shipped = shipped_withdrawn_packages(
+            &text,
+            &withdrawn_packages,
+            &withdrawn_directories,
+            WITHDRAWN_BINARIES,
+        );
         assert!(
             shipped.is_empty(),
             "{name}: a withdrawn package is built for shipping by {shipped:?}"
