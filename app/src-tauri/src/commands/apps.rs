@@ -417,9 +417,12 @@ fn refuse_api_client_secrets(data_json: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Whether any object in `value` holds a non-empty secret field, or a
+/// Whether any object in `value` holds a non-empty secret field, or is a
 /// credential header entry (`{"key": "Authorization", "value": "..."}`) with
-/// a non-empty value. Field and header names match in any letter case.
+/// a non-empty value. Field and header names match in any letter case, and
+/// every spelling counts: an object is a credential header entry when any
+/// of its `key` fields names a credential header and any of its `value`
+/// fields is non-empty, so a decoy spelling cannot hide the real one.
 fn holds_api_client_secret(value: &serde_json::Value) -> bool {
     let filled = |field: &serde_json::Value| match field {
         serde_json::Value::Null => false,
@@ -433,15 +436,16 @@ fn holds_api_client_secret(value: &serde_json::Value) -> bool {
     };
     match value {
         serde_json::Value::Object(map) => {
-            let field = |name: &str| {
-                map.iter()
-                    .find(|(key, _)| named(key, &[name]))
-                    .map(|(_, field)| field)
-            };
-            let credential_header = field("key")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|key| named(key, API_CLIENT_CREDENTIAL_HEADERS))
-                && field("value").is_some_and(filled);
+            let names_credential_header = map.iter().any(|(name, field)| {
+                named(name, &["key"])
+                    && field
+                        .as_str()
+                        .is_some_and(|header| named(header, API_CLIENT_CREDENTIAL_HEADERS))
+            });
+            let holds_value = map
+                .iter()
+                .any(|(name, field)| named(name, &["value"]) && filled(field));
+            let credential_header = names_credential_header && holds_value;
             credential_header
                 || map.iter().any(|(key, field)| {
                     (named(key, API_CLIENT_SECRET_FIELDS) && filled(field))

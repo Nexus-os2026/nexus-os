@@ -686,6 +686,10 @@ fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
         serde_json::json!({"headers": [{"key": "api-key", "value": "synthetic", "enabled": true}]}),
         serde_json::json!({"headers": [{"key": "X-Auth-Token", "value": "synthetic", "enabled": true}]}),
         serde_json::json!({"headers": [{"key": "PRIVATE-TOKEN", "value": "synthetic", "enabled": true}]}),
+        // A decoy spelling beside the real one (stream 4 review): any key
+        // field naming a credential header and any non-empty value field.
+        serde_json::json!({"headers": [{"Key": "Accept", "key": "Authorization", "value": "Bearer synthetic", "enabled": true}]}),
+        serde_json::json!({"headers": [{"key": "Authorization", "Value": "", "value": "Bearer synthetic", "enabled": true}]}),
     ] {
         let data = request(auth.clone());
         let error = refuse_api_client_secrets(&data).unwrap_err();
@@ -702,6 +706,8 @@ fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
         serde_json::json!({"headers": [{"key": "X-Custom", "value": "synthetic", "enabled": true}]}),
         serde_json::json!({"params": [{"key": "api_key", "value": "synthetic", "enabled": true}]}),
         serde_json::json!({"url": "https://example.test/?token=synthetic"}),
+        // A credential header named, but every value empty.
+        serde_json::json!({"headers": [{"Key": "Authorization", "key": "Accept", "value": "", "Value": null, "enabled": true}]}),
     ] {
         assert_eq!(
             refuse_api_client_secrets(&request(undetected.clone())),
