@@ -113,3 +113,29 @@ pub fn kernel_abi() -> i32 {
 pub fn abi_is_supported(abi: i32) -> bool {
     abi >= SandboxPolicy::V1.landlock_min_abi as i32
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn p2i_nc_33_a_landlock_below_abi_6_is_never_accepted() {
+        let available = |effective_abi| LandlockStatus::Available {
+            effective_abi,
+            kernel_abi: None,
+        };
+        for abi in [ABI::V1, ABI::V2, ABI::V3, ABI::V4, ABI::V5] {
+            assert!(!abi_at_least(&available(abi)), "{abi:?}");
+        }
+        assert!(abi_at_least(&available(ABI::V6)));
+        // A kernel newer than this crate knows is enforced at ABI 6.
+        assert!(abi_at_least(&LandlockStatus::Available {
+            effective_abi: ABI::V6,
+            kernel_abi: Some(7),
+        }));
+        assert!(!abi_at_least(&LandlockStatus::NotEnabled));
+        assert!(!abi_at_least(&LandlockStatus::NotImplemented));
+        assert!(!abi_is_supported(0) && !abi_is_supported(5));
+        assert!(abi_is_supported(6) && abi_is_supported(7));
+    }
+}

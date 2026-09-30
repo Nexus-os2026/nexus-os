@@ -484,16 +484,45 @@ review's `display_safe`, rendered as text).
 
 ## 15. Negative-control suite and CI
 
-The automated controls (mission §26, items 1–45) run live on a supported
-host through a dedicated exact-SHA workflow on the self-hosted runner
-(`.github/workflows/ci-phase2-linux-sandbox.yml`), which fails if a layer is
-missing. Hosted CI runs the portable tests and asserts fail-closed
-unavailability where the host lacks the layers; no required test is ignored.
+The automated controls (mission §26, items 1–45) are tests. "Live" tests
+run the real helper on a supported host
+(`crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs`, required with
+`NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX=1`, `NEXUS_VERIFIER_TOOLCHAIN=packaged`
+and `--features development-toolchain`, where a missing layer or toolchain
+fails the suite instead of skipping it). Source-mutation controls, each
+restored exactly, showed every layer and check below is load-bearing.
+
+| # | Control | Test |
+|---|---|---|
+| 1–6 | host sentinel read and write, HOME, `~/.nexus`, synthetic Git/SSH/API credentials, `/etc/passwd` | live `p2c_live_escape_attempts_are_all_denied` (`read_sentinel`, `write_sentinel`, `write_outside`, `list_real_home`, `list_nexus_dir`, `read_git_credentials`, `read_ssh_key`, `read_api_key`, `read_etc_passwd`; sentinel unchanged); live `p2g_live_offline_rust_profile_runs_cargo_test` (a candidate's own tests) |
+| 7 | candidate symlink escape | live `symlink_relative`, `symlink_absolute`; kernel `p2e_input_rescan_detects_every_change` (a symlink in the input invalidates it) |
+| 8–12 | TCP, UDP, abstract and pathname Unix sockets, Ollama loopback | live `tcp_host`, `udp_socket`, `abstract_socket`, `pathname_socket`, `tcp_ollama`, `socketpair_inet`; P2G candidate tests; host listeners count zero contacts |
+| 13, 14 | unexpected inherited descriptor, parent secret in the environment | live `no_inherited_fds` (a leaked non-close-on-exec descriptor), environment keys exactly the launch's; P2G `sealed_environment` (no parent secret, no `PATH`) |
+| 15–19 | nested user namespace, `setns`/`unshare`, mount/`chroot`/`pivot_root`, `io_uring`, ptrace/`process_vm`/pidfd | live seccomp checks (`ENOSYS` from the filter itself) and ablation `p2c_live_each_layer_is_necessary` |
+| 20–22 | `setsid`/`setpgid` descendant, grandchild after init exit, `cgroup.kill` reach | live `p2c_live_descendants_do_not_survive_init_exit`, `p2c_live_parent_death_ends_the_sandbox`, `p2d_live_deadline_kill_reaches_every_descendant` |
+| 23–26 | pids, memory, wall timeout, output flood | live `p2d_live_pids_limit_is_enforced`, `p2d_live_memory_limit_is_enforced`, `p2d_live_descendant_oom_is_never_a_pass`, `p2d_live_deadline_kill_reaches_every_descendant`, `p2d_live_output_flood_is_bounded` |
+| 27 | no sockets after the filter | live `socketpair_inet`, `socket_raw` and every socket check (`socket` is `ENOSYS`) |
+| 28–30 | input not writable, input hash unchanged, a modified input invalidates the result | live `write_input_new`, `modify_input`, `p2e_live_workspace_confines_the_verifier`, P2G input unchanged after every run; kernel `p2e_input_rescan_detects_every_change`; desktop `p2h_finalization_never_reports_more_than_it_proved` |
+| 31, 32 | toolchain tamper, missing packaged toolchain | `p2f_the_exact_tree_verifies_and_every_deviation_is_rejected`, `p2f_verification_binds_tree_and_runtime_and_reverify_sees_changes`, `p2f_the_launch_material_is_the_verified_files`, `p2f_production_is_unavailable_without_an_installed_package`, live `p2f_live_packaged_toolchain_verifies` |
+| 33 | unsupported Landlock ABI | `p2i_nc_33_a_landlock_below_abi_6_is_never_accepted`; live `p2i_live_unavailable_landlock_fails_closed` |
+| 34, 35 | missing namespace, missing cgroup delegation | live `p2c_live_missing_namespace_fails_closed`, `p2d_live_missing_scope_fails_closed`, `p2d_live_unmovable_process_fails_closed` |
+| 36 | seccomp installation failure launches nothing | live `p2i_live_failed_seccomp_install_runs_nothing` |
+| 37–42 | forged approval, stale approval, a result of another candidate, rerun invalidates the review, `CleanupFailed` blocks Apply, a failed but cleaned verification is advisory | kernel compile-fail doctests; `p2h_nc_37`–`p2h_nc_42`; `p2b_a_result_binds_only_its_own_launch` |
+| 43 | no caller or model input of command, argv, executable, cwd, environment or network policy | `p1_g_01_coding_commands_take_only_opaque_ids_and_choices`, `p2_g_01`–`p2_g_05`, `p2b_the_profile_has_no_shell_path_or_network_escape`, frontend `p1_g_governed_coding_sends_no_path_grant_or_approval` and the page tests |
+| 44 | `/proc` | live `read_proc_status`, `list_proc`; P2G `no_host_files` |
+| 45 | no raw shell | `p2b_the_profile_has_no_shell_path_or_network_escape`; live `exec_shell`; P2G `no_shell` |
+
+CI: a dedicated exact-SHA workflow on the self-hosted runner
+(`.github/workflows/ci-phase2-linux-sandbox.yml`) runs the live suite and
+fails if a layer is missing. Hosted CI runs the portable tests and asserts
+fail-closed unavailability where the host lacks the layers; no required test
+is ignored.
 
 Known runner prerequisite: the runner user (`github-runner`) currently has
-no systemd user manager (not lingering), so the cgroup layer is unavailable
-there until an administrator provides one; the dedicated workflow will fail
-until then, by design.
+no systemd user manager (not lingering) and so no `/run/user/<uid>` or user
+bus: the cgroup and workspace layers are unavailable there until an
+administrator provides them; the dedicated workflow fails until then, by
+design.
 
 ## 16. Feasibility evidence (P2A-001 and this mission's spike)
 
@@ -504,3 +533,38 @@ cgroup v2 limits through the user manager; the exact first-profile invocation
 compiles, links (`rust-lld`, self-contained musl) and passes with an empty
 environment under strict Landlock (no `/proc`, `/sys`, `/etc`, `/usr` beyond
 the eight runtime files) and with path-based metadata mutation denied.
+
+## 17. Phase Two authority inventory
+
+| Authority | Where | Governed by |
+|---|---|---|
+| Spawn a process | `launcher::Helper::spawn` (the only `Command::new` in the sandbox crate) | only `execution::run`, only from the desktop's verification module after the owner's recorded native approval; the program is `HelperProgram::installed()` (root-owned, `/usr/bin`, beside the installed application); cleared environment, no arguments, `/` as working directory, no `pre_exec` |
+| Execute project code | the helper's verifier child (`execveat` of the verified `cargo` by descriptor) | every mandatory layer established and re-checked first; any failure reports a setup stage and executes nothing |
+| Namespaces | the helper (`unshare` once) | uid/gid identity maps written only for the backend's own unreaped child; identities verified by `readlink` of `/proc/self/ns/*` |
+| cgroup scope | `scope::ScopeManager` over the user manager's fixed D-Bus interface | bus from the real uid, owner-checked; backend-random unit names; limits verified from the cgroup files; `StopUnit` only for a scope this call created and could not prove; kill, counters and emptiness through the retained descriptor |
+| Workspace | `workspace::WorkspaceRoot`/`Workspace` under `/run/user/<uid>/nexus-verifier` | uid-derived, walked without symlinks, owner-only, exclusive creation, identity-bound removal |
+| Toolchain | `toolchain::VerifiedVerifierToolchain::installed()` | embedded manifest, root-owned installed tree, host runtime checks, re-verified before each launch |
+| Candidate copy | `CodingRun::materialize_verification_input` | the retained staging handle, the verified manifest, an empty backend-created directory |
+| Launch approval | `CodingRun::request_verification_approval` with the desktop's native dialog | bounded facts; recorded; single-use approval bound to the exact binding |
+| IPC | `coding_verification_profiles`, `coding_start_verification`, `coding_retry_verification_cleanup` | run id and profile name only; capabilities grant them to the main window at the local origin |
+| Ledger | `verify.prepared`, `verify.approval_granted`, `verify.approval_declined`, `verify.launch`, `verify.result`, `verify.cleanup` | hashes, sizes, classes and generations only; fail closed |
+
+Unchanged: Builder's trusted toolchain and every Phase Zero and Phase One
+surface; the Phase Zero and Phase One guards still pass, with reviewed pin
+updates for the new commands, the new Tauri config merge and the new ignored
+build-output directories.
+
+## 18. Residuals
+
+- The installed-package path (installed helper, installed toolchain) cannot
+  run in a development build by design; the desktop glue is covered by unit
+  tests of its decisions and by source pins, and the layers below it by the
+  live suite. Bundling the helper binary with the release package is part of
+  release packaging.
+- A workspace left by a crashed backend stays (owner-only, on the session
+  tmpfs) until the session ends; there is no startup sweep by name.
+- A panic in the desktop's verification thread finalizes the run as
+  `SandboxFailed` with cleanup unconfirmed and nothing to retry: Apply stays
+  refused for that run; the owner can discard it.
+- Timing: a verification's generation binds the toolchain verification it
+  was prepared with; a re-verification from scratch is a new binding.

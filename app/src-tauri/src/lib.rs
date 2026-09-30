@@ -8887,5 +8887,9 @@ mod tests;
 mod phase1_tests;
 
 #[cfg(test)]
+#[path = "phase2_tests.rs"]
+mod phase2_tests;
+
+#[cfg(test)]
 #[path = "p2_entry_tests.rs"]
 mod p2_entry_tests;

@@ -12,7 +12,7 @@ It is not production-ready.
 |---|---|---|
 | Phase Zero — trust-boundary foundation | **PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-29 | `rebuild/phase0-trust-boundary` at `f727f5c39fab8d5c729a55eb28ad576d3d56ce47` |
 | Phase One — governed coding workflow | **PHASE ONE COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-30 | `rebuild/phase1-governed-coding` at `14270a9a38770ac84456c1f812042d2967edec42` |
-| Phase Two | Not started | — |
+| Phase Two — governed verification execution | In progress: implementation candidate under Architect review, not complete | — |
 
 - Both phases are complete for the Linux support profile only. Windows and
   macOS portability validation remains deferred.
@@ -27,7 +27,11 @@ It is not production-ready.
   checkpoint plus status documentation and a generated ACL schema and test
   hygiene commit. Pre-Phase-Two entry hardening follows it (see
   [SECURITY.md](SECURITY.md)). None of these redefines the frozen Phase One
-  checkpoint, and Phase Two has not started.
+  checkpoint.
+- Phase Two (governed verification execution, Linux support profile) is being
+  implemented on the `implement/phase2-governed-verification` branch under an
+  Architect-approved mission. It is not integrated and not complete; see
+  [Governed verification](#governed-verification-phase-two-in-progress).
 
 Phase Zero rebuilt the project's trust boundary around one rule: a string is
 never authority. It replaced ambient, caller-asserted and path-based
@@ -100,6 +104,23 @@ Phase One does not claim:
 Structural verification checks that the candidate stays within the run's
 scopes and policy. It is not semantic verification and does not run the
 project's tests.
+
+## Governed verification (Phase Two, in progress)
+
+On a supported Linux host, the owner may run a reviewed candidate's own
+tests, locally, in a backend-owned verifier sandbox before deciding whether to
+apply it. The first and only profile is `rust.cargo-test.offline.v1`: a
+single dependency-free Rust library package, tested offline with a Rust
+toolchain packaged with Nexus. The owner confirms each launch in a native
+dialog; the frontend sends only the run and a profile name. The sandbox runs
+the tests in new user, PID, network, IPC, UTS and cgroup namespaces with no
+network, strict Landlock, a seccomp allow-list and backend-owned cgroup
+limits. The result is advisory and is bound into the owner's review; Apply
+waits while a verification is active or its cleanup is unconfirmed. Without
+every required layer, verification is unavailable. The design and its
+explicit non-claims are in
+[docs/security/phase2-governed-verification.md](docs/security/phase2-governed-verification.md).
+This is an implementation candidate, not a completed phase.
 
 ## Local-first is not local-only
 

@@ -1,0 +1,275 @@
+//! Phase Two trust-surface pins: governed sandboxed verification.
+//!
+//! The only execution route the desktop has for project code is the
+//! verifier sandbox, reached from one module, launched once, from backend
+//! objects only; the sandbox crate spawns exactly one process (its trusted
+//! helper) and takes nothing from the environment; the development toolchain
+//! is never production; the profile and both policies are pinned by hash.
+//! A failure here is a trust-surface change: review it, then update the pin.
+
+use std::path::{Path, PathBuf};
+
+fn repo() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// Rust source without line comments (doc text may name what is forbidden).
+fn code(text: &str) -> String {
+    text.lines()
+        .map(|line| match line.find("//") {
+            Some(at) => &line[..at],
+            None => line,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Non-test Rust files beneath `dir`.
+fn production_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        if path.is_dir() {
+            if name != "tests" {
+                production_files(&path, out);
+            }
+        } else if name.ends_with(".rs") && !name.ends_with("tests.rs") && name != "tests.rs" {
+            out.push(path);
+        }
+    }
+}
+
+fn count_in(files: &[PathBuf], needle: &str) -> Vec<(String, usize)> {
+    files
+        .iter()
+        .filter_map(|path| {
+            let found = code(&std::fs::read_to_string(path).unwrap())
+                .matches(needle)
+                .count();
+            (found > 0).then(|| {
+                (
+                    path.file_name().unwrap().to_string_lossy().into_owned(),
+                    found,
+                )
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn p2_g_01_the_desktop_reaches_project_code_only_through_the_verifier_sandbox() {
+    let flow = code(include_str!("coding_flow/verification.rs"));
+    for (needle, expected) in [
+        ("execution::run(", 1),
+        ("HelperProgram::installed()", 1),
+        ("VerifiedVerifierToolchain::installed()", 1),
+        ("launch_spec(", 1),
+        ("HelperProgram::at", 0),
+        ("development(", 0),
+        ("Command", 0),
+        ("std::process", 0),
+        ("pre_exec", 0),
+        ("std::env", 0),
+        ("std::fs", 0),
+    ] {
+        assert_eq!(flow.matches(needle).count(), expected, "{needle}");
+    }
+    // The verification module is part of the governed coding flow: only
+    // `coding_flow.rs` includes it.
+    let flow_root = include_str!("coding_flow.rs");
+    assert_eq!(
+        flow_root
+            .matches("#[path = \"coding_flow/verification.rs\"]")
+            .count(),
+        1
+    );
+    assert!(!include_str!("lib.rs").contains("verification.rs"));
+    // No other desktop source reaches the sandbox crate.
+    let mut files = Vec::new();
+    production_files(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut files,
+    );
+    let mut users: Vec<String> = count_in(&files, "nexus_verifier_sandbox")
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    users.sort();
+    assert_eq!(users, ["coding_flow.rs", "verification.rs"]);
+}
+
+#[test]
+fn p2_g_02_the_sandbox_crate_spawns_only_its_helper_and_reads_no_environment() {
+    let mut files = Vec::new();
+    production_files(
+        &repo().join("crates/nexus-verifier-sandbox/src"),
+        &mut files,
+    );
+    assert!(files.len() >= 15, "sandbox sources not found");
+    let pins: [(&str, &[(&str, usize)]); 11] = [
+        ("Command::new(", &[("launcher.rs", 1)]),
+        ("pre_exec", &[]),
+        ("CommandExt", &[]),
+        ("sys::execveat_fd(", &[("helper.rs", 1)]),
+        ("libc::fork(", &[("sys.rs", 1)]),
+        ("sys::unshare(", &[("helper.rs", 1)]),
+        ("libc::socket(", &[("sys.rs", 1)]),
+        ("current_exe()", &[("launcher.rs", 1), ("toolchain.rs", 1)]),
+        ("std::env::var", &[]),
+        ("env::var_os", &[]),
+        ("XDG_RUNTIME_DIR", &[]),
+    ];
+    for (needle, expected) in pins {
+        let mut found = count_in(&files, needle);
+        found.sort();
+        let expected: Vec<(String, usize)> = expected
+            .iter()
+            .map(|(name, n)| (name.to_string(), *n))
+            .collect();
+        assert_eq!(found, expected, "{needle}");
+    }
+}
+
+#[test]
+fn p2_g_03_the_development_toolchain_is_never_production() {
+    let toolchain = include_str!("../../../crates/nexus-verifier-sandbox/src/toolchain.rs");
+    let at = toolchain
+        .find("pub fn development(")
+        .expect("development constructor");
+    let before = &toolchain[..at];
+    let attribute = before
+        .rfind("#[cfg(feature = \"development-toolchain\")]")
+        .unwrap();
+    assert!(
+        !before[attribute..].contains("pub fn "),
+        "the development constructor is compiled only with its feature"
+    );
+    // Only the sandbox crate names the feature; nothing enables it.
+    let mut manifests = Vec::new();
+    let mut pending = vec![repo()];
+    while let Some(dir) = pending.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !matches!(
+                    name.as_str(),
+                    "target" | "node_modules" | ".git" | ".claude" | "verifier-toolchain"
+                ) && !name.starts_with('.')
+                {
+                    pending.push(path);
+                }
+            } else if name == "Cargo.toml" {
+                manifests.push(path);
+            }
+        }
+    }
+    assert!(manifests.len() > 10, "workspace manifests not found");
+    for manifest in manifests {
+        let text = std::fs::read_to_string(&manifest).unwrap();
+        if text.contains("development-toolchain") {
+            assert!(
+                manifest.ends_with("crates/nexus-verifier-sandbox/Cargo.toml"),
+                "{} names the development toolchain",
+                manifest.display()
+            );
+        }
+    }
+    let app = include_str!("../Cargo.toml");
+    let line = app
+        .lines()
+        .find(|line| line.starts_with("nexus-verifier-sandbox"))
+        .expect("the desktop's sandbox dependency");
+    assert!(!line.contains("features"), "{line}");
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn p2_g_04_the_profile_and_policies_are_pinned() {
+    use nexus_verifier_sandbox::policy::{ResourcePolicy, SandboxPolicy};
+    use nexus_verifier_sandbox::profile::VerifierProfileId;
+    let names: Vec<&str> = VerifierProfileId::PRODUCTION
+        .iter()
+        .map(|id| id.name())
+        .collect();
+    assert_eq!(names, ["rust.cargo-test.offline.v1"]);
+    let profile = VerifierProfileId::PRODUCTION[0].profile();
+    assert_eq!(
+        (profile.argv0, profile.args),
+        (
+            "cargo",
+            &[
+                "test",
+                "--offline",
+                "--locked",
+                "--no-fail-fast",
+                "--lib",
+                "--tests"
+            ][..]
+        )
+    );
+    assert!(profile.env.iter().all(|var| var.key != "PATH"));
+    for (what, actual, pinned) in [
+        ("profile", hex::encode(profile.hash().bytes()), PROFILE_PIN),
+        (
+            "sandbox policy",
+            hex::encode(SandboxPolicy::V1.hash().bytes()),
+            SANDBOX_POLICY_PIN,
+        ),
+        (
+            "resource policy",
+            hex::encode(ResourcePolicy::RUST_OFFLINE_V1.hash().bytes()),
+            RESOURCE_POLICY_PIN,
+        ),
+    ] {
+        assert_eq!(
+            actual, pinned,
+            "the {what} changed: review it, then update the pin"
+        );
+    }
+}
+
+// Reviewed Phase Two identities (P2I).
+const PROFILE_PIN: &str = "3b1726e81a65a3e3b2159fc500a98f77b688d639dfc2a5f2d2685f6b0aa24848";
+const SANDBOX_POLICY_PIN: &str = "ce975e476e999e426253cfef71c50cd0e96ce1a0c7a4e88ab2fdd56a78342f7b";
+const RESOURCE_POLICY_PIN: &str =
+    "eeff12c6e175461ef424620187db7c1282605f2ae636e30fa304315db750d9fe";
+
+#[test]
+fn p2_g_05_verification_commands_are_registered_granted_and_nothing_else() {
+    let lib = include_str!("lib.rs");
+    let manifest = include_str!("webview_boundary/app_commands.rs");
+    let capability = include_str!("../capabilities/app-commands.json");
+    for command in [
+        "coding_verification_profiles",
+        "coding_start_verification",
+        "coding_retry_verification_cleanup",
+    ] {
+        assert_eq!(
+            lib.matches(&format!("fn {command}(")).count(),
+            1,
+            "{command}"
+        );
+        assert!(
+            lib.contains(&format!("                {command},")),
+            "{command}"
+        );
+        assert!(manifest.contains(&format!("\"{command}\"")), "{command}");
+        let permission = format!("\"allow-{}\"", command.replace('_', "-"));
+        assert!(capability.contains(&permission), "{permission}");
+    }
+    // No other command names verification or the sandbox.
+    let registered: Vec<&str> = manifest
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix('"')?.strip_suffix("\","))
+        .filter(|name| name.contains("verification") || name.contains("sandbox"))
+        .collect();
+    assert_eq!(
+        registered,
+        [
+            "coding_retry_verification_cleanup",
+            "coding_start_verification",
+            "coding_verification_profiles"
+        ]
+    );
+}

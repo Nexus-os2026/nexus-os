@@ -41,8 +41,12 @@ grant, for example:
   support profile ("PHASE ONE COMPLETE — LINUX SUPPORT PROFILE", declared by
   the project Architect on 2026-09-30 for commit
   `14270a9a38770ac84456c1f812042d2967edec42`). See
-  [Governed coding (Phase One)](#governed-coding-phase-one) below. Phase Two
-  has not started.
+  [Governed coding (Phase One)](#governed-coding-phase-one) below.
+- Phase Two, governed verification execution for the Linux support profile,
+  is in progress: an implementation candidate on
+  `implement/phase2-governed-verification` under Architect review. It is not
+  integrated or complete and makes no claim yet; see
+  [Governed verification (Phase Two, in progress)](#governed-verification-phase-two-in-progress).
 - That checkpoint stays frozen on `rebuild/phase1-governed-coding`. Its
   completion evidence is the `evidence/phase1-closure` branch at
   `c237937189b5977eaad01acad6a4c52bcce796cc`. Later commits do not redefine
@@ -64,6 +68,22 @@ grant, for example:
   and, for Phase One, the completion record on the `evidence/phase1-closure`
   branch. They are internal engineering evidence, not an external audit or a
   certification.
+
+## Governed verification (Phase Two, in progress)
+
+The candidate's design record is
+[docs/security/phase2-governed-verification.md](docs/security/phase2-governed-verification.md),
+with its authority inventory and non-claims. In short: project test code runs
+only in a dedicated trusted helper's sandbox (new user, PID, network, IPC,
+UTS and cgroup namespaces; strict Landlock at ABI ≥ 6; a seccomp allow-list;
+no network; a backend-owned cgroup v2 scope with memory, swap, process, CPU
+and wall limits; sealed descriptors and environment), from a verified
+materialized candidate and a verified packaged toolchain, after the owner's
+native approval of that exact launch. The result is advisory and bound into
+the owner's review. If any required layer is missing, verification is
+unavailable; there is no fallback. It does not claim a private mount view,
+metadata confidentiality, a private `/proc`, or protection against kernel
+vulnerabilities, root, or malicious same-uid processes.
 
 ## Security model (as far as Phase Zero establishes it)
 
@@ -140,8 +160,8 @@ Not claimed for governed coding:
 
 ### Hardening since the Phase One checkpoint
 
-These changes follow the frozen Phase One checkpoint. They do not redefine
-it, and Phase Two has not started.
+These changes follow the frozen Phase One checkpoint and precede the Phase
+Two mission. They do not redefine the checkpoint.
 
 - **Run read grant revoked when no longer needed.** A run revokes its
   read-only project grant as soon as it no longer needs project read

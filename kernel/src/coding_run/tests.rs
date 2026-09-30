@@ -887,8 +887,11 @@ fn p1a_nc_29_no_project_owner_bytes_change() {
 fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
     // Phase One P1-08: the governed coding flow (`coding_flow.rs`) is the one
     // desktop module that reaches the primitive; every other desktop source,
-    // including the command registry in lib.rs, must not.
+    // including the command registry in lib.rs, must not. Phase Two: its
+    // verification submodule, included only from `coding_flow.rs`, is part
+    // of the same flow.
     const GOVERNED_FLOW: &str = "coding_flow.rs";
+    const GOVERNED_VERIFICATION: &str = "coding_flow/verification.rs";
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../app/src-tauri/src");
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         for entry in std::fs::read_dir(dir).unwrap() {
@@ -920,7 +923,7 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
         "the governed coding flow must exist"
     );
     for path in sources {
-        if path.ends_with(GOVERNED_FLOW) {
+        if path.ends_with(GOVERNED_FLOW) || path.ends_with(GOVERNED_VERIFICATION) {
             continue;
         }
         let text = std::fs::read_to_string(&path).unwrap();

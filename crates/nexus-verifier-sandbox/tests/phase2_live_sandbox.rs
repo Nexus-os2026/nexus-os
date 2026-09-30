@@ -62,6 +62,7 @@ mod live {
             Some("--probe-daemon") => probe::daemon(&args[2..]),
             Some("--ablation") => ablation::run(&args[2..]),
             Some("--deny-unshare-driver") => drivers::deny_unshare(&args[2..]),
+            Some("--deny-layer-driver") => drivers::deny_layer(&args[2..]),
             Some("--parent-death-driver") => drivers::parent_death(&args[2..]),
             _ => suite(),
         }
@@ -479,12 +480,20 @@ mod live {
             "p2c_live_malformed_launch_runs_nothing",
             cases::malformed_launch,
         );
+        run_case(
+            "p2i_live_unavailable_landlock_fails_closed",
+            cases::unavailable_landlock,
+        );
+        run_case(
+            "p2i_live_failed_seccomp_install_runs_nothing",
+            cases::failed_seccomp_install,
+        );
         run_case("p2d_live_missing_scope_fails_closed", p2d::missing_scope);
         run_case(
             "p2f_live_packaged_toolchain_verifies",
             p2f::packaged_toolchain,
         );
-        let mut passed = 8;
+        let mut passed = 10;
         match p2d::ScopeManager::connect() {
             Err(error) => {
                 assert!(
@@ -1250,6 +1259,11 @@ const ABSTRACT: &str = {abstract_name:?};
             std::env::remove_var("NEXUS_P2C_PARENT_SECRET");
             drop(leaked);
             assert_eq!(
+                fs::read(fixture.outside.join("sentinel.txt")).unwrap(),
+                b"P2C-SENTINEL\n",
+                "the host sentinel is unchanged"
+            );
+            assert_eq!(
                 outcome,
                 Outcome::Finished(VerifierStatus::Exited(0)),
                 "{stdout}\n{stderr}"
@@ -1257,6 +1271,7 @@ const ABSTRACT: &str = {abstract_name:?};
             let checks = parse(&stdout);
             let denied_any = [
                 "read_sentinel",
+                "write_sentinel",
                 "write_outside",
                 "list_real_home",
                 "list_nexus_dir",
@@ -1523,6 +1538,29 @@ const ABSTRACT: &str = {abstract_name:?};
             );
         }
 
+        fn denied_layer(layer: &str) {
+            let fixture = Fixture::new(&format!("deny-{layer}"));
+            let status = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--deny-layer-driver",
+                    layer,
+                    &fixture.root.display().to_string(),
+                ])
+                .status()
+                .unwrap();
+            assert!(status.success(), "a host without {layer} must fail closed");
+        }
+
+        /// A kernel without Landlock (its system calls fail with ENOSYS).
+        pub fn unavailable_landlock() {
+            denied_layer("landlock");
+        }
+
+        /// seccomp installation that fails (EPERM).
+        pub fn failed_seccomp_install() {
+            denied_layer("seccomp");
+        }
+
         pub fn malformed_launch() {
             let fixture = Fixture::new("malformed");
             let listeners = Listeners::start(&fixture.outside);
@@ -1597,6 +1635,53 @@ const ABSTRACT: &str = {abstract_name:?};
                 }) if errno == libc::EPERM => {}
                 Launched::Refused(other) => panic!("expected an Unshare refusal, got {other:?}"),
                 Launched::Ran { .. } => panic!("the helper ran without namespaces"),
+            }
+            assert!(fs::read_dir(root.join("scratch").join("target"))
+                .unwrap()
+                .next()
+                .is_none());
+        }
+
+        /// Run the real helper while a layer cannot be established: the
+        /// driver's own seccomp filter (inherited by the helper) makes the
+        /// layer's system calls fail. The launch must stop at that layer's
+        /// setup stage and nothing may run.
+        pub fn deny_layer(args: &[String]) {
+            let (syscalls, errno, stage): (Vec<libc::c_long>, i32, SetupStage) =
+                match args[0].as_str() {
+                    "landlock" => (
+                        vec![
+                            libc::SYS_landlock_create_ruleset,
+                            libc::SYS_landlock_add_rule,
+                            libc::SYS_landlock_restrict_self,
+                        ],
+                        libc::ENOSYS,
+                        SetupStage::Landlock,
+                    ),
+                    "seccomp" => (vec![libc::SYS_seccomp], libc::EPERM, SetupStage::Seccomp),
+                    other => panic!("unknown layer {other}"),
+                };
+            let root = PathBuf::from(&args[1]);
+            let filter = SeccompFilter::new(
+                syscalls.into_iter().map(|nr| (nr, vec![])).collect(),
+                SeccompAction::Allow,
+                SeccompAction::Errno(errno as u32),
+                TargetArch::x86_64,
+            )
+            .unwrap();
+            let program: BpfProgram = filter.try_into().unwrap();
+            seccompiler::apply_filter(&program).unwrap();
+            let fixture = Fixture::at(&root);
+            let listeners = Listeners::start(&fixture.outside);
+            let spec = fixture.spec(
+                7,
+                probe_argv(&fixture, &listeners, "nolayer", &["only=noop".into()]),
+            );
+            match launch(spec) {
+                Launched::Refused(LaunchError::SetupFailed { stage: failed, .. })
+                    if failed == stage => {}
+                Launched::Refused(other) => panic!("expected a {stage:?} refusal, got {other:?}"),
+                Launched::Ran { .. } => panic!("the helper ran without {}", args[0]),
             }
             assert!(fs::read_dir(root.join("scratch").join("target"))
                 .unwrap()
@@ -1947,6 +2032,13 @@ const ABSTRACT: &str = {abstract_name:?};
             let path = |key: &str| PathBuf::from(&c[key]);
             let outside = path("outside");
             report("read_sentinel", fs::read(path("sentinel")).map(drop));
+            report(
+                "write_sentinel",
+                fs::OpenOptions::new()
+                    .append(true)
+                    .open(path("sentinel"))
+                    .map(drop),
+            );
             report("write_outside", fs::write(outside.join("written"), b"x"));
             report("list_real_home", fs::read_dir(path("real_home")).map(drop));
             report("list_nexus_dir", fs::read_dir(path("nexus_dir")).map(drop));
