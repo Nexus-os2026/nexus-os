@@ -79,9 +79,14 @@ Forbidden unless explicitly authorized:
 
 Use the mission's branch/worktree.
 Do not modify `main`.
-Do not modify `rebuild/phase0-trust-boundary` except in an explicit integration mission.
+Do not change the frozen or evidence refs (`rebuild/phase0-trust-boundary`, `evidence/phase0-closure`, `rebuild/phase1-governed-coding`, `evidence/phase1-closure`) except under an explicit Architect integration or evidence mission.
 Use `--ff-only` for authoritative integration when instructed.
 Do not merge validation PRs unless explicitly authorized.
+
+Provenance:
+- use the remote and ref the mission names, explicitly, for every fetch, push and comparison;
+- never assume a bare `git push` or `git pull`, or a branch's configured upstream, targets the authoritative remote (`origin` may be a stale mirror);
+- Phase Two work uses the `github` remote unless a later Architect mission says otherwise.
 
 ## Autonomous loop
 Inside an approved implementation mission:
@@ -142,7 +147,7 @@ Do not hold authority/catalog/process/lifecycle locks across audit callbacks, pr
 Prefer:
 snapshot/reserve → unlock → native operation → generation/identity re-check → bounded state transition → unlock → completion → audit.
 
-Audit must not expose secrets, private principals, grants, execution IDs, sensitive roots, environment credentials, or caller-forged authority.
+Audit must not expose secrets, raw or environment credentials, authority-bearing capability material (anything that authorizes by itself, such as an approval, a key or a token), unnecessary sensitive filesystem roots, or caller-forged authority. Opaque identifiers (run, agent and execution ids, and revoked or otherwise non-authoritative grant ids) may be recorded where audit correlation requires them, provided the identifier by itself grants no authority.
 
 ## Reporting
 Use the exact report structure required by the mission.

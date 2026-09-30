@@ -79,6 +79,14 @@ pub(crate) enum Closure {
     /// toggled Warden review in the saved configuration. A string is not
     /// that authority, and no governed simulation mechanism exists.
     SimulationReplay,
+    // P2-ENTRY-H1: residual closed before Phase Two authority work.
+    /// Time Machine undo, redo and undo-to-checkpoint: replaying a recorded
+    /// checkpoint restored an agent's fuel and memories, set its state
+    /// (forced across illegal lifecycle transitions when the lifecycle
+    /// refused), or toggled Warden review, with no owner approval. A recorded
+    /// checkpoint is not that authority, and no governed replay mechanism
+    /// exists.
+    CheckpointReplay,
 }
 
 impl Closure {
@@ -127,6 +135,11 @@ impl Closure {
             // Phase One charter §12.
             Self::SimulationReplay => {
                 "time-machine what-if is unavailable: a caller-chosen key and value is not authority over agent fuel, agent state or Warden review"
+            }
+
+            // P2-ENTRY-H1.
+            Self::CheckpointReplay => {
+                "time-machine undo and redo are unavailable: a recorded checkpoint is not authority over agent state, fuel, memories or configuration"
             }
         }
     }

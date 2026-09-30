@@ -25,6 +25,11 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     // Phase One charter §12: caller strings set fuel, agent state or Warden
     // review.
     ("time_machine_what_if", Closure::SimulationReplay),
+    // P2-ENTRY-H1: replaying a recorded checkpoint restored agent fuel,
+    // memories, state (forced across illegal transitions) or Warden review.
+    ("time_machine_undo", Closure::CheckpointReplay),
+    ("time_machine_redo", Closure::CheckpointReplay),
+    ("time_machine_undo_checkpoint", Closure::CheckpointReplay),
     // E1: a raw user-selected path is not authority.
     ("file_manager_list", Closure::FileSelection),
     ("file_manager_read", Closure::FileSelection),
@@ -390,6 +395,7 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             builder_theme_extract_from_url, nexus_link_send_model, is_ollama_installed,
             builder_deploy_store_credentials, builder_backend_connect, email_start_oauth,
             integration_start_oauth, self_rewrite_apply_patch, time_machine_what_if,
+            time_machine_undo, time_machine_redo, time_machine_undo_checkpoint,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
@@ -1013,7 +1019,7 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
         "OS keyboard and mouse input chosen by the interface or a model",
     ),
     // P0-002C5B: file replay needs a live workspace grant, and the desktop
-    // holds none for Time Machine, so it replays agent state and config only.
+    // holds none for Time Machine, so it replayed agent state and config only.
     (
         "FileAuthority::new(",
         "Time Machine file replay authority (no desktop grant binding)",
@@ -1023,6 +1029,29 @@ const LATENT_UNSAFE_APIS: &[(&str, &str)] = &[
     (
         "undo_checkpoint_with(",
         "Time Machine file replay (C5B: latent)",
+    ),
+    // P2-ENTRY-H1: undo, redo and undo-to-checkpoint are closed commands, and
+    // the agent-state, fuel, memory and configuration replay is removed. The
+    // forced lifecycle transition belongs to the kernel safety halt alone.
+    (
+        ".undo()",
+        "Time Machine checkpoint replay (P2-ENTRY-H1: closed)",
+    ),
+    (
+        ".redo()",
+        "Time Machine checkpoint replay (P2-ENTRY-H1: closed)",
+    ),
+    (
+        ".undo_checkpoint(",
+        "Time Machine checkpoint replay (P2-ENTRY-H1: closed)",
+    ),
+    (
+        "UndoAction",
+        "Time Machine replay of agent state, fuel, memories or configuration (P2-ENTRY-H1: closed)",
+    ),
+    (
+        "force_transition_agent_state",
+        "a lifecycle transition forced past the state machine (kernel safety halt only)",
     ),
     (
         "with_default_path()",
@@ -1534,6 +1563,41 @@ fn browser_bridge_is_never_started() {
     for source in [session, commands] {
         assert!(!source.contains(".start("), "browser bridge start");
     }
+}
+
+/// P2-ENTRY-H1: `Supervisor::force_transition_agent_state` sets an agent's
+/// state past the lifecycle state machine. Its only production callers are
+/// the kernel safety halt's two fallbacks, which crush a runaway agent to
+/// `Stopping` or `Stopped`; no Time Machine, desktop or other workspace path
+/// reaches it. (`LATENT_UNSAFE_APIS` also bars it from the desktop.)
+#[test]
+fn p2e_h1_only_the_safety_halt_forces_an_agent_state() {
+    let mut sites = Vec::new();
+    for (path, text) in workspace_production_sources() {
+        for (at, _) in text.match_indices("force_transition_agent_state") {
+            let context: String = text[at..].chars().take(240).collect();
+            sites.push((path.clone(), context));
+        }
+    }
+    assert!(
+        sites
+            .iter()
+            .all(|(path, _)| path == "kernel/src/supervisor.rs"),
+        "{sites:#?}"
+    );
+    // The definition, and two calls that both carry the safety-halt reason.
+    assert_eq!(sites.len(), 3, "{sites:#?}");
+    let definitions = sites
+        .iter()
+        .filter(|(_, context)| {
+            without_whitespace(context).starts_with("force_transition_agent_state(&mutself,")
+        })
+        .count();
+    let halts = sites
+        .iter()
+        .filter(|(_, context)| context.contains("\"safety-halt-forced\""))
+        .count();
+    assert_eq!((definitions, halts), (1, 2), "{sites:#?}");
 }
 
 // ── P0-002C5B regression guards ─────────────────────────────────────────
@@ -2866,6 +2930,7 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
     let measurement_client = include_str!(
         "../../../../crates/nexus-capability-measurement/src/evaluation/nim_client.rs"
     );
+    let p2_entry = include_str!("../p2_entry_tests.rs");
     let mut pinned = std::collections::HashSet::new();
     for (regression, source, guards) in [
         (
@@ -2875,6 +2940,22 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
                 "closed_commands_stay_registered_take_no_input_and_only_deny",
                 "closed_handlers_return_only_their_bounded_reason",
                 "closure_reasons_are_bounded_and_echo_no_input",
+            ][..],
+        ),
+        // P2-ENTRY-H1: Time Machine checkpoint replay stays closed.
+        (
+            "Time Machine checkpoint replay reopened, or an agent state forced outside the kernel safety halt",
+            own,
+            &["p2e_h1_only_the_safety_halt_forces_an_agent_state"][..],
+        ),
+        (
+            "Time Machine checkpoint replay reopened, or an agent state forced outside the kernel safety halt",
+            p2_entry,
+            &[
+                "p2e_h1_tm_01_replay_commands_take_no_input_and_only_deny",
+                "p2e_h1_tm_02_replay_attempts_change_no_agent_state_fuel_memory_config_or_file",
+                "p2e_h1_tm_03_the_desktop_keeps_no_checkpoint_replay_path",
+                "p2e_h1_tm_04_replay_attempts_leave_the_saved_governance_configuration_unchanged",
             ][..],
         ),
         (

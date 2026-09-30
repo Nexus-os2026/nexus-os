@@ -242,6 +242,10 @@ content and absolute path are never recorded.
   - The desktop constructs no `FileAuthority`. The guard names `FileAuthority::new(`, `.undo_with(`, `.redo_with(` and `undo_checkpoint_with(`.
   - The Conductor no longer records file entries (guarded).
   - No UI command was added.
+- **Update (P2-ENTRY-H1).** `time_machine_undo`, `time_machine_redo` and `time_machine_undo_checkpoint` are now closed commands (`Closure::CheckpointReplay` in `CLOSED_COMMANDS`). They take no input and only deny, so agent-state and config entries no longer replay either.
+  - The desktop applies no replay action and never calls `Supervisor::force_transition_agent_state`. Only the kernel safety halt uses it (`LATENT_UNSAFE_APIS`; `p2e_h1_only_the_safety_halt_forces_an_agent_state`).
+  - Guards: `CLOSED_COMMANDS`; `LATENT_UNSAFE_APIS` (`.undo()`, `.redo()`, `.undo_checkpoint(`, `UndoAction`, `force_transition_agent_state`); `p2e_h1_only_the_safety_halt_forces_an_agent_state`; and `p2e_h1_tm_01`–`p2e_h1_tm_04` (`app/src-tauri/src/p2_entry_tests.rs`), which observe agent state, fuel, memories, the saved governance configuration and an owner file across every replay request. All are pinned in the final trust-surface guard.
+  - Latent, not reachable from the desktop: `Conductor::rollback` still calls `undo_checkpoint` and returns its replay actions without applying them; the desktop constructs no `Conductor` (guarded).
 - **Tests** (`kernel/src/time_machine/tests.rs`, 34):
   - arbitrary absolute paths and `../` cannot undo or redo;
   - an absolute spelling of the recorded file itself, inside the root or through a hard link outside it, is refused;

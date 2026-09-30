@@ -6,7 +6,8 @@
 //! chosen from the models installed in the operator's loopback Ollama. It
 //! never sends a path, a grant or an approval. The backend:
 //! - selects projects through the native folder picker it invokes itself;
-//! - issues a fresh read grant per run and pins the local model;
+//! - issues a fresh read grant per run (the run revokes it as soon as it no
+//!   longer needs project read authority) and pins the local model;
 //! - runs the governed worker and structural verification off the IPC
 //!   thread;
 //! - shows the owner's native confirmation itself before any apply or
@@ -310,10 +311,20 @@ mod linux {
                 }),
             });
             self.runs().insert(id, Arc::clone(&slot));
-            std::thread::Builder::new()
+            let worker = Arc::clone(&slot);
+            if std::thread::Builder::new()
                 .name("nexus-coding-run".to_string())
-                .spawn(move || work(&slot, &endpoint, &model, &task))
-                .map_err(|_| "the coding run could not be started".to_string())?;
+                .spawn(move || work(&worker, &endpoint, &model, &task))
+                .is_err()
+            {
+                // The run never started: end it now, closing its read grant,
+                // instead of leaving it preparing until the grant expires.
+                let mut run = claim(&slot, &["preparing"], "failed")?;
+                let (stage, message) =
+                    end_failed(&mut run, "The coding run could not be started.".to_string());
+                slot.refresh(&run, stage, Some(message));
+                return Err("the coding run could not be started".to_string());
+            }
             Ok(StartView {
                 run_id: id.to_string(),
             })
@@ -445,8 +456,9 @@ mod linux {
     /// Cancel a run that is still live and remove its staging copy, and say
     /// what actually happened. The run is shown as discarded only if
     /// cancellation (when needed) and staging cleanup both succeeded and the
-    /// run is not left requiring recovery. Staging cleanup never touches the
-    /// project grant.
+    /// run is not left requiring recovery. The run's own read grant is closed
+    /// by the time it ends (a failed closure leaves it requiring recovery),
+    /// and the discard retries that closure.
     pub(crate) fn discard_run(run: &mut CodingRun) -> (&'static str, String) {
         let cancel = if run.state().is_terminal() {
             Ok(())

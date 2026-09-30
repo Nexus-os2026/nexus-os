@@ -21,9 +21,9 @@ use super::{
     run_parallel_simulation_reports, search_documents, set_default_agent, start_agent, start_build,
     start_learning, start_research, start_simulation_with_observer, stop_agent,
     stop_computer_action, time_machine_create_checkpoint, time_machine_list_checkpoints,
-    time_machine_redo, time_machine_undo, tracing_end_span, tracing_end_trace, tracing_get_trace,
-    tracing_list_traces, tracing_start_span, tracing_start_trace, voice_get_status,
-    voice_transcribe, AppState, LearningSource,
+    tracing_end_span, tracing_end_trace, tracing_get_trace, tracing_list_traces,
+    tracing_start_span, tracing_start_trace, voice_get_status, voice_transcribe, AppState,
+    LearningSource,
 };
 use nexus_kernel::simulation::SimulationObserver;
 use serde_json::json;
@@ -1920,50 +1920,30 @@ fn test_time_machine_undo_empty() {
 
 #[test]
 fn test_time_machine_create_undo_redo_cycle() {
+    // P2-ENTRY-H1: the undo and redo IPC commands are closed (see the
+    // `p2e_h1_tm_*` guards); the kernel cycle under the desktop's recorded
+    // checkpoint still round-trips it.
     let state = AppState::new_in_memory();
 
     let _ = time_machine_create_checkpoint(&state, "cycle-test".to_string()).unwrap_or_else(|e| {
         eprintln!("operation failed: {e}");
         std::process::exit(1)
     });
+    let mut supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
 
     // Undo
-    let undo_result = time_machine_undo(&state);
-    assert!(undo_result.is_ok());
-    let undo_parsed: serde_json::Value = serde_json::from_str(&undo_result.unwrap_or_else(|e| {
-        eprintln!("JSON parse failed: {e}");
-        std::process::exit(1)
-    }))
-    .unwrap_or_else(|e| {
-        eprintln!("deserialization failed: {e}");
+    let (undone, _) = supervisor.time_machine_mut().undo().unwrap_or_else(|e| {
+        eprintln!("undo failed: {e}");
         std::process::exit(1)
     });
-    assert_eq!(
-        undo_parsed["label"].as_str().unwrap_or_else(|| {
-            eprintln!("expected string value");
-            std::process::exit(1)
-        }),
-        "cycle-test"
-    );
+    assert_eq!(undone.label, "cycle-test");
 
     // Redo
-    let redo_result = time_machine_redo(&state);
-    assert!(redo_result.is_ok());
-    let redo_parsed: serde_json::Value = serde_json::from_str(&redo_result.unwrap_or_else(|e| {
-        eprintln!("JSON parse failed: {e}");
-        std::process::exit(1)
-    }))
-    .unwrap_or_else(|e| {
-        eprintln!("deserialization failed: {e}");
+    let (redone, _) = supervisor.time_machine_mut().redo().unwrap_or_else(|e| {
+        eprintln!("redo failed: {e}");
         std::process::exit(1)
     });
-    assert_eq!(
-        redo_parsed["label"].as_str().unwrap_or_else(|| {
-            eprintln!("expected string value");
-            std::process::exit(1)
-        }),
-        "cycle-test"
-    );
+    assert_eq!(redone.label, "cycle-test");
 }
 
 // ── Voice wiring tests ──────────────────────────────────────────────

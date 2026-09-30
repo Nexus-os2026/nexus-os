@@ -483,9 +483,11 @@ mod outcomes {
             c.run.state(),
             RunState::RecoveryRequired(RecoveryReason::TerminalNotRecorded)
         );
+        // P2-ENTRY-H1: authority closure never depends on the ledger, so the
+        // run's own read grant is revoked even though the record failed.
         assert!(
-            c.authority.resolve(c.project_grant, c.binding).is_ok(),
-            "staging cleanup never revokes the project grant"
+            c.authority.resolve(c.project_grant, c.binding).is_err(),
+            "the run's read grant is revoked when the run ends"
         );
     }
 
@@ -515,7 +517,8 @@ mod outcomes {
             ("discarded", "The run was discarded.")
         );
         assert_eq!(c.run.state(), RunState::Cancelled);
-        assert!(c.authority.resolve(c.project_grant, c.binding).is_ok());
+        // P2-ENTRY-H1: a discarded run leaves no read grant live.
+        assert!(c.authority.resolve(c.project_grant, c.binding).is_err());
         assert_eq!(
             discard_outcome(Ok(()), Ok(CleanupStatus::Discarded), RunState::Cancelled).0,
             "discarded"

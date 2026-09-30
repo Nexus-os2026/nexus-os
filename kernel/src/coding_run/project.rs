@@ -12,7 +12,9 @@
 //! read-only, expiring `UserSelected` workspace grant bound to that run
 //! ([`ProjectRegistry::grant_for_run`]), issued only after the folder still
 //! has the identity it had when it was picked; the run then re-checks that
-//! identity when it opens the folder. A moved or replaced folder fails.
+//! identity when it opens the folder. A moved or replaced folder fails. The
+//! run owns that grant and revokes it as soon as it no longer needs project
+//! read authority; the expiry is only a backstop.
 //!
 //! Registrations live only as long as the process. A [`ProjectId`] can be
 //! displayed and parsed, but it has no serialized form that restores a
@@ -43,7 +45,9 @@ use crate::workspace_authority::{
     WorkspaceAuthorityRegistry, WorkspaceAuthoritySource, WorkspaceBinding, WorkspaceGrantId,
 };
 
-/// How long a run's read grant on its project lives.
+/// The longest a run's read grant on its project can live. The run revokes
+/// the grant as soon as it no longer needs project read authority; this
+/// expiry is only a backstop.
 pub const RUN_GRANT_LIFETIME: Duration = Duration::from_secs(4 * 60 * 60);
 /// How long an apply grant on a project lives.
 pub const APPLY_GRANT_LIFETIME: Duration = Duration::from_secs(120);

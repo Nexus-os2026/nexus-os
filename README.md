@@ -18,8 +18,16 @@ It is not production-ready.
   macOS portability validation remains deferred.
 - This is not a production-readiness declaration.
 - This is not an external certification or audit.
-- The frozen checkpoints are the validated bytes. Later documentation or
-  status commits do not redefine them.
+- The frozen checkpoints are the validated bytes. Later commits on `main` do
+  not redefine them.
+- Phase One's completion evidence is the `evidence/phase1-closure` branch at
+  `c237937189b5977eaad01acad6a4c52bcce796cc`.
+- `main` after Phase One completion is
+  `6f3d64360dd21aa8d717c3995c46e48f396148b9`: the frozen Phase One
+  checkpoint plus status documentation and a generated ACL schema and test
+  hygiene commit. Pre-Phase-Two entry hardening follows it (see
+  [SECURITY.md](SECURITY.md)). None of these redefines the frozen Phase One
+  checkpoint, and Phase Two has not started.
 
 Phase Zero rebuilt the project's trust boundary around one rule: a string is
 never authority. It replaced ambient, caller-asserted and path-based

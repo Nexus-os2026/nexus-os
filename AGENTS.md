@@ -8,7 +8,7 @@
 > This file contains two kinds of information:
 >
 > 1. **PERMANENT ENGINEERING RULES** — durable operating rules for Nexus OS.
-> 2. **CURRENT PROJECT STATE** — a point-in-time Phase 0 snapshot that may change as approved work lands.
+> 2. **CURRENT PROJECT STATE** — a point-in-time snapshot that may change as approved work lands.
 >
 > If the current-state section becomes stale, preserve the permanent rules and re-establish current state from Git, GitHub, approved architecture records, and the latest architect-approved mission.
 
@@ -252,7 +252,7 @@ Work must never:
 
 # 6. Trust-Boundary Constitution
 
-Security-critical Phase 0 work follows these permanent principles.
+Security-critical work in every phase follows these permanent principles.
 
 ## 6.1 Fail Closed
 
@@ -903,427 +903,86 @@ Never use "complete" to mean "I made progress."
 
 # PART II — CURRENT PROJECT STATE
 
-> Snapshot date: 2026-09-22.
+> Snapshot date: 2026-09-30 (P2-ENTRY-H1).
 >
 > This section is operational context, not permanent authorization.
-> Re-verify it before acting.
+> Re-verify it against Git and GitHub before acting. The latest
+> Architect-approved mission supersedes it.
 
-## 21. Project
+# 21. Project and Sources of Truth
 
 Project:
 
 ```text
-Nexus AI OS
+Nexus OS — governed, local-first agentic AI operating environment
 ```
 
-Current reboot focus:
+Authoritative remote:
 
 ```text
-Phase 0 — Trust Boundary
+GitHub: Nexus-os2026/nexus-os
 ```
 
-Local authoritative repository:
-
-```text
-/home/nexus/NEXUS/nexus-os
-```
-
-Remote:
-
-```text
-Nexus-os2026/nexus-os
-```
-
-Authoritative branch:
-
-```text
-rebuild/phase0-trust-boundary
-```
-
-Draft PR:
-
-```text
-#1
-head: rebuild/phase0-trust-boundary
-base: main
-```
-
-Do not merge PR #1 to `main` without explicit authorization.
+- Local clones name their remotes differently, and a clone's `origin` or a branch's configured upstream may point at a stale mirror. Name the remote and ref explicitly for every fetch, push and comparison; never rely on a bare `git push` or `git pull`.
+- No filesystem path is authoritative. Discover worktrees with `git worktree list --porcelain` and choose one by its branch, `HEAD` and tree compared with the refs in §22 and §23.
+- A worktree that has a protected branch checked out is not a place to commit.
 
 ---
 
-# 22. Completed Phase 0 Trust Work
+# 22. Phase Status
 
-Completed checkpoints include:
+| Phase | Status | Frozen checkpoint | Evidence |
+|---|---|---|---|
+| Phase Zero — trust-boundary foundation | Complete, Linux support profile (Architect declaration 2026-09-29) | `rebuild/phase0-trust-boundary` = `f727f5c39fab8d5c729a55eb28ad576d3d56ce47` | `evidence/phase0-closure` = `e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1` |
+| Phase One — governed coding workflow | Complete, Linux support profile (Architect declaration 2026-09-30) | `rebuild/phase1-governed-coding` = `14270a9a38770ac84456c1f812042d2967edec42` | `evidence/phase1-closure` = `c237937189b5977eaad01acad6a4c52bcce796cc` |
+| Phase Two | **Not started** | — | — |
 
-```text
-P0-001
-P0-001B
-P0-002A
-P0-002B
-P0-002C1
-```
-
-Important trust-boundary milestones:
-
-- governed filesystem containment
-- Nexus Code filesystem containment
-- backend Workspace Authority Registry
-- opaque workspace authority handles
-- canonical roots
-- AgentId + run UUID binding
-- narrowing-only grants
-- revocation
-- expiry
-- AppState-owned registry
-- no frontend minting
+- `main` is the public default branch. At this snapshot its base is `6f3d64360dd21aa8d717c3995c46e48f396148b9`: the frozen Phase One checkpoint plus post-completion status documentation and generated ACL schema/test hygiene. Those commits do not redefine the frozen checkpoint. Later Architect-approved commits may advance `main`; verify it with Git.
+- The P1→P2 deep local reality audit is complete and was accepted by the Architect for Phase Two architecture design.
+- Phase Two implementation remains gated on the Architect-required entry hardening and then on an explicit Architect-approved Phase Two mission. Finishing a hardening mission does not start Phase Two.
 
 ---
 
-# 23. P0-002C2 State
-
-P0-002C2 planning is:
+# 23. Protected Refs
 
 ```text
-APPROVED
-FROZEN
-IMPLEMENTATION BLOCKED
+main                              public default branch
+rebuild/phase0-trust-boundary     frozen Phase Zero checkpoint
+evidence/phase0-closure           Phase Zero evidence
+rebuild/phase1-governed-coding    frozen Phase One checkpoint
+evidence/phase1-closure           Phase One evidence
 ```
 
-The approved design is a narrow trusted issuance/binding adapter with Builder fresh-project planning persistence as the first production consumer.
-
-C2 must **not** begin until the Phase 0 CI baseline is green and the Architect explicitly authorizes implementation.
-
-Do not infer authorization from the existence of the plan.
+Frozen and evidence branches must never move. Only an explicit Architect integration or evidence mission can change one of these refs; no other mission, report or agent can authorize it. `main` changes only by an Architect-authorized fast-forward integration.
 
 ---
 
-# 24. Current Authoritative History
+# 24. Supported Validation Profile
 
-Current authoritative history through the latest integrated R5 checkpoint:
-
-```text
-41955580 fix(portability): own cross-platform process termination
-28186157 fix(portability): detect system RAM cross-platform
-a9693f25 fix(portability): resolve Windows identity home natively
-fd41c4ef fix(test): use ephemeral Oracle identity in AppState
-acca797e fix(test): make Codex prompt path assertion portable
-30f83e35 fix(test): align full agent flow workspace fixture
-077a386c fix(trust): add workspace authority registry
-```
-
-Full current R5 SHA:
-
-```text
-4195558088ede5e2a163219b6d05f2ba0b7dbdd2
-```
-
-Re-verify with Git before relying on this snapshot.
+- Linux is the supported validation profile for Phase Zero and Phase One.
+- Windows and macOS portability validation is deferred. Linux success is not Windows or macOS proof, and no Phase Zero or Phase One security claim is made for them.
+- Part I §14 still applies to new code: do not add platform assumptions that would block the deferred portability work.
 
 ---
 
-# 25. Current R5.1 Work
+# 25. Current CI Gate
 
-Current bounded correction worktree:
-
-```text
-/home/nexus/NEXUS/nexus-os-p0-ci-r5-macos
-```
-
-Branch:
+The gate for a candidate is NEXUS OS CI (`.github/workflows/ci.yml`) and NEXUS OS Security Audit (`.github/workflows/audit.yml`), all jobs green on the exact SHA:
 
 ```text
-repair/p0-ci-r5-macos-zombie-group
+NEXUS OS CI:               test-linux, security-audit-linux, test-frontend, test-python
+NEXUS OS Security Audit:   security-audit
 ```
 
-Base:
-
-```text
-4195558088ede5e2a163219b6d05f2ba0b7dbdd2
-```
-
-Current reported modification:
-
-```text
-kernel/src/resource_limiter/unix.rs
-```
-
-Purpose:
-
-Narrowly handle Darwin/macOS `killpg(SIGKILL) -> EPERM` behavior for an exited, unreaped zombie-only process-group leader without converting genuine live-group `EPERM` into success.
-
-Current proposed decision:
-
-```text
-root exit confirmed
-+ identity still owned/unreaped
-+ killpg returns EPERM
-        ↓
-getpgid(owned root PID)
-
-getpgid succeeds
-    → preserve original EPERM as real failure
-
-getpgid fails with non-ESRCH
-    → propagate failure
-
-getpgid fails with ESRCH
-    → narrowly accept Darwin zombie-only condition
-    → do not signal arbitrary PGID again
-    → finalize/reap owned root normally
-```
-
-Linux behavior must remain unchanged.
-
-Windows behavior must remain unchanged.
-
-The current local R5.1 report states:
-
-```text
-kernel lib: PASS
-resource_limiter integration: PASS
-coder-agent: PASS
-fmt: PASS
-clippy: PASS
-diff check: PASS
-Cargo.lock: unchanged
-```
-
-Work must still inspect the actual diff before treating R5.1 as verified.
+- NEXUS OS CI runs on push to `main` and by `workflow_dispatch` with an Architect-approved `candidate_sha`. Security Audit runs on push to `main`, weekly and by dispatch.
+- `test-linux` includes formatting, Clippy, the Rust tests, the live webview boundary harness (dev and release profiles) and the packaged Builder toolchain gate.
+- NEXUS OS Fast Local CI (`.github/workflows/ci-fast-local.yml`) runs on a self-hosted runner for pushes to `implement/**` and `repair/**`. It is pre-integration evidence, not the gate.
+- The deferred portability workflow (`.github/workflows/ci-portability.yml`, macOS and Windows) runs only by dispatch. It is deferred evidence, not a gate.
+- The old five-job Phase Zero baseline (`test-linux`, `test-windows`, `test-macos`, `test-frontend`, `test-python`) is historical. It is not the current gate.
 
 ---
 
-# 26. Current Standard CI Baseline
-
-Latest standard authoritative CI run observed before R5.1 integration:
-
-```text
-NEXUS OS CI
-run #30
-authoritative SHA: 4195558088ede5e2a163219b6d05f2ba0b7dbdd2
-```
-
-Observed jobs:
-
-```text
-test-linux     PASS
-test-python    PASS
-test-windows   FAIL
-test-macos     FAIL
-test-frontend  FAIL
-```
-
-This is not a completed Phase 0 CI baseline.
-
----
-
-# 27. Current Known CI Root-Cause Groups
-
-These are historical evidence only.
-
-Always inspect the newest CI before applying another repair.
-
-## Windows
-
-Known unresolved groups include:
-
-### Governed execution Unix assumptions
-
-Examples:
-
-```text
-actuators::code_exec::tests::executes_bash_code
-
-actuators::shell::tests::command_executed_side_effect
-actuators::shell::tests::echo_hello
-actuators::shell::tests::ls_in_workspace
-actuators::shell::tests::shell_command_splits_compound_command
-actuators::shell::tests::uses_command_new_not_sh
-
-actuators::tests::code_execute_routed_and_runs
-actuators::tests::shell_through_registry
-```
-
-Do not "fix" these by hardcoding GitHub runner locations.
-
-A product-level platform abstraction is required.
-
-### Canonical workspace test assertions
-
-Known examples:
-
-```text
-image_gen::resolves_output_inside_workspace
-tts::resolves_audio_output_inside_workspace
-```
-
-Repair stale path comparisons; preserve containment.
-
-### C1 expiry precision test
-
-Known test:
-
-```text
-p0_002c1_expiry_is_inherited_and_fails_closed_at_deadline
-```
-
-Do not weaken:
-
-```text
-expiry <= now => expired
-```
-
-Use a portable deterministic test interval.
-
-### Later Windows failures exposed by deep diagnostics
-
-Known historical groups:
-
-- Linux-only shell integration fixtures
-- `/bin/cat` Codex mock
-- `.sh` Codex mocks executed directly on Windows
-
-Treat these as separate bounded portability repairs.
-
----
-
-## macOS
-
-Latest standard failure after R5 was:
-
-```text
-coder-agent --test ide_features
-test_safe_command_execution
-```
-
-with:
-
-```text
-tree termination/reap failed:
-Operation not permitted (os error 1)
-```
-
-R5.1 exists specifically to address this without weakening real `EPERM`.
-
-Historical deep-diagnostic macOS issues also included:
-
-- canonical temp-path assertions
-- scheduler-sensitive 100 ms cancellation test
-- Linux-only shell tests
-- nonblocking TCP readiness race
-
-The TCP test previously reproduced approximately:
-
-```text
-2 passed
-8 failed
-```
-
-across 10 repeated attempts.
-
-Fixed sleeps are not acceptable synchronization for the nonblocking transport.
-
----
-
-## Frontend
-
-Known failure:
-
-```text
-AiChatHub Tauri event cleanup
-```
-
-Observed deep-diagnostic evidence:
-
-```text
-100 test files passed
-449 assertions passed
-18 unhandled errors
-Vitest exits 1
-```
-
-Error:
-
-```text
-Cannot read properties of undefined
-(reading 'unregisterListener')
-```
-
-Important findings:
-
-- isolated AiChatHub reproduces it
-- one-worker full suite reproduces it
-- production Vite build passes
-- not test-worker concurrency
-- not another test contaminating AiChatHub
-- event mock/lifecycle boundary is defective
-
-Do not suppress unhandled rejections.
-
-Do not remove cleanup.
-
-Repair the Tauri event test boundary correctly.
-
----
-
-# 28. Current CI Repair Order
-
-Unless fresh evidence changes dependency/order, current intended root-cause sequence is:
-
-```text
-R5.1 — Darwin zombie-process-group correction
-
-R6 — Windows governed shell/code execution portability
-
-R7 — stale/portable fixture repairs
-      - canonical image/TTS paths
-      - C1 expiry precision
-      - genuinely Linux-only shell tests
-      - Codex mock portability
-      - scheduler timing if still present
-
-R8 — macOS nonblocking TCP readiness
-
-R9 — frontend Tauri event-listener test isolation
-```
-
-This ordering is not phase authorization.
-
-It is a repair roadmap inside the current CI-baseline mission.
-
-Fresh evidence may justify reordering bounded repairs.
-
----
-
-# 29. Current CI Success Gate
-
-Phase 0 CI baseline is not green until all five jobs pass on the same authoritative SHA:
-
-```text
-test-linux
-test-windows
-test-macos
-test-frontend
-test-python
-```
-
-After that:
-
-```text
-PHASE ZERO CI BASELINE GREEN
-```
-
-does **not** mean "start C2 automatically."
-
-The next state is:
-
-```text
-READY FOR ARCHITECT REVIEW BEFORE P0-002C2
-```
-
----
-
-# 30. Current Workflow Doctrine
+# 26. Workflow Doctrine
 
 The old manual bridge workflow:
 
@@ -1359,7 +1018,13 @@ Work becomes autonomous **inside** the mission rather than requiring the Owner t
 
 ---
 
-# 31. Final Rule
+# 27. History
+
+Until 2026-09-30 this part held a 2026-09-22 Phase Zero snapshot: the P0-002C2 plan, the R5.1 Darwin process-group work, the R5–R9 CI repair order, the known Windows, macOS and frontend CI root-cause groups, and the five-job CI gate. That material is history. It authorizes nothing and does not describe the current state. It is preserved in Git (`git show 6f3d64360dd21aa8d717c3995c46e48f396148b9:AGENTS.md`, former §§21–29) for the deferred portability work.
+
+---
+
+# 28. Final Rule
 
 When uncertain, prefer:
 

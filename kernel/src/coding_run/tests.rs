@@ -1751,3 +1751,8 @@ mod p1_restore;
 
 #[path = "p1_e2e_tests.rs"]
 mod p1_e2e;
+
+// ── P2-ENTRY-H1: the run's own read grant is revoked eagerly ────────────────
+
+#[path = "p2e_read_grant_tests.rs"]
+mod p2e_read_grant;

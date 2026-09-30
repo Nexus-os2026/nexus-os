@@ -695,13 +695,10 @@ impl CodingRun {
 
     /// Resolve a write grant for this run's project: live, writable, bound
     /// to this run, for this project, and rooted at the directory the run
-    /// retained. Returns a fresh handle on that root.
+    /// retained. Returns a fresh handle on that root. The run's own read
+    /// grant is closed by now and is never used here.
     fn project_root_for_write(&self, grant: &ProjectGrant) -> Result<DirHandle, ApplyError> {
-        let retained = self
-            .project
-            .as_ref()
-            .ok_or(refused(Refusal::WrongProject))?
-            .identity();
+        let retained = self.granted_root.ok_or(refused(Refusal::WrongProject))?;
         if grant.binding != self.binding
             || !std::sync::Arc::ptr_eq(&grant.authority, &self.registry)
             || self.project_id.is_some_and(|id| id != grant.project)

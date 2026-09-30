@@ -722,40 +722,6 @@ pub struct AgentStatusEvent {
     pub fuel_remaining: u64,
 }
 
-/// Best-effort emitter used by crate-internal helpers that do not own a
-/// `tauri::Window` (e.g. time-machine undo/redo). Pulls the current
-/// `AppHandle` from `AppState` and broadcasts `"agent-status-changed"`.
-/// Returns silently when the app handle has not yet been registered or when
-/// the agent id is not a valid UUID.
-pub(crate) fn emit_agent_status_via_app(state: &AppState, agent_id: &str) {
-    let Ok(parsed) = uuid::Uuid::parse_str(agent_id) else {
-        return;
-    };
-    let Some(app) = state.app_handle() else {
-        return;
-    };
-    let status_opt = {
-        let supervisor = match state.supervisor.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        supervisor
-            .health_check()
-            .into_iter()
-            .find(|s| s.id == parsed)
-    };
-    if let Some(status) = status_opt {
-        let _ = app.emit(
-            "agent-status-changed",
-            AgentStatusEvent {
-                agent_id: agent_id.to_string(),
-                status: status.state.to_string(),
-                fuel_remaining: status.remaining_fuel,
-            },
-        );
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuditRow {
     pub event_id: String,
@@ -3210,21 +3176,27 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn time_machine_undo(state: tauri::State<'_, AppState>) -> Result<String, String> {
-        super::time_machine_undo(state.inner())
+    pub(crate) fn time_machine_undo() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "time_machine_undo",
+            crate::phase0_surface::Closure::CheckpointReplay,
+        ))
     }
 
     #[tauri::command]
-    fn time_machine_undo_checkpoint(
-        state: tauri::State<'_, AppState>,
-        id: String,
-    ) -> Result<String, String> {
-        super::time_machine_undo_checkpoint(state.inner(), id)
+    pub(crate) fn time_machine_undo_checkpoint() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "time_machine_undo_checkpoint",
+            crate::phase0_surface::Closure::CheckpointReplay,
+        ))
     }
 
     #[tauri::command]
-    fn time_machine_redo(state: tauri::State<'_, AppState>) -> Result<String, String> {
-        super::time_machine_redo(state.inner())
+    pub(crate) fn time_machine_redo() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "time_machine_redo",
+            crate::phase0_surface::Closure::CheckpointReplay,
+        ))
     }
 
     #[tauri::command]
@@ -8878,3 +8850,7 @@ mod tests;
 #[cfg(test)]
 #[path = "phase1_tests.rs"]
 mod phase1_tests;
+
+#[cfg(test)]
+#[path = "p2_entry_tests.rs"]
+mod p2_entry_tests;

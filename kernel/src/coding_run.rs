@@ -14,6 +14,16 @@
 //! checkpoint issues no `UserSelected` grant, exposes no IPC, runs no process
 //! and never writes to the project.
 //!
+//! P2-ENTRY-H1: a run created for an owner-selected project
+//! ([`CodingRun::create_for_project`]) owns its fresh read grant and revokes
+//! it as soon as it no longer needs project read authority: when structural
+//! verification passes (the worker phase re-checks the project before each
+//! step until then), or at any earlier terminal transition. Closure is
+//! explicit; `Drop` and the grant's expiry are only backstops. The open
+//! project directory handle is kept only for the snapshot copy. A grant the
+//! caller passes to [`CodingRun::create`] stays the caller's and is never
+//! revoked by the run.
+//!
 //! Phase One adds a governed worker ([`run_worker`]): a local model pinned
 //! into the run ([`CodingRun::pin_model`]) proposes typed edits that reach
 //! staging only through [`CodingRun::edit`]. The only model access is the
@@ -183,6 +193,9 @@ pub enum RecoveryReason {
     RejectionNotRecorded,
     /// The staging grant could not be revoked when the run closed.
     StagingRevocationFailed,
+    /// The run's own project read grant could not be revoked when the run
+    /// stopped needing it.
+    ProjectRevocationFailed,
 }
 
 /// Run state. Terminal outcomes are kept as they happened.
@@ -527,6 +540,54 @@ impl Drop for StagingLease {
     }
 }
 
+// Test seam: the run's project read grant cannot be revoked.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static PROJECT_READ_REVOKE_FAILS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+/// Owner of the fresh per-run read grant that
+/// [`ProjectRegistry::grant_for_run`] issued and
+/// [`CodingRun::create_for_project`] moved into the run.
+///
+/// The run needs project read authority only to stage and to re-check its
+/// project during the worker phase. [`ProjectReadLease::close`] revokes the
+/// grant (idempotently) at the end of that phase or at any earlier terminal
+/// transition; `Drop` revokes an unclosed grant as a backstop, and the
+/// grant's expiry is a backstop too. A caller-owned grant has no lease.
+#[derive(Debug)]
+struct ProjectReadLease {
+    registry: Arc<WorkspaceAuthorityRegistry>,
+    binding: WorkspaceBinding,
+    grant: WorkspaceGrantId,
+    closed: bool,
+}
+
+impl ProjectReadLease {
+    /// Revoke the grant, idempotently: revoking a grant that is already
+    /// revoked or expired succeeds. As for the staging grant, closure is
+    /// confirmed only when the registry revoked it; an unavailable registry
+    /// is not proof that the grant is closed. Returns whether it is closed.
+    fn close(&mut self) -> bool {
+        if self.closed {
+            return true;
+        }
+        #[cfg(test)]
+        if PROJECT_READ_REVOKE_FAILS.with(std::cell::Cell::get) {
+            return false;
+        }
+        self.closed = self.registry.revoke(self.grant, self.binding).is_ok();
+        self.closed
+    }
+}
+
+impl Drop for ProjectReadLease {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
 /// One governed coding run.
 pub struct CodingRun {
     id: RunId,
@@ -537,8 +598,15 @@ pub struct CodingRun {
     ledger: Arc<dyn LedgerStore>,
     registry: Arc<WorkspaceAuthorityRegistry>,
     project_grant: WorkspaceGrantId,
+    /// The run's own per-run read grant, until the run stops needing it
+    /// (`None` for a caller-owned grant).
+    project_lease: Option<ProjectReadLease>,
     binding: WorkspaceBinding,
+    /// The project directory, open only for the snapshot copy.
     project: Option<DirHandle>,
+    /// The project directory's identity when the run was granted; apply and
+    /// restore compare their fresh write grant's root against it.
+    granted_root: Option<NodeIdentity>,
     staging: Option<StagingLease>,
     base: Option<Manifest>,
     generation_valid: bool,
@@ -584,13 +652,14 @@ impl CodingRun {
         binding: WorkspaceBinding,
         scopes: RunScopes,
     ) -> Result<Self, RunError> {
-        Self::create_inner(ledger, registry, project_grant, binding, scopes, None)
+        Self::create_inner(ledger, registry, project_grant, binding, scopes, None, None)
     }
 
     /// Create a run over an owner-selected project. The run's grant is the
     /// fresh per-run grant from [`ProjectRegistry::grant_for_run`], and the
     /// folder must still be the directory selected by the owner when the run
-    /// opens it.
+    /// opens it. The run owns that grant: it revokes it once it no longer
+    /// needs to read the project, or at once if it cannot be created.
     pub fn create_for_project(
         ledger: Arc<dyn LedgerStore>,
         project: ProjectGrant,
@@ -603,6 +672,12 @@ impl CodingRun {
             identity,
             authority,
         } = project;
+        let lease = ProjectReadLease {
+            registry: Arc::clone(&authority),
+            binding,
+            grant,
+            closed: false,
+        };
         Self::create_inner(
             ledger,
             authority,
@@ -610,6 +685,7 @@ impl CodingRun {
             binding,
             scopes,
             Some((project, identity)),
+            Some(lease),
         )
     }
 
@@ -620,8 +696,9 @@ impl CodingRun {
         binding: WorkspaceBinding,
         scopes: RunScopes,
         selected: Option<(ProjectId, NodeIdentity)>,
+        project_lease: Option<ProjectReadLease>,
     ) -> Result<Self, RunError> {
-        let run = Self {
+        let mut run = Self {
             id: RunId::generate(),
             state: RunState::Created,
             cleanup: CleanupStatus::NotStarted,
@@ -630,8 +707,10 @@ impl CodingRun {
             ledger,
             registry,
             project_grant,
+            project_lease,
             binding,
             project: None,
+            granted_root: None,
             staging: None,
             base: None,
             generation_valid: true,
@@ -659,8 +738,12 @@ impl CodingRun {
         if let Some(project) = run.project_id {
             facts["project"] = json!(project.to_string());
         }
-        record(run.ledger.as_ref(), run.id.0, EventKind::RunCreated, &facts)
-            .map_err(RunError::Ledger)?;
+        if let Err(error) = record(run.ledger.as_ref(), run.id.0, EventKind::RunCreated, &facts) {
+            // A run whose creation cannot be recorded does not exist, so its
+            // own read grant closes now (`Drop` retries if this fails).
+            run.close_project_read();
+            return Err(RunError::Ledger(error));
+        }
         Ok(run)
     }
 
@@ -734,11 +817,7 @@ impl CodingRun {
         if *grant.permission() == FsPermissionLevel::Deny {
             return Err(RunError::AuthorityDenied);
         }
-        let retained = self
-            .project
-            .as_ref()
-            .ok_or(RunError::AuthorityDenied)?
-            .identity();
+        let retained = self.granted_root.ok_or(RunError::AuthorityDenied)?;
         let fresh =
             DirHandle::open_absolute(grant.root()).map_err(|_| RunError::IdentityChanged)?;
         if fresh.identity() != retained {
@@ -767,28 +846,38 @@ impl CodingRun {
     // ── Terminal transitions ───────────────────────────────────────────
 
     /// Enter a terminal state. Authority closure comes first and never
-    /// depends on the ledger: the staging grant is revoked, and the actual
-    /// resulting state is derived from that outcome (the requested state, or
-    /// `RecoveryRequired(StagingRevocationFailed)` if revocation failed).
-    /// Only then is that actual state recorded, once, so the ledger's final
-    /// state-bearing event agrees with the backend state. If that record
-    /// fails the run fails closed: `TerminalNotRecorded`, unless revocation
-    /// also failed, in which case the more severe `StagingRevocationFailed`
-    /// is kept. Nothing is retried.
+    /// depends on the ledger: the staging grant and the run's own project
+    /// read grant are revoked, and the actual resulting state is derived from
+    /// that outcome (the requested state, or `RecoveryRequired` with
+    /// `StagingRevocationFailed` or `ProjectRevocationFailed` if a revocation
+    /// failed). Only then is that actual state recorded, once, so the
+    /// ledger's final state-bearing event agrees with the backend state. If
+    /// that record fails the run fails closed: `TerminalNotRecorded`, unless
+    /// a revocation also failed, in which case that more severe reason is
+    /// kept. Nothing is retried.
     fn enter_terminal(&mut self, requested: RunState) {
         if terminal_event(requested).is_none() {
             return;
         }
-        let closed = self.staging.as_mut().is_none_or(StagingLease::revoke_grant);
-        let actual = if closed {
-            requested
-        } else {
+        let staging_closed = self.staging.as_mut().is_none_or(StagingLease::revoke_grant);
+        let project_closed = self.close_project_read();
+        let actual = if !staging_closed {
             RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)
+        } else if !project_closed {
+            RunState::RecoveryRequired(RecoveryReason::ProjectRevocationFailed)
+        } else {
+            requested
         };
         let recorded = self.record_state(actual);
         self.state = match (recorded, actual) {
             (true, actual) => actual,
-            (false, RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)) => actual,
+            (
+                false,
+                RunState::RecoveryRequired(
+                    RecoveryReason::StagingRevocationFailed
+                    | RecoveryReason::ProjectRevocationFailed,
+                ),
+            ) => actual,
             (false, _) => RunState::RecoveryRequired(RecoveryReason::TerminalNotRecorded),
         };
         if matches!(
@@ -814,11 +903,13 @@ impl CodingRun {
     }
 
     /// Enter RecoveryRequired even if the ledger cannot record it. The
-    /// staging grant is revoked, and with `discard` the staging generation
-    /// is removed, first and independently of the ledger. The actual reason
-    /// (`StagingRevocationFailed` if the grant could not be revoked, else
-    /// `reason`) is then recorded once, best-effort: the run is already fail
-    /// closed, and a failed record is not retried.
+    /// staging grant and the run's own project read grant are revoked, and
+    /// with `discard` the staging generation is removed, first and
+    /// independently of the ledger. The actual reason
+    /// (`StagingRevocationFailed` or `ProjectRevocationFailed` if a grant
+    /// could not be revoked, else `reason`) is then recorded once,
+    /// best-effort: the run is already fail closed, and a failed record is
+    /// not retried.
     ///
     /// Returns the error matching the resulting state.
     fn force_recovery(&mut self, reason: RecoveryReason, discard: bool) -> RunError {
@@ -828,14 +919,17 @@ impl CodingRun {
         } else if let Some(staging) = self.staging.as_mut() {
             staging.revoke_grant();
         }
-        let actual = if self
+        let project_closed = self.close_project_read();
+        let actual = if !self
             .staging
             .as_ref()
             .is_none_or(StagingLease::authority_closed)
         {
-            reason
-        } else {
             RecoveryReason::StagingRevocationFailed
+        } else if !project_closed {
+            RecoveryReason::ProjectRevocationFailed
+        } else {
+            reason
         };
         self.state = RunState::RecoveryRequired(actual);
         let _ = self.record_state(self.state);
@@ -853,6 +947,17 @@ impl CodingRun {
                 state,
             }),
         }
+    }
+
+    /// Close the run's project read authority: drop the project handle and
+    /// revoke the run's own read grant (idempotently). Returns whether no read
+    /// grant the run owns is still live; a caller-owned grant is never
+    /// revoked here.
+    fn close_project_read(&mut self) -> bool {
+        self.project = None;
+        self.project_lease
+            .as_mut()
+            .is_none_or(ProjectReadLease::close)
     }
 
     /// Close the staging lease (revoke and remove). A fully closed lease is
@@ -952,6 +1057,7 @@ impl CodingRun {
         {
             return Err(self.fail(RunError::IdentityChanged));
         }
+        self.granted_root = Some(project.identity());
         self.project = Some(project);
         let expires_at = grant.expires_at();
         let name = self.id.to_string();
@@ -1060,6 +1166,9 @@ impl CodingRun {
         {
             return Err(self.fail(error));
         }
+        // The copy was the only read through the project handle; later
+        // checks re-open the grant root and compare its identity.
+        self.project = None;
         let hash = manifest.hash();
         self.base = Some(manifest);
         self.state = RunState::Staged;
@@ -1337,13 +1446,19 @@ impl CodingRun {
         )
         .map_err(RunError::Ledger)?;
         if result.passed() {
-            // The verified candidate keeps its bytes but no write authority.
+            // The verified candidate keeps its bytes but no write authority,
+            // and the run no longer needs project read authority: review
+            // needs neither, and apply and restore get their own fresh write
+            // grants.
             let revoked = self
                 .staging
                 .as_mut()
                 .is_some_and(StagingLease::revoke_grant);
             if !revoked {
                 return Err(self.force_recovery(RecoveryReason::StagingRevocationFailed, false));
+            }
+            if !self.close_project_read() {
+                return Err(self.force_recovery(RecoveryReason::ProjectRevocationFailed, false));
             }
             self.verification = Some(result.clone());
             self.state = RunState::StructurallyVerified;
@@ -1625,9 +1740,10 @@ impl CodingRun {
     }
 
     /// Revoke the staging grant and remove the disposable staging directory
-    /// through retained handles. Allowed once the run is terminal; the run
-    /// outcome is unchanged. Idempotent. The cleanup record is best-effort;
-    /// the returned status reflects the cleanup itself.
+    /// through retained handles, and retry closing the run's own project
+    /// read grant if the run's end could not. Allowed once the run is
+    /// terminal; the run outcome is unchanged. Idempotent. The cleanup record
+    /// is best-effort; the returned status reflects the staging cleanup.
     pub fn discard_staging(&mut self) -> Result<CleanupStatus, RunError> {
         if !self.state.is_terminal() {
             return Err(RunError::InvalidState {
@@ -1637,6 +1753,7 @@ impl CodingRun {
         }
         self.generation_valid = false;
         self.verification = None;
+        self.close_project_read();
         self.close_staging();
         let facts = json!({ "status": format!("{:?}", self.cleanup) });
         let _ = record(
@@ -1675,6 +1792,17 @@ impl CodingRun {
     #[cfg(test)]
     pub(crate) fn staging_grant_for_test(&self) -> Option<WorkspaceGrantId> {
         self.staging.as_ref().and_then(|staging| staging.grant)
+    }
+
+    /// The run's own per-run read grant (`None` for a caller-owned grant).
+    #[cfg(test)]
+    pub(crate) fn project_read_grant_for_test(&self) -> Option<WorkspaceGrantId> {
+        self.project_lease.as_ref().map(|lease| lease.grant)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn project_handle_retained_for_test(&self) -> bool {
+        self.project.is_some()
     }
 }
 

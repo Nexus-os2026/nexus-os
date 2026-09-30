@@ -43,6 +43,13 @@ grant, for example:
   `14270a9a38770ac84456c1f812042d2967edec42`). See
   [Governed coding (Phase One)](#governed-coding-phase-one) below. Phase Two
   has not started.
+- That checkpoint stays frozen on `rebuild/phase1-governed-coding`. Its
+  completion evidence is the `evidence/phase1-closure` branch at
+  `c237937189b5977eaad01acad6a4c52bcce796cc`. Later commits do not redefine
+  it: status documentation and the generated ACL schema and test hygiene
+  commit `6f3d64360dd21aa8d717c3995c46e48f396148b9` (`main` after Phase One
+  completion), then the entry hardening described in
+  [Hardening since the Phase One checkpoint](#hardening-since-the-phase-one-checkpoint).
 - Linux is the active validation target for both phases. Windows and macOS
   portability validation is deferred, and no Phase Zero or Phase One
   security claim is made for them.
@@ -130,9 +137,22 @@ Not claimed for governed coding:
   apply or restore needs manual recovery.
 - Coding-run authority does not survive a restart.
 - Governed coding is not supported on Windows or macOS.
-- Deferred hardening: a run's read-only project grant expires after a
-  bounded four hours rather than being revoked when the run completes. It is
-  run-bound and read-only.
+
+### Hardening since the Phase One checkpoint
+
+These changes follow the frozen Phase One checkpoint. They do not redefine
+it, and Phase Two has not started.
+
+- **Run read grant revoked when no longer needed.** A run revokes its
+  read-only project grant as soon as it no longer needs project read
+  authority: when structural verification passes (until then the run
+  re-checks its project before each step), or when the run ends earlier. The
+  bounded four-hour expiry remains only as a backstop. If the revocation
+  fails, the run requires recovery; it is never reported as a clean outcome.
+- **Time Machine replay closed.** Undo, redo and undo-to-checkpoint no longer
+  restore agent state, fuel, memories or Warden review configuration. Like
+  "what if", they only deny, and no Time Machine path can force an agent's
+  state past the lifecycle state machine.
 
 ### Dependencies
 
