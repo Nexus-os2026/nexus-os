@@ -253,18 +253,61 @@ used. The only host runtime files are the eight root-owned files `rustc`,
 
 ## 11. Workspace
 
-Under the user runtime directory derived from the real uid
-(`/run/user/<uid>`; never `$XDG_RUNTIME_DIR` or `$HOME`), validated as an
-absolute canonical, owner-only (0700), uid-owned tmpfs and retained by
-identity. Per execution, exclusively created component by component:
-`input/` (exact candidate, verifier read-only), `target/`, `home/`, `tmp/`,
-`cargo-home/`. Materialization requires the run to be `StructurallyVerified`,
-re-reads the candidate through the retained staging handle (the revoked
-staging grant is not reopened), copies regular files only, rescans the
-destination and requires its manifest hash to equal the exact Phase One
-candidate manifest hash. `input/` is rescanned after execution; a changed hash
-invalidates the result (`CandidateChanged`). Cleanup is identity-bound; an
-unconfirmed deletion is `CleanupFailed`.
+The workspaces directory is derived from the real uid, never from
+`$XDG_RUNTIME_DIR` or `$HOME`: `/run/user/<uid>/nexus-verifier`. It is
+reached from `/` one component at a time without following symlinks; `/run`
+and `/run/user` must be root-owned and writable by no one else,
+`/run/user/<uid>` must be a tmpfs directory owned by the uid with mode 0700,
+and `nexus-verifier` is opened or created owner-only and must be the same
+(owner, mode 0700, same filesystem). It is retained by descriptor.
+
+Per execution a fresh workspace `ws-<128-bit random>/` is created
+exclusively (owner-only) with six areas, each created exclusively and
+retained by descriptor:
+
+| Area | Verifier role (Landlock) | Environment |
+|---|---|---|
+| `input/` | `CandidateInput`: read file, read directory | working directory |
+| `scratch/` | `Scratch`: workspace write, no execute | — |
+| `home/` | `Scratch` | `HOME` |
+| `tmp/` | `Scratch` | `TMPDIR` |
+| `cargo-home/` | `Scratch` | `CARGO_HOME` (empty) |
+| `target/` | `Target`: workspace write and execute | `CARGO_TARGET_DIR` |
+
+The verifier has no rights on the workspace directory itself, so it cannot
+rename or replace an area, and Landlock grants no symlink, FIFO, socket or
+device creation anywhere; seccomp denies every `chmod` variant. Environment
+paths are derived only for the verifier and must resolve, without following
+a symlink, to exactly the retained directories before a launch.
+
+Materialization (`CodingRun::materialize_verification_input`) requires a
+`StructurallyVerified` run whose candidate is not in the owner's project
+(not applied, or rolled back) and an empty `input/`. The staged candidate is
+re-read through the retained staging handle (the revoked staging grant is
+never reopened) and must still hash to the verified candidate manifest;
+otherwise the verification is withdrawn, as for a review. Only the
+candidate's regular files are copied, each through retained handles and
+checked against its manifest entry; the copy is then scanned like staging
+(symlink, special file, hard link, unscoped name or redirect is a violation)
+and its manifest hash must equal the exact Phase One candidate manifest hash.
+Any other failure is `VerificationInput` and leaves the run unchanged: the
+owner can still review and apply it. After execution
+`CodingRun::check_verification_input` rescans `input/`; any difference makes
+the result `CandidateChanged`.
+
+Removal is identity-bound and explicit, through retained descriptors only,
+never following a symlink or entering another filesystem. It removes
+whatever the verifier left: names that are not UTF-8, directories created
+without permissions (made accessible with `fchmodat2(AT_SYMLINK_NOFOLLOW)`),
+hard links and any nesting depth (a subtree at depth 32 is moved up into the
+workspace and removed from there, so open descriptors stay bounded). A
+directory is removed by name only while the name still refers to the
+retained directory, and removal is confirmed through the retained descriptor
+(a removed directory has no links). An unconfirmed removal retains the
+workspace for a retry and is `CleanupFailed`. Not claims: a same-uid process
+racing a rename between the identity check and the removal; workspaces left
+by a crashed backend stay (owner-only, on the session tmpfs) until the
+session ends: there is no startup sweep by name.
 
 ## 12. First profile: `rust.cargo-test.offline.v1`
 

@@ -90,6 +90,12 @@ impl DirHandle {
         Self::from_directory_file(file)
     }
 
+    /// Retain a directory the backend already holds open (a descriptor of a
+    /// backend-created directory), checked like any other handle.
+    pub(crate) fn from_directory_fd(fd: std::os::fd::OwnedFd) -> io::Result<Self> {
+        Self::from_directory_file(File::from(fd))
+    }
+
     fn from_directory_file(file: File) -> io::Result<Self> {
         let metadata = file.metadata()?;
         if !metadata.is_dir() {

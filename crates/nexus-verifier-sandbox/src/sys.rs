@@ -2,7 +2,7 @@
 //! checked. Every `unsafe` block has a stated reason; nothing here decides
 //! policy.
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io;
 use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 
@@ -381,11 +381,12 @@ pub(crate) const FORBIDDEN_FILESYSTEMS: [i64; 12] = [
     0xde5e_81e4, // efivarfs
 ];
 
-/// Whether the directory `dir` refers to lists nothing but `.` and `..`. A
-/// removed directory lists nothing (or reports `ENOENT`), which counts as
-/// empty. The listing uses a new open file description, so the offset of
-/// the retained descriptor is never moved.
-pub(crate) fn directory_is_empty(dir: BorrowedFd<'_>) -> io::Result<bool> {
+/// Entry names of the directory `dir` refers to, without `.` and `..`: at
+/// least one name if any exists, and at most about one 32 KiB listing
+/// buffer of them. A removed directory lists nothing (or reports `ENOENT`),
+/// which is an empty listing. The listing uses a new open file description,
+/// so the offset of the retained descriptor is never moved.
+pub(crate) fn directory_batch(dir: BorrowedFd<'_>) -> io::Result<Vec<CString>> {
     // SAFETY: "." is a NUL-terminated constant; openat returns a new
     // descriptor owned here on success.
     let raw = match check(unsafe {
@@ -396,12 +397,13 @@ pub(crate) fn directory_is_empty(dir: BorrowedFd<'_>) -> io::Result<bool> {
         )
     }) {
         Ok(raw) => raw,
-        Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(true),
+        Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(Vec::new()),
         Err(error) => return Err(error),
     };
     // SAFETY: openat succeeded, so raw is new and owned here.
     let listing = unsafe { OwnedFd::from_raw_fd(raw) };
-    let mut buf = [0u8; 4096];
+    let mut buf = vec![0u8; 32 * 1024];
+    let mut names = Vec::new();
     loop {
         // SAFETY: getdents64 writes at most buf.len() bytes of records.
         let n = unsafe {
@@ -413,9 +415,9 @@ pub(crate) fn directory_is_empty(dir: BorrowedFd<'_>) -> io::Result<bool> {
             )
         };
         let filled = match check_long(n) {
-            Ok(0) => return Ok(true),
+            Ok(0) => return Ok(names),
             Ok(n) => buf.get(..n as usize).ok_or(io::ErrorKind::InvalidData)?,
-            Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(true),
+            Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(names),
             Err(error) => return Err(error),
         };
         // Each record: d_ino (8), d_off (8), d_reclen (2), d_type (1), then
@@ -431,12 +433,123 @@ pub(crate) fn directory_is_empty(dir: BorrowedFd<'_>) -> io::Result<bool> {
                 .ok_or_else(malformed)?;
             let name = &record[19..];
             let name = &name[..name.iter().position(|&b| b == 0).unwrap_or(name.len())];
+            if name.is_empty() {
+                return Err(malformed());
+            }
             if name != b"." && name != b".." {
-                return Ok(false);
+                names.push(CString::new(name).map_err(|_| malformed())?);
             }
             offset += reclen;
         }
+        if !names.is_empty() {
+            return Ok(names);
+        }
     }
+}
+
+/// Whether the directory `dir` refers to lists nothing but `.` and `..` (a
+/// removed directory lists nothing).
+pub(crate) fn directory_is_empty(dir: BorrowedFd<'_>) -> io::Result<bool> {
+    Ok(directory_batch(dir)?.is_empty())
+}
+
+/// Open the directory `name` beneath `dir` for reading, never following a
+/// symlink at `name`.
+pub(crate) fn open_dir_at(dir: BorrowedFd<'_>, name: &CStr) -> io::Result<OwnedFd> {
+    // SAFETY: name is NUL-terminated; openat returns a new descriptor owned
+    // here on success.
+    let raw = check(unsafe {
+        libc::openat(
+            dir.as_raw_fd(),
+            name.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    })?;
+    // SAFETY: openat succeeded, so raw is new and owned here.
+    Ok(unsafe { OwnedFd::from_raw_fd(raw) })
+}
+
+/// Create the directory `name` beneath `dir` with `mode`; fails if any entry
+/// exists at `name`.
+pub(crate) fn mkdir_at(dir: BorrowedFd<'_>, name: &CStr, mode: libc::mode_t) -> io::Result<()> {
+    // SAFETY: name is NUL-terminated.
+    check(unsafe { libc::mkdirat(dir.as_raw_fd(), name.as_ptr(), mode) }).map(|_| ())
+}
+
+/// `lstat` of `name` beneath `dir`.
+pub(crate) fn stat_at(dir: BorrowedFd<'_>, name: &CStr) -> io::Result<libc::stat> {
+    // SAFETY: stat is plain data; fstatat fills it.
+    let mut st: libc::stat = unsafe { std::mem::zeroed() };
+    // SAFETY: name is NUL-terminated; fstatat writes one stat structure.
+    check(unsafe {
+        libc::fstatat(
+            dir.as_raw_fd(),
+            name.as_ptr(),
+            &mut st,
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    })?;
+    Ok(st)
+}
+
+/// Remove the entry `name` beneath `dir` (a directory with `directory`).
+pub(crate) fn unlink_at(dir: BorrowedFd<'_>, name: &CStr, directory: bool) -> io::Result<()> {
+    let flags = if directory { libc::AT_REMOVEDIR } else { 0 };
+    // SAFETY: name is NUL-terminated.
+    check(unsafe { libc::unlinkat(dir.as_raw_fd(), name.as_ptr(), flags) }).map(|_| ())
+}
+
+/// Move `from` beneath `from_dir` to `to` beneath `to_dir`, never replacing
+/// an entry.
+pub(crate) fn rename_noreplace_at(
+    from_dir: BorrowedFd<'_>,
+    from: &CStr,
+    to_dir: BorrowedFd<'_>,
+    to: &CStr,
+) -> io::Result<()> {
+    // SAFETY: both names are NUL-terminated; renameat2 takes no buffers.
+    check_long(unsafe {
+        libc::syscall(
+            libc::SYS_renameat2,
+            from_dir.as_raw_fd(),
+            from.as_ptr(),
+            to_dir.as_raw_fd(),
+            to.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    })
+    .map(|_| ())
+}
+
+/// Set the permission bits of `name` beneath `dir` without following a
+/// symlink (`fchmodat2` with `AT_SYMLINK_NOFOLLOW`; a symlink is refused).
+pub(crate) fn chmod_at_nofollow(
+    dir: BorrowedFd<'_>,
+    name: &CStr,
+    mode: libc::mode_t,
+) -> io::Result<()> {
+    // SAFETY: name is NUL-terminated; fchmodat2 takes no buffers.
+    check_long(unsafe {
+        libc::syscall(
+            libc::SYS_fchmodat2,
+            dir.as_raw_fd(),
+            name.as_ptr(),
+            mode,
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    })
+    .map(|_| ())
+}
+
+/// `bytes` random bytes from the kernel, as lowercase hex.
+pub(crate) fn random_hex(bytes: usize) -> io::Result<String> {
+    let mut buf = vec![0u8; bytes];
+    // SAFETY: getrandom fills at most buf.len() bytes of buf.
+    let n = unsafe { libc::getrandom(buf.as_mut_ptr().cast(), buf.len(), 0) };
+    if n != buf.len() as isize {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(hex::encode(buf))
 }
 
 /// Whether `st` is the root directory of this process's filesystem view.

@@ -494,7 +494,7 @@ mod live {
             }
             Ok(scopes) => {
                 type ScopedCase = (&'static str, fn(&p2d::ScopeManager));
-                let scoped: [ScopedCase; 8] = [
+                let scoped: [ScopedCase; 10] = [
                     (
                         "p2d_live_execution_runs_in_a_verified_scope",
                         p2d::scoped_run_passes,
@@ -517,6 +517,14 @@ mod live {
                     (
                         "p2d_live_unmovable_process_fails_closed",
                         p2d::unmovable_process,
+                    ),
+                    (
+                        "p2e_live_workspace_is_private_and_path_bound",
+                        p2e::workspace_is_private,
+                    ),
+                    (
+                        "p2e_live_workspace_confines_the_verifier",
+                        p2e::workspace_confines,
                     ),
                 ];
                 for (name, case) in scoped {
@@ -743,6 +751,175 @@ mod live {
                 }
             });
             assert!(ScopeManager::connect_at(path.to_str().unwrap()).is_err());
+        }
+    }
+
+    mod p2e {
+        use super::p2d::{execution, ExitClass, ResourcePolicy, ScopeManager};
+        use super::*;
+        use nexus_verifier_sandbox::workspace::{Area, Workspace, WorkspaceError, WorkspaceRoot};
+        use std::os::unix::fs::MetadataExt;
+
+        fn limits() -> ResourcePolicy {
+            ResourcePolicy {
+                wall_timeout_secs: 60,
+                runtime_backstop_secs: 120,
+                ..ResourcePolicy::RUST_OFFLINE_V1
+            }
+        }
+
+        /// File bytes by relative path, from the backend's view.
+        fn contents(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+            fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
+                for entry in fs::read_dir(dir).unwrap().flatten() {
+                    let path = entry.path();
+                    let kind = fs::symlink_metadata(&path).unwrap().file_type();
+                    if kind.is_dir() {
+                        walk(root, &path, out);
+                    } else {
+                        let bytes = if kind.is_file() {
+                            fs::read(&path).unwrap()
+                        } else {
+                            b"<not a regular file>".to_vec()
+                        };
+                        out.insert(path.strip_prefix(root).unwrap().to_path_buf(), bytes);
+                    }
+                }
+            }
+            let mut out = BTreeMap::new();
+            walk(root, root, &mut out);
+            out
+        }
+
+        pub fn workspace_is_private(_: &ScopeManager) {
+            let root = WorkspaceRoot::derive().unwrap();
+            let ws = Workspace::create(&root).unwrap();
+            // SAFETY: getuid has no preconditions.
+            let uid = unsafe { libc::getuid() };
+            let base = PathBuf::from(format!("/run/user/{uid}/nexus-verifier"));
+            assert_eq!(fs::metadata(&base).unwrap().mode() & 0o7777, 0o700);
+            for area in Area::ALL {
+                let path = ws.env_path(area);
+                assert!(path.starts_with(&base), "{path:?}");
+                let meta = fs::symlink_metadata(&path).unwrap();
+                assert!(meta.is_dir());
+                assert_eq!((meta.uid(), meta.mode() & 0o7777), (uid, 0o700));
+            }
+            ws.verify_paths().unwrap();
+            // A path that no longer names its retained directory is refused,
+            // and the directory now at that name is never removed.
+            let scratch = ws.env_path(Area::Scratch);
+            let moved = scratch.with_file_name("scratch-moved");
+            fs::rename(&scratch, &moved).unwrap();
+            fs::create_dir(&scratch).unwrap();
+            fs::write(scratch.join("sentinel"), b"keep").unwrap();
+            assert!(matches!(
+                ws.verify_paths(),
+                Err(WorkspaceError::PathChanged(Area::Scratch))
+            ));
+            let workspace_dir = scratch.parent().unwrap().to_path_buf();
+            let retained = ws.remove().unwrap_err();
+            assert_eq!(fs::read(scratch.join("sentinel")).unwrap(), b"keep");
+            // Put back, the retained workspace is removed on retry.
+            fs::remove_dir_all(&scratch).unwrap();
+            fs::rename(&moved, &scratch).unwrap();
+            retained.retry().unwrap();
+            assert!(!workspace_dir.exists());
+        }
+
+        pub fn workspace_confines(scopes: &ScopeManager) {
+            let fixture = Fixture::new("workspace");
+            let listeners = Listeners::start(&fixture.outside);
+            let root = WorkspaceRoot::derive().unwrap();
+            let ws = Workspace::create(&root).unwrap();
+            let input = ws.env_path(Area::Input);
+            fs::create_dir(input.join("src")).unwrap();
+            fs::write(input.join("src/lib.rs"), b"pub fn answer() -> u32 { 42 }\n").unwrap();
+            let before = contents(&input);
+            ws.verify_paths().unwrap();
+            let mut rules: Vec<(Role, OwnedFd)> = fixture
+                .rules()
+                .into_iter()
+                .filter(|(role, _)| {
+                    !matches!(role, Role::CandidateInput | Role::Target | Role::Scratch)
+                })
+                .collect();
+            rules.extend(ws.rules().unwrap());
+            let mut extra = vec!["only=workspace".to_string()];
+            for area in Area::ALL {
+                extra.push(format!(
+                    "ws_{}={}",
+                    area.name().replace('-', "_"),
+                    ws.env_path(area).display()
+                ));
+            }
+            let env = vec![
+                format!("HOME={}", ws.env_path(Area::Home).display()).into_bytes(),
+                format!("TMPDIR={}", ws.env_path(Area::Tmp).display()).into_bytes(),
+                format!("CARGO_HOME={}", ws.env_path(Area::CargoHome).display()).into_bytes(),
+                b"LC_ALL=C".to_vec(),
+            ];
+            let spec = LaunchSpec {
+                generation: 20,
+                executable: open_path(&fixture.probe),
+                working_directory: ws.directory(Area::Input).unwrap(),
+                argv: probe_argv(&fixture, &listeners, "workspace", &extra)
+                    .into_iter()
+                    .map(String::into_bytes)
+                    .collect(),
+                env,
+                rules,
+            };
+            let report = execution::run(scopes, &HelperProgram::at(HELPER), spec, &limits());
+            assert_eq!(report.classify(0), ExitClass::Passed, "{report:?}");
+            let checks = parse(&String::from_utf8_lossy(&report.stdout.excerpt));
+            for name in ["ws_input_read", "ws_input_list"] {
+                assert_eq!(
+                    checks.get(name).map(|c| c.0),
+                    Some(true),
+                    "{name}: {checks:?}"
+                );
+            }
+            for name in [
+                "ws_input_write",
+                "ws_input_create",
+                "ws_input_remove",
+                "ws_input_mkdir",
+                "ws_input_rename",
+                "ws_input_link_out",
+                "ws_scratch_symlink",
+                "ws_scratch_fifo",
+            ] {
+                assert_eq!(
+                    checks.get(name).map(|c| c.0),
+                    Some(false),
+                    "{name}: {checks:?}"
+                );
+            }
+            for name in [
+                "ws_scratch_write",
+                "ws_home_write",
+                "ws_tmp_write",
+                "ws_cargo_home_write",
+                "ws_target_write",
+                "ws_left_deep",
+                "ws_left_locked",
+                "ws_left_hidden",
+                "ws_left_odd_name",
+                "ws_left_hard_link",
+                "ws_left_no_mode",
+            ] {
+                assert_eq!(
+                    checks.get(name).map(|c| c.0),
+                    Some(true),
+                    "{name}: {checks:?}"
+                );
+            }
+            // The candidate is exactly as the backend wrote it.
+            assert_eq!(contents(&input), before);
+            let dir = input.parent().unwrap().to_path_buf();
+            ws.remove().unwrap();
+            assert!(!dir.exists(), "everything the verifier left was removed");
         }
     }
 
@@ -1331,6 +1508,87 @@ mod live {
                         block[i] = 1;
                     }
                     println!("check allocated ALLOWED {}", block.len() / (1024 * 1024));
+                    return;
+                }
+                Some("workspace") => {
+                    use std::ffi::OsString;
+                    use std::os::unix::ffi::OsStringExt;
+                    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+                    let input = PathBuf::from(&c["ws_input"]);
+                    let scratch = PathBuf::from(&c["ws_scratch"]);
+                    let lib = input.join("src/lib.rs");
+                    report("ws_input_read", fs::read(&lib).map(|_| ()));
+                    report("ws_input_list", fs::read_dir(&input).map(|_| ()));
+                    report(
+                        "ws_input_write",
+                        fs::OpenOptions::new().write(true).open(&lib).map(|_| ()),
+                    );
+                    report("ws_input_create", fs::write(input.join("new.rs"), b"x"));
+                    report("ws_input_remove", fs::remove_file(&lib));
+                    report("ws_input_mkdir", fs::create_dir(input.join("dir")));
+                    report(
+                        "ws_input_rename",
+                        fs::rename(&lib, input.join("src/moved.rs")),
+                    );
+                    report(
+                        "ws_input_link_out",
+                        fs::hard_link(&lib, scratch.join("linked-input.rs")),
+                    );
+                    for area in ["scratch", "home", "tmp", "cargo_home", "target"] {
+                        let dir = PathBuf::from(&c[&format!("ws_{area}")]);
+                        report(
+                            &format!("ws_{area}_write"),
+                            fs::write(dir.join("written"), b"x"),
+                        );
+                    }
+                    report(
+                        "ws_scratch_symlink",
+                        symlink("/etc/hostname", scratch.join("link")),
+                    );
+                    let fifo =
+                        std::ffi::CString::new(scratch.join("fifo").into_os_string().into_vec())
+                            .unwrap();
+                    // SAFETY: a NUL-terminated path.
+                    raw("ws_scratch_fifo", unsafe {
+                        libc::mkfifo(fifo.as_ptr(), 0o600) as libc::c_long
+                    });
+                    // What a verifier can leave behind for the backend.
+                    let mut deep = scratch.join("deep");
+                    for _ in 0..100 {
+                        deep = deep.join("d");
+                    }
+                    report("ws_left_deep", fs::create_dir_all(&deep));
+                    report(
+                        "ws_left_locked",
+                        fs::DirBuilder::new()
+                            .mode(0o000)
+                            .create(scratch.join("locked")),
+                    );
+                    let hidden = scratch.join("hidden");
+                    report(
+                        "ws_left_hidden",
+                        fs::DirBuilder::new()
+                            .mode(0o300)
+                            .create(&hidden)
+                            .and_then(|()| fs::write(hidden.join("file"), b"x")),
+                    );
+                    report(
+                        "ws_left_odd_name",
+                        fs::write(scratch.join(OsString::from_vec(b"\xff\xfe".to_vec())), b"x"),
+                    );
+                    report(
+                        "ws_left_hard_link",
+                        fs::hard_link(scratch.join("written"), scratch.join("written-too")),
+                    );
+                    report(
+                        "ws_left_no_mode",
+                        fs::OpenOptions::new()
+                            .write(true)
+                            .create_new(true)
+                            .mode(0o000)
+                            .open(scratch.join("no-mode"))
+                            .map(|_| ()),
+                    );
                     return;
                 }
                 Some("alloc-child") => {

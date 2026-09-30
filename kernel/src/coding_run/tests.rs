@@ -1761,3 +1761,8 @@ mod p2e_read_grant;
 
 #[path = "p2e_worker_panic_tests.rs"]
 mod p2e_worker_panic;
+
+// ── Phase Two P2E: the verification input ───────────────────────────────────
+
+#[path = "p2e_materialize_tests.rs"]
+mod p2e_materialize;

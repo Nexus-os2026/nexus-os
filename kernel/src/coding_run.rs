@@ -345,6 +345,8 @@ pub enum RunError {
     CandidateChanged,
     #[error("the verified candidate is no longer available")]
     CandidateUnavailable,
+    #[error("the verification input could not be prepared")]
+    VerificationInput,
 }
 
 /// A candidate edit. Content is data; the path is checked against the frozen
@@ -1604,6 +1606,122 @@ impl CodingRun {
         Ok((candidate, bytes))
     }
 
+    // ── Verification input (Phase Two, P2E) ────────────────────────────
+
+    /// Materialize the verified candidate into `input`, the empty input
+    /// directory of a fresh verification workspace, and prove the copy.
+    /// Returns the verified candidate manifest hash the copy matches.
+    ///
+    /// The staged candidate is re-read through the retained staging handle
+    /// (the revoked staging grant is never reopened) and must still hash to
+    /// the verified candidate manifest; otherwise the verification is
+    /// withdrawn, as for a review. Only the candidate's regular files are
+    /// copied, each through retained handles and checked against its
+    /// manifest entry. The copy is then scanned like staging (a symlink,
+    /// special file, hard link, unscoped name or redirect is a violation) and
+    /// must hash to exactly the verified candidate manifest. Any other failure
+    /// is `VerificationInput` and leaves the run as it was: verification is
+    /// advisory and never costs the owner a reviewable candidate.
+    pub fn materialize_verification_input(
+        &mut self,
+        input: std::os::fd::OwnedFd,
+    ) -> Result<ManifestHash, RunError> {
+        let verification = self.unapplied_verification("materialize_verification_input")?;
+        let input = DirHandle::from_directory_fd(input).map_err(|_| RunError::VerificationInput)?;
+        if !input
+            .entries()
+            .map_err(|_| RunError::VerificationInput)?
+            .is_empty()
+        {
+            return Err(RunError::VerificationInput);
+        }
+        let candidate = match self.staged_candidate(&verification) {
+            Ok(candidate) => candidate,
+            Err(error) => return Err(self.withdraw_verification(error)),
+        };
+        for (path, entry) in candidate.entries() {
+            let content = match self.read_staged_file(path, self.profile.max_file_bytes) {
+                Ok(content) if ManifestEntry::of(&content) == *entry => content,
+                _ => return Err(self.withdraw_verification(RunError::CandidateChanged)),
+            };
+            write_input_file(&input, path, &content).map_err(|_| RunError::VerificationInput)?;
+        }
+        input.sync().map_err(|_| RunError::VerificationInput)?;
+        self.input_matches(&input, &verification)
+            .map_err(|_| RunError::VerificationInput)?;
+        Ok(verification.candidate_manifest_hash)
+    }
+
+    /// Rescan a materialized verification input after its verifier ended.
+    /// It must still hash to exactly the verified candidate manifest;
+    /// otherwise (`CandidateChanged`) the execution's result is invalid.
+    pub fn check_verification_input(&self, input: std::os::fd::OwnedFd) -> Result<(), RunError> {
+        let verification = self.unapplied_verification("check_verification_input")?;
+        let input = DirHandle::from_directory_fd(input).map_err(|_| RunError::CandidateChanged)?;
+        self.input_matches(&input, &verification)
+    }
+
+    /// The passing verification of a structurally verified candidate that
+    /// is not in the owner's project.
+    fn unapplied_verification(
+        &self,
+        operation: &'static str,
+    ) -> Result<StructuralVerification, RunError> {
+        self.require(operation, &[RunState::StructurallyVerified])?;
+        if !matches!(
+            self.apply_state,
+            apply::ApplyState::NotApplied | apply::ApplyState::RolledBack
+        ) {
+            return Err(RunError::InvalidState {
+                operation,
+                state: self.state,
+            });
+        }
+        if !self.generation_valid {
+            return Err(RunError::CandidateChanged);
+        }
+        self.verification
+            .clone()
+            .ok_or(RunError::CandidateUnavailable)
+    }
+
+    /// Re-scan the staged candidate: it must still hash to the verified
+    /// candidate manifest with no structural violation.
+    fn staged_candidate(
+        &self,
+        verification: &StructuralVerification,
+    ) -> Result<Manifest, RunError> {
+        let base = self.base.as_ref().ok_or(RunError::CandidateUnavailable)?;
+        let staging = self
+            .staging_handle()
+            .map_err(|_| RunError::CandidateUnavailable)?;
+        let mut changed_text = Vec::new();
+        let (candidate, violations) =
+            structural::scan_staging(staging, &self.profile, &mut changed_text, base);
+        if !violations.is_empty() || candidate.hash() != verification.candidate_manifest_hash {
+            return Err(RunError::CandidateChanged);
+        }
+        Ok(candidate)
+    }
+
+    /// Scan a verification input like staging: no violation, and exactly the
+    /// verified candidate manifest.
+    fn input_matches(
+        &self,
+        input: &DirHandle,
+        verification: &StructuralVerification,
+    ) -> Result<(), RunError> {
+        let base = self.base.as_ref().ok_or(RunError::CandidateUnavailable)?;
+        let mut changed_text = Vec::new();
+        let (copied, violations) =
+            structural::scan_staging(input, &self.profile, &mut changed_text, base);
+        if violations.is_empty() && copied.hash() == verification.candidate_manifest_hash {
+            Ok(())
+        } else {
+            Err(RunError::CandidateChanged)
+        }
+    }
+
     /// The verified candidate is gone or changed: it can never be approved.
     fn withdraw_verification(&mut self, error: RunError) -> RunError {
         self.verification = None;
@@ -2094,6 +2212,22 @@ impl SnapshotCopy {
             _ => Self::reject(SnapshotRejection::Io, parts),
         }
     }
+}
+
+/// Write one candidate file into a verification input, creating its parent
+/// directories one at a time beneath the retained input handle.
+fn write_input_file(input: &DirHandle, path: &RelPath, content: &[u8]) -> Result<(), RunError> {
+    let (parents, name) = path.parent_and_name();
+    let mut owned: Option<DirHandle> = None;
+    for part in parents {
+        let dir = owned.as_ref().unwrap_or(input);
+        owned = Some(ensure_dir(dir, part)?);
+    }
+    owned
+        .as_ref()
+        .unwrap_or(input)
+        .create_snapshot_file(name, content)
+        .map_err(|_| RunError::StagingIo)
 }
 
 /// Open a staging subdirectory, creating it if missing. Anything else at the
