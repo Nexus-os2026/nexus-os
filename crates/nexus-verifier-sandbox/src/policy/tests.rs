@@ -153,6 +153,10 @@ fn p2b_policy_hashes_are_deterministic_and_cover_every_field() {
             ..base
         },
         SandboxPolicy {
+            seccomp: &crate::seccomp_policy::ALLOWED[1..],
+            ..base
+        },
+        SandboxPolicy {
             inherited_fds: "all",
             ..base
         },

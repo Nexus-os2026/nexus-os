@@ -110,10 +110,16 @@ desktop verification driver (long-lived thread; owns the execution)
 - The driver places the helper in a new transient scope (§9) and proves the
   membership from the kernel's view of the retained, unreaped child before
   sending the launch message.
-- The helper validates the typed launch message (bounded sizes, bounded
-  descriptor count, compiled policy hash must match), `unshare`s the six
-  namespaces in one call, reports, and waits while the driver writes
-  `setgroups=deny` and identity `uid_map`/`gid_map` for that exact child.
+- The helper validates the typed launch message (bounded sizes, at most 32
+  descriptors each of the kind its role requires, compiled policy hash must
+  match), `unshare`s the six namespaces in one call, reports, and waits
+  while the driver writes `setgroups=deny` and identity `uid_map`/`gid_map`
+  for that exact child. It then verifies the map, and that its user,
+  network, IPC, UTS and cgroup namespaces changed, by reading (never
+  following) the `/proc/self/ns/*` links: on this host AppArmor's
+  `unprivileged_userns` profile denies access to the namespace files
+  themselves. The init verifies it is PID 1 in a different PID namespace and
+  that its network namespace has only a down loopback.
 - The helper forks the PID-namespace init. Init forks the verifier child,
   which: gives itself `/dev/null` as stdin, applies `no_new_privs`, strict
   Landlock, then seccomp, closes every descriptor except 0–2 and the verified

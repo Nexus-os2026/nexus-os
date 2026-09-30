@@ -12,5 +12,24 @@
 mod hash;
 pub mod policy;
 pub mod profile;
+pub mod protocol;
+pub mod seccomp_policy;
+
+// The sandbox itself exists only on x86_64 Linux: the seccomp program is
+// compiled for that architecture. Everywhere else verification is
+// unavailable.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub mod helper;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub mod landlock_rules;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub mod launcher;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub mod seccomp;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+mod sys;
 
 pub use hash::{ProfileHash, ResourcePolicyHash, SandboxPolicyHash};
+
+/// Whether this build can run the verifier sandbox at all.
+pub const SANDBOX_SUPPORTED_PLATFORM: bool = cfg!(all(target_os = "linux", target_arch = "x86_64"));

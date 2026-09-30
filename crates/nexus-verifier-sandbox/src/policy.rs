@@ -167,6 +167,8 @@ pub struct SandboxPolicy {
     pub environment: &'static str,
     /// stdin is `/dev/null`; stdout and stderr are bounded pipes.
     pub stdio: &'static str,
+    /// The seccomp allow-list installed last, before exec.
+    pub seccomp: &'static [crate::seccomp_policy::Allowed],
 }
 
 impl SandboxPolicy {
@@ -190,6 +192,7 @@ impl SandboxPolicy {
         inherited_fds: "stdio+verified-executable",
         environment: "exact-profile-variables",
         stdio: "stdin-dev-null;stdout-stderr-bounded-pipes",
+        seccomp: crate::seccomp_policy::ALLOWED,
     };
 
     pub fn hash(&self) -> SandboxPolicyHash {
@@ -214,6 +217,7 @@ impl SandboxPolicy {
         put_bytes(&mut hasher, self.inherited_fds.as_bytes());
         put_bytes(&mut hasher, self.environment.as_bytes());
         put_bytes(&mut hasher, self.stdio.as_bytes());
+        crate::seccomp_policy::put_policy(self.seccomp, &mut |part| put_bytes(&mut hasher, part));
         SandboxPolicyHash::finish(hasher)
     }
 }

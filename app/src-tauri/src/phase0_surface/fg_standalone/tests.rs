@@ -48,9 +48,13 @@ enum Disposition {
     Developer,
     /// A benchmark that no recipe ships (coordinator decision D3).
     Benchmark,
+    /// The Phase Two verifier sandbox helper: started only by the desktop
+    /// backend, which gives it its whole launch over a private control
+    /// socket; it reads no arguments or environment.
+    VerifierHelper,
 }
 
-use Disposition::{Benchmark, Desktop, Developer, Withdrawn};
+use Disposition::{Benchmark, Desktop, Developer, VerifierHelper, Withdrawn};
 
 /// Every effective binary target of the workspace: (package directory,
 /// binary name, source path within the package, disposition).
@@ -72,6 +76,12 @@ const BINARY_TARGETS: &[(&str, &str, &str, Disposition)] = &[
         "nexus-desktop-backend",
         "src/main.rs",
         Desktop,
+    ),
+    (
+        "crates/nexus-verifier-sandbox",
+        "nexus-verifier-sandbox",
+        "src/main.rs",
+        VerifierHelper,
     ),
     (
         "benchmarks/conductor-bench",
@@ -520,7 +530,7 @@ fn p0_fg_standalone_every_binary_target_is_inventoried() {
         found, expected,
         "every binary target must be inventoried with a reviewed disposition"
     );
-    assert_eq!(BINARY_TARGETS.len(), 30);
+    assert_eq!(BINARY_TARGETS.len(), 31);
 
     let mut messages = BTreeMap::new();
     for (member, name, path, disposition) in BINARY_TARGETS {
@@ -540,7 +550,7 @@ fn p0_fg_standalone_every_binary_target_is_inventoried() {
                     "{name}: withdrawal messages must be unique"
                 );
             }
-            Desktop | Developer | Benchmark => assert!(
+            Desktop | Developer | Benchmark | VerifierHelper => assert!(
                 message.is_none(),
                 "{member}/{path}: `{name}` is not inventoried as withdrawn"
             ),
