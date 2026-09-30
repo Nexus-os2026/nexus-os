@@ -1720,3 +1720,8 @@ mod p1_worker;
 
 #[path = "p1_project_tests.rs"]
 mod p1_project;
+
+// ── Phase One P1-05: owner review ───────────────────────────────────────────
+
+#[path = "p1_review_tests.rs"]
+mod p1_review;

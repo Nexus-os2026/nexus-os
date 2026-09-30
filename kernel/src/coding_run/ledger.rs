@@ -81,6 +81,8 @@ pub enum EventKind {
     WorkerRead,
     ProposalRejected,
     WorkerFinished,
+    ReviewComputed,
+    CandidateWithdrawn,
 }
 
 impl EventKind {
@@ -103,6 +105,8 @@ impl EventKind {
             Self::WorkerRead => "worker.read",
             Self::ProposalRejected => "worker.proposal_rejected",
             Self::WorkerFinished => "worker.finished",
+            Self::ReviewComputed => "review.computed",
+            Self::CandidateWithdrawn => "review.candidate_withdrawn",
         }
     }
 }

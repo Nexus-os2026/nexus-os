@@ -35,6 +35,7 @@ mod ledger;
 mod local_model;
 mod manifest;
 mod project;
+mod review;
 mod scope;
 mod structural;
 mod worker;
@@ -42,7 +43,7 @@ mod worker;
 #[cfg(test)]
 mod tests;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -66,6 +67,10 @@ pub use manifest::{Manifest, ManifestEntry, ManifestHash};
 pub use project::{
     FolderPicker, ProjectError, ProjectGrant, ProjectId, ProjectInfo, ProjectRegistry,
     APPLY_GRANT_LIFETIME, RUN_GRANT_LIFETIME,
+};
+pub use review::{
+    ChangeKind, DiffOmitted, FileChange, Review, ReviewBinding, TextDiff, MAX_DIFF_BYTES_PER_FILE,
+    MAX_DIFF_BYTES_TOTAL, MAX_DIFF_FILE_BYTES,
 };
 pub use scope::{RelPath, RunScopes, ScopeEntry, ScopeError, ScopeSet};
 pub use structural::{
@@ -241,6 +246,10 @@ pub enum RunError {
     RecoveryRequired(RecoveryReason),
     #[error("staging location unavailable")]
     StagingUnavailable,
+    #[error("the staged candidate no longer matches its verification")]
+    CandidateChanged,
+    #[error("the verified candidate is no longer available")]
+    CandidateUnavailable,
 }
 
 /// A candidate edit. Content is data; the path is checked against the frozen
@@ -510,6 +519,9 @@ pub struct CodingRun {
     /// created from an owner-selected project.
     project_id: Option<ProjectId>,
     expected_root: Option<NodeIdentity>,
+    /// Base bytes of each base file, captured (and hash-checked) from
+    /// staging before its first edit; the old side of the review.
+    base_contents: BTreeMap<RelPath, Vec<u8>>,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -590,6 +602,7 @@ impl CodingRun {
             verification: None,
             project_id: selected.map(|(id, _)| id),
             expected_root: selected.map(|(_, identity)| identity),
+            base_contents: BTreeMap::new(),
         };
         let mut facts = json!({
             "project_grant": project_grant,
@@ -1058,6 +1071,9 @@ impl CodingRun {
             }
             Err(error) => return Err(self.fail(error)),
         }
+        if let Err(error) = self.capture_base(&edit) {
+            return Err(self.fail(error));
+        }
         let facts = json!({
             "path": edit.path().as_string(),
             "kind": edit.kind(),
@@ -1076,6 +1092,27 @@ impl CodingRun {
         }
         self.state = RunState::Candidate;
         Ok(())
+    }
+
+    /// Before a base file is first replaced, keep its staged bytes (which
+    /// must still hash to the base manifest entry) for the review.
+    fn capture_base(&mut self, edit: &CandidateEdit) -> Result<(), RunError> {
+        let CandidateEdit::Replace { path, .. } = edit else {
+            return Ok(());
+        };
+        if self.base_contents.contains_key(path) {
+            return Ok(());
+        }
+        let Some(entry) = self.base.as_ref().and_then(|base| base.get(path)).cloned() else {
+            return Ok(());
+        };
+        match self.read_staged_file(path, self.profile.max_file_bytes) {
+            Ok(bytes) if ManifestEntry::of(&bytes) == entry => {
+                self.base_contents.insert(path.clone(), bytes);
+                Ok(())
+            }
+            _ => Err(RunError::StagingRedirect),
+        }
     }
 
     fn edit_policy_rejection(&self, edit: &CandidateEdit) -> Option<EditRejection> {
@@ -1273,6 +1310,104 @@ impl CodingRun {
         Ok(result)
     }
 
+    // ── Owner review (Phase One) ───────────────────────────────────────
+
+    /// Compute the owner's review of the verified candidate. The staged
+    /// candidate is re-read and must still hash to the verified candidate
+    /// manifest; otherwise the verification is withdrawn and the run can
+    /// never be approved. The review is recorded before it is returned.
+    pub fn review(&mut self) -> Result<Review, RunError> {
+        self.require("review", &[RunState::StructurallyVerified])?;
+        let verification = self
+            .verification
+            .clone()
+            .ok_or(RunError::CandidateUnavailable)?;
+        if !self.generation_valid {
+            return Err(RunError::CandidateChanged);
+        }
+        let (candidate, new_bytes) = match self.verified_candidate(&verification) {
+            Ok(found) => found,
+            Err(error) => return Err(self.withdraw_verification(error)),
+        };
+        let base = self.base.clone().ok_or(RunError::CandidateUnavailable)?;
+        let binding = ReviewBinding {
+            run_id: self.id,
+            base_manifest_hash: verification.base_manifest_hash,
+            candidate_manifest_hash: verification.candidate_manifest_hash,
+            profile_hash: verification.profile_hash,
+        };
+        let review = review::build(
+            binding,
+            base.entries(),
+            candidate.entries(),
+            &self.base_contents,
+            &new_bytes,
+        );
+        let facts = json!({
+            "binding": hex::encode(binding.hash()),
+            "base_manifest": binding.base_manifest_hash.to_hex(),
+            "candidate_manifest": binding.candidate_manifest_hash.to_hex(),
+            "create": review.count(ChangeKind::Create),
+            "replace": review.count(ChangeKind::Replace),
+            "delete": review.count(ChangeKind::Delete),
+        });
+        record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::ReviewComputed,
+            &facts,
+        )
+        .map_err(RunError::Ledger)?;
+        Ok(review)
+    }
+
+    /// Re-read the staged candidate: its manifest must hash to the verified
+    /// candidate hash with no structural violation, and each changed file's
+    /// bytes must match its manifest entry. Returns the manifest and the
+    /// changed files' bytes.
+    fn verified_candidate(
+        &self,
+        verification: &StructuralVerification,
+    ) -> Result<(Manifest, BTreeMap<RelPath, Vec<u8>>), RunError> {
+        let base = self.base.as_ref().ok_or(RunError::CandidateUnavailable)?;
+        let staging = self
+            .staging_handle()
+            .map_err(|_| RunError::CandidateUnavailable)?;
+        let mut changed_text = Vec::new();
+        let (candidate, violations) =
+            structural::scan_staging(staging, &self.profile, &mut changed_text, base);
+        if !violations.is_empty() || candidate.hash() != verification.candidate_manifest_hash {
+            return Err(RunError::CandidateChanged);
+        }
+        let mut bytes = BTreeMap::new();
+        for (path, entry) in candidate.entries() {
+            if base.get(path) == Some(entry) {
+                continue;
+            }
+            let content = self
+                .read_staged_file(path, self.profile.max_file_bytes)
+                .map_err(|_| RunError::CandidateChanged)?;
+            if ManifestEntry::of(&content) != *entry {
+                return Err(RunError::CandidateChanged);
+            }
+            bytes.insert(path.clone(), content);
+        }
+        Ok((candidate, bytes))
+    }
+
+    /// The verified candidate is gone or changed: it can never be approved.
+    fn withdraw_verification(&mut self, error: RunError) -> RunError {
+        self.verification = None;
+        self.generation_valid = false;
+        let _ = record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::CandidateWithdrawn,
+            &json!({ "reason": error.to_string() }),
+        );
+        error
+    }
+
     // ── Worker support (Phase One) ─────────────────────────────────────
 
     /// Bind the run to one local model before any worker runs. Once pinned,
@@ -1458,6 +1593,7 @@ impl CodingRun {
             });
         }
         self.generation_valid = false;
+        self.verification = None;
         self.close_staging();
         let facts = json!({ "status": format!("{:?}", self.cleanup) });
         let _ = record(
