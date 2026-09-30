@@ -1161,3 +1161,254 @@ fn p1a_r1_nc_07_unrecorded_edit_rejection_fails_closed() {
     assert_revoked(&f, staging_grant);
     assert_project_grant_live(&f);
 }
+
+// ── P1A-002-R2: staging-root provenance and identity-bound cleanup ─────────
+
+const FIRST_TERMINAL_AFTER_STAGING: usize = 6;
+
+/// A canonical temporary identity home.
+fn temp_home() -> (tempfile::TempDir, PathBuf) {
+    let tmp = tempfile::tempdir().unwrap();
+    let home = tmp.path().join("home");
+    std::fs::create_dir(&home).unwrap();
+    let home = home.canonicalize().unwrap();
+    (tmp, home)
+}
+
+fn is_real_dir(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_dir())
+}
+
+#[test]
+fn p1a_r2_nc_01_staging_parent_is_derived_from_real_directories() {
+    let (_tmp, home) = temp_home();
+    let parent = StagingParent::derive_for_test(&home).unwrap();
+    assert!(is_real_dir(&home.join(".nexus")));
+    assert!(is_real_dir(&home.join(".nexus/coding-runs")));
+    // Derivation is repeatable over the existing real directories.
+    StagingParent::derive_for_test(&home).unwrap();
+    // The derived parent is usable for a run.
+    let f = fixture();
+    let mut run = new_run(&f);
+    run.grant(&parent).unwrap();
+    let staging = run.staging_path_for_test().unwrap();
+    assert!(staging.starts_with(home.join(".nexus/coding-runs")));
+    assert!(is_real_dir(&staging));
+    drop(run);
+    assert!(!staging.exists());
+}
+
+#[test]
+fn p1a_r2_nc_02_redirected_or_non_canonical_identity_home_is_refused() {
+    let (tmp, home) = temp_home();
+    let link = tmp.path().join("home-link");
+    std::os::unix::fs::symlink(&home, &link).unwrap();
+    assert_eq!(
+        StagingParent::derive_for_test(&link).unwrap_err(),
+        RunError::StagingUnavailable
+    );
+    let dotted = home.join("..").join("home");
+    assert_eq!(
+        StagingParent::derive_for_test(&dotted).unwrap_err(),
+        RunError::StagingUnavailable
+    );
+    assert!(!home.join(".nexus").exists(), "the target was not modified");
+}
+
+#[test]
+fn p1a_r2_nc_03_symlinked_nexus_directory_is_refused() {
+    let (tmp, home) = temp_home();
+    let elsewhere = tmp.path().join("elsewhere");
+    std::fs::create_dir(&elsewhere).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, home.join(".nexus")).unwrap();
+    assert_eq!(
+        StagingParent::derive_for_test(&home).unwrap_err(),
+        RunError::StagingUnavailable
+    );
+    assert!(
+        !elsewhere.join("coding-runs").exists(),
+        "nothing was created through the symlink"
+    );
+}
+
+#[test]
+fn p1a_r2_nc_04_symlinked_coding_runs_directory_is_refused() {
+    let (tmp, home) = temp_home();
+    std::fs::create_dir(home.join(".nexus")).unwrap();
+    let target = tmp.path().join("target");
+    std::fs::create_dir(&target).unwrap();
+    write(&target.join("keep.txt"), "untouched\n");
+    let before = digest(&target);
+    std::os::unix::fs::symlink(&target, home.join(".nexus/coding-runs")).unwrap();
+    assert_eq!(
+        StagingParent::derive_for_test(&home).unwrap_err(),
+        RunError::StagingUnavailable
+    );
+    assert_eq!(digest(&target), before, "the symlink target is untouched");
+}
+
+#[test]
+fn p1a_r2_nc_05_cleanup_never_removes_a_replacement_for_the_staging_root() {
+    let f = fixture();
+    let mut run = staged_run(&f);
+    run.edit(replace("src/lib.rs", "pub fn x() {}\n")).unwrap();
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    let staging = run.staging_path_for_test().unwrap();
+    let moved = staging.with_file_name("moved-original");
+    std::fs::rename(&staging, &moved).unwrap();
+    std::fs::create_dir(&staging).unwrap();
+    run.cancel().unwrap();
+    assert_eq!(run.discard_staging().unwrap(), CleanupStatus::DiscardFailed);
+    assert_eq!(run.cleanup_status(), CleanupStatus::DiscardFailed);
+    assert!(is_real_dir(&staging), "the replacement was not deleted");
+    assert!(
+        is_real_dir(&moved),
+        "the retained original is not reported removed"
+    );
+    assert_revoked(&f, staging_grant);
+    assert_project_grant_live(&f);
+    drop(run);
+    assert!(
+        is_real_dir(&staging),
+        "Drop does not delete the replacement either"
+    );
+    assert_revoked(&f, staging_grant);
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r2_nc_06_recursive_cleanup_never_removes_a_replaced_subdirectory() {
+    let f = fixture();
+    let mut run = staged_run(&f);
+    let staging = run.staging_path_for_test().unwrap();
+    assert!(is_real_dir(&staging.join("docs")));
+    let swapped = std::rc::Rc::new(std::cell::Cell::new(false));
+    let flag = std::rc::Rc::clone(&swapped);
+    fsops::BEFORE_IDENTITY_REMOVAL.with(|hook| {
+        *hook.borrow_mut() = Some(Box::new(move |parent: &Path, name: &str| {
+            if name == "docs" && !flag.get() {
+                flag.set(true);
+                std::fs::rename(parent.join("docs"), parent.join("zz-original-docs")).unwrap();
+                std::fs::create_dir(parent.join("docs")).unwrap();
+            }
+        }));
+    });
+    run.cancel().unwrap();
+    let status = run.discard_staging().unwrap();
+    fsops::BEFORE_IDENTITY_REMOVAL.with(|hook| *hook.borrow_mut() = None);
+    assert!(swapped.get(), "the swap was staged before the removal step");
+    assert_eq!(status, CleanupStatus::DiscardFailed);
+    assert!(
+        is_real_dir(&staging.join("docs")),
+        "the replacement was not deleted"
+    );
+    assert!(is_real_dir(&staging.join("zz-original-docs")));
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r2_nc_07_changed_staging_identity_cleanup_is_truthful() {
+    // Companion to p1a_nc_13: after the identity failure, cleanup must not
+    // remove the replacement or claim success.
+    let f = fixture();
+    let mut run = staged_run(&f);
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    let staging = run.staging_path_for_test().unwrap();
+    let moved = staging.with_file_name("moved-staging");
+    std::fs::rename(&staging, &moved).unwrap();
+    std::fs::create_dir(&staging).unwrap();
+    assert_eq!(
+        run.edit(replace("src/lib.rs", "x\n")),
+        Err(RunError::IdentityChanged)
+    );
+    assert_eq!(run.discard_staging().unwrap(), CleanupStatus::DiscardFailed);
+    assert!(is_real_dir(&staging), "the replacement was not removed");
+    drop(run);
+    assert!(is_real_dir(&staging));
+    assert!(is_real_dir(&moved));
+    assert_revoked(&f, staging_grant);
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r2_nc_08_unrecorded_cancel_is_not_reported_as_success() {
+    let f = fixture();
+    let store = FailingStore::new(&f.ledger, FIRST_TERMINAL_AFTER_STAGING);
+    let mut run = new_run_with(&f, store, default_scopes());
+    run.grant(&parent(&f)).unwrap();
+    run.snapshot().unwrap();
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    assert_eq!(
+        run.cancel(),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::TerminalNotRecorded
+        ))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::TerminalNotRecorded)
+    );
+    assert_revoked(&f, staging_grant);
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r2_nc_09_unrecorded_revoke_is_not_reported_as_success() {
+    let f = fixture();
+    let store = FailingStore::new(&f.ledger, FIRST_TERMINAL_AFTER_STAGING);
+    let mut run = new_run_with(&f, store, default_scopes());
+    run.grant(&parent(&f)).unwrap();
+    run.snapshot().unwrap();
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    assert_eq!(
+        run.revoke(),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::TerminalNotRecorded
+        ))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::TerminalNotRecorded)
+    );
+    assert_revoked(&f, staging_grant);
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r2_nc_10_authority_closure_failure_is_staging_revocation_failed() {
+    let f = fixture();
+    // Through a requested terminal transition.
+    let mut run = staged_run(&f);
+    let real = run.staging_grant_for_test().unwrap();
+    run.substitute_unrevocable_staging_grant_for_test();
+    assert_eq!(
+        run.cancel(),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::StagingRevocationFailed
+        ))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)
+    );
+    f.registry.revoke(real, f.binding).unwrap();
+    // Through force_recovery (an unrecorded edit rejection).
+    let store = FailingStore::new(&f.ledger, FIRST_EDIT_EVENT);
+    let mut run = new_run_with(&f, store, default_scopes());
+    run.grant(&parent(&f)).unwrap();
+    run.snapshot().unwrap();
+    let real = run.staging_grant_for_test().unwrap();
+    run.substitute_unrevocable_staging_grant_for_test();
+    assert_eq!(
+        run.edit(replace("docs/guide.md", "x\n")),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::StagingRevocationFailed
+        ))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)
+    );
+    f.registry.revoke(real, f.binding).unwrap();
+    assert_project_grant_live(&f);
+}

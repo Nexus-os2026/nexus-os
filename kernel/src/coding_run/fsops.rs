@@ -56,6 +56,15 @@ pub(crate) enum EntryKind {
     Missing,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Test hook run just before an identity-bound subdirectory removal
+    /// during recursive cleanup, with the parent's anchor and the entry name.
+    #[allow(clippy::type_complexity)]
+    pub(crate) static BEFORE_IDENTITY_REMOVAL: std::cell::RefCell<Option<Box<dyn FnMut(&Path, &str)>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 /// An open directory with a retained identity.
 #[derive(Debug)]
 pub(crate) struct DirHandle {
@@ -268,7 +277,10 @@ impl DirHandle {
         Ok(names)
     }
 
-    /// Remove every entry beneath this directory without following links.
+    /// Remove every entry beneath this directory without following links. A
+    /// subdirectory is opened, emptied through its own handle, and removed
+    /// only if the name still names that same directory (see
+    /// [`Self::remove_subdir_if_identity`]); the handle stays open until then.
     pub(crate) fn remove_all_entries(&self) -> io::Result<()> {
         for name in self.entries()? {
             let path = self.temp_child(&name);
@@ -280,8 +292,14 @@ impl DirHandle {
                     .open(&path)?;
                 let child = Self::from_directory_file(file)?;
                 child.remove_all_entries()?;
+                #[cfg(test)]
+                BEFORE_IDENTITY_REMOVAL.with(|hook| {
+                    if let Some(hook) = hook.borrow_mut().as_mut() {
+                        hook(&self.anchor(), &name);
+                    }
+                });
+                self.remove_subdir_if_identity(&name, child.identity())?;
                 drop(child);
-                std::fs::remove_dir(&path)?;
             } else {
                 std::fs::remove_file(&path)?;
             }
@@ -289,10 +307,43 @@ impl DirHandle {
         self.sync()
     }
 
-    /// Remove an empty subdirectory by name.
-    pub(crate) fn remove_subdir(&self, name: &str) -> io::Result<()> {
-        std::fs::remove_dir(self.temp_child(name))?;
+    /// Remove the empty subdirectory `name` only if it is still the directory
+    /// with identity `expected`. The entry is classified through this retained
+    /// parent without following it; a missing entry, a symlink, a special file
+    /// or a directory with another device/inode is refused and nothing is
+    /// removed. The parent is fsynced after a removal.
+    ///
+    /// Not a claim: without `unsafe` or a new dependency there is no atomic
+    /// "remove if inode" system call here, so a same-user process racing a
+    /// rename into the instant between the identity check and `rmdir` is not
+    /// excluded. A stale or replaced name is never removed deterministically.
+    pub(crate) fn remove_subdir_if_identity(
+        &self,
+        name: &str,
+        expected: NodeIdentity,
+    ) -> io::Result<()> {
+        let path = self.temp_child(name);
+        let metadata = std::fs::symlink_metadata(&path)?;
+        if !metadata.file_type().is_dir() {
+            return Err(io::Error::other("entry is not the retained directory"));
+        }
+        if NodeIdentity::of(&metadata) != expected {
+            return Err(io::Error::other("directory identity changed"));
+        }
+        std::fs::remove_dir(&path)?;
         self.sync()
+    }
+
+    /// Open the direct child directory `name`, creating it (owner-only) if it
+    /// is missing. An existing symlink, file or special entry is refused, as
+    /// is a directory on another device.
+    pub(crate) fn open_or_create_subdir(&self, name: &str) -> io::Result<DirHandle> {
+        match self.kind(name)? {
+            EntryKind::Directory => {}
+            EntryKind::Missing => self.make_subdir(name)?,
+            _ => return Err(io::Error::other("entry is not a directory")),
+        }
+        self.open_subdir(name)
     }
 
     /// fsync the directory.

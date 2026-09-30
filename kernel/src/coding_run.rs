@@ -34,7 +34,7 @@ mod structural;
 #[cfg(test)]
 mod tests;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde_json::{json, Value};
@@ -251,17 +251,50 @@ pub struct StagingParent {
 }
 
 impl StagingParent {
-    /// `<identity home>/.nexus/coding-runs`, created owner-only if missing.
+    /// `<identity home>/.nexus/coding-runs`, derived by construction from
+    /// retained directory identities (see [`Self::derive`]).
     pub fn from_identity_home() -> Result<Self, RunError> {
-        let path = crate::identity_home::nexus_state_path("coding-runs")
-            .map_err(|_| RunError::StagingUnavailable)?;
-        std::os::unix::fs::DirBuilderExt::mode(&mut std::fs::DirBuilder::new(), 0o700)
-            .recursive(true)
-            .create(&path)
-            .map_err(|_| RunError::StagingUnavailable)?;
-        Self::open(path)
+        let home =
+            crate::identity_home::identity_home().map_err(|_| RunError::StagingUnavailable)?;
+        Self::derive(&home)
     }
 
+    /// Derive the staging parent under an identity home without trusting any
+    /// pathname below it. The identity home must already be a real directory
+    /// whose path is its exact canonical spelling (no symlink anywhere in it);
+    /// it is then opened and retained, and `.nexus` and `coding-runs` are
+    /// opened, or created owner-only, one at a time as direct children of the
+    /// retained handles. An existing symlink, file or special entry at either
+    /// name makes coding runs unavailable; nothing is followed or created
+    /// through it. Finally the pathname used for grant issuance must name the
+    /// retained `coding-runs` directory.
+    fn derive(home: &Path) -> Result<Self, RunError> {
+        let unavailable = |_| RunError::StagingUnavailable;
+        let canonical = std::fs::canonicalize(home).map_err(unavailable)?;
+        if canonical != home {
+            return Err(RunError::StagingUnavailable);
+        }
+        let home_handle = DirHandle::open_absolute(home).map_err(unavailable)?;
+        let nexus = home_handle
+            .open_or_create_subdir(".nexus")
+            .map_err(unavailable)?;
+        let runs = nexus
+            .open_or_create_subdir("coding-runs")
+            .map_err(unavailable)?;
+        let path = home.join(".nexus").join("coding-runs");
+        let named = DirHandle::open_absolute(&path).map_err(unavailable)?;
+        if named.identity() != runs.identity() {
+            return Err(RunError::StagingUnavailable);
+        }
+        Ok(Self { handle: runs, path })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn derive_for_test(home: &Path) -> Result<Self, RunError> {
+        Self::derive(home)
+    }
+
+    #[cfg(test)]
     fn open(path: PathBuf) -> Result<Self, RunError> {
         let handle = DirHandle::open_absolute(&path).map_err(|_| RunError::StagingUnavailable)?;
         Ok(Self { handle, path })
@@ -369,8 +402,16 @@ impl StagingLease {
         }
     }
 
+    /// Whether no live staging grant remains.
+    fn authority_closed(&self) -> bool {
+        self.grant.is_none() || self.grant_revoked
+    }
+
     /// Revoke the grant and remove the run directory through retained
-    /// handles. Idempotent; never touches the ledger.
+    /// handles. The directory entry is removed only if it still names the
+    /// retained directory; a renamed original or a replacement at the old
+    /// name is never deleted, and then cleanup fails (the handle is kept for
+    /// a retry). Idempotent; never touches the ledger.
     fn close(&mut self) -> CleanupStatus {
         if self.released {
             return CleanupStatus::Discarded;
@@ -379,13 +420,22 @@ impl StagingLease {
         let removed = if !self.created {
             true
         } else {
-            let emptied = self
-                .handle
-                .as_ref()
-                .map_or(Ok(()), DirHandle::remove_all_entries);
-            self.handle = None;
-            emptied.is_ok() && self.parent.remove_subdir(&self.name).is_ok()
+            match self.handle.as_ref() {
+                Some(handle) => {
+                    handle.remove_all_entries().is_ok()
+                        && self
+                            .parent
+                            .remove_subdir_if_identity(&self.name, handle.identity())
+                            .is_ok()
+                }
+                // Created but never opened: its identity is unknown, so it
+                // cannot be proven safe to remove.
+                None => false,
+            }
         };
+        if removed {
+            self.handle = None;
+        }
         if revoked && removed {
             self.released = true;
             CleanupStatus::Discarded
@@ -604,7 +654,10 @@ impl CodingRun {
     /// Enter RecoveryRequired even if the ledger cannot record it. The
     /// staging grant is revoked, and with `discard` the staging generation
     /// is removed, independently of the ledger.
-    fn force_recovery(&mut self, reason: RecoveryReason, discard: bool) {
+    ///
+    /// Returns the error matching the resulting state: if the staging grant
+    /// cannot be revoked, the state is `StagingRevocationFailed`, not `reason`.
+    fn force_recovery(&mut self, reason: RecoveryReason, discard: bool) -> RunError {
         let _ = record(
             self.ledger.as_ref(),
             self.id.0,
@@ -617,6 +670,30 @@ impl CodingRun {
             self.close_staging();
         } else if let Some(staging) = self.staging.as_mut() {
             staging.revoke_grant();
+        }
+        if !self
+            .staging
+            .as_ref()
+            .is_none_or(StagingLease::authority_closed)
+        {
+            self.state = RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed);
+        }
+        match self.state {
+            RunState::RecoveryRequired(actual) => RunError::RecoveryRequired(actual),
+            _ => RunError::RecoveryRequired(reason),
+        }
+    }
+
+    /// The result of a requested terminal transition: success only if the
+    /// run actually ended in the requested state.
+    fn terminal_result(&self, requested: RunState) -> Result<(), RunError> {
+        match self.state {
+            state if state == requested => Ok(()),
+            RunState::RecoveryRequired(reason) => Err(RunError::RecoveryRequired(reason)),
+            state => Err(RunError::InvalidState {
+                operation: "terminal transition",
+                state,
+            }),
         }
     }
 
@@ -686,10 +763,7 @@ impl CodingRun {
         )
         .is_err()
         {
-            self.force_recovery(RecoveryReason::OutcomeNotRecorded, true);
-            return Err(RunError::RecoveryRequired(
-                RecoveryReason::OutcomeNotRecorded,
-            ));
+            return Err(self.force_recovery(RecoveryReason::OutcomeNotRecorded, true));
         }
         if result.is_err() {
             self.generation_valid = false;
@@ -759,10 +833,7 @@ impl CodingRun {
             if self.cleanup != CleanupStatus::Discarded {
                 self.staging = Some(lease);
             }
-            self.force_recovery(RecoveryReason::OutcomeNotRecorded, true);
-            return Err(RunError::RecoveryRequired(
-                RecoveryReason::OutcomeNotRecorded,
-            ));
+            return Err(self.force_recovery(RecoveryReason::OutcomeNotRecorded, true));
         }
         if let Err(error) = allocated {
             self.cleanup = lease.close();
@@ -786,10 +857,7 @@ impl CodingRun {
         )
         .is_err()
         {
-            self.force_recovery(RecoveryReason::GrantedNotRecorded, true);
-            return Err(RunError::RecoveryRequired(
-                RecoveryReason::GrantedNotRecorded,
-            ));
+            return Err(self.force_recovery(RecoveryReason::GrantedNotRecorded, true));
         }
         self.state = RunState::Granted;
         Ok(())
@@ -932,8 +1000,7 @@ impl CodingRun {
             Err(_) => {
                 // A required security event was not recorded: the run
                 // cannot continue.
-                self.force_recovery(RecoveryReason::RejectionNotRecorded, false);
-                RunError::RecoveryRequired(RecoveryReason::RejectionNotRecorded)
+                self.force_recovery(RecoveryReason::RejectionNotRecorded, false)
             }
         }
     }
@@ -1085,10 +1152,7 @@ impl CodingRun {
                 .as_mut()
                 .is_some_and(StagingLease::revoke_grant);
             if !revoked {
-                self.force_recovery(RecoveryReason::StagingRevocationFailed, false);
-                return Err(RunError::RecoveryRequired(
-                    RecoveryReason::StagingRevocationFailed,
-                ));
+                return Err(self.force_recovery(RecoveryReason::StagingRevocationFailed, false));
             }
             self.state = RunState::StructurallyVerified;
         } else {
@@ -1107,7 +1171,7 @@ impl CodingRun {
             });
         }
         self.enter_terminal(RunState::Cancelled);
-        Ok(())
+        self.terminal_result(RunState::Cancelled)
     }
 
     pub fn revoke(&mut self) -> Result<(), RunError> {
@@ -1118,7 +1182,7 @@ impl CodingRun {
             });
         }
         self.enter_terminal(RunState::Revoked(RevocationReason::Explicit));
-        Ok(())
+        self.terminal_result(RunState::Revoked(RevocationReason::Explicit))
     }
 
     /// Revoke the staging grant and remove the disposable staging directory
@@ -1154,6 +1218,18 @@ impl CodingRun {
     #[cfg(test)]
     pub(crate) fn staging_path_for_test(&self) -> Option<PathBuf> {
         self.staging.as_ref().map(StagingLease::path)
+    }
+
+    /// Replace the staging grant id with one the registry does not know, so
+    /// revocation fails (test-only authority-closure failure seam).
+    #[cfg(test)]
+    pub(crate) fn substitute_unrevocable_staging_grant_for_test(&mut self) {
+        let unknown: WorkspaceGrantId =
+            serde_json::from_value(json!(Uuid::new_v4())).expect("grant id");
+        if let Some(staging) = self.staging.as_mut() {
+            staging.grant = Some(unknown);
+            staging.grant_revoked = false;
+        }
     }
 
     #[cfg(test)]
