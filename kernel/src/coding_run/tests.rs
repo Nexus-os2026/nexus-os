@@ -175,10 +175,12 @@ fn kinds(f: &Fixture, run: &CodingRun) -> Vec<String> {
 }
 
 /// Delegates to the real ledger but fails the append with a chosen index.
+/// It keeps the payload it refused, so a test can see what was attempted.
 struct FailingStore {
     inner: Arc<CodingRunLedger>,
     fail_at: usize,
     calls: AtomicUsize,
+    refused: std::sync::Mutex<Option<String>>,
 }
 
 impl FailingStore {
@@ -187,13 +189,19 @@ impl FailingStore {
             inner: Arc::clone(inner),
             fail_at,
             calls: AtomicUsize::new(0),
+            refused: std::sync::Mutex::new(None),
         })
+    }
+
+    fn refused(&self) -> Option<String> {
+        self.refused.lock().unwrap().clone()
     }
 }
 
 impl LedgerStore for FailingStore {
     fn append(&self, event: NewLedgerEvent<'_>) -> Result<LedgerRecord, LedgerFailure> {
         if self.calls.fetch_add(1, Ordering::SeqCst) == self.fail_at {
+            *self.refused.lock().unwrap() = Some(event.payload.to_string());
             return Err(LedgerFailure::Unavailable);
         }
         LedgerStore::append(self.inner.as_ref(), event)
@@ -913,4 +921,243 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
             );
         }
     }
+}
+
+// ── P1A-002-R1: staging authority lifecycle ─────────────────────────────────
+
+const ALLOCATION_OUTCOME: usize = 2;
+const RUN_GRANTED: usize = 3;
+const FIRST_EDIT_EVENT: usize = 6;
+
+/// The staging grant id recorded in an allocation outcome payload.
+fn grant_in(payload: &str) -> WorkspaceGrantId {
+    let value: serde_json::Value = serde_json::from_str(payload).unwrap();
+    let grant = value
+        .pointer("/facts/staging_grant")
+        .or_else(|| value.get("staging_grant"))
+        .cloned()
+        .expect("staging grant in payload");
+    serde_json::from_value(grant).unwrap()
+}
+
+fn assert_revoked(f: &Fixture, grant: WorkspaceGrantId) {
+    assert_eq!(
+        f.registry.resolve(grant, f.binding).unwrap_err(),
+        WorkspaceAuthorityError::RevokedGrant,
+        "the staging grant must not resolve"
+    );
+}
+
+fn assert_project_grant_live(f: &Fixture) {
+    assert!(
+        f.registry.resolve(f.grant, f.binding).is_ok(),
+        "run cleanup must never revoke the project grant"
+    );
+}
+
+fn staging_parent_entries(f: &Fixture) -> usize {
+    std::fs::read_dir(&f.staging_parent).unwrap().count()
+}
+
+#[test]
+fn p1a_r1_nc_01_allocation_outcome_failure_revokes_and_removes_staging() {
+    let f = fixture();
+    let store = FailingStore::new(&f.ledger, ALLOCATION_OUTCOME);
+    let mut run = new_run_with(&f, store.clone(), default_scopes());
+    assert_eq!(
+        run.grant(&parent(&f)),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::OutcomeNotRecorded
+        ))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::OutcomeNotRecorded)
+    );
+    // The refused outcome named the grant that had already been issued.
+    let staging_grant = grant_in(&store.refused().expect("refused outcome"));
+    assert_revoked(&f, staging_grant);
+    assert_eq!(
+        staging_parent_entries(&f),
+        0,
+        "no staging generation remains"
+    );
+    assert_eq!(run.cleanup_status(), CleanupStatus::Discarded);
+    assert_project_grant_live(&f);
+    drop(run);
+    assert_revoked(&f, staging_grant);
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r1_nc_02_run_granted_failure_revokes_removes_and_leaves_created() {
+    let f = fixture();
+    let store = FailingStore::new(&f.ledger, RUN_GRANTED);
+    let mut run = new_run_with(&f, store.clone(), default_scopes());
+    assert_eq!(
+        run.grant(&parent(&f)),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::GrantedNotRecorded
+        ))
+    );
+    assert_ne!(run.state(), RunState::Created);
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::GrantedNotRecorded)
+    );
+    // The allocation outcome was recorded, with the issued grant.
+    let outcome = f
+        .ledger
+        .verify_run(run.id().ledger_key())
+        .unwrap()
+        .into_iter()
+        .find(|record| record.event_kind == "op.outcome")
+        .expect("allocation outcome");
+    let staging_grant = grant_in(&outcome.payload);
+    assert_revoked(&f, staging_grant);
+    assert_eq!(staging_parent_entries(&f), 0);
+    assert!(matches!(run.snapshot(), Err(RunError::InvalidState { .. })));
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r1_nc_03_structural_success_revokes_the_staging_write_grant() {
+    let f = fixture();
+    let mut run = staged_run(&f);
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    let staging = run.staging_path_for_test().unwrap();
+    run.edit(replace("src/lib.rs", "pub fn answer() -> u32 { 42 }\n"))
+        .unwrap();
+    assert!(f.registry.resolve(staging_grant, f.binding).is_ok());
+    let result = run.verify_structural().unwrap();
+    assert!(result.passed());
+    assert_eq!(run.state(), RunState::StructurallyVerified);
+    assert_revoked(&f, staging_grant);
+    assert!(
+        staging.join("src/lib.rs").is_file(),
+        "candidate bytes remain"
+    );
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r1_nc_04_discard_after_verification_is_complete_and_idempotent() {
+    let f = fixture();
+    let mut run = staged_run(&f);
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    let staging = run.staging_path_for_test().unwrap();
+    run.edit(replace("src/lib.rs", "pub fn answer() -> u32 { 42 }\n"))
+        .unwrap();
+    run.verify_structural().unwrap();
+    assert_eq!(run.discard_staging().unwrap(), CleanupStatus::Discarded);
+    assert!(!staging.exists());
+    assert_revoked(&f, staging_grant);
+    assert_eq!(run.discard_staging().unwrap(), CleanupStatus::Discarded);
+    assert!(!staging.exists(), "repeated cleanup recreates nothing");
+    assert_eq!(run.state(), RunState::StructurallyVerified);
+    drop(run);
+    assert_revoked(&f, staging_grant);
+    assert_eq!(staging_parent_entries(&f), 0);
+    assert_project_grant_live(&f);
+}
+
+/// Builds a run up to one owning state.
+type BuildRun = fn(&Fixture) -> CodingRun;
+
+#[test]
+fn p1a_r1_nc_05_drop_revokes_staging_authority_in_every_owning_state() {
+    let f = fixture();
+    let stages: [(&str, BuildRun); 4] = [
+        ("Granted", |f| {
+            let mut run = new_run(f);
+            run.grant(&parent(f)).unwrap();
+            run
+        }),
+        ("Staged", staged_run),
+        ("Candidate", |f| {
+            let mut run = staged_run(f);
+            run.edit(replace("src/lib.rs", "pub fn x() {}\n")).unwrap();
+            run
+        }),
+        ("StructurallyVerified", |f| {
+            let mut run = staged_run(f);
+            run.edit(replace("src/lib.rs", "pub fn x() {}\n")).unwrap();
+            run.verify_structural().unwrap();
+            run
+        }),
+    ];
+    for (name, build) in stages {
+        let run = build(&f);
+        let staging_grant = run.staging_grant_for_test().unwrap();
+        let staging = run.staging_path_for_test().unwrap();
+        assert!(staging.is_dir(), "{name}");
+        drop(run);
+        assert_revoked(&f, staging_grant);
+        assert!(!staging.exists(), "{name}: staging removed on drop");
+        assert_project_grant_live(&f);
+    }
+    assert_eq!(staging_parent_entries(&f), 0);
+}
+
+#[test]
+fn p1a_r1_nc_06_swapped_staging_parent_leaves_no_orphan() {
+    let f = fixture();
+    let retained = parent(&f);
+    let moved = f.staging_parent.with_file_name("staging.moved");
+    std::fs::rename(&f.staging_parent, &moved).unwrap();
+    std::fs::create_dir(&f.staging_parent).unwrap();
+    let mut run = new_run(&f);
+    assert_eq!(run.grant(&retained), Err(RunError::IdentityChanged));
+    assert_eq!(
+        run.state(),
+        RunState::Failed(FailureReason::IdentityChanged)
+    );
+    assert_eq!(
+        std::fs::read_dir(&moved).unwrap().count(),
+        0,
+        "no orphan under the retained parent"
+    );
+    assert_eq!(
+        staging_parent_entries(&f),
+        0,
+        "nothing under the new pathname"
+    );
+    assert_project_grant_live(&f);
+    drop(run);
+    std::fs::remove_dir(&f.staging_parent).unwrap();
+    std::fs::rename(&moved, &f.staging_parent).unwrap();
+}
+
+#[test]
+fn p1a_r1_nc_07_unrecorded_edit_rejection_fails_closed() {
+    let f = fixture();
+    let store = FailingStore::new(&f.ledger, FIRST_EDIT_EVENT);
+    let mut run = new_run_with(&f, store.clone(), default_scopes());
+    run.grant(&parent(&f)).unwrap();
+    run.snapshot().unwrap();
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    let staging = run.staging_path_for_test().unwrap();
+    let before = digest(&staging);
+    assert_eq!(
+        run.edit(replace("docs/guide.md", "outside the write scope\n")),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::RejectionNotRecorded
+        ))
+    );
+    assert!(store.refused().unwrap().contains("OutsideWriteScope"));
+    assert_eq!(digest(&staging), before, "the rejected edit wrote nothing");
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::RejectionNotRecorded)
+    );
+    assert!(matches!(
+        run.edit(replace("src/lib.rs", "pub fn x() {}\n")),
+        Err(RunError::InvalidState { .. })
+    ));
+    assert!(matches!(
+        run.verify_structural(),
+        Err(RunError::InvalidState { .. })
+    ));
+    assert_revoked(&f, staging_grant);
+    assert_project_grant_live(&f);
 }

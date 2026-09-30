@@ -117,6 +117,12 @@ pub enum RecoveryReason {
     LedgerIntegrity,
     /// A terminal transition could not be recorded.
     TerminalNotRecorded,
+    /// Staging was allocated but `run.granted` could not be recorded.
+    GrantedNotRecorded,
+    /// A rejected edit could not be recorded.
+    RejectionNotRecorded,
+    /// The staging grant could not be revoked when the run closed.
+    StagingRevocationFailed,
 }
 
 /// Run state. Terminal outcomes are kept as they happened.
@@ -267,15 +273,139 @@ impl StagingParent {
     }
 }
 
-/// A run's staging area: its own grant, retained identity and parent.
+/// Owner of one run's staging authority: the run directory (created through
+/// a duplicate of the staging parent's retained handle), its retained handle
+/// and the backend-issued staging grant.
+///
+/// A lease exists before the directory is created, so from the moment the
+/// directory or the grant exists exactly one object is responsible for
+/// removing and revoking it. [`StagingLease::close`] revokes the grant
+/// (idempotently) and removes the directory through retained handles; it
+/// never depends on the ledger. `Drop` closes an unreleased lease without
+/// panicking. The project grant is never held or revoked here.
 #[derive(Debug)]
-struct Staging {
-    grant: WorkspaceGrantId,
-    handle: DirHandle,
+struct StagingLease {
+    registry: Arc<WorkspaceAuthorityRegistry>,
+    binding: WorkspaceBinding,
     parent: DirHandle,
+    parent_path: PathBuf,
     name: String,
+    created: bool,
+    handle: Option<DirHandle>,
+    grant: Option<WorkspaceGrantId>,
+    grant_revoked: bool,
+    released: bool,
+}
+
+impl StagingLease {
+    /// Take ownership responsibility before anything is created.
+    fn begin(
+        registry: Arc<WorkspaceAuthorityRegistry>,
+        binding: WorkspaceBinding,
+        parent: &StagingParent,
+        name: String,
+    ) -> Result<Self, RunError> {
+        let retained = parent.handle.try_clone().map_err(|_| RunError::StagingIo)?;
+        Ok(Self {
+            registry,
+            binding,
+            parent: retained,
+            parent_path: parent.path.clone(),
+            name,
+            created: false,
+            handle: None,
+            grant: None,
+            grant_revoked: false,
+            released: false,
+        })
+    }
+
+    /// Create the run directory under the retained parent, confirm the
+    /// parent pathname still names that parent, and issue the staging grant.
+    /// Every step's result stays owned by the lease.
+    fn allocate(&mut self, expires_at: Option<std::time::SystemTime>) -> Result<(), RunError> {
+        self.parent
+            .make_subdir(&self.name)
+            .map_err(|_| RunError::StagingIo)?;
+        self.created = true;
+        self.handle = Some(
+            self.parent
+                .open_subdir(&self.name)
+                .map_err(|_| RunError::StagingIo)?,
+        );
+        let named =
+            DirHandle::open_absolute(&self.parent_path).map_err(|_| RunError::IdentityChanged)?;
+        if named.identity() != self.parent.identity() {
+            return Err(RunError::IdentityChanged);
+        }
+        let grant = self
+            .registry
+            .issue_trusted_root(
+                &self.parent_path.join(&self.name),
+                self.binding,
+                WorkspaceAuthoritySource::BackendAllocated,
+                FsPermissionLevel::ReadWrite,
+                expires_at,
+            )
+            .map_err(|_| RunError::StagingIo)?;
+        self.grant = Some(grant);
+        Ok(())
+    }
+
+    fn handle(&self) -> Result<&DirHandle, RunError> {
+        self.handle.as_ref().ok_or(RunError::AuthorityDenied)
+    }
+
+    /// Revoke the staging grant, idempotently. Returns whether no live grant
+    /// remains.
+    fn revoke_grant(&mut self) -> bool {
+        match self.grant {
+            None => true,
+            Some(_) if self.grant_revoked => true,
+            Some(grant) => {
+                self.grant_revoked = self.registry.revoke(grant, self.binding).is_ok();
+                self.grant_revoked
+            }
+        }
+    }
+
+    /// Revoke the grant and remove the run directory through retained
+    /// handles. Idempotent; never touches the ledger.
+    fn close(&mut self) -> CleanupStatus {
+        if self.released {
+            return CleanupStatus::Discarded;
+        }
+        let revoked = self.revoke_grant();
+        let removed = if !self.created {
+            true
+        } else {
+            let emptied = self
+                .handle
+                .as_ref()
+                .map_or(Ok(()), DirHandle::remove_all_entries);
+            self.handle = None;
+            emptied.is_ok() && self.parent.remove_subdir(&self.name).is_ok()
+        };
+        if revoked && removed {
+            self.released = true;
+            CleanupStatus::Discarded
+        } else {
+            CleanupStatus::DiscardFailed
+        }
+    }
+
     #[cfg(test)]
-    path: PathBuf,
+    fn path(&self) -> PathBuf {
+        self.parent_path.join(&self.name)
+    }
+}
+
+impl Drop for StagingLease {
+    fn drop(&mut self) {
+        if !self.released {
+            let _ = self.close();
+        }
+    }
 }
 
 /// One governed coding run.
@@ -290,7 +420,7 @@ pub struct CodingRun {
     project_grant: WorkspaceGrantId,
     binding: WorkspaceBinding,
     project: Option<DirHandle>,
-    staging: Option<Staging>,
+    staging: Option<StagingLease>,
     base: Option<Manifest>,
     generation_valid: bool,
     next_op: u64,
@@ -418,13 +548,14 @@ impl CodingRun {
     /// staging directory.
     fn revalidate_staging(&self) -> Result<(), RunError> {
         let staging = self.staging.as_ref().ok_or(RunError::AuthorityDenied)?;
-        let grant = self.resolve_grant(staging.grant)?;
+        let staging_grant = staging.grant.ok_or(RunError::AuthorityDenied)?;
+        let grant = self.resolve_grant(staging_grant)?;
         if *grant.permission() != FsPermissionLevel::ReadWrite {
             return Err(RunError::AuthorityDenied);
         }
         let fresh =
             DirHandle::open_absolute(grant.root()).map_err(|_| RunError::IdentityChanged)?;
-        if fresh.identity() != staging.handle.identity() {
+        if fresh.identity() != staging.handle()?.identity() {
             return Err(RunError::IdentityChanged);
         }
         Ok(())
@@ -461,8 +592,42 @@ impl CodingRun {
         ) {
             self.generation_valid = false;
         }
-        if let Some(staging) = &self.staging {
-            let _ = self.registry.revoke(staging.grant, self.binding);
+        // Safety cleanup does not depend on the record above.
+        if let Some(staging) = self.staging.as_mut() {
+            if !staging.revoke_grant() {
+                self.generation_valid = false;
+                self.state = RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed);
+            }
+        }
+    }
+
+    /// Enter RecoveryRequired even if the ledger cannot record it. The
+    /// staging grant is revoked, and with `discard` the staging generation
+    /// is removed, independently of the ledger.
+    fn force_recovery(&mut self, reason: RecoveryReason, discard: bool) {
+        let _ = record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::RecoveryRequired,
+            &json!({ "reason": format!("{reason:?}") }),
+        );
+        self.state = RunState::RecoveryRequired(reason);
+        self.generation_valid = false;
+        if discard {
+            self.close_staging();
+        } else if let Some(staging) = self.staging.as_mut() {
+            staging.revoke_grant();
+        }
+    }
+
+    /// Close the staging lease (revoke and remove). A fully closed lease is
+    /// dropped; a lease whose cleanup failed is kept so Drop retries.
+    fn close_staging(&mut self) {
+        if let Some(mut staging) = self.staging.take() {
+            self.cleanup = staging.close();
+            if self.cleanup != CleanupStatus::Discarded {
+                self.staging = Some(staging);
+            }
         }
     }
 
@@ -521,12 +686,7 @@ impl CodingRun {
         )
         .is_err()
         {
-            self.generation_valid = false;
-            self.state = RunState::RecoveryRequired(RecoveryReason::OutcomeNotRecorded);
-            self.discard_quietly();
-            if let Some(staging) = &self.staging {
-                let _ = self.registry.revoke(staging.grant, self.binding);
-            }
+            self.force_recovery(RecoveryReason::OutcomeNotRecorded, true);
             return Err(RunError::RecoveryRequired(
                 RecoveryReason::OutcomeNotRecorded,
             ));
@@ -557,66 +717,82 @@ impl CodingRun {
         self.project = Some(project);
         let expires_at = grant.expires_at();
         let name = self.id.to_string();
-        let registry = Arc::clone(&self.registry);
-        let binding = self.binding;
-        let allocated = self.mutate(
-            "allocate_staging",
-            json!({ "name": name }),
-            |_| {
-                parent
-                    .handle
-                    .make_subdir(&name)
-                    .map_err(|_| RunError::StagingIo)?;
-                let handle = parent
-                    .handle
-                    .open_subdir(&name)
-                    .map_err(|_| RunError::StagingIo)?;
-                let own_parent =
-                    DirHandle::open_absolute(&parent.path).map_err(|_| RunError::StagingIo)?;
-                if own_parent.identity() != parent.handle.identity() {
-                    return Err(RunError::IdentityChanged);
-                }
-                let path = parent.path.join(&name);
-                let staging_grant = registry
-                    .issue_trusted_root(
-                        &path,
-                        binding,
-                        WorkspaceAuthoritySource::BackendAllocated,
-                        FsPermissionLevel::ReadWrite,
-                        expires_at,
-                    )
-                    .map_err(|_| RunError::StagingIo)?;
-                Ok(Staging {
-                    grant: staging_grant,
-                    handle,
-                    parent: own_parent,
-                    name: name.clone(),
-                    #[cfg(test)]
-                    path,
-                })
-            },
-            |staging: &Staging| json!({ "staging_grant": staging.grant }),
-        );
-        match allocated {
-            Ok(staging) => {
-                self.staging = Some(staging);
-                if let Err(error) = self.revalidate_staging() {
+
+        // Prepared → allocation → Outcome. The lease owns the directory and
+        // the grant from the moment either exists.
+        let op = self.next_op;
+        self.next_op += 1;
+        record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::OperationPrepared,
+            &json!({ "op": op, "kind": "allocate_staging", "facts": { "name": name } }),
+        )
+        .map_err(RunError::Ledger)?;
+        let mut lease =
+            match StagingLease::begin(Arc::clone(&self.registry), self.binding, parent, name) {
+                Ok(lease) => lease,
+                Err(error) => {
+                    let _ = record(
+                        self.ledger.as_ref(),
+                        self.id.0,
+                        EventKind::OperationOutcome,
+                        &json!({ "op": op, "ok": false, "error": error.to_string() }),
+                    );
                     return Err(self.fail(error));
                 }
-                let facts = json!({ "staging_grant": self.staging.as_ref().map(|s| s.grant) });
-                if let Err(error) = record(
-                    self.ledger.as_ref(),
-                    self.id.0,
-                    EventKind::RunGranted,
-                    &facts,
-                ) {
-                    return Err(RunError::Ledger(error));
-                }
-                self.state = RunState::Granted;
-                Ok(())
+            };
+        let allocated = lease.allocate(expires_at);
+        let outcome = match &allocated {
+            Ok(()) => json!({ "op": op, "ok": true, "facts": { "staging_grant": lease.grant } }),
+            Err(error) => json!({ "op": op, "ok": false, "error": error.to_string() }),
+        };
+        let outcome_recorded = record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::OperationOutcome,
+            &outcome,
+        );
+        if outcome_recorded.is_err() {
+            // The lease is closed before it is ever installed.
+            self.cleanup = lease.close();
+            if self.cleanup != CleanupStatus::Discarded {
+                self.staging = Some(lease);
             }
-            Err(error) => Err(self.fail(error)),
+            self.force_recovery(RecoveryReason::OutcomeNotRecorded, true);
+            return Err(RunError::RecoveryRequired(
+                RecoveryReason::OutcomeNotRecorded,
+            ));
         }
+        if let Err(error) = allocated {
+            self.cleanup = lease.close();
+            if self.cleanup != CleanupStatus::Discarded {
+                self.staging = Some(lease);
+            }
+            return Err(self.fail(error));
+        }
+        self.staging = Some(lease);
+        if let Err(error) = self.revalidate_staging() {
+            let error = self.fail(error);
+            self.close_staging();
+            return Err(error);
+        }
+        let facts = json!({ "staging_grant": self.staging.as_ref().and_then(|s| s.grant) });
+        if record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::RunGranted,
+            &facts,
+        )
+        .is_err()
+        {
+            self.force_recovery(RecoveryReason::GrantedNotRecorded, true);
+            return Err(RunError::RecoveryRequired(
+                RecoveryReason::GrantedNotRecorded,
+            ));
+        }
+        self.state = RunState::Granted;
+        Ok(())
     }
 
     // ── Granted → Staged ───────────────────────────────────────────────
@@ -660,11 +836,7 @@ impl CodingRun {
 
     fn copy_read_scope(&self) -> Result<Manifest, RunError> {
         let project = self.project.as_ref().ok_or(RunError::AuthorityDenied)?;
-        let staging = &self
-            .staging
-            .as_ref()
-            .ok_or(RunError::AuthorityDenied)?
-            .handle;
+        let staging = self.staging_handle()?;
         let mut copy = SnapshotCopy {
             profile: self.profile,
             manifest: Manifest::default(),
@@ -757,17 +929,18 @@ impl CodingRun {
             &facts,
         ) {
             Ok(_) => RunError::EditRejected(rejection),
-            Err(error) => RunError::Ledger(error),
+            Err(_) => {
+                // A required security event was not recorded: the run
+                // cannot continue.
+                self.force_recovery(RecoveryReason::RejectionNotRecorded, false);
+                RunError::RecoveryRequired(RecoveryReason::RejectionNotRecorded)
+            }
         }
     }
 
     /// Walk to the target's directory without creating anything.
     fn probe_target(&self, edit: &CandidateEdit) -> Result<(), RunError> {
-        let staging = &self
-            .staging
-            .as_ref()
-            .ok_or(RunError::AuthorityDenied)?
-            .handle;
+        let staging = self.staging_handle()?;
         let (parents, name) = edit.path().parent_and_name();
         let mut owned: Option<DirHandle> = None;
         for part in parents {
@@ -808,11 +981,7 @@ impl CodingRun {
     }
 
     fn apply_edit(&self, edit: &CandidateEdit) -> Result<(), RunError> {
-        let staging = &self
-            .staging
-            .as_ref()
-            .ok_or(RunError::AuthorityDenied)?
-            .handle;
+        let staging = self.staging_handle()?;
         let (parents, name) = edit.path().parent_and_name();
         let mut owned: Option<DirHandle> = None;
         for part in parents {
@@ -869,11 +1038,7 @@ impl CodingRun {
             Err(error) => return Err(RunError::Ledger(error)),
         }
         let base = self.base.clone().ok_or(RunError::AuthorityDenied)?;
-        let staging = &self
-            .staging
-            .as_ref()
-            .ok_or(RunError::AuthorityDenied)?
-            .handle;
+        let staging = self.staging_handle()?;
         let mut changed_text = Vec::new();
         let (candidate, mut violations) =
             structural::scan_staging(staging, &self.profile, &mut changed_text, &base);
@@ -914,6 +1079,17 @@ impl CodingRun {
         )
         .map_err(RunError::Ledger)?;
         if result.passed() {
+            // The verified candidate keeps its bytes but no write authority.
+            let revoked = self
+                .staging
+                .as_mut()
+                .is_some_and(StagingLease::revoke_grant);
+            if !revoked {
+                self.force_recovery(RecoveryReason::StagingRevocationFailed, false);
+                return Err(RunError::RecoveryRequired(
+                    RecoveryReason::StagingRevocationFailed,
+                ));
+            }
             self.state = RunState::StructurallyVerified;
         } else {
             self.enter_terminal(RunState::Failed(FailureReason::StructuralRejected));
@@ -945,8 +1121,10 @@ impl CodingRun {
         Ok(())
     }
 
-    /// Remove the disposable staging directory. Allowed once the run is
-    /// terminal; the run outcome is unchanged.
+    /// Revoke the staging grant and remove the disposable staging directory
+    /// through retained handles. Allowed once the run is terminal; the run
+    /// outcome is unchanged. Idempotent. The cleanup record is best-effort;
+    /// the returned status reflects the cleanup itself.
     pub fn discard_staging(&mut self) -> Result<CleanupStatus, RunError> {
         if !self.state.is_terminal() {
             return Err(RunError::InvalidState {
@@ -954,7 +1132,8 @@ impl CodingRun {
                 state: self.state,
             });
         }
-        self.discard_quietly();
+        self.generation_valid = false;
+        self.close_staging();
         let facts = json!({ "status": format!("{:?}", self.cleanup) });
         let _ = record(
             self.ledger.as_ref(),
@@ -965,24 +1144,21 @@ impl CodingRun {
         Ok(self.cleanup)
     }
 
-    fn discard_quietly(&mut self) {
-        let Some(staging) = &self.staging else {
-            return;
-        };
-        let removed = staging
-            .handle
-            .remove_all_entries()
-            .and_then(|()| staging.parent.remove_subdir(&staging.name));
-        self.cleanup = if removed.is_ok() {
-            CleanupStatus::Discarded
-        } else {
-            CleanupStatus::DiscardFailed
-        };
+    fn staging_handle(&self) -> Result<&DirHandle, RunError> {
+        self.staging
+            .as_ref()
+            .ok_or(RunError::AuthorityDenied)?
+            .handle()
     }
 
     #[cfg(test)]
     pub(crate) fn staging_path_for_test(&self) -> Option<PathBuf> {
-        self.staging.as_ref().map(|staging| staging.path.clone())
+        self.staging.as_ref().map(StagingLease::path)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn staging_grant_for_test(&self) -> Option<WorkspaceGrantId> {
+        self.staging.as_ref().and_then(|staging| staging.grant)
     }
 }
 

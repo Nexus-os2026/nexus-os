@@ -100,6 +100,15 @@ impl DirHandle {
         self.identity
     }
 
+    /// A second handle on the same open directory (a duplicated descriptor,
+    /// not a path re-open), so an owner can outlive the original handle.
+    pub(crate) fn try_clone(&self) -> io::Result<DirHandle> {
+        Ok(Self {
+            file: self.file.try_clone()?,
+            identity: self.identity,
+        })
+    }
+
     fn anchor(&self) -> PathBuf {
         PathBuf::from(format!("/proc/self/fd/{}", self.file.as_raw_fd()))
     }
