@@ -1412,3 +1412,301 @@ fn p1a_r2_nc_10_authority_closure_failure_is_staging_revocation_failed() {
     f.registry.revoke(real, f.binding).unwrap();
     assert_project_grant_live(&f);
 }
+
+// ── P1A-002-R3: terminal ledger state matches the actual outcome ───────────
+
+/// Events that carry the run's state.
+const STATE_EVENTS: [&str; 7] = [
+    "run.created",
+    "run.granted",
+    "verify.structural",
+    "run.cancelled",
+    "run.revoked",
+    "run.failed",
+    "run.recovery_required",
+];
+
+/// The final state-bearing event of a run's verified ledger and its reason.
+fn final_state_event(f: &Fixture, run: RunId) -> (String, Option<String>) {
+    let record = f
+        .ledger
+        .verify_run(run.ledger_key())
+        .unwrap()
+        .into_iter()
+        .rev()
+        .find(|record| STATE_EVENTS.contains(&record.event_kind.as_str()))
+        .expect("a state-bearing event");
+    let payload: serde_json::Value = serde_json::from_str(&record.payload).unwrap();
+    let reason = payload
+        .get("reason")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    (record.event_kind, reason)
+}
+
+fn count_kind(f: &Fixture, run: RunId, kind: &str) -> usize {
+    kinds_of(f, run).iter().filter(|k| *k == kind).count()
+}
+
+fn kinds_of(f: &Fixture, run: RunId) -> Vec<String> {
+    f.ledger
+        .verify_run(run.ledger_key())
+        .unwrap()
+        .into_iter()
+        .map(|record| record.event_kind)
+        .collect()
+}
+
+/// Delegates to the real ledger but fails every append from `from` on.
+struct FailFromStore {
+    inner: Arc<CodingRunLedger>,
+    from: usize,
+    calls: AtomicUsize,
+}
+
+impl LedgerStore for FailFromStore {
+    fn append(&self, event: NewLedgerEvent<'_>) -> Result<LedgerRecord, LedgerFailure> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) >= self.from {
+            return Err(LedgerFailure::Unavailable);
+        }
+        LedgerStore::append(self.inner.as_ref(), event)
+    }
+    fn verified_records(&self, run: Uuid) -> Result<Vec<LedgerRecord>, LedgerFailure> {
+        self.inner.verified_records(run)
+    }
+}
+
+fn recovery(reason: &str) -> (String, Option<String>) {
+    (
+        "run.recovery_required".to_string(),
+        Some(reason.to_string()),
+    )
+}
+
+#[test]
+fn p1a_r3_nc_01_cancel_with_failed_revocation_records_the_actual_state() {
+    let f = fixture();
+    let mut run = staged_run(&f);
+    let real = run.staging_grant_for_test().unwrap();
+    run.substitute_unrevocable_staging_grant_for_test();
+    assert_eq!(
+        run.cancel(),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::StagingRevocationFailed
+        ))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)
+    );
+    assert_eq!(
+        final_state_event(&f, run.id()),
+        recovery("StagingRevocationFailed")
+    );
+    assert_eq!(
+        count_kind(&f, run.id(), "run.cancelled"),
+        0,
+        "no false cancel"
+    );
+    f.registry.revoke(real, f.binding).unwrap();
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r3_nc_02_revoke_with_failed_revocation_records_the_actual_state() {
+    let f = fixture();
+    let mut run = staged_run(&f);
+    let real = run.staging_grant_for_test().unwrap();
+    run.substitute_unrevocable_staging_grant_for_test();
+    assert_eq!(
+        run.revoke(),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::StagingRevocationFailed
+        ))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)
+    );
+    assert_eq!(
+        final_state_event(&f, run.id()),
+        recovery("StagingRevocationFailed")
+    );
+    assert_eq!(
+        count_kind(&f, run.id(), "run.revoked"),
+        0,
+        "no false revoke"
+    );
+    f.registry.revoke(real, f.binding).unwrap();
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r3_nc_03_force_recovery_records_the_superseding_reason() {
+    let f = fixture();
+    let store = FailingStore::new(&f.ledger, FIRST_EDIT_EVENT);
+    let mut run = new_run_with(&f, store, default_scopes());
+    run.grant(&parent(&f)).unwrap();
+    run.snapshot().unwrap();
+    let real = run.staging_grant_for_test().unwrap();
+    run.substitute_unrevocable_staging_grant_for_test();
+    assert_eq!(
+        run.edit(replace("docs/guide.md", "x\n")),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::StagingRevocationFailed
+        ))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)
+    );
+    assert_eq!(
+        final_state_event(&f, run.id()),
+        recovery("StagingRevocationFailed")
+    );
+    let superseded = f
+        .ledger
+        .verify_run(run.id().ledger_key())
+        .unwrap()
+        .iter()
+        .any(|record| record.payload.contains("RejectionNotRecorded"));
+    assert!(
+        !superseded,
+        "the superseded reason is not the recorded state"
+    );
+    f.registry.revoke(real, f.binding).unwrap();
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r3_nc_04_normal_cancel_ends_in_cancelled() {
+    let f = fixture();
+    let mut run = staged_run(&f);
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    run.cancel().unwrap();
+    assert_eq!(run.state(), RunState::Cancelled);
+    assert_eq!(
+        final_state_event(&f, run.id()),
+        ("run.cancelled".to_string(), Some("cancelled".to_string()))
+    );
+    assert_eq!(count_kind(&f, run.id(), "run.recovery_required"), 0);
+    assert_revoked(&f, staging_grant);
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r3_nc_05_normal_revoke_ends_in_revoked() {
+    let f = fixture();
+    let mut run = staged_run(&f);
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    run.revoke().unwrap();
+    assert_eq!(run.state(), RunState::Revoked(RevocationReason::Explicit));
+    assert_eq!(
+        final_state_event(&f, run.id()),
+        ("run.revoked".to_string(), Some("Explicit".to_string()))
+    );
+    assert_eq!(count_kind(&f, run.id(), "run.recovery_required"), 0);
+    assert_revoked(&f, staging_grant);
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r3_nc_06_structural_rejection_ends_in_run_failed() {
+    let f = fixture();
+    let mut run = staged_run(&f);
+    run.edit(replace("src/lib.rs", "pub fn x() {}\n")).unwrap();
+    let staging = run.staging_path_for_test().unwrap();
+    std::fs::write(staging.join("tests/check.rs"), "changed\n").unwrap();
+    assert!(!run.verify_structural().unwrap().passed());
+    assert_eq!(
+        run.state(),
+        RunState::Failed(FailureReason::StructuralRejected)
+    );
+    assert_eq!(
+        final_state_event(&f, run.id()),
+        (
+            "run.failed".to_string(),
+            Some("StructuralRejected".to_string())
+        )
+    );
+    assert_eq!(count_kind(&f, run.id(), "run.recovery_required"), 0);
+    // A passing verification ends at its verification record.
+    let mut passing = staged_run(&f);
+    passing
+        .edit(replace("src/lib.rs", "pub fn y() {}\n"))
+        .unwrap();
+    assert!(passing.verify_structural().unwrap().passed());
+    assert_eq!(final_state_event(&f, passing.id()).0, "verify.structural");
+    assert_eq!(count_kind(&f, passing.id(), "run.recovery_required"), 0);
+    assert_project_grant_live(&f);
+}
+
+#[test]
+fn p1a_r3_nc_07_unrecorded_actual_state_stays_fail_closed() {
+    let f = fixture();
+    // (a) Revocation fails and the record of the actual state fails too.
+    let store = FailingStore::new(&f.ledger, FIRST_TERMINAL_AFTER_STAGING);
+    let mut run = new_run_with(&f, store, default_scopes());
+    run.grant(&parent(&f)).unwrap();
+    run.snapshot().unwrap();
+    let real = run.staging_grant_for_test().unwrap();
+    run.substitute_unrevocable_staging_grant_for_test();
+    assert_eq!(
+        run.cancel(),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::StagingRevocationFailed
+        ))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)
+    );
+    let kinds = kinds_of(&f, run.id());
+    assert!(!kinds.contains(&"run.cancelled".to_string()));
+    assert!(!kinds.contains(&"run.recovery_required".to_string()));
+    assert!(matches!(run.cancel(), Err(RunError::InvalidState { .. })));
+    f.registry.revoke(real, f.binding).unwrap();
+
+    // (b) Revocation succeeds but the requested terminal record fails:
+    // cleanup happened anyway and the result is not a clean success.
+    let store = FailingStore::new(&f.ledger, FIRST_TERMINAL_AFTER_STAGING);
+    let mut run = new_run_with(&f, store, default_scopes());
+    run.grant(&parent(&f)).unwrap();
+    run.snapshot().unwrap();
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    assert_eq!(
+        run.revoke(),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::TerminalNotRecorded
+        ))
+    );
+    assert_revoked(&f, staging_grant);
+
+    // (c) force_recovery whose own record fails: the staging generation is
+    // still revoked and removed, and the run stays fail closed.
+    let store = Arc::new(FailFromStore {
+        inner: Arc::clone(&f.ledger),
+        from: SNAPSHOT_OUTCOME,
+        calls: AtomicUsize::new(0),
+    });
+    let mut run = new_run_with(&f, store, default_scopes());
+    run.grant(&parent(&f)).unwrap();
+    let staging_grant = run.staging_grant_for_test().unwrap();
+    let staging = run.staging_path_for_test().unwrap();
+    assert_eq!(
+        run.snapshot(),
+        Err(RunError::RecoveryRequired(
+            RecoveryReason::OutcomeNotRecorded
+        ))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::OutcomeNotRecorded)
+    );
+    assert_revoked(&f, staging_grant);
+    assert!(!staging.exists(), "cleanup did not wait for the ledger");
+    assert!(!kinds_of(&f, run.id()).contains(&"run.recovery_required".to_string()));
+    assert!(matches!(run.cancel(), Err(RunError::InvalidState { .. })));
+    assert!(matches!(run.revoke(), Err(RunError::InvalidState { .. })));
+    assert_project_grant_live(&f);
+}

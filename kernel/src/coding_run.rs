@@ -613,28 +613,30 @@ impl CodingRun {
 
     // ── Terminal transitions ───────────────────────────────────────────
 
-    /// Enter a terminal state, recording it first. If the record fails the
-    /// run needs recovery instead. The staging grant is revoked either way.
-    fn enter_terminal(&mut self, state: RunState) {
-        let (event, reason) = match state {
-            RunState::Cancelled => (EventKind::RunCancelled, "cancelled".to_string()),
-            RunState::Revoked(reason) => (EventKind::RunRevoked, format!("{reason:?}")),
-            RunState::Failed(reason) => (EventKind::RunFailed, format!("{reason:?}")),
-            RunState::RecoveryRequired(reason) => {
-                (EventKind::RecoveryRequired, format!("{reason:?}"))
-            }
-            _ => return,
-        };
-        let recorded = record(
-            self.ledger.as_ref(),
-            self.id.0,
-            event,
-            &json!({ "reason": reason }),
-        );
-        self.state = if recorded.is_ok() {
-            state
+    /// Enter a terminal state. Authority closure comes first and never
+    /// depends on the ledger: the staging grant is revoked, and the actual
+    /// resulting state is derived from that outcome (the requested state, or
+    /// `RecoveryRequired(StagingRevocationFailed)` if revocation failed).
+    /// Only then is that actual state recorded, once, so the ledger's final
+    /// state-bearing event agrees with the backend state. If that record
+    /// fails the run fails closed: `TerminalNotRecorded`, unless revocation
+    /// also failed, in which case the more severe `StagingRevocationFailed`
+    /// is kept. Nothing is retried.
+    fn enter_terminal(&mut self, requested: RunState) {
+        if terminal_event(requested).is_none() {
+            return;
+        }
+        let closed = self.staging.as_mut().is_none_or(StagingLease::revoke_grant);
+        let actual = if closed {
+            requested
         } else {
-            RunState::RecoveryRequired(RecoveryReason::TerminalNotRecorded)
+            RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)
+        };
+        let recorded = self.record_state(actual);
+        self.state = match (recorded, actual) {
+            (true, actual) => actual,
+            (false, RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)) => actual,
+            (false, _) => RunState::RecoveryRequired(RecoveryReason::TerminalNotRecorded),
         };
         if matches!(
             self.state,
@@ -642,46 +644,49 @@ impl CodingRun {
         ) {
             self.generation_valid = false;
         }
-        // Safety cleanup does not depend on the record above.
-        if let Some(staging) = self.staging.as_mut() {
-            if !staging.revoke_grant() {
-                self.generation_valid = false;
-                self.state = RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed);
-            }
-        }
+    }
+
+    /// Record a terminal state as its state-bearing ledger event.
+    fn record_state(&self, state: RunState) -> bool {
+        let Some((event, reason)) = terminal_event(state) else {
+            return false;
+        };
+        record(
+            self.ledger.as_ref(),
+            self.id.0,
+            event,
+            &json!({ "reason": reason }),
+        )
+        .is_ok()
     }
 
     /// Enter RecoveryRequired even if the ledger cannot record it. The
     /// staging grant is revoked, and with `discard` the staging generation
-    /// is removed, independently of the ledger.
+    /// is removed, first and independently of the ledger. The actual reason
+    /// (`StagingRevocationFailed` if the grant could not be revoked, else
+    /// `reason`) is then recorded once, best-effort: the run is already fail
+    /// closed, and a failed record is not retried.
     ///
-    /// Returns the error matching the resulting state: if the staging grant
-    /// cannot be revoked, the state is `StagingRevocationFailed`, not `reason`.
+    /// Returns the error matching the resulting state.
     fn force_recovery(&mut self, reason: RecoveryReason, discard: bool) -> RunError {
-        let _ = record(
-            self.ledger.as_ref(),
-            self.id.0,
-            EventKind::RecoveryRequired,
-            &json!({ "reason": format!("{reason:?}") }),
-        );
-        self.state = RunState::RecoveryRequired(reason);
         self.generation_valid = false;
         if discard {
             self.close_staging();
         } else if let Some(staging) = self.staging.as_mut() {
             staging.revoke_grant();
         }
-        if !self
+        let actual = if self
             .staging
             .as_ref()
             .is_none_or(StagingLease::authority_closed)
         {
-            self.state = RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed);
-        }
-        match self.state {
-            RunState::RecoveryRequired(actual) => RunError::RecoveryRequired(actual),
-            _ => RunError::RecoveryRequired(reason),
-        }
+            reason
+        } else {
+            RecoveryReason::StagingRevocationFailed
+        };
+        self.state = RunState::RecoveryRequired(actual);
+        let _ = self.record_state(self.state);
+        RunError::RecoveryRequired(actual)
     }
 
     /// The result of a requested terminal transition: success only if the
@@ -1235,6 +1240,19 @@ impl CodingRun {
     #[cfg(test)]
     pub(crate) fn staging_grant_for_test(&self) -> Option<WorkspaceGrantId> {
         self.staging.as_ref().and_then(|staging| staging.grant)
+    }
+}
+
+/// The state-bearing ledger event and reason for a terminal state.
+fn terminal_event(state: RunState) -> Option<(EventKind, String)> {
+    match state {
+        RunState::Cancelled => Some((EventKind::RunCancelled, "cancelled".to_string())),
+        RunState::Revoked(reason) => Some((EventKind::RunRevoked, format!("{reason:?}"))),
+        RunState::Failed(reason) => Some((EventKind::RunFailed, format!("{reason:?}"))),
+        RunState::RecoveryRequired(reason) => {
+            Some((EventKind::RecoveryRequired, format!("{reason:?}")))
+        }
+        _ => None,
     }
 }
 
