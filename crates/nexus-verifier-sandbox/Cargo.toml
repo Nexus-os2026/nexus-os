@@ -1,0 +1,11 @@
+[package]
+name = "nexus-verifier-sandbox"
+version = "0.1.0"
+license = "MIT"
+edition = "2021"
+publish = false
+description = "Phase Two governed verification: verifier profiles, sandbox and resource policy identities, and the Linux verifier sandbox helper"
+
+[dependencies]
+sha2 = "0.10"
+hex = "0.4"

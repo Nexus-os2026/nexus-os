@@ -5988,6 +5988,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-verifier-sandbox"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "sha2",
+]
+
+[[package]]
 name = "nexus-workflows"
 version = "10.6.0"
 dependencies = [

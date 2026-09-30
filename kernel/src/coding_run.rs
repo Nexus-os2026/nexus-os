@@ -64,6 +64,38 @@
 //!     (approval.clone(), approval) // not Clone
 //! }
 //! ```
+//!
+//! Phase Two (P2B) adds the run-bound verification types
+//! ([`VerifierLaunchBinding`], [`VerifierLaunchApproval`],
+//! [`VerificationResult`]): a verifier launch approval is, like an owner
+//! approval, only the result of the backend's native confirmation of one
+//! exact launch binding.
+//!
+//! ```compile_fail
+//! use nexus_kernel::coding_run::{VerifierLaunchApproval, VerifierLaunchBinding};
+//! fn forge(binding: VerifierLaunchBinding) -> VerifierLaunchApproval {
+//!     VerifierLaunchApproval { binding } // the field is private
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! use nexus_kernel::coding_run::{VerifierLaunchApproval, VerifierLaunchBinding};
+//! fn forge(binding: VerifierLaunchBinding) -> VerifierLaunchApproval {
+//!     VerifierLaunchApproval::confirmed(binding) // crate-private
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! let _: nexus_kernel::coding_run::VerifierLaunchApproval =
+//!     serde_json::from_str(r#"{"approved": true}"#).unwrap(); // no deserializer
+//! ```
+//!
+//! ```compile_fail
+//! use nexus_kernel::coding_run::VerifierLaunchApproval;
+//! fn twice(approval: VerifierLaunchApproval) -> (VerifierLaunchApproval, VerifierLaunchApproval) {
+//!     (approval.clone(), approval) // not Clone
+//! }
+//! ```
 
 mod apply;
 mod fsops;
@@ -74,6 +106,7 @@ mod project;
 mod review;
 mod scope;
 mod structural;
+mod verifier;
 mod worker;
 
 #[cfg(test)]
@@ -115,6 +148,11 @@ pub use review::{
 pub use scope::{RelPath, RunScopes, ScopeEntry, ScopeError, ScopeSet};
 pub use structural::{
     StructuralOutcome, StructuralProfile, StructuralVerification, StructuralViolation,
+};
+pub use verifier::{
+    ExecutionGeneration, StreamSummary, VerificationResult, VerifierCleanup, VerifierExit,
+    VerifierInputs, VerifierLaunchApproval, VerifierLaunchBinding, VerifierLaunchConfirmer,
+    VerifierLaunchFacts, VerifierLaunchRequest, VerifierMarker, VerifierOutcome,
 };
 pub use worker::{
     run_worker, EditProposal, ProposalOp, ProposalRejection, WorkerError, WorkerLimits,

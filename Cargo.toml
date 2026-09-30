@@ -70,6 +70,7 @@ members = [
   "crates/nexus-ui-repair",
   "crates/nexus-swarm",
   "crates/nexus-swarm-core",
+  "crates/nexus-verifier-sandbox",
   "nexus-code",
 ]
 
