@@ -91,6 +91,11 @@ pub enum EventKind {
     ApplyCompleted,
     ApplyRolledBack,
     ApplyRecoveryRequired,
+    RestoreApproved,
+    RestoreDeclined,
+    RestoreRejected,
+    RestorePrepared,
+    RestoreCompleted,
 }
 
 impl EventKind {
@@ -123,6 +128,11 @@ impl EventKind {
             Self::ApplyCompleted => "apply.completed",
             Self::ApplyRolledBack => "apply.rolled_back",
             Self::ApplyRecoveryRequired => "apply.recovery_required",
+            Self::RestoreApproved => "restore.approved",
+            Self::RestoreDeclined => "restore.declined",
+            Self::RestoreRejected => "restore.rejected",
+            Self::RestorePrepared => "restore.prepared",
+            Self::RestoreCompleted => "restore.completed",
         }
     }
 }

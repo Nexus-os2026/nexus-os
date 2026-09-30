@@ -556,6 +556,8 @@ pub struct CodingRun {
     apply_state: apply::ApplyState,
     /// The record of this run's successful apply (restore authority).
     applied: Option<apply::ApplyRecord>,
+    /// The owner's native approval to restore this run's apply.
+    restore_approved: Option<ReviewBinding>,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -640,6 +642,7 @@ impl CodingRun {
             approved: None,
             apply_state: apply::ApplyState::NotApplied,
             applied: None,
+            restore_approved: None,
         };
         let mut facts = json!({
             "project_grant": project_grant,

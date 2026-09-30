@@ -1,4 +1,4 @@
-//! Owner approval and apply (Phase One, P1-06).
+//! Owner approval, apply and single-run restore (Phase One, P1-06/P1-07).
 //!
 //! Approval (decision D2) comes only from a backend-invoked native
 //! confirmation ([`OwnerConfirmer`]) that shows backend-computed facts about
@@ -27,8 +27,14 @@
 //! recovery, never as applied. Multi-file apply is not atomic; the ledger
 //! and the filesystem are separate transactional domains.
 //!
-//! The apply record kept by the run is the only material a later restore of
-//! this one run may use.
+//! Restore ("Restore this coding run") undoes exactly one successful apply
+//! of this run, after its own native confirmation and over a fresh write
+//! grant. Before anything is touched, the project root must still be the
+//! selected directory, every applied file must still be reachable at its
+//! path through the same directories and still hold exactly the bytes Nexus
+//! wrote (a created file must still be the very file Nexus created), and
+//! every pre-image must be intact in the private store; otherwise nothing is
+//! touched. It is not Time Machine and uses no Time Machine authority.
 
 use serde_json::json;
 use thiserror::Error;
@@ -163,12 +169,17 @@ impl ConfirmationRequest {
 /// consumes it.
 #[derive(Debug)]
 pub struct OwnerApproval {
+    kind: ConfirmationKind,
     binding: ReviewBinding,
 }
 
 impl OwnerApproval {
     pub fn binding(&self) -> &ReviewBinding {
         &self.binding
+    }
+
+    pub fn kind(&self) -> ConfirmationKind {
+        self.kind
     }
 }
 
@@ -256,8 +267,6 @@ struct CreatedDir {
 }
 
 /// The record of one successful apply: the only restore authority.
-// The pre-image store and created directories are read by restore (P1-07).
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct ApplyRecord {
     binding: ReviewBinding,
@@ -369,6 +378,7 @@ impl CodingRun {
         result?;
         self.approved = Some(review.binding);
         Ok(OwnerApproval {
+            kind: ConfirmationKind::Apply,
             binding: review.binding,
         })
     }
@@ -380,7 +390,12 @@ impl CodingRun {
         grant: ProjectGrant,
         storage: &StagingParent,
     ) -> Result<ApplyReport, ApplyError> {
-        let result = self.apply_inner(approval.binding, &grant, storage);
+        let result = if approval.kind == ConfirmationKind::Apply {
+            self.apply_inner(approval.binding, &grant, storage)
+        } else {
+            self.approved = None;
+            Err(refused(Refusal::ApprovalMismatch))
+        };
         // The write grant never outlives the attempt.
         let _ = grant.authority.revoke(grant.grant, grant.binding);
         if let Err(ApplyError::Refused(refusal)) = &result {
@@ -724,6 +739,179 @@ impl CodingRun {
         }
         Ok((dir, name, facts))
     }
+
+    // ── Restore (P1-07) ────────────────────────────────────────────────
+
+    /// Ask the owner, natively, to restore this run's apply.
+    pub fn request_restore(
+        &mut self,
+        project_name: &str,
+        confirmer: &dyn OwnerConfirmer,
+    ) -> Result<OwnerApproval, ApplyError> {
+        let record_ = self.applied.as_ref().ok_or(ApplyError::InvalidState)?;
+        if self.apply_state != ApplyState::Applied {
+            return Err(ApplyError::InvalidState);
+        }
+        let binding = record_.binding;
+        let request = ConfirmationRequest::new(ConfirmationKind::Restore, project_name, &binding)
+            .with_paths(record_.files.iter().map(|f| (&f.path, f.kind)));
+        let confirmed = confirmer.confirm(&request);
+        let event = if confirmed {
+            EventKind::RestoreApproved
+        } else {
+            EventKind::RestoreDeclined
+        };
+        record(
+            self.ledger.as_ref(),
+            self.id.0,
+            event,
+            &json!({ "binding": hex::encode(binding.hash()) }),
+        )
+        .map_err(|_| refused(Refusal::Unrecorded))?;
+        if !confirmed {
+            return Err(refused(Refusal::Declined));
+        }
+        self.restore_approved = Some(binding);
+        Ok(OwnerApproval {
+            kind: ConfirmationKind::Restore,
+            binding,
+        })
+    }
+
+    /// Restore this run's apply: only if every applied file still has the
+    /// content Nexus wrote (a created file must still be the very file Nexus
+    /// created). Otherwise nothing is touched.
+    pub fn restore(
+        &mut self,
+        approval: OwnerApproval,
+        grant: ProjectGrant,
+    ) -> Result<ApplyReport, ApplyError> {
+        let result = if approval.kind == ConfirmationKind::Restore {
+            self.restore_inner(approval.binding, &grant)
+        } else {
+            self.restore_approved = None;
+            Err(refused(Refusal::ApprovalMismatch))
+        };
+        let _ = grant.authority.revoke(grant.grant, grant.binding);
+        if let Err(ApplyError::Refused(refusal)) = &result {
+            let _ = record(
+                self.ledger.as_ref(),
+                self.id.0,
+                EventKind::RestoreRejected,
+                &json!({ "reason": format!("{refusal:?}") }),
+            );
+        }
+        result
+    }
+
+    fn restore_inner(
+        &mut self,
+        binding: ReviewBinding,
+        grant: &ProjectGrant,
+    ) -> Result<ApplyReport, ApplyError> {
+        if self.apply_state != ApplyState::Applied || self.applied.is_none() {
+            return Err(ApplyError::InvalidState);
+        }
+        let approved = self.restore_approved.take();
+        let record_binding = self.applied.as_ref().map(|r| r.binding);
+        if approved.is_none() {
+            return Err(refused(Refusal::NotApproved));
+        }
+        if approved != Some(binding) || record_binding != Some(binding) {
+            return Err(refused(Refusal::ApprovalMismatch));
+        }
+        let root = self.project_root_for_write(grant)?;
+        let max = self.profile.max_file_bytes;
+        let applied = self.applied.as_ref().ok_or(ApplyError::InvalidState)?;
+        // Preflight: every file must still be what Nexus wrote, reached at
+        // its path through the same directories, and every pre-image must
+        // still be intact, before anything is touched.
+        for file in &applied.files {
+            let text = file.path.as_string();
+            if !reaches(&root, &file.path, file.dir.identity()) {
+                return Err(refused(Refusal::Stale(text)));
+            }
+            let (bytes, identity, _) = file
+                .dir
+                .read_with_identity(&file.name, max)
+                .map_err(|_| refused(Refusal::Stale(text.clone())))?;
+            if ManifestEntry::of(&bytes) != file.candidate
+                || (file.kind == ChangeKind::Create && identity != file.installed)
+            {
+                return Err(refused(Refusal::Stale(text)));
+            }
+            if let Some(pre) = &file.preimage {
+                let bytes = applied
+                    .storage
+                    .read_regular(&pre.slot, max)
+                    .map_err(|_| refused(Refusal::PreimageUnavailable))?;
+                if ManifestEntry::of(&bytes) != pre.entry {
+                    return Err(refused(Refusal::PreimageUnavailable));
+                }
+            }
+        }
+        record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::RestorePrepared,
+            &json!({ "binding": hex::encode(binding.hash()), "files": applied.files.len() }),
+        )
+        .map_err(|_| refused(Refusal::Unrecorded))?;
+
+        let mut applied = self.applied.take().ok_or(ApplyError::InvalidState)?;
+        let files: Vec<(RelPath, ChangeKind)> = applied
+            .files
+            .iter()
+            .map(|f| (f.path.clone(), f.kind))
+            .collect();
+        let unrestored = rollback(&mut applied.files, &mut applied.dirs, &applied.storage);
+        if unrestored.is_empty() {
+            self.apply_state = ApplyState::Restored;
+            discard_storage(
+                &applied.storage_parent,
+                &applied.storage_name,
+                &applied.storage,
+            );
+            let _ = record(
+                self.ledger.as_ref(),
+                self.id.0,
+                EventKind::RestoreCompleted,
+                &json!({ "binding": hex::encode(binding.hash()), "files": files.len() }),
+            );
+            Ok(ApplyReport { binding, files })
+        } else {
+            self.apply_state = ApplyState::RecoveryRequired;
+            let _ = record(
+                self.ledger.as_ref(),
+                self.id.0,
+                EventKind::ApplyRecoveryRequired,
+                &json!({ "failed": "restore", "unrestored": unrestored }),
+            );
+            Err(ApplyError::RecoveryRequired {
+                failed: "restore".to_string(),
+                unrestored,
+            })
+        }
+    }
+}
+
+/// Whether `path`'s parent, walked from `root` without following links, is
+/// the directory with identity `expected`.
+fn reaches(root: &DirHandle, path: &RelPath, expected: NodeIdentity) -> bool {
+    let (parents, _) = path.parent_and_name();
+    let Ok(mut dir) = root.try_clone() else {
+        return false;
+    };
+    for part in parents {
+        match dir.kind(part) {
+            Ok(EntryKind::Directory) => match dir.open_subdir(part) {
+                Ok(next) => dir = next,
+                Err(_) => return false,
+            },
+            _ => return false,
+        }
+    }
+    dir.identity() == expected
 }
 
 fn request_for(kind: ConfirmationKind, project_name: &str, review: &Review) -> ConfirmationRequest {

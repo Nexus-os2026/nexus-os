@@ -1730,3 +1730,8 @@ mod p1_review;
 
 #[path = "p1_apply_tests.rs"]
 mod p1_apply;
+
+// ── Phase One P1-07: single-run restore ─────────────────────────────────────
+
+#[path = "p1_restore_tests.rs"]
+mod p1_restore;
