@@ -1725,3 +1725,8 @@ mod p1_project;
 
 #[path = "p1_review_tests.rs"]
 mod p1_review;
+
+// ── Phase One P1-06: owner approval and apply ───────────────────────────────
+
+#[path = "p1_apply_tests.rs"]
+mod p1_apply;

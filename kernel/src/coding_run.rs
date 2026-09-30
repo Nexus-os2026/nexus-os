@@ -29,7 +29,31 @@
 //! use nexus_kernel::coding_run::RunId;
 //! let _id = RunId(uuid::Uuid::new_v4()); // the field is private
 //! ```
+//!
+//! Owner approval exists only as the result of the backend's native
+//! confirmation: it cannot be built from caller data, deserialized from a
+//! frontend message, or duplicated.
+//!
+//! ```compile_fail
+//! use nexus_kernel::coding_run::{OwnerApproval, ReviewBinding};
+//! fn forge(binding: ReviewBinding) -> OwnerApproval {
+//!     OwnerApproval { binding } // the field is private
+//! }
+//! ```
+//!
+//! ```compile_fail
+//! let _: nexus_kernel::coding_run::OwnerApproval =
+//!     serde_json::from_str(r#"{"approved": true}"#).unwrap(); // no deserializer
+//! ```
+//!
+//! ```compile_fail
+//! use nexus_kernel::coding_run::OwnerApproval;
+//! fn twice(approval: OwnerApproval) -> (OwnerApproval, OwnerApproval) {
+//!     (approval.clone(), approval) // not Clone
+//! }
+//! ```
 
+mod apply;
 mod fsops;
 mod ledger;
 mod local_model;
@@ -58,6 +82,10 @@ use crate::workspace_authority::{
 };
 use fsops::{DirHandle, EntryKind, NodeIdentity};
 
+pub use apply::{
+    ApplyError, ApplyReport, ApplyState, ConfirmationKind, ConfirmationRequest, OwnerApproval,
+    OwnerConfirmer, Refusal,
+};
 pub use ledger::{analyze as analyze_ledger, LedgerFailure, LedgerRecovery, LedgerStore};
 pub use local_model::{
     loopback_endpoint, LocalModel, LocalOllama, ModelError, ModelMessage, ModelPin, ModelRole,
@@ -522,6 +550,12 @@ pub struct CodingRun {
     /// Base bytes of each base file, captured (and hash-checked) from
     /// staging before its first edit; the old side of the review.
     base_contents: BTreeMap<RelPath, Vec<u8>>,
+    /// The owner's native approval of the current review binding, until an
+    /// apply consumes it.
+    approved: Option<ReviewBinding>,
+    apply_state: apply::ApplyState,
+    /// The record of this run's successful apply (restore authority).
+    applied: Option<apply::ApplyRecord>,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -603,6 +637,9 @@ impl CodingRun {
             project_id: selected.map(|(id, _)| id),
             expected_root: selected.map(|(_, identity)| identity),
             base_contents: BTreeMap::new(),
+            approved: None,
+            apply_state: apply::ApplyState::NotApplied,
+            applied: None,
         };
         let mut facts = json!({
             "project_grant": project_grant,

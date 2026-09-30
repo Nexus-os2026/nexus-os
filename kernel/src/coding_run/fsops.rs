@@ -346,6 +346,125 @@ impl DirHandle {
         self.open_subdir(name)
     }
 
+    // ── Owner-project operations (Phase One apply and restore) ─────────
+
+    /// Write `content` to a new exclusive temporary file with permission
+    /// bits `mode`, fsync it, and return its name and identity.
+    pub(crate) fn write_temp_with_mode(
+        &self,
+        content: &[u8],
+        mode: u32,
+    ) -> io::Result<(String, NodeIdentity)> {
+        let name = format!("{}{}", super::scope::TEMP_PREFIX, uuid::Uuid::new_v4());
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(self.temp_child(&name))?;
+        let result = file
+            .write_all(content)
+            .and_then(|()| {
+                file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(mode & 0o7777))
+            })
+            .and_then(|()| file.sync_all())
+            .and_then(|()| file.metadata());
+        match result {
+            Ok(metadata) => Ok((name, NodeIdentity::of(&metadata))),
+            Err(error) => {
+                let _ = std::fs::remove_file(self.temp_child(&name));
+                Err(error)
+            }
+        }
+    }
+
+    /// Read a regular file (checked like [`Self::read_regular`]) and return
+    /// its bytes, identity and permission bits. `name` may be a temporary
+    /// name of this handle.
+    pub(crate) fn read_with_identity(
+        &self,
+        name: &str,
+        max_bytes: u64,
+    ) -> io::Result<(Vec<u8>, NodeIdentity, u32)> {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)
+            .open(self.any_child(name)?)?;
+        let metadata = file.metadata()?;
+        self.check_regular(&metadata)?;
+        if metadata.len() > max_bytes {
+            return Err(io::Error::other("file exceeds the size cap"));
+        }
+        let mut content = Vec::with_capacity(metadata.len() as usize);
+        (&mut file).take(max_bytes + 1).read_to_end(&mut content)?;
+        let after = file.metadata()?;
+        if content.len() as u64 != metadata.len() || after.len() != metadata.len() {
+            return Err(io::Error::other("file changed while reading"));
+        }
+        Ok((content, NodeIdentity::of(&metadata), metadata.mode()))
+    }
+
+    /// A project-name child, or one of this handle's temporary names.
+    fn any_child(&self, name: &str) -> io::Result<PathBuf> {
+        if name.starts_with(super::scope::TEMP_PREFIX) && !name.contains('/') {
+            Ok(self.temp_child(name))
+        } else {
+            self.child(name)
+        }
+    }
+
+    /// Atomically exchange two entries of this directory (`renameat2` with
+    /// `RENAME_EXCHANGE`, relative to this handle's descriptor). Both must
+    /// exist; nothing is replaced or lost.
+    pub(crate) fn exchange(&self, a: &str, b: &str) -> io::Result<()> {
+        self.any_child(a)?;
+        self.any_child(b)?;
+        nix::fcntl::renameat2(
+            Some(self.file.as_raw_fd()),
+            a,
+            Some(self.file.as_raw_fd()),
+            b,
+            nix::fcntl::RenameFlags::RENAME_EXCHANGE,
+        )
+        .map_err(io::Error::from)
+    }
+
+    /// Rename within this directory without ever replacing an entry.
+    pub(crate) fn rename_noreplace(&self, from: &str, to: &str) -> io::Result<()> {
+        self.any_child(from)?;
+        self.any_child(to)?;
+        nix::fcntl::renameat2(
+            Some(self.file.as_raw_fd()),
+            from,
+            Some(self.file.as_raw_fd()),
+            to,
+            nix::fcntl::RenameFlags::RENAME_NOREPLACE,
+        )
+        .map_err(io::Error::from)
+    }
+
+    /// Publish a temporary file under a new name; never replaces anything.
+    pub(crate) fn link_temp(&self, temp: &str, name: &str) -> io::Result<()> {
+        std::fs::hard_link(self.temp_child(temp), self.child(name)?)
+    }
+
+    /// Remove one of this handle's temporary names.
+    pub(crate) fn remove_temp(&self, temp: &str) -> io::Result<()> {
+        if !temp.starts_with(super::scope::TEMP_PREFIX) || temp.contains('/') {
+            return Err(invalid("not a temporary name"));
+        }
+        std::fs::remove_file(self.temp_child(temp))
+    }
+
+    /// Create a subdirectory with permission bits `mode` (subject to the
+    /// umask) and open it.
+    pub(crate) fn make_subdir_with_mode(&self, name: &str, mode: u32) -> io::Result<DirHandle> {
+        std::fs::DirBuilder::new()
+            .mode(mode)
+            .create(self.child(name)?)?;
+        self.open_subdir(name)
+    }
+
     /// fsync the directory.
     pub(crate) fn sync(&self) -> io::Result<()> {
         self.file.sync_all()

@@ -83,6 +83,14 @@ pub enum EventKind {
     WorkerFinished,
     ReviewComputed,
     CandidateWithdrawn,
+    ApprovalGranted,
+    ApprovalDeclined,
+    ApplyRejected,
+    ApplyPrepared,
+    ApplyOp,
+    ApplyCompleted,
+    ApplyRolledBack,
+    ApplyRecoveryRequired,
 }
 
 impl EventKind {
@@ -107,6 +115,14 @@ impl EventKind {
             Self::WorkerFinished => "worker.finished",
             Self::ReviewComputed => "review.computed",
             Self::CandidateWithdrawn => "review.candidate_withdrawn",
+            Self::ApprovalGranted => "approval.granted",
+            Self::ApprovalDeclined => "approval.declined",
+            Self::ApplyRejected => "apply.rejected",
+            Self::ApplyPrepared => "apply.prepared",
+            Self::ApplyOp => "apply.op",
+            Self::ApplyCompleted => "apply.completed",
+            Self::ApplyRolledBack => "apply.rolled_back",
+            Self::ApplyRecoveryRequired => "apply.recovery_required",
         }
     }
 }
