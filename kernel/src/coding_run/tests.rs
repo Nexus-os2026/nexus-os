@@ -1756,3 +1756,8 @@ mod p1_e2e;
 
 #[path = "p2e_read_grant_tests.rs"]
 mod p2e_read_grant;
+
+// ── P2-ENTRY-H1-R1: a worker panic fails the run closed ──────────────────────
+
+#[path = "p2e_worker_panic_tests.rs"]
+mod p2e_worker_panic;

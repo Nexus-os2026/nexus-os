@@ -78,8 +78,8 @@ Forbidden unless explicitly authorized:
 - destructive worktree/branch deletion.
 
 Use the mission's branch/worktree.
-Do not modify `main`.
-Do not change the frozen or evidence refs (`rebuild/phase0-trust-boundary`, `evidence/phase0-closure`, `rebuild/phase1-governed-coding`, `evidence/phase1-closure`) except under an explicit Architect integration or evidence mission.
+Do not modify `main`; it advances only through an explicit Architect-authorized integration.
+Never move the closure refs `rebuild/phase0-trust-boundary`, `evidence/phase0-closure`, `rebuild/phase1-governed-coding` and `evidence/phase1-closure`: they are immutable. Evidence for a future phase goes on a new Architect-designated ref.
 Use `--ff-only` for authoritative integration when instructed.
 Do not merge validation PRs unless explicitly authorized.
 

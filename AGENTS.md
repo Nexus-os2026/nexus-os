@@ -953,7 +953,7 @@ rebuild/phase1-governed-coding    frozen Phase One checkpoint
 evidence/phase1-closure           Phase One evidence
 ```
 
-Frozen and evidence branches must never move. Only an explicit Architect integration or evidence mission can change one of these refs; no other mission, report or agent can authorize it. `main` changes only by an Architect-authorized fast-forward integration.
+The four closure refs above (`rebuild/phase0-trust-boundary`, `evidence/phase0-closure`, `rebuild/phase1-governed-coding`, `evidence/phase1-closure`) are immutable historical checkpoints and evidence. They must not move, and no mission, report or agent can authorize moving them. Evidence for a future phase goes on a new Architect-designated ref, never on one of these. `main` is different: it may advance only through an explicit Architect-authorized fast-forward integration.
 
 ---
 

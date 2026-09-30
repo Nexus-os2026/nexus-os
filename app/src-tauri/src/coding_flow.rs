@@ -89,6 +89,10 @@ pub(crate) struct RunView {
 #[cfg(target_os = "linux")]
 pub(crate) use linux::*;
 
+#[cfg(all(test, target_os = "linux"))]
+#[path = "coding_flow/worker_panic_tests.rs"]
+mod worker_panic_tests;
+
 #[cfg(target_os = "linux")]
 mod linux {
     use std::collections::HashMap;
@@ -110,7 +114,7 @@ mod linux {
     /// The most scope folders of each kind a run may name.
     const MAX_SCOPE_ENTRIES: usize = 32;
 
-    struct Display {
+    pub(super) struct Display {
         stage: &'static str,
         message: Option<String>,
         worker: Option<WorkerView>,
@@ -122,8 +126,8 @@ mod linux {
         can_restore: bool,
     }
 
-    struct RunSlot {
-        run: Mutex<CodingRun>,
+    pub(super) struct RunSlot {
+        pub(super) run: Mutex<CodingRun>,
         binding: WorkspaceBinding,
         project: ProjectInfo,
         model: String,
@@ -131,7 +135,33 @@ mod linux {
     }
 
     impl RunSlot {
-        fn display(&self) -> std::sync::MutexGuard<'_, Display> {
+        /// The slot of a newly created run, shown as preparing.
+        pub(super) fn new(
+            run: CodingRun,
+            binding: WorkspaceBinding,
+            project: ProjectInfo,
+            model: String,
+        ) -> Self {
+            Self {
+                run: Mutex::new(run),
+                binding,
+                project,
+                model,
+                display: Mutex::new(Display {
+                    stage: "preparing",
+                    message: None,
+                    worker: None,
+                    verification: None,
+                    review: None,
+                    run_state: "Created".to_string(),
+                    apply_state: "NotApplied".to_string(),
+                    can_apply: false,
+                    can_restore: false,
+                }),
+            }
+        }
+
+        pub(super) fn display(&self) -> std::sync::MutexGuard<'_, Display> {
             self.display.lock().unwrap_or_else(|p| p.into_inner())
         }
 
@@ -151,7 +181,7 @@ mod linux {
             }
         }
 
-        fn view(&self, id: RunId) -> RunView {
+        pub(super) fn view(&self, id: RunId) -> RunView {
             let display = self.display();
             let busy = matches!(
                 display.stage,
@@ -293,23 +323,7 @@ mod linux {
             let run = CodingRun::create_for_project(ledger, grant, scopes)
                 .map_err(|error| format!("the run could not be recorded: {error}"))?;
             let id = run.id();
-            let slot = Arc::new(RunSlot {
-                run: Mutex::new(run),
-                binding,
-                project,
-                model: model.clone(),
-                display: Mutex::new(Display {
-                    stage: "preparing",
-                    message: None,
-                    worker: None,
-                    verification: None,
-                    review: None,
-                    run_state: "Created".to_string(),
-                    apply_state: "NotApplied".to_string(),
-                    can_apply: false,
-                    can_restore: false,
-                }),
-            });
+            let slot = Arc::new(RunSlot::new(run, binding, project, model.clone()));
             self.runs().insert(id, Arc::clone(&slot));
             let worker = Arc::clone(&slot);
             if std::thread::Builder::new()
@@ -537,7 +551,7 @@ mod linux {
     }
 
     /// Take the run for an owner action, only from the expected stage.
-    fn claim<'a>(
+    pub(super) fn claim<'a>(
         slot: &'a RunSlot,
         from: &[&'static str],
         to: &'static str,
@@ -655,9 +669,42 @@ mod linux {
         LocalOllama::installed_models(&local_endpoint()?).map_err(|error| error.to_string())
     }
 
-    /// The worker thread: stage, pin the model, run the worker, review.
+    /// The worker thread: the governed work behind the worker panic
+    /// boundary ([`guarded`]).
     fn work(slot: &RunSlot, endpoint: &LocalEndpoint, model: &str, task: &str) {
+        guarded(slot, |run| governed_work(slot, run, endpoint, model, task));
+    }
+
+    /// What the display says after a caught worker panic: fixed and bounded,
+    /// never the panic's payload.
+    pub(super) const WORKER_STOPPED: &str =
+        "The coding worker stopped unexpectedly; the run needs recovery.";
+
+    /// The coding worker thread's panic boundary (P2-ENTRY-H1-R1).
+    ///
+    /// The run is locked once, outside the boundary, so a panic in `body`
+    /// unwinds only `body`: the run guard is never dropped while unwinding
+    /// (the run mutex is not poisoned) and recovery reuses it rather than
+    /// locking again. The kernel closes the run's authority first and leaves
+    /// it requiring recovery ([`CodingRun::guard_worker`]); only then does
+    /// the display say so, without the payload, and the thread ends. Nothing
+    /// is retried or continued.
+    pub(super) fn guarded(slot: &RunSlot, body: impl FnOnce(&mut CodingRun)) {
         let mut run = slot.run.lock().unwrap_or_else(|p| p.into_inner());
+        if run.guard_worker(body).is_err() {
+            slot.refresh(&run, "recovery_required", Some(WORKER_STOPPED.to_string()));
+        }
+    }
+
+    /// The worker's governed work on the locked run: stage, pin the model,
+    /// run the worker, review.
+    fn governed_work(
+        slot: &RunSlot,
+        run: &mut CodingRun,
+        endpoint: &LocalEndpoint,
+        model: &str,
+        task: &str,
+    ) {
         let prepared = StagingParent::from_identity_home()
             .map_err(|error| error.to_string())
             .and_then(|parent| run.grant(&parent).map_err(|e| e.to_string()))
@@ -667,30 +714,27 @@ mod linux {
             slot.refresh(run, stage, Some(message));
         };
         if let Err(error) = prepared {
-            fail(
-                &mut run,
-                format!("The project could not be staged: {error}"),
-            );
+            fail(run, format!("The project could not be staged: {error}"));
             return;
         }
         let local = match LocalOllama::select(endpoint, model) {
             Ok(local) => local,
             Err(error) => {
-                fail(&mut run, format!("{error}; no other model is used."));
+                fail(run, format!("{error}; no other model is used."));
                 return;
             }
         };
         if let Err(error) = run.pin_model(local.pin().clone()) {
-            fail(&mut run, format!("The model could not be pinned: {error}"));
+            fail(run, format!("The model could not be pinned: {error}"));
             return;
         }
-        slot.refresh(&run, "working", None);
-        match run_worker(&mut run, &local, task) {
+        slot.refresh(run, "working", None);
+        match run_worker(run, &local, task) {
             Ok(report) => {
                 slot.display().worker = Some(worker_view(&report));
                 match &report.verification {
                     None => slot.refresh(
-                        &run,
+                        run,
                         "no_changes",
                         Some("The model finished without proposing changes.".to_string()),
                     ),
@@ -698,7 +742,7 @@ mod linux {
                         slot.display().verification = Some(verification_view(verification));
                         if !verification.passed() {
                             fail(
-                                &mut run,
+                                run,
                                 "Structural verification rejected the candidate; it cannot be applied.".to_string(),
                             );
                             return;
@@ -706,17 +750,16 @@ mod linux {
                         match run.review() {
                             Ok(review) => {
                                 slot.display().review = Some(review_view(&review));
-                                slot.refresh(&run, "review", None);
+                                slot.refresh(run, "review", None);
                             }
-                            Err(error) => fail(
-                                &mut run,
-                                format!("The review could not be computed: {error}"),
-                            ),
+                            Err(error) => {
+                                fail(run, format!("The review could not be computed: {error}"))
+                            }
                         }
                     }
                 }
             }
-            Err(error) => fail(&mut run, error.to_string()),
+            Err(error) => fail(run, error.to_string()),
         }
     }
 

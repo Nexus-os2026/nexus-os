@@ -11,7 +11,7 @@ use super::*;
 use crate::workspace_authority::WorkspaceAuthorityError;
 use std::sync::Mutex as StdMutex;
 
-struct Yes;
+pub(super) struct Yes;
 
 impl OwnerConfirmer for Yes {
     fn confirm(&self, _request: &ConfirmationRequest) -> bool {
@@ -66,10 +66,10 @@ impl LocalModel for Scripted {
 }
 
 /// Makes revoking a run's read grant fail until dropped.
-struct RevokeFails;
+pub(super) struct RevokeFails;
 
 impl RevokeFails {
-    fn set() -> Self {
+    pub(super) fn set() -> Self {
         PROJECT_READ_REVOKE_FAILS.with(|fails| fails.set(true));
         Self
     }
@@ -90,7 +90,7 @@ fn binding() -> WorkspaceBinding {
 
 /// A run over the owner-selected fixture project, holding its own read
 /// grant: (run, binding, read grant).
-fn owned_run_with(
+pub(super) fn owned_run_with(
     e: &Env,
     ledger: Arc<dyn LedgerStore>,
 ) -> (CodingRun, WorkspaceBinding, WorkspaceGrantId) {
@@ -102,12 +102,12 @@ fn owned_run_with(
     (run, binding, read)
 }
 
-fn owned_run(e: &Env) -> (CodingRun, WorkspaceBinding, WorkspaceGrantId) {
+pub(super) fn owned_run(e: &Env) -> (CodingRun, WorkspaceBinding, WorkspaceGrantId) {
     owned_run_with(e, Arc::clone(&e.f.ledger) as Arc<dyn LedgerStore>)
 }
 
 /// An owned run that has staged the project.
-fn staged_owned(e: &Env) -> (CodingRun, WorkspaceBinding, WorkspaceGrantId) {
+pub(super) fn staged_owned(e: &Env) -> (CodingRun, WorkspaceBinding, WorkspaceGrantId) {
     let (mut run, binding, read) = owned_run(e);
     run.grant(&parent(&e.f)).unwrap();
     run.snapshot().unwrap();
@@ -115,7 +115,7 @@ fn staged_owned(e: &Env) -> (CodingRun, WorkspaceBinding, WorkspaceGrantId) {
 }
 
 /// An owned run whose candidate passed structural verification.
-fn verified_owned(e: &Env) -> (CodingRun, WorkspaceBinding, WorkspaceGrantId) {
+pub(super) fn verified_owned(e: &Env) -> (CodingRun, WorkspaceBinding, WorkspaceGrantId) {
     let (mut run, binding, read) = staged_owned(e);
     for edit in default_edits() {
         run.edit(edit).unwrap();
@@ -124,11 +124,11 @@ fn verified_owned(e: &Env) -> (CodingRun, WorkspaceBinding, WorkspaceGrantId) {
     (run, binding, read)
 }
 
-fn live(e: &Env, grant: WorkspaceGrantId, binding: WorkspaceBinding) -> bool {
+pub(super) fn live(e: &Env, grant: WorkspaceGrantId, binding: WorkspaceBinding) -> bool {
     e.f.registry.resolve(grant, binding).is_ok()
 }
 
-fn assert_read_revoked(e: &Env, grant: WorkspaceGrantId, binding: WorkspaceBinding) {
+pub(super) fn assert_read_revoked(e: &Env, grant: WorkspaceGrantId, binding: WorkspaceBinding) {
     assert_eq!(
         e.f.registry.resolve(grant, binding).unwrap_err(),
         WorkspaceAuthorityError::RevokedGrant,
@@ -137,7 +137,7 @@ fn assert_read_revoked(e: &Env, grant: WorkspaceGrantId, binding: WorkspaceBindi
 }
 
 /// The final state-bearing ledger event of a run and its reason.
-fn final_state_event(e: &Env, run: &CodingRun) -> (String, String) {
+pub(super) fn final_state_event(e: &Env, run: &CodingRun) -> (String, String) {
     let record =
         e.f.ledger
             .verify_run(run.id().ledger_key())

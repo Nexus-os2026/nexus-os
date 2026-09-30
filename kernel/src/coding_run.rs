@@ -22,7 +22,9 @@
 //! explicit; `Drop` and the grant's expiry are only backstops. The open
 //! project directory handle is kept only for the snapshot copy. A grant the
 //! caller passes to [`CodingRun::create`] stays the caller's and is never
-//! revoked by the run.
+//! revoked by the run. A worker body that panics fails closed the same way
+//! ([`CodingRun::guard_worker`]): the run's authority is closed first and the
+//! run requires recovery.
 //!
 //! Phase One adds a governed worker ([`run_worker`]): a local model pinned
 //! into the run ([`CodingRun::pin_model`]) proposes typed edits that reach
@@ -196,6 +198,17 @@ pub enum RecoveryReason {
     /// The run's own project read grant could not be revoked when the run
     /// stopped needing it.
     ProjectRevocationFailed,
+    /// The governed worker body panicked ([`CodingRun::guard_worker`]).
+    /// Whatever it was doing may be half done, so the outcome is uncertain.
+    WorkerPanicked,
+}
+
+/// A governed worker body panicked ([`CodingRun::guard_worker`]). It carries
+/// no panic payload: only the state the run was left in once its authority
+/// was closed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkerPanic {
+    pub state: RunState,
 }
 
 /// Run state. Terminal outcomes are kept as they happened.
@@ -1713,6 +1726,64 @@ impl CodingRun {
         if !self.state.is_terminal() {
             self.enter_terminal(RunState::Failed(reason));
         }
+    }
+
+    /// Run the governed worker's `body` on this run behind a panic boundary
+    /// (P2-ENTRY-H1-R1). The desktop's coding worker thread is the only
+    /// caller; no process-wide panic hook or policy is involved.
+    ///
+    /// If `body` panics, only `body` unwinds, and the run fails closed before
+    /// this returns: see [`Self::recover_worker_panic`]. The panic payload is
+    /// dropped unread; it is never shown, recorded or returned. Nothing is
+    /// retried or continued, no write grant is issued and the owner's project
+    /// is not touched.
+    ///
+    /// `AssertUnwindSafe` is sound here because after a panic the run is used
+    /// only to close its authority and require recovery, never to continue
+    /// the interrupted work.
+    pub fn guard_worker<T>(&mut self, body: impl FnOnce(&mut Self) -> T) -> Result<T, WorkerPanic> {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(self))) {
+            Ok(value) => Ok(value),
+            Err(payload) => {
+                let state = self.recover_worker_panic();
+                drop(payload);
+                Err(WorkerPanic { state })
+            }
+        }
+    }
+
+    /// Fail the run closed after its worker body panicked. Whatever the body
+    /// was doing may be half done (a prepared record without its outcome, a
+    /// staging mutation, a model turn), so this is never a clean cancellation.
+    ///
+    /// A live run, or a verified candidate the owner has not yet been shown
+    /// (`StructurallyVerified`, not applied: the panic interrupted the worker
+    /// before its review was delivered), goes through the authority-first
+    /// recovery path: its staging grant and its own project read grant are
+    /// revoked independently of the ledger, the candidate generation and any
+    /// verification are withdrawn, and it enters
+    /// `RecoveryRequired(WorkerPanicked)`, recorded once (best-effort). A
+    /// failed revocation keeps the stronger `StagingRevocationFailed` or
+    /// `ProjectRevocationFailed` instead. The staging copy is kept for an
+    /// explicit discard, so no removal is claimed.
+    ///
+    /// A run that had already ended (cancelled, revoked, failed, requiring
+    /// recovery, or applied) keeps its recorded outcome; terminal outcomes are
+    /// never rewritten. Its authority closure is retried, idempotently.
+    /// Returns the run's state.
+    fn recover_worker_panic(&mut self) -> RunState {
+        let unreviewed_candidate = self.state == RunState::StructurallyVerified
+            && self.apply_state == apply::ApplyState::NotApplied;
+        if self.state.is_terminal() && !unreviewed_candidate {
+            if let Some(staging) = self.staging.as_mut() {
+                staging.revoke_grant();
+            }
+            self.close_project_read();
+            return self.state;
+        }
+        self.verification = None;
+        let _ = self.force_recovery(RecoveryReason::WorkerPanicked, false);
+        self.state
     }
 
     // ── Cancellation, revocation, cleanup ──────────────────────────────
