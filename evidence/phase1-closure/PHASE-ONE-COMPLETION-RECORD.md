@@ -192,8 +192,14 @@ These hold only for the governed coding path described in C, on Linux.
 - **Staged mutation only.** Model-proposed changes reach only private
   staging. The owner's project is written only by apply, after native
   approval of the exact run, base and candidate.
-- **Stale-safe apply.** Concurrent owner changes, a replaced root, redirects
-  or a changed candidate reject apply with zero writes.
+- **Stale-safe apply.**
+  - Before any owner-project mutation, apply preflight rejects stale base
+    bytes, a replaced project root, redirects, out-of-scope changes or a
+    changed candidate.
+  - A concurrent owner change during the write or exchange window is
+    detected. A write may already have happened by then. Nexus restores the
+    owner's version where it safely can, or reports recovery required. It
+    never reports clean success for an unresolved conflict.
 - **Truthful outcomes.** Partial failures are rolled back where safe, or
   reported as requiring recovery. No clean success is reported without
   durable finalization and confirmed closure of the temporary write grant.
