@@ -1,0 +1,51 @@
+{
+  "version": "1.94.0",
+  "date": "2026-03-05",
+  "source": "https://static.rust-lang.org/dist/2026-03-05/",
+  "channel": {
+    "file": "channel-rust-1.94.0.toml",
+    "sha256": "aaa177def36e01d539bee6bde95295230b9ce378f81057845db8d0ebe97898ee"
+  },
+  "host": "x86_64-unknown-linux-gnu",
+  "target": "x86_64-unknown-linux-musl",
+  "components": [
+    {
+      "archive": "rustc-1.94.0-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "b8c57ca524c86b2454502628a0d76f2de8cf1ae2c0a098dcdf1216ffaa4747e8",
+      "files": {
+        "rustc-1.94.0-x86_64-unknown-linux-gnu/rustc/bin/rustc": "bin/rustc",
+        "rustc-1.94.0-x86_64-unknown-linux-gnu/rustc/lib/librustc_driver-24b10b5e3eb5af70.so": "lib/librustc_driver-24b10b5e3eb5af70.so",
+        "rustc-1.94.0-x86_64-unknown-linux-gnu/rustc/lib/libLLVM.so.21.1-rust-1.94.0-stable": "lib/libLLVM.so.21.1-rust-1.94.0-stable",
+        "rustc-1.94.0-x86_64-unknown-linux-gnu/rustc/lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld": "lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld",
+        "rustc-1.94.0-x86_64-unknown-linux-gnu/COPYRIGHT": "share/doc/rustc/COPYRIGHT",
+        "rustc-1.94.0-x86_64-unknown-linux-gnu/LICENSE-APACHE": "share/doc/rustc/LICENSE-APACHE",
+        "rustc-1.94.0-x86_64-unknown-linux-gnu/LICENSE-MIT": "share/doc/rustc/LICENSE-MIT"
+      },
+      "trees": {}
+    },
+    {
+      "archive": "cargo-1.94.0-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "6d77b3f9396cc23aa4f3ae2822b1349c4b2cf746dee4228212b5bed94200f421",
+      "files": {
+        "cargo-1.94.0-x86_64-unknown-linux-gnu/cargo/bin/cargo": "bin/cargo",
+        "cargo-1.94.0-x86_64-unknown-linux-gnu/LICENSE-APACHE": "share/doc/cargo/LICENSE-APACHE",
+        "cargo-1.94.0-x86_64-unknown-linux-gnu/LICENSE-MIT": "share/doc/cargo/LICENSE-MIT",
+        "cargo-1.94.0-x86_64-unknown-linux-gnu/LICENSE-THIRD-PARTY": "share/doc/cargo/LICENSE-THIRD-PARTY"
+      },
+      "trees": {}
+    },
+    {
+      "archive": "rust-std-1.94.0-x86_64-unknown-linux-musl.tar.gz",
+      "sha256": "74a0e509ada9e9dd8e40a987abfdc677c6aa3487506bd6afaf9ede9466e3b189",
+      "files": {
+        "rust-std-1.94.0-x86_64-unknown-linux-musl/COPYRIGHT": "share/doc/rust-std/COPYRIGHT",
+        "rust-std-1.94.0-x86_64-unknown-linux-musl/LICENSE-APACHE": "share/doc/rust-std/LICENSE-APACHE",
+        "rust-std-1.94.0-x86_64-unknown-linux-musl/LICENSE-MIT": "share/doc/rust-std/LICENSE-MIT"
+      },
+      "trees": {
+        "rust-std-1.94.0-x86_64-unknown-linux-musl/rust-std-x86_64-unknown-linux-musl/lib/rustlib/x86_64-unknown-linux-musl/lib/": "lib/rustlib/x86_64-unknown-linux-musl/lib/"
+      }
+    }
+  ],
+  "files": 84
+}

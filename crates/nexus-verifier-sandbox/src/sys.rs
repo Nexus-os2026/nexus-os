@@ -447,6 +447,85 @@ pub(crate) fn directory_batch(dir: BorrowedFd<'_>) -> io::Result<Vec<CString>> {
     }
 }
 
+/// Every entry name of the directory `dir` refers to, without `.` and `..`,
+/// read to the end through a new open file description.
+pub(crate) fn directory_entries(dir: BorrowedFd<'_>) -> io::Result<Vec<CString>> {
+    let listing = open_dir_at(dir, c".")?;
+    let mut names = Vec::new();
+    let mut buf = vec![0u8; 32 * 1024];
+    loop {
+        // SAFETY: getdents64 writes at most buf.len() bytes of records.
+        let n = unsafe {
+            libc::syscall(
+                libc::SYS_getdents64,
+                listing.as_raw_fd(),
+                buf.as_mut_ptr(),
+                buf.len(),
+            )
+        };
+        let filled = match check_long(n)? {
+            0 => return Ok(names),
+            n => buf.get(..n as usize).ok_or(io::ErrorKind::InvalidData)?,
+        };
+        let mut offset = 0;
+        while offset < filled.len() {
+            let malformed = || io::Error::from_raw_os_error(libc::EINVAL);
+            let header = filled.get(offset..offset + 19).ok_or_else(malformed)?;
+            let reclen = usize::from(u16::from_ne_bytes([header[16], header[17]]));
+            let record = filled
+                .get(offset..offset + reclen)
+                .filter(|record| record.len() > 19)
+                .ok_or_else(malformed)?;
+            let name = &record[19..];
+            let name = &name[..name.iter().position(|&b| b == 0).unwrap_or(name.len())];
+            if name.is_empty() {
+                return Err(malformed());
+            }
+            if name != b"." && name != b".." {
+                names.push(CString::new(name).map_err(|_| malformed())?);
+            }
+            offset += reclen;
+        }
+    }
+}
+
+/// Open the file `name` beneath `dir` read-only, never following a symlink
+/// at `name` and never blocking on a FIFO.
+pub(crate) fn open_file_at(dir: BorrowedFd<'_>, name: &CStr) -> io::Result<OwnedFd> {
+    // SAFETY: name is NUL-terminated; openat returns a new descriptor owned
+    // here on success.
+    let raw = check(unsafe {
+        libc::openat(
+            dir.as_raw_fd(),
+            name.as_ptr(),
+            libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_NOCTTY | libc::O_CLOEXEC,
+        )
+    })?;
+    // SAFETY: openat succeeded, so raw is new and owned here.
+    Ok(unsafe { OwnedFd::from_raw_fd(raw) })
+}
+
+/// The target of the symlink `name` beneath `dir`.
+pub(crate) fn readlink_at(dir: BorrowedFd<'_>, name: &CStr) -> io::Result<Vec<u8>> {
+    let mut buf = vec![0u8; 4096];
+    // SAFETY: name is NUL-terminated; readlinkat writes at most buf.len()
+    // bytes.
+    let n = unsafe {
+        libc::readlinkat(
+            dir.as_raw_fd(),
+            name.as_ptr(),
+            buf.as_mut_ptr().cast(),
+            buf.len(),
+        )
+    };
+    let n = check_long(n as libc::c_long)? as usize;
+    if n >= buf.len() {
+        return Err(io::Error::from_raw_os_error(libc::ENAMETOOLONG));
+    }
+    buf.truncate(n);
+    Ok(buf)
+}
+
 /// Whether the directory `dir` refers to lists nothing but `.` and `..` (a
 /// removed directory lists nothing).
 pub(crate) fn directory_is_empty(dir: BorrowedFd<'_>) -> io::Result<bool> {

@@ -472,7 +472,9 @@ fn p0_fg_webview_conf_has_restrictive_csp_and_guarded_window() {
         );
         merges += 1;
     }
-    assert_eq!(merges, 1, "the one reviewed release-time config merge");
+    // Reviewed: the Builder toolchain and (Phase Two P2F) the verifier
+    // toolchain resources, each touching only the bundle.
+    assert_eq!(merges, 2, "the reviewed release-time config merges");
 }
 
 /// The privileged document loads nothing from a third party: `index.html`

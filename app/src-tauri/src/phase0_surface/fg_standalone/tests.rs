@@ -923,14 +923,16 @@ impl IgnoredDirectory {
 /// prefix), joined by line feeds. A new or changed anchored entry in
 /// `.gitignore` could hide a recipe or a pipeline file from the walk, so it
 /// fails here until it is reviewed and the pin is updated.
+// Phase Two P2F reviewed `/app/src-tauri/verifier-toolchain/` and its
+// `.assembly-*` work directories: the assembled verifier toolchain only.
 const IGNORED_DIRECTORIES_PIN: (usize, &str) = (
-    10,
-    "6fa2a363ee77a556134b6c454da1eb3e830e243905cebc6fa315693d0e356ce5",
+    12,
+    "2228363af9c03cbff2d27b3424b65703f35594df43d2af6ec3b6f7bc4545a93f",
 );
 
 /// The anchored ignored directories of the root `.gitignore`: ignored build
-/// output and local state, such as the Builder toolchain that the packaging
-/// step assembles, cloned upstream sources and agent worktrees (other
+/// output and local state, such as the Builder and verifier toolchains that
+/// the packaging steps assemble, cloned upstream sources and agent worktrees (other
 /// checkouts of this repository, each guarded by its own copy of these
 /// tests). Read at run time, so the walk never names them itself, and pinned
 /// ([`IGNORED_DIRECTORIES_PIN`]).

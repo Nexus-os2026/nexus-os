@@ -33,6 +33,8 @@ pub mod seccomp;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod sys;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub mod toolchain;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub mod workspace;
 
 pub use hash::{ProfileHash, ResourcePolicyHash, SandboxPolicyHash};

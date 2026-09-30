@@ -480,7 +480,11 @@ mod live {
             cases::malformed_launch,
         );
         run_case("p2d_live_missing_scope_fails_closed", p2d::missing_scope);
-        let mut passed = 7;
+        run_case(
+            "p2f_live_packaged_toolchain_verifies",
+            p2f::packaged_toolchain,
+        );
+        let mut passed = 8;
         match p2d::ScopeManager::connect() {
             Err(error) => {
                 assert!(
@@ -751,6 +755,59 @@ mod live {
                 }
             });
             assert!(ScopeManager::connect_at(path.to_str().unwrap()).is_err());
+        }
+    }
+
+    mod p2f {
+        use super::*;
+        use nexus_verifier_sandbox::toolchain::{ToolchainError, VerifiedVerifierToolchain};
+
+        /// The assembled development tree (`packaging/verifier-toolchain`).
+        pub fn development_root() -> PathBuf {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../app/src-tauri/verifier-toolchain")
+                .canonicalize()
+                .expect("an assembled verifier toolchain (packaging/verifier-toolchain)")
+        }
+
+        /// The development toolchain, when this build can verify one.
+        #[cfg(feature = "development-toolchain")]
+        pub fn development() -> Option<VerifiedVerifierToolchain> {
+            nexus_verifier_sandbox::toolchain::is_packaged().then(|| {
+                VerifiedVerifierToolchain::verify_development(&development_root()).unwrap()
+            })
+        }
+
+        #[cfg(not(feature = "development-toolchain"))]
+        pub fn development() -> Option<VerifiedVerifierToolchain> {
+            None
+        }
+
+        pub fn packaged_toolchain() {
+            // Whatever this build is, production verification fails closed
+            // here: this test is not the installed application.
+            assert_eq!(
+                VerifiedVerifierToolchain::verify_installed().err(),
+                Some(ToolchainError::Unavailable)
+            );
+            let Some(toolchain) = development() else {
+                assert!(
+                    !required(),
+                    "{REQUIRE_LIVE}=1 requires the packaged verifier toolchain: assemble \
+                     packaging/verifier-toolchain and build with \
+                     NEXUS_VERIFIER_TOOLCHAIN=packaged --features development-toolchain"
+                );
+                println!("(no packaged verifier toolchain in this build: verified unavailable)");
+                return;
+            };
+            toolchain.reverify().unwrap();
+            assert_eq!(toolchain.rust_version(), "1.94.0");
+            let launch = toolchain.launch().unwrap();
+            assert_eq!(launch.rules.len(), 9);
+            assert_eq!(launch.rustc, development_root().join("bin/rustc"));
+            let again = development().expect("verified again");
+            assert_eq!(again.digest(), toolchain.digest());
+            assert!(again.generation() > toolchain.generation());
         }
     }
 

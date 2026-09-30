@@ -70,3 +70,6 @@ docs/claude-skills/*.zip
 # P0-002C4D2: assembled packaged Builder toolchain (release/CI build output)
 /app/src-tauri/builder-toolchain/
 /app/src-tauri/builder-toolchain.assembly-*/
+# Phase Two P2F: assembled packaged verifier toolchain (release/CI build output)
+/app/src-tauri/verifier-toolchain/
+/app/src-tauri/verifier-toolchain.assembly-*/

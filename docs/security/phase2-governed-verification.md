@@ -229,27 +229,63 @@ cleanup is confirmed. No PID-only cleanup and no startup sweep by name.
 
 ## 10. Toolchain authority
 
-A neutral `VerifiedVerifierToolchain`, separate from Builder's toolchain
-object (Builder is not modified). Production root: the installed Nexus
-layout (`/usr/bin/<exe>` → `/usr/lib/NexusOS/verifier-toolchain`), root-owned
-and not writable by the user; a missing or failing packaged toolchain makes
-the profile unavailable. User rustup installations are never verifier
-authority. The manifest binds target OS/arch/ABI, the exact tree, file kind,
-size, SHA-256, executable mode and schema/version, and an exact-tree digest;
-missing, extra, symlink, special, redirected or changed entries are
-rejected. It is re-verified immediately before each launch and the entry
-executable is launched by descriptor.
+A neutral `VerifiedVerifierToolchain` (`nexus-verifier-sandbox::toolchain`),
+separate from Builder's toolchain object (Builder is not modified). It is
+opaque backend authority: private fields, constructed only at the successful
+end of a verification, not `Clone`, `Copy`, `Default` or serializable, and
+never created from a frontend path. User rustup installations are never
+verifier authority.
 
-The packaged tree is assembled from three official Rust 1.94.0 components
-pinned by the SHA-256 in `channel-rust-1.94.0.toml`: `rustc`
+Packaging (`packaging/verifier-toolchain`): the tree is assembled from three
+official Rust 1.94.0 component archives pinned by SHA-256, each pin checked
+against the pinned `channel-rust-1.94.0.toml`: `rustc`
 (`x86_64-unknown-linux-gnu`, which ships `rust-lld`), `cargo`
 (`x86_64-unknown-linux-gnu`) and `rust-std` for `x86_64-unknown-linux-musl`
-(self-contained CRT objects, `libc.a`, `libunwind.a`). Test binaries are
+(self-contained CRT objects, `libc.a`, `libunwind.a`). Exactly 84 files:
+`cargo`, `rustc`, the compiler driver and LLVM libraries, `rust-lld`, the musl
+standard library and the upstream license files. Test binaries are
 static-pie musl executables linked by `rust-lld`; no host C toolchain is
-used. The only host runtime files are the eight root-owned files `rustc`,
-`cargo` and `rust-lld` load: `libc.so.6`, `libm.so.6`, `libdl.so.2`,
-`librt.so.1`, `libpthread.so.0`, `libgcc_s.so.1`, `libz.so.1` and
-`ld-linux-x86-64.so.2`.
+used.
+
+Manifest: rendered at build time (`NEXUS_VERIFIER_TOOLCHAIN=packaged`) from
+the assembled tree and embedded in the library: schema, Rust release, host
+and verifier targets, and per file its path, size, SHA-256 and executable
+mode. It is never read from disk; a build without the assembled toolchain
+embeds none, and the toolchain is then unavailable before any filesystem
+access.
+
+Production root: derived only from the installed executable, the Debian
+package's `/usr/bin/<exe>` giving `/usr/lib/NexusOS/verifier-toolchain`
+(Tauri resource `verifier-toolchain`). `/usr`, `/usr/lib`,
+`/usr/lib/NexusOS`, the root and every directory and file of the tree must
+be root-owned and writable by no one else: the installed-package invariant.
+Verification is descriptor-relative and never follows a link; missing,
+extra, symlinked, special, resized, changed or mode-changed entries,
+unexpected directories, another platform or another release are rejected.
+
+Host runtime: the only host files the toolchain loads are
+`ld-linux-x86-64.so.2`, `libc.so.6`, `libm.so.6`, `libdl.so.2`, `librt.so.1`,
+`libpthread.so.0`, `libgcc_s.so.1` and `libz.so.1` in
+`/usr/lib/x86_64-linux-gnu`: each a root-owned regular file writable by no
+one else (or a root-owned symlink to one by a plain name in the same
+directory) in root-owned directories, and the ELF interpreter path
+`/lib64/ld-linux-x86-64.so.2` must resolve to exactly that loader. They are
+the sandbox's `RuntimeLoader` (read and execute) and `RuntimeLibrary` (read)
+rules.
+
+Binding: the toolchain digest (domain `nexus.verifier.toolchain.v1`) covers
+the embedded manifest and the host runtime files' SHA-256; each
+verification also gets a backend-owned generation. Both are what a launch
+approval and a result bind. The toolchain is re-verified immediately before
+each launch (the root still at its path, the tree still exact, the same
+runtime files), and `cargo` is launched by descriptor after checking it is
+the verified file.
+
+Development: the live suite verifies the assembled development tree against
+the same embedded manifest only in builds with the crate's
+`development-toolchain` feature; that constructor does not exist in
+production builds, and the Phase Two supported-host run fails (it does not
+skip) without it.
 
 ## 11. Workspace
 
