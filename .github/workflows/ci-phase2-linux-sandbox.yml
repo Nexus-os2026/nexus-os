@@ -1,0 +1,186 @@
+name: NEXUS OS Phase Two Linux Sandbox
+
+# Phase Two (governed verification execution): the supported-host evidence.
+# It runs the complete live Phase Two isolation, escape and cleanup suite
+# against one exact candidate commit on the self-hosted Nexus runner, with
+# every layer required. If this host cannot provide one (unprivileged user,
+# PID, network, IPC, UTS and cgroup namespaces; Landlock ABI >= 6; the seccomp
+# allow-list; cgroup v2 limits delegated through the runner user's systemd
+# user manager; a private /run/user/<uid>), the job fails. There is no
+# degraded mode and no skipped case: the suite runs with
+# NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX=1 and the passed-case count is checked.
+#
+# It never runs for pull requests or pushes (the repository is public and
+# this runner is a self-hosted machine): only by dispatch, on the ref whose
+# head is the candidate, with that exact candidate SHA.
+#
+# Caches that are reused: the runner's installed Rust 1.94.0 toolchain (called
+# directly, never through rustup) and the Cargo target directory kept outside
+# the checkout. The checkout is clean, and the verifier toolchain is assembled
+# fresh from the pinned official Rust archives (assemble.mjs checks every
+# digest and refuses an existing output directory).
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: "Exact 40-character candidate commit (the head of the dispatched ref)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2-linux-sandbox
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  phase2-linux-sandbox:
+    runs-on: [self-hosted, Linux, X64, nexus-local]
+    timeout-minutes: 120
+    steps:
+      - name: Validate the candidate and the workflow identity
+        shell: bash
+        env:
+          CANDIDATE: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::candidate_sha must be a full, lowercase 40-character commit SHA"
+            exit 1
+          fi
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "::error::this workflow runs only by dispatch"
+            exit 1
+          fi
+          if [[ "$GITHUB_WORKFLOW_REF" != "$GITHUB_REPOSITORY/.github/workflows/ci-phase2-linux-sandbox.yml@"* ]]; then
+            echo "::error::unexpected workflow identity: $GITHUB_WORKFLOW_REF"
+            exit 1
+          fi
+          # The workflow definition that runs is the candidate's own.
+          if [[ "$GITHUB_SHA" != "$CANDIDATE" || "$GITHUB_WORKFLOW_SHA" != "$CANDIDATE" ]]; then
+            echo "::error::dispatch this workflow on the ref whose head is $CANDIDATE (event $GITHUB_SHA, workflow $GITHUB_WORKFLOW_SHA)"
+            exit 1
+          fi
+          echo "Candidate: \`$CANDIDATE\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout the exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          persist-credentials: false
+          clean: true
+
+      - name: Verify the exact candidate and a clean checkout
+        shell: bash
+        env:
+          CANDIDATE: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          tested="$(git rev-parse HEAD)"
+          if [[ "$tested" != "$CANDIDATE" ]]; then
+            echo "::error::checked out $tested but the candidate is $CANDIDATE"
+            exit 1
+          fi
+          if [[ -n "$(git status --porcelain=v1 --untracked-files=all --ignored)" ]]; then
+            echo "::error::the checkout is not clean"
+            git status --short --ignored
+            exit 1
+          fi
+          echo "Tested commit: $tested"
+
+      - name: Use the runner's installed Rust 1.94.0 (no rustup, nothing installed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain="${RUSTUP_HOME:-$HOME/.rustup}/toolchains/1.94.0-x86_64-unknown-linux-gnu/bin"
+          for tool in cargo rustc rustdoc; do
+            if [[ ! -x "$toolchain/$tool" ]]; then
+              echo "::error::$toolchain/$tool is missing: provision Rust 1.94.0 on this runner"
+              exit 1
+            fi
+          done
+          echo "$toolchain" >> "$GITHUB_PATH"
+
+      - name: Use the persistent Cargo target cache (outside the checkout)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache="$(dirname "$GITHUB_WORKSPACE")/.nexus-fast-cache"
+          mkdir -p "$cache/cargo-target"
+          echo "CARGO_TARGET_DIR=$cache/cargo-target" >> "$GITHUB_ENV"
+          if ! rustc --version | grep -q '^rustc 1\.94\.0 '; then
+            echo "::error::expected rustc 1.94.0, found: $(rustc --version)"
+            exit 1
+          fi
+
+      # Evidence of the host, and an early, explicit failure for a missing
+      # layer. The live suite below checks every layer again itself.
+      - name: Required host layers (the job fails if any is missing)
+        shell: bash
+        run: |
+          set -euo pipefail
+          uid="$(id -u)"
+          missing=0
+          need() { echo "::error::$1"; missing=1; }
+          echo "user: $(id -un) ($uid); kernel: $(uname -r); arch: $(uname -m)"
+          [[ "$(uname -m)" == "x86_64" ]] || need "the verifier sandbox is x86_64 Linux only"
+          if [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            echo "apparmor_restrict_unprivileged_userns=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)"
+          fi
+          abi="$(python3 -c 'import ctypes; libc = ctypes.CDLL(None, use_errno=True); libc.syscall.restype = ctypes.c_long; print(max(libc.syscall(444, None, ctypes.c_size_t(0), ctypes.c_uint32(1)), 0))')"
+          echo "landlock ABI: $abi"
+          (( abi >= 6 )) || need "Landlock ABI $abi is below the required 6"
+          runtime="/run/user/$uid"
+          [[ -d "$runtime" && "$(stat -f -c %T "$runtime")" == "tmpfs" && "$(stat -c %u:%a "$runtime")" == "$uid:700" ]] \
+            || need "$runtime is missing or not a private tmpfs: the runner user needs a systemd user manager (lingering)"
+          [[ -S "$runtime/bus" ]] || need "no systemd user manager bus at $runtime/bus for $(id -un)"
+          delegated="/sys/fs/cgroup/user.slice/user-$uid.slice/user@$uid.service/cgroup.controllers"
+          for controller in memory pids cpu; do
+            grep -qw "$controller" "$delegated" 2>/dev/null || need "the $controller controller is not delegated to $(id -un)'s user manager"
+          done
+          if (( missing )); then
+            echo "::error::this host cannot provide every Phase Two layer; verification would be unavailable here"
+            exit 1
+          fi
+
+      - name: Setup Node.js 24.21.0 (verifier toolchain assembly)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+
+      - name: Assemble the packaged verifier toolchain (pinned Rust 1.94.0 components)
+        shell: bash
+        run: node packaging/verifier-toolchain/scripts/assemble.mjs --out app/src-tauri/verifier-toolchain
+
+      - name: Verifier sandbox unit tests
+        run: cargo test -p nexus-verifier-sandbox --locked --lib
+
+      - name: Live Phase Two isolation, escape and cleanup suite (every layer required)
+        shell: bash
+        env:
+          NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX: "1"
+          NEXUS_VERIFIER_TOOLCHAIN: packaged
+        run: |
+          set -o pipefail
+          cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox 2>&1 | tee phase2-live.log
+          grep -qx 'test result: ok. 21 live sandbox cases passed' phase2-live.log
+          if systemctl --user list-units --all --no-legend 'nexus-verifier-*' | grep -q .; then
+            echo "::error::a verifier scope was left behind"
+            exit 1
+          fi
+          if [[ -n "$(ls -A "/run/user/$(id -u)/nexus-verifier" 2>/dev/null)" ]]; then
+            echo "::error::a verification workspace was left behind"
+            exit 1
+          fi
+
+      - name: Phase Two kernel and desktop controls
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test -p nexus-kernel --locked --lib -- p2b_ p2e_input p2h_ 2>&1 | tee phase2-kernel.log
+          cargo test -p nexus-desktop-backend --locked --lib -- phase2_tests coding_flow::verification phase1_tests 2>&1 | tee phase2-desktop.log
