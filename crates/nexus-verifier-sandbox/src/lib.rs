@@ -9,6 +9,7 @@
 //!
 //! See `docs/security/phase2-governed-verification.md`.
 
+pub mod applicability;
 mod hash;
 pub mod policy;
 pub mod profile;
@@ -26,6 +27,8 @@ pub mod helper;
 pub mod landlock_rules;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub mod launcher;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub mod profile_launch;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub mod scope;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]

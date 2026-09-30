@@ -347,15 +347,54 @@ session ends: there is no startup sweep by name.
 
 ## 12. First profile: `rust.cargo-test.offline.v1`
 
-Applicable only to a single dependency-free Rust library package, parsed by
-the backend: no workspace, no registry/git/path/dev/build/target-specific
-dependencies, no `.cargo/config` or `.cargo/config.toml`, no `build.rs`, no
-custom runner, no proc-macro, a lock file that exists and is current, and a
-library target. The model never decides applicability. Fixed backend
-invocation: `test --offline --locked --no-fail-fast --lib --tests`, target
-`x86_64-unknown-linux-musl`, private empty `CARGO_HOME`, private
-`CARGO_TARGET_DIR`, fixed `RUSTC`, linker `rust-lld` with self-contained
-linking, `LC_ALL=C`, `TZ=UTC`, no `PATH`.
+Applicability (`nexus-verifier-sandbox::applicability`) is decided by the
+backend from the candidate's own files, never by a model, with a parser that
+accepts exactly this grammar (a TOML subset: bare keys, basic and literal
+strings, integers, booleans, arrays of those, `#` comments; anything else is
+not applicable):
+
+- `[package]` (required): `name` and `version` (required); only `edition`
+  (2015, 2018, 2021, 2024), `rust-version`, `authors`, `description`,
+  `license`, `readme`, `repository`, `homepage`, `documentation`,
+  `keywords`, `categories` and `publish`;
+- `[lib]` (optional): only `name`, `path` (a normalized relative `.rs` path
+  of the candidate), `test`, `doctest`, `bench`, `doc`;
+- `[dependencies]` (optional): no entry.
+
+Refused, with a bounded reason: a workspace; any dependency (registry, git or
+path; normal, dev, build or target-specific); `[patch]`/`[replace]`;
+features, profiles, lints, explicit targets, package metadata and every
+other table or key (`cargo-features`, `build`, `links`, `resolver`, ...);
+`build.rs`; `.cargo/config` or `.cargo/config.toml` anywhere; a proc macro
+or other crate type; a missing library source; a missing or stale
+`Cargo.lock` (it must be lock format 3 or 4 with exactly the package itself:
+no source, checksum or dependency). On a materialized workspace the
+candidate is read through the retained `input/` descriptor.
+
+Launch (`nexus-verifier-sandbox::profile_launch::launch_spec`): the profile
+must require exactly the verified toolchain (release, host, target, entry
+executable); the toolchain is re-verified and every workspace path
+re-checked; then `bin/cargo` is launched by descriptor with
+`cargo test --offline --locked --no-fail-fast --lib --tests`, working
+directory `input/`, and only the profile's environment: `HOME`, `TMPDIR`,
+`CARGO_HOME` (empty), `CARGO_TARGET_DIR` from the workspace; `RUSTC` and the
+musl target linker (`rust-lld`) from the verified toolchain;
+`CARGO_BUILD_TARGET=x86_64-unknown-linux-musl`,
+`CARGO_ENCODED_RUSTFLAGS=-Clink-self-contained=yes -Clinker-flavor=ld.lld`,
+`CARGO_NET_OFFLINE=true`, `CARGO_TERM_COLOR=never`, `CARGO_INCREMENTAL=0`,
+`CARGO_BUILD_JOBS=4`, `RUST_TEST_THREADS=4`, `LC_ALL=C`, `TZ=UTC`; no
+`PATH`. The rules are the toolchain's (tree, loader, libraries), the six
+workspace areas and `/dev/null` and `/dev/urandom` (checked device
+numbers). The passing exit status is 0.
+
+Live evidence on the supported host: a passing crate passes (unit and
+integration tests); a failing test and a compile error are `Failed` (101);
+a candidate whose own tests attempt TCP, UDP, pathname and abstract Unix
+sockets, host files, `~/.ssh`, `/etc/passwd`, `/proc`, writing the input, a
+shell and reading a parent secret or `PATH` finds each denied (no host
+listener contacted); a candidate with a registry dependency is not
+applicable, and run anyway it cannot resolve offline and no network is
+reachable.
 
 ## 13. Native launch approval
 

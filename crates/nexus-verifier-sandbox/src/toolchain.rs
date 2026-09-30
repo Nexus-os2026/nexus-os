@@ -541,6 +541,8 @@ pub struct ToolchainLaunch {
     /// The tree (read and execute), the loader (read and execute) and each
     /// runtime library (read).
     pub rules: Vec<(Role, OwnedFd)>,
+    /// The verified root's path, for the profile's toolchain-relative values.
+    pub root: PathBuf,
     /// The compiler's path, for the fixed `RUSTC`.
     pub rustc: PathBuf,
     /// The linker's path, for the fixed target linker setting.
@@ -642,6 +644,11 @@ impl VerifiedVerifierToolchain {
         self.manifest.rust_version
     }
 
+    /// The toolchain-relative path of the entry executable.
+    pub fn entry(&self) -> &'static str {
+        contract::CARGO
+    }
+
     /// The launch material: the entry executable by descriptor (it must be
     /// the verified file), the sandbox rules and the fixed paths.
     pub fn launch(&self) -> Result<ToolchainLaunch, ToolchainError> {
@@ -662,6 +669,7 @@ impl VerifiedVerifierToolchain {
         Ok(ToolchainLaunch {
             executable,
             rules,
+            root: self.path.clone(),
             rustc: self.path.join(contract::RUSTC),
             linker: self.path.join(contract::LINKER),
         })
