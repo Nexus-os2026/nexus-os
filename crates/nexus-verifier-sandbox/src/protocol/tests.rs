@@ -35,6 +35,7 @@ fn p2c_protocol_messages_round_trip_exactly() {
         },
         FromHelper::Finished(VerifierStatus::Exited(101)),
         FromHelper::Finished(VerifierStatus::Signalled(9)),
+        FromHelper::InitLost,
     ];
     for reply in replies {
         assert_eq!(FromHelper::decode(&reply.encode()), Ok(reply.clone()));

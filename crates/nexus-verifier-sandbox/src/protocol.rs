@@ -128,6 +128,8 @@ pub enum FromHelper {
         errno: i32,
     },
     Finished(VerifierStatus),
+    /// The namespace init ended without a final report.
+    InitLost,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,6 +149,7 @@ const TAG_NS_READY: u8 = 11;
 const TAG_RUNNING: u8 = 12;
 const TAG_SETUP_FAILED: u8 = 13;
 const TAG_FINISHED: u8 = 14;
+const TAG_INIT_LOST: u8 = 15;
 
 const ROLE_EXECUTABLE: u8 = 1;
 const ROLE_WORKDIR: u8 = 2;
@@ -412,6 +415,7 @@ impl FromHelper {
                     }
                 }
             }
+            Self::InitLost => w.u8(TAG_INIT_LOST),
         }
         w.0
     }
@@ -440,6 +444,7 @@ impl FromHelper {
                 1 => Self::Finished(VerifierStatus::Signalled(r.i32()?)),
                 _ => return Err(DecodeError::Invalid),
             },
+            TAG_INIT_LOST => Self::InitLost,
             _ => return Err(DecodeError::UnknownTag),
         };
         r.end()?;

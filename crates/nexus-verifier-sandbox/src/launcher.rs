@@ -86,7 +86,8 @@ pub enum Outcome {
         stage: SetupStage,
         errno: i32,
     },
-    /// The helper ended without a final report.
+    /// The verifier ran, but its init or the helper ended without a final
+    /// report: the result is unknown.
     Lost,
 }
 
@@ -252,7 +253,9 @@ impl Helper {
     }
 
     /// Wait up to `timeout` for the verifier's final report. `Ok(None)`
-    /// means the timeout passed first (the caller ends the execution).
+    /// means the timeout passed first (the caller ends the execution). After
+    /// its final report the helper holds its scope until it is killed or
+    /// the control channel is written to or closed.
     pub fn wait_report(&self, timeout: Duration) -> Result<Option<Outcome>, LaunchError> {
         self.set_receive_timeout(Some(timeout.max(Duration::from_millis(1))))
             .map_err(LaunchError::Control)?;
@@ -261,7 +264,7 @@ impl Helper {
             Ok(Some(FromHelper::SetupFailed { stage, errno })) => {
                 Ok(Some(Outcome::SetupFailed { stage, errno }))
             }
-            Ok(None) => Ok(Some(Outcome::Lost)),
+            Ok(Some(FromHelper::InitLost)) | Ok(None) => Ok(Some(Outcome::Lost)),
             Ok(Some(_)) => Err(LaunchError::Protocol),
             Err(LaunchError::Control(error))
                 if matches!(
@@ -281,8 +284,17 @@ impl Helper {
         self.child.kill()
     }
 
-    /// Reap the helper and return its exit status.
-    pub fn reap(mut self) -> io::Result<std::process::ExitStatus> {
-        self.child.wait()
+    /// Release the helper and reap it, returning its exit status. Closing
+    /// the control channel ends a helper's hold on its scope after its
+    /// final report.
+    pub fn reap(self) -> io::Result<std::process::ExitStatus> {
+        let Self { mut child, control } = self;
+        drop(control);
+        child.wait()
+    }
+
+    /// Reap the helper if it has exited, without waiting.
+    pub fn try_reap(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+        self.child.try_wait()
     }
 }

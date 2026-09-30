@@ -201,8 +201,28 @@ its sandbox properties is part of the boundary.
 | Scope runtime backstop | 660 s |
 | Output ceiling | 8 MiB per stream; excerpt 16 KiB per stream |
 
-Finalization: terminate (`cgroup.kill`), reap the retained helper child,
-confirm `cgroup.events` reports `populated 0`; only then is cleanup
+The scope is created for the backend's retained, unreaped helper child
+(its PID is only that child's locator) and is proven before any launch:
+the helper is in it, the retained cgroup directory is a populated cgroup v2
+directory, and it carries exactly the limits above, `memory.oom.group 0`,
+the runtime backstop and `OOMPolicy=continue` (an out-of-memory kill ends
+only the chosen process; the manager never stops the scope for it).
+
+After its final report the helper sends that report only once the PID
+namespace init is reaped (the kernel has then ended every process of the
+namespace) and keeps the scope in existence until the backend releases it,
+so the backend reads the scope's counters (`memory.events oom_kill`,
+`pids.events max`) for exactly the ended tree. Classification uses them:
+without readable counters no run is reported as passed or failed.
+
+Finalization: read the counters, terminate (`cgroup.kill`), reap the
+retained helper child, and confirm through the retained directory
+descriptor that `cgroup.events` reports `populated 0` — or that the cgroup
+has been removed: systemd removes an emptied scope's cgroup, the kernel
+removes a cgroup only while it is unpopulated, and a removed cgroup can
+never hold a process again. Removal is recognised only through the retained
+descriptor (the `cgroup.events` file every live cgroup has is gone and the
+directory lists nothing), never by path or unit name. Only then is cleanup
 reported clean. Otherwise the execution is `CleanupFailed`, which retains
 the boundary and blocks another verifier for the run and blocks Apply until
 cleanup is confirmed. No PID-only cleanup and no startup sweep by name.
@@ -275,7 +295,9 @@ run, candidate, structural binding, profile, toolchain, sandbox and resource
 policies, execution generation, exit class, duration, per-stream size,
 digest and truncation, and cleanup status. Exit classes: Passed, Failed,
 TimedOut, OutputLimitExceeded, OomKilled, ProcessLimit, Signalled,
-SandboxUnavailable, SandboxSetupFailed, ToolchainUnavailable,
+SandboxUnavailable, SandboxSetupFailed (nothing untrusted ran),
+SandboxFailed (the verifier ran but the sandbox lost it or its counters
+before a final report: the result is unknown), ToolchainUnavailable,
 CandidateChanged, CleanupFailed. The result grants nothing.
 
 Verification is **advisory**: a failed verification does not prohibit Apply.

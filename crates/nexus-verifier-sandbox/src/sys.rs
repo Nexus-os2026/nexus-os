@@ -381,6 +381,64 @@ pub(crate) const FORBIDDEN_FILESYSTEMS: [i64; 12] = [
     0xde5e_81e4, // efivarfs
 ];
 
+/// Whether the directory `dir` refers to lists nothing but `.` and `..`. A
+/// removed directory lists nothing (or reports `ENOENT`), which counts as
+/// empty. The listing uses a new open file description, so the offset of
+/// the retained descriptor is never moved.
+pub(crate) fn directory_is_empty(dir: BorrowedFd<'_>) -> io::Result<bool> {
+    // SAFETY: "." is a NUL-terminated constant; openat returns a new
+    // descriptor owned here on success.
+    let raw = match check(unsafe {
+        libc::openat(
+            dir.as_raw_fd(),
+            c".".as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+        )
+    }) {
+        Ok(raw) => raw,
+        Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(true),
+        Err(error) => return Err(error),
+    };
+    // SAFETY: openat succeeded, so raw is new and owned here.
+    let listing = unsafe { OwnedFd::from_raw_fd(raw) };
+    let mut buf = [0u8; 4096];
+    loop {
+        // SAFETY: getdents64 writes at most buf.len() bytes of records.
+        let n = unsafe {
+            libc::syscall(
+                libc::SYS_getdents64,
+                listing.as_raw_fd(),
+                buf.as_mut_ptr(),
+                buf.len(),
+            )
+        };
+        let filled = match check_long(n) {
+            Ok(0) => return Ok(true),
+            Ok(n) => buf.get(..n as usize).ok_or(io::ErrorKind::InvalidData)?,
+            Err(error) if error.raw_os_error() == Some(libc::ENOENT) => return Ok(true),
+            Err(error) => return Err(error),
+        };
+        // Each record: d_ino (8), d_off (8), d_reclen (2), d_type (1), then
+        // the NUL-terminated name.
+        let mut offset = 0;
+        while offset < filled.len() {
+            let malformed = || io::Error::from_raw_os_error(libc::EINVAL);
+            let header = filled.get(offset..offset + 19).ok_or_else(malformed)?;
+            let reclen = usize::from(u16::from_ne_bytes([header[16], header[17]]));
+            let record = filled
+                .get(offset..offset + reclen)
+                .filter(|record| record.len() > 19)
+                .ok_or_else(malformed)?;
+            let name = &record[19..];
+            let name = &name[..name.iter().position(|&b| b == 0).unwrap_or(name.len())];
+            if name != b"." && name != b".." {
+                return Ok(false);
+            }
+            offset += reclen;
+        }
+    }
+}
+
 /// Whether `st` is the root directory of this process's filesystem view.
 pub(crate) fn is_root_directory(st: &libc::stat) -> io::Result<bool> {
     let root = std::fs::metadata("/")?;

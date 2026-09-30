@@ -133,6 +133,9 @@ pub enum VerifierExit {
     SandboxUnavailable,
     /// The sandbox could not be established; nothing untrusted ran.
     SandboxSetupFailed,
+    /// The executable ran, but the sandbox lost it or its accounting before
+    /// a final report: the result is unknown.
+    SandboxFailed,
     /// The verified toolchain is missing or failed verification.
     ToolchainUnavailable,
     /// The materialized candidate no longer matched the verified candidate.
@@ -160,6 +163,7 @@ impl VerifierExit {
             Self::ToolchainUnavailable => (10, 0),
             Self::CandidateChanged => (11, 0),
             Self::CleanupFailed => (12, 0),
+            Self::SandboxFailed => (13, 0),
         }
     }
 }

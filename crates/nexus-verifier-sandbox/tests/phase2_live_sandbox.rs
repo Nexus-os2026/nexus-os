@@ -479,7 +479,271 @@ mod live {
             "p2c_live_malformed_launch_runs_nothing",
             cases::malformed_launch,
         );
-        println!("test result: ok. 6 live sandbox cases passed");
+        run_case("p2d_live_missing_scope_fails_closed", p2d::missing_scope);
+        let mut passed = 7;
+        match p2d::ScopeManager::connect() {
+            Err(error) => {
+                assert!(
+                    !required(),
+                    "{REQUIRE_LIVE}=1 but no user-manager cgroup scope is available: {error:?}"
+                );
+                println!(
+                    "phase2 live sandbox: no user-manager cgroup scope on this host ({error:?}); \
+                     verification is unavailable here: no execution can start without a scope"
+                );
+            }
+            Ok(scopes) => {
+                type ScopedCase = (&'static str, fn(&p2d::ScopeManager));
+                let scoped: [ScopedCase; 8] = [
+                    (
+                        "p2d_live_execution_runs_in_a_verified_scope",
+                        p2d::scoped_run_passes,
+                    ),
+                    (
+                        "p2d_live_helper_holds_the_scope_until_released",
+                        p2d::helper_holds_the_scope,
+                    ),
+                    (
+                        "p2d_live_deadline_kill_reaches_every_descendant",
+                        p2d::deadline_kill_reaches_descendants,
+                    ),
+                    ("p2d_live_pids_limit_is_enforced", p2d::pids_limit),
+                    ("p2d_live_memory_limit_is_enforced", p2d::memory_limit),
+                    (
+                        "p2d_live_descendant_oom_is_never_a_pass",
+                        p2d::descendant_oom,
+                    ),
+                    ("p2d_live_output_flood_is_bounded", p2d::output_flood),
+                    (
+                        "p2d_live_unmovable_process_fails_closed",
+                        p2d::unmovable_process,
+                    ),
+                ];
+                for (name, case) in scoped {
+                    print!("test {name} ... ");
+                    let _ = std::io::stdout().flush();
+                    case(&scopes);
+                    println!("ok");
+                    passed += 1;
+                }
+            }
+        }
+        println!("test result: ok. {passed} live sandbox cases passed");
+    }
+
+    mod p2d {
+        use super::*;
+        pub use nexus_verifier_sandbox::execution::{self, EndedBy, ExitClass};
+        pub use nexus_verifier_sandbox::policy::ResourcePolicy;
+        pub use nexus_verifier_sandbox::scope::{Occupancy, ScopeError, ScopeManager};
+
+        fn limits() -> ResourcePolicy {
+            ResourcePolicy {
+                wall_timeout_secs: 60,
+                runtime_backstop_secs: 120,
+                ..ResourcePolicy::RUST_OFFLINE_V1
+            }
+        }
+
+        fn run_probe(
+            scopes: &ScopeManager,
+            tag: &str,
+            only: &str,
+            marker: &str,
+            limits: &ResourcePolicy,
+        ) -> (execution::ExecutionReport, BTreeMap<String, (bool, i32)>) {
+            let fixture = Fixture::new(tag);
+            let listeners = Listeners::start(&fixture.outside);
+            let spec = fixture.spec(
+                10,
+                probe_argv(&fixture, &listeners, marker, &[format!("only={only}")]),
+            );
+            let report = execution::run(scopes, &HelperProgram::at(HELPER), spec, limits);
+            let checks = parse(&String::from_utf8_lossy(&report.stdout.excerpt));
+            (report, checks)
+        }
+
+        pub fn scoped_run_passes(scopes: &ScopeManager) {
+            let (report, checks) = run_probe(scopes, "scoped", "noop", "scoped", &limits());
+            assert!(report.not_run.is_none(), "{:?}", report.not_run);
+            assert_eq!(report.classify(0), ExitClass::Passed, "{report:?}");
+            assert!(report.cleanup.is_confirmed());
+            assert!(checks.is_empty());
+        }
+
+        pub fn helper_holds_the_scope(scopes: &ScopeManager) {
+            let fixture = Fixture::new("hold");
+            let listeners = Listeners::start(&fixture.outside);
+            let spec = fixture.spec(
+                11,
+                probe_argv(&fixture, &listeners, "hold", &["only=noop".into()]),
+            );
+            let (helper, output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
+            let stdout = read_all(output.stdout);
+            let stderr = read_all(output.stderr);
+            let scope = scopes.start(&helper, &limits()).unwrap();
+            helper.handshake().unwrap();
+            helper.launch(spec).unwrap();
+            let outcome = helper.wait_report(Duration::from_secs(60)).unwrap();
+            assert_eq!(outcome, Some(Outcome::Finished(VerifierStatus::Exited(0))));
+            // After its final report the helper keeps the scope, and with it
+            // the kernel's counters, until it is released.
+            std::thread::sleep(Duration::from_secs(1));
+            assert_eq!(scope.occupancy().unwrap(), Occupancy::Populated);
+            let events = scope.events().unwrap();
+            assert_eq!((events.oom_kills, events.pids_max), (0, 0));
+            scope.kill().unwrap();
+            helper.reap().unwrap();
+            assert!(scope.wait_empty(Duration::from_secs(10)).unwrap());
+            // The manager then removes the emptied scope; the removal is
+            // recognised through the retained descriptor alone.
+            assert!(wait_until(Duration::from_secs(10), || {
+                scope.occupancy().ok() == Some(Occupancy::Removed)
+            }));
+            assert!(scope.events().is_err(), "no counters outlive the scope");
+            let _ = (stdout.join(), stderr.join());
+        }
+
+        pub fn deadline_kill_reaches_descendants(scopes: &ScopeManager) {
+            let marker = format!("p2d-deadline-{}", std::process::id());
+            let limits = ResourcePolicy {
+                wall_timeout_secs: 3,
+                ..limits()
+            };
+            let started = Instant::now();
+            let (report, _) = run_probe(scopes, "deadline", "hang", &marker, &limits);
+            assert_eq!(report.ended_by, Some(EndedBy::Deadline), "{report:?}");
+            assert_eq!(report.classify(0), ExitClass::TimedOut);
+            assert!(report.cleanup.is_confirmed());
+            assert!(started.elapsed() < Duration::from_secs(30));
+            assert_eq!(
+                marker_processes(&marker),
+                0,
+                "cgroup.kill reached every detached descendant"
+            );
+        }
+
+        pub fn pids_limit(scopes: &ScopeManager) {
+            let limits = ResourcePolicy {
+                pids_max: 16,
+                ..limits()
+            };
+            let (report, checks) = run_probe(scopes, "pids", "threads", "pids", &limits);
+            assert!(report.events.is_some_and(|e| e.pids_max > 0), "{report:?}");
+            assert_eq!(report.classify(0), ExitClass::ProcessLimit);
+            let refused = checks.get("threads_refused").map(|c| c.1).unwrap_or(0);
+            assert!(refused > 0, "{checks:?}");
+            assert!(report.cleanup.is_confirmed());
+        }
+
+        pub fn memory_limit(scopes: &ScopeManager) {
+            let limits = ResourcePolicy {
+                memory_max_bytes: 64 * 1024 * 1024,
+                ..limits()
+            };
+            let (report, checks) = run_probe(scopes, "memory", "alloc", "memory", &limits);
+            assert!(report.events.is_some_and(|e| e.oom_kills > 0), "{report:?}");
+            assert_eq!(report.classify(0), ExitClass::OomKilled);
+            assert!(
+                !checks.contains_key("allocated"),
+                "the allocation never completed"
+            );
+            assert!(report.cleanup.is_confirmed());
+        }
+
+        pub fn descendant_oom(scopes: &ScopeManager) {
+            // A descendant is killed for memory while the verifier carries
+            // on and exits normally, as a compiler under a build tool would.
+            // The manager must not end the scope for it (the counters would
+            // be lost) and the run must never be reported as passed.
+            let limits = ResourcePolicy {
+                memory_max_bytes: 64 * 1024 * 1024,
+                ..limits()
+            };
+            let (report, checks) =
+                run_probe(scopes, "oom-child", "alloc-child", "oom-child", &limits);
+            assert_eq!(
+                report.outcome,
+                Some(Outcome::Finished(VerifierStatus::Exited(0))),
+                "{report:?}"
+            );
+            assert_eq!(
+                checks.get("child_killed_by_signal").map(|c| c.1),
+                Some(libc::SIGKILL),
+                "{checks:?}"
+            );
+            assert!(report.events.is_some_and(|e| e.oom_kills > 0), "{report:?}");
+            assert_eq!(report.classify(0), ExitClass::OomKilled);
+            assert!(report.cleanup.is_confirmed());
+        }
+
+        pub fn output_flood(scopes: &ScopeManager) {
+            let limits = ResourcePolicy {
+                output_ceiling_bytes: 64 * 1024,
+                excerpt_bytes: 1024,
+                ..limits()
+            };
+            let (report, _) = run_probe(scopes, "flood", "flood", "flood", &limits);
+            assert_eq!(
+                report.classify(0),
+                ExitClass::OutputLimitExceeded,
+                "{report:?}"
+            );
+            assert!(report.stdout.truncated);
+            assert!(report.stdout.bytes > 64 * 1024);
+            assert!(report.stdout.excerpt.len() <= 1024);
+            assert!(report.cleanup.is_confirmed());
+        }
+
+        /// Transient verifier scopes the user manager currently has loaded
+        /// (observation only).
+        fn loaded_scopes() -> usize {
+            let out = Command::new("systemctl")
+                .args(["--user", "list-units", "--all", "--plain", "--no-legend"])
+                .arg("nexus-verifier-*.scope")
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).lines().count()
+        }
+
+        pub fn unmovable_process(scopes: &ScopeManager) {
+            // A helper that is no longer running cannot be placed in a
+            // scope: no scope is confirmed for it, and the empty unit made
+            // for it is not left behind.
+            let before = loaded_scopes();
+            let (mut helper, _output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
+            helper.kill().unwrap();
+            let refused = scopes.start(&helper, &limits());
+            assert!(refused.is_err(), "{refused:?}");
+            helper.reap().unwrap();
+            assert!(
+                wait_until(Duration::from_secs(10), || loaded_scopes() <= before),
+                "the refused scope was stopped"
+            );
+        }
+
+        pub fn missing_scope() {
+            assert!(matches!(
+                ScopeManager::connect_at("/nonexistent/nexus-p2d/bus"),
+                Err(ScopeError::BusUnavailable(_))
+            ));
+            let fixture = Fixture::new("nobus");
+            let file = fixture.outside.join("bus-file");
+            fs::write(&file, b"").unwrap();
+            assert!(matches!(
+                ScopeManager::connect_at(file.to_str().unwrap()),
+                Err(ScopeError::BusUnavailable(_))
+            ));
+            // A socket that does not speak D-Bus is not a user manager.
+            let path = fixture.outside.join("not-dbus.sock");
+            let listener = UnixListener::bind(&path).unwrap();
+            std::thread::spawn(move || {
+                for stream in listener.incoming().flatten() {
+                    drop(stream);
+                }
+            });
+            assert!(ScopeManager::connect_at(path.to_str().unwrap()).is_err());
+        }
     }
 
     mod cases {
@@ -970,7 +1234,7 @@ mod live {
     /// Runs inside the sandbox (or an ablation). Prints one line per check.
     pub mod probe {
         use super::*;
-        use std::os::unix::process::CommandExt;
+        use std::os::unix::process::{CommandExt, ExitStatusExt};
 
         fn report(name: &str, result: std::io::Result<()>) {
             match result {
@@ -1027,6 +1291,77 @@ mod live {
             match c.get("only").map(String::as_str) {
                 Some("noop") => {
                     let _ = fs::write(Path::new(&c["target"]).join("ran"), b"1");
+                    return;
+                }
+                Some("hang") => {
+                    for _ in 0..2 {
+                        let _ = Command::new(&c["self_exe"])
+                            .arg("--probe-daemon")
+                            .args(args)
+                            .process_group(0)
+                            .spawn();
+                    }
+                    std::thread::sleep(Duration::from_secs(300));
+                    return;
+                }
+                Some("threads") => {
+                    let (mut started, mut refused) = (0, 0);
+                    let mut handles = Vec::new();
+                    for _ in 0..64 {
+                        match std::thread::Builder::new()
+                            .spawn(|| std::thread::sleep(Duration::from_millis(500)))
+                        {
+                            Ok(handle) => {
+                                started += 1;
+                                handles.push(handle);
+                            }
+                            Err(_) => refused += 1,
+                        }
+                    }
+                    println!("check threads_started ALLOWED {started}");
+                    println!("check threads_refused ALLOWED {refused}");
+                    for handle in handles {
+                        let _ = handle.join();
+                    }
+                    return;
+                }
+                Some("alloc") => {
+                    let mut block = vec![0u8; 512 * 1024 * 1024];
+                    for i in (0..block.len()).step_by(4096) {
+                        block[i] = 1;
+                    }
+                    println!("check allocated ALLOWED {}", block.len() / (1024 * 1024));
+                    return;
+                }
+                Some("alloc-child") => {
+                    let child_args: Vec<String> = args
+                        .iter()
+                        .map(|arg| {
+                            if arg.starts_with("only=") {
+                                "only=alloc".to_string()
+                            } else {
+                                arg.clone()
+                            }
+                        })
+                        .collect();
+                    let status = Command::new(&c["self_exe"])
+                        .arg("--probe")
+                        .args(&child_args)
+                        .status();
+                    // Carry on well after the kill, as a build tool would.
+                    std::thread::sleep(Duration::from_secs(3));
+                    let signal = status.ok().and_then(|s| s.signal()).unwrap_or(0);
+                    println!("check child_killed_by_signal ALLOWED {signal}");
+                    return;
+                }
+                Some("flood") => {
+                    let chunk = vec![b'x'; 64 * 1024];
+                    let mut out = std::io::stdout().lock();
+                    for _ in 0..256 {
+                        if out.write_all(&chunk).is_err() {
+                            break;
+                        }
+                    }
                     return;
                 }
                 Some("daemons") => {

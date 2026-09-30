@@ -193,28 +193,38 @@ impl Session<'_> {
         }
     }
 
-    /// Forward the init's reports until its terminal report, then reap it.
+    /// Forward the init's reports. The final report is sent only once the
+    /// init is reaped, when the kernel has ended every process of its PID
+    /// namespace. The helper then stays in its scope, keeping the scope in
+    /// existence, until the backend writes to or closes the control channel
+    /// (or kills it), so the backend reads the scope's counters for exactly
+    /// the ended tree.
     fn relay(&self, reports: OwnedFd, init_pid: libc::pid_t) -> i32 {
-        let mut terminal = false;
+        let mut last = None;
         while let Some(message) = read_report(reports.as_fd()) {
-            let ends = matches!(
+            if matches!(
                 message,
                 FromHelper::Finished(_) | FromHelper::SetupFailed { .. }
-            );
+            ) {
+                last = Some(message);
+                break;
+            }
             if !self.send(&message) {
                 break;
             }
-            if ends {
-                terminal = true;
-                break;
-            }
         }
+        drop(reports);
         let _ = sys::wait_pid(init_pid);
-        if terminal {
+        let code = if last.is_some() {
             exit::OK
         } else {
             exit::INIT_LOST
+        };
+        if self.send(&last.unwrap_or(FromHelper::InitLost)) {
+            let mut release = [0u8; 1];
+            let _ = sys::recv_message(self.control, &mut release, 0);
         }
+        code
     }
 }
 

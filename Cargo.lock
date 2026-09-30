@@ -6006,7 +6006,10 @@ dependencies = [
  "landlock",
  "libc",
  "seccompiler",
+ "serde",
  "sha2",
+ "tokio",
+ "zbus",
 ]
 
 [[package]]

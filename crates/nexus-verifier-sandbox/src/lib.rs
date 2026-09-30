@@ -19,11 +19,15 @@ pub mod seccomp_policy;
 // compiled for that architecture. Everywhere else verification is
 // unavailable.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub mod execution;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub mod helper;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub mod landlock_rules;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub mod launcher;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+pub mod scope;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub mod seccomp;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]

@@ -240,6 +240,7 @@ fn p2b_every_exit_class_is_distinct_and_only_passed_passes() {
         VerifierExit::Signalled { signal: 11 },
         VerifierExit::SandboxUnavailable,
         VerifierExit::SandboxSetupFailed,
+        VerifierExit::SandboxFailed,
         VerifierExit::ToolchainUnavailable,
         VerifierExit::CandidateChanged,
         VerifierExit::CleanupFailed,
