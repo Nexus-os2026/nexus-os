@@ -396,15 +396,56 @@ listener contacted); a candidate with a registry dependency is not
 applicable, and run anyway it cannot resolve offline and no network is
 reachable.
 
-## 13. Native launch approval
+## 13. Lifecycle and native launch approval
 
-Before any project code executes the backend invokes a native confirmation
-and obtains a single-use, unforgeable approval bound to: run id, candidate
-manifest hash, structural binding hash, verifier profile hash, toolchain
-digest and generation, sandbox policy hash and resource policy hash. The
-prompt shows bounded facts (profile, "local", "no network", time and
-resource limits); no paths or secrets. If any bound input differs at launch,
-the launch is refused. Frontend or model flags grant nothing.
+A run's sandboxed verification has its own lifecycle, separate from the
+Phase One run state (`VerificationPhase`): Idle → Prepared → Materialized →
+Approved → Starting → Running → Finalizing → Idle, or `CleanupFailed`. One
+execution at a time; a backend-assigned execution generation that only
+increases; reruns only once the previous execution is finalized. Every
+transition that matters is recorded in the coding-run ledger first; one
+that cannot be recorded does not happen.
+
+1. **Prepared** (`CodingRun::prepare_verification`): the run must be
+   `StructurallyVerified`, not applied, with no active or unconfirmed
+   execution. The backend computes the inputs from its own verified objects
+   (profile hash, toolchain digest and generation, sandbox and resource
+   policy hashes) and the launch binding (run, candidate manifest hash,
+   structural binding hash, inputs); `verify.prepared` is recorded.
+2. **Materialized**: the candidate is materialized into a fresh workspace
+   (section 11).
+3. **Approved** (`request_verification_approval`): the backend's native
+   dialog shows bounded facts only (profile, "on this machine", "no network
+   access", time, memory, CPU and process limits, the run and a short
+   candidate hash; no paths or secrets); the decision is recorded
+   (`verify.approval_granted` / `verify.approval_declined`). Only a recorded
+   confirmation yields the `VerifierLaunchApproval`: crate-private
+   constructor, no deserializer, not `Clone`, consumed by the launch.
+4. **Starting** (`begin_verification`): the backend recomputes the inputs
+   immediately before the launch; the approval, the prepared binding and the
+   current binding must all be equal (a changed candidate, toolchain
+   verification or policy is `Stale` and nothing starts). The generation is
+   assigned and `verify.launch` recorded.
+5. **Running / Finalizing**: set by the desktop around the sandboxed
+   execution, which runs on a thread of its own, off the IPC thread.
+6. **Finalized** (`finish_verification`): the result is built from the
+   approved binding (never from anything a caller names), recorded
+   (`verify.result`: result hash, generation, class, duration, per-stream
+   size, digest and truncation, cleanup) and only then becomes the latest
+   result. An unconfirmed cleanup leaves `CleanupFailed` until
+   `confirm_verification_cleanup` (after a successful retry, recorded as
+   `verify.cleanup`).
+
+The desktop (`coding_flow/verification.rs`, Linux x86_64) orders it: the
+packaged toolchain and the installed helper must verify (a development
+build has neither, so verification is unavailable there), the profile must
+apply to the verified candidate, then prepare, materialize, native approval,
+begin, and the execution thread: `launch_spec` (toolchain re-verified,
+workspace paths re-checked), `ScopeManager::connect`, `execution::run`, input
+rescan, workspace removal, finish. Anything failing before the launch ran
+nothing and records nothing beyond what was already recorded. A panic in
+the execution thread still finalizes the run as `SandboxFailed` with cleanup
+unconfirmed.
 
 ## 14. Result, review and apply
 
@@ -416,13 +457,30 @@ TimedOut, OutputLimitExceeded, OomKilled, ProcessLimit, Signalled,
 SandboxUnavailable, SandboxSetupFailed (nothing untrusted ran),
 SandboxFailed (the verifier ran but the sandbox lost it or its counters
 before a final report: the result is unknown), ToolchainUnavailable,
-CandidateChanged, CleanupFailed. The result grants nothing.
+CandidateChanged, CleanupFailed. The recorded class is decided in this
+order: an unconfirmed cleanup (execution boundary or workspace) is
+`CleanupFailed`; else a changed input is `CandidateChanged`; else the
+sandbox's class. The result grants nothing.
 
 Verification is **advisory**: a failed verification does not prohibit Apply.
-The review binding binds either the latest finalized result hash or an
-explicit "no verification result" marker, so rerunning or changing
-verification invalidates an earlier approval. Apply is refused while a
-verification is starting, running or finalizing, or its cleanup failed.
+The review binding (`ReviewBinding.verification`) binds either the latest
+finalized result hash or an explicit "no verification result" marker, and
+the review shows that result, so a rerun invalidates an earlier owner
+approval (the apply's current binding no longer matches). Apply is refused
+(`VerificationInProgress`) while a verification is starting, running or
+finalizing, and (`VerificationCleanupFailed`) while its cleanup is
+unconfirmed; a normal failure with confirmed cleanup can still be approved.
+
+IPC: `coding_verification_profiles(run_id)`,
+`coding_start_verification(run_id, profile)` and
+`coding_retry_verification_cleanup(run_id)`. Only the opaque run id and a
+compiled-in profile name cross IPC (the name is looked up exactly and grants
+nothing); no command, argument, executable, working directory, environment,
+sandbox or network setting, path, PID, cgroup or approval. Views are bounded
+display data: the phase, the result class and exit status or signal,
+duration, output sizes and truncation, cleanup, a short result hash, and
+the output tails (at most 4096 characters per stream, escaped with the
+review's `display_safe`, rendered as text).
 
 ## 15. Negative-control suite and CI
 

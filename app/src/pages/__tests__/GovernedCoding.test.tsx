@@ -24,6 +24,7 @@ function status(overrides: Partial<CodingRunStatus> = {}): CodingRunStatus {
     verification: { passed: true, candidate_short: "cand1234", base_short: "base5678", violations: [] },
     review: {
       binding_short: "bind9999",
+      verification_short: null,
       changes: [
         {
           path: "src/a.ts",
@@ -38,9 +39,12 @@ function status(overrides: Partial<CodingRunStatus> = {}): CodingRunStatus {
         },
       ],
     },
+    sandbox_verification: null,
     can_apply: true,
     can_restore: false,
     can_discard: true,
+    can_verify: false,
+    can_retry_verification_cleanup: false,
     ...overrides,
   };
 }
@@ -212,7 +216,7 @@ describe("GovernedCoding", () => {
     render(<GovernedCoding />);
     await startRun();
     await waitFor(() => expect(screen.getAllByText("worker exceeded turn budget").length).toBeGreaterThan(0));
-    expect(screen.getByRole("region", { name: "Step 8: Result" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Step 9: Result" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Approve & Apply" })).toBeNull();
   });
 
@@ -261,5 +265,119 @@ describe("GovernedCoding", () => {
     });
     expect(calls).toBe(settled);
     unmount();
+  });
+
+  // ── Phase Two: sandboxed verification ────────────────────────────────────
+
+  const PROFILE = {
+    name: "rust.cargo-test.offline.v1",
+    display_name: "Rust library tests (offline)",
+    applicable: true,
+    reason: null,
+  };
+
+  const VERIFIED = {
+    phase: "idle",
+    result: {
+      generation: 1,
+      profile: "rust.cargo-test.offline.v1",
+      exit: "failed",
+      passed: false,
+      exit_code: 101,
+      signal: null,
+      duration_ms: 2400,
+      stdout_bytes: 120,
+      stdout_truncated: false,
+      stderr_bytes: 40,
+      stderr_truncated: true,
+      cleanup: "confirmed" as const,
+      result_short: "res123456789",
+      stdout_excerpt: "test tests::answers ... FAILED\n<img src=x onerror=alert(1)>",
+      stderr_excerpt: null,
+    },
+  };
+
+  it("starts sandboxed verification with only the run id and a profile name", async () => {
+    mockCommands({
+      ...BASE,
+      coding_status: status({ can_verify: true }),
+      coding_verification_profiles: [PROFILE],
+      coding_start_verification: status({
+        stage: "verifying",
+        can_apply: false,
+        can_verify: false,
+        sandbox_verification: { phase: "running", result: null },
+      }),
+    });
+    render(<GovernedCoding />);
+    await startRun();
+    await waitFor(() =>
+      expectInvokedWith("coding_verification_profiles", { runId: "run-1", run_id: "run-1" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Run Rust library tests (offline)" }));
+    await waitFor(() => expectInvoked("coding_start_verification"));
+    const args = lastArgs("coding_start_verification") ?? {};
+    expect(args).toEqual({ runId: "run-1", run_id: "run-1", profile: "rust.cargo-test.offline.v1" });
+    assertNoForbiddenKeys(args, /path|dir|cmd|command|arg|exec|env|network|sandbox|approv|confirm/i);
+    await waitFor(() => expect(screen.getByText("Verification: running")).toBeInTheDocument());
+  });
+
+  it("shows why a profile does not apply and offers no run", async () => {
+    mockCommands({
+      ...BASE,
+      coding_status: status({ can_verify: true }),
+      coding_verification_profiles: [
+        { ...PROFILE, applicable: false, reason: "This profile does not apply to the candidate (Dependencies)." },
+      ],
+    });
+    render(<GovernedCoding />);
+    await startRun();
+    await waitFor(() =>
+      expect(screen.getByText(/does not apply to the candidate \(Dependencies\)/)).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("button", { name: /^Run Rust/ })).toBeNull();
+  });
+
+  it("shows an advisory result with its output as text and keeps Apply available", async () => {
+    mockCommands({
+      ...BASE,
+      coding_status: status({
+        sandbox_verification: VERIFIED,
+        review: { ...status().review!, verification_short: "res123456789" },
+      }),
+    });
+    const { container } = render(<GovernedCoding />);
+    await startRun();
+    await waitFor(() => expect(screen.getByText(/Result: failed \(exit status 101\)/)).toBeInTheDocument());
+    expect(screen.getByText(/verification res123456789/)).toBeInTheDocument();
+    expect(screen.getByText(/errors 40 bytes\s*\(truncated\)/)).toBeInTheDocument();
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("<img src=x onerror=alert(1)>");
+    expect(screen.getByRole("button", { name: "Approve & Apply" })).toBeInTheDocument();
+  });
+
+  it("offers a cleanup retry that sends only the run id", async () => {
+    mockCommands({
+      ...BASE,
+      coding_status: status({
+        can_apply: false,
+        can_retry_verification_cleanup: true,
+        sandbox_verification: {
+          phase: "cleanup_failed",
+          result: { ...VERIFIED.result, exit: "cleanup_failed", exit_code: null, cleanup: "failed" as const },
+        },
+      }),
+      coding_retry_verification_cleanup: status({ message: "The verification's cleanup is now confirmed." }),
+    });
+    render(<GovernedCoding />);
+    await startRun();
+    expect(await screen.findByText("Verification: cleanup not confirmed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve & Apply" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry verification cleanup" }));
+    await waitFor(() =>
+      expectInvokedWith("coding_retry_verification_cleanup", { runId: "run-1", run_id: "run-1" }),
+    );
+    const args = lastArgs("coding_retry_verification_cleanup") ?? {};
+    expect(Object.keys(args).sort()).toEqual(["runId", "run_id"]);
   });
 });

@@ -16,13 +16,13 @@ impl FolderPicker for Picker {
 }
 
 /// A native confirmation stand-in: answers `yes`, remembers what it showed.
-struct Confirm {
+pub(super) struct Confirm {
     yes: bool,
     shown: RefCell<Vec<ConfirmationRequest>>,
 }
 
 impl Confirm {
-    fn yes() -> Self {
+    pub(super) fn yes() -> Self {
         Self {
             yes: true,
             shown: RefCell::new(Vec::new()),

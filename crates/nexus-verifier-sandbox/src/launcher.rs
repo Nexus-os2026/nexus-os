@@ -29,6 +29,21 @@ use crate::sys;
 /// Bound on each setup step (handshake, namespaces, start).
 pub const SETUP_STEP_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Where the Nexus package installs the application and the helper.
+const INSTALLED_BIN_DIR: &str = "/usr/bin";
+const INSTALLED_HELPER: &str = "nexus-verifier-sandbox";
+
+/// Why no installed helper is available.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HelperUnavailable {
+    /// The application is not running from its installed package, or the
+    /// package has no helper.
+    NotInstalled,
+    /// The helper or its directory is not root-owned and unwritable by
+    /// others.
+    NotProtected,
+}
+
 /// The trusted helper executable.
 #[derive(Debug, Clone)]
 pub struct HelperProgram {
@@ -36,10 +51,40 @@ pub struct HelperProgram {
 }
 
 impl HelperProgram {
-    /// The helper at `path`. Production code obtains this only from the
-    /// verified installed layout.
+    /// The helper at `path`. Tests only; production code obtains the
+    /// helper from the installed layout ([`Self::installed`]).
     pub fn at(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
+    }
+
+    /// The helper the Nexus package installs beside the running application:
+    /// `/usr/bin/nexus-verifier-sandbox`, derived only from this process's
+    /// own executable (which must itself be in `/usr/bin`), and a root-owned
+    /// regular executable that no one else can write, in the root-owned
+    /// `/usr/bin`: the installed-package invariant. A development build is
+    /// not installed and has none.
+    pub fn installed() -> Result<Self, HelperUnavailable> {
+        use std::os::unix::fs::MetadataExt;
+        let executable = std::env::current_exe()
+            .and_then(|path| path.canonicalize())
+            .map_err(|_| HelperUnavailable::NotInstalled)?;
+        let bin = Path::new(INSTALLED_BIN_DIR);
+        if executable.parent() != Some(bin) {
+            return Err(HelperUnavailable::NotInstalled);
+        }
+        let protected = |meta: &std::fs::Metadata| meta.uid() == 0 && meta.mode() & 0o022 == 0;
+        let dir = std::fs::symlink_metadata(bin).map_err(|_| HelperUnavailable::NotInstalled)?;
+        let path = bin.join(INSTALLED_HELPER);
+        let file = std::fs::symlink_metadata(&path).map_err(|_| HelperUnavailable::NotInstalled)?;
+        if !dir.is_dir()
+            || !protected(&dir)
+            || !file.file_type().is_file()
+            || !protected(&file)
+            || file.mode() & 0o100 == 0
+        {
+            return Err(HelperUnavailable::NotProtected);
+        }
+        Ok(Self { path })
     }
 
     pub fn path(&self) -> &Path {
@@ -296,5 +341,19 @@ impl Helper {
     /// Reap the helper if it has exited, without waiting.
     pub fn try_reap(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
         self.child.try_wait()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn p2h_only_an_installed_application_has_an_installed_helper() {
+        // A test executable is never the installed application.
+        assert_eq!(
+            HelperProgram::installed().err(),
+            Some(HelperUnavailable::NotInstalled)
+        );
     }
 }

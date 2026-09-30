@@ -15,16 +15,29 @@
 //! A [`VerificationResult`] is bound under its own domain to the same values
 //! plus the execution generation and the outcome. It is advisory evidence:
 //! it grants nothing, and output bytes are never part of any binding.
+//!
+//! P2H: a run's sandboxed verification has its own lifecycle
+//! ([`VerificationPhase`]), separate from the run's state: prepared (the
+//! launch binding recorded), materialized, approved (the owner's native
+//! confirmation of exactly that binding), starting, running, finalizing,
+//! then idle again or `CleanupFailed`. One execution at a time; generations
+//! only increase; the latest finalized result is bound into the owner's
+//! review, and Apply is refused while an execution is starting, running or
+//! finalizing, or its cleanup is unconfirmed. Every transition that matters
+//! is recorded in the coding-run ledger first (hashes, sizes and classes
+//! only); a transition that cannot be recorded does not happen.
 
-// P2B defines these types; P2H wires their crate-private constructors into
-// `CodingRun` and removes this allowance.
-#![cfg_attr(not(test), allow(dead_code))]
+use std::collections::BTreeSet;
 
+use serde_json::json;
 use sha2::{Digest, Sha256};
+use thiserror::Error;
 
-use super::manifest::{put_bytes, ManifestHash};
-use super::review::display_safe;
-use super::{RunId, StructuralVerification};
+use super::ledger::{record, EventKind};
+use super::manifest::{put_bytes, Manifest, ManifestEntry, ManifestHash};
+use super::review::{display_safe, ReviewBinding};
+use super::scope::RelPath;
+use super::{CodingRun, RunError, RunId, StructuralVerification};
 
 const INPUTS_DOMAIN: &[u8] = b"nexus.coding_run.verifier_inputs.v1";
 const LAUNCH_DOMAIN: &[u8] = b"nexus.coding_run.verifier_launch.v1";
@@ -347,6 +360,484 @@ impl VerifierLaunchApproval {
 
     pub fn binding(&self) -> &VerifierLaunchBinding {
         &self.binding
+    }
+}
+
+/// Where a run's sandboxed verification stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerificationPhase {
+    /// Nothing is prepared or running: none has run, or the latest is
+    /// finalized.
+    Idle,
+    /// A launch binding was prepared and recorded.
+    Prepared,
+    /// The candidate was materialized for the prepared launch.
+    Materialized,
+    /// The owner approved the prepared launch natively.
+    Approved,
+    /// The approved launch was taken; the sandbox is being set up.
+    Starting,
+    /// The verifier is running.
+    Running,
+    /// The execution ended; its cleanup and input check are being finalized.
+    Finalizing,
+    /// The last execution's cleanup could not be confirmed.
+    CleanupFailed,
+}
+
+impl VerificationPhase {
+    /// Whether this phase refuses Apply.
+    pub fn blocks_apply(self) -> bool {
+        matches!(
+            self,
+            Self::Starting | Self::Running | Self::Finalizing | Self::CleanupFailed
+        )
+    }
+}
+
+/// Why a verification step was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum VerificationError {
+    #[error("verification is not available in this state")]
+    InvalidState,
+    #[error("the verified candidate is no longer available")]
+    CandidateUnavailable,
+    #[error("the launch no longer matches what was approved")]
+    Stale,
+    #[error("the owner declined the verification")]
+    Declined,
+    #[error("the verification could not be recorded")]
+    Unrecorded,
+    #[error("no execution generation remains")]
+    Exhausted,
+}
+
+/// A run's verification lifecycle state.
+#[derive(Debug)]
+pub(crate) struct VerifierState {
+    phase: VerificationPhase,
+    /// The binding being prepared, approved or executed.
+    binding: Option<VerifierLaunchBinding>,
+    /// The generation of the active or last execution.
+    current: Option<ExecutionGeneration>,
+    /// The next generation to assign, if any remains.
+    next: Option<ExecutionGeneration>,
+    /// The latest finalized result.
+    latest: Option<VerificationResult>,
+}
+
+impl Default for VerifierState {
+    fn default() -> Self {
+        Self {
+            phase: VerificationPhase::Idle,
+            binding: None,
+            current: None,
+            next: Some(ExecutionGeneration::FIRST),
+            latest: None,
+        }
+    }
+}
+
+impl VerifierState {
+    /// The materialization step of a prepared launch (an idle run may also
+    /// materialize, outside any launch).
+    pub(crate) fn may_materialize(&self) -> bool {
+        matches!(
+            self.phase,
+            VerificationPhase::Idle | VerificationPhase::Prepared
+        )
+    }
+
+    pub(crate) fn materialized(&mut self) {
+        if self.phase == VerificationPhase::Prepared {
+            self.phase = VerificationPhase::Materialized;
+        }
+    }
+
+    fn reset(&mut self) {
+        self.phase = VerificationPhase::Idle;
+        self.binding = None;
+    }
+}
+
+fn exit_name(exit: VerifierExit) -> &'static str {
+    match exit {
+        VerifierExit::Passed => "passed",
+        VerifierExit::Failed { .. } => "failed",
+        VerifierExit::TimedOut => "timed_out",
+        VerifierExit::OutputLimitExceeded => "output_limit_exceeded",
+        VerifierExit::OomKilled => "oom_killed",
+        VerifierExit::ProcessLimit => "process_limit",
+        VerifierExit::Signalled { .. } => "signalled",
+        VerifierExit::SandboxUnavailable => "sandbox_unavailable",
+        VerifierExit::SandboxSetupFailed => "sandbox_setup_failed",
+        VerifierExit::SandboxFailed => "sandbox_failed",
+        VerifierExit::ToolchainUnavailable => "toolchain_unavailable",
+        VerifierExit::CandidateChanged => "candidate_changed",
+        VerifierExit::CleanupFailed => "cleanup_failed",
+    }
+}
+
+impl VerifierExit {
+    /// A stable, bounded name for display and the ledger.
+    pub fn name(self) -> &'static str {
+        exit_name(self)
+    }
+}
+
+/// The verified candidate as a verifier profile's applicability check sees
+/// it: its file paths, and reads of small files checked against the
+/// verified manifest.
+pub struct VerificationCandidate<'a> {
+    run: &'a CodingRun,
+    manifest: Manifest,
+}
+
+impl VerificationCandidate<'_> {
+    pub fn paths(&self) -> BTreeSet<String> {
+        self.manifest
+            .entries()
+            .keys()
+            .map(RelPath::as_string)
+            .collect()
+    }
+
+    /// One candidate file of at most `max_bytes`, only if it still hashes
+    /// to its verified entry.
+    pub fn read(&self, path: &str, max_bytes: u64) -> Option<Vec<u8>> {
+        let path = RelPath::parse(path).ok()?;
+        let entry = self.manifest.get(&path)?;
+        if entry.size > max_bytes {
+            return None;
+        }
+        let bytes = self.run.read_staged_file(&path, max_bytes).ok()?;
+        (ManifestEntry::of(&bytes) == *entry).then_some(bytes)
+    }
+}
+
+impl CodingRun {
+    /// Where this run's sandboxed verification stands.
+    pub fn verification_phase(&self) -> VerificationPhase {
+        self.verifier.phase
+    }
+
+    /// The latest finalized sandboxed verification of this run.
+    pub fn latest_verification(&self) -> Option<&VerificationResult> {
+        self.verifier.latest.as_ref()
+    }
+
+    /// The generation of the active or last execution.
+    pub fn verification_generation(&self) -> Option<ExecutionGeneration> {
+        self.verifier.current
+    }
+
+    /// The verified candidate, re-scanned, for an applicability check.
+    pub fn verification_candidate(&self) -> Result<VerificationCandidate<'_>, RunError> {
+        let verification = self.unapplied_verification("verification_candidate")?;
+        let manifest = self.staged_candidate(&verification)?;
+        Ok(VerificationCandidate {
+            run: self,
+            manifest,
+        })
+    }
+
+    /// The review binding of the current candidate, with the latest
+    /// finalized verification (which must be this candidate's) or none.
+    pub(crate) fn review_binding(
+        &self,
+        verification: &StructuralVerification,
+    ) -> Result<ReviewBinding, RunError> {
+        let marker = match &self.verifier.latest {
+            None => VerifierMarker::NoResult,
+            Some(result)
+                if result.run_id == self.id
+                    && result.candidate_manifest_hash == verification.candidate_manifest_hash
+                    && result.structural_binding_hash == verification.binding_hash() =>
+            {
+                VerifierMarker::Result(result.binding_hash())
+            }
+            Some(_) => return Err(RunError::CandidateChanged),
+        };
+        Ok(ReviewBinding {
+            run_id: self.id,
+            base_manifest_hash: verification.base_manifest_hash,
+            candidate_manifest_hash: verification.candidate_manifest_hash,
+            profile_hash: verification.profile_hash,
+            verification: marker,
+        })
+    }
+
+    fn current_structural(
+        &self,
+        operation: &'static str,
+    ) -> Result<StructuralVerification, VerificationError> {
+        self.unapplied_verification(operation)
+            .map_err(|error| match error {
+                RunError::InvalidState { .. } => VerificationError::InvalidState,
+                _ => VerificationError::CandidateUnavailable,
+            })
+    }
+
+    /// Prepare a launch of `inputs` against the verified candidate and record
+    /// its binding. Refused while an execution is active or its cleanup is
+    /// unconfirmed.
+    pub fn prepare_verification(
+        &mut self,
+        inputs: VerifierInputs,
+    ) -> Result<VerifierLaunchBinding, VerificationError> {
+        if self.verifier.phase.blocks_apply() {
+            return Err(VerificationError::InvalidState);
+        }
+        let verification = self.current_structural("prepare_verification")?;
+        let binding = VerifierLaunchBinding::new(&verification, inputs);
+        record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::VerificationPrepared,
+            &json!({
+                "binding": hex::encode(binding.hash()),
+                "candidate_manifest": binding.candidate_manifest_hash.to_hex(),
+                "structural_binding": hex::encode(binding.structural_binding_hash),
+                "profile": hex::encode(inputs.profile_hash),
+                "toolchain": hex::encode(inputs.toolchain_digest),
+                "toolchain_generation": inputs.toolchain_generation,
+                "sandbox_policy": hex::encode(inputs.sandbox_policy_hash),
+                "resource_policy": hex::encode(inputs.resource_policy_hash),
+            }),
+        )
+        .map_err(|_| VerificationError::Unrecorded)?;
+        self.verifier.phase = VerificationPhase::Prepared;
+        self.verifier.binding = Some(binding);
+        Ok(binding)
+    }
+
+    /// Give up a prepared or approved launch that has not started.
+    pub fn abandon_verification(&mut self) -> Result<(), VerificationError> {
+        match self.verifier.phase {
+            VerificationPhase::Prepared
+            | VerificationPhase::Materialized
+            | VerificationPhase::Approved => {
+                self.verifier.reset();
+                Ok(())
+            }
+            _ => Err(VerificationError::InvalidState),
+        }
+    }
+
+    /// Ask the owner, through the backend's native confirmation, to approve
+    /// exactly the prepared, materialized launch. The decision is recorded;
+    /// only a recorded confirmation yields the single-use approval.
+    pub fn request_verification_approval(
+        &mut self,
+        facts: &VerifierLaunchFacts,
+        confirmer: &dyn VerifierLaunchConfirmer,
+    ) -> Result<VerifierLaunchApproval, VerificationError> {
+        let binding = match (self.verifier.phase, self.verifier.binding) {
+            (VerificationPhase::Materialized, Some(binding)) => binding,
+            _ => return Err(VerificationError::InvalidState),
+        };
+        match self.current_structural("request_verification_approval") {
+            Ok(verification)
+                if VerifierLaunchBinding::new(&verification, binding.inputs) == binding => {}
+            Ok(_) => {
+                self.verifier.reset();
+                return Err(VerificationError::Stale);
+            }
+            Err(error) => {
+                self.verifier.reset();
+                return Err(error);
+            }
+        }
+        let request = VerifierLaunchRequest::new(&binding, facts);
+        let confirmed = confirmer.confirm_launch(&request);
+        let event = if confirmed {
+            EventKind::VerificationApproved
+        } else {
+            EventKind::VerificationDeclined
+        };
+        let recorded = record(
+            self.ledger.as_ref(),
+            self.id.0,
+            event,
+            &json!({ "binding": hex::encode(binding.hash()) }),
+        );
+        if recorded.is_err() {
+            self.verifier.reset();
+            return Err(VerificationError::Unrecorded);
+        }
+        if !confirmed {
+            self.verifier.reset();
+            return Err(VerificationError::Declined);
+        }
+        self.verifier.phase = VerificationPhase::Approved;
+        Ok(VerifierLaunchApproval::confirmed(binding))
+    }
+
+    /// Take the approval for a launch of `inputs`, computed again by the
+    /// backend immediately before the launch: they, the candidate and the
+    /// approval must all still be exactly what was approved. Assigns and
+    /// records the execution generation.
+    pub fn begin_verification(
+        &mut self,
+        approval: VerifierLaunchApproval,
+        inputs: VerifierInputs,
+    ) -> Result<ExecutionGeneration, VerificationError> {
+        let approved = match (self.verifier.phase, self.verifier.binding) {
+            (VerificationPhase::Approved, Some(binding)) => binding,
+            _ => return Err(VerificationError::InvalidState),
+        };
+        let verification = match self.current_structural("begin_verification") {
+            Ok(verification) => verification,
+            Err(error) => {
+                self.verifier.reset();
+                return Err(error);
+            }
+        };
+        let current = VerifierLaunchBinding::new(&verification, inputs);
+        if approval.binding != approved || approval.binding != current {
+            self.verifier.reset();
+            return Err(VerificationError::Stale);
+        }
+        let Some(generation) = self.verifier.next else {
+            self.verifier.reset();
+            return Err(VerificationError::Exhausted);
+        };
+        if record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::VerificationLaunched,
+            &json!({
+                "binding": hex::encode(current.hash()),
+                "generation": generation.get(),
+            }),
+        )
+        .is_err()
+        {
+            self.verifier.reset();
+            return Err(VerificationError::Unrecorded);
+        }
+        self.verifier.next = generation.next();
+        self.verifier.current = Some(generation);
+        self.verifier.phase = VerificationPhase::Starting;
+        Ok(generation)
+    }
+
+    fn active_generation(
+        &self,
+        generation: ExecutionGeneration,
+        allowed: &[VerificationPhase],
+    ) -> Result<(), VerificationError> {
+        if allowed.contains(&self.verifier.phase) && self.verifier.current == Some(generation) {
+            Ok(())
+        } else {
+            Err(VerificationError::InvalidState)
+        }
+    }
+
+    /// The verifier of `generation` is running.
+    pub fn verification_running(
+        &mut self,
+        generation: ExecutionGeneration,
+    ) -> Result<(), VerificationError> {
+        self.active_generation(generation, &[VerificationPhase::Starting])?;
+        self.verifier.phase = VerificationPhase::Running;
+        Ok(())
+    }
+
+    /// The execution of `generation` ended; it is being finalized.
+    pub fn verification_finalizing(
+        &mut self,
+        generation: ExecutionGeneration,
+    ) -> Result<(), VerificationError> {
+        self.active_generation(
+            generation,
+            &[VerificationPhase::Starting, VerificationPhase::Running],
+        )?;
+        self.verifier.phase = VerificationPhase::Finalizing;
+        Ok(())
+    }
+
+    /// Finalize the execution of `generation` with what the backend
+    /// observed. The result is bound to the launch that was approved, never
+    /// to anything the caller names, and is recorded before it can be
+    /// reviewed. An unconfirmed cleanup leaves the run `CleanupFailed`.
+    pub fn finish_verification(
+        &mut self,
+        generation: ExecutionGeneration,
+        outcome: VerifierOutcome,
+    ) -> Result<VerificationResult, VerificationError> {
+        self.active_generation(
+            generation,
+            &[
+                VerificationPhase::Starting,
+                VerificationPhase::Running,
+                VerificationPhase::Finalizing,
+            ],
+        )?;
+        let binding = self
+            .verifier
+            .binding
+            .ok_or(VerificationError::InvalidState)?;
+        let result = VerificationResult {
+            run_id: binding.run_id,
+            candidate_manifest_hash: binding.candidate_manifest_hash,
+            structural_binding_hash: binding.structural_binding_hash,
+            inputs: binding.inputs,
+            generation,
+            outcome,
+        };
+        let (_, detail) = outcome.exit.code();
+        let stream = |s: &StreamSummary| {
+            json!({
+                "bytes": s.bytes,
+                "sha256": hex::encode(s.sha256),
+                "truncated": s.truncated,
+            })
+        };
+        let recorded = record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::VerificationFinished,
+            &json!({
+                "result": hex::encode(result.binding_hash()),
+                "generation": generation.get(),
+                "exit": outcome.exit.name(),
+                "detail": detail,
+                "duration_ms": outcome.duration_ms,
+                "stdout": stream(&outcome.stdout),
+                "stderr": stream(&outcome.stderr),
+                "cleanup": match outcome.cleanup {
+                    VerifierCleanup::Confirmed => "confirmed",
+                    VerifierCleanup::Failed => "failed",
+                },
+            }),
+        );
+        self.verifier.binding = None;
+        self.verifier.phase = match outcome.cleanup {
+            VerifierCleanup::Confirmed => VerificationPhase::Idle,
+            VerifierCleanup::Failed => VerificationPhase::CleanupFailed,
+        };
+        // An unrecorded result is never review evidence.
+        recorded.map_err(|_| VerificationError::Unrecorded)?;
+        self.verifier.latest = Some(result);
+        Ok(result)
+    }
+
+    /// The retained boundary of `generation` is now confirmed gone.
+    pub fn confirm_verification_cleanup(
+        &mut self,
+        generation: ExecutionGeneration,
+    ) -> Result<(), VerificationError> {
+        self.active_generation(generation, &[VerificationPhase::CleanupFailed])?;
+        record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::VerificationCleanup,
+            &json!({ "generation": generation.get(), "cleanup": "confirmed" }),
+        )
+        .map_err(|_| VerificationError::Unrecorded)?;
+        self.verifier.phase = VerificationPhase::Idle;
+        Ok(())
     }
 }
 

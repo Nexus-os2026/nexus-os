@@ -150,9 +150,10 @@ pub use structural::{
     StructuralOutcome, StructuralProfile, StructuralVerification, StructuralViolation,
 };
 pub use verifier::{
-    ExecutionGeneration, StreamSummary, VerificationResult, VerifierCleanup, VerifierExit,
-    VerifierInputs, VerifierLaunchApproval, VerifierLaunchBinding, VerifierLaunchConfirmer,
-    VerifierLaunchFacts, VerifierLaunchRequest, VerifierMarker, VerifierOutcome,
+    ExecutionGeneration, StreamSummary, VerificationCandidate, VerificationError,
+    VerificationPhase, VerificationResult, VerifierCleanup, VerifierExit, VerifierInputs,
+    VerifierLaunchApproval, VerifierLaunchBinding, VerifierLaunchConfirmer, VerifierLaunchFacts,
+    VerifierLaunchRequest, VerifierMarker, VerifierOutcome,
 };
 pub use worker::{
     run_worker, EditProposal, ProposalOp, ProposalRejection, WorkerError, WorkerLimits,
@@ -682,6 +683,8 @@ pub struct CodingRun {
     applied: Option<apply::ApplyRecord>,
     /// The owner's native approval to restore this run's apply.
     restore_approved: Option<ReviewBinding>,
+    /// The sandboxed verification lifecycle (Phase Two).
+    verifier: verifier::VerifierState,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -778,6 +781,7 @@ impl CodingRun {
             apply_state: apply::ApplyState::NotApplied,
             applied: None,
             restore_approved: None,
+            verifier: verifier::VerifierState::default(),
         };
         let mut facts = json!({
             "project_grant": project_grant,
@@ -1541,14 +1545,10 @@ impl CodingRun {
             Err(error) => return Err(self.withdraw_verification(error)),
         };
         let base = self.base.clone().ok_or(RunError::CandidateUnavailable)?;
-        let binding = ReviewBinding {
-            run_id: self.id,
-            base_manifest_hash: verification.base_manifest_hash,
-            candidate_manifest_hash: verification.candidate_manifest_hash,
-            profile_hash: verification.profile_hash,
-        };
+        let binding = self.review_binding(&verification)?;
         let review = review::build(
             binding,
+            self.verifier_latest(),
             base.entries(),
             candidate.entries(),
             &self.base_contents,
@@ -1558,6 +1558,10 @@ impl CodingRun {
             "binding": hex::encode(binding.hash()),
             "base_manifest": binding.base_manifest_hash.to_hex(),
             "candidate_manifest": binding.candidate_manifest_hash.to_hex(),
+            "verification": match binding.verification {
+                VerifierMarker::NoResult => "none".to_string(),
+                VerifierMarker::Result(hash) => hex::encode(hash),
+            },
             "create": review.count(ChangeKind::Create),
             "replace": review.count(ChangeKind::Replace),
             "delete": review.count(ChangeKind::Delete),
@@ -1627,6 +1631,12 @@ impl CodingRun {
         input: std::os::fd::OwnedFd,
     ) -> Result<ManifestHash, RunError> {
         let verification = self.unapplied_verification("materialize_verification_input")?;
+        if !self.verifier.may_materialize() {
+            return Err(RunError::InvalidState {
+                operation: "materialize_verification_input",
+                state: self.state,
+            });
+        }
         let input = DirHandle::from_directory_fd(input).map_err(|_| RunError::VerificationInput)?;
         if !input
             .entries()
@@ -1649,7 +1659,12 @@ impl CodingRun {
         input.sync().map_err(|_| RunError::VerificationInput)?;
         self.input_matches(&input, &verification)
             .map_err(|_| RunError::VerificationInput)?;
+        self.verifier.materialized();
         Ok(verification.candidate_manifest_hash)
+    }
+
+    fn verifier_latest(&self) -> Option<VerificationResult> {
+        self.latest_verification().copied()
     }
 
     /// Rescan a materialized verification input after its verifier ended.
@@ -1663,7 +1678,7 @@ impl CodingRun {
 
     /// The passing verification of a structurally verified candidate that
     /// is not in the owner's project.
-    fn unapplied_verification(
+    pub(crate) fn unapplied_verification(
         &self,
         operation: &'static str,
     ) -> Result<StructuralVerification, RunError> {
@@ -1687,7 +1702,7 @@ impl CodingRun {
 
     /// Re-scan the staged candidate: it must still hash to the verified
     /// candidate manifest with no structural violation.
-    fn staged_candidate(
+    pub(crate) fn staged_candidate(
         &self,
         verification: &StructuralVerification,
     ) -> Result<Manifest, RunError> {

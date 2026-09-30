@@ -1766,3 +1766,8 @@ mod p2e_worker_panic;
 
 #[path = "p2e_materialize_tests.rs"]
 mod p2e_materialize;
+
+// ── Phase Two P2H: the verification lifecycle, review and Apply gates ──────
+
+#[path = "p2h_verification_tests.rs"]
+mod p2h_verification;

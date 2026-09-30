@@ -99,6 +99,9 @@ tauri-plugin-global-shortcut = "2.3.1"
 # Phase One (decision D1/D2): backend-invoked native folder selection and
 # owner confirmation. The webview is granted no dialog permission.
 tauri-plugin-dialog = "=2.7.0"
+# Phase Two: governed sandboxed verification (profiles, packaged toolchain,
+# workspace, cgroup scope and the backend side of the separate helper).
+nexus-verifier-sandbox = { path = "../../crates/nexus-verifier-sandbox" }
 
 # P0 item D native boundary harness (tests/webview_boundary_live.rs): it drives
 # the real Wry runtime with the production context and build_main_window, so it

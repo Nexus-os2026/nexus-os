@@ -1443,6 +1443,12 @@
           "markdownDescription": "Enables the coding_restore_run command without any pre-configured scope."
         },
         {
+          "description": "Enables the coding_retry_verification_cleanup command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-retry-verification-cleanup",
+          "markdownDescription": "Enables the coding_retry_verification_cleanup command without any pre-configured scope."
+        },
+        {
           "description": "Enables the coding_select_project command without any pre-configured scope.",
           "type": "string",
           "const": "allow-coding-select-project",
@@ -1455,10 +1461,22 @@
           "markdownDescription": "Enables the coding_start_run command without any pre-configured scope."
         },
         {
+          "description": "Enables the coding_start_verification command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-start-verification",
+          "markdownDescription": "Enables the coding_start_verification command without any pre-configured scope."
+        },
+        {
           "description": "Enables the coding_status command without any pre-configured scope.",
           "type": "string",
           "const": "allow-coding-status",
           "markdownDescription": "Enables the coding_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the coding_verification_profiles command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-verification-profiles",
+          "markdownDescription": "Enables the coding_verification_profiles command without any pre-configured scope."
         },
         {
           "description": "Enables the cogfs_get_context command without any pre-configured scope.",
@@ -6321,6 +6339,12 @@
           "markdownDescription": "Denies the coding_restore_run command without any pre-configured scope."
         },
         {
+          "description": "Denies the coding_retry_verification_cleanup command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-retry-verification-cleanup",
+          "markdownDescription": "Denies the coding_retry_verification_cleanup command without any pre-configured scope."
+        },
+        {
           "description": "Denies the coding_select_project command without any pre-configured scope.",
           "type": "string",
           "const": "deny-coding-select-project",
@@ -6333,10 +6357,22 @@
           "markdownDescription": "Denies the coding_start_run command without any pre-configured scope."
         },
         {
+          "description": "Denies the coding_start_verification command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-start-verification",
+          "markdownDescription": "Denies the coding_start_verification command without any pre-configured scope."
+        },
+        {
           "description": "Denies the coding_status command without any pre-configured scope.",
           "type": "string",
           "const": "deny-coding-status",
           "markdownDescription": "Denies the coding_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_verification_profiles command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-verification-profiles",
+          "markdownDescription": "Denies the coding_verification_profiles command without any pre-configured scope."
         },
         {
           "description": "Denies the cogfs_get_context command without any pre-configured scope.",

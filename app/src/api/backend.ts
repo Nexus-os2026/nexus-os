@@ -5560,6 +5560,40 @@ export interface CodingChange {
 export interface CodingReview {
   binding_short: string;
   changes: CodingChange[];
+  /** The sandboxed verification result this review binds, if any. */
+  verification_short: string | null;
+}
+
+/** A finalized sandboxed verification (advisory). Output tails are untrusted, pre-escaped text. */
+export interface CodingSandboxResult {
+  generation: number;
+  profile: string | null;
+  exit: string;
+  passed: boolean;
+  exit_code: number | null;
+  signal: number | null;
+  duration_ms: number;
+  stdout_bytes: number;
+  stdout_truncated: boolean;
+  stderr_bytes: number;
+  stderr_truncated: boolean;
+  cleanup: "confirmed" | "failed";
+  result_short: string;
+  stdout_excerpt: string | null;
+  stderr_excerpt: string | null;
+}
+
+export interface CodingSandboxVerification {
+  phase: string;
+  result: CodingSandboxResult | null;
+}
+
+/** A compiled-in verifier profile; its name only selects, it grants nothing. */
+export interface CodingVerifierProfile {
+  name: string;
+  display_name: string;
+  applicable: boolean;
+  reason: string | null;
 }
 
 export interface CodingRunStatus {
@@ -5574,9 +5608,12 @@ export interface CodingRunStatus {
   worker: CodingWorkerSummary | null;
   verification: CodingVerification | null;
   review: CodingReview | null;
+  sandbox_verification: CodingSandboxVerification | null;
   can_apply: boolean;
   can_restore: boolean;
   can_discard: boolean;
+  can_verify: boolean;
+  can_retry_verification_cleanup: boolean;
 }
 
 export interface CodingStartRunRequest {
@@ -5637,4 +5674,20 @@ export function codingRestoreRun(runId: string): Promise<CodingRunStatus> {
 
 export function codingDiscardRun(runId: string): Promise<CodingRunStatus> {
   return invokeDesktop<CodingRunStatus>("coding_discard_run", codingRunArgs(runId));
+}
+
+export function codingVerificationProfiles(runId: string): Promise<CodingVerifierProfile[]> {
+  return invokeDesktop<CodingVerifierProfile[]>("coding_verification_profiles", codingRunArgs(runId));
+}
+
+/**
+ * Starts sandboxed verification of the run's candidate with a compiled-in profile. The backend
+ * asks the owner via a native OS confirmation dialog; only the run id and profile name are sent.
+ */
+export function codingStartVerification(runId: string, profile: string): Promise<CodingRunStatus> {
+  return invokeDesktop<CodingRunStatus>("coding_start_verification", { ...codingRunArgs(runId), profile });
+}
+
+export function codingRetryVerificationCleanup(runId: string): Promise<CodingRunStatus> {
+  return invokeDesktop<CodingRunStatus>("coding_retry_verification_cleanup", codingRunArgs(runId));
 }

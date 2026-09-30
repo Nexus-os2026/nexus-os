@@ -213,6 +213,10 @@ pub enum Refusal {
     Unsupported(String),
     PreimageUnavailable,
     Unrecorded,
+    /// A sandboxed verification is starting, running or finalizing.
+    VerificationInProgress,
+    /// A sandboxed verification's cleanup is unconfirmed.
+    VerificationCleanupFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -378,6 +382,17 @@ fn refused(refusal: Refusal) -> ApplyError {
 }
 
 impl CodingRun {
+    /// Verification is advisory, but Apply waits for an active execution to
+    /// be finalized and for an unconfirmed cleanup to be confirmed.
+    fn verification_permits_apply(&self) -> Result<(), ApplyError> {
+        use super::verifier::VerificationPhase;
+        match self.verification_phase() {
+            VerificationPhase::CleanupFailed => Err(refused(Refusal::VerificationCleanupFailed)),
+            phase if phase.blocks_apply() => Err(refused(Refusal::VerificationInProgress)),
+            _ => Ok(()),
+        }
+    }
+
     /// Where this run stands with respect to the owner's project.
     pub fn apply_state(&self) -> ApplyState {
         self.apply_state
@@ -405,6 +420,7 @@ impl CodingRun {
         {
             return Err(ApplyError::InvalidState);
         }
+        self.verification_permits_apply()?;
         let review = self.review().map_err(|error| match error {
             RunError::CandidateChanged | RunError::CandidateUnavailable => {
                 refused(Refusal::CandidateChanged)
@@ -498,12 +514,10 @@ impl CodingRun {
             .verification
             .clone()
             .ok_or(refused(Refusal::CandidateChanged))?;
-        let current = ReviewBinding {
-            run_id: self.id,
-            base_manifest_hash: verification.base_manifest_hash,
-            candidate_manifest_hash: verification.candidate_manifest_hash,
-            profile_hash: verification.profile_hash,
-        };
+        self.verification_permits_apply()?;
+        let current = self
+            .review_binding(&verification)
+            .map_err(|_| refused(Refusal::CandidateChanged))?;
         if approved.is_none() {
             return Err(refused(Refusal::NotApproved));
         }

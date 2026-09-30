@@ -111,7 +111,7 @@ fn p1_tm_03_no_production_code_performs_what_if_mutation() {
 
 // ── P1-08 / §14: the governed coding surface ────────────────────────────────
 
-const CODING_COMMANDS: [&str; 9] = [
+const CODING_COMMANDS: [&str; 12] = [
     "coding_select_project",
     "coding_list_projects",
     "coding_list_local_models",
@@ -121,6 +121,10 @@ const CODING_COMMANDS: [&str; 9] = [
     "coding_approve_apply",
     "coding_restore_run",
     "coding_discard_run",
+    // Phase Two: governed sandboxed verification (run id and profile name).
+    "coding_verification_profiles",
+    "coding_start_verification",
+    "coding_retry_verification_cleanup",
 ];
 
 /// The parameter list of `fn name(` in `src`.
@@ -183,7 +187,8 @@ fn p1_g_01_coding_commands_take_only_opaque_ids_and_choices() {
                     "protected_scope",
                     "task",
                     "model",
-                    "run_id"
+                    "run_id",
+                    "profile"
                 ]
                 .contains(&name),
                 "{command} takes an unexpected input {name}"

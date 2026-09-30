@@ -553,7 +553,7 @@ impl VerifiedVerifierToolchain {
     /// Production verification: the embedded manifest against the toolchain
     /// installed beside this executable. Unavailable without an embedded
     /// manifest, before any filesystem access.
-    pub fn verify_installed() -> Result<Self, ToolchainError> {
+    pub fn installed() -> Result<Self, ToolchainError> {
         let manifest = PACKAGED.as_ref().ok_or(ToolchainError::Unavailable)?;
         validate(manifest)?;
         let executable = std::env::current_exe().map_err(|_| ToolchainError::Unavailable)?;
@@ -570,7 +570,7 @@ impl VerifiedVerifierToolchain {
     /// manifest. Only in builds with the `development-toolchain` feature;
     /// never production authority.
     #[cfg(feature = "development-toolchain")]
-    pub fn verify_development(root: &Path) -> Result<Self, ToolchainError> {
+    pub fn development(root: &Path) -> Result<Self, ToolchainError> {
         let manifest = PACKAGED.as_ref().ok_or(ToolchainError::Unavailable)?;
         validate(manifest)?;
         let canonical = root

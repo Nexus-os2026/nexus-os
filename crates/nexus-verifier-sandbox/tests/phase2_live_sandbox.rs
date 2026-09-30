@@ -777,9 +777,8 @@ mod live {
         /// The development toolchain, when this build can verify one.
         #[cfg(feature = "development-toolchain")]
         pub fn development() -> Option<VerifiedVerifierToolchain> {
-            nexus_verifier_sandbox::toolchain::is_packaged().then(|| {
-                VerifiedVerifierToolchain::verify_development(&development_root()).unwrap()
-            })
+            nexus_verifier_sandbox::toolchain::is_packaged()
+                .then(|| VerifiedVerifierToolchain::development(&development_root()).unwrap())
         }
 
         #[cfg(not(feature = "development-toolchain"))]
@@ -791,7 +790,7 @@ mod live {
             // Whatever this build is, production verification fails closed
             // here: this test is not the installed application.
             assert_eq!(
-                VerifiedVerifierToolchain::verify_installed().err(),
+                VerifiedVerifierToolchain::installed().err(),
                 Some(ToolchainError::Unavailable)
             );
             let Some(toolchain) = development() else {

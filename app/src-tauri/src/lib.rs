@@ -3299,6 +3299,38 @@ pub mod runtime {
         crate::coding_flow::ipc::discard(state.inner().clone(), run_id).await
     }
 
+    // ── Governed verification (Phase Two) ───────────────────────────────
+    // Only the opaque run id and a compiled-in profile name cross IPC: no
+    // command, argument, executable, path, environment, sandbox setting or
+    // approval. The backend invokes the native launch confirmation itself.
+
+    #[tauri::command]
+    async fn coding_verification_profiles(
+        state: tauri::State<'_, AppState>,
+        run_id: String,
+    ) -> Result<Vec<crate::coding_flow::VerifierProfileView>, String> {
+        crate::coding_flow::ipc::verification_profiles(state.inner().clone(), run_id).await
+    }
+
+    #[tauri::command]
+    async fn coding_start_verification(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, AppState>,
+        run_id: String,
+        profile: String,
+    ) -> Result<crate::coding_flow::RunView, String> {
+        crate::coding_flow::ipc::start_verification(app, state.inner().clone(), run_id, profile)
+            .await
+    }
+
+    #[tauri::command]
+    async fn coding_retry_verification_cleanup(
+        state: tauri::State<'_, AppState>,
+        run_id: String,
+    ) -> Result<crate::coding_flow::RunView, String> {
+        crate::coding_flow::ipc::retry_verification_cleanup(state.inner().clone(), run_id).await
+    }
+
     // ── Nexus Link commands ─────────────────────────────────────────────
 
     #[tauri::command]
@@ -8110,6 +8142,9 @@ pub mod runtime {
                 coding_approve_apply,
                 coding_restore_run,
                 coding_discard_run,
+                coding_verification_profiles,
+                coding_start_verification,
+                coding_retry_verification_cleanup,
                 nexus_link_status,
                 nexus_link_toggle_sharing,
                 nexus_link_add_peer,

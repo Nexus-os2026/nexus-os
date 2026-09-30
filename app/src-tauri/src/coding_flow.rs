@@ -17,6 +17,10 @@
 //! in this process; it is never authority by itself. Nothing here runs a
 //! process, uses git, or reaches a network destination other than the
 //! loopback Ollama address.
+//!
+//! Phase Two adds governed sandboxed verification of a verified candidate
+//! (`coding_flow/verification.rs`): the frontend names only the run and a
+//! compiled-in profile; the only execution route is the verifier sandbox.
 
 use serde::Serialize;
 
@@ -65,6 +69,46 @@ pub(crate) struct ChangeView {
 pub(crate) struct ReviewView {
     pub binding_short: String,
     pub changes: Vec<ChangeView>,
+    /// The sandboxed verification result this review binds (Phase Two).
+    pub verification_short: Option<String>,
+}
+
+/// A compiled-in verifier profile and whether it applies to a run's
+/// candidate.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct VerifierProfileView {
+    pub name: &'static str,
+    pub display_name: &'static str,
+    pub applicable: bool,
+    pub reason: Option<String>,
+}
+
+/// A finalized sandboxed verification, as bounded display data.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct SandboxResultView {
+    pub generation: u64,
+    pub profile: Option<&'static str>,
+    pub exit: &'static str,
+    pub passed: bool,
+    pub exit_code: Option<i32>,
+    pub signal: Option<i32>,
+    pub duration_ms: u64,
+    pub stdout_bytes: u64,
+    pub stdout_truncated: bool,
+    pub stderr_bytes: u64,
+    pub stderr_truncated: bool,
+    pub cleanup: &'static str,
+    pub result_short: String,
+    /// The tail of the output, escaped for display (untrusted data).
+    pub stdout_excerpt: Option<String>,
+    pub stderr_excerpt: Option<String>,
+}
+
+/// Where a run's sandboxed verification stands.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct SandboxVerificationView {
+    pub phase: &'static str,
+    pub result: Option<SandboxResultView>,
 }
 
 /// A run as the frontend sees it. Display data only.
@@ -81,9 +125,12 @@ pub(crate) struct RunView {
     pub worker: Option<WorkerView>,
     pub verification: Option<VerificationView>,
     pub review: Option<ReviewView>,
+    pub sandbox_verification: Option<SandboxVerificationView>,
     pub can_apply: bool,
     pub can_restore: bool,
     pub can_discard: bool,
+    pub can_verify: bool,
+    pub can_retry_verification_cleanup: bool,
 }
 
 #[cfg(target_os = "linux")]
@@ -92,6 +139,10 @@ pub(crate) use linux::*;
 #[cfg(all(test, target_os = "linux"))]
 #[path = "coding_flow/worker_panic_tests.rs"]
 mod worker_panic_tests;
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "coding_flow/verification.rs"]
+mod verification;
 
 #[cfg(target_os = "linux")]
 mod linux {
@@ -104,7 +155,8 @@ mod linux {
         CleanupStatus, CodingRun, FolderPicker, LedgerStore, LocalEndpoint, LocalModel,
         LocalOllama, OwnerConfirmer, ProjectId, ProjectInfo, ProjectRegistry, RelPath, Review,
         RunError, RunId, RunScopes, RunState, ScopeEntry, ScopeSet, StagingParent,
-        StructuralOutcome, StructuralVerification, TextDiff, WorkerReport,
+        StructuralOutcome, StructuralVerification, TextDiff, VerificationPhase, VerificationResult,
+        VerifierCleanup, VerifierExit, VerifierMarker, WorkerReport,
     };
     use nexus_kernel::workspace_authority::{WorkspaceAuthorityRegistry, WorkspaceBinding};
     use nexus_persistence::coding_run_ledger::CodingRunLedger;
@@ -115,15 +167,20 @@ mod linux {
     const MAX_SCOPE_ENTRIES: usize = 32;
 
     pub(super) struct Display {
-        stage: &'static str,
-        message: Option<String>,
+        pub(super) stage: &'static str,
+        pub(super) message: Option<String>,
         worker: Option<WorkerView>,
         verification: Option<VerificationView>,
-        review: Option<ReviewView>,
+        pub(super) review: Option<ReviewView>,
         run_state: String,
         apply_state: String,
         can_apply: bool,
         can_restore: bool,
+        sandbox: Option<SandboxVerificationView>,
+        /// The latest sandboxed execution's output tails, escaped.
+        pub(super) excerpts: (Option<String>, Option<String>),
+        can_verify: bool,
+        can_retry_cleanup: bool,
     }
 
     pub(super) struct RunSlot {
@@ -157,6 +214,10 @@ mod linux {
                     apply_state: "NotApplied".to_string(),
                     can_apply: false,
                     can_restore: false,
+                    sandbox: None,
+                    excerpts: (None, None),
+                    can_verify: false,
+                    can_retry_cleanup: false,
                 }),
             }
         }
@@ -166,26 +227,37 @@ mod linux {
         }
 
         /// Refresh the display from the run after a transition.
-        fn refresh(&self, run: &CodingRun, stage: &'static str, message: Option<String>) {
+        pub(super) fn refresh(
+            &self,
+            run: &CodingRun,
+            stage: &'static str,
+            message: Option<String>,
+        ) {
             let mut display = self.display();
             display.stage = stage;
             display.message = message;
             display.run_state = format!("{:?}", run.state());
             display.apply_state = format!("{:?}", run.apply_state());
-            display.can_apply = run.state() == RunState::StructurallyVerified
+            let phase = run.verification_phase();
+            let reviewable = run.state() == RunState::StructurallyVerified
                 && run.apply_state() == ApplyState::NotApplied
                 && run.verification().is_some();
+            display.can_apply = reviewable && !phase.blocks_apply();
+            display.can_verify =
+                cfg!(target_arch = "x86_64") && reviewable && phase == VerificationPhase::Idle;
+            display.can_retry_cleanup = phase == VerificationPhase::CleanupFailed;
             display.can_restore = run.apply_state() == ApplyState::Applied;
             if run.verification().is_none() && run.apply_state() == ApplyState::NotApplied {
                 display.review = None;
             }
+            display.sandbox = sandbox_view(run, &display.excerpts);
         }
 
         pub(super) fn view(&self, id: RunId) -> RunView {
             let display = self.display();
             let busy = matches!(
                 display.stage,
-                "preparing" | "working" | "applying" | "restoring" | "discarding"
+                "preparing" | "working" | "applying" | "restoring" | "discarding" | "verifying"
             );
             RunView {
                 run_id: id.to_string(),
@@ -199,10 +271,81 @@ mod linux {
                 worker: display.worker.clone(),
                 verification: display.verification.clone(),
                 review: display.review.clone(),
+                sandbox_verification: display.sandbox.clone(),
                 can_apply: !busy && display.can_apply,
                 can_restore: !busy && display.can_restore,
-                can_discard: !busy && !display.can_restore && display.stage != "discarded",
+                can_discard: !busy
+                    && !display.can_restore
+                    && !display.can_retry_cleanup
+                    && display.stage != "discarded",
+                can_verify: !busy && display.can_verify,
+                can_retry_verification_cleanup: !busy && display.can_retry_cleanup,
             }
+        }
+    }
+
+    fn phase_name(phase: VerificationPhase) -> &'static str {
+        match phase {
+            VerificationPhase::Idle => "idle",
+            VerificationPhase::Prepared => "prepared",
+            VerificationPhase::Materialized => "materialized",
+            VerificationPhase::Approved => "approved",
+            VerificationPhase::Starting => "starting",
+            VerificationPhase::Running => "running",
+            VerificationPhase::Finalizing => "finalizing",
+            VerificationPhase::CleanupFailed => "cleanup_failed",
+        }
+    }
+
+    /// The run's sandboxed verification as display data.
+    fn sandbox_view(
+        run: &CodingRun,
+        excerpts: &(Option<String>, Option<String>),
+    ) -> Option<SandboxVerificationView> {
+        let phase = run.verification_phase();
+        let result = run
+            .latest_verification()
+            .map(|result| result_view(result, excerpts));
+        (phase != VerificationPhase::Idle || result.is_some()).then(|| SandboxVerificationView {
+            phase: phase_name(phase),
+            result,
+        })
+    }
+
+    fn result_view(
+        result: &VerificationResult,
+        excerpts: &(Option<String>, Option<String>),
+    ) -> SandboxResultView {
+        use nexus_verifier_sandbox::profile::VerifierProfileId;
+        let outcome = &result.outcome;
+        SandboxResultView {
+            generation: result.generation.get(),
+            profile: VerifierProfileId::PRODUCTION
+                .iter()
+                .find(|id| id.profile().hash().bytes() == result.inputs.profile_hash)
+                .map(|id| id.name()),
+            exit: outcome.exit.name(),
+            passed: outcome.exit.passed(),
+            exit_code: match outcome.exit {
+                VerifierExit::Failed { exit_code } => Some(exit_code),
+                _ => None,
+            },
+            signal: match outcome.exit {
+                VerifierExit::Signalled { signal } => Some(signal),
+                _ => None,
+            },
+            duration_ms: outcome.duration_ms,
+            stdout_bytes: outcome.stdout.bytes,
+            stdout_truncated: outcome.stdout.truncated,
+            stderr_bytes: outcome.stderr.bytes,
+            stderr_truncated: outcome.stderr.truncated,
+            cleanup: match outcome.cleanup {
+                VerifierCleanup::Confirmed => "confirmed",
+                VerifierCleanup::Failed => "failed",
+            },
+            result_short: hex::encode(result.binding_hash())[..12].to_string(),
+            stdout_excerpt: excerpts.0.clone(),
+            stderr_excerpt: excerpts.1.clone(),
         }
     }
 
@@ -212,6 +355,9 @@ mod linux {
         projects: ProjectRegistry,
         ledger: OnceLock<Result<Arc<CodingRunLedger>, String>>,
         runs: Mutex<HashMap<RunId, Arc<RunSlot>>>,
+        /// Boundaries of sandboxed verifications whose cleanup is unconfirmed.
+        #[cfg(target_arch = "x86_64")]
+        pub(super) retained: Mutex<HashMap<RunId, super::verification::Retained>>,
     }
 
     impl std::fmt::Debug for CodingFlow {
@@ -232,6 +378,8 @@ mod linux {
                 projects: ProjectRegistry::new(authority, &state_dir),
                 ledger: OnceLock::new(),
                 runs: Mutex::new(HashMap::new()),
+                #[cfg(target_arch = "x86_64")]
+                retained: Mutex::new(HashMap::new()),
             })
         }
 
@@ -258,7 +406,7 @@ mod linux {
             self.runs.lock().unwrap_or_else(|p| p.into_inner())
         }
 
-        fn slot(&self, run_id: &str) -> Result<(RunId, Arc<RunSlot>), String> {
+        pub(super) fn slot(&self, run_id: &str) -> Result<(RunId, Arc<RunSlot>), String> {
             let id = RunId::parse(run_id).ok_or_else(|| "unknown coding run".to_string())?;
             let slot = self
                 .runs()
@@ -794,6 +942,10 @@ mod linux {
 
     pub(crate) fn review_view(review: &Review) -> ReviewView {
         ReviewView {
+            verification_short: match review.binding.verification {
+                VerifierMarker::NoResult => None,
+                VerifierMarker::Result(hash) => Some(hex::encode(hash)[..12].to_string()),
+            },
             binding_short: hex::encode(review.binding.hash())[..12].to_string(),
             changes: review
                 .changes
@@ -850,6 +1002,26 @@ mod linux {
                 .blocking_pick_folder()?
                 .into_path()
                 .ok()
+        }
+    }
+
+    #[cfg(feature = "tauri-runtime")]
+    impl nexus_kernel::coding_run::VerifierLaunchConfirmer for NativeDialogs {
+        fn confirm_launch(
+            &self,
+            request: &nexus_kernel::coding_run::VerifierLaunchRequest,
+        ) -> bool {
+            use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+            self.0
+                .dialog()
+                .message(native_dialog_text(&request.message()))
+                .title(request.title())
+                .kind(MessageDialogKind::Warning)
+                .buttons(MessageDialogButtons::OkCancelCustom(
+                    "Run verification".to_string(),
+                    "Cancel".to_string(),
+                ))
+                .blocking_show()
         }
     }
 
@@ -1012,6 +1184,59 @@ pub(crate) mod ipc {
         {
             let _ = (app, state, run_id);
             Err(UNSUPPORTED.to_string())
+        }
+    }
+
+    #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+    const NO_VERIFICATION: &str = "sandboxed verification is available on Linux x86_64 only";
+
+    pub(crate) async fn verification_profiles(
+        state: crate::AppState,
+        run_id: String,
+    ) -> Result<Vec<VerifierProfileView>, String> {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        {
+            let flow = state.coding_flow()?;
+            blocking(move || flow.verification_profiles(&run_id)).await
+        }
+        #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+        {
+            let _ = (state, run_id);
+            Err(NO_VERIFICATION.to_string())
+        }
+    }
+
+    pub(crate) async fn start_verification(
+        app: App,
+        state: crate::AppState,
+        run_id: String,
+        profile: String,
+    ) -> Result<RunView, String> {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        {
+            let flow = state.coding_flow()?;
+            blocking(move || flow.start_verification(&run_id, &profile, &NativeDialogs(app))).await
+        }
+        #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+        {
+            let _ = (app, state, run_id, profile);
+            Err(NO_VERIFICATION.to_string())
+        }
+    }
+
+    pub(crate) async fn retry_verification_cleanup(
+        state: crate::AppState,
+        run_id: String,
+    ) -> Result<RunView, String> {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        {
+            let flow = state.coding_flow()?;
+            blocking(move || flow.retry_verification_cleanup(&run_id)).await
+        }
+        #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+        {
+            let _ = (state, run_id);
+            Err(NO_VERIFICATION.to_string())
         }
     }
 

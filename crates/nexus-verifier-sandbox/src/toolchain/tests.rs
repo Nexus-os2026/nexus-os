@@ -446,7 +446,7 @@ fn p2f_production_is_unavailable_without_an_installed_package() {
     // A test build embeds no manifest, or this test executable is not the
     // installed application: either way the toolchain is unavailable.
     assert_eq!(
-        VerifiedVerifierToolchain::verify_installed().err(),
+        VerifiedVerifierToolchain::installed().err(),
         Some(ToolchainError::Unavailable)
     );
 }

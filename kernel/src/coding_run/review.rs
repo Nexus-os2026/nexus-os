@@ -7,9 +7,12 @@
 //!
 //! A review is data. It grants nothing; it names exactly what an owner
 //! approval would bind to ([`ReviewBinding`]: run, base manifest hash,
-//! candidate manifest hash, structural profile hash). Rendering is bounded
-//! per file and in total, so a model-controlled candidate cannot produce an
-//! unbounded diff.
+//! candidate manifest hash, structural profile hash and, since Phase Two,
+//! the latest finalized sandboxed verification result or an explicit "no
+//! result" marker, so a new verification invalidates an earlier approval).
+//! Rendering is bounded per file and in total, so a model-controlled
+//! candidate cannot produce an unbounded diff. The latest verification
+//! result is shown with the review; it is advisory.
 
 use std::collections::BTreeMap;
 
@@ -17,6 +20,7 @@ use sha2::{Digest, Sha256};
 
 use super::manifest::{put_bytes, ManifestEntry, ManifestHash};
 use super::scope::RelPath;
+use super::verifier::{VerificationResult, VerifierMarker};
 use super::RunId;
 
 const BINDING_DOMAIN: &[u8] = b"nexus.coding_run.review_binding.v1";
@@ -73,6 +77,8 @@ pub struct ReviewBinding {
     pub base_manifest_hash: ManifestHash,
     pub candidate_manifest_hash: ManifestHash,
     pub profile_hash: [u8; 32],
+    /// The latest finalized sandboxed verification, or explicitly none.
+    pub verification: VerifierMarker,
 }
 
 impl ReviewBinding {
@@ -83,6 +89,7 @@ impl ReviewBinding {
         hasher.update(self.base_manifest_hash.bytes());
         hasher.update(self.candidate_manifest_hash.bytes());
         hasher.update(self.profile_hash);
+        self.verification.put(&mut hasher);
         hasher.finalize().into()
     }
 }
@@ -92,6 +99,9 @@ impl ReviewBinding {
 pub struct Review {
     pub binding: ReviewBinding,
     pub changes: Vec<FileChange>,
+    /// The latest finalized sandboxed verification (advisory), bound by
+    /// `binding.verification`.
+    pub verification: Option<VerificationResult>,
 }
 
 impl Review {
@@ -132,6 +142,7 @@ pub fn display_safe(text: &str, multiline: bool) -> String {
 /// caller against the base and candidate manifests.
 pub(crate) fn build(
     binding: ReviewBinding,
+    verification: Option<VerificationResult>,
     base: &BTreeMap<RelPath, ManifestEntry>,
     candidate: &BTreeMap<RelPath, ManifestEntry>,
     old: &BTreeMap<RelPath, Vec<u8>>,
@@ -174,7 +185,11 @@ pub(crate) fn build(
             diff,
         });
     }
-    Review { binding, changes }
+    Review {
+        binding,
+        changes,
+        verification,
+    }
 }
 
 fn render(path: &RelPath, old: &[u8], new: &[u8], budget: &mut usize) -> TextDiff {
