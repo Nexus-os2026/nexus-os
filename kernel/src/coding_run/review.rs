@@ -100,6 +100,33 @@ impl Review {
     }
 }
 
+/// Text made safe to display: control characters (other than line breaks
+/// and tabs in multi-line text) and invisible or direction-changing
+/// formatting characters (bidirectional overrides, isolates and marks,
+/// zero-width characters, the byte-order mark) are shown as visible
+/// `⟨U+XXXX⟩` escapes, so a file name or candidate line cannot display as
+/// something other than what it is.
+pub fn display_safe(text: &str, multiline: bool) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        let invisible = matches!(
+            c,
+            '\u{061C}'
+                | '\u{200B}'..='\u{200F}'
+                | '\u{202A}'..='\u{202E}'
+                | '\u{2060}'..='\u{2069}'
+                | '\u{FEFF}'
+        );
+        let kept_control = multiline && (c == '\n' || c == '\t');
+        if invisible || (c.is_control() && !kept_control) {
+            out.push_str(&format!("⟨U+{:04X}⟩", c as u32));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Build the review. `old` holds the base bytes of changed base files and
 /// `new` the candidate bytes of changed files; both were hash-checked by the
 /// caller against the base and candidate manifests.

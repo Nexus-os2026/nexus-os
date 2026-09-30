@@ -42,7 +42,7 @@ use thiserror::Error;
 use super::fsops::{DirHandle, EntryKind, NodeIdentity};
 use super::ledger::{record, EventKind};
 use super::manifest::ManifestEntry;
-use super::review::{ChangeKind, Review, ReviewBinding};
+use super::review::{display_safe, ChangeKind, Review, ReviewBinding};
 use super::scope::RelPath;
 use super::structural::StructuralProfile;
 use super::{CodingRun, ProjectGrant, RunError, RunId, RunState, StagingParent};
@@ -123,9 +123,8 @@ impl ConfirmationRequest {
     }
 
     fn new(kind: ConfirmationKind, project_name: &str, binding: &ReviewBinding) -> Self {
-        let name: String = project_name
+        let name: String = display_safe(project_name, false)
             .chars()
-            .map(|c| if c.is_control() { '\u{fffd}' } else { c })
             .take(MAX_DISPLAY_NAME)
             .collect();
         Self {
@@ -155,7 +154,8 @@ impl ConfirmationRequest {
                     ChangeKind::Replace => "replace",
                     ChangeKind::Delete => "delete",
                 };
-                self.paths.push(format!("{verb} {}", path.as_string()));
+                self.paths
+                    .push(format!("{verb} {}", display_safe(&path.as_string(), false)));
             } else {
                 self.more_paths += 1;
             }

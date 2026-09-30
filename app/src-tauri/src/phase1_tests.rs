@@ -334,3 +334,17 @@ fn p1_g_05_only_the_governed_commands_reach_the_coding_flow() {
         assert!(body.contains("crate::coding_flow::ipc::"), "{command}");
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn p1_g_06_native_dialog_text_prints_percent_signs_literally() {
+    use crate::coding_flow::native_dialog_text;
+    assert_eq!(native_dialog_text("src/100%s%n.rs"), "src/100%%s%%n.rs");
+    assert_eq!(native_dialog_text("50%% done"), "50%%%% done");
+    assert_eq!(native_dialog_text("no directives"), "no directives");
+    // Every `%` is doubled, so GTK's printf sees no conversion directive.
+    let escaped = native_dialog_text("%d%x%s%p%n%%");
+    assert!(escaped.split("%%").all(|piece| !piece.contains('%')));
+    let source = include_str!("coding_flow.rs");
+    assert!(source.contains(".message(native_dialog_text(&request.message()))"));
+}

@@ -324,9 +324,8 @@ fn display_name(root: &Path) -> String {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let cleaned: String = name
+    let cleaned: String = super::review::display_safe(&name, false)
         .chars()
-        .map(|c| if c.is_control() { '\u{fffd}' } else { c })
         .take(MAX_NAME_CHARS)
         .collect();
     if cleaned.is_empty() {

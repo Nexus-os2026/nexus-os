@@ -577,3 +577,33 @@ fn p1_a_nc_13_an_unrecordable_completion_is_undone() {
     assert_eq!(digest(&e.f.project), before);
     assert_eq!(run.apply_state(), ApplyState::RolledBack);
 }
+
+#[test]
+fn p1_a_nc_14_confirmation_and_review_text_cannot_disguise_a_change() {
+    let e = env();
+    // A model-chosen name with printf directives and a right-to-left
+    // override that would display "src/evil\u{202e}sr.txt" as "...txt.rs".
+    let hostile = "src/100%s%n\u{202e}sr.txt";
+    let (mut run, _) = verified(
+        &e,
+        vec![create(hostile, "line one\n\u{202e}hidden\u{200b}\n")],
+    );
+    let confirm = Confirm::yes();
+    run.request_approval(&e.info.name, &confirm).unwrap();
+    let shown = confirm.shown.borrow()[0].clone();
+    let message = shown.message();
+    assert!(message.contains("⟨U+202E⟩"), "{message}");
+    assert!(!message.contains('\u{202e}'));
+    // The kernel keeps `%` literal; the native adapter escapes it for GTK.
+    assert!(message.contains("100%s%n"));
+
+    let review = run.review().unwrap();
+    let TextDiff::Unified { text, .. } = &review.changes[0].diff else {
+        panic!("diff expected");
+    };
+    let safe = display_safe(text, true);
+    assert!(safe.contains("⟨U+202E⟩hidden⟨U+200B⟩\n"));
+    assert!(!safe.contains('\u{202e}') && !safe.contains('\u{200b}'));
+    assert_eq!(display_safe("a\nb\tc\u{0}", true), "a\nb\tc⟨U+0000⟩");
+    assert_eq!(display_safe("a\nb", false), "a⟨U+000A⟩b");
+}

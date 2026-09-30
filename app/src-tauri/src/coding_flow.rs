@@ -95,10 +95,11 @@ mod linux {
     use std::sync::{Arc, Mutex, OnceLock};
 
     use nexus_kernel::coding_run::{
-        loopback_endpoint, run_worker, ApplyError, ApplyState, ChangeKind, CodingRun, FolderPicker,
-        LedgerStore, LocalEndpoint, LocalModel, LocalOllama, OwnerConfirmer, ProjectId,
-        ProjectInfo, ProjectRegistry, RelPath, Review, RunId, RunScopes, RunState, ScopeEntry,
-        ScopeSet, StagingParent, StructuralOutcome, StructuralVerification, TextDiff, WorkerReport,
+        display_safe, loopback_endpoint, run_worker, ApplyError, ApplyState, ChangeKind, CodingRun,
+        FolderPicker, LedgerStore, LocalEndpoint, LocalModel, LocalOllama, OwnerConfirmer,
+        ProjectId, ProjectInfo, ProjectRegistry, RelPath, Review, RunId, RunScopes, RunState,
+        ScopeEntry, ScopeSet, StagingParent, StructuralOutcome, StructuralVerification, TextDiff,
+        WorkerReport,
     };
     use nexus_kernel::workspace_authority::{WorkspaceAuthorityRegistry, WorkspaceBinding};
     use nexus_persistence::coding_run_ledger::CodingRunLedger;
@@ -616,7 +617,11 @@ mod linux {
         WorkerView {
             turns: report.turns,
             files_read: report.files_read,
-            accepted: report.accepted.iter().map(RelPath::as_string).collect(),
+            accepted: report
+                .accepted
+                .iter()
+                .map(|path| display_safe(&path.as_string(), false))
+                .collect(),
             rejected: report.rejected,
         }
     }
@@ -646,12 +651,12 @@ mod linux {
                 .map(|change| {
                     let (diff, diff_note, truncated) = match &change.diff {
                         TextDiff::Unified { text, truncated } => {
-                            (Some(text.clone()), None, *truncated)
+                            (Some(display_safe(text, true)), None, *truncated)
                         }
                         TextDiff::Omitted(reason) => (None, Some(format!("{reason:?}")), false),
                     };
                     ChangeView {
-                        path: change.path.as_string(),
+                        path: display_safe(&change.path.as_string(), false),
                         kind: match change.kind {
                             ChangeKind::Create => "create",
                             ChangeKind::Replace => "replace",
@@ -668,6 +673,14 @@ mod linux {
                 })
                 .collect(),
         }
+    }
+
+    /// Text for the native message dialog. On Linux the dialog plugin's GTK
+    /// backend passes the message to `gtk_message_dialog_format_secondary_text`
+    /// as a printf format string, so every `%` (which a model-chosen file name
+    /// or a folder name may contain) is doubled to print literally.
+    pub(crate) fn native_dialog_text(message: &str) -> String {
+        message.replace('%', "%%")
     }
 
     /// The desktop's native dialogs: the only [`FolderPicker`] and
@@ -701,7 +714,7 @@ mod linux {
             };
             self.0
                 .dialog()
-                .message(request.message())
+                .message(native_dialog_text(&request.message()))
                 .title(request.title())
                 .kind(MessageDialogKind::Warning)
                 .buttons(MessageDialogButtons::OkCancelCustom(

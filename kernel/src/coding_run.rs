@@ -97,8 +97,8 @@ pub use project::{
     APPLY_GRANT_LIFETIME, RUN_GRANT_LIFETIME,
 };
 pub use review::{
-    ChangeKind, DiffOmitted, FileChange, Review, ReviewBinding, TextDiff, MAX_DIFF_BYTES_PER_FILE,
-    MAX_DIFF_BYTES_TOTAL, MAX_DIFF_FILE_BYTES,
+    display_safe, ChangeKind, DiffOmitted, FileChange, Review, ReviewBinding, TextDiff,
+    MAX_DIFF_BYTES_PER_FILE, MAX_DIFF_BYTES_TOTAL, MAX_DIFF_FILE_BYTES,
 };
 pub use scope::{RelPath, RunScopes, ScopeEntry, ScopeError, ScopeSet};
 pub use structural::{
