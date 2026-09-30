@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AgentSummary, AuditEventRow } from "../../types";
 import { getSelfEvolutionMetrics, getSelfEvolutionStrategies, triggerCrossAgentLearning } from "../../api/backend";
+import { notify } from "../../lib/ownerConfirm";
 
 export type AgentDetailTab = "overview" | "logs" | "audit" | "config" | "evolution";
 
@@ -519,10 +520,10 @@ export function AgentDetail({
                     onClick={async () => {
                       try {
                         const count = await triggerCrossAgentLearning();
-                        alert(`Shared ${count} strategies across agents.`);
+                        void notify(`Shared ${count} strategies across agents.`);
                         if (agent) loadEvolution(agent.id);
                       } catch (e) {
-                        alert(`Error: ${e}`);
+                        void notify(`Error: ${e}`);
                       }
                     }}
                   >

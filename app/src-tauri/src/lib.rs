@@ -1,6 +1,9 @@
 #![allow(unexpected_cfgs)]
 #![allow(unused_imports)]
 mod builder_workspace;
+// Phase One: the governed coding flow, the only desktop surface that reaches
+// the coding-run primitive.
+mod coding_flow;
 mod commands;
 mod nx_bridge;
 pub mod oracle_runtime;
@@ -928,6 +931,10 @@ pub struct AppState {
     #[allow(dead_code)] // Retained owner; the private adapter holds an Arc clone.
     workspace_authority: Arc<nexus_kernel::workspace_authority::WorkspaceAuthorityRegistry>,
     builder_workspace: Result<Arc<builder_workspace::BuilderWorkspaceAuthority>, String>,
+    /// Phase One governed coding session (projects selected natively and the
+    /// runs of this process). Shares the backend authority registry.
+    #[cfg(target_os = "linux")]
+    coding: Result<Arc<coding_flow::CodingFlow>, String>,
     /// Lock invariant: audit and supervisor guards must never overlap. Do not
     /// hold audit across routing, secrets, Warden, models, tools or callbacks.
     /// Execution passes an AuditWriter; readers snapshot before downstream work.
@@ -1288,11 +1295,15 @@ impl AppState {
         if let Err(error) = &builder_workspace {
             eprintln!("{error}; Builder planning is unavailable");
         }
+        #[cfg(target_os = "linux")]
+        let coding = coding_flow::CodingFlow::new(Arc::clone(&workspace_authority)).map(Arc::new);
 
         let state = Self {
             supervisor: supervisor.clone(),
             workspace_authority,
             builder_workspace,
+            #[cfg(target_os = "linux")]
+            coding,
             audit,
             meta: Arc::new(Mutex::new(HashMap::new())),
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
@@ -1643,6 +1654,8 @@ impl AppState {
             builder_workspace: Err(
                 "Builder storage is not configured for this test AppState".into()
             ),
+            #[cfg(target_os = "linux")]
+            coding: Err("governed coding is not configured for this test AppState".into()),
             audit: Arc::new(Mutex::new(AuditTrail::new())),
             meta: Arc::new(Mutex::new(HashMap::new())),
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
@@ -1936,6 +1949,12 @@ impl AppState {
         } else {
             false
         }
+    }
+
+    /// The governed coding session (Phase One).
+    #[cfg(target_os = "linux")]
+    pub(crate) fn coding_flow(&self) -> Result<Arc<coding_flow::CodingFlow>, String> {
+        self.coding.clone()
     }
 
     #[cfg(all(
@@ -3222,6 +3241,90 @@ pub mod runtime {
             "time_machine_what_if",
             crate::phase0_surface::Closure::SimulationReplay,
         ))
+    }
+
+    // ── Governed coding (Phase One) ─────────────────────────────────────
+    // Only opaque ids and choices cross IPC: no path, grant or approval. The
+    // backend invokes the native folder picker and owner confirmation itself.
+
+    #[tauri::command]
+    async fn coding_select_project(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, AppState>,
+    ) -> Result<crate::coding_flow::ProjectView, String> {
+        crate::coding_flow::ipc::select_project(app, state.inner().clone()).await
+    }
+
+    #[tauri::command]
+    fn coding_list_projects(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<crate::coding_flow::ProjectView>, String> {
+        crate::coding_flow::ipc::list_projects(state.inner())
+    }
+
+    #[tauri::command]
+    async fn coding_list_local_models() -> Result<Vec<String>, String> {
+        crate::coding_flow::ipc::list_local_models().await
+    }
+
+    #[tauri::command]
+    fn coding_start_run(
+        state: tauri::State<'_, AppState>,
+        project_id: String,
+        write_scope: Vec<String>,
+        protected_scope: Vec<String>,
+        task: String,
+        model: String,
+    ) -> Result<crate::coding_flow::StartView, String> {
+        crate::coding_flow::ipc::start_run(
+            state.inner(),
+            &project_id,
+            &write_scope,
+            &protected_scope,
+            task,
+            model,
+        )
+    }
+
+    #[tauri::command]
+    fn coding_status(
+        state: tauri::State<'_, AppState>,
+        run_id: String,
+    ) -> Result<crate::coding_flow::RunView, String> {
+        crate::coding_flow::ipc::status(state.inner(), &run_id)
+    }
+
+    #[tauri::command]
+    fn coding_list_runs(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<Vec<crate::coding_flow::RunView>, String> {
+        crate::coding_flow::ipc::list_runs(state.inner())
+    }
+
+    #[tauri::command]
+    async fn coding_approve_apply(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, AppState>,
+        run_id: String,
+    ) -> Result<crate::coding_flow::RunView, String> {
+        crate::coding_flow::ipc::approve_apply(app, state.inner().clone(), run_id).await
+    }
+
+    #[tauri::command]
+    async fn coding_restore_run(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, AppState>,
+        run_id: String,
+    ) -> Result<crate::coding_flow::RunView, String> {
+        crate::coding_flow::ipc::restore(app, state.inner().clone(), run_id).await
+    }
+
+    #[tauri::command]
+    fn coding_discard_run(
+        state: tauri::State<'_, AppState>,
+        run_id: String,
+    ) -> Result<crate::coding_flow::RunView, String> {
+        crate::coding_flow::ipc::discard(state.inner(), &run_id)
     }
 
     // ── Nexus Link commands ─────────────────────────────────────────────
@@ -7767,6 +7870,11 @@ pub mod runtime {
             )
             .manage(AppState::new())
             .manage(nx_bridge::init_nx_state().expect("Failed to initialize Nexus Code bridge"));
+        // Phase One (D1/D2): native dialogs for backend-invoked project
+        // selection and owner confirmation. The webview holds no dialog
+        // permission, so it cannot open these dialogs itself.
+        #[cfg(target_os = "linux")]
+        let builder = builder.plugin(tauri_plugin_dialog::init());
 
         let builder = builder.setup(|app| {
             // P0 item D: build the single privileged window with its navigation
@@ -8021,6 +8129,15 @@ pub mod runtime {
                 time_machine_redo,
                 time_machine_get_diff,
                 time_machine_what_if,
+                coding_select_project,
+                coding_list_projects,
+                coding_list_local_models,
+                coding_start_run,
+                coding_status,
+                coding_list_runs,
+                coding_approve_apply,
+                coding_restore_run,
+                coding_discard_run,
                 nexus_link_status,
                 nexus_link_toggle_sharing,
                 nexus_link_add_peer,

@@ -1407,6 +1407,66 @@
           "markdownDescription": "Enables the cm_upload_darwin command without any pre-configured scope."
         },
         {
+          "description": "Enables the coding_approve_apply command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-approve-apply",
+          "markdownDescription": "Enables the coding_approve_apply command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the coding_discard_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-discard-run",
+          "markdownDescription": "Enables the coding_discard_run command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the coding_list_local_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-list-local-models",
+          "markdownDescription": "Enables the coding_list_local_models command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the coding_list_projects command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-list-projects",
+          "markdownDescription": "Enables the coding_list_projects command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the coding_list_runs command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-list-runs",
+          "markdownDescription": "Enables the coding_list_runs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the coding_restore_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-restore-run",
+          "markdownDescription": "Enables the coding_restore_run command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the coding_run_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-run-status",
+          "markdownDescription": "Enables the coding_run_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the coding_select_project command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-select-project",
+          "markdownDescription": "Enables the coding_select_project command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the coding_start_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-start-run",
+          "markdownDescription": "Enables the coding_start_run command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the coding_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-coding-status",
+          "markdownDescription": "Enables the coding_status command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cogfs_get_context command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cogfs-get-context",
@@ -6229,6 +6289,66 @@
           "type": "string",
           "const": "deny-cm-upload-darwin",
           "markdownDescription": "Denies the cm_upload_darwin command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_approve_apply command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-approve-apply",
+          "markdownDescription": "Denies the coding_approve_apply command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_discard_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-discard-run",
+          "markdownDescription": "Denies the coding_discard_run command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_list_local_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-list-local-models",
+          "markdownDescription": "Denies the coding_list_local_models command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_list_projects command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-list-projects",
+          "markdownDescription": "Denies the coding_list_projects command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_list_runs command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-list-runs",
+          "markdownDescription": "Denies the coding_list_runs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_restore_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-restore-run",
+          "markdownDescription": "Denies the coding_restore_run command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_run_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-run-status",
+          "markdownDescription": "Denies the coding_run_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_select_project command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-select-project",
+          "markdownDescription": "Denies the coding_select_project command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_start_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-start-run",
+          "markdownDescription": "Denies the coding_start_run command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the coding_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-coding-status",
+          "markdownDescription": "Denies the coding_status command without any pre-configured scope."
         },
         {
           "description": "Denies the cogfs_get_context command without any pre-configured scope.",
@@ -11791,6 +11911,72 @@
           "type": "string",
           "const": "core:window:deny-unminimize",
           "markdownDescription": "Denies the unminimize command without any pre-configured scope."
+        },
+        {
+          "description": "This permission set configures the types of dialogs\navailable from the dialog plugin.\n\n#### Granted Permissions\n\nAll dialog types are enabled.\n\n\n\n#### This default permission set includes:\n\n- `allow-message`\n- `allow-save`\n- `allow-open`",
+          "type": "string",
+          "const": "dialog:default",
+          "markdownDescription": "This permission set configures the types of dialogs\navailable from the dialog plugin.\n\n#### Granted Permissions\n\nAll dialog types are enabled.\n\n\n\n#### This default permission set includes:\n\n- `allow-message`\n- `allow-save`\n- `allow-open`"
+        },
+        {
+          "description": "Enables the ask command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `allow-message` and will be removed in v3)",
+          "type": "string",
+          "const": "dialog:allow-ask",
+          "markdownDescription": "Enables the ask command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `allow-message` and will be removed in v3)"
+        },
+        {
+          "description": "Enables the confirm command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `allow-message` and will be removed in v3)",
+          "type": "string",
+          "const": "dialog:allow-confirm",
+          "markdownDescription": "Enables the confirm command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `allow-message` and will be removed in v3)"
+        },
+        {
+          "description": "Enables the message command without any pre-configured scope.",
+          "type": "string",
+          "const": "dialog:allow-message",
+          "markdownDescription": "Enables the message command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open command without any pre-configured scope.",
+          "type": "string",
+          "const": "dialog:allow-open",
+          "markdownDescription": "Enables the open command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save command without any pre-configured scope.",
+          "type": "string",
+          "const": "dialog:allow-save",
+          "markdownDescription": "Enables the save command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the ask command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `deny-message` and will be removed in v3)",
+          "type": "string",
+          "const": "dialog:deny-ask",
+          "markdownDescription": "Denies the ask command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `deny-message` and will be removed in v3)"
+        },
+        {
+          "description": "Denies the confirm command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `deny-message` and will be removed in v3)",
+          "type": "string",
+          "const": "dialog:deny-confirm",
+          "markdownDescription": "Denies the confirm command without any pre-configured scope. (**DEPRECATED**: This is now an alias to `deny-message` and will be removed in v3)"
+        },
+        {
+          "description": "Denies the message command without any pre-configured scope.",
+          "type": "string",
+          "const": "dialog:deny-message",
+          "markdownDescription": "Denies the message command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open command without any pre-configured scope.",
+          "type": "string",
+          "const": "dialog:deny-open",
+          "markdownDescription": "Denies the open command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save command without any pre-configured scope.",
+          "type": "string",
+          "const": "dialog:deny-save",
+          "markdownDescription": "Denies the save command without any pre-configured scope."
         },
         {
           "description": "No features are enabled by default, as we believe\nthe shortcuts can be inherently dangerous and it is\napplication specific if specific shortcuts should be\nregistered or unregistered.\n",

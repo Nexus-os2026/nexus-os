@@ -18,7 +18,7 @@
 //! `phase0_surface/fg_webview/tests.rs`) fail on any drift between the
 //! registry, this list and the capability, so neither can drift silently.
 
-/// Every registered application command, sorted and unique (804).
+/// Every registered application command, sorted and unique (813).
 pub const APP_COMMANDS: &[&str] = &[
     "a2a_cancel_task",
     "a2a_crate_discover_agent",
@@ -225,6 +225,15 @@ pub const APP_COMMANDS: &[&str] = &[
     "cm_three_way_comparison",
     "cm_trigger_feedback",
     "cm_upload_darwin",
+    "coding_approve_apply",
+    "coding_discard_run",
+    "coding_list_local_models",
+    "coding_list_projects",
+    "coding_list_runs",
+    "coding_restore_run",
+    "coding_select_project",
+    "coding_start_run",
+    "coding_status",
     "cogfs_get_context",
     "cogfs_get_entities",
     "cogfs_get_graph",

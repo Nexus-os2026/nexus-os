@@ -7,10 +7,10 @@
 //! makes local models unavailable. There is no provider choice, no fallback
 //! and no cloud route: if the local model cannot answer, the run fails.
 //!
-//! Requests are made in-process (no `curl`, no child process), without a
-//! proxy (a proxy variable could otherwise carry project source off the
-//! machine), without following redirects, with a bounded wait and a bounded
-//! response.
+//! Requests are made in-process (no command-line HTTP tool, no child
+//! process), without a proxy (a proxy variable could otherwise carry project
+//! source off the machine), without following redirects, with a bounded wait
+//! and a bounded response.
 
 use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr};
@@ -21,6 +21,9 @@ use thiserror::Error;
 
 /// The only provider a Phase One coding run can use.
 pub const LOCAL_PROVIDER: &str = "ollama";
+
+/// A checked loopback Ollama address (see [`loopback_endpoint`]).
+pub type LocalEndpoint = url::Url;
 
 const MAX_MODEL_NAME_BYTES: usize = 128;
 const MAX_LIST_RESPONSE_BYTES: u64 = 1024 * 1024;

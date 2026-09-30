@@ -88,8 +88,8 @@ pub use apply::{
 };
 pub use ledger::{analyze as analyze_ledger, LedgerFailure, LedgerRecovery, LedgerStore};
 pub use local_model::{
-    loopback_endpoint, LocalModel, LocalOllama, ModelError, ModelMessage, ModelPin, ModelRole,
-    LOCAL_PROVIDER,
+    loopback_endpoint, LocalEndpoint, LocalModel, LocalOllama, ModelError, ModelMessage, ModelPin,
+    ModelRole, LOCAL_PROVIDER,
 };
 pub use manifest::{Manifest, ManifestEntry, ManifestHash};
 pub use project::{

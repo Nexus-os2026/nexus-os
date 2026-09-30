@@ -16,6 +16,7 @@ import {
   getTemporalHistory,
   setTemporalConfig,
 } from "../api/backend";
+import { confirmAction } from "../lib/ownerConfirm";
 
 /* ── types ── */
 
@@ -299,7 +300,7 @@ export default function TimeMachine() {
       const diffRaw = await timeMachineGetDiff(id);
       const diff: DiffEntry[] = JSON.parse(diffRaw);
       const preview = summarizeUndoActions(diff);
-      const confirmed = window.confirm(
+      const confirmed = await confirmAction(
         preview.length === 0
           ? "Rewind to this checkpoint?"
           : `These actions will be undone:\n${preview.map((item) => `- ${item}`).join("\n")}\n\nRewind to this point?`
@@ -342,7 +343,7 @@ export default function TimeMachine() {
       const diffRaw = await timeMachineGetDiff(checkpoint.id);
       const diff: DiffEntry[] = JSON.parse(diffRaw);
       const preview = summarizeUndoActions(diff);
-      const confirmed = window.confirm(
+      const confirmed = await confirmAction(
         preview.length === 0
           ? `Run What if? for ${checkpoint.label}?`
           : `These actions will be undone:\n${preview.map((item) => `- ${item}`).join("\n")}\n\nThen ${variableKey} will be set to ${variableValue}. Continue?`

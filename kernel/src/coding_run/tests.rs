@@ -885,6 +885,10 @@ fn p1a_nc_29_no_project_owner_bytes_change() {
 
 #[test]
 fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
+    // Phase One P1-08: the governed coding flow (`coding_flow.rs`) is the one
+    // desktop module that reaches the primitive; every other desktop source,
+    // including the command registry in lib.rs, must not.
+    const GOVERNED_FLOW: &str = "coding_flow.rs";
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../app/src-tauri/src");
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         for entry in std::fs::read_dir(dir).unwrap() {
@@ -911,7 +915,14 @@ fn p1a_nc_30_no_production_ipc_exposes_the_coding_run_primitive() {
         sources.iter().any(|path| path.ends_with("lib.rs")),
         "the desktop command registry (lib.rs) must be scanned"
     );
+    assert!(
+        sources.iter().any(|path| path.ends_with(GOVERNED_FLOW)),
+        "the governed coding flow must exist"
+    );
     for path in sources {
+        if path.ends_with(GOVERNED_FLOW) {
+            continue;
+        }
         let text = std::fs::read_to_string(&path).unwrap();
         for needle in ["coding_run", "CodingRun", "CodingRunLedger"] {
             assert!(
@@ -1735,3 +1746,8 @@ mod p1_apply;
 
 #[path = "p1_restore_tests.rs"]
 mod p1_restore;
+
+// ── Phase One end-to-end ────────────────────────────────────────────────────
+
+#[path = "p1_e2e_tests.rs"]
+mod p1_e2e;

@@ -5505,3 +5505,136 @@ export function builderScaffoldBuild(brief: string, outputMode?: string, project
     project_name: projectName,
   });
 }
+
+// ── Governed Coding (Phase One) ─────────────────────────────────────────────
+// The frontend never sends filesystem paths or approval booleans. Projects are
+// chosen through a backend-invoked native folder picker and referenced by an
+// opaque id; apply approval is confirmed by a native OS dialog in the backend.
+
+export interface CodingProject {
+  id: string;
+  name: string;
+}
+
+export type CodingRunStage =
+  | "preparing"
+  | "working"
+  | "verifying"
+  | "review"
+  | "no_changes"
+  | "applying"
+  | "restoring"
+  | "applied"
+  | "rolled_back"
+  | "restored"
+  | "failed"
+  | "recovery_required"
+  | "discarded";
+
+export interface CodingWorkerSummary {
+  turns: number;
+  files_read: number;
+  accepted: string[];
+  rejected: number;
+}
+
+export interface CodingVerification {
+  passed: boolean;
+  candidate_short: string;
+  base_short: string;
+  violations: string[];
+}
+
+export interface CodingChange {
+  path: string;
+  kind: "create" | "replace" | "delete";
+  old_sha256: string | null;
+  new_sha256: string | null;
+  old_size: number | null;
+  new_size: number | null;
+  diff: string | null;
+  diff_note: string | null;
+  truncated: boolean;
+}
+
+export interface CodingReview {
+  binding_short: string;
+  changes: CodingChange[];
+}
+
+export interface CodingRunStatus {
+  run_id: string;
+  project_id: string;
+  project_name: string;
+  model: string;
+  stage: CodingRunStage;
+  message: string | null;
+  run_state: string;
+  apply_state: string;
+  worker: CodingWorkerSummary | null;
+  verification: CodingVerification | null;
+  review: CodingReview | null;
+  can_apply: boolean;
+  can_restore: boolean;
+  can_discard: boolean;
+}
+
+export interface CodingStartRunRequest {
+  projectId: string;
+  writeScope: string[];
+  protectedScope: string[];
+  task: string;
+  model: string;
+}
+
+function codingRunArgs(runId: string): Record<string, unknown> {
+  return { runId, run_id: runId };
+}
+
+/** Opens a native folder picker in the backend; the frontend never sends a path. */
+export function codingSelectProject(): Promise<CodingProject> {
+  return invokeDesktop<CodingProject>("coding_select_project");
+}
+
+export function codingListProjects(): Promise<CodingProject[]> {
+  return invokeDesktop<CodingProject[]>("coding_list_projects");
+}
+
+export function codingListLocalModels(): Promise<string[]> {
+  return invokeDesktop<string[]>("coding_list_local_models");
+}
+
+export function codingStartRun(request: CodingStartRunRequest): Promise<{ run_id: string }> {
+  const { projectId, writeScope, protectedScope, task, model } = request;
+  return invokeDesktop<{ run_id: string }>("coding_start_run", {
+    projectId,
+    project_id: projectId,
+    writeScope,
+    write_scope: writeScope,
+    protectedScope,
+    protected_scope: protectedScope,
+    task,
+    model,
+  });
+}
+
+export function codingRunStatus(runId: string): Promise<CodingRunStatus> {
+  return invokeDesktop<CodingRunStatus>("coding_status", codingRunArgs(runId));
+}
+
+export function codingListRuns(): Promise<CodingRunStatus[]> {
+  return invokeDesktop<CodingRunStatus[]>("coding_list_runs");
+}
+
+/** Requests apply; the backend asks the owner via a native OS confirmation dialog. */
+export function codingApproveApply(runId: string): Promise<CodingRunStatus> {
+  return invokeDesktop<CodingRunStatus>("coding_approve_apply", codingRunArgs(runId));
+}
+
+export function codingRestoreRun(runId: string): Promise<CodingRunStatus> {
+  return invokeDesktop<CodingRunStatus>("coding_restore_run", codingRunArgs(runId));
+}
+
+export function codingDiscardRun(runId: string): Promise<CodingRunStatus> {
+  return invokeDesktop<CodingRunStatus>("coding_discard_run", codingRunArgs(runId));
+}

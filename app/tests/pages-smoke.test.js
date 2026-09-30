@@ -38,6 +38,7 @@ const requiredPages = [
   "CommandCenter.tsx",
   "MissionControl.tsx",
   "CodeEditor.tsx",
+  "GovernedCoding.tsx",
   "ComputerControl.tsx",
   "AgentBrowser.tsx",
   "AgentDnaLab.tsx",

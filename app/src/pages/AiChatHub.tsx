@@ -15,6 +15,7 @@ import type {
 } from "../types";
 import "./ai-chat-hub.css";
 import { renderChatContent } from "../lib/safeHtml";
+import { confirmAction } from "../lib/ownerConfirm";
 
 /* ─── types ─── */
 type View = "chat" | "compare" | "history";
@@ -1714,7 +1715,7 @@ export default function AiChatHub() {
               <div className="ch-chat-actions">
                 <button type="button" className="ch-hdr-btn cursor-pointer" onClick={() => togglePin(activeConv.id)} title={activeConv.pinned ? "Unpin" : "Pin"}>{activeConv.pinned ? <Pin size={16} aria-hidden="true" /> : <MapPin size={16} aria-hidden="true" />}</button>
                 <button type="button" className="ch-hdr-btn cursor-pointer" onClick={copyConversation} title="Copy conversation" aria-label="Copy conversation"><ClipboardList size={16} aria-hidden="true" /></button>
-                <button type="button" className="ch-hdr-btn cursor-pointer" onClick={() => { if (window.confirm("Delete this conversation?")) deleteConversation(activeConv.id); }} title="Delete"><Trash2 size={16} aria-hidden="true" /></button>
+                <button type="button" className="ch-hdr-btn cursor-pointer" onClick={async () => { if (await confirmAction("Delete this conversation?", "Delete")) deleteConversation(activeConv.id); }} title="Delete"><Trash2 size={16} aria-hidden="true" /></button>
                 <button type="button" className={`ch-hdr-btn ch-voice-btn cursor-pointer ${voiceActive ? "active" : ""}`} onClick={() => { setVoiceActive(!voiceActive); logAudit(voiceActive ? "Voice off" : "Voice on \u2014 Jarvis mode"); }} title="Voice">
                   {voiceActive ? <Mic size={16} aria-hidden="true" /> : <MicOff size={16} aria-hidden="true" />}
                 </button>
@@ -1775,7 +1776,7 @@ export default function AiChatHub() {
                       </button>
                       <button type="button"
                         className="ch-ctrl-btn ch-ctrl-kill cursor-pointer"
-                        onClick={() => { if (window.confirm(`Force kill ${selectedAgent.name}?`)) handleAgentAction("kill"); }}
+                        onClick={async () => { if (await confirmAction(`Force kill ${selectedAgent.name}?`, "Kill")) handleAgentAction("kill"); }}
                         disabled={agentActionLoading}
                       >
                         <X size={12} aria-hidden="true" /> Kill

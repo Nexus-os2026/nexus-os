@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AgentSummary, AuditEventRow } from "../../types";
 import { Avatar } from "./Avatar";
+import { confirmAction } from "../../lib/ownerConfirm";
 
 interface AgentCardProps {
   agent: AgentSummary;
@@ -242,9 +243,9 @@ export function AgentCard({
         {!agent.isSystem && (
           <button type="button"
             className="agent-action-btn delete"
-            onClick={(event) => {
+            onClick={async (event) => {
               event.stopPropagation();
-              if (window.confirm(`Delete agent "${agent.name}"? This cannot be undone.`)) {
+              if (await confirmAction(`Delete agent "${agent.name}"? This cannot be undone.`, "Delete")) {
                 onDelete(agent.id);
               }
             }}

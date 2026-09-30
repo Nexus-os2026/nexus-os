@@ -44,6 +44,7 @@ const pages = [
   'Firewall',
   'FlashInference',
   'GovernanceOracle',
+  'GovernedCoding',
   'GovernedControl',
   'Identity',
   'ImmuneDashboard',

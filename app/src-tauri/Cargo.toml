@@ -96,6 +96,9 @@ tauri-plugin-global-shortcut = "2.3.1"
 [target.'cfg(target_os = "linux")'.dependencies]
 tauri = { version = "2.5.5", optional = true, default-features = false, features = ["tray-icon", "wry"] }
 tauri-plugin-global-shortcut = "2.3.1"
+# Phase One (decision D1/D2): backend-invoked native folder selection and
+# owner confirmation. The webview is granted no dialog permission.
+tauri-plugin-dialog = "=2.7.0"
 
 # P0 item D native boundary harness (tests/webview_boundary_live.rs): it drives
 # the real Wry runtime with the production context and build_main_window, so it
