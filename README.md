@@ -6,38 +6,86 @@ through backend-owned, explicitly granted authority.
 
 It is not production-ready.
 
-## Status: Phase Zero complete — Linux support profile
+## Status: Phase One complete — Linux support profile
 
-**PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE**, as declared by the project
-Architect on 2026-09-29.
+| Phase | Status | Frozen checkpoint |
+|---|---|---|
+| Phase Zero — trust-boundary foundation | **PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-29 | `rebuild/phase0-trust-boundary` at `f727f5c39fab8d5c729a55eb28ad576d3d56ce47` |
+| Phase One — governed coding workflow | **PHASE ONE COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-30 | `rebuild/phase1-governed-coding` at `14270a9a38770ac84456c1f812042d2967edec42` |
+| Phase Two | Not started | — |
 
-- Phase Zero is complete for the Linux support profile.
-- Windows and macOS portability validation remains deferred.
+- Both phases are complete for the Linux support profile only. Windows and
+  macOS portability validation remains deferred.
 - This is not a production-readiness declaration.
 - This is not an external certification or audit.
-- Phase One has not been implemented; this status update adds no Phase One
-  capability.
+- The frozen checkpoints are the validated bytes. Later documentation or
+  status commits do not redefine them.
 
 Phase Zero rebuilt the project's trust boundary around one rule: a string is
 never authority. It replaced ambient, caller-asserted and path-based
 authority with backend-owned grants, narrowing, revocation and fail-closed
 defaults.
 
-The final hosted validation of the Phase Zero checkpoint passed. The
-authoritative branch and the public `main` branch were then aligned to that
-checkpoint. The completed Phase Zero checkpoint is frozen at commit
-`f727f5c39fab8d5c729a55eb28ad576d3d56ce47`; later documentation or status
-commits do not redefine those validated bytes.
+Phase One builds one governed coding workflow on that foundation (see
+[Governed coding](#governed-coding-phase-one) below). It does not make Nexus a
+complete, general-purpose autonomous coding system.
 
-The public default branch (`main`) was aligned to the completed Phase Zero
-checkpoint. Older releases and tags predate the rebuild; they remain
-historical and are explicitly labelled as such.
+The public default branch (`main`) was fast-forwarded to each completed
+checkpoint after its hosted validation passed. Older releases and tags
+predate the rebuild. They remain historical and are explicitly labelled as
+such.
 
 ## Platform scope
 
-- Linux is the active Phase Zero validation profile.
-- Windows and macOS portability validation is deferred.
+- Linux is the active validation profile for Phase Zero and Phase One.
+- Windows and macOS portability validation is deferred. Governed coding is
+  not available on them.
 - Linux security claims do not automatically apply to Windows or macOS.
+
+## Governed coding (Phase One)
+
+The desktop's Governed Coding page runs one governed workflow:
+
+1. **Select the project.** The owner picks a project folder through a native
+   folder picker that the backend opens itself. The frontend never supplies
+   a path, and it refers to projects and runs only by opaque ids that grant
+   nothing.
+2. **Describe the work.** The owner chooses the write scope and protected
+   folders, describes a task, and picks a model installed in a local Ollama
+   on a loopback address. The model is pinned into the run, and there is no
+   cloud fallback.
+3. **The worker proposes edits.** The worker has no shell, git or process
+   authority. Project content, including files such as `AGENTS.md`, is
+   treated as task data. The model's output becomes only bounded, typed edit
+   proposals, applied to a private staging copy. Protected inputs cannot be
+   edited.
+4. **Verify and review.** The candidate is structurally verified, and the
+   backend computes a review of the exact changes.
+5. **Approve.** The owner approves through a native confirmation, bound to
+   the exact run, base and candidate. A frontend flag cannot approve.
+6. **Apply.** The apply refuses with zero writes if the owner's files
+   changed since the run started. Pre-images are saved first, and a failure
+   is rolled back or reported as needing recovery, never as success.
+7. **Restore.** The owner can restore that single run. The restore refuses
+   if the applied files have since changed.
+
+Phase One does not claim:
+
+- arbitrary project test execution;
+- shell coding authority or arbitrary process execution;
+- git mutation;
+- cloud coding models;
+- web-enabled coding research;
+- package installation or deployment;
+- multi-agent or computer-use coding;
+- Windows or macOS governed coding;
+- coding-run authority that survives a restart;
+- atomic multi-file filesystem transactions;
+- general Time Machine rollback authority.
+
+Structural verification checks that the candidate stays within the run's
+scopes and policy. It is not semantic verification and does not run the
+project's tests.
 
 ## Local-first is not local-only
 
@@ -88,7 +136,11 @@ deployment guide linked below.
 - The Phase Zero evidence is internal engineering evidence. It is not an
   external audit.
 - No general operating-system or WebAssembly sandbox is claimed for agents
-  in Phase Zero.
+  in Phase Zero or Phase One.
+- The Phase One evidence is internal engineering evidence. It is not an
+  external audit.
+- Governed coding has no general shell, process or git authority. Its
+  structural verification is not a guarantee that the code is correct.
 - The dependency and security checks in CI pass with a reviewed set of
   accepted advisories. A green run does not mean there is no dependency
   debt.
@@ -102,8 +154,11 @@ deployment guide linked below.
   current engineering evidence on authority surfaces and closures. It is
   not a certification.
 - [Security policy](SECURITY.md): how to report a vulnerability.
-- [Deployment status](docs/DEPLOYMENT.md): what is and is not deployable in
-  Phase Zero.
+- [Deployment status](docs/DEPLOYMENT.md): what is and is not deployable.
+  Phase One adds no server deployment.
+- Phase One completion evidence: the `evidence/phase1-closure` branch
+  (declaration, completion record, validation runs, non-claims). It is not a
+  certification.
 
 ## Vision
 

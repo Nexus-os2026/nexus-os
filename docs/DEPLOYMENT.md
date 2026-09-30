@@ -4,6 +4,9 @@
 > supported server deployment.** This page records what the completed Phase
 > Zero Linux support profile does and does not support. It is not an
 > installation guide.
+>
+> Phase One (the governed coding workflow, also Linux only) adds no server
+> deployment and changes nothing on this page.
 
 ## Platform scope
 
