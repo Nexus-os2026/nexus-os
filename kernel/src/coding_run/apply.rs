@@ -228,6 +228,20 @@ pub enum ApplyError {
         failed: String,
         unrestored: Vec<String>,
     },
+    /// The filesystem work of `operation` ("restore" or "rollback")
+    /// finished, but its durable completion record could not be written:
+    /// the outcome is not established, so recovery is required and the
+    /// private pre-image store is kept.
+    #[error(
+        "{operation} finished on disk but its completion could not be recorded; recovery required"
+    )]
+    CompletionUnrecorded { operation: &'static str },
+    /// The temporary write grant could not be confirmed closed after the
+    /// attempt. `after` is what the attempt itself did to the project.
+    #[error("the temporary write grant could not be confirmed closed; recovery required")]
+    AuthorityNotClosed {
+        after: Box<Result<ApplyReport, ApplyError>>,
+    },
 }
 
 /// What a successful apply or restore wrote.
@@ -340,6 +354,25 @@ fn hook_after_exchange(_dir: &DirHandle, _temp: &str, _name: &str, _path: &RelPa
     });
 }
 
+// Test seam: the temporary write grant cannot be revoked.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static WRITE_GRANT_REVOKE_FAILS: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+/// Close the temporary write grant of an apply or restore attempt,
+/// independently of the ledger. Closure is confirmed only if the registry
+/// revoked it, or it no longer resolves (already revoked or expired).
+fn close_write_grant(grant: &ProjectGrant) -> bool {
+    #[cfg(test)]
+    if WRITE_GRANT_REVOKE_FAILS.with(std::cell::Cell::get) {
+        return false;
+    }
+    grant.authority.revoke(grant.grant, grant.binding).is_ok()
+        || grant.authority.resolve(grant.grant, grant.binding).is_err()
+}
+
 fn refused(refusal: Refusal) -> ApplyError {
     ApplyError::Refused(refusal)
 }
@@ -414,9 +447,13 @@ impl CodingRun {
             self.approved = None;
             Err(refused(Refusal::ApprovalMismatch))
         };
-        // The write grant never outlives the attempt.
-        let _ = grant.authority.revoke(grant.grant, grant.binding);
+        // The write grant never outlives the attempt, and no outcome is
+        // clean unless its closure is confirmed.
+        if !close_write_grant(&grant) {
+            return Err(self.authority_not_closed(result));
+        }
         if let Err(ApplyError::Refused(refusal)) = &result {
+            // Informational: nothing was written and no state changed.
             let _ = record(
                 self.ledger.as_ref(),
                 self.id.0,
@@ -425,6 +462,22 @@ impl CodingRun {
             );
         }
         result
+    }
+
+    /// The write grant stayed live after an attempt: the run requires
+    /// recovery whatever the attempt did, and the actual state is recorded
+    /// once (best effort).
+    fn authority_not_closed(&mut self, after: Result<ApplyReport, ApplyError>) -> ApplyError {
+        self.apply_state = ApplyState::RecoveryRequired;
+        let _ = record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::ApplyRecoveryRequired,
+            &json!({ "failed": "write grant closure", "attempt_ok": after.is_ok() }),
+        );
+        ApplyError::AuthorityNotClosed {
+            after: Box::new(after),
+        }
     }
 
     fn apply_inner(
@@ -596,33 +649,48 @@ impl CodingRun {
         storage_name: String,
         storage_dir: DirHandle,
     ) -> ApplyError {
-        let (event, error) = if unrestored.is_empty() {
-            self.apply_state = ApplyState::RolledBack;
-            discard_storage(storage_parent, &storage_name, &storage_dir);
-            (
+        let facts = json!({ "failed": failed, "unrestored": unrestored });
+        if unrestored.is_empty() {
+            // A clean rollback is claimed only once it is durably recorded;
+            // the pre-image store is discarded only after that.
+            if record(
+                self.ledger.as_ref(),
+                self.id.0,
                 EventKind::ApplyRolledBack,
-                ApplyError::RolledBack {
-                    failed: failed.clone(),
-                },
+                &facts,
             )
-        } else {
-            // Pre-images stay in run storage for manual recovery.
-            self.apply_state = ApplyState::RecoveryRequired;
-            (
-                EventKind::ApplyRecoveryRequired,
-                ApplyError::RecoveryRequired {
-                    failed: failed.clone(),
-                    unrestored: unrestored.clone(),
-                },
-            )
-        };
+            .is_ok()
+            {
+                self.apply_state = ApplyState::RolledBack;
+                discard_storage(storage_parent, &storage_name, &storage_dir);
+                return ApplyError::RolledBack { failed };
+            }
+            return self.completion_unrecorded("rollback", &failed);
+        }
+        // Partial: recovery is required whether or not this is recorded, and
+        // the pre-images stay in run storage for manual recovery.
+        self.apply_state = ApplyState::RecoveryRequired;
         let _ = record(
             self.ledger.as_ref(),
             self.id.0,
-            event,
-            &json!({ "failed": failed, "unrestored": unrestored }),
+            EventKind::ApplyRecoveryRequired,
+            &facts,
         );
-        error
+        ApplyError::RecoveryRequired { failed, unrestored }
+    }
+
+    /// The filesystem work of `operation` finished but its completion could
+    /// not be recorded: recovery is required, the pre-image store is kept,
+    /// and the actual state is recorded once (best effort, never retried).
+    fn completion_unrecorded(&mut self, operation: &'static str, failed: &str) -> ApplyError {
+        self.apply_state = ApplyState::RecoveryRequired;
+        let _ = record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::ApplyRecoveryRequired,
+            &json!({ "failed": failed, "completion_unrecorded": operation }),
+        );
+        ApplyError::CompletionUnrecorded { operation }
     }
 
     /// Resolve a write grant for this run's project: live, writable, bound
@@ -821,23 +889,46 @@ impl CodingRun {
             self.restore_approved = None;
             Err(refused(Refusal::ApprovalMismatch))
         };
-        let _ = grant.authority.revoke(grant.grant, grant.binding);
-        if let Err(ApplyError::Refused(refusal)) = &result {
-            let _ = record(
-                self.ledger.as_ref(),
-                self.id.0,
-                EventKind::RestoreRejected,
-                &json!({ "reason": format!("{refusal:?}") }),
-            );
+        // Clean success needs the durable completion (checked inside) and a
+        // confirmed closure of the write grant; only then is the run
+        // Restored and the private pre-image store discarded.
+        if !close_write_grant(&grant) {
+            let after = result.map(|(report, _kept)| report);
+            return Err(self.authority_not_closed(after));
         }
-        result
+        match result {
+            Ok((report, applied)) => {
+                self.apply_state = ApplyState::Restored;
+                discard_storage(
+                    &applied.storage_parent,
+                    &applied.storage_name,
+                    &applied.storage,
+                );
+                Ok(report)
+            }
+            Err(error) => {
+                if let ApplyError::Refused(refusal) = &error {
+                    // Informational: nothing was touched.
+                    let _ = record(
+                        self.ledger.as_ref(),
+                        self.id.0,
+                        EventKind::RestoreRejected,
+                        &json!({ "reason": format!("{refusal:?}") }),
+                    );
+                }
+                Err(error)
+            }
+        }
     }
 
+    /// Restore on disk and record its durable completion. On success the
+    /// consumed apply record (holding the pre-image store) is returned for
+    /// the caller to discard once the write grant is confirmed closed.
     fn restore_inner(
         &mut self,
         binding: ReviewBinding,
         grant: &ProjectGrant,
-    ) -> Result<ApplyReport, ApplyError> {
+    ) -> Result<(ApplyReport, ApplyRecord), ApplyError> {
         if self.apply_state != ApplyState::Applied || self.applied.is_none() {
             return Err(ApplyError::InvalidState);
         }
@@ -895,20 +986,21 @@ impl CodingRun {
             .collect();
         let unrestored = rollback(&mut applied.files, &mut applied.dirs, &applied.storage);
         if unrestored.is_empty() {
-            self.apply_state = ApplyState::Restored;
-            discard_storage(
-                &applied.storage_parent,
-                &applied.storage_name,
-                &applied.storage,
-            );
-            let _ = record(
+            // Files are restored; success is claimed only after the durable
+            // completion record. Without it the pre-image store is kept.
+            if record(
                 self.ledger.as_ref(),
                 self.id.0,
                 EventKind::RestoreCompleted,
                 &json!({ "binding": hex::encode(binding.hash()), "files": files.len() }),
-            );
-            Ok(ApplyReport { binding, files })
+            )
+            .is_err()
+            {
+                return Err(self.completion_unrecorded("restore", "restore.completed"));
+            }
+            Ok((ApplyReport { binding, files }, applied))
         } else {
+            // Partial: recovery is required whether or not this is recorded.
             self.apply_state = ApplyState::RecoveryRequired;
             let _ = record(
                 self.ledger.as_ref(),

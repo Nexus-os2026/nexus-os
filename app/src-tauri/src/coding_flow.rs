@@ -95,11 +95,11 @@ mod linux {
     use std::sync::{Arc, Mutex, OnceLock};
 
     use nexus_kernel::coding_run::{
-        display_safe, loopback_endpoint, run_worker, ApplyError, ApplyState, ChangeKind, CodingRun,
-        FolderPicker, LedgerStore, LocalEndpoint, LocalModel, LocalOllama, OwnerConfirmer,
-        ProjectId, ProjectInfo, ProjectRegistry, RelPath, Review, RunId, RunScopes, RunState,
-        ScopeEntry, ScopeSet, StagingParent, StructuralOutcome, StructuralVerification, TextDiff,
-        WorkerReport,
+        display_safe, loopback_endpoint, run_worker, ApplyError, ApplyState, ChangeKind,
+        CleanupStatus, CodingRun, FolderPicker, LedgerStore, LocalEndpoint, LocalModel,
+        LocalOllama, OwnerConfirmer, ProjectId, ProjectInfo, ProjectRegistry, RelPath, Review,
+        RunError, RunId, RunScopes, RunState, ScopeEntry, ScopeSet, StagingParent,
+        StructuralOutcome, StructuralVerification, TextDiff, WorkerReport,
     };
     use nexus_kernel::workspace_authority::{WorkspaceAuthorityRegistry, WorkspaceBinding};
     use nexus_persistence::coding_run_ledger::CodingRunLedger;
@@ -363,7 +363,9 @@ mod linux {
                 ),
                 Err(error) => ("review", Some(apply_message(&error))),
             };
-            let stage = if stage == "review" && run.verification().is_none() {
+            let stage = if run.apply_state() == ApplyState::RecoveryRequired {
+                "recovery_required"
+            } else if stage == "review" && run.verification().is_none() {
                 "failed"
             } else {
                 stage
@@ -403,6 +405,11 @@ mod linux {
                 ),
                 Err(error) => ("applied", Some(apply_message(&error))),
             };
+            let stage = if run.apply_state() == ApplyState::RecoveryRequired {
+                "recovery_required"
+            } else {
+                stage
+            };
             slot.refresh(&run, stage, message);
             Ok(slot.view(id))
         }
@@ -429,16 +436,91 @@ mod linux {
                 slot.refresh(&run, "applied", Some(refusal.clone()));
                 return Err(refusal);
             }
-            if !run.state().is_terminal() {
-                let _ = run.cancel();
-            }
-            let _ = run.discard_staging();
-            slot.refresh(
-                &run,
-                "discarded",
-                Some("The run was discarded.".to_string()),
-            );
+            let (stage, message) = discard_run(&mut run);
+            slot.refresh(&run, stage, Some(message));
             Ok(slot.view(id))
+        }
+    }
+
+    /// Cancel a run that is still live and remove its staging copy, and say
+    /// what actually happened. The run is shown as discarded only if
+    /// cancellation (when needed) and staging cleanup both succeeded and the
+    /// run is not left requiring recovery. Staging cleanup never touches the
+    /// project grant.
+    pub(crate) fn discard_run(run: &mut CodingRun) -> (&'static str, String) {
+        let cancel = if run.state().is_terminal() {
+            Ok(())
+        } else {
+            run.cancel()
+        };
+        let cleanup = run.discard_staging();
+        discard_outcome(cancel, cleanup, run.state())
+    }
+
+    /// The displayed outcome of a discard from its actual results.
+    pub(crate) fn discard_outcome(
+        cancel: Result<(), RunError>,
+        cleanup: Result<CleanupStatus, RunError>,
+        state: RunState,
+    ) -> (&'static str, String) {
+        if let Err(error) = cancel {
+            return (
+                "recovery_required",
+                format!("The run could not be cancelled cleanly ({error}); it needs recovery."),
+            );
+        }
+        match cleanup {
+            Ok(CleanupStatus::Discarded | CleanupStatus::NotStarted) => {}
+            Ok(CleanupStatus::DiscardFailed) => {
+                return (
+                    "recovery_required",
+                    "The staging copy could not be removed; it needs recovery.".to_string(),
+                )
+            }
+            Err(error) => {
+                return (
+                    "recovery_required",
+                    format!("The staging copy could not be removed ({error}); it needs recovery."),
+                )
+            }
+        }
+        if let RunState::RecoveryRequired(reason) = state {
+            return (
+                "recovery_required",
+                format!("The staging copy was removed, but the run needs recovery ({reason:?})."),
+            );
+        }
+        ("discarded", "The run was discarded.".to_string())
+    }
+
+    /// End a run that failed before review: cancel it if it is still live,
+    /// and report `recovery_required` rather than an ordinary failure if the
+    /// run could not be closed cleanly.
+    pub(crate) fn end_failed(run: &mut CodingRun, message: String) -> (&'static str, String) {
+        let cancel = if run.state().is_terminal() {
+            Ok(())
+        } else {
+            run.cancel()
+        };
+        failure_outcome(cancel, run.state(), message)
+    }
+
+    /// The displayed outcome of a failed run from its actual state.
+    pub(crate) fn failure_outcome(
+        cancel: Result<(), RunError>,
+        state: RunState,
+        message: String,
+    ) -> (&'static str, String) {
+        match (cancel, state) {
+            (_, RunState::RecoveryRequired(reason)) => (
+                "recovery_required",
+                format!("{message} The run also needs recovery ({reason:?})."),
+            ),
+            (Err(error), _) => (
+                "recovery_required",
+                format!("{message} The run could not be closed cleanly ({error})."),
+            ),
+            (Ok(()), _) => ("failed", message),
         }
     }
 
@@ -491,6 +573,18 @@ mod linux {
             }
             ApplyError::Refused(refusal) => format!("Refused before any change: {refusal:?}"),
             ApplyError::InvalidState => "This action is not available for the run.".to_string(),
+            ApplyError::CompletionUnrecorded { operation } => format!(
+                "The {operation} finished on disk, but it could not be recorded durably; the run needs recovery and its saved originals are kept."
+            ),
+            ApplyError::AuthorityNotClosed { after } => {
+                let what = match after.as_ref() {
+                    Ok(report) => format!("{} file(s) were written", report.files.len()),
+                    Err(error) => apply_message(error),
+                };
+                format!(
+                    "{what}, but the temporary write permission could not be confirmed closed; the run needs recovery."
+                )
+            }
             other => other.to_string(),
         }
     }
@@ -556,34 +650,26 @@ mod linux {
             .map_err(|error| error.to_string())
             .and_then(|parent| run.grant(&parent).map_err(|e| e.to_string()))
             .and_then(|()| run.snapshot().map(|_| ()).map_err(|e| e.to_string()));
+        let fail = |run: &mut CodingRun, message: String| {
+            let (stage, message) = end_failed(run, message);
+            slot.refresh(run, stage, Some(message));
+        };
         if let Err(error) = prepared {
-            let _ = run.cancel();
-            slot.refresh(
-                &run,
-                "failed",
-                Some(format!("The project could not be staged: {error}")),
+            fail(
+                &mut run,
+                format!("The project could not be staged: {error}"),
             );
             return;
         }
         let local = match LocalOllama::select(endpoint, model) {
             Ok(local) => local,
             Err(error) => {
-                let _ = run.cancel();
-                slot.refresh(
-                    &run,
-                    "failed",
-                    Some(format!("{error}; no other model is used.")),
-                );
+                fail(&mut run, format!("{error}; no other model is used."));
                 return;
             }
         };
         if let Err(error) = run.pin_model(local.pin().clone()) {
-            let _ = run.cancel();
-            slot.refresh(
-                &run,
-                "failed",
-                Some(format!("The model could not be pinned: {error}")),
-            );
+            fail(&mut run, format!("The model could not be pinned: {error}"));
             return;
         }
         slot.refresh(&run, "working", None);
@@ -599,10 +685,9 @@ mod linux {
                     Some(verification) => {
                         slot.display().verification = Some(verification_view(verification));
                         if !verification.passed() {
-                            slot.refresh(
-                                &run,
-                                "failed",
-                                Some("Structural verification rejected the candidate; it cannot be applied.".to_string()),
+                            fail(
+                                &mut run,
+                                "Structural verification rejected the candidate; it cannot be applied.".to_string(),
                             );
                             return;
                         }
@@ -611,16 +696,15 @@ mod linux {
                                 slot.display().review = Some(review_view(&review));
                                 slot.refresh(&run, "review", None);
                             }
-                            Err(error) => slot.refresh(
-                                &run,
-                                "failed",
-                                Some(format!("The review could not be computed: {error}")),
+                            Err(error) => fail(
+                                &mut run,
+                                format!("The review could not be computed: {error}"),
                             ),
                         }
                     }
                 }
             }
-            Err(error) => slot.refresh(&run, "failed", Some(error.to_string())),
+            Err(error) => fail(&mut run, error.to_string()),
         }
     }
 

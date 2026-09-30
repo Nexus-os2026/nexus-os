@@ -325,3 +325,91 @@ fn p1_r_nc_09_restore_uses_no_time_machine_authority() {
         }
     }
 }
+
+// ── Final closure: restore finalization truthfulness ────────────────────────
+
+fn store_of(e: &Env, run: &CodingRun) -> PathBuf {
+    e.f.staging_parent.join(format!("{}.apply", run.id()))
+}
+
+#[test]
+fn p1_r_nc_10_restore_without_durable_completion_is_not_success() {
+    use super::p1_apply::verified_with;
+    let e = env();
+    let before = digest(&e.f.project);
+    // 0 created, 1–2 allocation, 3 granted, 4–5 snapshot, 6–9 edits,
+    // 10 verify, 11 review, 12 approval, 13 prepared, 14–15 ops,
+    // 16 apply.completed, 17 restore.approved, 18 restore.prepared,
+    // 19 restore.completed.
+    let store = FailingStore::new(&e.f.ledger, 19);
+    let (mut run, binding) = verified_with(&e, store, super::p1_apply::default_edits());
+    approve_and_apply(&e, &mut run, binding).unwrap();
+    let result = restore(&e, &mut run, binding);
+    assert_eq!(
+        result,
+        Err(ApplyError::CompletionUnrecorded {
+            operation: "restore"
+        })
+    );
+    assert_eq!(digest(&e.f.project), before, "the files were restored");
+    assert_eq!(run.apply_state(), ApplyState::RecoveryRequired);
+    assert!(store_of(&e, &run).join("p00000").is_file(), "evidence kept");
+    let kinds = kinds(&e.f, &run);
+    assert!(!kinds.contains(&"restore.completed".to_string()));
+    assert_eq!(kinds.last().unwrap(), "apply.recovery_required");
+    assert_eq!(
+        run.request_restore(&e.info.name, &yes()).unwrap_err(),
+        ApplyError::InvalidState
+    );
+}
+
+#[test]
+fn p1_r_11_clean_restore_is_recorded_before_the_store_is_discarded() {
+    let e = env();
+    let (mut run, binding) = applied(&e, default_edits());
+    let store = store_of(&e, &run);
+    assert!(store.is_dir());
+    restore(&e, &mut run, binding).unwrap();
+    let kinds = kinds(&e.f, &run);
+    let tail: Vec<&str> = kinds
+        .iter()
+        .rev()
+        .take(3)
+        .rev()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        tail,
+        ["restore.approved", "restore.prepared", "restore.completed"]
+    );
+    assert_eq!(run.apply_state(), ApplyState::Restored);
+    assert!(!store.exists());
+}
+
+#[test]
+fn p1_r_nc_12_restore_with_an_unclosed_write_grant_is_not_success() {
+    use crate::coding_run::apply::WRITE_GRANT_REVOKE_FAILS;
+    let e = env();
+    let before = digest(&e.f.project);
+    let (mut run, binding) = applied(&e, default_edits());
+    let approval = run.request_restore(&e.info.name, &yes()).unwrap();
+    let grant = e.projects.grant_for_apply(e.info.id, binding).unwrap();
+    let grant_id = grant.grant_id();
+    WRITE_GRANT_REVOKE_FAILS.with(|f| f.set(true));
+    let result = run.restore(approval, grant);
+    WRITE_GRANT_REVOKE_FAILS.with(|f| f.set(false));
+    let Err(ApplyError::AuthorityNotClosed { after }) = result else {
+        panic!("an unclosed write grant must not be clean success: {result:?}");
+    };
+    // What the restore did is reported truthfully...
+    assert_eq!(after.as_ref().as_ref().unwrap().files.len(), 2);
+    assert_eq!(digest(&e.f.project), before);
+    // ...but the run is not clean: recovery, evidence kept.
+    assert_eq!(run.apply_state(), ApplyState::RecoveryRequired);
+    assert!(store_of(&e, &run).is_dir());
+    assert!(
+        e.f.registry.resolve(grant_id, binding).is_ok(),
+        "the simulated failure left the grant live"
+    );
+    assert_eq!(kinds(&e.f, &run).last().unwrap(), "apply.recovery_required");
+}

@@ -426,8 +426,10 @@ fn drive(
                 .map_err(|error| run_error(run, error))?,
         )
     } else {
-        // Nothing changed: there is nothing to review.
-        let _ = run.cancel();
+        // Nothing changed: there is nothing to review. The run must still
+        // close cleanly (staging authority revoked and the cancellation
+        // recorded); otherwise the worker has not finished.
+        run.cancel().map_err(|error| run_error(run, error))?;
         None
     };
     Ok(WorkerReport {

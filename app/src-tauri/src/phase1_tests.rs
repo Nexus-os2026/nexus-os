@@ -375,3 +375,188 @@ fn p1_g_07_owner_actions_claim_the_run_and_never_block_the_main_thread() {
         assert!(lib.contains(&format!("async fn {command}(")), "{command}");
     }
 }
+
+// ── Final closure: desktop outcomes never claim more than happened ──────────
+
+#[cfg(target_os = "linux")]
+mod outcomes {
+    use crate::coding_flow::{discard_outcome, discard_run, end_failed, failure_outcome};
+    use nexus_kernel::coding_run::{
+        CleanupStatus, CodingRun, FolderPicker, LedgerFailure, LedgerStore, ProjectRegistry,
+        RecoveryReason, RunError, RunScopes, RunState, ScopeEntry, ScopeSet,
+    };
+    use nexus_kernel::workspace_authority::{
+        WorkspaceAuthorityRegistry, WorkspaceBinding, WorkspaceGrantId,
+    };
+    use nexus_persistence::coding_run_ledger::{CodingRunLedger, LedgerRecord, NewLedgerEvent};
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    /// Fails the append with index `fail_at` (0 is run.created).
+    struct FailAt {
+        inner: CodingRunLedger,
+        fail_at: usize,
+        calls: AtomicUsize,
+    }
+
+    impl LedgerStore for FailAt {
+        fn append(&self, event: NewLedgerEvent<'_>) -> Result<LedgerRecord, LedgerFailure> {
+            if self.calls.fetch_add(1, Ordering::SeqCst) == self.fail_at {
+                return Err(LedgerFailure::Unavailable);
+            }
+            LedgerStore::append(&self.inner, event)
+        }
+        fn verified_records(&self, run: uuid::Uuid) -> Result<Vec<LedgerRecord>, LedgerFailure> {
+            self.inner.verified_records(run)
+        }
+    }
+
+    struct Picker(PathBuf);
+
+    impl FolderPicker for Picker {
+        fn pick_folder(&self) -> Option<PathBuf> {
+            Some(self.0.clone())
+        }
+    }
+
+    struct Case {
+        root: PathBuf,
+        authority: Arc<WorkspaceAuthorityRegistry>,
+        binding: WorkspaceBinding,
+        project_grant: WorkspaceGrantId,
+        run: CodingRun,
+    }
+
+    impl Drop for Case {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    /// A created run over a native-picked temporary project; the ledger
+    /// fails the append with index `fail_at`.
+    fn case(fail_at: usize) -> Case {
+        let root = std::env::temp_dir().join(format!("nexus-p1-outcome-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("project/src")).unwrap();
+        std::fs::create_dir_all(root.join("state")).unwrap();
+        std::fs::write(root.join("project/src/lib.rs"), "pub fn a() {}\n").unwrap();
+        let root = root.canonicalize().unwrap();
+        let authority = Arc::new(WorkspaceAuthorityRegistry::new());
+        let projects = ProjectRegistry::new(Arc::clone(&authority), &root.join("state"));
+        let info = projects.select(&Picker(root.join("project"))).unwrap();
+        let binding = WorkspaceBinding {
+            agent_id: uuid::Uuid::new_v4(),
+            run_id: uuid::Uuid::new_v4(),
+        };
+        let grant = projects.grant_for_run(info.id, binding).unwrap();
+        let project_grant = grant.grant_id();
+        let ledger = Arc::new(FailAt {
+            inner: CodingRunLedger::open(&root.join("ledger.db")).unwrap(),
+            fail_at,
+            calls: AtomicUsize::new(0),
+        });
+        let scopes = RunScopes::new(
+            ScopeSet::new([ScopeEntry::WholeProject]),
+            ScopeSet::new([ScopeEntry::WholeProject]),
+            ScopeSet::default(),
+        )
+        .unwrap();
+        let run = CodingRun::create_for_project(ledger, grant, scopes).unwrap();
+        Case {
+            root,
+            authority,
+            binding,
+            project_grant,
+            run,
+        }
+    }
+
+    #[test]
+    fn p1_g_08_a_discard_whose_cancellation_fails_is_not_discarded() {
+        // 0 run.created, 1 run.cancelled (fails).
+        let mut c = case(1);
+        let (stage, message) = discard_run(&mut c.run);
+        assert_eq!(stage, "recovery_required");
+        assert!(!message.contains("was discarded"), "{message}");
+        assert_eq!(
+            c.run.state(),
+            RunState::RecoveryRequired(RecoveryReason::TerminalNotRecorded)
+        );
+        assert!(
+            c.authority.resolve(c.project_grant, c.binding).is_ok(),
+            "staging cleanup never revokes the project grant"
+        );
+    }
+
+    #[test]
+    fn p1_g_09_a_failed_staging_cleanup_is_not_discarded() {
+        for cleanup in [Ok(CleanupStatus::DiscardFailed), Err(RunError::StagingIo)] {
+            let (stage, message) = discard_outcome(Ok(()), cleanup, RunState::Cancelled);
+            assert_eq!(stage, "recovery_required");
+            assert!(!message.contains("was discarded"), "{message}");
+            assert!(message.contains("could not be removed"), "{message}");
+        }
+        // A run left requiring recovery is not "discarded" either.
+        let (stage, _) = discard_outcome(
+            Ok(()),
+            Ok(CleanupStatus::Discarded),
+            RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed),
+        );
+        assert_eq!(stage, "recovery_required");
+    }
+
+    #[test]
+    fn p1_g_10_a_clean_discard_is_discarded() {
+        let mut c = case(usize::MAX);
+        let (stage, message) = discard_run(&mut c.run);
+        assert_eq!(
+            (stage, message.as_str()),
+            ("discarded", "The run was discarded.")
+        );
+        assert_eq!(c.run.state(), RunState::Cancelled);
+        assert!(c.authority.resolve(c.project_grant, c.binding).is_ok());
+        assert_eq!(
+            discard_outcome(Ok(()), Ok(CleanupStatus::Discarded), RunState::Cancelled).0,
+            "discarded"
+        );
+    }
+
+    #[test]
+    fn p1_g_11_a_setup_failure_whose_cancel_fails_is_recovery_required() {
+        let mut c = case(1);
+        let (stage, message) = end_failed(&mut c.run, "The project could not be staged.".into());
+        assert_eq!(stage, "recovery_required");
+        assert!(message.starts_with("The project could not be staged."));
+        assert!(matches!(c.run.state(), RunState::RecoveryRequired(_)));
+
+        let mut c = case(usize::MAX);
+        let (stage, message) = end_failed(&mut c.run, "The model could not be pinned.".into());
+        assert_eq!(
+            (stage, message.as_str()),
+            ("failed", "The model could not be pinned.")
+        );
+        assert_eq!(c.run.state(), RunState::Cancelled);
+
+        // A run already terminal in recovery is shown as such.
+        let (stage, _) = failure_outcome(
+            Ok(()),
+            RunState::RecoveryRequired(RecoveryReason::OutcomeNotRecorded),
+            "Worker failed.".into(),
+        );
+        assert_eq!(stage, "recovery_required");
+    }
+
+    #[test]
+    fn p1_g_12_the_coding_flow_ignores_no_run_or_grant_result() {
+        let flow = include_str!("coding_flow.rs");
+        for ignored in ["let _ = run.", "let _ = grant.", ".revoke("] {
+            assert!(!flow.contains(ignored), "coding_flow.rs contains {ignored}");
+        }
+        assert_eq!(
+            flow.matches("\"discarded\"").count(),
+            2,
+            "one outcome and one busy check"
+        );
+    }
+}

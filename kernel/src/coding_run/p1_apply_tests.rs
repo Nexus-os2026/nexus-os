@@ -701,3 +701,114 @@ fn p1_a_nc_16_a_leftover_temporary_file_is_named_not_hidden() {
         )))
     );
 }
+
+// ── Final closure: apply outcome finalization truthfulness ──────────────────
+
+#[test]
+fn p1_a_nc_17_a_rollback_without_its_durable_record_is_not_clean() {
+    let e = env();
+    let before = digest(&e.f.project);
+    // ... 13 prepared, 14 op ok, 15 op failed, 16 apply.rolled_back.
+    let store = FailingStore::new(&e.f.ledger, 16);
+    let (mut run, binding) = verified_with(&e, store, default_edits());
+    let result = with_hook(
+        |point, path| point == HookPoint::BeforeWrite && path == "src/new/deep.rs",
+        || approve_and_apply(&e, &mut run, binding),
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        ApplyError::CompletionUnrecorded {
+            operation: "rollback"
+        }
+    );
+    assert_eq!(digest(&e.f.project), before, "owner bytes are back");
+    assert_eq!(run.apply_state(), ApplyState::RecoveryRequired);
+    assert!(preimage_store(&e, &run).is_dir(), "evidence kept");
+    let kinds = kinds(&e.f, &run);
+    assert!(!kinds.contains(&"apply.rolled_back".to_string()));
+    assert_eq!(kinds.last().unwrap(), "apply.recovery_required");
+}
+
+#[test]
+fn p1_a_nc_18_a_partial_rollback_stays_recovery_required_without_its_record() {
+    let e = env();
+    // ... 13 prepared, 14 op ok, 15 op failed, 16 apply.recovery_required.
+    let store = FailingStore::new(&e.f.ledger, 16);
+    let (mut run, binding) = verified_with(
+        &e,
+        store,
+        vec![
+            replace("src/lib.rs", "pub fn answer() -> u32 { 42 }\n"),
+            replace("src/util.rs", "y\n"),
+        ],
+    );
+    let lib = e.f.project.join("src/lib.rs");
+    let result = with_hook(
+        move |point, path| {
+            if point == HookPoint::BeforeWrite && path == "src/util.rs" {
+                std::fs::write(&lib, "// owner edit after apply\n").unwrap();
+                return true;
+            }
+            false
+        },
+        || approve_and_apply(&e, &mut run, binding),
+    );
+    assert_eq!(
+        result.unwrap_err(),
+        ApplyError::RecoveryRequired {
+            failed: "src/util.rs".to_string(),
+            unrestored: vec!["src/lib.rs".to_string()]
+        }
+    );
+    assert_eq!(run.apply_state(), ApplyState::RecoveryRequired);
+    assert!(!kinds(&e.f, &run).contains(&"apply.recovery_required".to_string()));
+}
+
+#[test]
+fn p1_a_nc_19_an_apply_with_an_unclosed_write_grant_is_not_success() {
+    use crate::coding_run::apply::WRITE_GRANT_REVOKE_FAILS;
+    let e = env();
+    let (mut run, binding) = verified(&e, default_edits());
+    let approval = run.request_approval(&e.info.name, &Confirm::yes()).unwrap();
+    let grant = e.projects.grant_for_apply(e.info.id, binding).unwrap();
+    WRITE_GRANT_REVOKE_FAILS.with(|f| f.set(true));
+    let result = run.apply(approval, grant, &parent(&e.f));
+    WRITE_GRANT_REVOKE_FAILS.with(|f| f.set(false));
+    let Err(ApplyError::AuthorityNotClosed { after }) = result else {
+        panic!("an unclosed write grant must not be clean success: {result:?}");
+    };
+    // The project really was changed, and the error says so.
+    let report = after.as_ref().as_ref().unwrap();
+    assert_eq!(report.files.len(), 2);
+    assert_eq!(read(&e, "src/lib.rs"), "pub fn answer() -> u32 { 42 }\n");
+    assert_eq!(run.apply_state(), ApplyState::RecoveryRequired);
+    assert_eq!(kinds(&e.f, &run).last().unwrap(), "apply.recovery_required");
+    assert_eq!(
+        run.request_restore(&e.info.name, &Confirm::yes())
+            .unwrap_err(),
+        ApplyError::InvalidState
+    );
+
+    // A refused attempt whose grant cannot be closed is also not clean.
+    let (mut other, other_binding) = verified(&e, vec![replace("src/util.rs", "u\n")]);
+    let approval = other
+        .request_approval(&e.info.name, &Confirm::yes())
+        .unwrap();
+    std::fs::write(e.f.project.join("src/util.rs"), "// owner\n").unwrap();
+    let grant = e
+        .projects
+        .grant_for_apply(e.info.id, other_binding)
+        .unwrap();
+    WRITE_GRANT_REVOKE_FAILS.with(|f| f.set(true));
+    let result = other.apply(approval, grant, &parent(&e.f));
+    WRITE_GRANT_REVOKE_FAILS.with(|f| f.set(false));
+    assert_eq!(
+        result.unwrap_err(),
+        ApplyError::AuthorityNotClosed {
+            after: Box::new(Err(ApplyError::Refused(Refusal::Stale(
+                "src/util.rs".to_string()
+            ))))
+        }
+    );
+    assert_eq!(other.apply_state(), ApplyState::RecoveryRequired);
+}

@@ -775,3 +775,43 @@ fn p1_w_nc_17_one_answer_cannot_carry_more_work_than_the_bounds() {
     );
     assert!(kinds(&f, &run).len() < 40, "work stays bounded per answer");
 }
+
+// ── Final closure: a no-change worker must finalize truthfully ──────────────
+
+#[test]
+fn p1_w_nc_18_a_no_change_run_that_cannot_close_is_not_a_clean_finish() {
+    let f = fixture();
+    // 0–5 create/grant/snapshot, 6 pin, 7 started, 8 turn, 9 finished,
+    // 10 run.cancelled.
+    let store = FailingStore::new(&f.ledger, 10);
+    let model = ScriptedModel::new("m:1", vec![finish()]);
+    let mut run = new_run_with(&f, store, default_scopes());
+    run.grant(&parent(&f)).unwrap();
+    run.snapshot().unwrap();
+    run.pin_model(model.pin().clone()).unwrap();
+    assert_eq!(
+        run_worker(&mut run, &model, "task"),
+        Err(WorkerError::Run(RunError::RecoveryRequired(
+            RecoveryReason::TerminalNotRecorded
+        )))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::TerminalNotRecorded)
+    );
+
+    // Staging authority that cannot be closed is not a clean finish either.
+    let model = ScriptedModel::new("m:1", vec![finish()]);
+    let mut run = pinned_run(&f, &model);
+    run.substitute_unrevocable_staging_grant_for_test();
+    assert_eq!(
+        run_worker(&mut run, &model, "task"),
+        Err(WorkerError::Run(RunError::RecoveryRequired(
+            RecoveryReason::StagingRevocationFailed
+        )))
+    );
+    assert_eq!(
+        run.state(),
+        RunState::RecoveryRequired(RecoveryReason::StagingRevocationFailed)
+    );
+}
