@@ -63,9 +63,15 @@ The desktop's Governed Coding page runs one governed workflow:
    backend computes a review of the exact changes.
 5. **Approve.** The owner approves through a native confirmation, bound to
    the exact run, base and candidate. A frontend flag cannot approve.
-6. **Apply.** The apply refuses with zero writes if the owner's files
-   changed since the run started. Pre-images are saved first, and a failure
-   is rolled back or reported as needing recovery, never as success.
+6. **Apply.** Pre-images are saved before the first write.
+   - **Stale files.** If preflight finds the base files stale, the apply is
+     refused before anything in the owner's project is written.
+   - **Concurrent edit.** If an owner edit races the actual write, Nexus
+     detects the conflict. It restores the owner's version where it safely
+     can, or reports recovery required. It never silently overwrites the
+     concurrent version or reports clean success.
+   - **Other failure.** Any other failure is rolled back, or reported as
+     needing recovery, never as success.
 7. **Restore.** The owner can restore that single run. The restore refuses
    if the applied files have since changed.
 

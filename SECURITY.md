@@ -104,8 +104,14 @@ Phase One adds one governed coding workflow to the desktop, on Linux:
 - **Native owner approval.** Apply requires a backend-invoked native
   confirmation of that exact binding. A frontend or model claim of approval
   grants nothing.
-- **Stale-safe apply.** Changed owner files, a moved or replaced project
-  folder, symlinks or a changed candidate reject the apply with zero writes.
+- **Stale-safe apply.** Before any write to the owner's project, apply
+  preflight rejects stale base files, a moved or replaced project folder,
+  symlinks or other redirects, out-of-scope changes and a changed candidate.
+  An owner edit that races the actual write is detected after a write may
+  already have happened. Nexus puts the owner's version back where it safely
+  can, or reports recovery required. It never silently overwrites the
+  concurrent version and never reports clean success for an unresolved
+  conflict.
 - **Truthful rollback and recovery.** Pre-images are saved before the first
   write. A failure is rolled back where safe or reported as needing recovery.
   No clean success is reported without its durable ledger record.
