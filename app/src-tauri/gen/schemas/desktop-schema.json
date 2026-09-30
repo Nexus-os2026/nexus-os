@@ -1443,12 +1443,6 @@
           "markdownDescription": "Enables the coding_restore_run command without any pre-configured scope."
         },
         {
-          "description": "Enables the coding_run_status command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-coding-run-status",
-          "markdownDescription": "Enables the coding_run_status command without any pre-configured scope."
-        },
-        {
           "description": "Enables the coding_select_project command without any pre-configured scope.",
           "type": "string",
           "const": "allow-coding-select-project",
@@ -6325,12 +6319,6 @@
           "type": "string",
           "const": "deny-coding-restore-run",
           "markdownDescription": "Denies the coding_restore_run command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the coding_run_status command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-coding-run-status",
-          "markdownDescription": "Denies the coding_run_status command without any pre-configured scope."
         },
         {
           "description": "Denies the coding_select_project command without any pre-configured scope.",
