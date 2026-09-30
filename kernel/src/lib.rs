@@ -11,6 +11,9 @@ pub mod behavioral_profile;
 pub mod capabilities;
 pub mod checkpoint;
 pub mod civilization;
+/// Governed coding run primitive (Phase One P1A-002; Linux support profile).
+#[cfg(target_os = "linux")]
+pub mod coding_run;
 pub mod cogfs;
 pub mod cognitive;
 pub mod compliance;
