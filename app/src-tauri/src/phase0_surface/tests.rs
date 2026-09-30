@@ -22,6 +22,9 @@ use super::{closed, Closure};
 
 /// Every desktop IPC command closed by P0-002C5A, with its closure.
 const CLOSED_COMMANDS: &[(&str, Closure)] = &[
+    // Phase One charter §12: caller strings set fuel, agent state or Warden
+    // review.
+    ("time_machine_what_if", Closure::SimulationReplay),
     // E1: a raw user-selected path is not authority.
     ("file_manager_list", Closure::FileSelection),
     ("file_manager_read", Closure::FileSelection),
@@ -386,7 +389,7 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             a2a_cancel_task, mcp_host_connect, mcp_host_call_tool,
             builder_theme_extract_from_url, nexus_link_send_model, is_ollama_installed,
             builder_deploy_store_credentials, builder_backend_connect, email_start_oauth,
-            integration_start_oauth, self_rewrite_apply_patch,
+            integration_start_oauth, self_rewrite_apply_patch, time_machine_what_if,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,

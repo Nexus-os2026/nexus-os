@@ -73,6 +73,12 @@ pub(crate) enum Closure {
     /// credential or token, and no approved secret store exists for it in
     /// Phase Zero. Stored values stay readable; nothing new is stored.
     SecretStorage,
+    // Phase One charter §12: residual closed before coding authority ships.
+    /// Time Machine "what if": a caller-chosen variable key and value set an
+    /// agent's fuel, forced an agent's state across illegal transitions, or
+    /// toggled Warden review in the saved configuration. A string is not
+    /// that authority, and no governed simulation mechanism exists.
+    SimulationReplay,
 }
 
 impl Closure {
@@ -116,6 +122,11 @@ impl Closure {
             // Final Gate items A and H.
             Self::SecretStorage => {
                 "storing a credential or token outside an approved secret store is unavailable in Phase Zero"
+            }
+
+            // Phase One charter §12.
+            Self::SimulationReplay => {
+                "time-machine what-if is unavailable: a caller-chosen key and value is not authority over agent fuel, agent state or Warden review"
             }
         }
     }

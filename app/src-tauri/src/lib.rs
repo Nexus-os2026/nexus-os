@@ -3217,13 +3217,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn time_machine_what_if(
-        state: tauri::State<'_, AppState>,
-        id: String,
-        variable_key: String,
-        variable_value: String,
-    ) -> Result<String, String> {
-        super::time_machine_what_if(state.inner(), id, variable_key, variable_value)
+    pub(crate) fn time_machine_what_if() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "time_machine_what_if",
+            crate::phase0_surface::Closure::SimulationReplay,
+        ))
     }
 
     // ── Nexus Link commands ─────────────────────────────────────────────
@@ -8759,3 +8757,7 @@ pub mod runtime {
 #[cfg(test)]
 #[path = "lib_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "phase1_tests.rs"]
+mod phase1_tests;
