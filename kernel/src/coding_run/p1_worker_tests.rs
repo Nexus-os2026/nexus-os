@@ -735,3 +735,43 @@ fn p1_w_nc_16_the_worker_modules_hold_no_privileged_surface() {
     assert!(model.contains(".no_proxy()"));
     assert!(model.contains("Policy::none()"));
 }
+
+#[test]
+fn p1_w_nc_17_one_answer_cannot_carry_more_work_than_the_bounds() {
+    let f = fixture();
+    let many_paths: Vec<String> = (0..5_000).map(|i| format!("../f{i}.rs")).collect();
+    let many_edits: Vec<serde_json::Value> = (0..5_000)
+        .map(|i| json!({"path": format!("src/e{i}.rs"), "op": "create", "content": "x\n"}))
+        .collect();
+    let model = ScriptedModel::new(
+        "m:1",
+        vec![
+            json!({"action": "read", "paths": many_paths}),
+            json!({"action": "edit", "edits": many_edits}),
+            finish(),
+        ],
+    );
+    let mut run = pinned_run(&f, &model);
+    let bounded = WorkerLimits {
+        max_files_read: 3,
+        max_proposals: 3,
+        ..limits()
+    };
+    let report = run_worker_with_limits(&mut run, &model, "task", bounded).unwrap();
+    assert_eq!(report.files_read, 0);
+    assert_eq!(report.accepted.len(), 3);
+    // Three invalid reads and one refusal for the remaining 4 997 paths;
+    // three accepted edits and one refusal for the remaining 4 997.
+    let reasons: Vec<String> = rejections(&f, &run).into_iter().map(|(_, r)| r).collect();
+    assert_eq!(
+        reasons,
+        vec![
+            "InvalidPath(Traversal)",
+            "InvalidPath(Traversal)",
+            "InvalidPath(Traversal)",
+            "LimitReached",
+            "LimitReached",
+        ]
+    );
+    assert!(kinds(&f, &run).len() < 40, "work stays bounded per answer");
+}

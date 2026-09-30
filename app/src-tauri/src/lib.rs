@@ -3320,11 +3320,11 @@ pub mod runtime {
     }
 
     #[tauri::command]
-    fn coding_discard_run(
+    async fn coding_discard_run(
         state: tauri::State<'_, AppState>,
         run_id: String,
     ) -> Result<crate::coding_flow::RunView, String> {
-        crate::coding_flow::ipc::discard(state.inner(), &run_id)
+        crate::coding_flow::ipc::discard(state.inner().clone(), run_id).await
     }
 
     // ── Nexus Link commands ─────────────────────────────────────────────

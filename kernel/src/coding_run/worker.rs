@@ -346,8 +346,22 @@ fn drive(
             }
             ModelAction::Read { paths } => {
                 let mut reply = String::new();
-                for raw in paths {
-                    reply.push_str(&read_one(run, &mut budget, &raw, &marker)?);
+                // At most the remaining read allowance is considered; the
+                // rest of the request is refused as one.
+                let allowance = (limits.max_files_read - budget.files_read) as usize;
+                for (index, raw) in paths.iter().enumerate() {
+                    if index == allowance {
+                        reject(run, &mut budget, raw, ProposalRejection::LimitReached)?;
+                        reply.push_str(&format!(
+                            "Read refused: {} path(s): read limit reached\n",
+                            paths.len() - index
+                        ));
+                        break;
+                    }
+                    if budget.remaining().is_none() {
+                        return Err(stop(run, WorkerError::Deadline));
+                    }
+                    reply.push_str(&read_one(run, &mut budget, raw, &marker)?);
                 }
                 if reply.is_empty() {
                     reply.push_str("No paths were requested.");
@@ -356,7 +370,22 @@ fn drive(
             }
             ModelAction::Edit { edits } => {
                 let mut reply = String::new();
-                for raw in edits {
+                // At most the remaining proposal allowance is considered; the
+                // rest of the answer is refused as one.
+                let allowance = (limits.max_proposals - budget.proposals) as usize;
+                let total = edits.len();
+                for (index, raw) in edits.into_iter().enumerate() {
+                    if index == allowance {
+                        reject(run, &mut budget, &raw.path, ProposalRejection::LimitReached)?;
+                        reply.push_str(&format!(
+                            "Rejected: {} edit(s): proposal limit reached\n",
+                            total - index
+                        ));
+                        break;
+                    }
+                    if budget.remaining().is_none() {
+                        return Err(stop(run, WorkerError::Deadline));
+                    }
                     let path_text = bounded(&raw.path);
                     match propose(run, &mut budget, raw)? {
                         Ok(path) => {

@@ -189,7 +189,7 @@ fn render(path: &RelPath, old: &[u8], new: &[u8], budget: &mut usize) -> TextDif
     }
     let limit = MAX_DIFF_BYTES_PER_FILE.min(*budget);
     let (text, truncated) = unified(&path.as_string(), old, new, limit);
-    *budget -= text.len();
+    *budget = budget.saturating_sub(text.len());
     TextDiff::Unified { text, truncated }
 }
 
@@ -255,6 +255,9 @@ fn unified(path: &str, old: &str, new: &str, limit: usize) -> (String, bool) {
     let b: Vec<&str> = new.split_inclusive('\n').collect();
     let ops = line_ops(&a, &b);
     let mut out = format!("--- a/{path}\n+++ b/{path}\n");
+    if out.len() > limit {
+        return (cut_at(out, limit), true);
+    }
     let changed: Vec<usize> = ops
         .iter()
         .enumerate()
@@ -295,16 +298,21 @@ fn unified(path: &str, old: &str, new: &str, limit: usize) -> (String, bool) {
                 out.push_str("\n\\ No newline at end of file\n");
             }
             if out.len() > limit {
-                let mut cut = limit;
-                while !out.is_char_boundary(cut) {
-                    cut -= 1;
-                }
-                out.truncate(cut);
-                return (out, true);
+                return (cut_at(out, limit), true);
             }
         }
     }
     (out, false)
+}
+
+/// `text` cut to at most `limit` bytes on a character boundary.
+fn cut_at(mut text: String, limit: usize) -> String {
+    let mut cut = limit.min(text.len());
+    while !text.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    text.truncate(cut);
+    text
 }
 
 #[cfg(test)]

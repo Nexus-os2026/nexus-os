@@ -348,3 +348,30 @@ fn p1_g_06_native_dialog_text_prints_percent_signs_literally() {
     let source = include_str!("coding_flow.rs");
     assert!(source.contains(".message(native_dialog_text(&request.message()))"));
 }
+
+#[test]
+fn p1_g_07_owner_actions_claim_the_run_and_never_block_the_main_thread() {
+    let flow = include_str!("coding_flow.rs");
+    // The run lock is taken only by `claim` (owner actions) and the worker
+    // thread; owner actions change the stage under the display lock first.
+    assert_eq!(flow.matches("slot.run.lock()").count(), 2);
+    for action in [
+        "\"applying\")?",
+        "\"restoring\")?",
+        "\"discarding\",\n            )?",
+    ] {
+        assert!(flow.contains(action), "{action} must go through claim");
+    }
+    // Commands that may wait on a run or a native dialog are async and run
+    // their work on the blocking pool, never on the main thread.
+    let lib = include_str!("lib.rs");
+    for command in [
+        "coding_select_project",
+        "coding_list_local_models",
+        "coding_approve_apply",
+        "coding_restore_run",
+        "coding_discard_run",
+    ] {
+        assert!(lib.contains(&format!("async fn {command}(")), "{command}");
+    }
+}

@@ -154,7 +154,7 @@ mod linux {
             let display = self.display();
             let busy = matches!(
                 display.stage,
-                "preparing" | "working" | "applying" | "restoring"
+                "preparing" | "working" | "applying" | "restoring" | "discarding"
             );
             RunView {
                 run_id: id.to_string(),
@@ -326,7 +326,7 @@ mod linux {
             confirmer: &dyn OwnerConfirmer,
         ) -> Result<RunView, String> {
             let (id, slot) = self.slot(run_id)?;
-            let mut run = claim(&slot, "review", "applying")?;
+            let mut run = claim(&slot, &["review"], "applying")?;
             let outcome = run
                 .request_approval(&slot.project.name, confirmer)
                 .and_then(|approval| {
@@ -379,7 +379,7 @@ mod linux {
             confirmer: &dyn OwnerConfirmer,
         ) -> Result<RunView, String> {
             let (id, slot) = self.slot(run_id)?;
-            let mut run = claim(&slot, "applied", "restoring")?;
+            let mut run = claim(&slot, &["applied"], "restoring")?;
             let outcome = run
                 .request_restore(&slot.project.name, confirmer)
                 .and_then(|approval| {
@@ -408,15 +408,26 @@ mod linux {
         }
 
         /// Cancel a run that has not been applied and remove its staging.
+        /// The run is claimed atomically, so it can never wait on a run an
+        /// apply or restore holds while its native dialog is open.
         pub(crate) fn discard(&self, run_id: &str) -> Result<RunView, String> {
             let (id, slot) = self.slot(run_id)?;
-            let stage = slot.display().stage;
-            if matches!(stage, "preparing" | "working" | "applying" | "restoring") {
-                return Err("the run is busy".to_string());
-            }
-            let mut run = slot.run.lock().unwrap_or_else(|p| p.into_inner());
+            let mut run = claim(
+                &slot,
+                &[
+                    "review",
+                    "no_changes",
+                    "failed",
+                    "rolled_back",
+                    "restored",
+                    "recovery_required",
+                ],
+                "discarding",
+            )?;
             if run.apply_state() == ApplyState::Applied {
-                return Err("an applied run can be restored, not discarded".to_string());
+                let refusal = "an applied run can be restored, not discarded".to_string();
+                slot.refresh(&run, "applied", Some(refusal.clone()));
+                return Err(refusal);
             }
             if !run.state().is_terminal() {
                 let _ = run.cancel();
@@ -434,12 +445,12 @@ mod linux {
     /// Take the run for an owner action, only from the expected stage.
     fn claim<'a>(
         slot: &'a RunSlot,
-        from: &'static str,
+        from: &[&'static str],
         to: &'static str,
     ) -> Result<std::sync::MutexGuard<'a, CodingRun>, String> {
         {
             let mut display = slot.display();
-            if display.stage != from {
+            if !from.contains(&display.stage) {
                 return Err(format!(
                     "the run is not ready for this action ({})",
                     display.stage
@@ -865,10 +876,11 @@ pub(crate) mod ipc {
         }
     }
 
-    pub(crate) fn discard(state: &crate::AppState, run_id: &str) -> Result<RunView, String> {
+    pub(crate) async fn discard(state: crate::AppState, run_id: String) -> Result<RunView, String> {
         #[cfg(target_os = "linux")]
         {
-            state.coding_flow()?.discard(run_id)
+            let flow = state.coding_flow()?;
+            blocking(move || flow.discard(&run_id)).await
         }
         #[cfg(not(target_os = "linux"))]
         {

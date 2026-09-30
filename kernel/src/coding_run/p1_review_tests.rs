@@ -282,3 +282,19 @@ fn p1_d_nc_06_tampered_base_bytes_before_the_first_edit_end_the_run() {
         RunState::Failed(FailureReason::StagingRedirect)
     );
 }
+
+#[test]
+fn p1_d_nc_07_headers_count_against_the_bound_and_never_underflow_it() {
+    let long = "d/".repeat(1000) + "f.rs";
+    let (text, truncated) = unified_for_test(&long, "", "", 64);
+    assert!(truncated);
+    assert!(text.len() <= 64);
+    // A created empty file renders only its (bounded) header.
+    let f = fixture();
+    let mut run = verified(&f, vec![create("src/empty.rs", "")]);
+    let review = run.review().unwrap();
+    assert_eq!(
+        diff_text(&review.changes[0]),
+        "--- a/src/empty.rs\n+++ b/src/empty.rs\n"
+    );
+}
