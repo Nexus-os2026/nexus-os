@@ -11,8 +11,13 @@
 //! id. Project authority is the live [`WorkspaceAuthorityRegistry`] grant for
 //! the run's [`WorkspaceBinding`] plus the directory identity retained when
 //! the run was granted; both are re-checked before every sensitive step. This
-//! checkpoint issues no `UserSelected` grant, exposes no IPC, runs no process,
-//! makes no network or model call and never writes to the project.
+//! checkpoint issues no `UserSelected` grant, exposes no IPC, runs no process
+//! and never writes to the project.
+//!
+//! Phase One adds a governed worker ([`run_worker`]): a local model pinned
+//! into the run ([`CodingRun::pin_model`]) proposes typed edits that reach
+//! staging only through [`CodingRun::edit`]. The only model access is the
+//! loopback-only [`LocalOllama`]; no cloud provider exists on this path.
 //!
 //! ```compile_fail
 //! use nexus_kernel::coding_run::{CodingRun, RunId};
@@ -27,13 +32,16 @@
 
 mod fsops;
 mod ledger;
+mod local_model;
 mod manifest;
 mod scope;
 mod structural;
+mod worker;
 
 #[cfg(test)]
 mod tests;
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -49,10 +57,18 @@ use crate::workspace_authority::{
 use fsops::{DirHandle, EntryKind};
 
 pub use ledger::{analyze as analyze_ledger, LedgerFailure, LedgerRecovery, LedgerStore};
+pub use local_model::{
+    loopback_endpoint, LocalModel, LocalOllama, ModelError, ModelMessage, ModelPin, ModelRole,
+    LOCAL_PROVIDER,
+};
 pub use manifest::{Manifest, ManifestEntry, ManifestHash};
 pub use scope::{RelPath, RunScopes, ScopeEntry, ScopeError, ScopeSet};
 pub use structural::{
     StructuralOutcome, StructuralProfile, StructuralVerification, StructuralViolation,
+};
+pub use worker::{
+    run_worker, EditProposal, ProposalOp, ProposalRejection, WorkerError, WorkerLimits,
+    WorkerReport, WORKER_LIMITS,
 };
 
 use ledger::{record, EventKind};
@@ -105,6 +121,12 @@ pub enum FailureReason {
     StagingRedirect,
     StagingIo,
     StructuralRejected,
+    /// The pinned local model could not answer.
+    ModelUnavailable,
+    /// The worker reached its turn limit or deadline.
+    WorkerLimitExceeded,
+    /// A required worker record could not be written.
+    AuditUnavailable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,6 +203,8 @@ pub enum EditRejection {
     TooLarge,
     NotStaged,
     AlreadyExists,
+    /// A read outside the frozen read scope.
+    OutsideReadScope,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -474,6 +498,9 @@ pub struct CodingRun {
     base: Option<Manifest>,
     generation_valid: bool,
     next_op: u64,
+    model_pin: Option<ModelPin>,
+    created: BTreeSet<RelPath>,
+    verification: Option<StructuralVerification>,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -512,6 +539,9 @@ impl CodingRun {
             base: None,
             generation_valid: true,
             next_op: 0,
+            model_pin: None,
+            created: BTreeSet::new(),
+            verification: None,
         };
         let facts = json!({
             "project_grant": project_grant,
@@ -545,6 +575,17 @@ impl CodingRun {
 
     pub fn base_manifest(&self) -> Option<&Manifest> {
         self.base.as_ref()
+    }
+
+    /// The local model this run is bound to, if pinned.
+    pub fn model_pin(&self) -> Option<&ModelPin> {
+        self.model_pin.as_ref()
+    }
+
+    /// The passing structural verification of the current candidate, once
+    /// the run is `StructurallyVerified`.
+    pub fn verification(&self) -> Option<&StructuralVerification> {
+        self.verification.as_ref()
     }
 
     fn require(&self, operation: &'static str, allowed: &[RunState]) -> Result<(), RunError> {
@@ -968,6 +1009,9 @@ impl CodingRun {
         if let Err(error) = self.revalidate_staging() {
             return Err(self.fail(error));
         }
+        if let CandidateEdit::Create { path, .. } = &edit {
+            self.created.insert(path.clone());
+        }
         self.state = RunState::Candidate;
         Ok(())
     }
@@ -1159,11 +1203,161 @@ impl CodingRun {
             if !revoked {
                 return Err(self.force_recovery(RecoveryReason::StagingRevocationFailed, false));
             }
+            self.verification = Some(result.clone());
             self.state = RunState::StructurallyVerified;
         } else {
             self.enter_terminal(RunState::Failed(FailureReason::StructuralRejected));
         }
         Ok(result)
+    }
+
+    // ── Worker support (Phase One) ─────────────────────────────────────
+
+    /// Bind the run to one local model before any worker runs. Once pinned,
+    /// the pin never changes; a worker with another model is refused.
+    pub fn pin_model(&mut self, pin: ModelPin) -> Result<(), RunError> {
+        self.require("pin_model", &[RunState::Staged])?;
+        if self.model_pin.is_some() {
+            return Err(RunError::InvalidState {
+                operation: "pin_model",
+                state: self.state,
+            });
+        }
+        let facts = json!({
+            "provider": pin.provider(),
+            "endpoint": pin.endpoint(),
+            "model": pin.model(),
+        });
+        record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::ModelPinned,
+            &facts,
+        )
+        .map_err(RunError::Ledger)?;
+        self.model_pin = Some(pin);
+        Ok(())
+    }
+
+    /// Staged files with their base sizes, plus files created in staging.
+    pub fn staged_files(&self) -> Vec<(RelPath, u64)> {
+        let mut files: Vec<(RelPath, u64)> = self
+            .base
+            .iter()
+            .flat_map(|base| base.entries().iter())
+            .map(|(path, entry)| (path.clone(), entry.size))
+            .collect();
+        for path in &self.created {
+            if self
+                .base
+                .as_ref()
+                .is_none_or(|base| base.get(path).is_none())
+            {
+                files.push((path.clone(), 0));
+            }
+        }
+        files.sort();
+        files
+    }
+
+    /// Read one staged file inside the read scope, at most `max_bytes`. The
+    /// read is recorded before its content is returned. A path outside the
+    /// read scope, missing or too large is a plain refusal; a redirected
+    /// staging entry ends the run.
+    pub(crate) fn read_staged(
+        &mut self,
+        path: &RelPath,
+        max_bytes: u64,
+    ) -> Result<Vec<u8>, RunError> {
+        self.require("read_staged", &[RunState::Staged, RunState::Candidate])?;
+        if !self.generation_valid {
+            return Err(RunError::RecoveryRequired(
+                RecoveryReason::OutcomeNotRecorded,
+            ));
+        }
+        if !self.scopes.read().covers(path) {
+            return Err(RunError::EditRejected(EditRejection::OutsideReadScope));
+        }
+        if let Err(error) = self
+            .revalidate_project()
+            .and_then(|()| self.revalidate_staging())
+        {
+            return Err(self.fail(error));
+        }
+        let content = match self.read_staged_file(path, max_bytes) {
+            Ok(content) => content,
+            Err(RunError::EditRejected(rejection)) => {
+                return Err(RunError::EditRejected(rejection))
+            }
+            Err(error) => return Err(self.fail(error)),
+        };
+        let facts = json!({
+            "path": path.as_string(),
+            "size": content.len(),
+            "sha256": hex::encode(ManifestEntry::of(&content).sha256),
+        });
+        record(
+            self.ledger.as_ref(),
+            self.id.0,
+            EventKind::WorkerRead,
+            &facts,
+        )
+        .map_err(RunError::Ledger)?;
+        Ok(content)
+    }
+
+    fn read_staged_file(&self, path: &RelPath, max_bytes: u64) -> Result<Vec<u8>, RunError> {
+        let staging = self.staging_handle()?;
+        let (parents, name) = path.parent_and_name();
+        let mut owned: Option<DirHandle> = None;
+        for part in parents {
+            let dir = owned.as_ref().unwrap_or(staging);
+            match dir.kind(part).map_err(|_| RunError::StagingIo)? {
+                EntryKind::Directory => {
+                    owned = Some(
+                        dir.open_subdir(part)
+                            .map_err(|_| RunError::StagingRedirect)?,
+                    )
+                }
+                EntryKind::Missing => return Err(RunError::EditRejected(EditRejection::NotStaged)),
+                _ => return Err(RunError::StagingRedirect),
+            }
+        }
+        let dir = owned.as_ref().unwrap_or(staging);
+        match dir.kind(name).map_err(|_| RunError::StagingIo)? {
+            EntryKind::Regular => {}
+            EntryKind::Missing => return Err(RunError::EditRejected(EditRejection::NotStaged)),
+            _ => return Err(RunError::StagingRedirect),
+        }
+        let size = dir
+            .regular_metadata(name)
+            .map_err(|_| RunError::StagingRedirect)?
+            .len();
+        if size > max_bytes.min(self.profile.max_file_bytes) {
+            return Err(RunError::EditRejected(EditRejection::TooLarge));
+        }
+        dir.read_regular(name, max_bytes.min(self.profile.max_file_bytes))
+            .map_err(|_| RunError::StagingIo)
+    }
+
+    /// Record a worker event (fail closed: the caller stops on error).
+    pub(crate) fn record_worker(&self, event: EventKind, facts: &Value) -> Result<(), RunError> {
+        if self.state.is_terminal() {
+            return Err(RunError::InvalidState {
+                operation: "worker",
+                state: self.state,
+            });
+        }
+        record(self.ledger.as_ref(), self.id.0, event, facts)
+            .map(|_| ())
+            .map_err(RunError::Ledger)
+    }
+
+    /// End a non-terminal run for a worker-level failure.
+    pub(crate) fn fail_worker(&mut self, reason: FailureReason) {
+        if !self.state.is_terminal() {
+            self.enter_terminal(RunState::Failed(reason));
+        }
     }
 
     // ── Cancellation, revocation, cleanup ──────────────────────────────

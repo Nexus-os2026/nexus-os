@@ -1710,3 +1710,8 @@ fn p1a_r3_nc_07_unrecorded_actual_state_stays_fail_closed() {
     assert!(matches!(run.revoke(), Err(RunError::InvalidState { .. })));
     assert_project_grant_live(&f);
 }
+
+// ── Phase One P1-03: governed local-model worker ────────────────────────────
+
+#[path = "p1_worker_tests.rs"]
+mod p1_worker;

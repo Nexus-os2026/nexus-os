@@ -75,6 +75,12 @@ pub enum EventKind {
     RunFailed,
     RecoveryRequired,
     StagingDiscarded,
+    ModelPinned,
+    WorkerStarted,
+    WorkerTurn,
+    WorkerRead,
+    ProposalRejected,
+    WorkerFinished,
 }
 
 impl EventKind {
@@ -91,6 +97,12 @@ impl EventKind {
             Self::RunFailed => "run.failed",
             Self::RecoveryRequired => "run.recovery_required",
             Self::StagingDiscarded => "staging.discarded",
+            Self::ModelPinned => "run.model_pinned",
+            Self::WorkerStarted => "worker.started",
+            Self::WorkerTurn => "worker.turn",
+            Self::WorkerRead => "worker.read",
+            Self::ProposalRejected => "worker.proposal_rejected",
+            Self::WorkerFinished => "worker.finished",
         }
     }
 }
