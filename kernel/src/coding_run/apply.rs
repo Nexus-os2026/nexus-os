@@ -322,6 +322,24 @@ fn hook(_point: &str, _path: &RelPath) -> bool {
     false
 }
 
+// Test hook right after a replacement's exchange (the displaced file is at
+// `temp`, the new file at `name`).
+#[cfg(test)]
+thread_local! {
+    #[allow(clippy::type_complexity)]
+    pub(crate) static AFTER_EXCHANGE: std::cell::RefCell<Option<Box<dyn FnMut(&std::path::Path, &str, &str)>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn hook_after_exchange(_dir: &DirHandle, _temp: &str, _name: &str, _path: &RelPath) {
+    #[cfg(test)]
+    AFTER_EXCHANGE.with(|h| {
+        if let Some(f) = h.borrow_mut().as_mut() {
+            f(&_dir.anchor_for_test(), _temp, _name);
+        }
+    });
+}
+
 fn refused(refusal: Refusal) -> ApplyError {
     ApplyError::Refused(refusal)
 }
@@ -474,8 +492,14 @@ impl CodingRun {
             return Err(refused(Refusal::Unsupported(path.as_string())));
         }
 
-        // Pre-images, recorded before the first owner-project write.
+        // Pre-images, recorded before the first owner-project write. The
+        // store's parent handle is duplicated now, so nothing after the first
+        // write can fail for lack of it.
         let (storage_dir, storage_name, preimages) = self.store_preimages(storage, &plan)?;
+        let Ok(storage_parent) = storage.handle.try_clone() else {
+            discard_storage(&storage.handle, &storage_name, &storage_dir);
+            return Err(refused(Refusal::PreimageUnavailable));
+        };
         let prepared = json!({
             "binding": hex::encode(binding.hash()),
             "preimages": preimages,
@@ -503,14 +527,21 @@ impl CodingRun {
         let mut dirs: Vec<CreatedDir> = Vec::new();
         let mut slots = preimages_slots(&plan);
         let mut failure: Option<String> = None;
+        let mut hidden: Vec<String> = Vec::new();
         for planned in plan {
             let path = planned.path.clone();
             let slot = slots.remove(&path);
             let outcome = if hook("write", &path) {
-                Err(())
+                Err(WriteFailure::Failed)
             } else {
                 write_one(planned, slot, &mut dirs, &mut applied)
             };
+            if let Err(WriteFailure::OwnerVersionAt(temp)) = &outcome {
+                hidden.push(format!(
+                    "{} (your concurrent version is saved as {temp})",
+                    path.as_string()
+                ));
+            }
             let recorded = record(
                 self.ledger.as_ref(),
                 self.id.0,
@@ -533,7 +564,8 @@ impl CodingRun {
             .is_ok();
         if !completed {
             let failed = failure.unwrap_or_else(|| "apply.completed".to_string());
-            let unrestored = rollback(&mut applied, &mut dirs, &storage_dir);
+            let mut unrestored = rollback(&mut applied, &mut dirs, &storage_dir);
+            unrestored.extend(hidden);
             return Err(self.finish_failed(
                 failed,
                 unrestored,
@@ -548,10 +580,7 @@ impl CodingRun {
             files: applied,
             dirs,
             storage: storage_dir,
-            storage_parent: storage
-                .handle
-                .try_clone()
-                .map_err(|_| refused(Refusal::PreimageUnavailable))?,
+            storage_parent,
             storage_name,
         });
         self.apply_state = ApplyState::Applied;
@@ -940,12 +969,21 @@ fn preimages_slots(plan: &[Planned]) -> std::collections::BTreeMap<RelPath, Prei
 
 /// Write one planned file. A written file is pushed to `applied` as soon as
 /// it exists in the project, so a later failure can undo it.
+/// Why one planned write failed.
+enum WriteFailure {
+    Failed,
+    /// The owner's concurrent version could not be put back and remains in
+    /// the target's directory under this temporary name.
+    OwnerVersionAt(String),
+}
+
 fn write_one(
     planned: Planned,
     preimage: Option<Preimage>,
     dirs: &mut Vec<CreatedDir>,
     applied: &mut Vec<AppliedFile>,
-) -> Result<(), ()> {
+) -> Result<(), WriteFailure> {
+    let failed = |_| WriteFailure::Failed;
     let Planned {
         path,
         kind,
@@ -958,18 +996,19 @@ fn write_one(
     } = planned;
     match kind {
         ChangeKind::Replace => {
-            let pre = preimage.ok_or(())?;
+            let pre = preimage.ok_or(WriteFailure::Failed)?;
             let (temp, installed) = dir
                 .write_temp_with_mode(&content, pre.mode)
-                .map_err(|_| ())?;
+                .map_err(failed)?;
             if hook("exchange", &path) {
                 let _ = dir.remove_temp(&temp);
-                return Err(());
+                return Err(WriteFailure::Failed);
             }
             if dir.exchange(&temp, &name).is_err() {
                 let _ = dir.remove_temp(&temp);
-                return Err(());
+                return Err(WriteFailure::Failed);
             }
+            hook_after_exchange(&dir, &temp, &name, &path);
             // The displaced file must be the one checked in preflight.
             let displaced = dir.read_with_identity(&temp, MAX_FILE);
             let unchanged = matches!(&displaced, Ok((bytes, identity, _))
@@ -978,18 +1017,18 @@ fn write_one(
                 // Put the owner's concurrent version back; drop ours.
                 if dir.exchange(&temp, &name).is_ok() {
                     let _ = dir.remove_temp(&temp);
-                } else {
-                    applied.push(AppliedFile {
-                        path,
-                        kind,
-                        dir,
-                        name,
-                        candidate,
-                        installed,
-                        preimage: Some(pre),
-                    });
+                    return Err(WriteFailure::Failed);
                 }
-                return Err(());
+                applied.push(AppliedFile {
+                    path,
+                    kind,
+                    dir,
+                    name,
+                    candidate,
+                    installed,
+                    preimage: Some(pre),
+                });
+                return Err(WriteFailure::OwnerVersionAt(temp));
             }
             let removed = dir.remove_temp(&temp).and_then(|()| dir.sync());
             applied.push(AppliedFile {
@@ -1001,27 +1040,46 @@ fn write_one(
                 installed,
                 preimage: Some(pre),
             });
-            removed.map_err(|_| ())
+            removed.map_err(failed)
         }
         ChangeKind::Create => {
             let mut dir = dir;
             for part in missing {
-                let sub = dir
-                    .make_subdir_with_mode(&part, CREATED_DIR_MODE)
-                    .map_err(|_| ())?;
-                dirs.push(CreatedDir {
-                    parent: dir,
-                    name: part,
-                    identity: sub.identity(),
-                });
+                // A directory an earlier creation of this apply made (still
+                // the same directory) is reused; anything else at the name
+                // appeared concurrently and fails the apply.
+                let ours = dirs
+                    .iter()
+                    .find(|d| d.name == part && d.parent.identity() == dir.identity())
+                    .map(|d| d.identity);
+                let sub = match ours {
+                    Some(identity) => {
+                        let sub = dir.open_subdir(&part).map_err(failed)?;
+                        if sub.identity() != identity {
+                            return Err(WriteFailure::Failed);
+                        }
+                        sub
+                    }
+                    None => {
+                        let sub = dir
+                            .make_subdir_with_mode(&part, CREATED_DIR_MODE)
+                            .map_err(failed)?;
+                        dirs.push(CreatedDir {
+                            parent: dir.try_clone().map_err(failed)?,
+                            name: part,
+                            identity: sub.identity(),
+                        });
+                        sub
+                    }
+                };
                 dir = sub;
             }
             let (temp, installed) = dir
                 .write_temp_with_mode(&content, CREATED_FILE_MODE)
-                .map_err(|_| ())?;
+                .map_err(failed)?;
             if dir.link_temp(&temp, &name).is_err() {
                 let _ = dir.remove_temp(&temp);
-                return Err(());
+                return Err(WriteFailure::Failed);
             }
             let removed = dir.remove_temp(&temp).and_then(|()| dir.sync());
             applied.push(AppliedFile {
@@ -1033,9 +1091,9 @@ fn write_one(
                 installed,
                 preimage: None,
             });
-            removed.map_err(|_| ())
+            removed.map_err(failed)
         }
-        ChangeKind::Delete => Err(()),
+        ChangeKind::Delete => Err(WriteFailure::Failed),
     }
 }
 

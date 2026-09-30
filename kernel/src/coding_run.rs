@@ -226,6 +226,9 @@ pub enum SnapshotRejection {
     OtherDevice(String),
     InvalidName(String),
     NotADirectory(String),
+    /// A leftover Nexus temporary file (an interrupted apply or restore left
+    /// it); check its content and remove or rename it.
+    LeftoverTemporary(String),
     FileTooLarge(String),
     FileCountCap,
     TotalBytesCap,
@@ -1776,8 +1779,12 @@ impl SnapshotCopy {
                 continue;
             }
             prefix.push(name.clone());
-            if scope::validate_component(&name).is_err() {
-                return Err(Self::reject(SnapshotRejection::InvalidName, prefix));
+            match scope::validate_component(&name) {
+                Ok(_) => {}
+                Err(ScopeError::Reserved) => {
+                    return Err(Self::reject(SnapshotRejection::LeftoverTemporary, prefix))
+                }
+                Err(_) => return Err(Self::reject(SnapshotRejection::InvalidName, prefix)),
             }
             match source.kind(&name).map_err(|_| RunError::StagingIo)? {
                 EntryKind::Directory => {

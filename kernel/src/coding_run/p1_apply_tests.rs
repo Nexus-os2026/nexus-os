@@ -607,3 +607,97 @@ fn p1_a_nc_14_confirmation_and_review_text_cannot_disguise_a_change() {
     assert_eq!(display_safe("a\nb\tc\u{0}", true), "a\nb\tc⟨U+0000⟩");
     assert_eq!(display_safe("a\nb", false), "a⟨U+000A⟩b");
 }
+
+#[test]
+fn p1_a_03_creations_share_the_new_directories_they_need() {
+    let e = env();
+    let before = digest(&e.f.project);
+    let (mut run, binding) = verified(
+        &e,
+        vec![
+            create("src/new/a.rs", "a\n"),
+            create("src/new/b.rs", "b\n"),
+            create("src/new/deep/c.rs", "c\n"),
+        ],
+    );
+    approve_and_apply(&e, &mut run, binding).unwrap();
+    for (path, content) in [
+        ("src/new/a.rs", "a\n"),
+        ("src/new/b.rs", "b\n"),
+        ("src/new/deep/c.rs", "c\n"),
+    ] {
+        assert_eq!(read(&e, path), content);
+    }
+    let approval = run.request_restore(&e.info.name, &Confirm::yes()).unwrap();
+    let grant = e.projects.grant_for_apply(e.info.id, binding).unwrap();
+    run.restore(approval, grant).unwrap();
+    assert_eq!(
+        digest(&e.f.project),
+        before,
+        "files and directories removed"
+    );
+}
+
+#[test]
+fn p1_a_nc_15_a_concurrent_version_that_cannot_be_put_back_is_reported() {
+    use crate::coding_run::apply::AFTER_EXCHANGE;
+    let e = env();
+    let (mut run, binding) = verified(&e, default_edits());
+    AFTER_EXCHANGE.with(|h| {
+        *h.borrow_mut() = Some(Box::new(|dir: &Path, temp: &str, name: &str| {
+            // The owner saves a new version in place, and the target name
+            // disappears, so the exchange cannot be undone.
+            std::fs::write(dir.join(temp), "// owner's concurrent version\n").unwrap();
+            std::fs::remove_file(dir.join(name)).unwrap();
+        }))
+    });
+    let result = approve_and_apply(&e, &mut run, binding);
+    AFTER_EXCHANGE.with(|h| *h.borrow_mut() = None);
+    let ApplyError::RecoveryRequired { failed, unrestored } = result.unwrap_err() else {
+        panic!("a hidden owner version must require recovery");
+    };
+    assert_eq!(failed, "src/lib.rs");
+    let note = unrestored
+        .iter()
+        .find(|u| u.contains("your concurrent version is saved as"))
+        .expect("the owner's version is located");
+    let temp = note.rsplit(' ').next().unwrap().trim_end_matches(')');
+    assert_eq!(
+        read(&e, &format!("src/{temp}")),
+        "// owner's concurrent version\n"
+    );
+    assert_eq!(run.apply_state(), ApplyState::RecoveryRequired);
+}
+
+#[test]
+fn p1_a_nc_16_a_leftover_temporary_file_is_named_not_hidden() {
+    let e = env();
+    std::fs::write(
+        e.f.project.join("src/.nexus-coding-run-tmp-0000"),
+        "// leftover\n",
+    )
+    .unwrap();
+    let grant = e
+        .projects
+        .grant_for_run(
+            e.info.id,
+            WorkspaceBinding {
+                agent_id: Uuid::new_v4(),
+                run_id: Uuid::new_v4(),
+            },
+        )
+        .unwrap();
+    let mut run = CodingRun::create_for_project(
+        Arc::clone(&e.f.ledger) as Arc<dyn LedgerStore>,
+        grant,
+        default_scopes(),
+    )
+    .unwrap();
+    run.grant(&parent(&e.f)).unwrap();
+    assert_eq!(
+        run.snapshot(),
+        Err(RunError::Snapshot(SnapshotRejection::LeftoverTemporary(
+            "src/.nexus-coding-run-tmp-0000".to_string()
+        )))
+    );
+}

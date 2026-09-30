@@ -122,6 +122,11 @@ impl DirHandle {
         PathBuf::from(format!("/proc/self/fd/{}", self.file.as_raw_fd()))
     }
 
+    #[cfg(test)]
+    pub(crate) fn anchor_for_test(&self) -> PathBuf {
+        self.anchor()
+    }
+
     fn child(&self, name: &str) -> io::Result<PathBuf> {
         validate_component(name).map_err(|_| invalid("invalid entry name"))?;
         Ok(self.anchor().join(name))
