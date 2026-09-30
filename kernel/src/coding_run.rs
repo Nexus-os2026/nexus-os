@@ -34,6 +34,7 @@ mod fsops;
 mod ledger;
 mod local_model;
 mod manifest;
+mod project;
 mod scope;
 mod structural;
 mod worker;
@@ -54,7 +55,7 @@ use crate::workspace_authority::{
     WorkspaceAuthorityError, WorkspaceAuthorityRegistry, WorkspaceAuthoritySource,
     WorkspaceBinding, WorkspaceGrant, WorkspaceGrantId,
 };
-use fsops::{DirHandle, EntryKind};
+use fsops::{DirHandle, EntryKind, NodeIdentity};
 
 pub use ledger::{analyze as analyze_ledger, LedgerFailure, LedgerRecovery, LedgerStore};
 pub use local_model::{
@@ -62,6 +63,10 @@ pub use local_model::{
     LOCAL_PROVIDER,
 };
 pub use manifest::{Manifest, ManifestEntry, ManifestHash};
+pub use project::{
+    FolderPicker, ProjectError, ProjectGrant, ProjectId, ProjectInfo, ProjectRegistry,
+    APPLY_GRANT_LIFETIME, RUN_GRANT_LIFETIME,
+};
 pub use scope::{RelPath, RunScopes, ScopeEntry, ScopeError, ScopeSet};
 pub use structural::{
     StructuralOutcome, StructuralProfile, StructuralVerification, StructuralViolation,
@@ -501,6 +506,10 @@ pub struct CodingRun {
     model_pin: Option<ModelPin>,
     created: BTreeSet<RelPath>,
     verification: Option<StructuralVerification>,
+    /// The project and its directory identity at selection, for runs
+    /// created from an owner-selected project.
+    project_id: Option<ProjectId>,
+    expected_root: Option<NodeIdentity>,
 }
 
 impl std::fmt::Debug for CodingRun {
@@ -524,6 +533,43 @@ impl CodingRun {
         binding: WorkspaceBinding,
         scopes: RunScopes,
     ) -> Result<Self, RunError> {
+        Self::create_inner(ledger, registry, project_grant, binding, scopes, None)
+    }
+
+    /// Create a run over an owner-selected project. The run's grant is the
+    /// fresh per-run grant from [`ProjectRegistry::grant_for_run`], and the
+    /// folder must still be the directory selected by the owner when the run
+    /// opens it.
+    pub fn create_for_project(
+        ledger: Arc<dyn LedgerStore>,
+        project: ProjectGrant,
+        scopes: RunScopes,
+    ) -> Result<Self, RunError> {
+        let ProjectGrant {
+            project,
+            grant,
+            binding,
+            identity,
+            authority,
+        } = project;
+        Self::create_inner(
+            ledger,
+            authority,
+            grant,
+            binding,
+            scopes,
+            Some((project, identity)),
+        )
+    }
+
+    fn create_inner(
+        ledger: Arc<dyn LedgerStore>,
+        registry: Arc<WorkspaceAuthorityRegistry>,
+        project_grant: WorkspaceGrantId,
+        binding: WorkspaceBinding,
+        scopes: RunScopes,
+        selected: Option<(ProjectId, NodeIdentity)>,
+    ) -> Result<Self, RunError> {
         let run = Self {
             id: RunId::generate(),
             state: RunState::Created,
@@ -542,8 +588,10 @@ impl CodingRun {
             model_pin: None,
             created: BTreeSet::new(),
             verification: None,
+            project_id: selected.map(|(id, _)| id),
+            expected_root: selected.map(|(_, identity)| identity),
         };
-        let facts = json!({
+        let mut facts = json!({
             "project_grant": project_grant,
             "agent": binding.agent_id.to_string(),
             "binding_run": binding.run_id.to_string(),
@@ -552,6 +600,9 @@ impl CodingRun {
             "protected": run.scopes.protected().describe(),
             "profile": hex::encode(run.profile.hash()),
         });
+        if let Some(project) = run.project_id {
+            facts["project"] = json!(project.to_string());
+        }
         record(run.ledger.as_ref(), run.id.0, EventKind::RunCreated, &facts)
             .map_err(RunError::Ledger)?;
         Ok(run)
@@ -575,6 +626,11 @@ impl CodingRun {
 
     pub fn base_manifest(&self) -> Option<&Manifest> {
         self.base.as_ref()
+    }
+
+    /// The owner-selected project this run was created for, if any.
+    pub fn project_id(&self) -> Option<ProjectId> {
+        self.project_id
     }
 
     /// The local model this run is bound to, if pinned.
@@ -834,6 +890,12 @@ impl CodingRun {
             Ok(handle) => handle,
             Err(_) => return Err(self.fail(RunError::IdentityChanged)),
         };
+        if self
+            .expected_root
+            .is_some_and(|expected| expected != project.identity())
+        {
+            return Err(self.fail(RunError::IdentityChanged));
+        }
         self.project = Some(project);
         let expires_at = grant.expires_at();
         let name = self.id.to_string();

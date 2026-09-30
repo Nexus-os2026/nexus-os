@@ -1715,3 +1715,8 @@ fn p1a_r3_nc_07_unrecorded_actual_state_stays_fail_closed() {
 
 #[path = "p1_worker_tests.rs"]
 mod p1_worker;
+
+// ── Phase One P1-04: backend-owned project registration ─────────────────────
+
+#[path = "p1_project_tests.rs"]
+mod p1_project;
