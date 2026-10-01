@@ -450,7 +450,9 @@ pub enum RecordKind {
 
 /// One record the recorder must make durable, in `id` order. The digest binds
 /// the acknowledgement to exactly this record: it is the SHA-256 of the
-/// record's canonical frame ([`super::codec::encode_record`]).
+/// record's canonical frame header and payload, every byte of the frame
+/// before its 32-byte digest trailer, which holds this digest and is not
+/// covered ([`super::codec::encode_record`] writes the frame).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordIntent {
     pub id: RecordId,

@@ -7,7 +7,10 @@
 //! over-limit input, digest and payload mutation, cross-domain
 //! substitution); a canonical, injective encoding in which every byte is
 //! bound; the core's real record and request digest paths; and decoding as
-//! plain data that can do nothing.
+//! plain data that can do nothing. I2-R1 adds the request receipt control:
+//! the digest the real core retains in each request receipt, observed
+//! through a read-only accessor compiled for tests only, is the canonical
+//! digest of that request's frame.
 //!
 //! Golden vectors: every frame and digest below was assembled field by field
 //! from the version-1 table by a stdlib-only script (Python `struct` and
@@ -32,6 +35,8 @@ const G2: [u8; 16] = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
 ];
 const GF: [u8; 16] = [0xff; 16];
+const G3C: [u8; 16] = [0x3c; 16];
+const GA5: [u8; 16] = [0xa5; 16];
 
 /// An identity as a vector states it: (generation, sequence).
 type Id = ([u8; 16], u64);
@@ -490,6 +495,57 @@ const REQUEST_VECTORS: &[RequestVector] = &[
     },
 ];
 
+/// The request receipt vectors: the requests the receipt control serves
+/// through the real core, each with its version-1 frame and digest from the
+/// same independent derivation as the golden vectors.
+const RECEIPT_VECTORS: &[RequestVector] = &[
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000001 01 0000000000000000",
+        digest: "fa39efc25ef1f1b8d6e29a9235d66dd59b124a9081237aab0220590a950f6de4",
+        request: Request { generation: Generation::new(G3C), seq: 1, op: RequestOp::Retry { epoch: 0 } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0019 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000002 02",
+        digest: "e65434b8803345efc5d1ff2b4911b4909356612cbe4a7d6daabf172300b82272",
+        request: Request { generation: Generation::new(G3C), seq: 2, op: RequestOp::Shutdown },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000003 01 0000000000000001",
+        digest: "9a227c00586d95650e6d5aa9493e09953b2d063269e30613fe83db67703ac694",
+        request: Request { generation: Generation::new(G3C), seq: 3, op: RequestOp::Retry { epoch: 1 } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000004 01 ffffffffffffffff",
+        digest: "69a101a9786c39730c16ea2ee1c692aa96992667a1697b911ab378dd0b8c8948",
+        request: Request { generation: Generation::new(G3C), seq: 4, op: RequestOp::Retry { epoch: u64::MAX } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000005 01 0000000000000000",
+        digest: "9ffecc155b972e94d992d533fa4cc4ff99e93081c861658491667ce03e831c2d",
+        request: Request { generation: Generation::new(G3C), seq: 5, op: RequestOp::Retry { epoch: 0 } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5 0000000000000001 01 0000000000000000",
+        digest: "b55792d6176f5c3ce7a34a8177f994340e64c53faf2b1ea81a58b543d82e6749",
+        request: Request { generation: Generation::new(GA5), seq: 1, op: RequestOp::Retry { epoch: 0 } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0019 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000001 02",
+        digest: "0bf26bf71b4c7345f3dff3dfe9ceb77bc7f77e45a9498e343acd392bbfa7bf23",
+        request: Request { generation: Generation::new(G3C), seq: 1, op: RequestOp::Shutdown },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000002 01 0000000000000000",
+        digest: "7d486ff6b72427b30ba1525b6586a7f991d527de6052c5780ef7ec045ecfa6ea",
+        request: Request { generation: Generation::new(G3C), seq: 2, op: RequestOp::Retry { epoch: 0 } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000003 01 0000000000000002",
+        digest: "1a0c59e036b9e331eeedb39ee3976d23ec90e2afd8ce446d833d40a2bd5a43f2",
+        request: Request { generation: Generation::new(G3C), seq: 3, op: RequestOp::Retry { epoch: 2 } },
+    },
+];
+
 fn unhex(text: &str) -> Vec<u8> {
     let digits: Vec<u8> = text
         .bytes()
@@ -635,8 +691,12 @@ struct Run {
 
 impl Run {
     fn new(config: Config) -> Self {
+        Self::with(config, GENERATION)
+    }
+
+    fn with(config: Config, generation: Generation) -> Self {
         let (custody, control) =
-            Custody::new(config, GENERATION, Vec::new(), Tick(0)).expect("a valid configuration");
+            Custody::new(config, generation, Vec::new(), Tick(0)).expect("a valid configuration");
         Self {
             custody,
             control,
@@ -680,7 +740,7 @@ impl Run {
     fn request(&mut self, op: RequestOp) -> Request {
         self.seq += 1;
         Request {
-            generation: GENERATION,
+            generation: self.custody.generation(),
             seq: self.seq,
             op,
         }
@@ -2171,4 +2231,171 @@ fn c16_core_digest_paths_use_the_codec() {
         }
     }
     assert!(module.contains("pub mod codec;"));
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// The digest the real core retains in each request receipt is the
+/// canonical one (I2-R1, finding A). Real requests go through
+/// `Control::submit`, `Custody::serve`, sequencing and execution in three
+/// custodies: A requires recovery (its retries run as real attempts), B has
+/// another generation, C has A's. The digest each retained receipt holds,
+/// read through a read-only observation compiled for tests only, must be the
+/// digest of that request's version-1 frame, given literally above by the
+/// independent derivation and re-derived here from the frame with the sha2
+/// crate. Generation, sequence, operation and epoch are each bound: requests
+/// differing in exactly one of them are retained under different digests. A
+/// duplicate or a conflicting request leaves the retained digest as it was.
+#[test]
+fn c17_core_retains_the_canonical_request_digest_in_its_receipts() {
+    assert_eq!(GENERATION.bytes(), G3C);
+    let canonical = |request: &Request| -> [u8; 32] {
+        let vector = RECEIPT_VECTORS
+            .iter()
+            .find(|vector| vector.request == *request)
+            .unwrap_or_else(|| panic!("no receipt vector for {request:?}"));
+        let mut digest = [0; 32];
+        digest.copy_from_slice(&unhex(vector.digest));
+        assert_eq!(
+            sha(&unhex(vector.frame)),
+            digest,
+            "the literal is its frame's digest"
+        );
+        digest
+    };
+    let config = Config {
+        recovery_spacing_millis: 1,
+        ..Config::LIVE
+    };
+
+    let (mut a, _ticket) = Run::recovering(config);
+    let mut a_requests = Vec::new();
+    for op in [
+        RequestOp::Retry { epoch: 0 },
+        RequestOp::Shutdown,
+        RequestOp::Retry { epoch: 1 },
+        RequestOp::Retry { epoch: u64::MAX },
+        RequestOp::Retry { epoch: 0 },
+    ] {
+        let request = a.request(op);
+        assert!(
+            matches!(a.serve(request, false), RequestOutcome::Executed(_)),
+            "{request:?}"
+        );
+        a_requests.push(request);
+    }
+    assert_eq!(a.custody.snapshot().recovery.attempts, 2, "two retries ran");
+    let first = a_requests[0];
+    assert!(matches!(
+        a.serve(first, false),
+        RequestOutcome::Duplicate(_)
+    ));
+    let conflicting = Request {
+        op: RequestOp::Shutdown,
+        ..first
+    };
+    assert_eq!(a.serve(conflicting, false), RequestOutcome::Conflict);
+    assert_eq!(a.custody.retained_request_digest(6), None);
+
+    let mut b = Run::with(config, Generation::new(GA5));
+    let b_request = b.request(RequestOp::Retry { epoch: 0 });
+    assert!(matches!(
+        b.serve(b_request, false),
+        RequestOutcome::Executed(_)
+    ));
+    let mut c = Run::with(config, GENERATION);
+    let mut c_requests = Vec::new();
+    for op in [
+        RequestOp::Shutdown,
+        RequestOp::Retry { epoch: 0 },
+        RequestOp::Retry { epoch: 2 },
+    ] {
+        let request = c.request(op);
+        assert!(
+            matches!(c.serve(request, false), RequestOutcome::Executed(_)),
+            "{request:?}"
+        );
+        c_requests.push(request);
+    }
+
+    let retained = |label: &str, run: &Run, requests: &[Request]| -> Vec<[u8; 32]> {
+        requests
+            .iter()
+            .map(|request| {
+                let expected = canonical(request);
+                let stored = run.custody.retained_request_digest(request.seq);
+                assert_eq!(
+                    stored,
+                    Some(expected),
+                    "[request-receipt] custody {label} retained {} for {request:?}, not its \
+                     canonical digest {}",
+                    stored.map_or_else(|| "nothing".to_string(), |digest| hex(&digest)),
+                    hex(&expected)
+                );
+                expected
+            })
+            .collect()
+    };
+    let a_digests = retained("A", &a, &a_requests);
+    let b_digests = retained("B", &b, &[b_request]);
+    let c_digests = retained("C", &c, &c_requests);
+
+    let pairs = [
+        (
+            "generation",
+            a_requests[0],
+            b_request,
+            a_digests[0],
+            b_digests[0],
+        ),
+        (
+            "sequence",
+            a_requests[0],
+            a_requests[4],
+            a_digests[0],
+            a_digests[4],
+        ),
+        (
+            "operation",
+            a_requests[0],
+            c_requests[0],
+            a_digests[0],
+            c_digests[0],
+        ),
+        (
+            "operation",
+            a_requests[1],
+            c_requests[1],
+            a_digests[1],
+            c_digests[1],
+        ),
+        (
+            "epoch",
+            a_requests[2],
+            c_requests[2],
+            a_digests[2],
+            c_digests[2],
+        ),
+    ];
+    for (field, left, right, left_digest, right_digest) in pairs {
+        let differing = [
+            left.generation != right.generation,
+            left.seq != right.seq,
+            std::mem::discriminant(&left.op) != std::mem::discriminant(&right.op),
+            left.op != right.op
+                && matches!(left.op, RequestOp::Retry { .. })
+                && matches!(right.op, RequestOp::Retry { .. }),
+        ];
+        assert_eq!(
+            differing.iter().filter(|differs| **differs).count(),
+            1,
+            "{left:?} and {right:?} differ in exactly the {field}"
+        );
+        assert_ne!(
+            left_digest, right_digest,
+            "[request-receipt] requests differing only in the {field} share a retained digest"
+        );
+    }
 }

@@ -2784,6 +2784,14 @@ impl<R: Resource> Custody<R> {
         RequestOutcome::Executed(response)
     }
 
+    /// Test observation only: the digest the retained receipt for request
+    /// `seq` holds, if one is retained. It reads this custody's real receipt
+    /// and changes nothing.
+    #[cfg(test)]
+    pub(crate) fn retained_request_digest(&self, seq: u64) -> Option<[u8; 32]> {
+        self.requests.receipt(seq).map(|receipt| receipt.digest)
+    }
+
     /// One explicit recovery attempt: while the run requires recovery, or
     /// (after its terminal record) while late incidents are held; decided
     /// against the current epoch, within the budget and the spacing, with its
