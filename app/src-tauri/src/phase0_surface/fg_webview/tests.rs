@@ -473,8 +473,9 @@ fn p0_fg_webview_conf_has_restrictive_csp_and_guarded_window() {
         );
         merges += 1;
     }
-    // Reviewed: the Builder toolchain and (Phase Two P2F) the verifier
-    // toolchain resources, each touching only the bundle.
+    // Reviewed: the Builder toolchain resource and (Phase Two P2F, P2-R1)
+    // the Linux verifier runtime (toolchain resource and helper sidecar),
+    // each touching only the bundle.
     assert_eq!(merges, 2, "the reviewed release-time config merges");
 }
 

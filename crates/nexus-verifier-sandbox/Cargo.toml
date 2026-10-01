@@ -22,8 +22,9 @@ serde = "1"
 sha2 = "0.10"
 
 # The live sandbox harness enables its feature for this crate's own tests
-# (unit and live) and nothing else: dev-dependencies are never part of a
-# normal build, such as the desktop backend's or the release package's.
+# (unit, live and package-layout) and nothing else: dev-dependencies are
+# never part of a normal build, such as the desktop backend's or the
+# release package's.
 [dev-dependencies]
 nexus-verifier-sandbox = { path = ".", features = ["live-sandbox-harness"] }
 
@@ -32,9 +33,9 @@ nexus-verifier-sandbox = { path = ".", features = ["live-sandbox-harness"] }
 # manifest. Never production authority; enabled only for the live suite.
 development-toolchain = []
 # The live sandbox harness only: a helper at an arbitrary path (the build's
-# own helper binary) and deterministic fault injection (the live panic
-# controls). Never production authority; only the dev-dependency above
-# enables it.
+# own helper binary), deterministic fault injection (the live panic
+# controls) and the extracted-package layout check. Never production
+# authority; only the dev-dependency above enables it.
 live-sandbox-harness = []
 
 [[test]]

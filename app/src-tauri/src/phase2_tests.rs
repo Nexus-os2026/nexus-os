@@ -263,6 +263,10 @@ fn p2_g_06_production_cannot_construct_a_helper_from_an_arbitrary_path() {
     // sandbox crate's own tests and live harness, the build's own helper
     // (`at`). Nothing else constructs one.
     assert!(gated(&launcher, "at", HARNESS_ONLY), "HelperProgram::at");
+    assert!(
+        gated(&launcher, "in_extracted_package", HARNESS_ONLY),
+        "HelperProgram::in_extracted_package"
+    );
     assert!(!gated(&launcher, "installed", HARNESS_ONLY));
     assert_eq!(code(&launcher).matches("Self { path").count(), 2);
     for function in ["run_with_fault", "holds_scope", "holds_helper"] {
@@ -301,6 +305,7 @@ fn p2_g_06_production_cannot_construct_a_helper_from_an_arbitrary_path() {
     );
     for needle in [
         "HelperProgram::at",
+        "in_extracted_package",
         "run_with_fault",
         "Fault::",
         "FaultPoint",
@@ -369,6 +374,128 @@ fn p2_g_07_a_retained_verification_cleanup_is_never_dropped() {
         .find("verification_phase().blocks_apply()")
         .expect("discard refuses an unconfirmed verification cleanup");
     assert!(refused < discard.find("discard_run(&mut run)").unwrap());
+}
+
+/// The release workflow job `name` (from its key to the next job's).
+fn job<'a>(workflow: &'a str, name: &str) -> &'a str {
+    let start = workflow
+        .find(&format!("\n  {name}:\n"))
+        .unwrap_or_else(|| panic!("job {name}"))
+        + 1;
+    let rest = &workflow[start..];
+    let end = rest
+        .match_indices("\n  ")
+        .find(|(at, _)| {
+            let line = &rest[at + 3..];
+            line.starts_with(|c: char| c.is_ascii_alphanumeric())
+                && line
+                    .split('\n')
+                    .next()
+                    .is_some_and(|key| key.ends_with(':'))
+        })
+        .map_or(rest.len(), |(at, _)| at + 1);
+    &rest[..end]
+}
+
+#[test]
+fn p2_g_08_the_linux_package_installs_the_verifier_runtime() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let json = |name: &str| -> serde_json::Value {
+        serde_json::from_str(&std::fs::read_to_string(manifest_dir.join(name)).unwrap()).unwrap()
+    };
+    // Development builds bundle nothing; the Linux release merges, after
+    // the Builder toolchain, the verifier toolchain resource and the helper
+    // sidecar, which the Debian package installs at
+    // /usr/lib/NexusOS/verifier-toolchain and /usr/bin/nexus-verifier-sandbox.
+    let base = json("tauri.conf.json");
+    assert_eq!(base["productName"], "NexusOS");
+    assert!(base["bundle"].get("externalBin").is_none());
+    assert_eq!(
+        json("tauri.verifier-runtime.conf.json"),
+        serde_json::json!({
+            "bundle": {
+                "resources": { "verifier-toolchain": "verifier-toolchain" },
+                "externalBin": ["binaries/nexus-verifier-sandbox"]
+            }
+        })
+    );
+    // Exactly the layout production derives, and the package inspection
+    // checks.
+    let read = |path: &str| std::fs::read_to_string(repo().join(path)).unwrap();
+    let launcher = read("crates/nexus-verifier-sandbox/src/launcher.rs");
+    assert!(launcher.contains("const INSTALLED_BIN_DIR: &str = \"/usr/bin\";"));
+    assert!(launcher.contains("const INSTALLED_HELPER: &str = \"nexus-verifier-sandbox\";"));
+    let toolchain = read("crates/nexus-verifier-sandbox/src/toolchain.rs");
+    assert!(
+        toolchain.contains("const INSTALLED_ROOT: &str = \"/usr/lib/NexusOS/verifier-toolchain\";")
+    );
+    let inspect = read("packaging/verifier-toolchain/scripts/inspect-deb.mjs");
+    for constant in [
+        "const HELPER = 'usr/bin/nexus-verifier-sandbox';",
+        "const VERIFIER_ROOT = 'usr/lib/NexusOS/verifier-toolchain';",
+        "const BUILDER_ROOT = 'usr/lib/NexusOS/toolchain';",
+    ] {
+        assert!(inspect.contains(constant), "{constant}");
+    }
+    let stage = read("packaging/verifier-toolchain/scripts/stage-helper.mjs");
+    assert!(stage.contains("const TRIPLE = 'x86_64-unknown-linux-gnu';"));
+    // The staged sidecar is build output, never committed.
+    assert!(read(".gitignore")
+        .lines()
+        .any(|line| line == "/app/src-tauri/binaries/nexus-verifier-sandbox-*"));
+
+    // The Linux release job builds, packages and proves the runtime, in
+    // this order (the Builder toolchain's own steps are pinned by its
+    // guard); Windows and macOS have no verifier sandbox.
+    let workflow = read(".github/workflows/release.yml");
+    let linux = job(&workflow, "build-linux");
+    let mut at = 0;
+    for step in [
+        "NEXUS_BUILDER_TOOLCHAIN: packaged",
+        "NEXUS_VERIFIER_TOOLCHAIN: packaged",
+        "packaging/verifier-toolchain/scripts/assemble.mjs --out app/src-tauri/verifier-toolchain",
+        "run: cargo build --release",
+        "id: helper",
+        "packaging/verifier-toolchain/scripts/stage-helper.mjs --out app/src-tauri/binaries >> \"$GITHUB_OUTPUT\"",
+        "npm run tauri build -- --bundles deb --config src-tauri/tauri.",
+        ".conf.json --config src-tauri/tauri.verifier-runtime.conf.json\n",
+        "assemble.mjs --compare app/src-tauri/verifier-toolchain",
+        "node --test packaging/verifier-toolchain/test/",
+        "HELPER_SHA256: ${{ steps.helper.outputs.sha256 }}",
+        "packaging/verifier-toolchain/scripts/inspect-deb.mjs",
+        "--application nexus-desktop-backend",
+        "--verifier-toolchain app/src-tauri/verifier-toolchain",
+        "--helper app/src-tauri/binaries/nexus-verifier-sandbox-x86_64-unknown-linux-gnu",
+        "--helper-sha256 \"$HELPER_SHA256\"",
+        "cargo tree --locked -p nexus-desktop-backend -e features,normal,build -i nexus-verifier-sandbox",
+        "grep -q -e development-toolchain -e live-sandbox-harness",
+        "dpkg-deb -x \"$deb\" \"$root\"",
+        "NEXUS_EXTRACTED_PACKAGE_ROOT=\"$root\" cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_package_layout",
+        "name: NexusOS-Linux",
+    ] {
+        let found = linux[at..]
+            .find(step)
+            .unwrap_or_else(|| panic!("the Linux release job lacks, in order: {step}"));
+        at += found + step.len();
+    }
+    assert_eq!(workflow.matches("NEXUS_VERIFIER_TOOLCHAIN").count(), 1);
+    assert_eq!(
+        workflow.matches("tauri.verifier-runtime.conf.json").count(),
+        1
+    );
+    // The Debian bundle merges exactly two configurations, the verifier
+    // runtime's last.
+    let bundle = linux
+        .lines()
+        .find(|line| line.contains("--bundles deb"))
+        .expect("the Debian bundle");
+    assert_eq!(bundle.matches("--config ").count(), 2, "{bundle}");
+    for name in ["build-windows", "build-macos", "create-release"] {
+        let other = job(&workflow, name);
+        for needle in ["verifier", "nexus-verifier-sandbox", "binaries/"] {
+            assert!(!other.contains(needle), "{name}: {needle}");
+        }
+    }
 }
 
 // Reviewed Phase Two identities (P2I).

@@ -162,6 +162,12 @@ jobs:
         shell: bash
         run: app/src-tauri/builder-toolchain/node/node --test packaging/builder-toolchain/test/entry.test.mjs
 
+      # Phase Two (P2-R1): the release's Debian package inspection refuses
+      # every deviation the Linux package must never ship.
+      - name: Linux package inspection negative controls
+        shell: bash
+        run: node --test packaging/verifier-toolchain/test/
+
       - name: Packaged Builder toolchain verification and governed launch
         shell: bash
         env:

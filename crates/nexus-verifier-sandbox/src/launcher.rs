@@ -67,7 +67,6 @@ impl HelperProgram {
     /// `/usr/bin`: the installed-package invariant. A development build is
     /// not installed and has none.
     pub fn installed() -> Result<Self, HelperUnavailable> {
-        use std::os::unix::fs::MetadataExt;
         let executable = std::env::current_exe()
             .and_then(|path| path.canonicalize())
             .map_err(|_| HelperUnavailable::NotInstalled)?;
@@ -75,7 +74,27 @@ impl HelperProgram {
         if executable.parent() != Some(bin) {
             return Err(HelperUnavailable::NotInstalled);
         }
-        let protected = |meta: &std::fs::Metadata| meta.uid() == 0 && meta.mode() & 0o022 == 0;
+        Self::in_bin(bin, 0)
+    }
+
+    /// The helper of an extracted, not installed, Nexus package beneath
+    /// `root`, held to exactly the installed layout's checks except that the
+    /// owner is the user who extracted it (who cannot create root-owned
+    /// files): package evidence only, never authority. The archive's own
+    /// ownership is checked separately (root).
+    #[cfg(any(test, feature = "live-sandbox-harness"))]
+    pub fn in_extracted_package(root: &Path) -> Result<Self, HelperUnavailable> {
+        // SAFETY: getuid has no preconditions.
+        let owner = unsafe { libc::getuid() };
+        Self::in_bin(&root.join(INSTALLED_BIN_DIR.trim_start_matches('/')), owner)
+    }
+
+    /// The package's helper in `bin`: a regular executable that `owner`
+    /// owns and no one else can write, in a directory with the same
+    /// protection.
+    fn in_bin(bin: &Path, owner: u32) -> Result<Self, HelperUnavailable> {
+        use std::os::unix::fs::MetadataExt;
+        let protected = |meta: &std::fs::Metadata| meta.uid() == owner && meta.mode() & 0o022 == 0;
         let dir = std::fs::symlink_metadata(bin).map_err(|_| HelperUnavailable::NotInstalled)?;
         let path = bin.join(INSTALLED_HELPER);
         let file = std::fs::symlink_metadata(&path).map_err(|_| HelperUnavailable::NotInstalled)?;

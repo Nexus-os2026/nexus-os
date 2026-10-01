@@ -130,6 +130,12 @@ jobs:
       # P0-002C4D2: the backend build script embeds the manifest of the
       # assembled Builder toolchain (app/src-tauri/builder-toolchain).
       NEXUS_BUILDER_TOOLCHAIN: packaged
+      # Phase Two (P2-R1): the verifier sandbox build script embeds the
+      # manifest of the assembled verifier toolchain
+      # (app/src-tauri/verifier-toolchain), so the packaged backend verifies
+      # exactly the tree this package installs. Linux only: Windows and macOS
+      # have no verifier sandbox.
+      NEXUS_VERIFIER_TOOLCHAIN: packaged
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -158,6 +164,10 @@ jobs:
         shell: bash
         run: node packaging/builder-toolchain/scripts/assemble.mjs --target x86_64-unknown-linux-gnu --out app/src-tauri/builder-toolchain
 
+      - name: Assemble the Nexus verifier toolchain (pinned Rust 1.94.0 components)
+        shell: bash
+        run: node packaging/verifier-toolchain/scripts/assemble.mjs --out app/src-tauri/verifier-toolchain
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -168,13 +178,18 @@ jobs:
       - name: Build Rust release
         run: cargo build --release
 
+      - name: Build and stage the verifier sandbox helper (Tauri sidecar)
+        id: helper
+        shell: bash
+        run: node packaging/verifier-toolchain/scripts/stage-helper.mjs --out app/src-tauri/binaries >> "$GITHUB_OUTPUT"
+
       - name: Install app dependencies
         working-directory: app
         run: npm ci
 
-      - name: Build Tauri bundles (deb)
+      - name: Build Tauri bundles (deb, with the verifier runtime)
         working-directory: app
-        run: npm run tauri build -- --bundles deb --config src-tauri/tauri.builder-toolchain.conf.json
+        run: npm run tauri build -- --bundles deb --config src-tauri/tauri.builder-toolchain.conf.json --config src-tauri/tauri.verifier-runtime.conf.json
 
       - name: Verify bundled Builder toolchain bytes
         shell: bash
@@ -183,6 +198,66 @@ jobs:
           data_dir="$(find target/release/bundle/deb -mindepth 2 -maxdepth 2 -type d -name data | LC_ALL=C sort | head -n 1)"
           bundled="${data_dir}/usr/lib/NexusOS/toolchain"
           node packaging/builder-toolchain/scripts/assemble.mjs --compare app/src-tauri/builder-toolchain "$bundled"
+
+      - name: Verify bundled verifier toolchain bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          data_dir="$(find target/release/bundle/deb -mindepth 2 -maxdepth 2 -type d -name data | LC_ALL=C sort | head -n 1)"
+          bundled="${data_dir}/usr/lib/NexusOS/verifier-toolchain"
+          node packaging/verifier-toolchain/scripts/assemble.mjs --compare app/src-tauri/verifier-toolchain "$bundled"
+
+      - name: Package inspection negative controls
+        shell: bash
+        run: node --test packaging/verifier-toolchain/test/
+
+      # The package as it ships, read without installing it: the helper at
+      # exactly /usr/bin/nexus-verifier-sandbox (the staged build), both
+      # toolchains exactly, root ownership and modes from the archive's own
+      # metadata, no maintainer script, no other helper or ELF file, and the
+      # application embedding the verifier toolchain manifest.
+      - name: Inspect the Debian package (verifier helper, toolchains, ownership)
+        shell: bash
+        env:
+          HELPER_SHA256: ${{ steps.helper.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          mapfile -t debs < <(find target/release/bundle/deb -maxdepth 1 -type f -name '*.deb' | LC_ALL=C sort)
+          if [ "${#debs[@]}" -ne 1 ]; then
+            echo "expected exactly one .deb, found ${#debs[@]}" >&2
+            exit 1
+          fi
+          node packaging/verifier-toolchain/scripts/inspect-deb.mjs \
+            --deb "${debs[0]}" \
+            --application nexus-desktop-backend \
+            --builder-toolchain app/src-tauri/builder-toolchain \
+            --verifier-toolchain app/src-tauri/verifier-toolchain \
+            --helper app/src-tauri/binaries/nexus-verifier-sandbox-x86_64-unknown-linux-gnu \
+            --helper-sha256 "$HELPER_SHA256"
+
+      - name: Production feature graph (no development or harness verifier features)
+        shell: bash
+        run: |
+          set -euo pipefail
+          graph="$(cargo tree --locked -p nexus-desktop-backend -e features,normal,build -i nexus-verifier-sandbox)"
+          echo "$graph"
+          if grep -q -e development-toolchain -e live-sandbox-harness <<< "$graph"; then
+            echo "the packaged backend links a development or harness verifier feature" >&2
+            exit 1
+          fi
+
+      # The same layout and tree checks production applies, beneath the
+      # extracted package (the extracting user owns it; root ownership is
+      # the inspection above).
+      - name: Extracted package satisfies the installed verifier layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb="$(find target/release/bundle/deb -maxdepth 1 -type f -name '*.deb' | LC_ALL=C sort | head -n 1)"
+          root="$RUNNER_TEMP/nexus-deb-root"
+          rm -rf "$root"
+          dpkg-deb -x "$deb" "$root"
+          NEXUS_EXTRACTED_PACKAGE_ROOT="$root" cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_package_layout
 
       - name: Print bundle tree (Linux)
         run: |

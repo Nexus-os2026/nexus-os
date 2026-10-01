@@ -73,3 +73,6 @@ docs/claude-skills/*.zip
 # Phase Two P2F: assembled packaged verifier toolchain (release/CI build output)
 /app/src-tauri/verifier-toolchain/
 /app/src-tauri/verifier-toolchain.assembly-*/
+# Phase Two P2-R1: the verifier helper staged as the Linux package's Tauri
+# sidecar (release build output)
+/app/src-tauri/binaries/nexus-verifier-sandbox-*

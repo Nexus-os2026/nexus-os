@@ -286,7 +286,7 @@ access.
 
 Production root: derived only from the installed executable, the Debian
 package's `/usr/bin/<exe>` giving `/usr/lib/NexusOS/verifier-toolchain`
-(Tauri resource `verifier-toolchain`). `/usr`, `/usr/lib`,
+(Tauri resource `verifier-toolchain`, section 10a). `/usr`, `/usr/lib`,
 `/usr/lib/NexusOS`, the root and every directory and file of the tree must
 be root-owned and writable by no one else: the installed-package invariant.
 Verification is descriptor-relative and never follows a link; missing,
@@ -316,6 +316,46 @@ the same embedded manifest only in builds with the crate's
 `development-toolchain` feature; that constructor does not exist in
 production builds, and the Phase Two supported-host run fails (it does not
 skip) without it.
+
+## 10a. Linux package (P2-R1)
+
+The Linux release (`.github/workflows/release.yml`, `build-linux`) builds
+the Debian package with the verifier runtime; Windows and macOS have no
+verifier sandbox and their release jobs are unchanged.
+
+- The job assembles the Builder toolchain and the verifier toolchain, and
+  builds with `NEXUS_BUILDER_TOOLCHAIN=packaged` and
+  `NEXUS_VERIFIER_TOOLCHAIN=packaged`, so the packaged backend embeds the
+  manifest of exactly the tree the package installs.
+- `packaging/verifier-toolchain/scripts/stage-helper.mjs` builds the helper
+  from the checkout (`cargo build --release --locked`, the path cargo
+  reports) and stages it, exclusively, as the Tauri sidecar
+  `app/src-tauri/binaries/nexus-verifier-sandbox-x86_64-unknown-linux-gnu`,
+  printing its digest.
+- The bundle merges the Builder configuration and then
+  `app/src-tauri/tauri.verifier-runtime.conf.json`: the
+  `verifier-toolchain` resource and the `binaries/nexus-verifier-sandbox`
+  sidecar, which the Debian package installs at
+  `/usr/lib/NexusOS/verifier-toolchain` and exactly
+  `/usr/bin/nexus-verifier-sandbox`, the paths production derives. No
+  maintainer script.
+- Evidence: both bundled toolchains are compared with the assembled trees;
+  `packaging/verifier-toolchain/scripts/inspect-deb.mjs` reads the `.deb`
+  itself, without installing it: root ownership and modes from the archive's
+  own metadata, no maintainer script, `md5sums`, exactly the application and
+  the helper in `usr/bin`, the helper byte-identical to the staged build, no
+  other copy of it and no ELF file outside the expected places, both
+  toolchains exact, and the application embedding the verifier manifest
+  (every file's digest); its own negative controls
+  (`packaging/verifier-toolchain/test/`) run first and in Fast Local; the
+  production feature graph of the backend has neither the
+  `development-toolchain` nor the `live-sandbox-harness` feature; and the
+  extracted package (`dpkg-deb -x`) satisfies production's layout and tree
+  checks with the extracting user as owner
+  (`tests/phase2_package_layout.rs`; the root ownership is the inspection's).
+- An installed package missing the helper, its protection, the toolchain or
+  any file of it, or a backend built without the manifest, fails closed:
+  verification is unavailable.
 
 ## 11. Workspace
 
@@ -545,7 +585,8 @@ restored exactly, showed every layer and check below is load-bearing.
 | 44 | `/proc` | live `read_proc_status`, `list_proc`; P2G `no_host_files` |
 | 45 | no raw shell | `p2b_the_profile_has_no_shell_path_or_network_escape`; live `exec_shell`; P2G `no_shell` |
 
-P2-R1 controls (the panic invariant and helper construction):
+P2-R1 controls (the panic invariant, helper construction and the Linux
+package):
 
 | Control | Test |
 |---|---|
@@ -553,6 +594,7 @@ P2-R1 controls (the panic invariant and helper construction):
 | the finalizer and a retained boundary without a scope | `p2r1_finalization_ends_and_reaps_a_helper_without_a_scope`, `p2r1_a_failed_or_panicking_finalization_retains_the_live_boundary`, `p2r1_a_dropped_boundary_still_ends_its_helper`, `p2r1_a_panicking_output_thread_loses_its_record`, `p2r1_an_interrupted_execution_is_never_passed` |
 | the desktop's panic path, retry and discard | `p2r1_a_panic_after_the_execution_retains_its_unconfirmed_boundary`, `p2r1_a_panic_with_nothing_unconfirmed_is_an_unknown_result`, `p2_g_07_a_retained_verification_cleanup_is_never_dropped`; kernel `p2r1_a_panicked_verification_keeps_apply_refused_until_its_cleanup_is_confirmed` |
 | no arbitrary helper path in production | `p2_g_06_production_cannot_construct_a_helper_from_an_arbitrary_path`; a normal build of the desktop cannot name `HelperProgram::at` (it does not exist without the harness feature) |
+| the Linux package | `p2_g_08_the_linux_package_installs_the_verifier_runtime`; `packaging/verifier-toolchain/test/inspect-deb.test.mjs`; `tests/phase2_package_layout.rs`; the release job's inspection |
 
 CI: a dedicated exact-SHA workflow on the self-hosted runner
 (`.github/workflows/ci-phase2-linux-sandbox.yml`) runs the live suite and
@@ -590,6 +632,7 @@ the eight runtime files) and with path-based metadata mutation denied.
 | Launch approval | `CodingRun::request_verification_approval` with the desktop's native dialog | bounded facts; recorded; single-use approval bound to the exact binding |
 | IPC | `coding_verification_profiles`, `coding_start_verification`, `coding_retry_verification_cleanup` | run id and profile name only; capabilities grant them to the main window at the local origin |
 | Ledger | `verify.prepared`, `verify.approval_granted`, `verify.approval_declined`, `verify.launch`, `verify.result`, `verify.cleanup` | hashes, sizes, classes and generations only; fail closed |
+| Release package | the Linux `.deb`: `/usr/bin/nexus-verifier-sandbox` and `/usr/lib/NexusOS/verifier-toolchain` | built from the release checkout (section 10a); no maintainer script; inspected as it ships |
 
 Unchanged: Builder's trusted toolchain and every Phase Zero and Phase One
 surface; the Phase Zero and Phase One guards still pass, with reviewed pin
@@ -600,9 +643,9 @@ build-output directories.
 
 - The installed-package path (installed helper, installed toolchain) cannot
   run in a development build by design; the desktop glue is covered by unit
-  tests of its decisions and by source pins, and the layers below it by the
-  live suite. Bundling the helper binary with the release package is part of
-  release packaging.
+  tests of its decisions and by source pins, the layers below it by the live
+  suite, and the package by its inspection and the extracted-layout tests
+  (an installed package was not exercised as root: installing needs root).
 - A workspace left by a crashed backend stays (owner-only, on the session
   tmpfs) until the session ends; there is no startup sweep by name.
 - Retained boundaries live in the backend's memory: if the backend process
