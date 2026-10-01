@@ -1,19 +1,22 @@
-//! P2-V1-R3B-I1, -R1 and -R2 fixture controls for the custody core
-//! (`support/custody/`): the same owner survives failed and exhausted
-//! cleanup, reporting, refused shutdown and explicit recovery; admission is
-//! reserved, acknowledged and linearized against cancellation, and the first
-//! actual failure closes it for good (no next case, no reopening), an
-//! expected retained boundary's failed first attempt included, at once; an
-//! unknown native outcome stays pending until its own bound completion;
-//! expected injected conditions stay apart from actual failures, and output
-//! detachment is output loss, never completeness; the terminal commitment is
-//! ordered against cancellation and lease expiry (accepted before it, they
-//! fail the run; after it, they are late and change nothing); a run is final
-//! only when its terminal record is acknowledged, after which its verdict
-//! never changes and a late owner is an incident of its own; failed or
-//! pending evidence keeps the custody from closing; dependencies are released
-//! only after native completion; acknowledgements bind exact records;
-//! replayed, stale and conflicting events act on nothing.
+//! P2-V1-R3B-I1, -R1, -R2 and -R2A fixture controls for the custody core
+//! (`support/custody/`; the R2A commitment-boundary controls need private
+//! access, live in its `core.rs` and run in this target as
+//! `custody::core::commitment_boundary::*`): the same owner survives failed
+//! and exhausted cleanup, reporting, refused shutdown and explicit recovery;
+//! admission is reserved, acknowledged and linearized against cancellation,
+//! and the first actual failure closes it for good (no next case, no
+//! reopening), an expected retained boundary's failed first attempt
+//! included, at once; an unknown native outcome stays pending until its own
+//! bound completion; expected injected conditions stay apart from actual
+//! failures, and output detachment is output loss, never completeness; the
+//! terminal commitment is ordered against cancellation and lease expiry
+//! (accepted before it, they fail the run; after it, they are late and change
+//! nothing), at its primitive's own boundary as well; a run is final only
+//! when its terminal record is acknowledged, after which its verdict never
+//! changes and a late owner is an incident of its own; failed or pending
+//! evidence keeps the custody from closing; dependencies are released only
+//! after native completion; acknowledgements bind exact records; replayed,
+//! stale and conflicting events act on nothing.
 //!
 //! These are not live evidence. No process, cgroup, scope, user manager, bus,
 //! socket, file or record storage is touched: every adapter is an in-process
@@ -2257,6 +2260,93 @@ fn r15_shutdown_request_is_no_second_finalization_rule() {
     lab.released();
     let (failed, capture) = cancelled_outcome(&mut lab, closure);
     assert!(failed, "{capture}");
+}
+
+/// R2A, supplementary: source structure, not behavior. The behavioral proof
+/// is the boundary controls in `support/custody/core.rs` (module
+/// `commitment_boundary`, run in this target), which pause the real
+/// commitment primitive. This pins what they rely on: normal finalization
+/// calls that one primitive; the gate's closure and commitment are each
+/// written in exactly one place; the primitive takes the gate once and,
+/// under it, reads the deciding closure, reaches its decision point and
+/// records the commitment, in that order; and every fixture item is compiled
+/// for tests only, with the boundary set in one place.
+#[test]
+fn r16_commitment_wiring_reaches_the_tested_primitive() {
+    let core = include_str!("support/custody/core.rs");
+    let body = |signature: &str| -> &str {
+        let start = core
+            .find(signature)
+            .unwrap_or_else(|| panic!("missing {signature}"));
+        let end = start + core[start..].find("\n    }\n").expect("its end");
+        &core[start..end]
+    };
+
+    assert_eq!(core.matches("self.shared.commit(now)").count(), 1);
+    assert!(
+        body("    fn try_finalize(&mut self, now: Tick) {").contains(
+            "let closure = self.shared.commit(now);\n        self.note_cancellation(closure, now);"
+        )
+    );
+    assert_eq!(core.matches("committed.get_or_insert(").count(), 1);
+    assert_eq!(core.matches("gate.closure = Some(").count(), 1);
+    assert!(
+        body("    fn close(&self, reason: ClosureReason, at: Tick) -> CancelReceipt {")
+            .contains("gate.closure = Some(closure);")
+    );
+    assert!(
+        body("    pub fn cancel(&self, reason: CancelReason, now: Tick) -> CancelReceipt {")
+            .contains("self.shared.close(ClosureReason::Cancelled(reason), now)")
+    );
+
+    let commit = body("    fn commit(&self, at: Tick) -> Option<Closure> {");
+    assert_eq!(commit.matches("lock(&self.gate)").count(), 1, "{commit}");
+    let order = [
+        "self.reach(CommitPoint::Entry);",
+        "let mut gate = lock(&self.gate);",
+        "let closure = gate.closure;",
+        "self.reach(CommitPoint::Decided);",
+        "gate.committed.get_or_insert(Commitment { at });",
+        "\n        closure",
+    ];
+    let positions: Vec<usize> = order
+        .iter()
+        .map(|step| {
+            commit
+                .find(step)
+                .unwrap_or_else(|| panic!("missing {step}"))
+        })
+        .collect();
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "{commit}"
+    );
+
+    let lines: Vec<&str> = core.lines().collect();
+    for item in [
+        "struct CommitBoundary {",
+        "enum CommitPoint {",
+        "const BOUNDARY_WATCHDOG",
+        "commit_boundary: Option<CommitBoundary>,",
+        "commit_boundary: None,",
+        "self.reach(CommitPoint::Entry);",
+        "self.reach(CommitPoint::Decided);",
+        "fn reach(&self, point: CommitPoint) {",
+        "fn install_commit_boundary(",
+        "mod commitment_boundary {",
+    ] {
+        let at = lines
+            .iter()
+            .position(|line| line.contains(item))
+            .unwrap_or_else(|| panic!("missing {item}"));
+        let attribute = lines[..at]
+            .iter()
+            .rev()
+            .map(|line| line.trim())
+            .find(|line| !line.starts_with("///") && !line.starts_with("#[derive("));
+        assert_eq!(attribute, Some("#[cfg(test)]"), "{item}");
+    }
+    assert_eq!(core.matches("commit_boundary = Some(").count(), 1);
 }
 
 /// H1. The same owner survives a failed cleanup, its automatic budget and

@@ -93,6 +93,29 @@
 //!   adapter or a borrower from replacing or altering an owner's contents,
 //!   and custody cannot detect it.
 //!
+//! Commitment atomicity, verified at the primitive (R2A). The commitment
+//! primitive (`Shared::commit`) takes the admission gate once and, under that
+//! one guard, reads the closure that decides the outcome and records the
+//! commitment; every closure (`Shared::close`, behind `Control::cancel`,
+//! lease loss and fail-stop) takes the same gate. A fixture boundary,
+//! compiled only under `cfg(test)`, can pause one custody's commitment at
+//! its entry (holding nothing) or at its decision point (holding the gate,
+//! closure read, commitment not yet recorded). It is per custody, never set
+//! by `Custody::new`, installable only while nothing else holds the
+//! custody's shared state, and does nothing when absent; in a build without
+//! `cfg(test)` it does not exist. The boundary controls in `core.rs`
+//! (`commitment_boundary`) drive a real run to its last earlier
+//! acknowledgement and show, on that real path: a cancellation accepted at
+//! the entry fails the run; at the decision point the control side cannot
+//! take the gate (a non-blocking attempt finds it held), so a cancellation
+//! can only follow the commitment and is late. A commitment split into a
+//! read under one guard and a record under another fails them: the control
+//! side takes the gate in between, its cancellation is accepted and the
+//! outcome leaves it out. Limits: the boundary proves the primitive it
+//! instruments, at the two points it sits, which a source guard pins
+//! (`r16`); it does not enumerate other interleavings, and the barrier race
+//! (`r12`) remains supplementary.
+//!
 //! Integration obligations (none is met here):
 //!
 //! - Destruction: this module does not preserve owners when its enclosing

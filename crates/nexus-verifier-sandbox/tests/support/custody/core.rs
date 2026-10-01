@@ -398,6 +398,35 @@ struct Lease {
     last: Tick,
 }
 
+/// Fixture only: a rendezvous at one point of one custody's commitment
+/// primitive ([`Shared::commit`]). Reaching it, the commitment tells the
+/// fixture and waits, at most [`BOUNDARY_WATCHDOG`], for the fixture's
+/// release; it calls nothing else and hands nothing out. Never set by
+/// [`Custody::new`] (see `Custody::install_commit_boundary`).
+#[cfg(test)]
+struct CommitBoundary {
+    point: CommitPoint,
+    reached: std::sync::mpsc::SyncSender<CommitPoint>,
+    release: Mutex<std::sync::mpsc::Receiver<()>>,
+    /// The release did not come in time: a fixture failure, never evidence.
+    missed: std::sync::atomic::AtomicBool,
+}
+
+/// Fixture only: where a commitment boundary sits.
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommitPoint {
+    /// The commitment was called; it holds nothing yet.
+    Entry,
+    /// It holds the gate and has read the closure that decides its outcome;
+    /// the commitment is not recorded yet.
+    Decided,
+}
+
+/// Fixture only: how long a boundary waits for its release.
+#[cfg(test)]
+const BOUNDARY_WATCHDOG: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// The only state shared with the control side. Each lock guards one field,
 /// is taken alone, and is held only for a copy or an assignment.
 struct Shared {
@@ -407,6 +436,10 @@ struct Shared {
     lease: Mutex<Lease>,
     snapshot: Mutex<Arc<Snapshot>>,
     queue: Mutex<Option<Request>>,
+    /// Fixture only: the commitment primitive's boundary, if one was
+    /// installed before anything else held this state.
+    #[cfg(test)]
+    commit_boundary: Option<CommitBoundary>,
 }
 
 impl Shared {
@@ -435,14 +468,45 @@ impl Shared {
     /// The terminal commitment point, in the gate's own critical section (the
     /// one every closure takes): the closure made before it, if any, is part
     /// of the outcome it fixes, and none can be made after it. Made once.
+    /// The closure that decides the outcome is read, and the commitment
+    /// recorded, under one guard. (The fixture points, compiled for tests
+    /// only, do nothing unless a boundary was installed.)
     fn commit(&self, at: Tick) -> Option<Closure> {
+        #[cfg(test)]
+        self.reach(CommitPoint::Entry);
         let mut gate = lock(&self.gate);
+        let closure = gate.closure;
+        #[cfg(test)]
+        self.reach(CommitPoint::Decided);
         gate.committed.get_or_insert(Commitment { at });
-        gate.closure
+        closure
     }
 
     fn closure(&self) -> Option<Closure> {
         lock(&self.gate).closure
+    }
+
+    /// Fixture only: meet the fixture at `point` if this custody's boundary
+    /// sits there (tell it, then wait for its release, bounded); otherwise
+    /// nothing.
+    #[cfg(test)]
+    fn reach(&self, point: CommitPoint) {
+        let Some(boundary) = self
+            .commit_boundary
+            .as_ref()
+            .filter(|boundary| boundary.point == point)
+        else {
+            return;
+        };
+        let released = boundary.reached.send(point).is_ok()
+            && lock(&boundary.release)
+                .recv_timeout(BOUNDARY_WATCHDOG)
+                .is_ok();
+        if !released {
+            boundary
+                .missed
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+        }
     }
 }
 
@@ -1255,6 +1319,8 @@ impl<R: Resource> Custody<R> {
             }),
             snapshot: Mutex::new(Arc::new(blank_snapshot(generation, now, &config))),
             queue: Mutex::new(None),
+            #[cfg(test)]
+            commit_boundary: None,
         });
         let mut custody = Custody {
             config,
@@ -1322,6 +1388,21 @@ impl<R: Resource> Custody<R> {
     /// The last published snapshot (the same one the control side reads).
     pub fn snapshot(&self) -> Arc<Snapshot> {
         Arc::clone(&lock(&self.shared.snapshot))
+    }
+
+    /// Fixture only: install a commitment boundary, possible only while this
+    /// custody alone holds its shared state (no control handle exists), so it
+    /// can never be put into a custody the control side already uses. Refused
+    /// otherwise, with the boundary handed back.
+    #[cfg(test)]
+    fn install_commit_boundary(&mut self, boundary: CommitBoundary) -> Result<(), CommitBoundary> {
+        match Arc::get_mut(&mut self.shared) {
+            Some(shared) => {
+                shared.commit_boundary = Some(boundary);
+                Ok(())
+            }
+            None => Err(boundary),
+        }
     }
 
     /// Before the run starts: ask the validator about one prior incident.
@@ -3111,4 +3192,362 @@ fn request_digest(request: &Request) -> [u8; 32] {
     hasher.update(request.seq.to_be_bytes());
     hasher.update(format!("{:?}", request.op).as_bytes());
     hasher.finalize().into()
+}
+
+/// R2A: the terminal commitment's atomicity, at the primitive's own
+/// boundary. Each control drives a real run through the public API to its
+/// last earlier acknowledgement; that `acknowledge`, on the execution owner's
+/// thread, reaches `try_finalize` and [`Shared::commit`], where a boundary
+/// pauses it at one point while this thread, the control side, looks at the
+/// gate without blocking (`try_lock`) and cancels through the real
+/// [`Control::cancel`] (so [`Shared::close`]) only when it can take the gate:
+/// it never waits for what the commitment excludes. Channels order the two
+/// threads, every wait is bounded, and the commitment is always released and
+/// joined before anything is asserted. Nothing here imitates the commitment.
+#[cfg(test)]
+mod commitment_boundary {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::mpsc::{self, Receiver, Sender};
+    use std::sync::TryLockError;
+    use std::thread;
+
+    const GENERATION: Generation = Generation::new([0x5a; 16]);
+
+    /// These runs admit no native action, so no owner of this type exists.
+    struct Never;
+
+    impl Resource for Never {
+        fn kind(&self) -> SlotKind {
+            SlotKind::Process
+        }
+    }
+
+    struct NoCleanup;
+
+    impl Cleanup<Never> for NoCleanup {
+        fn attempt(&mut self, _owner: &mut Never, _entry: &EntryView) -> CleanupReport {
+            CleanupReport::NOTHING
+        }
+    }
+
+    /// The recorder stand-in: it keeps what it is given, in memory.
+    #[derive(Default)]
+    struct Journal(Vec<RecordIntent>);
+
+    impl RecordSink for Journal {
+        fn submit(&mut self, intent: &RecordIntent) {
+            self.0.push(intent.clone());
+        }
+    }
+
+    /// The gate as the control side found it at the boundary.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Found {
+        /// Held by the commitment: a cancellation could only have waited.
+        Held,
+        /// Free: the control side could take it, and cancelled.
+        Free,
+        Poisoned,
+        /// The commitment never reached its boundary.
+        NotReached,
+    }
+
+    /// A boundary at `point`, with the fixture's ends of its channels.
+    fn boundary_at(point: CommitPoint) -> (CommitBoundary, Receiver<CommitPoint>, Sender<()>) {
+        let (reached, reached_rx) = mpsc::sync_channel(1);
+        let (release, release_rx) = mpsc::channel();
+        let boundary = CommitBoundary {
+            point,
+            reached,
+            release: Mutex::new(release_rx),
+            missed: AtomicBool::new(false),
+        };
+        (boundary, reached_rx, release)
+    }
+
+    fn acknowledge(
+        custody: &mut Custody<Never>,
+        journal: &Journal,
+        index: usize,
+        at: u64,
+    ) -> AckOutcome {
+        custody.acknowledge(&RecordAck::of(&journal.0[index]), Tick(at))
+    }
+
+    /// What happened, in order, and what came of it.
+    struct Trace {
+        point: CommitPoint,
+        met: Option<CommitPoint>,
+        found: Found,
+        at_boundary: Option<CancelReceipt>,
+        acknowledged: AckOutcome,
+        missed: bool,
+        after: CancelReceipt,
+        terminal: Option<(u64, Verdict)>,
+        published: Verdict,
+        failures: Vec<FailureClass>,
+        admission: AdmissionView,
+    }
+
+    impl Trace {
+        fn describe(&self) -> String {
+            let at_boundary = match self.at_boundary {
+                Some(receipt) => format!("{receipt:?}"),
+                None => "not attempted (the gate was not free)".to_string(),
+            };
+            format!(
+                "1. execution owner: acknowledge(last earlier record) -> try_finalize -> \
+                 Shared::commit, boundary at {:?}, met: {:?}; 2. control side: \
+                 gate.try_lock() -> {:?}; 3. control side: cancel at the boundary -> \
+                 {at_boundary}; 4. control side: release; 5. execution owner: acknowledge \
+                 -> {:?} (release missed: {}); 6. control side: cancel after the \
+                 commitment -> {:?}; outcome: terminal record {:?}, published {:?}, \
+                 failures {:?}, admission {:?}",
+                self.point,
+                self.met,
+                self.found,
+                self.acknowledged,
+                self.missed,
+                self.after,
+                self.terminal,
+                self.published,
+                self.failures,
+                self.admission
+            )
+        }
+
+        /// The fixture did its part: the commitment met it where it was set,
+        /// the gate was observed, and the release came in time.
+        fn fixture_held(&self) -> bool {
+            self.met == Some(self.point)
+                && matches!(self.found, Found::Held | Found::Free)
+                && self.acknowledged == AckOutcome::Acknowledged
+                && !self.missed
+        }
+
+        /// Every accepted cancellation is in the committed outcome (the run
+        /// failed, the cancellation its one failure and the admission closure
+        /// its own); with none accepted, the run passed and nothing closed.
+        fn consistent(&self) -> bool {
+            let accepted = [self.at_boundary, Some(self.after)]
+                .into_iter()
+                .flatten()
+                .find_map(|receipt| match receipt {
+                    CancelReceipt::Accepted(closure) => Some(closure),
+                    CancelReceipt::AlreadyClosed(_) | CancelReceipt::Late(_) => None,
+                });
+            let verdict = self.terminal.map(|(_, verdict)| verdict);
+            match accepted {
+                Some(closure) => {
+                    verdict == Some(Verdict::Failed)
+                        && self.published == Verdict::Failed
+                        && self.failures == vec![FailureClass::Cancelled]
+                        && self.admission.closure == Some(closure)
+                }
+                None => {
+                    verdict == Some(Verdict::Passed)
+                        && self.published == Verdict::Passed
+                        && self.failures.is_empty()
+                        && self.admission.closure.is_none()
+                }
+            }
+        }
+
+        /// The cancellation after the commitment was late, naming it.
+        fn late_after(&self) -> bool {
+            matches!(self.after, CancelReceipt::Late(commitment)
+                if self.admission.committed == Some(commitment))
+        }
+    }
+
+    /// A run with its boundary at `point`, through its terminal commitment
+    /// and the acknowledgement of everything it recorded.
+    fn run(point: CommitPoint) -> Trace {
+        let (boundary, reached, release) = boundary_at(point);
+        let (mut custody, control) =
+            Custody::<Never>::new(Config::LIVE, GENERATION, Vec::new(), Tick(0))
+                .expect("a valid configuration");
+        drop(control);
+        assert!(
+            custody.install_commit_boundary(boundary).is_ok(),
+            "nothing else holds the shared state yet"
+        );
+        let control = custody.control();
+        let mut journal = Journal::default();
+        custody.start_run(Tick(1)).expect("the run starts");
+        custody
+            .flush_records(&mut journal, Tick(2))
+            .expect("the journal accepts every record");
+        assert_eq!(
+            acknowledge(&mut custody, &journal, 0, 3),
+            AckOutcome::Acknowledged
+        );
+        custody
+            .begin_case(CaseId(1), Expectation::Clean, Tick(4))
+            .expect("the case begins");
+        assert!(
+            custody
+                .end_case(&mut NoCleanup, Tick(5))
+                .expect("the case ends")
+                .passed
+        );
+        assert_eq!(custody.finish_run(Tick(6)), Ok(RunPhase::Candidate));
+        custody
+            .flush_records(&mut journal, Tick(7))
+            .expect("the journal accepts every record");
+        assert_eq!(
+            acknowledge(&mut custody, &journal, 1, 8),
+            AckOutcome::Acknowledged
+        );
+        assert_eq!(
+            journal.0.len(),
+            3,
+            "the run's start, its case's start and end"
+        );
+        assert_eq!(control.status().control.admission.committed, None);
+        let last = RecordAck::of(&journal.0[2]);
+
+        // 1. The last earlier acknowledgement, on the execution owner's thread.
+        let executor = thread::spawn(move || {
+            let acknowledged = custody.acknowledge(&last, Tick(9));
+            (custody, acknowledged)
+        });
+        // 2-4. The control side, at the boundary.
+        let met = reached.recv_timeout(BOUNDARY_WATCHDOG).ok();
+        let found = match met {
+            None => Found::NotReached,
+            Some(_) => match control.shared.gate.try_lock() {
+                Ok(_) => Found::Free,
+                Err(TryLockError::WouldBlock) => Found::Held,
+                Err(TryLockError::Poisoned(_)) => Found::Poisoned,
+            },
+        };
+        let at_boundary =
+            (found == Found::Free).then(|| control.cancel(CancelReason::Requested, Tick(10)));
+        let _ = release.send(());
+        // 5. The commitment, completed.
+        let (mut custody, acknowledged) = executor.join().expect("the execution owner");
+        let missed = control
+            .shared
+            .commit_boundary
+            .as_ref()
+            .is_some_and(|boundary| boundary.missed.load(Ordering::SeqCst));
+        // 6. A cancellation after it.
+        let after = control.cancel(CancelReason::Requested, Tick(11));
+        // The remaining evidence, acknowledged: the outcome as published.
+        custody
+            .flush_records(&mut journal, Tick(12))
+            .expect("the journal accepts every record");
+        for (index, at) in (3..journal.0.len()).zip(13..) {
+            assert_eq!(
+                acknowledge(&mut custody, &journal, index, at),
+                AckOutcome::Acknowledged
+            );
+        }
+        let snapshot = custody.snapshot();
+        Trace {
+            point,
+            met,
+            found,
+            at_boundary,
+            acknowledged,
+            missed,
+            after,
+            terminal: snapshot
+                .terminal
+                .map(|terminal| (terminal.record.seq(), terminal.verdict)),
+            published: snapshot.verdict,
+            failures: snapshot
+                .failures
+                .iter()
+                .map(|failure| failure.class)
+                .collect(),
+            admission: control.status().control.admission,
+        }
+    }
+
+    /// Cancellation first, at the latest instant: accepted at the
+    /// commitment's entry (`try_finalize` has decided to commit; the
+    /// primitive holds nothing yet), it is part of the committed outcome: the
+    /// run fails, and a later cancellation is late.
+    #[test]
+    fn r2a_cancellation_accepted_at_the_commitment_entry_fails_the_run() {
+        let trace = run(CommitPoint::Entry);
+        println!("{}", trace.describe());
+        assert!(
+            trace.fixture_held(),
+            "fixture failure: {}",
+            trace.describe()
+        );
+        assert!(
+            trace.found == Found::Free
+                && matches!(trace.at_boundary, Some(CancelReceipt::Accepted(_)))
+                && trace.consistent(),
+            "[cancel-first] an accepted cancellation is missing from the committed outcome: {}",
+            trace.describe()
+        );
+        assert!(trace.late_after(), "{}", trace.describe());
+    }
+
+    /// Commitment first, and exclusion at the boundary itself: while the
+    /// commitment holds the closure that decides its outcome, the control
+    /// side cannot take the gate, so its cancellation can only follow the
+    /// commitment: late, the outcome as committed (passed). A split
+    /// commitment that read the closure under one guard and recorded itself
+    /// under another would let that cancellation be accepted in between and
+    /// then leave it out of the outcome.
+    #[test]
+    fn r2a_commitment_excludes_cancellation_between_its_decision_and_its_record() {
+        let trace = run(CommitPoint::Decided);
+        println!("{}", trace.describe());
+        assert!(
+            trace.fixture_held(),
+            "fixture failure: {}",
+            trace.describe()
+        );
+        assert!(
+            trace.consistent(),
+            "[commit-atomic] an accepted cancellation is missing from the committed outcome: {}",
+            trace.describe()
+        );
+        assert_eq!(
+            trace.found,
+            Found::Held,
+            "[commit-excludes] the control side took the gate inside the commitment: {}",
+            trace.describe()
+        );
+        assert!(
+            trace.at_boundary.is_none()
+                && trace.late_after()
+                && trace.terminal.map(|(_, verdict)| verdict) == Some(Verdict::Passed),
+            "commitment first: {}",
+            trace.describe()
+        );
+    }
+
+    /// The boundary's activation: `Custody::new` installs none, and one can be
+    /// installed only while nothing else holds the custody's shared state.
+    #[test]
+    fn r2a_commit_boundary_installs_only_before_the_custody_is_shared() {
+        let (mut custody, control) =
+            Custody::<Never>::new(Config::LIVE, GENERATION, Vec::new(), Tick(0))
+                .expect("a valid configuration");
+        assert!(
+            control.shared.commit_boundary.is_none(),
+            "a custody from the public constructor has no boundary"
+        );
+        let clone = control.clone();
+        let (boundary, _reached, _release) = boundary_at(CommitPoint::Decided);
+        let boundary = custody
+            .install_commit_boundary(boundary)
+            .expect_err("refused while control handles exist");
+        drop(control);
+        let boundary = custody
+            .install_commit_boundary(boundary)
+            .expect_err("refused while any control handle exists");
+        drop(clone);
+        assert!(custody.install_commit_boundary(boundary).is_ok());
+        assert!(custody.control().shared.commit_boundary.is_some());
+    }
 }
