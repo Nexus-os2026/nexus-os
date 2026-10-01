@@ -161,9 +161,11 @@ jobs:
         run: cargo test -p nexus-verifier-sandbox --locked --lib
 
       # The checked cleanup observations the live suite and its step rely on,
-      # against fixtures only (no user manager is contacted, nothing is
-      # created outside the tests' temporary directories): a failed query or
-      # inspection is never "nothing left".
+      # the live harness's entry, and the live step's own script, against
+      # fixtures only (no user manager or bus daemon is contacted, no
+      # observation starts a process, nothing is created outside the tests'
+      # temporary directories): a failed observation or inspection is never
+      # "nothing left", and only no argument enters the suite.
       - name: Cleanup observation controls (fixtures only)
         shell: bash
         run: |
@@ -178,13 +180,32 @@ jobs:
           NEXUS_VERIFIER_TOOLCHAIN: packaged
         run: |
           set -o pipefail
+          # The cleanup observation is the live harness's own observation-only
+          # mode, built from this checkout by the suite's own cargo command:
+          # exactly one argument (no path, uid, bus or target) and no
+          # authority (it stops, kills, creates and removes nothing). Both of
+          # its observations (the loaded verifier scopes and the verification
+          # workspaces) always run; it fails if either cannot answer or finds
+          # anything.
+          observe_cleanup() {
+            cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox -- --cleanup-observation
+          }
+          # The gate: whatever is already loaded or present, or an observation
+          # that cannot answer, blocks the suite. Nothing is cleaned up and
+          # nothing is cleared.
+          preflight=0
+          observe_cleanup || preflight=$?
+          if (( preflight != 0 )); then
+            echo "::error::the cleanup observation found something left, or could not answer, before the live suite (cargo exit $preflight): the live suite was not run"
+            exit 1
+          fi
           # Every result is kept. Each command of the suite's pipeline keeps
           # its own status, taken at once (the next command replaces
-          # PIPESTATUS); the cleanup observations run whatever the suite
-          # reported (both of them, neither failure suppressing the other);
-          # and the step fails if the suite, the capture of its output, its
-          # passed-case count or an observation failed. A failed suite keeps
-          # its own exit status, whatever else failed.
+          # PIPESTATUS); the cleanup observation runs whatever the suite
+          # reported (both of its observations, neither failure suppressing
+          # the other); and the step fails if the suite, the capture of its
+          # output, its passed-case count or an observation failed. A failed
+          # suite keeps its own exit status, whatever else failed.
           if cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox 2>&1 | tee phase2-live.log; then
             statuses=("${PIPESTATUS[@]}")
           else
@@ -195,12 +216,15 @@ jobs:
           passed=0
           grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log || passed=$?
           observed=0
-          python3 scripts/ci/phase2_cleanup_check.py || observed=$?
+          observe_cleanup || observed=$?
           if (( captured != 0 )); then
             echo "::error::the live suite's output was not fully captured (tee exit $captured)"
           fi
           if (( passed != 0 )); then
             echo "::error::the live suite did not report 31 passed cases"
+          fi
+          if (( observed != 0 )); then
+            echo "::error::the cleanup observation found something left, or could not answer, after the live suite (cargo exit $observed)"
           fi
           if (( live != 0 )); then
             echo "::error::the live suite failed (cargo exit $live)"

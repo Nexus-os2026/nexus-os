@@ -551,12 +551,21 @@ fn item<'a>(source: &'a str, head: &str) -> &'a str {
     &rest[..rest.find("\n}\n").map_or(rest.len(), |end| end + 2)]
 }
 
+/// The item at `head` inside an inline module: from `head` to the closing
+/// brace at the module's own indentation.
+fn indented_item<'a>(source: &'a str, head: &str) -> &'a str {
+    let start = source.find(head).unwrap_or_else(|| panic!("{head}"));
+    let rest = &source[start..];
+    &rest[..rest.find("\n    }\n").map_or(rest.len(), |end| end + 6)]
+}
+
 #[test]
 fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
     let read = |path: &str| std::fs::read_to_string(repo().join(path)).unwrap();
-    // The live suite and its fixture controls share one checked scope
-    // observation; the suite queries nothing itself and never reads a failed
-    // query as "no scopes".
+    // The live suite and its fixture controls share one checked observation,
+    // made in their own process: it starts no process, reads no environment,
+    // subscribes to nothing and has no authority to stop, kill, create or
+    // remove anything.
     let support = code(&read(
         "crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs",
     ));
@@ -574,33 +583,235 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
             1
         );
     }
-    for needle in ["systemctl", "loaded_scopes() <", "loaded_scopes() >"] {
+    for needle in [
+        "Command",
+        "process::Child",
+        "process::Stdio",
+        "spawn",
+        "fork",
+        "exec",
+        "kill",
+        "waitid",
+        "waitpid",
+        "pidfd",
+        "systemctl",
+        "busctl",
+        "env::var",
+        "var_os",
+        "set_var",
+        "Builder::address",
+        "Builder::session",
+        "Builder::system",
+        "Connection::session",
+        "Connection::system",
+        "add_match",
+        "AddMatch",
+        "Subscribe",
+        "StopUnit",
+        "KillUnit",
+        "ResetFailed",
+        "remove_dir",
+        "remove_file",
+        "unlink",
+        "rmdir",
+        "set_permissions",
+        "create_dir",
+    ] {
+        assert!(!support.contains(needle), "{needle}");
+    }
+    // One bounded call to one method of the user manager, on the checked bus
+    // of this process's real uid, connected through the checked socket's own
+    // descriptor and authenticated as this process's own uid; the
+    // observation's runtime, and the connection with it, ends before the
+    // reply is judged.
+    for pin in [
+        "pub const OBSERVATION_TIMEOUT: Duration = Duration::from_secs(10);",
+        "pub const MANAGER: &str = \"org.freedesktop.systemd1\";",
+        "pub const MANAGER_PATH: &str = \"/org/freedesktop/systemd1\";",
+        "pub const MANAGER_INTERFACE: &str = \"org.freedesktop.systemd1.Manager\";",
+        "pub const LIST_UNITS: &str = \"ListUnitsByPatterns\";",
+        "pub const STATES: [&str; 0] = [];",
+        "pub const SCOPE_PATTERN: &str = \"nexus-verifier-*.scope\";",
+        "pub const PATTERNS: [&str; 1] = [SCOPE_PATTERN];",
+        "pub const REPLY_SIGNATURE: &str = \"a(ssssssouso)\";",
+        "pub const MAX_REPLY_BODY: usize = 64 * 1024;",
+        "pub const MAX_UNITS: usize = 256;",
+    ] {
+        assert_eq!(support.matches(pin).count(), 1, "{pin}");
+    }
+    assert!(indented_item(&support, "    impl Host<'static> {")
+        .contains("uid: unsafe { libc::getuid() },"));
+    let on = indented_item(&support, "    pub fn observe_scopes_on(");
+    assert!(on.contains(
+        "let deadline = deadline.min(Instant::now() + OBSERVATION_TIMEOUT);\n        \
+         let bus = user_bus(host)?;\n"
+    ));
+    assert!(on.contains(
+        "let scopes = list_scopes(move || tokio::net::UnixStream::connect(path), deadline);"
+    ));
+    let bus = indented_item(&support, "    pub fn user_bus(");
+    assert!(bus.contains("let (runtime, _) = runtime_dir(host, &Fs::real())?;"));
+    assert!(bus.contains("open_at(&runtime, \"bus\", libc::O_PATH)"));
+    assert!(bus.contains("st.st_mode & libc::S_IFMT != libc::S_IFSOCK || st.st_uid != host.uid"));
+    assert!(
+        support.contains("PathBuf::from(format!(\"/proc/self/fd/{}\", self.socket.as_raw_fd()))")
+    );
+    assert!(indented_item(&support, "    fn open_at(")
+        .contains("flags | libc::O_NOFOLLOW | libc::O_CLOEXEC,"));
+    let list = indented_item(&support, "    pub fn list_scopes<");
+    for needle in [
+        "zbus::connection::Builder::unix_stream(stream)\n                    \
+         .auth_mechanism(zbus::AuthMechanism::External)\n",
+        ".call_method(\n                        Some(MANAGER),\n                        \
+         MANAGER_PATH,\n                        Some(MANAGER_INTERFACE),\n                        \
+         LIST_UNITS,\n                        &(&STATES[..], &PATTERNS[..]),\n                    )",
+        "tokio::time::timeout_at(tokio::time::Instant::from_std(deadline), call).await",
+        "Err(_elapsed) => Err(ObservationError::Timeout),",
+        "Ok(Err(error)) => Err(error),",
+    ] {
+        assert!(list.contains(needle), "{needle}");
+    }
+    assert!(
+        list.find("drop(runtime);").unwrap()
+            < list
+                .find("Ok(Ok(reply)) => decode_scopes(&reply),")
+                .unwrap()
+    );
+    for (needle, count) in [
+        (".call_method(", 1),
+        ("timeout_at(", 1),
+        ("Builder::unix_stream(", 1),
+        (".auth_mechanism(", 1),
+    ] {
+        assert_eq!(support.matches(needle).count(), count, "{needle}");
+    }
+    // The reply: exactly the documented list, its body bounded before it is
+    // decoded, every unit a distinct verifier scope with bounded fields.
+    let decode = indented_item(&support, "    pub fn decode_scopes(");
+    let bounded = decode
+        .find("if body.len() > MAX_REPLY_BODY {")
+        .expect("the body bound");
+    let decoded = decode.find(".deserialize()").expect("the decoding");
+    assert!(bounded < decoded);
+    for needle in [
+        "if !reply.data().fds().is_empty() {",
+        "Some(signature) if signature.as_str() == REPLY_SIGNATURE => {}",
+        "if rows.len() > MAX_UNITS {",
+        "check_row(row)?;",
+        "if !scopes.insert(row.0.clone()) {",
+    ] {
+        assert!(decode.contains(needle), "{needle}");
+    }
+    // A wait gives every observation its caller's one deadline, and a failed
+    // observation ends it.
+    let wait = indented_item(&support, "    pub fn wait_for(");
+    assert!(wait.contains("mut observe: impl FnMut(Instant) -> Result<Scopes, ObservationError>,"));
+    assert!(wait.contains(
+        "let deadline = Instant::now() + within;\n        loop {\n            \
+         if done(&observe(deadline)?) {"
+    ));
+    // Workspaces: reached beneath the checked runtime directory without
+    // following a symlink, absent only as a missing final component of a
+    // runtime directory still there, checked before they are listed.
+    let workspaces = indented_item(&support, "    pub fn observe_workspaces_with(");
+    for needle in [
+        "let (runtime, runtime_st) = runtime_dir(host, fs)?;",
+        "Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {",
+        "if st.st_nlink == 0 {",
+        "|| st.st_dev != runtime_st.st_dev",
+    ] {
+        assert!(workspaces.contains(needle), "{needle}");
+    }
+    assert_eq!(workspaces.matches("Ok(Workspaces::Absent)").count(), 1);
+    // Both observations always run, a panic in one included; absence is
+    // reported as such, never as "never created".
+    let report = indented_item(&support, "    pub fn report_cleanup(");
+    assert!(report.contains(
+        "let scopes = contained(scopes, Err(ObservationError::Panicked));\n        \
+         let workspaces = contained(workspaces, Err(ObservationError::Panicked));"
+    ));
+    assert!(report.contains("absent at observation time"));
+    assert!(!support.contains("never created"));
+    let mode = indented_item(&support, "    pub fn cleanup_observation_mode(");
+    assert!(mode.contains("let host = Host::real();"));
+    assert!(
+        mode.contains("report_cleanup(observe_scopes, || observe_workspaces(&host), &mut |line| {")
+    );
+
+    // The entry: the arguments alone choose, before anything else happens;
+    // only no argument at all enters the suite, exactly
+    // `--cleanup-observation` the observation, and anything else is refused.
+    let dispatch = item(&support, "pub fn dispatch<E: Entry>(");
+    for needle in [
+        "return entry.refuse(Refusal::NoProgram);",
+        "return entry.refuse(Refusal::NotUtf8);",
+        "let Some(first) = rest.first() else {\n        return entry.suite();\n    };",
+        "if rest.len() != 1 {",
+        "None => entry.refuse(Refusal::Unknown(first.clone())),",
+    ] {
+        assert!(dispatch.contains(needle), "{needle}");
+    }
+    assert_eq!(dispatch.matches("entry.suite()").count(), 1);
+    assert_eq!(dispatch.matches("entry.cleanup_observation()").count(), 1);
+    assert!(harness.contains(
+        "fn main() -> ExitCode {\n    let args: Vec<OsString> = std::env::args_os().collect();\n    \
+         cleanup_observation::dispatch(&args, true, &mut live::Live)\n}"
+    ));
+    assert!(harness.contains("cleanup_observation::dispatch(&args, false, &mut Unsupported)"));
+    for needle in ["std::env::args()", "_ => suite()", "pub fn main()"] {
+        assert!(!harness.contains(needle), "{needle}");
+    }
+    let live = indented_item(
+        &harness,
+        "    impl crate::cleanup_observation::Entry for Live {",
+    );
+    assert!(live.contains(
+        "fn cleanup_observation(&mut self) -> Self::Exit {\n            \
+         crate::cleanup_observation::cleanup_observation_mode()\n"
+    ));
+    assert_eq!(harness.matches("suite();").count(), 1);
+    let unsupported = item(
+        &harness,
+        "impl cleanup_observation::Entry for Unsupported {",
+    );
+    assert!(!unsupported.contains("cleanup_observation_mode"));
+    assert_eq!(unsupported.matches("ExitCode::SUCCESS").count(), 1);
+
+    // The suite queries nothing itself and never reads a failed observation
+    // as "no scopes": each use is checked before anything is owned, checked
+    // by a wait (on its caller's one deadline) that ends at a failed
+    // observation, or the retained boundary's evidence.
+    for needle in [
+        "systemctl",
+        "reported(",
+        "loaded_scopes() <",
+        "loaded_scopes() >",
+    ] {
         assert!(!harness.contains(needle), "{needle}");
     }
     assert!(harness.contains(
         "pub fn loaded_scopes() -> Result<Scopes, ObservationError> {\n            \
          cleanup_observation::observe_scopes()\n"
     ));
-    // Each use: checked before anything is owned, checked by a wait that
-    // ends at a failed observation, or the retained boundary's evidence. A
-    // failure is reported only through `reported`, which first ends a query
-    // it still owns.
+    assert!(harness.contains(
+        "pub fn loaded_scopes_by(deadline: Instant) -> Result<Scopes, ObservationError> {\n            \
+         cleanup_observation::observe_scopes_by(deadline)\n"
+    ));
     assert_eq!(harness.matches("loaded_scopes()").count(), 4);
     assert_eq!(
+        harness.matches(".unwrap_or_else(|error| panic!(").count(),
+        2
+    );
+    assert_eq!(
         harness
-            .matches("loaded_scopes()\n                .unwrap_or_else(")
+            .matches("wait_for(Duration::from_secs(10), loaded_scopes_by, |now| {")
             .count(),
         2
     );
     assert_eq!(
         harness
-            .matches("wait_for(Duration::from_secs(10), loaded_scopes, |now| {")
+            .matches("loaded_scopes().map_err(|error| error.to_string())")
             .count(),
-        2
-    );
-    assert_eq!(harness.matches("reported(error)").count(), 4);
-    assert_eq!(
-        harness.matches("loaded_scopes().map_err(reported)").count(),
         1
     );
     // A retry's result keeps its owner: the harness never turns a retry into
@@ -668,57 +879,14 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
         release.find("releasing the unconfirmed owner").unwrap()
             < release.find("drop(owner);").unwrap()
     );
-    // The query: this uid's checked bus, an environment of exactly that bus
-    // and fixed output settings, bounded, its exit status checked first.
-    assert!(item(&support, "pub fn observe_scopes()").contains(
-        "let bus = user_bus(&Host::real())?;\n    \
-         observe(&scope_query(systemctl()?, &[], &bus)?)\n"
-    ));
-    assert!(item(&support, "impl Host<'static>").contains("uid: unsafe { libc::getuid() },"));
-    let observe = item(&support, "pub fn observe(");
-    assert!(
-        observe.find("if !answer.status.success() {").unwrap()
-            < observe.find("parse_scopes(&answer.stdout)").unwrap()
-    );
-    assert_eq!(support.matches("DBUS_SESSION_BUS_ADDRESS").count(), 1);
-    assert!(!support.contains("XDG_RUNTIME_DIR"));
-    assert!(!support.contains("env::var("));
-    assert_eq!(support.matches("var_os(").count(), 1);
-    assert!(support.contains("std::env::var_os(\"PATH\")"));
-    // The query's processes stay owned until they are ended: its group is
-    // ended, while the leader's unreaped exit anchors the group id and the
-    // output is still open, on every path; an answer comes only with that
-    // confirmed, and the group is never signalled once the anchor is gone.
-    let run = item(&support, "pub fn run(");
-    for needle in [".env_clear()", ".process_group(0)"] {
-        assert!(run.contains(needle), "{needle}");
-    }
-    let waited = run
-        .find("exit_by(&owned, deadline)")
-        .expect("the leader's exit, unreaped");
-    let finalized = run
-        .find("let finalized = owned.finalize();")
-        .expect("the group ended");
-    let released = run.find("drop(pipes);").expect("the output released");
-    assert!(waited < finalized && finalized < released);
-    assert!(run.contains("(Ok(answer), Ok(status)) => Ok(Answer { status, ..answer }),"));
-    assert_eq!(run.matches("Ok(Answer").count(), 2);
-    let finalize = item(&support, "impl OwnedQuery {");
-    let anchored = finalize.find("if !self.anchored {").expect("the anchor");
-    let signalled = finalize
-        .find("(self.ops.signal_group)(self.group)")
-        .expect("the group signalled");
-    let reaped = finalize
-        .find("(self.ops.reap)(")
-        .expect("the leader reaped");
-    assert!(anchored < signalled && signalled < reaped);
-    assert!(item(&support, "impl Drop for OwnedQuery {").contains("if self.anchored {"));
-    assert!(item(&support, "fn leader_exited(").contains("libc::WNOWAIT"));
 
-    // The workflow observes only through its checked observations, after
-    // running their fixture controls, and keeps every result of the live
-    // step: the suite's own status and its output capture's (each taken from
-    // the pipeline at once), its exact passed count and both observations.
+    // The workflow observes only through the live harness's observation-only
+    // mode of this checkout: after running the fixture controls, a gate
+    // before the live suite (an observation that cannot answer, or anything
+    // found, blocks it, and nothing is cleaned up), then the suite with every
+    // result kept (its own status and its output capture's, each taken from
+    // the pipeline at once, its exact passed count) and the observation after
+    // it. The Python runtime checker is gone.
     let workflow = read(".github/workflows/ci-phase2-linux-sandbox.yml");
     for needle in [
         "systemctl",
@@ -727,6 +895,8 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
         "|| true",
         "|| live=",
         "continue-on-error",
+        "always()",
+        "scripts/ci/phase2_cleanup_check.py",
     ] {
         assert!(!workflow.contains(needle), "{needle}");
     }
@@ -735,6 +905,7 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
         .expect("the live step")..];
     let live = &live[..live.find("\n      - name: ").expect("the next step")];
     assert!(!live.contains("2>/dev/null"), "{live}");
+    assert!(!live.contains("python3"), "{live}");
     let mut at = 0;
     for line in [
         "- name: Cleanup observation controls (fixtures only)\n",
@@ -742,6 +913,16 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
         "python3 scripts/ci/test_phase2_cleanup_check.py\n",
         "- name: Live Phase Two isolation, escape and cleanup suite (every layer required)\n",
         "NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX: \"1\"\n",
+        "observe_cleanup() {\n",
+        "cargo test -p nexus-verifier-sandbox --locked --features development-toolchain \
+         --test phase2_live_sandbox -- --cleanup-observation\n",
+        "}\n",
+        "preflight=0\n",
+        "observe_cleanup || preflight=$?\n",
+        "if (( preflight != 0 )); then\n",
+        "the live suite was not run\"\n",
+        "exit 1\n",
+        "fi\n",
         "if cargo test -p nexus-verifier-sandbox --locked --features development-toolchain \
          --test phase2_live_sandbox 2>&1 | tee phase2-live.log; then\n",
         "statuses=(\"${PIPESTATUS[@]}\")\n",
@@ -753,9 +934,10 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
         "passed=0\n",
         "grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log || passed=$?\n",
         "observed=0\n",
-        "python3 scripts/ci/phase2_cleanup_check.py || observed=$?\n",
+        "observe_cleanup || observed=$?\n",
         "if (( captured != 0 )); then\n",
         "if (( passed != 0 )); then\n",
+        "if (( observed != 0 )); then\n",
         "if (( live != 0 )); then\n",
         "exit \"$live\"\n",
         "if (( captured != 0 || passed != 0 || observed != 0 )); then\n",
@@ -767,37 +949,22 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
             .unwrap_or_else(|| panic!("the workflow lacks, in order: {line}"));
         at += found + line.len();
     }
-    for script in ["phase2_cleanup_check.py", "test_phase2_cleanup_check.py"] {
-        assert_eq!(
-            workflow.matches(&format!("scripts/ci/{script}")).count(),
-            1,
-            "{script}"
-        );
-    }
-    let checker = read("scripts/ci/phase2_cleanup_check.py");
-    for needle in [
-        "    bus = user_bus(Host())\n    return observe(*scope_query([systemctl()], bus))\n",
-        "        self.uid = os.getuid() if uid is None else uid\n",
-        "            env=env,\n",
-        "    return 0 if check() else 1\n",
-        "os.WEXITED | os.WNOHANG | os.WNOWAIT",
+    for (needle, count) in [
+        ("--cleanup-observation", 1),
+        ("observe_cleanup", 3),
+        ("scripts/ci/test_phase2_cleanup_check.py", 1),
     ] {
-        assert!(checker.contains(needle), "{needle}");
+        assert_eq!(workflow.matches(needle).count(), count, "{needle}");
     }
-    let ended = checker
-        .find("        first = _attempt(query, time.monotonic() + timeout, limit)\n")
-        .expect("the attempt");
-    let confirmed = checker
-        .find("            status = query.finalize()\n")
-        .expect("the group ended");
-    assert!(ended < confirmed);
-    assert!(
-        checker
-            .find("        self.ops.signal_group(self.group)\n")
-            .unwrap()
-            < checker.find("            status = self.ops.reap(").unwrap()
-    );
-    assert_eq!(checker.matches("{_reportable(error)}").count(), 2);
-    assert_eq!(checker.matches("os.environ").count(), 1);
-    assert_eq!(checker.matches("except FileNotFoundError:").count(), 1);
+    assert!(!repo().join("scripts/ci/phase2_cleanup_check.py").exists());
+    // Its step's own script is what the Python controls run, with stand-ins:
+    // no runtime observer is left in Python.
+    let steps = read("scripts/ci/test_phase2_cleanup_check.py");
+    assert!(steps.contains(
+        "LIVE_STEP = \"      - name: Live Phase Two isolation, escape and cleanup suite \
+         (every layer required)\""
+    ));
+    for needle in ["import phase2_cleanup_check", "os.waitid", "killpg", "dbus"] {
+        assert!(!steps.contains(needle), "{needle}");
+    }
 }

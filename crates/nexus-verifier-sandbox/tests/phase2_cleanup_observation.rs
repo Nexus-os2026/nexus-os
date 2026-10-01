@@ -1,18 +1,24 @@
-//! P2-V1-R1/R2 fixture controls for the live suite's checked cleanup
-//! observations (`support/cleanup_observation.rs`): a failed, unbounded,
-//! redirected or malformed query is never "no scopes"; a query's process
-//! group is ended before any answer, and a group that cannot be confirmed
-//! ended stays owned; a retained boundary's owner survives every failed
-//! cleanup attempt, and no failure hides another.
+//! P2-V1-R1 to R3A fixture controls for the live harness's entry and its
+//! checked cleanup observations (`support/cleanup_observation.rs`): the
+//! observation is one bounded call in this process, never a subprocess; a
+//! failed, refused, timed-out, oversized or malformed observation is never "no
+//! scopes"; a workspace inspection that cannot answer is never "none"; both
+//! observations always run; the arguments alone choose the entry, and only no
+//! argument enters the suite; a retained boundary's owner survives every
+//! failed cleanup attempt, and no failure hides another.
 //!
-//! These are not live evidence. No user manager is contacted and no unit,
-//! scope or cgroup is created: the stand-in queries are `/bin/sh` scripts
-//! this test owns, the runtime directories are fixture trees under the
-//! temporary directory (in which this test's uid stands in for root), and a
-//! retained boundary is stood in for by an owner whose drop is witnessed.
-//! Stand-ins that leave a process behind report it over a FIFO and wait
-//! until this test holds it by pidfd: the test's own cleanup ends it, and
-//! reaps what is this process's child, whatever the observer did.
+//! These are not live evidence. No user manager or bus daemon is contacted,
+//! no process is started by an observation, and no unit, scope or cgroup is
+//! created. The bus is a fixture peer this test owns at the other end of a
+//! socket pair (or of a listening socket in a fixture runtime directory),
+//! served by one thread that is always joined. The peer scripts the bus side
+//! of the conversation (the EXTERNAL handshake's replies, Hello's answer and
+//! the call's answer) with zbus's own message parser and builder, and records
+//! every message the observer sent, so the request itself is checked.
+//! Runtime directories are fixture trees under the temporary directory (in
+//! which this test's uid stands in for root); failures this host's
+//! permissions cannot produce deterministically are injected. The entry is
+//! proved with stand-in entries only: the real suite never runs here.
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[path = "support/cleanup_observation.rs"]
@@ -21,29 +27,38 @@ mod cleanup_observation;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod controls {
     use super::cleanup_observation::*;
-    use std::cell::Cell;
-    use std::collections::BTreeMap;
-    use std::ffi::CString;
-    use std::fs::{self, File, OpenOptions};
-    use std::io::{self, Read};
-    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
-    use std::os::unix::ffi::OsStrExt;
-    use std::os::unix::fs::{symlink, OpenOptionsExt, PermissionsExt};
-    use std::os::unix::net::UnixListener;
-    use std::os::unix::process::ExitStatusExt;
+    use std::cell::{Cell, RefCell};
+    use std::ffi::{CString, OsString};
+    use std::fs;
+    use std::io::{self, Read, Write};
+    use std::os::fd::{AsRawFd, OwnedFd};
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
+    use std::os::unix::net::{UnixListener, UnixStream};
     use std::path::{Path, PathBuf};
-    use std::process::{Command, ExitStatus};
+    use std::process::Command;
     use std::rc::Rc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::thread::JoinHandle;
     use std::time::{Duration, Instant};
+    use zbus::message::Type;
+    use zbus::zvariant::serialized::{Context, Data};
+    use zbus::zvariant::{DynamicType, Endian, OwnedObjectPath};
+    use zbus::Message;
 
-    /// A bus address no stand-in ever connects to.
-    const BUS: &str = "/nonexistent/nexus-p2v1r1/run/user/4242/bus";
-    const AMBIENT_CHILD: &str = "NEXUS_P2V1R1_AMBIENT_CHILD";
+    const AMBIENT_CHILD: &str = "NEXUS_P2V1R3A_AMBIENT_CHILD";
+    /// Bound on every wait of a fixture peer: it never hangs a test.
+    const PEER_TIMEOUT: Duration = Duration::from_secs(20);
+    const GUID: &str = "0123456789abcdef0123456789abcdef";
 
     fn uid() -> u32 {
         // SAFETY: getuid has no preconditions.
         unsafe { libc::getuid() }
+    }
+
+    fn euid() -> u32 {
+        // SAFETY: geteuid has no preconditions.
+        unsafe { libc::geteuid() }
     }
 
     fn mode(path: &Path, mode: u32) {
@@ -57,7 +72,7 @@ mod controls {
         fn new(tag: &str) -> Self {
             static NEXT: AtomicUsize = AtomicUsize::new(0);
             let root = std::env::temp_dir().join(format!(
-                "p2v1r1-{tag}-{}-{}",
+                "p2v1r3a-{tag}-{}-{}",
                 std::process::id(),
                 NEXT.fetch_add(1, Ordering::SeqCst)
             ));
@@ -66,8 +81,8 @@ mod controls {
             Root(root)
         }
 
-        /// `run/user/<uid>` as a host has it: `run` and `run/user` 0755,
-        /// the runtime directory 0700 holding a listening bus socket.
+        /// `run/user/<uid>` as a host has it: `run` and `run/user` 0755, the
+        /// runtime directory 0700 holding a listening bus socket.
         fn runtime(&self, uid: u32) -> (PathBuf, UnixListener) {
             let user = self.0.join("run/user");
             fs::create_dir_all(&user).unwrap();
@@ -97,692 +112,688 @@ mod controls {
         }
     }
 
-    /// The scope query, answered by `script` (run by `/bin/sh` with the
-    /// query's own arguments after it) instead of systemctl.
-    fn stand_in(script: &str) -> Query {
-        scope_query(
-            PathBuf::from("/bin/sh"),
-            &["-c", script, "systemctl"],
-            Path::new(BUS),
-        )
-        .unwrap()
+    /// The peer's answer to the listing call, built from the call itself.
+    type Reply = Box<dyn FnOnce(&Message) -> Message + Send>;
+
+    fn answer_rows(rows: Vec<UnitRow>) -> Option<Reply> {
+        Some(Box::new(move |call: &Message| {
+            Message::method_reply(call).unwrap().build(&rows).unwrap()
+        }))
     }
 
-    fn killed(status: ExitStatus) -> bool {
-        status.signal() == Some(libc::SIGKILL)
+    fn answer_body<B>(body: B) -> Option<Reply>
+    where
+        B: serde::Serialize + DynamicType + Send + 'static,
+    {
+        Some(Box::new(move |call: &Message| {
+            Message::method_reply(call).unwrap().build(&body).unwrap()
+        }))
     }
 
-    /// The environment a stand-in started with, from its own
-    /// `/proc/<pid>/environ`.
-    fn started_with(query: &Query) -> BTreeMap<String, String> {
-        let probe = Query {
-            program: query.program.clone(),
-            args: ["-c", "/bin/cat /proc/$$/environ"]
-                .iter()
-                .map(Into::into)
-                .collect(),
-            env: query.env.clone(),
-            timeout: query.timeout,
-            output_limit: query.output_limit,
-            ops: query.ops,
+    fn answer_error(name: &'static str, text: String) -> Option<Reply> {
+        Some(Box::new(move |call: &Message| {
+            Message::method_error(call, name)
+                .unwrap()
+                .build(&text)
+                .unwrap()
+        }))
+    }
+
+    /// How the fixture peer conducts the bus side of the handshake.
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    enum Handshake {
+        /// Accept EXTERNAL and answer Hello.
+        Accept,
+        /// Refuse every authentication.
+        Reject,
+        /// Never answer the authentication.
+        Silent,
+        /// Answer Hello with an error.
+        FailHello,
+        /// Close the connection once Hello is answered.
+        CloseAfterHello,
+    }
+
+    /// A message the observer sent, as the peer saw it.
+    #[derive(Debug, PartialEq)]
+    struct Sent {
+        kind: Type,
+        destination: Option<String>,
+        path: Option<String>,
+        interface: Option<String>,
+        member: Option<String>,
+        signature: Option<String>,
+        /// The arguments of an `asas` body.
+        arguments: Option<(Vec<String>, Vec<String>)>,
+        fds: usize,
+    }
+
+    impl Sent {
+        fn of(message: &Message) -> Self {
+            let header = message.header();
+            let body = message.body();
+            let signature = body.signature().map(|s| s.as_str().to_string());
+            let arguments = (signature.as_deref() == Some("asas"))
+                .then(|| body.deserialize::<(Vec<String>, Vec<String>)>().ok())
+                .flatten();
+            Sent {
+                kind: message.message_type(),
+                destination: header.destination().map(|name| name.to_string()),
+                path: header.path().map(|path| path.to_string()),
+                interface: header.interface().map(|name| name.to_string()),
+                member: header.member().map(|name| name.to_string()),
+                signature,
+                arguments,
+                fds: message.data().fds().len(),
+            }
+        }
+    }
+
+    /// What the fixture peer saw of one observation.
+    #[derive(Debug, Default)]
+    struct Seen {
+        /// The authentication command, its leading NUL aside.
+        auth: String,
+        /// Every message the observer sent, Hello first.
+        messages: Vec<Sent>,
+        /// The observer closed its end: the end of the conversation, read.
+        closed: bool,
+    }
+
+    fn read_exact_or_end(stream: &mut UnixStream, buffer: &mut [u8]) -> io::Result<bool> {
+        let mut read = 0;
+        while read < buffer.len() {
+            match stream.read(&mut buffer[read..])? {
+                0 if read == 0 => return Ok(false),
+                0 => return Err(io::Error::other("the observer closed mid-message")),
+                n => read += n,
+            }
+        }
+        Ok(true)
+    }
+
+    /// One handshake line, read byte by byte (nothing of a message that may
+    /// follow it is consumed).
+    fn read_line(stream: &mut UnixStream) -> io::Result<String> {
+        let mut line = Vec::new();
+        let mut byte = [0u8; 1];
+        while !line.ends_with(b"\r\n") {
+            if !read_exact_or_end(stream, &mut byte)? {
+                return Err(io::Error::other("the observer closed mid-handshake"));
+            }
+            line.push(byte[0]);
+            if line.len() > 4096 {
+                return Err(io::Error::other("a handshake line too long"));
+            }
+        }
+        line.truncate(line.len() - 2);
+        String::from_utf8(line).map_err(io::Error::other)
+    }
+
+    /// One whole message, framed by its primary header and parsed by zbus;
+    /// `None` at the end of the conversation.
+    fn read_message(stream: &mut UnixStream) -> io::Result<Option<Message>> {
+        let mut bytes = vec![0u8; 16];
+        if !read_exact_or_end(stream, &mut bytes)? {
+            return Ok(None);
+        }
+        let endian = match bytes[0] {
+            b'l' => Endian::Little,
+            b'B' => Endian::Big,
+            other => return Err(io::Error::other(format!("endianness {other}"))),
         };
-        let answer = run(&probe).unwrap();
-        assert!(answer.status.success(), "{answer:?}");
-        String::from_utf8(answer.stdout)
-            .unwrap()
-            .split('\0')
-            .filter(|entry| !entry.is_empty())
-            .map(|entry| {
-                let (key, value) = entry.split_once('=').unwrap();
-                (key.to_string(), value.to_string())
-            })
-            .collect()
-    }
-
-    fn expected_environment(bus: &str) -> BTreeMap<String, String> {
-        [
-            ("DBUS_SESSION_BUS_ADDRESS", format!("unix:path={bus}")),
-            ("LC_ALL", "C".to_string()),
-            ("SYSTEMD_COLORS", "0".to_string()),
-            ("SYSTEMD_URLIFY", "0".to_string()),
-        ]
-        .into_iter()
-        .map(|(key, value)| (key.to_string(), value))
-        .collect()
-    }
-
-    /// A FIFO at `dir/name`, for a stand-in's controlled communication.
-    fn fifo(dir: &Path, name: &str) -> PathBuf {
-        let path = dir.join(name);
-        let c_path = CString::new(path.as_os_str().as_bytes()).unwrap();
-        // SAFETY: a NUL-terminated path.
-        let made = unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) };
-        assert_eq!(made, 0, "mkfifo: {}", io::Error::last_os_error());
-        path
-    }
-
-    /// A process this test holds by pidfd: its own handle, which the
-    /// observer under test never shares, so the test's cleanup never depends
-    /// on that observer.
-    struct Held {
-        pid: libc::pid_t,
-        fd: OwnedFd,
-    }
-
-    impl Held {
-        fn open(pid: libc::pid_t) -> io::Result<Self> {
-            // SAFETY: pidfd_open takes a pid and no flags; it returns a new
-            // close-on-exec descriptor or -1.
-            let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0) };
-            let fd = RawFd::try_from(fd).map_err(|_| io::Error::other("pidfd_open"))?;
-            if fd < 0 {
-                return Err(io::Error::last_os_error());
+        let word = |at: usize| {
+            let word: [u8; 4] = bytes[at..at + 4].try_into().unwrap();
+            match endian {
+                Endian::Little => u32::from_le_bytes(word),
+                Endian::Big => u32::from_be_bytes(word),
             }
-            // SAFETY: a new descriptor, owned here.
-            Ok(Held {
-                pid,
-                fd: unsafe { OwnedFd::from_raw_fd(fd) },
-            })
+        };
+        let header = 16 + word(12) as usize;
+        let total = header.div_ceil(8) * 8 + word(4) as usize;
+        if total > 1024 * 1024 {
+            return Err(io::Error::other("a message too long for a fixture"));
         }
-
-        /// Whether the process has exited within `within`: its pidfd is
-        /// readable once it has. An exit, never a reap.
-        fn exited_within(&self, within: Duration) -> bool {
-            let mut polled = [libc::pollfd {
-                fd: self.fd.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            }];
-            let millis = i32::try_from(within.as_millis()).unwrap_or(i32::MAX);
-            // SAFETY: one initialized pollfd.
-            let ready = unsafe { libc::poll(polled.as_mut_ptr(), 1, millis) };
-            ready > 0 && polled[0].revents & libc::POLLIN != 0
+        bytes.resize(total, 0);
+        if !read_exact_or_end(stream, &mut bytes[16..])? {
+            return Err(io::Error::other("the observer closed mid-message"));
         }
-
-        /// Whether it is still this process's unreaped child: it was never
-        /// reaped, by anyone.
-        fn unreaped_child(&self) -> bool {
-            self.wait(libc::WEXITED | libc::WNOHANG | libc::WNOWAIT)
-        }
-
-        /// SIGKILL to exactly this process, through its pidfd.
-        fn kill(&self) {
-            // SAFETY: signals only the process the pidfd refers to.
-            unsafe {
-                libc::syscall(
-                    libc::SYS_pidfd_send_signal,
-                    self.fd.as_raw_fd(),
-                    libc::SIGKILL,
-                    std::ptr::null::<libc::siginfo_t>(),
-                    0,
-                )
-            };
-        }
-
-        /// Reap it, if it is still this process's child.
-        fn reap(&self) -> bool {
-            self.wait(libc::WEXITED)
-        }
-
-        fn wait(&self, options: libc::c_int) -> bool {
-            // SAFETY: siginfo_t is plain data; waitid fills it.
-            let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
-            let id = libc::id_t::try_from(self.fd.as_raw_fd()).unwrap_or(libc::id_t::MAX);
-            // SAFETY: waits only for the child the pidfd refers to.
-            unsafe { libc::waitid(libc::P_PIDFD, id, &mut info, options) == 0 }
-        }
+        // SAFETY: zbus parses and checks the message; it carries no
+        // descriptors.
+        let message =
+            unsafe { Message::from_bytes(Data::new(bytes, Context::new_dbus(endian, 0))) }
+                .map_err(io::Error::other)?;
+        Ok(Some(message))
     }
 
-    /// A stand-in query whose leader starts one descendant in its own
-    /// process group (every standard stream on /dev/null unless
-    /// `keep_output`, so it never holds the query's output), reports both
-    /// pids over a FIFO, waits until this test holds both by pidfd, then
-    /// exits with `status` without writing anything. Whatever the observer
-    /// does, dropping this ends what is left: the descendant through its
-    /// pidfd, and the leader, this process's child, reaped.
-    struct Survivor {
-        _root: Root,
-        script: String,
-        pids: PathBuf,
-        go: PathBuf,
-        held: Option<(Held, Held)>,
+    fn send(stream: &mut UnixStream, message: &Message) -> io::Result<()> {
+        stream.write_all(message.data())
     }
 
-    impl Survivor {
-        fn new(tag: &str, status: i32, keep_output: bool) -> Self {
-            let root = Root::new(tag);
-            let (pids, go) = (fifo(&root.0, "pids"), fifo(&root.0, "go"));
-            let redirect = if keep_output {
-                ""
-            } else {
-                " </dev/null >/dev/null 2>&1"
-            };
-            let script = format!(
-                "/bin/sleep 600{redirect} &\necho \"$$ $!\" > {}\nread go < {}\nexit {status}\n",
-                pids.display(),
-                go.display()
-            );
-            Survivor {
-                _root: root,
-                script,
-                pids,
-                go,
-                held: None,
+    /// The bus side of one observation over `stream`.
+    fn converse(
+        mut stream: UnixStream,
+        handshake: Handshake,
+        answer: Option<Reply>,
+    ) -> io::Result<Seen> {
+        stream.set_read_timeout(Some(PEER_TIMEOUT))?;
+        let mut seen = Seen::default();
+        let mut nul = [0u8; 1];
+        if !read_exact_or_end(&mut stream, &mut nul)? || nul[0] != 0 {
+            return Err(io::Error::other("no leading NUL"));
+        }
+        seen.auth = read_line(&mut stream)?;
+        match handshake {
+            Handshake::Silent => {}
+            Handshake::Reject => stream.write_all(b"REJECTED EXTERNAL\r\n")?,
+            _ => {
+                stream.write_all(format!("OK {GUID}\r\n").as_bytes())?;
+                loop {
+                    match read_line(&mut stream)?.as_str() {
+                        "NEGOTIATE_UNIX_FD" => stream.write_all(b"AGREE_UNIX_FD\r\n")?,
+                        "BEGIN" => break,
+                        other => return Err(io::Error::other(format!("handshake line {other:?}"))),
+                    }
+                }
+                let hello =
+                    read_message(&mut stream)?.ok_or_else(|| io::Error::other("no Hello"))?;
+                seen.messages.push(Sent::of(&hello));
+                if handshake == Handshake::FailHello {
+                    let refusal =
+                        Message::method_error(&hello, "org.freedesktop.DBus.Error.Failed")
+                            .map_err(io::Error::other)?
+                            .build(&"no")
+                            .map_err(io::Error::other)?;
+                    send(&mut stream, &refusal)?;
+                } else {
+                    let name = Message::method_reply(&hello)
+                        .map_err(io::Error::other)?
+                        .build(&":1.42")
+                        .map_err(io::Error::other)?;
+                    send(&mut stream, &name)?;
+                    if handshake == Handshake::CloseAfterHello {
+                        return Ok(seen);
+                    }
+                    if let Some(call) = read_message(&mut stream)? {
+                        seen.messages.push(Sent::of(&call));
+                        if let Some(reply) = answer {
+                            send(&mut stream, &reply(&call))?;
+                        }
+                    }
+                }
+            }
+        }
+        // Whatever else the observer sends is recorded; then its close.
+        let mut rest = Vec::new();
+        loop {
+            match stream.read_to_end(&mut rest) {
+                Ok(_) => break,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        if !rest.is_empty() && !seen.messages.is_empty() {
+            return Err(io::Error::other(format!(
+                "the observer sent {} more bytes",
+                rest.len()
+            )));
+        }
+        seen.closed = true;
+        Ok(seen)
+    }
+
+    /// A fixture bus peer, served by one thread that is always joined.
+    struct Peer {
+        thread: Option<JoinHandle<io::Result<Seen>>>,
+    }
+
+    impl Peer {
+        fn serve(stream: UnixStream, handshake: Handshake, answer: Option<Reply>) -> Self {
+            Peer {
+                thread: Some(std::thread::spawn(move || {
+                    converse(stream, handshake, answer)
+                })),
             }
         }
 
-        /// The stand-in query, observed while this test takes both of its
-        /// processes by pidfd: a handshake over the FIFOs, never a sleep.
-        fn observe(&mut self, query: &Query) -> Result<Scopes, ObservationError> {
-            let (pids, go) = (self.pids.clone(), self.go.clone());
-            let handshake = std::thread::spawn(move || -> io::Result<(Held, Held)> {
-                let mut line = String::new();
-                File::open(&pids)?.read_to_string(&mut line)?;
-                let ids: Vec<libc::pid_t> = line
-                    .split_whitespace()
-                    .filter_map(|id| id.parse().ok())
-                    .collect();
-                let &[leader, descendant] = ids.as_slice() else {
-                    return Err(io::Error::other(format!("pids {line:?}")));
-                };
-                // Both are alive here: the leader waits for `go`, the
-                // descendant sleeps.
-                let held = (Held::open(leader)?, Held::open(descendant)?);
-                fs::write(&go, b"go\n")?;
-                Ok(held)
-            });
-            let result = observe(query);
-            self.unblock();
-            match handshake.join() {
-                Ok(Ok(held)) => self.held = Some(held),
-                Ok(Err(error)) => panic!("the handshake failed: {error}; observed {result:?}"),
-                Err(_) => panic!("the handshake panicked; observed {result:?}"),
+        /// The first connection to `listener` within the peer timeout, if
+        /// any, then the conversation.
+        fn accept(listener: UnixListener, handshake: Handshake, answer: Option<Reply>) -> Self {
+            Peer {
+                thread: Some(std::thread::spawn(move || {
+                    let mut polled = [libc::pollfd {
+                        fd: listener.as_raw_fd(),
+                        events: libc::POLLIN,
+                        revents: 0,
+                    }];
+                    let millis = i32::try_from(PEER_TIMEOUT.as_millis()).unwrap();
+                    // SAFETY: one initialized pollfd.
+                    if unsafe { libc::poll(polled.as_mut_ptr(), 1, millis) } != 1 {
+                        return Err(io::Error::other("no connection"));
+                    }
+                    let (stream, _) = listener.accept()?;
+                    converse(stream, handshake, answer)
+                })),
             }
-            result
         }
 
-        /// Release a handshake still waiting on a FIFO the stand-in never
-        /// opened.
-        fn unblock(&self) {
-            let _ = OpenOptions::new()
-                .write(true)
-                .custom_flags(libc::O_NONBLOCK)
-                .open(&self.pids);
-            let _ = OpenOptions::new()
-                .read(true)
-                .custom_flags(libc::O_NONBLOCK)
-                .open(&self.go);
-        }
-
-        fn held(&self) -> (&Held, &Held) {
-            let (leader, descendant) = self.held.as_ref().expect("the handshake");
-            (leader, descendant)
+        fn seen(mut self) -> Seen {
+            self.thread
+                .take()
+                .unwrap()
+                .join()
+                .expect("the peer thread")
+                .expect("the peer's conversation")
         }
     }
 
-    impl Drop for Survivor {
+    impl Drop for Peer {
         fn drop(&mut self) {
-            self.unblock();
-            if let Some((leader, descendant)) = &self.held {
-                if !descendant.exited_within(Duration::ZERO) {
-                    descendant.kill();
-                    descendant.exited_within(Duration::from_secs(5));
-                }
-                if leader.unreaped_child() {
-                    leader.kill();
-                    leader.reap();
-                }
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
             }
         }
     }
 
-    #[test]
-    fn a_successful_empty_answer_is_no_scopes() {
-        assert_eq!(observe(&stand_in("exit 0")).unwrap(), Scopes::new());
-    }
-
-    #[test]
-    fn a_successful_answer_lists_each_loaded_verifier_scope() {
-        let answer = "nexus-verifier-0a1b.scope loaded active running Nexus verifier execution\n\
-                      \n\
-                      nexus-verifier-ff00.scope loaded inactive dead Nexus verifier execution\n";
-        let scopes = observe(&stand_in(&format!("printf '{answer}'"))).unwrap();
-        assert_eq!(
-            scopes.into_iter().collect::<Vec<_>>(),
-            ["nexus-verifier-0a1b.scope", "nexus-verifier-ff00.scope"]
-        );
-    }
-
-    #[test]
-    fn a_failed_query_with_empty_output_is_an_error_never_no_scopes() {
-        // A silent failure: nothing on either stream.
-        match observe(&stand_in("exit 4")) {
-            Err(ObservationError::Failed { status, .. }) => assert_eq!(status.code(), Some(4)),
-            other => panic!("a failed query is an error, never no scopes: {other:?}"),
-        }
-        // What systemctl --user does without a reachable user bus.
-        let unreachable = stand_in("echo 'Failed to connect to bus: No medium found' >&2; exit 1");
-        match observe(&unreachable) {
-            Err(ObservationError::Failed { status, stderr }) => {
-                assert_eq!(status.code(), Some(1));
-                assert!(stderr.contains("No medium found"), "{stderr}");
-            }
-            other => panic!("a failed query is an error, never no scopes: {other:?}"),
-        }
-    }
-
-    #[test]
-    fn a_successful_query_that_reports_diagnostics_is_an_error() {
-        let query = stand_in("echo 'warning: something is off' >&2; exit 0");
-        assert!(
-            matches!(observe(&query), Err(ObservationError::Diagnostics(text)) if text.contains("something is off"))
-        );
-    }
-
-    #[test]
-    fn a_missing_query_program_is_an_error() {
-        let query = scope_query(
-            PathBuf::from("/nonexistent/nexus-p2v1r1/systemctl"),
-            &[],
-            Path::new(BUS),
-        )
-        .unwrap();
-        assert!(
-            matches!(observe(&query), Err(ObservationError::Spawn(error)) if error.kind() == io::ErrorKind::NotFound)
-        );
-    }
-
-    #[test]
-    fn a_query_that_does_not_finish_is_ended_reaped_and_an_error() {
-        let mut query = stand_in("exec /bin/sleep 30");
-        query.timeout = Duration::from_millis(300);
+    /// One observation against a fixture peer at the other end of a socket
+    /// pair: its result, what the peer saw, and how long it took.
+    fn observe_with(
+        handshake: Handshake,
+        answer: Option<Reply>,
+        within: Duration,
+    ) -> (Result<Scopes, ObservationError>, Seen, Duration) {
+        let (ours, theirs) = UnixStream::pair().unwrap();
+        let peer = Peer::serve(theirs, handshake, answer);
         let started = Instant::now();
-        match observe(&query) {
-            Err(ObservationError::Stopped {
-                stop: Stop::Timeout,
-                status,
-            }) => assert!(killed(status), "ended and reaped: {status:?}"),
-            other => panic!("a query that does not finish is an error: {other:?}"),
-        }
-        assert!(started.elapsed() < Duration::from_secs(8));
-    }
-
-    #[test]
-    fn a_query_whose_output_stays_open_is_ended_with_its_process_group() {
-        // The leader exits, but the descendant it left keeps its output
-        // open: no answer is complete, and the bound still holds.
-        let mut survivor = Survivor::new("open-output", 0, true);
-        let mut query = stand_in(&survivor.script);
-        query.timeout = Duration::from_secs(3);
-        match survivor.observe(&query) {
-            Err(ObservationError::Stopped {
-                stop: Stop::Timeout,
-                status,
-            }) => assert!(status.success(), "the leader's own exit: {status:?}"),
-            other => panic!("an output held open is never an answer: {other:?}"),
-        }
-        let (leader, descendant) = survivor.held();
-        assert!(
-            descendant.exited_within(Duration::from_secs(5)),
-            "the query's process group was ended"
+        let result = list_scopes(
+            move || async move {
+                ours.set_nonblocking(true)?;
+                tokio::net::UnixStream::from_std(ours)
+            },
+            started + within,
         );
-        assert!(!leader.unreaped_child(), "the leader was reaped");
+        let took = started.elapsed();
+        (result, peer.seen(), took)
     }
 
-    #[test]
-    fn a_descendant_left_by_a_successful_query_is_ended_before_the_answer() {
-        // The leader exits 0 without output; its descendant, in its group,
-        // holds none of the query's output. Neither the end of the output
-        // nor the leader's exit ends the query.
-        let mut survivor = Survivor::new("survivor-ok", 0, false);
-        let query = stand_in(&survivor.script);
-        assert_eq!(survivor.observe(&query).unwrap(), Scopes::new());
-        let (leader, descendant) = survivor.held();
-        assert!(
-            descendant.exited_within(Duration::from_secs(5)),
-            "the query's process group was ended"
-        );
-        assert!(!leader.unreaped_child(), "the leader was reaped");
+    fn observe(answer: Option<Reply>) -> Result<Scopes, ObservationError> {
+        let (result, seen, _) = observe_with(Handshake::Accept, answer, Duration::from_secs(10));
+        assert!(seen.closed, "the observation released its connection");
+        result
     }
 
-    #[test]
-    fn a_descendant_left_by_a_failed_query_is_ended_with_it() {
-        let mut survivor = Survivor::new("survivor-failed", 3, false);
-        let query = stand_in(&survivor.script);
-        match survivor.observe(&query) {
-            Err(ObservationError::Failed { status, .. }) => assert_eq!(status.code(), Some(3)),
-            other => panic!("a failed query is an error: {other:?}"),
-        }
-        let (leader, descendant) = survivor.held();
-        assert!(descendant.exited_within(Duration::from_secs(5)));
-        assert!(!leader.unreaped_child());
+    fn row(name: &str) -> UnitRow {
+        (
+            name.to_string(),
+            "Nexus verifier execution".to_string(),
+            "loaded".to_string(),
+            "active".to_string(),
+            "running".to_string(),
+            String::new(),
+            OwnedObjectPath::try_from(
+                "/org/freedesktop/systemd1/unit/nexus_2dverifier_2d0a1b_2escope",
+            )
+            .unwrap(),
+            0,
+            String::new(),
+            OwnedObjectPath::try_from("/").unwrap(),
+        )
     }
 
-    #[test]
-    fn an_unreadable_query_is_ended_and_an_error() {
-        let mut survivor = Survivor::new("survivor-io", 0, false);
-        let mut query = stand_in(&survivor.script);
-        query.ops = Ops {
-            exited: |_| Err(io::Error::from_raw_os_error(libc::EIO)),
-            ..PROCESS
-        };
-        match survivor.observe(&query) {
-            Err(ObservationError::Stopped {
-                stop: Stop::Io(error),
-                ..
-            }) => assert_eq!(error.raw_os_error(), Some(libc::EIO)),
-            other => panic!("an unreadable query is an error: {other:?}"),
-        }
-        let (leader, descendant) = survivor.held();
-        assert!(descendant.exited_within(Duration::from_secs(5)));
-        assert!(!leader.unreaped_child());
+    fn scopes(names: &[&str]) -> Scopes {
+        names.iter().map(|name| name.to_string()).collect()
     }
 
-    #[test]
-    fn an_unconfirmed_group_end_keeps_the_query_owned_for_an_explicit_retry() {
-        let mut survivor = Survivor::new("survivor-unsignalled", 0, false);
-        let mut query = stand_in(&survivor.script);
-        query.ops = Ops {
-            signal_group: |_| Err(io::Error::from_raw_os_error(libc::EPERM)),
-            ..PROCESS
-        };
-        let result = survivor.observe(&query);
-        let Err(ObservationError::Unfinalized(unfinalized)) = result else {
-            panic!("never an answer while the group is not ended: {result:?}");
-        };
-        let Unfinalized {
-            query: owned,
-            first,
-            failure,
-        } = *unfinalized;
-        assert!(
-            matches!(&first, Ok(answer) if answer.status.success()),
-            "{first:?}"
-        );
-        assert_eq!(failure.raw_os_error(), Some(libc::EPERM));
-        let (leader, descendant) = survivor.held();
-        assert_eq!(owned.leader(), leader.pid.unsigned_abs());
-        assert!(leader.unreaped_child(), "still owned: the leader unreaped");
-        assert!(
-            !descendant.exited_within(Duration::ZERO),
-            "nothing ended the group"
-        );
-        // A later explicit retry, without the injected failure, ends it.
-        let status = owned
-            .with_ops(PROCESS)
-            .finalize()
-            .map_err(|(_, error)| error)
-            .unwrap();
-        assert!(status.success());
-        assert!(descendant.exited_within(Duration::from_secs(5)));
-        assert!(!leader.unreaped_child());
+    fn hex(text: &str) -> String {
+        text.bytes().map(|byte| format!("{byte:02x}")).collect()
     }
 
-    #[test]
-    fn an_unreaped_leader_keeps_the_query_owned_and_anchored() {
-        let mut survivor = Survivor::new("survivor-unreaped", 0, false);
-        let mut query = stand_in(&survivor.script);
-        query.ops = Ops {
-            reap: |_, _| Ok(None),
-            ..PROCESS
-        };
-        let result = survivor.observe(&query);
-        let Err(ObservationError::Unfinalized(unfinalized)) = result else {
-            panic!("never an answer while the leader is unreaped: {result:?}");
-        };
-        let Unfinalized { query: owned, .. } = *unfinalized;
-        let (leader, descendant) = survivor.held();
-        assert!(
-            descendant.exited_within(Duration::from_secs(5)),
-            "the group was signalled, anchored"
-        );
-        assert!(leader.unreaped_child(), "the anchor is kept");
-        let status = owned
-            .with_ops(PROCESS)
-            .finalize()
-            .map_err(|(_, error)| error)
-            .unwrap();
-        assert!(status.success());
-        assert!(!leader.unreaped_child());
-    }
-
-    static SIGNALLED: AtomicUsize = AtomicUsize::new(0);
-
-    /// The real group signal, counted (one control only uses it).
-    fn counted_signal(group: libc::pid_t) -> io::Result<()> {
-        SIGNALLED.fetch_add(1, Ordering::SeqCst);
-        (PROCESS.signal_group)(group)
-    }
-
-    #[test]
-    fn a_leader_in_an_unknown_state_is_never_signalled_again() {
-        let mut survivor = Survivor::new("survivor-unknown", 0, false);
-        let mut query = stand_in(&survivor.script);
-        query.ops = Ops {
-            signal_group: counted_signal,
-            reap: |_, _| Err(io::Error::from_raw_os_error(libc::ECHILD)),
-            ..PROCESS
-        };
-        let result = survivor.observe(&query);
-        let Err(ObservationError::Unfinalized(unfinalized)) = result else {
-            panic!("never an answer while the leader's state is unknown: {result:?}");
-        };
+    /// The exact request and nothing else: Hello, then the one listing call.
+    fn assert_the_listing_request(seen: &Seen) {
         assert_eq!(
-            SIGNALLED.load(Ordering::SeqCst),
-            1,
-            "signalled once, anchored"
+            seen.auth,
+            format!("AUTH EXTERNAL {}", hex(&euid().to_string()))
         );
-        let (leader, descendant) = survivor.held();
-        assert!(descendant.exited_within(Duration::from_secs(5)));
-        // Its reap failed, so the leader's state is unknown: neither a retry
-        // nor the drop signals that group id again.
-        let Unfinalized { query: owned, .. } = *unfinalized;
-        let Err((owned, error)) = owned.finalize() else {
-            panic!("a leader in an unknown state is never confirmed");
+        let hello = Sent {
+            kind: Type::MethodCall,
+            destination: Some("org.freedesktop.DBus".to_string()),
+            path: Some("/org/freedesktop/DBus".to_string()),
+            interface: Some("org.freedesktop.DBus".to_string()),
+            member: Some("Hello".to_string()),
+            signature: None,
+            arguments: None,
+            fds: 0,
         };
-        assert!(
-            error.to_string().contains("never signalled again"),
-            "{error}"
-        );
-        drop(owned);
-        assert_eq!(SIGNALLED.load(Ordering::SeqCst), 1);
-        // The leader is in fact still this process's child: the fixture's
-        // own cleanup reaps it.
-        assert!(leader.unreaped_child());
-    }
-
-    static REFUSED: AtomicUsize = AtomicUsize::new(0);
-
-    /// A group signal that always fails, counted (one control only uses it).
-    fn refused_signal(_: libc::pid_t) -> io::Result<()> {
-        REFUSED.fetch_add(1, Ordering::SeqCst);
-        Err(io::Error::from_raw_os_error(libc::EPERM))
+        let listing = Sent {
+            kind: Type::MethodCall,
+            destination: Some("org.freedesktop.systemd1".to_string()),
+            path: Some("/org/freedesktop/systemd1".to_string()),
+            interface: Some("org.freedesktop.systemd1.Manager".to_string()),
+            member: Some("ListUnitsByPatterns".to_string()),
+            signature: Some("asas".to_string()),
+            arguments: Some((Vec::new(), vec!["nexus-verifier-*.scope".to_string()])),
+            fds: 0,
+        };
+        assert_eq!(seen.messages, [hello, listing]);
     }
 
     #[test]
-    fn a_reported_unconfirmed_query_is_retried_then_released() {
-        let mut survivor = Survivor::new("survivor-released", 0, false);
-        let mut query = stand_in(&survivor.script);
-        query.ops = Ops {
-            signal_group: refused_signal,
-            ..PROCESS
-        };
-        let error = survivor.observe(&query).expect_err("never an answer");
-        let report = reported(error);
-        assert!(
-            report.contains("still not confirmed ended after 3 explicit attempts"),
-            "{report}"
+    fn the_request_is_exactly_the_managers_listing_of_verifier_scopes() {
+        let (result, seen, _) = observe_with(
+            Handshake::Accept,
+            answer_rows(Vec::new()),
+            Duration::from_secs(10),
         );
-        // The run's attempt, each explicit attempt, then the release's
-        // backstop, which still held the group's anchor.
-        assert_eq!(REFUSED.load(Ordering::SeqCst), 1 + EXPLICIT_ATTEMPTS + 1);
-        let (leader, descendant) = survivor.held();
-        assert!(!leader.unreaped_child(), "the release reaped the leader");
-        assert!(
-            !descendant.exited_within(Duration::ZERO),
-            "nothing could end the group: the fixture does"
+        assert_eq!(result.unwrap(), Scopes::new());
+        assert_the_listing_request(&seen);
+        assert!(seen.closed, "the connection was released with the answer");
+    }
+
+    #[test]
+    fn a_reply_lists_each_loaded_verifier_scope() {
+        let mut inactive = row("nexus-verifier-ff00.scope");
+        inactive.3 = "inactive".to_string();
+        inactive.4 = "dead".to_string();
+        let found = observe(answer_rows(vec![
+            row("nexus-verifier-0a1b.scope"),
+            inactive,
+        ]))
+        .unwrap();
+        assert_eq!(
+            found,
+            scopes(&["nexus-verifier-0a1b.scope", "nexus-verifier-ff00.scope"])
         );
     }
 
     #[test]
-    fn a_reported_query_is_finalized_again_explicitly() {
-        let mut survivor = Survivor::new("survivor-recovered", 0, false);
-        let mut query = stand_in(&survivor.script);
-        query.ops = Ops {
-            signal_group: |_| Err(io::Error::from_raw_os_error(libc::EPERM)),
-            ..PROCESS
-        };
-        let result = survivor.observe(&query);
-        let Err(ObservationError::Unfinalized(unfinalized)) = result else {
-            panic!("never an answer: {result:?}");
-        };
-        let Unfinalized {
-            query: owned,
-            first,
-            failure,
-        } = *unfinalized;
-        let error = ObservationError::Unfinalized(Box::new(Unfinalized {
-            query: owned.with_ops(PROCESS),
-            first,
-            failure,
-        }));
-        let report = reported(error);
-        assert!(
-            report.contains("confirmed ended only on explicit attempt 1"),
-            "{report}"
-        );
-        let (leader, descendant) = survivor.held();
-        assert!(descendant.exited_within(Duration::from_secs(5)));
-        assert!(!leader.unreaped_child());
-    }
-
-    #[test]
-    fn a_query_that_writes_too_much_is_ended_and_an_error() {
-        let line = "nexus-verifier-0a1b.scope loaded active running Nexus verifier execution";
-        for stream in ["", " >&2"] {
-            let mut query = stand_in(&format!(
-                "i=0; while [ $i -lt 64 ]; do echo '{line}'{stream}; i=$((i+1)); done; \
-                 exec /bin/sleep 30"
-            ));
-            query.output_limit = 1024;
-            match observe(&query) {
-                Err(ObservationError::Stopped {
-                    stop: Stop::OutputLimit,
-                    status,
-                }) => assert!(killed(status), "ended and reaped: {status:?}"),
-                other => panic!("too much output is an error{stream}: {other:?}"),
+    fn a_manager_error_is_an_error_never_no_scopes() {
+        let result = observe(answer_error(
+            "org.freedesktop.DBus.Error.AccessDenied",
+            "Access denied".to_string(),
+        ));
+        match result {
+            Err(ObservationError::Refused { name, message }) => {
+                assert_eq!(name, "org.freedesktop.DBus.Error.AccessDenied");
+                assert_eq!(message, "Access denied");
             }
+            other => panic!("a refused listing is an error, never no scopes: {other:?}"),
+        }
+        // Its diagnostic is bounded, whatever the manager wrote.
+        let result = observe(answer_error(
+            "org.freedesktop.DBus.Error.Failed",
+            format!("{}\n::error::injected", "x".repeat(10_000)),
+        ));
+        let shown = result.expect_err("an error").to_string();
+        assert!(
+            shown.chars().count() < 2 * MAX_DIAGNOSTIC,
+            "{}",
+            shown.len()
+        );
+        assert!(!shown.contains('\n'), "one line");
+    }
+
+    #[test]
+    fn a_failed_handshake_or_hello_is_an_error() {
+        for handshake in [Handshake::Reject, Handshake::FailHello] {
+            let (result, seen, took) =
+                observe_with(handshake, answer_rows(Vec::new()), Duration::from_secs(10));
+            assert!(
+                matches!(result, Err(ObservationError::Bus(_))),
+                "{handshake:?}: {result:?}"
+            );
+            assert!(took < Duration::from_secs(5), "{handshake:?}: at once");
+            assert!(seen.closed, "{handshake:?}: the connection was released");
         }
     }
 
     #[test]
-    fn a_malformed_answer_is_an_error() {
-        for answer in [
-            "garbage\\n",
-            "\\342\\227\\217 nexus-verifier-0a1b.scope loaded failed failed Nexus\\n",
-            "nexus-verifier-0a1b.scope\\n",
-            "nexus-verifier-0a1b.scope loaded active\\n",
-            "nexus-verifier-0a1b.scope Loaded active running Nexus\\n",
-            "nexus-verifier-0a1b.scope - active running Nexus\\n",
-            "other.scope loaded active running Other\\n",
-            "nexus-verifier-0a1b.service loaded active running Nexus\\n",
-            "nexus-verifier-.scope loaded active running Nexus\\n",
-            "nexus-verifier-0a1b.scope loaded active running A\\n\
-             nexus-verifier-0a1b.scope loaded active running A\\n",
-            "\\377\\n",
+    fn a_connection_closed_before_the_answer_is_an_error() {
+        let (result, seen, took) = observe_with(
+            Handshake::CloseAfterHello,
+            answer_rows(Vec::new()),
+            Duration::from_secs(10),
+        );
+        assert!(
+            matches!(result, Err(ObservationError::Bus(_))),
+            "{result:?}"
+        );
+        assert!(
+            took < Duration::from_secs(5),
+            "at once, not at the deadline"
+        );
+        assert_eq!(seen.messages.len(), 1, "Hello only");
+    }
+
+    #[test]
+    fn an_observation_that_does_not_finish_times_out_and_releases_its_connection() {
+        for (handshake, answer) in [
+            // Reaching and authenticating: the bus never answers.
+            (Handshake::Silent, answer_rows(Vec::new())),
+            // The call: the manager never answers.
+            (Handshake::Accept, None),
         ] {
-            let result = observe(&stand_in(&format!("printf '{answer}'")));
+            let within = Duration::from_millis(300);
+            let (result, seen, took) = observe_with(handshake, answer, within);
+            assert!(
+                matches!(result, Err(ObservationError::Timeout)),
+                "{handshake:?}: {result:?}"
+            );
+            assert!(
+                took >= within && took < Duration::from_secs(5),
+                "{handshake:?}: {took:?}"
+            );
+            assert!(seen.closed, "{handshake:?}: the connection was released");
+        }
+    }
+
+    #[test]
+    fn a_reply_of_another_shape_is_malformed() {
+        type Wider = (
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            OwnedObjectPath,
+            u32,
+            String,
+            OwnedObjectPath,
+        );
+        let (name, description, load, active, sub, following, path, job, kind, job_path) =
+            row("nexus-verifier-0a1b.scope");
+        let wider: Vec<Wider> = vec![(
+            name,
+            description,
+            load,
+            active,
+            sub,
+            following,
+            String::new(),
+            path,
+            job,
+            kind,
+            job_path,
+        )];
+        let answers: Vec<(&str, Option<Reply>)> = vec![
+            (
+                "names only",
+                answer_body(vec!["nexus-verifier-0a1b.scope".to_string()]),
+            ),
+            ("a wider record", answer_body(wider)),
+            ("no body", answer_body(())),
+            (
+                "the list and more",
+                answer_body((vec![row("nexus-verifier-0a1b.scope")], 1u32)),
+            ),
+            (
+                "undecodable records",
+                Some(Box::new(|call: &Message| {
+                    // SAFETY: deliberately not a valid body: an array that
+                    // claims 16 bytes and holds 3.
+                    unsafe {
+                        Message::method_reply(call)
+                            .unwrap()
+                            .build_raw_body(&[16, 0, 0, 0, 1, 2, 3], REPLY_SIGNATURE, Vec::new())
+                            .unwrap()
+                    }
+                })),
+            ),
+        ];
+        for (what, answer) in answers {
+            let result = observe(answer);
             assert!(
                 matches!(result, Err(ObservationError::Malformed(_))),
-                "{answer}: {result:?}"
+                "{what}: {result:?}"
             );
         }
     }
 
     #[test]
-    fn the_query_is_exactly_the_scope_listing_on_the_given_bus() {
-        let answer = run(&stand_in("printf '%s\\n' \"$@\"")).unwrap();
-        assert!(answer.status.success());
+    fn duplicate_or_out_of_pattern_units_are_malformed() {
+        let lists: Vec<(&str, Vec<UnitRow>)> = vec![
+            (
+                "listed twice",
+                vec![
+                    row("nexus-verifier-0a1b.scope"),
+                    row("nexus-verifier-0a1b.scope"),
+                ],
+            ),
+            ("another unit", vec![row("other.scope")]),
+            ("another type", vec![row("nexus-verifier-0a1b.service")]),
+            ("no name", vec![row("nexus-verifier-.scope")]),
+            ("a space", vec![row("nexus-verifier-0a 1b.scope")]),
+            ("not ASCII", vec![row("nexus-verifier-\u{e9}.scope")]),
+            ("a newline", vec![row("nexus-verifier-0a1b.scope\n")]),
+        ];
+        for (what, rows) in lists {
+            let result = observe(answer_rows(rows));
+            assert!(
+                matches!(result, Err(ObservationError::Malformed(_))),
+                "{what}: {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_bound_on_an_accepted_reply_is_enforced() {
+        let named = |n: usize| -> Vec<UnitRow> {
+            (0..n)
+                .map(|i| row(&format!("nexus-verifier-{i:04x}.scope")))
+                .collect()
+        };
         assert_eq!(
-            String::from_utf8(answer.stdout)
-                .unwrap()
-                .lines()
-                .collect::<Vec<_>>(),
-            [
-                "--user",
-                "--no-pager",
-                "--legend=no",
-                "--plain",
-                "--full",
-                "--all",
-                "list-units",
-                "nexus-verifier-*.scope"
-            ]
+            observe(answer_rows(named(MAX_UNITS))).unwrap().len(),
+            MAX_UNITS
         );
-        assert_eq!(started_with(&stand_in("")), expected_environment(BUS));
-        // A bus address is never built from a path that needs escaping.
-        for bus in [
-            "/run/user/1000/b us",
-            "/run/user/1000/bus;x",
-            "/run/user/1000/bus,guid=0",
+        let result = observe(answer_rows(named(MAX_UNITS + 1)));
+        assert!(
+            matches!(&result, Err(ObservationError::Malformed(why)) if why.contains("more than 256")),
+            "more than {MAX_UNITS} units are refused: {result:?}"
+        );
+        // A body over 64 KiB is refused before it is decoded, though every
+        // record in it is within its own bounds.
+        let long: Vec<UnitRow> = (0..80)
+            .map(|i| {
+                let mut unit = row(&format!("nexus-verifier-{i:04x}.scope"));
+                unit.1 = "d".repeat(MAX_TEXT);
+                unit
+            })
+            .collect();
+        let result = observe(answer_rows(long));
+        assert!(
+            matches!(&result, Err(ObservationError::Malformed(why)) if why.contains("more than 65536")),
+            "a body over {MAX_REPLY_BODY} bytes is refused before it is decoded: {result:?}"
+        );
+        let longest = format!("nexus-verifier-{}.scope", "a".repeat(MAX_NAME - 21));
+        assert_eq!(longest.len(), MAX_NAME);
+        assert_eq!(
+            observe(answer_rows(vec![row(&longest)])).unwrap(),
+            scopes(&[&longest])
+        );
+        let mut too_long = row(&format!(
+            "nexus-verifier-{}.scope",
+            "a".repeat(MAX_NAME - 20)
+        ));
+        let mut state = row("nexus-verifier-0a1b.scope");
+        state.3 = "a".repeat(MAX_STATE + 1);
+        let mut job = row("nexus-verifier-0a1b.scope");
+        job.8 = "Start".to_string();
+        let mut following = row("nexus-verifier-0a1b.scope");
+        following.5 = "a b".to_string();
+        let mut description = row("nexus-verifier-0a1b.scope");
+        description.1 = "d".repeat(MAX_TEXT + 1);
+        let mut unknown = row("nexus-verifier-0a1b.scope");
+        unknown.2 = String::new();
+        too_long.1 = "fits".to_string();
+        for (what, unit) in [
+            ("a name over 255 bytes", too_long),
+            ("a state over 64 bytes", state),
+            ("a job type not a state", job),
+            ("a following unit not a unit name", following),
+            ("a description over 1024 bytes", description),
+            ("an empty load state", unknown),
         ] {
-            assert!(matches!(
-                scope_query(PathBuf::from("/bin/sh"), &[], Path::new(bus)),
-                Err(ObservationError::Runtime(_))
-            ));
+            let result = observe(answer_rows(vec![unit]));
+            assert!(
+                matches!(result, Err(ObservationError::Malformed(_))),
+                "{what}: {result:?}"
+            );
         }
     }
 
     #[test]
-    fn poisoned_or_absent_ambient_bus_and_runtime_never_reach_the_query() {
-        if std::env::var_os(AMBIENT_CHILD).is_some() {
-            // Re-executed below, with that ambient environment.
-            assert_eq!(started_with(&stand_in("")), expected_environment(BUS));
-            return;
-        }
-        for poisoned in [true, false] {
-            let mut child = Command::new(std::env::current_exe().unwrap());
-            child
-                .args([
-                    "--exact",
-                    "controls::poisoned_or_absent_ambient_bus_and_runtime_never_reach_the_query",
-                    "--nocapture",
-                    "--test-threads=1",
-                ])
-                .env(AMBIENT_CHILD, "1");
-            if poisoned {
-                child
-                    .env(
-                        "DBUS_SESSION_BUS_ADDRESS",
-                        "unix:path=/nonexistent/poisoned/bus",
-                    )
-                    .env("XDG_RUNTIME_DIR", "/nonexistent/poisoned");
-            } else {
-                child
-                    .env_remove("DBUS_SESSION_BUS_ADDRESS")
-                    .env_remove("XDG_RUNTIME_DIR");
-            }
-            let output = child.output().unwrap();
-            let text = String::from_utf8_lossy(&output.stdout);
-            assert!(output.status.success(), "poisoned {poisoned}: {text}");
-            assert!(text.contains("1 passed"), "poisoned {poisoned}: {text}");
-        }
-    }
-
-    #[test]
-    fn the_bus_is_taken_only_from_a_checked_private_runtime_directory() {
+    fn the_bus_is_reached_only_through_the_checked_runtime_directory() {
         let root = Root::new("bus-ok");
-        let (runtime, _bus) = root.runtime(uid());
-        assert_eq!(
-            user_bus(&root.host(uid(), None)).unwrap(),
-            runtime.join("bus")
-        );
+        let (runtime, listener) = root.runtime(uid());
+        let socket = fs::symlink_metadata(runtime.join("bus")).unwrap();
+        let bus = user_bus(&root.host(uid(), None)).unwrap();
+        assert_eq!(bus.identity().unwrap(), (socket.dev(), socket.ino()));
         let magic = filesystem_type(&runtime).unwrap();
         assert!(user_bus(&root.host(uid(), Some(magic))).is_ok());
+        let peer = Peer::accept(
+            listener,
+            Handshake::Accept,
+            answer_rows(vec![row("nexus-verifier-0a1b.scope")]),
+        );
+        let found = observe_scopes_on(
+            &root.host(uid(), None),
+            Instant::now() + Duration::from_secs(10),
+        );
+        let seen = peer.seen();
+        assert_eq!(found.unwrap(), scopes(&["nexus-verifier-0a1b.scope"]));
+        assert_the_listing_request(&seen);
+        assert!(seen.closed);
+        // The caller's deadline bounds the whole observation.
+        let root = Root::new("bus-deadline");
+        let (_runtime, listener) = root.runtime(uid());
+        let peer = Peer::accept(listener, Handshake::Silent, None);
+        let started = Instant::now();
+        let result = observe_scopes_on(
+            &root.host(uid(), None),
+            started + Duration::from_millis(300),
+        );
+        assert!(
+            matches!(result, Err(ObservationError::Timeout)),
+            "{result:?}"
+        );
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(peer.seen().closed);
+    }
+
+    /// Whether anything connected to `listener` (without waiting).
+    fn connected(listener: &UnixListener) -> bool {
+        listener.set_nonblocking(true).unwrap();
+        match listener.accept() {
+            Ok(_) => true,
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => false,
+            Err(error) => panic!("{error}"),
+        }
     }
 
     #[test]
-    fn an_unusable_runtime_directory_or_bus_is_an_error() {
+    fn an_unusable_runtime_directory_or_bus_is_an_error_and_nothing_is_reached() {
         type Change = fn(&Root, &Path);
         let changes: [(&str, Change); 10] = [
             ("no runtime directory", |_, runtime| {
@@ -827,48 +838,105 @@ mod controls {
         ];
         for (what, change) in changes {
             let root = Root::new("bus-bad");
-            let (runtime, _bus) = root.runtime(uid());
+            let (runtime, listener) = root.runtime(uid());
             change(&root, &runtime);
-            let result = user_bus(&root.host(uid(), None));
+            let result = observe_scopes_on(
+                &root.host(uid(), None),
+                Instant::now() + Duration::from_secs(10),
+            );
             assert!(
                 matches!(result, Err(ObservationError::Runtime(_))),
                 "{what}: {result:?}"
             );
+            assert!(!connected(&listener), "{what}: nothing was reached");
         }
-        // Another uid's runtime directory (here owned by this test), a
-        // runtime directory not owned by root's stand-in, and one that is not
-        // the required filesystem.
-        let root = Root::new("bus-owner");
-        let other = uid().wrapping_add(1);
-        let (_runtime, _bus) = root.runtime(other);
-        assert!(matches!(
-            user_bus(&root.host(other, None)),
-            Err(ObservationError::Runtime(_))
-        ));
+        // Another uid's runtime directory (owned here by this test), a
+        // /run not owned by root's stand-in, and the wrong filesystem.
+        let other = Root::new("bus-owner");
+        let (_runtime, other_listener) = other.runtime(uid().wrapping_add(1));
         let root = Root::new("bus-root-owner");
-        let (_runtime, _bus) = root.runtime(uid());
-        let mut host = root.host(uid(), None);
-        host.root_owner = uid().wrapping_add(1);
-        assert!(matches!(user_bus(&host), Err(ObservationError::Runtime(_))));
-        let root = Root::new("bus-fs");
-        let (runtime, _bus) = root.runtime(uid());
+        let (runtime, listener) = root.runtime(uid());
+        let mut foreign = root.host(uid(), None);
+        foreign.root_owner = uid().wrapping_add(1);
         let wrong = filesystem_type(&runtime).unwrap().wrapping_add(1);
-        assert!(matches!(
-            user_bus(&root.host(uid(), Some(wrong))),
-            Err(ObservationError::Runtime(_))
-        ));
+        for host in [
+            other.host(uid().wrapping_add(1), None),
+            foreign,
+            root.host(uid(), Some(wrong)),
+        ] {
+            let result = observe_scopes_on(&host, Instant::now() + Duration::from_secs(10));
+            assert!(
+                matches!(result, Err(ObservationError::Runtime(_))),
+                "uid {} root {} magic {:?}: {result:?}",
+                host.uid,
+                host.root_owner,
+                host.fs_magic
+            );
+        }
+        assert!(!connected(&listener) && !connected(&other_listener));
     }
 
-    fn scopes(names: &[&str]) -> Scopes {
-        names.iter().map(|name| name.to_string()).collect()
+    #[test]
+    fn poisoned_or_absent_ambient_environment_never_redirects_the_observation() {
+        let ambient = [
+            "DBUS_SESSION_BUS_ADDRESS",
+            "DBUS_SYSTEM_BUS_ADDRESS",
+            "DBUS_STARTER_ADDRESS",
+            "XDG_RUNTIME_DIR",
+            "HOME",
+            "FLATPAK_ID",
+        ];
+        if std::env::var_os(AMBIENT_CHILD).is_some() {
+            // Re-executed below, with that ambient environment: the
+            // observation still goes only to the checked fixture bus, with
+            // exactly the listing request.
+            let root = Root::new("ambient");
+            let (_runtime, listener) = root.runtime(uid());
+            let peer = Peer::accept(listener, Handshake::Accept, answer_rows(Vec::new()));
+            let result = observe_scopes_on(
+                &root.host(uid(), None),
+                Instant::now() + Duration::from_secs(10),
+            );
+            let seen = peer.seen();
+            assert_eq!(result.unwrap(), Scopes::new());
+            assert_the_listing_request(&seen);
+            return;
+        }
+        for poisoned in [true, false] {
+            let mut child = Command::new(std::env::current_exe().unwrap());
+            child
+                .args([
+                    "--exact",
+                    "controls::poisoned_or_absent_ambient_environment_never_redirects_the_observation",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env(AMBIENT_CHILD, "1");
+            for name in ambient {
+                if poisoned {
+                    child.env(name, "unix:path=/nonexistent/poisoned/bus");
+                } else {
+                    child.env_remove(name);
+                }
+            }
+            let output = child.output().unwrap();
+            let text = String::from_utf8_lossy(&output.stdout);
+            assert!(output.status.success(), "poisoned {poisoned}: {text}");
+            assert!(text.contains("1 passed"), "poisoned {poisoned}: {text}");
+        }
     }
 
     #[test]
     fn a_failed_observation_never_ends_a_wait_as_done() {
-        let failing = || observe(&stand_in("exit 1"));
+        let failing = |_| {
+            Err(ObservationError::Refused {
+                name: "org.freedesktop.DBus.Error.Failed".to_string(),
+                message: "no".to_string(),
+            })
+        };
         let result = wait_for(Duration::from_secs(5), failing, |now| now.is_empty());
         assert!(
-            matches!(result, Err(ObservationError::Failed { .. })),
+            matches!(result, Err(ObservationError::Refused { .. })),
             "{result:?}"
         );
         // A failure part-way through a wait ends it too.
@@ -878,7 +946,7 @@ mod controls {
         ];
         let result = wait_for(
             Duration::from_secs(5),
-            || answers.pop().unwrap(),
+            |_| answers.pop().unwrap(),
             |now| now.is_empty(),
         );
         assert!(
@@ -887,7 +955,7 @@ mod controls {
         );
         assert!(wait_for(
             Duration::from_secs(5),
-            || Ok(Scopes::new()),
+            |_| Ok(Scopes::new()),
             |now| now.is_empty()
         )
         .unwrap());
@@ -895,11 +963,625 @@ mod controls {
         let kept = scopes(&["nexus-verifier-a.scope"]);
         assert!(!wait_for(
             Duration::from_millis(100),
-            || Ok(kept.clone()),
+            |_| Ok(kept.clone()),
             |now| now.is_empty()
         )
         .unwrap());
         assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn a_wait_gives_every_observation_its_callers_one_deadline() {
+        let within = Duration::from_millis(200);
+        let started = Instant::now();
+        let deadlines = RefCell::new(Vec::new());
+        let kept = scopes(&["nexus-verifier-a.scope"]);
+        let done = wait_for(
+            within,
+            |deadline| {
+                deadlines.borrow_mut().push(deadline);
+                Ok(kept.clone())
+            },
+            |now| now.is_empty(),
+        )
+        .unwrap();
+        let ended = Instant::now();
+        assert!(!done);
+        let deadlines = deadlines.into_inner();
+        assert!(deadlines.len() > 1, "observed repeatedly");
+        assert!(
+            deadlines.iter().all(|deadline| *deadline == deadlines[0]),
+            "never reset"
+        );
+        assert!(deadlines[0] >= started + within && deadlines[0] <= ended);
+        // An observation is never given more than its own bound, whatever
+        // the caller's deadline.
+        let (ours, theirs) = UnixStream::pair().unwrap();
+        let peer = Peer::serve(theirs, Handshake::Silent, None);
+        let before = Instant::now();
+        let result = list_scopes(
+            move || async move {
+                ours.set_nonblocking(true)?;
+                tokio::net::UnixStream::from_std(ours)
+            },
+            before + Duration::from_millis(200),
+        );
+        assert!(matches!(result, Err(ObservationError::Timeout)));
+        assert!(before.elapsed() < OBSERVATION_TIMEOUT);
+        drop(peer);
+    }
+
+    /// `run/user/<uid>/nexus-verifier` in a fixture runtime directory.
+    struct WorkspaceFixture {
+        root: Root,
+        runtime: PathBuf,
+        _bus: UnixListener,
+    }
+
+    impl WorkspaceFixture {
+        fn new(uid: u32) -> Self {
+            let root = Root::new("ws");
+            let (runtime, bus) = root.runtime(uid);
+            WorkspaceFixture {
+                root,
+                runtime,
+                _bus: bus,
+            }
+        }
+
+        fn dir(&self) -> PathBuf {
+            self.runtime.join(WORKSPACES)
+        }
+
+        fn private(self, entries: &[&str]) -> Self {
+            fs::create_dir(self.dir()).unwrap();
+            mode(&self.dir(), 0o700);
+            for entry in entries {
+                fs::create_dir(self.dir().join(entry)).unwrap();
+            }
+            self
+        }
+
+        fn observe(&self, fs: &Fs<'_>) -> Result<Workspaces, ObservationError> {
+            observe_workspaces_with(&self.root.host(uid(), None), fs)
+        }
+    }
+
+    fn listed(names: &[&str]) -> Workspaces {
+        Workspaces::Listed(Listing {
+            names: names.iter().map(|name| name.to_string()).collect(),
+            more: false,
+        })
+    }
+
+    /// `fstat`, except that its `n`th call (1-based) answers `change` of the
+    /// real answer, or fails.
+    fn nth_fstat(
+        n: usize,
+        change: impl Fn(&mut libc::stat) -> io::Result<()>,
+    ) -> impl Fn(&OwnedFd) -> io::Result<libc::stat> {
+        let calls = Cell::new(0);
+        move |fd| {
+            calls.set(calls.get() + 1);
+            let mut st = fstat(fd)?;
+            if calls.get() == n {
+                change(&mut st)?;
+            }
+            Ok(st)
+        }
+    }
+
+    fn fails(result: Result<Workspaces, ObservationError>, runtime: bool, what: &str) {
+        let as_expected = if runtime {
+            matches!(result, Err(ObservationError::Runtime(_)))
+        } else {
+            matches!(result, Err(ObservationError::Inspection(_)))
+        };
+        assert!(as_expected, "{what}: {result:?}");
+    }
+
+    #[test]
+    fn an_empty_workspaces_directory_is_nothing_left() {
+        let fixture = WorkspaceFixture::new(uid()).private(&[]);
+        assert_eq!(fixture.observe(&Fs::real()).unwrap(), listed(&[]));
+    }
+
+    #[test]
+    fn whatever_the_workspaces_directory_holds_is_left_behind() {
+        let fixture = WorkspaceFixture::new(uid()).private(&["ws-0a1b"]);
+        fs::write(fixture.dir().join(".hidden"), b"").unwrap();
+        assert_eq!(
+            fixture.observe(&Fs::real()).unwrap(),
+            listed(&[".hidden", "ws-0a1b"])
+        );
+        // Bounded: never more than the bound is read, and the rest is
+        // still "more".
+        let fixture = WorkspaceFixture::new(uid()).private(&[]);
+        for i in 0..MAX_LISTED + 5 {
+            fs::write(fixture.dir().join(format!("ws-{i:03}")), b"").unwrap();
+        }
+        match fixture.observe(&Fs::real()).unwrap() {
+            Workspaces::Listed(listing) => {
+                assert_eq!(listing.names.len(), MAX_LISTED);
+                assert!(listing.more && !listing.is_empty());
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn absence_is_only_a_missing_final_component_of_a_checked_runtime_directory() {
+        let fixture = WorkspaceFixture::new(uid());
+        assert_eq!(fixture.observe(&Fs::real()).unwrap(), Workspaces::Absent);
+        assert!(!fixture.dir().exists(), "nothing was created");
+        // A missing, symlinked or unchecked runtime directory is not
+        // absence.
+        let fixture = WorkspaceFixture::new(uid());
+        fs::remove_dir_all(&fixture.runtime).unwrap();
+        fails(fixture.observe(&Fs::real()), true, "no runtime directory");
+        assert!(!fixture.runtime.exists(), "the parent was not created");
+        let fixture = WorkspaceFixture::new(uid());
+        let real = fixture.root.0.join("elsewhere");
+        fs::rename(&fixture.runtime, &real).unwrap();
+        symlink(&real, &fixture.runtime).unwrap();
+        fails(
+            fixture.observe(&Fs::real()),
+            true,
+            "a symlinked runtime directory",
+        );
+        let fixture = WorkspaceFixture::new(uid());
+        mode(&fixture.root.0.join("run"), 0o777);
+        fails(fixture.observe(&Fs::real()), true, "a writable /run");
+        // Nor is a runtime directory removed while it is inspected (its
+        // fourth stat: the check after the missing name).
+        let fixture = WorkspaceFixture::new(uid());
+        let removed = nth_fstat(4, |st| {
+            st.st_nlink = 0;
+            Ok(())
+        });
+        fails(
+            fixture.observe(&Fs {
+                fstat: &removed,
+                ..Fs::real()
+            }),
+            false,
+            "a runtime directory removed",
+        );
+    }
+
+    #[test]
+    fn a_symlink_or_another_type_is_never_empty() {
+        type Change = fn(&WorkspaceFixture);
+        let changes: [(&str, Change); 5] = [
+            ("a symlink to a private directory", |f| {
+                let real = f.runtime.join("real");
+                fs::create_dir(&real).unwrap();
+                mode(&real, 0o700);
+                symlink(&real, f.dir()).unwrap();
+            }),
+            ("a dangling symlink", |f| {
+                symlink("/nonexistent/nexus-p2v1r3a", f.dir()).unwrap()
+            }),
+            ("a file", |f| fs::write(f.dir(), b"").unwrap()),
+            ("a FIFO", |f| {
+                let path = CString::new(f.dir().as_os_str().as_bytes()).unwrap();
+                // SAFETY: a NUL-terminated path.
+                assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+            }),
+            ("a socket", |f| {
+                drop(UnixListener::bind(f.dir()).unwrap());
+            }),
+        ];
+        for (what, change) in changes {
+            let fixture = WorkspaceFixture::new(uid());
+            change(&fixture);
+            fails(fixture.observe(&Fs::real()), false, what);
+        }
+    }
+
+    #[test]
+    fn a_wrong_owner_mode_or_filesystem_is_never_empty() {
+        let fixture = WorkspaceFixture::new(uid()).private(&[]);
+        mode(&fixture.dir(), 0o755);
+        fails(
+            fixture.observe(&Fs::real()),
+            false,
+            "a shared workspaces directory",
+        );
+        // Owners and filesystems this test cannot create are injected into
+        // the workspaces directory's own stat (the fourth).
+        let foreign = nth_fstat(4, |st| {
+            st.st_uid = uid().wrapping_add(1);
+            Ok(())
+        });
+        let elsewhere = nth_fstat(4, |st| {
+            st.st_dev = st.st_dev.wrapping_add(1);
+            Ok(())
+        });
+        type Stat<'a> = &'a dyn Fn(&OwnedFd) -> io::Result<libc::stat>;
+        let injected: [(&str, Stat<'_>); 2] = [
+            ("another owner", &foreign),
+            ("another filesystem", &elsewhere),
+        ];
+        for (what, injected) in injected {
+            let fixture = WorkspaceFixture::new(uid()).private(&[]);
+            fails(
+                fixture.observe(&Fs {
+                    fstat: injected,
+                    ..Fs::real()
+                }),
+                false,
+                what,
+            );
+        }
+        let other = Root::new("ws-other");
+        let (runtime, _bus) = other.runtime(uid().wrapping_add(1));
+        fs::create_dir(runtime.join(WORKSPACES)).unwrap();
+        mode(&runtime.join(WORKSPACES), 0o700);
+        fails(
+            observe_workspaces(&other.host(uid().wrapping_add(1), None)),
+            true,
+            "another uid's runtime directory",
+        );
+        let fixture = WorkspaceFixture::new(uid()).private(&[]);
+        fails(
+            observe_workspaces(&fixture.root.host(uid(), Some(0x1234))),
+            true,
+            "the wrong filesystem",
+        );
+    }
+
+    #[test]
+    fn a_refused_or_failing_inspection_is_never_empty() {
+        let refused = || io::Error::from_raw_os_error(libc::EACCES);
+        let failing = || io::Error::from_raw_os_error(libc::EIO);
+        let open_refused = |name: &'static str| {
+            move |dir: &OwnedFd, entry: &str| -> io::Result<OwnedFd> {
+                if entry == name {
+                    Err(refused())
+                } else {
+                    open_dir_at(dir, entry)
+                }
+            }
+        };
+        let workspaces_refused = open_refused(WORKSPACES);
+        let user_refused = open_refused("user");
+        let listing_refused = |_: &OwnedFd, _: usize| -> io::Result<Listing> { Err(refused()) };
+        let listing_failing = |_: &OwnedFd, _: usize| -> io::Result<Listing> { Err(failing()) };
+        let stat_failing = nth_fstat(4, |_| Err(failing()));
+        let runtime_stat_failing = nth_fstat(3, |_| Err(failing()));
+        let cases: [(&str, bool, Fs<'_>); 6] = [
+            (
+                "an open refused",
+                false,
+                Fs {
+                    open_dir_at: &workspaces_refused,
+                    ..Fs::real()
+                },
+            ),
+            (
+                "a listing refused",
+                false,
+                Fs {
+                    list: &listing_refused,
+                    ..Fs::real()
+                },
+            ),
+            (
+                "a listing failing",
+                false,
+                Fs {
+                    list: &listing_failing,
+                    ..Fs::real()
+                },
+            ),
+            (
+                "a stat failing",
+                false,
+                Fs {
+                    fstat: &stat_failing,
+                    ..Fs::real()
+                },
+            ),
+            (
+                "/run/user refused",
+                true,
+                Fs {
+                    open_dir_at: &user_refused,
+                    ..Fs::real()
+                },
+            ),
+            (
+                "a runtime stat failing",
+                true,
+                Fs {
+                    fstat: &runtime_stat_failing,
+                    ..Fs::real()
+                },
+            ),
+        ];
+        for (what, runtime, fs) in cases {
+            let fixture = WorkspaceFixture::new(uid()).private(&[]);
+            fails(fixture.observe(&fs), runtime, what);
+        }
+    }
+
+    /// The report of both observations, given stand-ins for each.
+    fn outcome(
+        scopes: Result<Scopes, ObservationError>,
+        workspaces: Result<Workspaces, ObservationError>,
+    ) -> (bool, String) {
+        let calls = RefCell::new(Vec::new());
+        let mut lines = Vec::new();
+        let clean = report_cleanup(
+            || {
+                calls.borrow_mut().push("scopes");
+                scopes
+            },
+            || {
+                calls.borrow_mut().push("workspaces");
+                workspaces
+            },
+            &mut |line| lines.push(line),
+        );
+        assert_eq!(
+            calls.into_inner(),
+            ["scopes", "workspaces"],
+            "both observations always run"
+        );
+        (clean, lines.join("\n"))
+    }
+
+    #[test]
+    fn only_two_answers_of_nothing_left_are_clean_and_neither_failure_hides_the_other() {
+        let refused = || ObservationError::Refused {
+            name: "org.freedesktop.DBus.Error.AccessDenied".to_string(),
+            message: "denied".to_string(),
+        };
+        assert!(outcome(Ok(Scopes::new()), Ok(listed(&[]))).0);
+        let (clean, report) = outcome(Ok(Scopes::new()), Ok(Workspaces::Absent));
+        assert!(clean);
+        assert!(report.contains("absent at observation time"), "{report}");
+        assert!(!report.contains("never created"), "{report}");
+        for (scopes, workspaces, expected) in [
+            (
+                Err(refused()),
+                Ok(listed(&[])),
+                "::error::the verifier scope observation failed: the user manager refused",
+            ),
+            (
+                Ok(Scopes::new()),
+                Err(ObservationError::Inspection("cannot be listed".to_string())),
+                "::error::the verification workspace observation failed: cannot be listed",
+            ),
+            (
+                Ok(scopes(&["nexus-verifier-0a1b.scope"])),
+                Ok(listed(&[])),
+                "::error::a verifier scope was left behind: nexus-verifier-0a1b.scope",
+            ),
+            (
+                Ok(Scopes::new()),
+                Ok(listed(&["ws-0a1b"])),
+                "::error::a verification workspace was left behind: \"ws-0a1b\"",
+            ),
+        ] {
+            let (clean, report) = outcome(scopes, workspaces);
+            assert!(!clean, "{report}");
+            assert!(report.contains(expected), "{report}");
+        }
+        let (clean, report) = outcome(Err(ObservationError::Timeout), Err(refused()));
+        assert!(!clean);
+        assert_eq!(report.matches("::error::").count(), 2, "{report}");
+    }
+
+    #[test]
+    fn a_panicking_observation_is_a_failure_and_the_other_still_runs() {
+        let calls = RefCell::new(Vec::new());
+        let mut lines = Vec::new();
+        let clean = report_cleanup(
+            || -> Result<Scopes, ObservationError> {
+                calls.borrow_mut().push("scopes");
+                panic!("injected")
+            },
+            || {
+                calls.borrow_mut().push("workspaces");
+                Ok(listed(&[]))
+            },
+            &mut |line| lines.push(line),
+        );
+        assert!(!clean);
+        assert_eq!(calls.into_inner(), ["scopes", "workspaces"]);
+        assert!(
+            lines[0].contains(
+                "::error::the verifier scope observation failed: the observation panicked"
+            ),
+            "{lines:?}"
+        );
+    }
+
+    /// What a stand-in entry was asked to be.
+    #[derive(Debug, PartialEq)]
+    enum Entered {
+        Suite,
+        Observation,
+        Mode(Mode, Vec<String>),
+        Refused(Refusal),
+    }
+
+    /// Stand-ins for every entry: nothing real ever runs.
+    struct StandIn;
+
+    impl Entry for StandIn {
+        type Exit = Entered;
+
+        fn suite(&mut self) -> Entered {
+            Entered::Suite
+        }
+
+        fn cleanup_observation(&mut self) -> Entered {
+            Entered::Observation
+        }
+
+        fn mode(&mut self, mode: Mode, args: &[String]) -> Entered {
+            Entered::Mode(mode, args.to_vec())
+        }
+
+        fn refuse(&mut self, refusal: Refusal) -> Entered {
+            Entered::Refused(refusal)
+        }
+    }
+
+    fn entered(args: &[&str], supported: bool) -> Entered {
+        let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+        dispatch(&args, supported, &mut StandIn)
+    }
+
+    #[test]
+    fn the_observation_mode_and_invalid_arguments_never_enter_the_suite() {
+        assert_eq!(entered(&["harness"], true), Entered::Suite);
+        assert_eq!(
+            entered(&["harness", "--cleanup-observation"], true),
+            Entered::Observation
+        );
+        assert_eq!(entered(&[], true), Entered::Refused(Refusal::NoProgram));
+        for args in [
+            &["harness", "--cleanup-observation", "/run/user/0/bus"][..],
+            &["harness", "--cleanup-observation", "--cleanup-observation"],
+            &["harness", "--cleanup-observation", ""],
+        ] {
+            assert_eq!(
+                entered(args, true),
+                Entered::Refused(Refusal::ObservationArguments(1)),
+                "{args:?}"
+            );
+        }
+        for unknown in [
+            "",
+            "-",
+            "--",
+            "--cleanup-observation=1",
+            "--CLEANUP-OBSERVATION",
+            "--suite",
+            "--help",
+            "--nocapture",
+            "--test-threads=1",
+            "--exact",
+            "probe",
+            "--PROBE",
+            "p2d_live_execution_runs_in_a_verified_scope",
+        ] {
+            assert_eq!(
+                entered(&["harness", unknown, "x"], true),
+                Entered::Refused(Refusal::Unknown(unknown.to_string())),
+                "{unknown:?}"
+            );
+        }
+        let not_utf8 = vec![OsString::from("harness"), OsString::from_vec(vec![0xff])];
+        assert_eq!(
+            dispatch(&not_utf8, true, &mut StandIn),
+            Entered::Refused(Refusal::NotUtf8)
+        );
+        // Only no argument at all enters the suite.
+        for args in [
+            &["harness", "--cleanup-observation"][..],
+            &["harness", "x"],
+            &["harness", "--probe"],
+            &["harness", "", ""],
+            &[],
+        ] {
+            assert_ne!(entered(args, true), Entered::Suite, "{args:?}");
+        }
+        // A refusal's description is bounded, whatever the argument.
+        let shown = Refusal::Unknown("x\n".repeat(10_000)).to_string();
+        assert!(shown.chars().count() < 2 * MAX_DIAGNOSTIC && !shown.contains('\n'));
+    }
+
+    #[test]
+    fn each_probe_or_driver_mode_is_chosen_by_its_own_first_argument() {
+        for (flag, mode) in Mode::ALL {
+            assert_eq!(
+                entered(&["probe", flag, "only=noop", "marker=x"], true),
+                Entered::Mode(mode, vec!["only=noop".to_string(), "marker=x".to_string()]),
+                "{flag}"
+            );
+            assert_eq!(
+                entered(&["probe", flag], true),
+                Entered::Mode(mode, Vec::new())
+            );
+        }
+    }
+
+    #[test]
+    fn where_the_sandbox_does_not_exist_only_the_suites_note_remains() {
+        assert_eq!(entered(&["harness"], false), Entered::Suite);
+        assert_eq!(
+            entered(&["harness", "--cleanup-observation"], false),
+            Entered::Refused(Refusal::Unsupported("--cleanup-observation".to_string()))
+        );
+        for (flag, _) in Mode::ALL {
+            assert_eq!(
+                entered(&["harness", flag], false),
+                Entered::Refused(Refusal::Unsupported(flag.to_string()))
+            );
+        }
+        assert_eq!(
+            entered(&["harness", "--suite"], false),
+            Entered::Refused(Refusal::Unknown("--suite".to_string()))
+        );
+    }
+
+    /// The shared observation's source, comments aside.
+    fn observer_code() -> String {
+        include_str!("support/cleanup_observation.rs")
+            .lines()
+            .map(|line| line.find("//").map_or(line, |at| &line[..at]))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn the_observer_has_no_process_path_and_reads_no_environment() {
+        let code = observer_code();
+        for needle in [
+            "Command",
+            "process::Child",
+            "process::Stdio",
+            "spawn",
+            "fork",
+            "exec",
+            "kill",
+            "waitid",
+            "waitpid",
+            "pidfd",
+            "systemctl",
+            "busctl",
+            "env::var",
+            "var_os",
+            "set_var",
+            "Builder::address",
+            "Builder::session",
+            "Builder::system",
+            "Connection::session",
+            "Connection::system",
+            "add_match",
+            "AddMatch",
+            "Subscribe",
+            "StopUnit",
+            "KillUnit",
+            "ResetFailed",
+        ] {
+            assert!(!code.contains(needle), "{needle}");
+        }
+        // One call, to one method of the manager, through one
+        // authentication mechanism, under one deadline.
+        assert_eq!(code.matches(".call_method(").count(), 1);
+        assert_eq!(code.matches("\"ListUnitsByPatterns\"").count(), 1);
+        assert_eq!(
+            code.matches(".auth_mechanism(zbus::AuthMechanism::External)")
+                .count(),
+            1
+        );
+        assert_eq!(code.matches("timeout_at(").count(), 1);
     }
 
     /// An owner standing in for a retained boundary: its cleanup fails
@@ -1008,8 +1690,12 @@ mod controls {
 
     #[test]
     fn an_observation_failure_survives_a_confirming_retry() {
-        // The real failure of an unreachable user bus, reported.
-        let observed = observe(&stand_in("echo 'No medium found' >&2; exit 1")).map_err(reported);
+        // A real failed observation: the manager refused the listing.
+        let observed = observe(answer_error(
+            "org.freedesktop.DBus.Error.Failed",
+            "No medium found".to_string(),
+        ))
+        .map_err(|error| error.to_string());
         let (owner, tries, dropped) = Witness::new(0);
         let (before, _) = before_and_kept();
         let verdict = judge_retained(

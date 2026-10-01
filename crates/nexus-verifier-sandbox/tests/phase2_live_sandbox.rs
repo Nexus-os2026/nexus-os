@@ -10,18 +10,63 @@
 //! helper fails closed (nothing runs), unless
 //! `NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX=1` demands a supported host, in which
 //! case it fails.
+//!
+//! The arguments alone choose what this executable is, before anything else
+//! happens ([`cleanup_observation::dispatch`]): the suite only with no
+//! argument; with exactly `--cleanup-observation`, only the checked cleanup
+//! observations (no fixture, helper, toolchain, probe, namespace or cgroup is
+//! touched, and nothing is stopped or removed); a probe or driver mode only by
+//! its own first argument; anything else is refused, never the suite.
 
-fn main() {
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    live::main();
-    #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
-    println!("p2c live sandbox: not an x86_64 Linux build; the helper is unavailable here");
+use std::ffi::OsString;
+use std::process::ExitCode;
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn main() -> ExitCode {
+    let args: Vec<OsString> = std::env::args_os().collect();
+    cleanup_observation::dispatch(&args, true, &mut live::Live)
 }
 
-/// Checked observation of the loaded verifier scopes (P2-V1-R1).
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+fn main() -> ExitCode {
+    let args: Vec<OsString> = std::env::args_os().collect();
+    cleanup_observation::dispatch(&args, false, &mut Unsupported)
+}
+
+/// The entry and the checked cleanup observations (P2-V1-R1 to R3A).
 #[path = "support/cleanup_observation.rs"]
 mod cleanup_observation;
+
+/// Where the sandbox does not exist: the suite's own note only; the
+/// observation and every other mode fail.
+#[cfg_attr(all(target_os = "linux", target_arch = "x86_64"), allow(dead_code))]
+struct Unsupported;
+
+impl cleanup_observation::Entry for Unsupported {
+    type Exit = ExitCode;
+
+    fn suite(&mut self) -> ExitCode {
+        println!("p2c live sandbox: not an x86_64 Linux build; the helper is unavailable here");
+        ExitCode::SUCCESS
+    }
+
+    fn cleanup_observation(&mut self) -> ExitCode {
+        self.refuse(cleanup_observation::Refusal::Unsupported(
+            cleanup_observation::CLEANUP_OBSERVATION.to_string(),
+        ))
+    }
+
+    fn mode(&mut self, _: cleanup_observation::Mode, _: &[String]) -> ExitCode {
+        self.refuse(cleanup_observation::Refusal::Unsupported(
+            "a probe or driver mode".to_string(),
+        ))
+    }
+
+    fn refuse(&mut self, refusal: cleanup_observation::Refusal) -> ExitCode {
+        eprintln!("phase2 live harness: {refusal}");
+        ExitCode::from(2)
+    }
+}
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod live {
@@ -60,16 +105,37 @@ mod live {
     ];
     const LOADER: &str = "ld-linux-x86-64.so.2";
 
-    pub fn main() {
-        let args: Vec<String> = std::env::args().collect();
-        match args.get(1).map(String::as_str) {
-            Some("--probe") => probe::run(&args[2..]),
-            Some("--probe-daemon") => probe::daemon(&args[2..]),
-            Some("--ablation") => ablation::run(&args[2..]),
-            Some("--deny-unshare-driver") => drivers::deny_unshare(&args[2..]),
-            Some("--deny-layer-driver") => drivers::deny_layer(&args[2..]),
-            Some("--parent-death-driver") => drivers::parent_death(&args[2..]),
-            _ => suite(),
+    /// The real entries, chosen by [`crate::cleanup_observation::dispatch`].
+    pub struct Live;
+
+    impl crate::cleanup_observation::Entry for Live {
+        type Exit = std::process::ExitCode;
+
+        fn suite(&mut self) -> Self::Exit {
+            suite();
+            std::process::ExitCode::SUCCESS
+        }
+
+        fn cleanup_observation(&mut self) -> Self::Exit {
+            crate::cleanup_observation::cleanup_observation_mode()
+        }
+
+        fn mode(&mut self, mode: crate::cleanup_observation::Mode, args: &[String]) -> Self::Exit {
+            use crate::cleanup_observation::Mode;
+            match mode {
+                Mode::Probe => probe::run(args),
+                Mode::ProbeDaemon => probe::daemon(args),
+                Mode::Ablation => ablation::run(args),
+                Mode::DenyUnshareDriver => drivers::deny_unshare(args),
+                Mode::DenyLayerDriver => drivers::deny_layer(args),
+                Mode::ParentDeathDriver => drivers::parent_death(args),
+            }
+            std::process::ExitCode::SUCCESS
+        }
+
+        fn refuse(&mut self, refusal: crate::cleanup_observation::Refusal) -> Self::Exit {
+            eprintln!("phase2 live harness: {refusal}");
+            std::process::ExitCode::from(2)
         }
     }
 
@@ -603,7 +669,7 @@ mod live {
 
     mod p2d {
         use super::*;
-        use crate::cleanup_observation::{self, reported, wait_for, ObservationError, Scopes};
+        use crate::cleanup_observation::{self, wait_for, ObservationError, Scopes};
         pub use nexus_verifier_sandbox::execution::{self, EndedBy, ExitClass};
         pub use nexus_verifier_sandbox::policy::ResourcePolicy;
         pub use nexus_verifier_sandbox::scope::{Occupancy, ScopeError, ScopeManager};
@@ -768,28 +834,33 @@ mod live {
 
         /// Transient verifier scopes the user manager currently has loaded
         /// (observation only), or why they could not be observed: a failed
-        /// query is never "no scopes".
+        /// observation is never "no scopes".
         pub fn loaded_scopes() -> Result<Scopes, ObservationError> {
             cleanup_observation::observe_scopes()
+        }
+
+        /// The same, by a waiting caller's own deadline (never extended).
+        pub fn loaded_scopes_by(deadline: Instant) -> Result<Scopes, ObservationError> {
+            cleanup_observation::observe_scopes_by(deadline)
         }
 
         pub fn unmovable_process(scopes: &ScopeManager) {
             // A helper that is no longer running cannot be placed in a
             // scope: no scope is confirmed for it, and the empty unit made
             // for it is not left behind.
-            let before = loaded_scopes()
-                .unwrap_or_else(|error| panic!("the loaded scopes: {}", reported(error)));
+            let before =
+                loaded_scopes().unwrap_or_else(|error| panic!("the loaded scopes: {error}"));
             let (mut helper, _output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
             helper.kill().unwrap();
             let refused = scopes.start(&helper, &limits());
             assert!(refused.is_err(), "{refused:?}");
             helper.reap().unwrap();
-            match wait_for(Duration::from_secs(10), loaded_scopes, |now| {
+            match wait_for(Duration::from_secs(10), loaded_scopes_by, |now| {
                 now.len() <= before.len()
             }) {
                 Ok(true) => {}
                 Ok(false) => panic!("the refused scope was not stopped"),
-                Err(error) => panic!("the refused scope was not observed: {}", reported(error)),
+                Err(error) => panic!("the refused scope was not observed: {error}"),
             }
         }
 
@@ -824,11 +895,12 @@ mod live {
     /// retained boundary that still owns the live tree, which a retry then
     /// ends and confirms. None is ever a pass.
     mod p2r1 {
-        use super::p2d::{execution, loaded_scopes, EndedBy, ExitClass, ResourcePolicy};
+        use super::p2d::{
+            execution, loaded_scopes, loaded_scopes_by, EndedBy, ExitClass, ResourcePolicy,
+        };
         use super::*;
         use crate::cleanup_observation::{
-            judge_retained, release, reported, settle, wait_for, Scopes, Settled, Verdict,
-            EXPLICIT_ATTEMPTS,
+            judge_retained, release, settle, wait_for, Scopes, Settled, Verdict, EXPLICIT_ATTEMPTS,
         };
         use execution::{Cleanup, ExecutionReport, Fault, FaultPoint, NotRun, RetainedBoundary};
         use nexus_verifier_sandbox::scope::ScopeManager;
@@ -908,12 +980,12 @@ mod live {
         fn gone(name: &str, marker: &str, children_before: usize, scopes_before: &Scopes) {
             assert_eq!(tree(marker), 0, "{name}: no process of the tree survives");
             assert_eq!(children(), children_before, "{name}: the helper is reaped");
-            match wait_for(Duration::from_secs(10), loaded_scopes, |now| {
+            match wait_for(Duration::from_secs(10), loaded_scopes_by, |now| {
                 now.len() <= scopes_before.len()
             }) {
                 Ok(true) => {}
                 Ok(false) => panic!("{name}: the scope is not gone"),
-                Err(error) => panic!("{name}: the scope was not observed: {}", reported(error)),
+                Err(error) => panic!("{name}: the scope was not observed: {error}"),
             }
         }
 
@@ -952,7 +1024,7 @@ mod live {
                         children_before + 1
                     ));
                 }
-                (found, loaded_scopes().map_err(reported))
+                (found, loaded_scopes().map_err(|error| error.to_string()))
             }));
             let kept = match evidence {
                 Ok((found, kept)) => {
@@ -1036,7 +1108,7 @@ mod live {
             };
             let children_before = children();
             let scopes_before = loaded_scopes()
-                .unwrap_or_else(|error| panic!("{name}: the loaded scopes: {}", reported(error)));
+                .unwrap_or_else(|error| panic!("{name}: the loaded scopes: {error}"));
             let (report, most) = watched(&marker, || {
                 execution::run_with_fault(scopes, &HelperProgram::at(HELPER), spec, &limits, fault)
             });
