@@ -582,13 +582,14 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
          cleanup_observation::observe_scopes()\n"
     ));
     // Each use: checked before anything is owned, checked by a wait that
-    // ends at a failed observation, or the retained boundary's.
+    // ends at a failed observation, or the retained boundary's evidence. A
+    // failure is reported only through `reported`, which first ends a query
+    // it still owns.
     assert_eq!(harness.matches("loaded_scopes()").count(), 4);
     assert_eq!(
-        harness.matches("loaded_scopes().unwrap_or_else(").count()
-            + harness
-                .matches("loaded_scopes()\n                .unwrap_or_else(")
-                .count(),
+        harness
+            .matches("loaded_scopes()\n                .unwrap_or_else(")
+            .count(),
         2
     );
     assert_eq!(
@@ -597,29 +598,75 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
             .count(),
         2
     );
-    // The retained boundary's scope is observed while it is held; the retry
-    // always runs before that observation is judged, and nothing else uses
-    // the observation or the boundary in between.
-    let held = harness
-        .find("let Cleanup::Failed(boundary) = report.cleanup else")
-        .expect("the retained boundary");
-    let observed = harness
-        .find("let kept = loaded_scopes();")
-        .expect("the retained observation");
-    let judged = harness
-        .find("after_retry(kept, &scopes_before, || boundary.retry().is_ok())")
-        .expect("the retained judgement");
-    assert!(held < observed && observed < judged);
-    let between = &harness[observed + "let kept = loaded_scopes();".len()..judged];
-    assert!(
-        !between.contains("kept") && !between.contains("boundary"),
-        "{between}"
+    assert_eq!(harness.matches("reported(error)").count(), 4);
+    assert_eq!(
+        harness.matches("loaded_scopes().map_err(reported)").count(),
+        1
     );
-    assert_eq!(harness.matches("boundary.retry()").count(), 1);
-    let after_retry = item(&support, "pub fn after_retry(");
+    // A retry's result keeps its owner: the harness never turns a retry into
+    // a boolean, and retries only through `settle` (directly or in
+    // `judge_retained`), which keeps each failed attempt's owner.
+    for needle in [
+        ".retry().is_ok()",
+        ".retry().is_err()",
+        "boundary.retry()",
+        "after_retry",
+    ] {
+        assert!(!harness.contains(needle), "{needle}");
+    }
+    assert_eq!(harness.matches("RetainedBoundary::retry").count(), 2);
     assert!(
-        after_retry.find("let retried = retry();").unwrap()
-            < after_retry.find("observed.map_err(").unwrap()
+        harness.contains("match settle(boundary, EXPLICIT_ATTEMPTS, RetainedBoundary::retry) {")
+    );
+    // Whatever the report owns leaves it before any check, and nothing
+    // between the execution and that can fail.
+    let ran = harness
+        .find("let (report, most) = watched(&marker, || {")
+        .expect("the execution");
+    let taken = harness
+        .find("let ExecutionReport {")
+        .expect("the report's owner taken out");
+    let judged = harness
+        .find("match (expect, boundary) {")
+        .expect("the judgement");
+    assert!(ran < taken && taken < judged);
+    for needle in ["assert", "panic!", ".unwrap()", ".expect("] {
+        assert!(!harness[ran..taken].contains(needle), "{needle}");
+    }
+    assert!(harness.contains("(result, watcher.join().ok())"));
+    // The retained boundary: evidence taken while it is held (a panic there
+    // contained), then the bounded explicit cleanup, then every judgement;
+    // an unconfirmed owner is released explicitly, once reported, before
+    // the suite stops.
+    let retained = item(&harness, "        fn retained(");
+    let evidence = retained
+        .find("let evidence = catch_unwind(AssertUnwindSafe(|| {")
+        .expect("contained evidence");
+    let settled = retained.find("judge_retained(").expect("the judgement");
+    assert!(evidence < settled);
+    assert!(retained.contains("EXPLICIT_ATTEMPTS,\n                RetainedBoundary::retry,"));
+    assert!(retained.contains(
+        "Verdict::Unconfirmed { owner, failures } => {\n                    \
+         stop_unconfirmed(name, &failures, owner)"
+    ));
+    let stop = item(&harness, "        fn stop_unconfirmed(");
+    assert!(
+        stop.find("let report = release(owner, name, failures);")
+            .unwrap()
+            < stop.find("panic!(\"{report}\")").unwrap()
+    );
+    let settle = item(&support, "pub fn settle<B>(");
+    assert!(settle.contains("Err(owner) => owner,"));
+    let judge = item(&support, "pub fn judge_retained<B>(");
+    assert!(
+        judge.contains(") -> Verdict<B> {\n    let settled = settle(owner, attempts, retry);\n")
+    );
+    assert!(judge
+        .contains("Settled::Unconfirmed(owner, _) => Verdict::Unconfirmed { owner, failures },"));
+    let release = item(&support, "pub fn release<B>(");
+    assert!(
+        release.find("releasing the unconfirmed owner").unwrap()
+            < release.find("drop(owner);").unwrap()
     );
     // The query: this uid's checked bus, an environment of exactly that bus
     // and fixed output settings, bounded, its exit status checked first.
@@ -628,14 +675,6 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
          observe(&scope_query(systemctl()?, &[], &bus)?)\n"
     ));
     assert!(item(&support, "impl Host<'static>").contains("uid: unsafe { libc::getuid() },"));
-    let run = item(&support, "pub fn run(");
-    for needle in [
-        ".env_clear()",
-        ".process_group(0)",
-        "let reaped = end(&mut child);",
-    ] {
-        assert!(run.contains(needle), "{needle}");
-    }
     let observe = item(&support, "pub fn observe(");
     assert!(
         observe.find("if !answer.status.success() {").unwrap()
@@ -646,17 +685,47 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
     assert!(!support.contains("env::var("));
     assert_eq!(support.matches("var_os(").count(), 1);
     assert!(support.contains("std::env::var_os(\"PATH\")"));
+    // The query's processes stay owned until they are ended: its group is
+    // ended, while the leader's unreaped exit anchors the group id and the
+    // output is still open, on every path; an answer comes only with that
+    // confirmed, and the group is never signalled once the anchor is gone.
+    let run = item(&support, "pub fn run(");
+    for needle in [".env_clear()", ".process_group(0)"] {
+        assert!(run.contains(needle), "{needle}");
+    }
+    let waited = run
+        .find("exit_by(&owned, deadline)")
+        .expect("the leader's exit, unreaped");
+    let finalized = run
+        .find("let finalized = owned.finalize();")
+        .expect("the group ended");
+    let released = run.find("drop(pipes);").expect("the output released");
+    assert!(waited < finalized && finalized < released);
+    assert!(run.contains("(Ok(answer), Ok(status)) => Ok(Answer { status, ..answer }),"));
+    assert_eq!(run.matches("Ok(Answer").count(), 2);
+    let finalize = item(&support, "impl OwnedQuery {");
+    let anchored = finalize.find("if !self.anchored {").expect("the anchor");
+    let signalled = finalize
+        .find("(self.ops.signal_group)(self.group)")
+        .expect("the group signalled");
+    let reaped = finalize
+        .find("(self.ops.reap)(")
+        .expect("the leader reaped");
+    assert!(anchored < signalled && signalled < reaped);
+    assert!(item(&support, "impl Drop for OwnedQuery {").contains("if self.anchored {"));
+    assert!(item(&support, "fn leader_exited(").contains("libc::WNOWAIT"));
 
     // The workflow observes only through its checked observations, after
     // running their fixture controls, and keeps every result of the live
-    // step: the suite's own failure, its exact passed count and both
-    // observations.
+    // step: the suite's own status and its output capture's (each taken from
+    // the pipeline at once), its exact passed count and both observations.
     let workflow = read(".github/workflows/ci-phase2-linux-sandbox.yml");
     for needle in [
         "systemctl",
         "ls -A",
         "grep -q .",
         "|| true",
+        "|| live=",
         "continue-on-error",
     ] {
         assert!(!workflow.contains(needle), "{needle}");
@@ -673,16 +742,23 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
         "python3 scripts/ci/test_phase2_cleanup_check.py\n",
         "- name: Live Phase Two isolation, escape and cleanup suite (every layer required)\n",
         "NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX: \"1\"\n",
-        "live=0\n",
-        "cargo test -p nexus-verifier-sandbox --locked --features development-toolchain \
-         --test phase2_live_sandbox 2>&1 | tee phase2-live.log || live=$?\n",
+        "if cargo test -p nexus-verifier-sandbox --locked --features development-toolchain \
+         --test phase2_live_sandbox 2>&1 | tee phase2-live.log; then\n",
+        "statuses=(\"${PIPESTATUS[@]}\")\n",
+        "else\n",
+        "statuses=(\"${PIPESTATUS[@]}\")\n",
+        "fi\n",
+        "live=${statuses[0]:-255}\n",
+        "captured=${statuses[1]:-255}\n",
         "passed=0\n",
         "grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log || passed=$?\n",
         "observed=0\n",
         "python3 scripts/ci/phase2_cleanup_check.py || observed=$?\n",
+        "if (( captured != 0 )); then\n",
+        "if (( passed != 0 )); then\n",
         "if (( live != 0 )); then\n",
         "exit \"$live\"\n",
-        "if (( passed != 0 || observed != 0 )); then\n",
+        "if (( captured != 0 || passed != 0 || observed != 0 )); then\n",
         "exit 1\n",
         "- name: Phase Two kernel and desktop controls\n",
     ] {
@@ -704,9 +780,24 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
         "        self.uid = os.getuid() if uid is None else uid\n",
         "            env=env,\n",
         "    return 0 if check() else 1\n",
+        "os.WEXITED | os.WNOHANG | os.WNOWAIT",
     ] {
         assert!(checker.contains(needle), "{needle}");
     }
+    let ended = checker
+        .find("        first = _attempt(query, time.monotonic() + timeout, limit)\n")
+        .expect("the attempt");
+    let confirmed = checker
+        .find("            status = query.finalize()\n")
+        .expect("the group ended");
+    assert!(ended < confirmed);
+    assert!(
+        checker
+            .find("        self.ops.signal_group(self.group)\n")
+            .unwrap()
+            < checker.find("            status = self.ops.reap(").unwrap()
+    );
+    assert_eq!(checker.matches("{_reportable(error)}").count(), 2);
     assert_eq!(checker.matches("os.environ").count(), 1);
     assert_eq!(checker.matches("except FileNotFoundError:").count(), 1);
 }

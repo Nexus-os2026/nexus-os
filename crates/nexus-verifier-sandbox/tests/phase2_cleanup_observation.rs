@@ -1,13 +1,18 @@
-//! P2-V1-R1 fixture controls for the live suite's checked cleanup
+//! P2-V1-R1/R2 fixture controls for the live suite's checked cleanup
 //! observations (`support/cleanup_observation.rs`): a failed, unbounded,
-//! redirected or malformed query is never "no scopes", and an observation
-//! failure at a retained boundary never skips its retry.
+//! redirected or malformed query is never "no scopes"; a query's process
+//! group is ended before any answer, and a group that cannot be confirmed
+//! ended stays owned; a retained boundary's owner survives every failed
+//! cleanup attempt, and no failure hides another.
 //!
 //! These are not live evidence. No user manager is contacted and no unit,
 //! scope or cgroup is created: the stand-in queries are `/bin/sh` scripts
-//! this test owns, bounded and reaped by the observation itself, and the
-//! runtime directories are fixture trees under the temporary directory, in
-//! which this test's uid stands in for root.
+//! this test owns, the runtime directories are fixture trees under the
+//! temporary directory (in which this test's uid stands in for root), and a
+//! retained boundary is stood in for by an owner whose drop is witnessed.
+//! Stand-ins that leave a process behind report it over a FIFO and wait
+//! until this test holds it by pidfd: the test's own cleanup ends it, and
+//! reaps what is this process's child, whatever the observer did.
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[path = "support/cleanup_observation.rs"]
@@ -18,12 +23,17 @@ mod controls {
     use super::cleanup_observation::*;
     use std::cell::Cell;
     use std::collections::BTreeMap;
-    use std::fs;
-    use std::os::unix::fs::{symlink, PermissionsExt};
+    use std::ffi::CString;
+    use std::fs::{self, File, OpenOptions};
+    use std::io::{self, Read};
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::{symlink, OpenOptionsExt, PermissionsExt};
     use std::os::unix::net::UnixListener;
     use std::os::unix::process::ExitStatusExt;
     use std::path::{Path, PathBuf};
-    use std::process::Command;
+    use std::process::{Command, ExitStatus};
+    use std::rc::Rc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
@@ -98,8 +108,8 @@ mod controls {
         .unwrap()
     }
 
-    fn killed(status: Option<std::process::ExitStatus>) -> bool {
-        status.is_some_and(|status| status.signal() == Some(libc::SIGKILL))
+    fn killed(status: ExitStatus) -> bool {
+        status.signal() == Some(libc::SIGKILL)
     }
 
     /// The environment a stand-in started with, from its own
@@ -114,6 +124,7 @@ mod controls {
             env: query.env.clone(),
             timeout: query.timeout,
             output_limit: query.output_limit,
+            ops: query.ops,
         };
         let answer = run(&probe).unwrap();
         assert!(answer.status.success(), "{answer:?}");
@@ -138,6 +149,191 @@ mod controls {
         .into_iter()
         .map(|(key, value)| (key.to_string(), value))
         .collect()
+    }
+
+    /// A FIFO at `dir/name`, for a stand-in's controlled communication.
+    fn fifo(dir: &Path, name: &str) -> PathBuf {
+        let path = dir.join(name);
+        let c_path = CString::new(path.as_os_str().as_bytes()).unwrap();
+        // SAFETY: a NUL-terminated path.
+        let made = unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) };
+        assert_eq!(made, 0, "mkfifo: {}", io::Error::last_os_error());
+        path
+    }
+
+    /// A process this test holds by pidfd: its own handle, which the
+    /// observer under test never shares, so the test's cleanup never depends
+    /// on that observer.
+    struct Held {
+        pid: libc::pid_t,
+        fd: OwnedFd,
+    }
+
+    impl Held {
+        fn open(pid: libc::pid_t) -> io::Result<Self> {
+            // SAFETY: pidfd_open takes a pid and no flags; it returns a new
+            // close-on-exec descriptor or -1.
+            let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0) };
+            let fd = RawFd::try_from(fd).map_err(|_| io::Error::other("pidfd_open"))?;
+            if fd < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: a new descriptor, owned here.
+            Ok(Held {
+                pid,
+                fd: unsafe { OwnedFd::from_raw_fd(fd) },
+            })
+        }
+
+        /// Whether the process has exited within `within`: its pidfd is
+        /// readable once it has. An exit, never a reap.
+        fn exited_within(&self, within: Duration) -> bool {
+            let mut polled = [libc::pollfd {
+                fd: self.fd.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            }];
+            let millis = i32::try_from(within.as_millis()).unwrap_or(i32::MAX);
+            // SAFETY: one initialized pollfd.
+            let ready = unsafe { libc::poll(polled.as_mut_ptr(), 1, millis) };
+            ready > 0 && polled[0].revents & libc::POLLIN != 0
+        }
+
+        /// Whether it is still this process's unreaped child: it was never
+        /// reaped, by anyone.
+        fn unreaped_child(&self) -> bool {
+            self.wait(libc::WEXITED | libc::WNOHANG | libc::WNOWAIT)
+        }
+
+        /// SIGKILL to exactly this process, through its pidfd.
+        fn kill(&self) {
+            // SAFETY: signals only the process the pidfd refers to.
+            unsafe {
+                libc::syscall(
+                    libc::SYS_pidfd_send_signal,
+                    self.fd.as_raw_fd(),
+                    libc::SIGKILL,
+                    std::ptr::null::<libc::siginfo_t>(),
+                    0,
+                )
+            };
+        }
+
+        /// Reap it, if it is still this process's child.
+        fn reap(&self) -> bool {
+            self.wait(libc::WEXITED)
+        }
+
+        fn wait(&self, options: libc::c_int) -> bool {
+            // SAFETY: siginfo_t is plain data; waitid fills it.
+            let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+            let id = libc::id_t::try_from(self.fd.as_raw_fd()).unwrap_or(libc::id_t::MAX);
+            // SAFETY: waits only for the child the pidfd refers to.
+            unsafe { libc::waitid(libc::P_PIDFD, id, &mut info, options) == 0 }
+        }
+    }
+
+    /// A stand-in query whose leader starts one descendant in its own
+    /// process group (every standard stream on /dev/null unless
+    /// `keep_output`, so it never holds the query's output), reports both
+    /// pids over a FIFO, waits until this test holds both by pidfd, then
+    /// exits with `status` without writing anything. Whatever the observer
+    /// does, dropping this ends what is left: the descendant through its
+    /// pidfd, and the leader, this process's child, reaped.
+    struct Survivor {
+        _root: Root,
+        script: String,
+        pids: PathBuf,
+        go: PathBuf,
+        held: Option<(Held, Held)>,
+    }
+
+    impl Survivor {
+        fn new(tag: &str, status: i32, keep_output: bool) -> Self {
+            let root = Root::new(tag);
+            let (pids, go) = (fifo(&root.0, "pids"), fifo(&root.0, "go"));
+            let redirect = if keep_output {
+                ""
+            } else {
+                " </dev/null >/dev/null 2>&1"
+            };
+            let script = format!(
+                "/bin/sleep 600{redirect} &\necho \"$$ $!\" > {}\nread go < {}\nexit {status}\n",
+                pids.display(),
+                go.display()
+            );
+            Survivor {
+                _root: root,
+                script,
+                pids,
+                go,
+                held: None,
+            }
+        }
+
+        /// The stand-in query, observed while this test takes both of its
+        /// processes by pidfd: a handshake over the FIFOs, never a sleep.
+        fn observe(&mut self, query: &Query) -> Result<Scopes, ObservationError> {
+            let (pids, go) = (self.pids.clone(), self.go.clone());
+            let handshake = std::thread::spawn(move || -> io::Result<(Held, Held)> {
+                let mut line = String::new();
+                File::open(&pids)?.read_to_string(&mut line)?;
+                let ids: Vec<libc::pid_t> = line
+                    .split_whitespace()
+                    .filter_map(|id| id.parse().ok())
+                    .collect();
+                let &[leader, descendant] = ids.as_slice() else {
+                    return Err(io::Error::other(format!("pids {line:?}")));
+                };
+                // Both are alive here: the leader waits for `go`, the
+                // descendant sleeps.
+                let held = (Held::open(leader)?, Held::open(descendant)?);
+                fs::write(&go, b"go\n")?;
+                Ok(held)
+            });
+            let result = observe(query);
+            self.unblock();
+            match handshake.join() {
+                Ok(Ok(held)) => self.held = Some(held),
+                Ok(Err(error)) => panic!("the handshake failed: {error}; observed {result:?}"),
+                Err(_) => panic!("the handshake panicked; observed {result:?}"),
+            }
+            result
+        }
+
+        /// Release a handshake still waiting on a FIFO the stand-in never
+        /// opened.
+        fn unblock(&self) {
+            let _ = OpenOptions::new()
+                .write(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(&self.pids);
+            let _ = OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(&self.go);
+        }
+
+        fn held(&self) -> (&Held, &Held) {
+            let (leader, descendant) = self.held.as_ref().expect("the handshake");
+            (leader, descendant)
+        }
+    }
+
+    impl Drop for Survivor {
+        fn drop(&mut self) {
+            self.unblock();
+            if let Some((leader, descendant)) = &self.held {
+                if !descendant.exited_within(Duration::ZERO) {
+                    descendant.kill();
+                    descendant.exited_within(Duration::from_secs(5));
+                }
+                if leader.unreaped_child() {
+                    leader.kill();
+                    leader.reap();
+                }
+            }
+        }
     }
 
     #[test]
@@ -192,19 +388,20 @@ mod controls {
         )
         .unwrap();
         assert!(
-            matches!(observe(&query), Err(ObservationError::Spawn(error)) if error.kind() == std::io::ErrorKind::NotFound)
+            matches!(observe(&query), Err(ObservationError::Spawn(error)) if error.kind() == io::ErrorKind::NotFound)
         );
     }
 
     #[test]
-    fn a_query_that_does_not_finish_is_killed_reaped_and_an_error() {
+    fn a_query_that_does_not_finish_is_ended_reaped_and_an_error() {
         let mut query = stand_in("exec /bin/sleep 30");
         query.timeout = Duration::from_millis(300);
         let started = Instant::now();
         match observe(&query) {
-            Err(ObservationError::Timeout(status)) => {
-                assert!(killed(status), "killed and reaped: {status:?}")
-            }
+            Err(ObservationError::Stopped {
+                stop: Stop::Timeout,
+                status,
+            }) => assert!(killed(status), "ended and reaped: {status:?}"),
             other => panic!("a query that does not finish is an error: {other:?}"),
         }
         assert!(started.elapsed() < Duration::from_secs(8));
@@ -212,42 +409,255 @@ mod controls {
 
     #[test]
     fn a_query_whose_output_stays_open_is_ended_with_its_process_group() {
-        // The query exits at once, but a process it left behind keeps its
-        // output open: no answer is complete, and the bound still holds.
-        let root = Root::new("open-output");
-        let pid_file = root.0.join("pid");
-        let mut query = stand_in(&format!(
-            "/bin/sleep 30 & echo $! > {}; exit 0",
-            pid_file.display()
-        ));
-        query.timeout = Duration::from_millis(500);
-        let started = Instant::now();
-        let result = observe(&query);
+        // The leader exits, but the descendant it left keeps its output
+        // open: no answer is complete, and the bound still holds.
+        let mut survivor = Survivor::new("open-output", 0, true);
+        let mut query = stand_in(&survivor.script);
+        query.timeout = Duration::from_secs(3);
+        match survivor.observe(&query) {
+            Err(ObservationError::Stopped {
+                stop: Stop::Timeout,
+                status,
+            }) => assert!(status.success(), "the leader's own exit: {status:?}"),
+            other => panic!("an output held open is never an answer: {other:?}"),
+        }
+        let (leader, descendant) = survivor.held();
         assert!(
-            matches!(result, Err(ObservationError::Timeout(Some(_)))),
-            "{result:?}"
+            descendant.exited_within(Duration::from_secs(5)),
+            "the query's process group was ended"
         );
-        assert!(started.elapsed() < Duration::from_secs(8));
-        let pid = fs::read_to_string(&pid_file).unwrap().trim().to_string();
-        // The killed process was reparented; it is gone once reaped there.
-        let gone = (0..250).any(|_| {
-            let done = match fs::read_to_string(format!("/proc/{pid}/stat")) {
-                Err(_) => true,
-                Ok(stat) => stat
-                    .rsplit(") ")
-                    .next()
-                    .is_some_and(|rest| rest.starts_with('Z')),
-            };
-            if !done {
-                std::thread::sleep(Duration::from_millis(20));
-            }
-            done
-        });
-        assert!(gone, "the query's process group was killed");
+        assert!(!leader.unreaped_child(), "the leader was reaped");
     }
 
     #[test]
-    fn a_query_that_writes_too_much_is_killed_and_an_error() {
+    fn a_descendant_left_by_a_successful_query_is_ended_before_the_answer() {
+        // The leader exits 0 without output; its descendant, in its group,
+        // holds none of the query's output. Neither the end of the output
+        // nor the leader's exit ends the query.
+        let mut survivor = Survivor::new("survivor-ok", 0, false);
+        let query = stand_in(&survivor.script);
+        assert_eq!(survivor.observe(&query).unwrap(), Scopes::new());
+        let (leader, descendant) = survivor.held();
+        assert!(
+            descendant.exited_within(Duration::from_secs(5)),
+            "the query's process group was ended"
+        );
+        assert!(!leader.unreaped_child(), "the leader was reaped");
+    }
+
+    #[test]
+    fn a_descendant_left_by_a_failed_query_is_ended_with_it() {
+        let mut survivor = Survivor::new("survivor-failed", 3, false);
+        let query = stand_in(&survivor.script);
+        match survivor.observe(&query) {
+            Err(ObservationError::Failed { status, .. }) => assert_eq!(status.code(), Some(3)),
+            other => panic!("a failed query is an error: {other:?}"),
+        }
+        let (leader, descendant) = survivor.held();
+        assert!(descendant.exited_within(Duration::from_secs(5)));
+        assert!(!leader.unreaped_child());
+    }
+
+    #[test]
+    fn an_unreadable_query_is_ended_and_an_error() {
+        let mut survivor = Survivor::new("survivor-io", 0, false);
+        let mut query = stand_in(&survivor.script);
+        query.ops = Ops {
+            exited: |_| Err(io::Error::from_raw_os_error(libc::EIO)),
+            ..PROCESS
+        };
+        match survivor.observe(&query) {
+            Err(ObservationError::Stopped {
+                stop: Stop::Io(error),
+                ..
+            }) => assert_eq!(error.raw_os_error(), Some(libc::EIO)),
+            other => panic!("an unreadable query is an error: {other:?}"),
+        }
+        let (leader, descendant) = survivor.held();
+        assert!(descendant.exited_within(Duration::from_secs(5)));
+        assert!(!leader.unreaped_child());
+    }
+
+    #[test]
+    fn an_unconfirmed_group_end_keeps_the_query_owned_for_an_explicit_retry() {
+        let mut survivor = Survivor::new("survivor-unsignalled", 0, false);
+        let mut query = stand_in(&survivor.script);
+        query.ops = Ops {
+            signal_group: |_| Err(io::Error::from_raw_os_error(libc::EPERM)),
+            ..PROCESS
+        };
+        let result = survivor.observe(&query);
+        let Err(ObservationError::Unfinalized(unfinalized)) = result else {
+            panic!("never an answer while the group is not ended: {result:?}");
+        };
+        let Unfinalized {
+            query: owned,
+            first,
+            failure,
+        } = *unfinalized;
+        assert!(
+            matches!(&first, Ok(answer) if answer.status.success()),
+            "{first:?}"
+        );
+        assert_eq!(failure.raw_os_error(), Some(libc::EPERM));
+        let (leader, descendant) = survivor.held();
+        assert_eq!(owned.leader(), leader.pid.unsigned_abs());
+        assert!(leader.unreaped_child(), "still owned: the leader unreaped");
+        assert!(
+            !descendant.exited_within(Duration::ZERO),
+            "nothing ended the group"
+        );
+        // A later explicit retry, without the injected failure, ends it.
+        let status = owned
+            .with_ops(PROCESS)
+            .finalize()
+            .map_err(|(_, error)| error)
+            .unwrap();
+        assert!(status.success());
+        assert!(descendant.exited_within(Duration::from_secs(5)));
+        assert!(!leader.unreaped_child());
+    }
+
+    #[test]
+    fn an_unreaped_leader_keeps_the_query_owned_and_anchored() {
+        let mut survivor = Survivor::new("survivor-unreaped", 0, false);
+        let mut query = stand_in(&survivor.script);
+        query.ops = Ops {
+            reap: |_, _| Ok(None),
+            ..PROCESS
+        };
+        let result = survivor.observe(&query);
+        let Err(ObservationError::Unfinalized(unfinalized)) = result else {
+            panic!("never an answer while the leader is unreaped: {result:?}");
+        };
+        let Unfinalized { query: owned, .. } = *unfinalized;
+        let (leader, descendant) = survivor.held();
+        assert!(
+            descendant.exited_within(Duration::from_secs(5)),
+            "the group was signalled, anchored"
+        );
+        assert!(leader.unreaped_child(), "the anchor is kept");
+        let status = owned
+            .with_ops(PROCESS)
+            .finalize()
+            .map_err(|(_, error)| error)
+            .unwrap();
+        assert!(status.success());
+        assert!(!leader.unreaped_child());
+    }
+
+    static SIGNALLED: AtomicUsize = AtomicUsize::new(0);
+
+    /// The real group signal, counted (one control only uses it).
+    fn counted_signal(group: libc::pid_t) -> io::Result<()> {
+        SIGNALLED.fetch_add(1, Ordering::SeqCst);
+        (PROCESS.signal_group)(group)
+    }
+
+    #[test]
+    fn a_leader_in_an_unknown_state_is_never_signalled_again() {
+        let mut survivor = Survivor::new("survivor-unknown", 0, false);
+        let mut query = stand_in(&survivor.script);
+        query.ops = Ops {
+            signal_group: counted_signal,
+            reap: |_, _| Err(io::Error::from_raw_os_error(libc::ECHILD)),
+            ..PROCESS
+        };
+        let result = survivor.observe(&query);
+        let Err(ObservationError::Unfinalized(unfinalized)) = result else {
+            panic!("never an answer while the leader's state is unknown: {result:?}");
+        };
+        assert_eq!(
+            SIGNALLED.load(Ordering::SeqCst),
+            1,
+            "signalled once, anchored"
+        );
+        let (leader, descendant) = survivor.held();
+        assert!(descendant.exited_within(Duration::from_secs(5)));
+        // Its reap failed, so the leader's state is unknown: neither a retry
+        // nor the drop signals that group id again.
+        let Unfinalized { query: owned, .. } = *unfinalized;
+        let Err((owned, error)) = owned.finalize() else {
+            panic!("a leader in an unknown state is never confirmed");
+        };
+        assert!(
+            error.to_string().contains("never signalled again"),
+            "{error}"
+        );
+        drop(owned);
+        assert_eq!(SIGNALLED.load(Ordering::SeqCst), 1);
+        // The leader is in fact still this process's child: the fixture's
+        // own cleanup reaps it.
+        assert!(leader.unreaped_child());
+    }
+
+    static REFUSED: AtomicUsize = AtomicUsize::new(0);
+
+    /// A group signal that always fails, counted (one control only uses it).
+    fn refused_signal(_: libc::pid_t) -> io::Result<()> {
+        REFUSED.fetch_add(1, Ordering::SeqCst);
+        Err(io::Error::from_raw_os_error(libc::EPERM))
+    }
+
+    #[test]
+    fn a_reported_unconfirmed_query_is_retried_then_released() {
+        let mut survivor = Survivor::new("survivor-released", 0, false);
+        let mut query = stand_in(&survivor.script);
+        query.ops = Ops {
+            signal_group: refused_signal,
+            ..PROCESS
+        };
+        let error = survivor.observe(&query).expect_err("never an answer");
+        let report = reported(error);
+        assert!(
+            report.contains("still not confirmed ended after 3 explicit attempts"),
+            "{report}"
+        );
+        // The run's attempt, each explicit attempt, then the release's
+        // backstop, which still held the group's anchor.
+        assert_eq!(REFUSED.load(Ordering::SeqCst), 1 + EXPLICIT_ATTEMPTS + 1);
+        let (leader, descendant) = survivor.held();
+        assert!(!leader.unreaped_child(), "the release reaped the leader");
+        assert!(
+            !descendant.exited_within(Duration::ZERO),
+            "nothing could end the group: the fixture does"
+        );
+    }
+
+    #[test]
+    fn a_reported_query_is_finalized_again_explicitly() {
+        let mut survivor = Survivor::new("survivor-recovered", 0, false);
+        let mut query = stand_in(&survivor.script);
+        query.ops = Ops {
+            signal_group: |_| Err(io::Error::from_raw_os_error(libc::EPERM)),
+            ..PROCESS
+        };
+        let result = survivor.observe(&query);
+        let Err(ObservationError::Unfinalized(unfinalized)) = result else {
+            panic!("never an answer: {result:?}");
+        };
+        let Unfinalized {
+            query: owned,
+            first,
+            failure,
+        } = *unfinalized;
+        let error = ObservationError::Unfinalized(Box::new(Unfinalized {
+            query: owned.with_ops(PROCESS),
+            first,
+            failure,
+        }));
+        let report = reported(error);
+        assert!(
+            report.contains("confirmed ended only on explicit attempt 1"),
+            "{report}"
+        );
+        let (leader, descendant) = survivor.held();
+        assert!(descendant.exited_within(Duration::from_secs(5)));
+        assert!(!leader.unreaped_child());
+    }
+
+    #[test]
+    fn a_query_that_writes_too_much_is_ended_and_an_error() {
         let line = "nexus-verifier-0a1b.scope loaded active running Nexus verifier execution";
         for stream in ["", " >&2"] {
             let mut query = stand_in(&format!(
@@ -256,9 +666,10 @@ mod controls {
             ));
             query.output_limit = 1024;
             match observe(&query) {
-                Err(ObservationError::OutputLimit(status)) => {
-                    assert!(killed(status), "killed and reaped: {status:?}")
-                }
+                Err(ObservationError::Stopped {
+                    stop: Stop::OutputLimit,
+                    status,
+                }) => assert!(killed(status), "ended and reaped: {status:?}"),
                 other => panic!("too much output is an error{stream}: {other:?}"),
             }
         }
@@ -491,51 +902,242 @@ mod controls {
         assert!(started.elapsed() < Duration::from_secs(5));
     }
 
-    #[test]
-    fn an_observation_failure_at_a_retained_boundary_never_skips_its_retry() {
-        let before = scopes(&["nexus-verifier-a.scope"]);
-        let kept = scopes(&["nexus-verifier-a.scope", "nexus-verifier-b.scope"]);
-        let retries = Cell::new(0);
-        let retry = |confirms: bool| {
-            let retries = &retries;
-            move || {
-                retries.set(retries.get() + 1);
-                confirms
-            }
-        };
-        // The real failure of an unreachable user bus: the retry still runs
-        // and confirms, and the observation failure is kept beside it.
-        let unreachable = observe(&stand_in("echo 'No medium found' >&2; exit 1"));
-        match after_retry(unreachable, &before, retry(true)) {
-            Err(Retained::Unobserved {
-                error: ObservationError::Failed { .. },
-                retried: true,
-            }) => {}
-            other => panic!("{other:?}"),
+    /// An owner standing in for a retained boundary: its cleanup fails
+    /// `failures` more times, every attempt is counted, and its drop (the
+    /// end of its ownership) is witnessed.
+    #[derive(Debug)]
+    struct Witness {
+        id: usize,
+        failures: usize,
+        tries: Rc<Cell<usize>>,
+        dropped: Rc<Cell<usize>>,
+    }
+
+    impl Witness {
+        fn new(failures: usize) -> (Self, Rc<Cell<usize>>, Rc<Cell<usize>>) {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let (tries, dropped) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+            let witness = Witness {
+                id: NEXT.fetch_add(1, Ordering::SeqCst),
+                failures,
+                tries: tries.clone(),
+                dropped: dropped.clone(),
+            };
+            (witness, tries, dropped)
         }
-        assert_eq!(retries.get(), 1);
-        let timed_out = Err(ObservationError::Timeout(None));
+
+        /// As a retained boundary's retry: a confirmation consumes the
+        /// owner; a failure returns the very same owner.
+        fn retry(mut self) -> Result<(), Self> {
+            self.tries.set(self.tries.get() + 1);
+            if self.failures == 0 {
+                return Ok(());
+            }
+            self.failures -= 1;
+            Err(self)
+        }
+    }
+
+    impl Drop for Witness {
+        fn drop(&mut self) {
+            self.dropped.set(self.dropped.get() + 1);
+        }
+    }
+
+    fn before_and_kept() -> (Scopes, Scopes) {
+        (
+            scopes(&["nexus-verifier-a.scope"]),
+            scopes(&["nexus-verifier-a.scope", "nexus-verifier-b.scope"]),
+        )
+    }
+
+    #[test]
+    fn each_failed_attempt_returns_the_same_owner() {
+        let (owner, tries, dropped) = Witness::new(2);
+        let id = owner.id;
+        let settled = settle(owner, EXPLICIT_ATTEMPTS, |owner: Witness| {
+            assert_eq!(owner.id, id, "the same owner");
+            assert_eq!(dropped.get(), 0, "never dropped between attempts");
+            owner.retry()
+        });
+        assert!(matches!(settled, Settled::Confirmed(3)), "{settled:?}");
+        assert_eq!((tries.get(), dropped.get()), (3, 1));
+    }
+
+    #[test]
+    fn a_failed_retry_keeps_its_owner_for_a_later_explicit_retry() {
+        let (owner, tries, dropped) = Witness::new(usize::MAX);
+        let id = owner.id;
+        let (before, kept) = before_and_kept();
+        let verdict = judge_retained(
+            Vec::new(),
+            Ok(kept),
+            &before,
+            owner,
+            EXPLICIT_ATTEMPTS,
+            Witness::retry,
+        );
+        assert_eq!(
+            dropped.get(),
+            0,
+            "the owner is never dropped by a failed cleanup: {verdict:?}"
+        );
+        let Verdict::Unconfirmed {
+            mut owner,
+            failures,
+        } = verdict
+        else {
+            panic!("an unconfirmed cleanup keeps its owner: {verdict:?}");
+        };
+        assert_eq!(owner.id, id, "the very owner every failed attempt returned");
+        assert_eq!(tries.get(), EXPLICIT_ATTEMPTS);
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("still unconfirmed after 3 explicit attempts")),
+            "{failures:?}"
+        );
+        // A later explicit retry confirms the cleanup, ending the ownership.
+        owner.failures = 0;
         assert!(matches!(
-            after_retry(timed_out, &before, retry(false)),
-            Err(Retained::Unobserved {
-                error: ObservationError::Timeout(None),
-                retried: false
-            })
+            settle(owner, 1, Witness::retry),
+            Settled::Confirmed(1)
         ));
-        assert_eq!(retries.get(), 2);
-        assert!(matches!(
-            after_retry(Ok(kept.clone()), &before, retry(false)),
-            Err(Retained::NotConfirmed { kept: true })
-        ));
-        assert!(matches!(
-            after_retry(Ok(before.clone()), &before, retry(false)),
-            Err(Retained::NotConfirmed { kept: false })
-        ));
-        assert!(matches!(
-            after_retry(Ok(before.clone()), &before, retry(true)),
-            Err(Retained::NotKept { before: 1, .. })
-        ));
-        assert!(after_retry(Ok(kept), &before, retry(true)).is_ok());
-        assert_eq!(retries.get(), 6, "every judgement ran the retry once");
+        assert_eq!((tries.get(), dropped.get()), (EXPLICIT_ATTEMPTS + 1, 1));
+    }
+
+    #[test]
+    fn an_observation_failure_survives_a_confirming_retry() {
+        // The real failure of an unreachable user bus, reported.
+        let observed = observe(&stand_in("echo 'No medium found' >&2; exit 1")).map_err(reported);
+        let (owner, tries, dropped) = Witness::new(0);
+        let (before, _) = before_and_kept();
+        let verdict = judge_retained(
+            Vec::new(),
+            observed,
+            &before,
+            owner,
+            EXPLICIT_ATTEMPTS,
+            Witness::retry,
+        );
+        assert_eq!(
+            (tries.get(), dropped.get()),
+            (1, 1),
+            "the retry ran and confirmed"
+        );
+        let Verdict::Failed(failures) = verdict else {
+            panic!("an observation failure stays a failure: {verdict:?}");
+        };
+        assert!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("could not be observed")
+                    && failure.contains("No medium found")),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn observation_and_cleanup_failures_are_kept_together_with_the_owner() {
+        let (owner, _, dropped) = Witness::new(usize::MAX);
+        let (before, _) = before_and_kept();
+        let verdict = judge_retained(
+            Vec::new(),
+            Err("the query failed".to_string()),
+            &before,
+            owner,
+            EXPLICIT_ATTEMPTS,
+            Witness::retry,
+        );
+        assert_eq!(
+            dropped.get(),
+            0,
+            "the owner is never dropped by a failed cleanup: {verdict:?}"
+        );
+        let Verdict::Unconfirmed { owner, failures } = verdict else {
+            panic!("an unconfirmed cleanup keeps its owner: {verdict:?}");
+        };
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("the query failed")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("still unconfirmed")));
+        // Released explicitly, once reported: the report keeps both.
+        let report = release(owner, "case", &failures);
+        assert_eq!(dropped.get(), 1);
+        assert!(report.contains("the query failed") && report.contains("still unconfirmed"));
+    }
+
+    #[test]
+    fn evidence_is_judged_only_after_the_cleanup() {
+        let (owner, tries, dropped) = Witness::new(0);
+        let (before, kept) = before_and_kept();
+        let verdict = judge_retained(
+            vec!["the retained tree is not alive".to_string()],
+            Ok(kept),
+            &before,
+            owner,
+            EXPLICIT_ATTEMPTS,
+            Witness::retry,
+        );
+        assert_eq!((tries.get(), dropped.get()), (1, 1), "cleaned up first");
+        let Verdict::Failed(failures) = verdict else {
+            panic!("{verdict:?}");
+        };
+        assert_eq!(failures, ["the retained tree is not alive"]);
+    }
+
+    #[test]
+    fn a_cleanup_confirmed_only_on_a_later_attempt_still_fails() {
+        let (owner, tries, dropped) = Witness::new(1);
+        let (before, kept) = before_and_kept();
+        let verdict = judge_retained(
+            Vec::new(),
+            Ok(kept),
+            &before,
+            owner,
+            EXPLICIT_ATTEMPTS,
+            Witness::retry,
+        );
+        assert_eq!((tries.get(), dropped.get()), (2, 1));
+        let Verdict::Failed(failures) = verdict else {
+            panic!("{verdict:?}");
+        };
+        assert!(
+            failures[0].contains("confirmed only on explicit attempt 2"),
+            "{failures:?}"
+        );
+    }
+
+    #[test]
+    fn a_kept_scope_and_a_first_confirmed_cleanup_pass() {
+        let (owner, tries, dropped) = Witness::new(0);
+        let (before, kept) = before_and_kept();
+        let verdict = judge_retained(
+            Vec::new(),
+            Ok(kept),
+            &before,
+            owner,
+            EXPLICIT_ATTEMPTS,
+            Witness::retry,
+        );
+        assert!(matches!(verdict, Verdict::Passed), "{verdict:?}");
+        assert_eq!((tries.get(), dropped.get()), (1, 1));
+        // Not kept: a failure, after the cleanup.
+        let (owner, _, dropped) = Witness::new(0);
+        let verdict = judge_retained(
+            Vec::new(),
+            Ok(before.clone()),
+            &before,
+            owner,
+            EXPLICIT_ATTEMPTS,
+            Witness::retry,
+        );
+        assert_eq!(dropped.get(), 1);
+        assert!(
+            matches!(&verdict, Verdict::Failed(failures) if failures[0].contains("not kept")),
+            "{verdict:?}"
+        );
     }
 }

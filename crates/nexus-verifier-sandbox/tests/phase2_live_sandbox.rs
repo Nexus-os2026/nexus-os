@@ -603,7 +603,7 @@ mod live {
 
     mod p2d {
         use super::*;
-        use crate::cleanup_observation::{self, wait_for, ObservationError, Scopes};
+        use crate::cleanup_observation::{self, reported, wait_for, ObservationError, Scopes};
         pub use nexus_verifier_sandbox::execution::{self, EndedBy, ExitClass};
         pub use nexus_verifier_sandbox::policy::ResourcePolicy;
         pub use nexus_verifier_sandbox::scope::{Occupancy, ScopeError, ScopeManager};
@@ -777,20 +777,20 @@ mod live {
             // A helper that is no longer running cannot be placed in a
             // scope: no scope is confirmed for it, and the empty unit made
             // for it is not left behind.
-            let before =
-                loaded_scopes().unwrap_or_else(|error| panic!("the loaded scopes: {error}"));
+            let before = loaded_scopes()
+                .unwrap_or_else(|error| panic!("the loaded scopes: {}", reported(error)));
             let (mut helper, _output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
             helper.kill().unwrap();
             let refused = scopes.start(&helper, &limits());
             assert!(refused.is_err(), "{refused:?}");
             helper.reap().unwrap();
-            let stopped = wait_for(Duration::from_secs(10), loaded_scopes, |now| {
+            match wait_for(Duration::from_secs(10), loaded_scopes, |now| {
                 now.len() <= before.len()
-            });
-            assert!(
-                matches!(stopped, Ok(true)),
-                "the refused scope was stopped: {stopped:?}"
-            );
+            }) {
+                Ok(true) => {}
+                Ok(false) => panic!("the refused scope was not stopped"),
+                Err(error) => panic!("the refused scope was not observed: {}", reported(error)),
+            }
         }
 
         pub fn missing_scope() {
@@ -826,9 +826,13 @@ mod live {
     mod p2r1 {
         use super::p2d::{execution, loaded_scopes, EndedBy, ExitClass, ResourcePolicy};
         use super::*;
-        use crate::cleanup_observation::{after_retry, wait_for, Scopes};
-        use execution::{Cleanup, Fault, FaultPoint, NotRun};
+        use crate::cleanup_observation::{
+            judge_retained, release, reported, settle, wait_for, Scopes, Settled, Verdict,
+            EXPLICIT_ATTEMPTS,
+        };
+        use execution::{Cleanup, ExecutionReport, Fault, FaultPoint, NotRun, RetainedBoundary};
         use nexus_verifier_sandbox::scope::ScopeManager;
+        use std::panic::{catch_unwind, AssertUnwindSafe};
         use std::sync::atomic::AtomicBool;
 
         fn process_ids() -> impl Iterator<Item = PathBuf> {
@@ -870,8 +874,9 @@ mod live {
         }
 
         /// Run `run` while watching the tree; returns the most of its
-        /// processes seen alive at once.
-        fn watched<T>(marker: &str, run: impl FnOnce() -> T) -> (T, usize) {
+        /// processes seen alive at once (`None`: the watcher failed, which
+        /// the caller judges later: `run`'s result may own a live boundary).
+        fn watched<T>(marker: &str, run: impl FnOnce() -> T) -> (T, Option<usize>) {
             let stop = Arc::new(AtomicBool::new(false));
             let (flag, marker) = (stop.clone(), marker.to_string());
             let watcher = std::thread::spawn(move || {
@@ -884,7 +889,7 @@ mod live {
             });
             let result = run();
             stop.store(true, Ordering::SeqCst);
-            (result, watcher.join().unwrap())
+            (result, watcher.join().ok())
         }
 
         enum Expect {
@@ -903,13 +908,105 @@ mod live {
         fn gone(name: &str, marker: &str, children_before: usize, scopes_before: &Scopes) {
             assert_eq!(tree(marker), 0, "{name}: no process of the tree survives");
             assert_eq!(children(), children_before, "{name}: the helper is reaped");
-            let removed = wait_for(Duration::from_secs(10), loaded_scopes, |now| {
+            match wait_for(Duration::from_secs(10), loaded_scopes, |now| {
                 now.len() <= scopes_before.len()
-            });
-            assert!(
-                matches!(removed, Ok(true)),
-                "{name}: the scope is gone: {removed:?}"
-            );
+            }) {
+                Ok(true) => {}
+                Ok(false) => panic!("{name}: the scope is not gone"),
+                Err(error) => panic!("{name}: the scope was not observed: {}", reported(error)),
+            }
+        }
+
+        /// A retained boundary that still owns the live tree. The evidence
+        /// is taken while it is held, its cleanup is settled explicitly
+        /// (bounded), and only then is anything judged. An unconfirmed
+        /// cleanup stops the suite (see [`stop_unconfirmed`]).
+        fn retained(
+            name: &str,
+            marker: &str,
+            children_before: usize,
+            scopes_before: &Scopes,
+            class: ExitClass,
+            mut failures: Vec<String>,
+            boundary: RetainedBoundary,
+        ) {
+            // Taking the evidence cannot drop the boundary: a panic while
+            // taking it is contained, and the boundary stays here.
+            let evidence = catch_unwind(AssertUnwindSafe(|| {
+                let mut found = Vec::new();
+                if class != ExitClass::CleanupFailed {
+                    found.push(format!(
+                        "classified {class:?}, not as an unconfirmed cleanup"
+                    ));
+                }
+                if !(boundary.holds_scope() && boundary.holds_helper()) {
+                    found.push("the boundary does not hold its scope and its helper".to_string());
+                }
+                if tree(marker) == 0 {
+                    found.push("the retained tree is not alive".to_string());
+                }
+                let unreaped = children();
+                if unreaped != children_before + 1 {
+                    found.push(format!(
+                        "{unreaped} children, not {} with the helper unreaped",
+                        children_before + 1
+                    ));
+                }
+                (found, loaded_scopes().map_err(reported))
+            }));
+            let kept = match evidence {
+                Ok((found, kept)) => {
+                    failures.extend(found);
+                    kept
+                }
+                Err(_) => {
+                    failures.push("the evidence could not be taken".to_string());
+                    Err("not observed".to_string())
+                }
+            };
+            match judge_retained(
+                failures,
+                kept,
+                scopes_before,
+                boundary,
+                EXPLICIT_ATTEMPTS,
+                RetainedBoundary::retry,
+            ) {
+                Verdict::Passed => gone(name, marker, children_before, scopes_before),
+                Verdict::Failed(failures) => panic!("{name}: {}", failures.join("; ")),
+                Verdict::Unconfirmed { owner, failures } => {
+                    stop_unconfirmed(name, &failures, owner)
+                }
+            }
+        }
+
+        /// An execution that kept a boundary it was expected to have ended:
+        /// the boundary is settled explicitly (bounded) before the case
+        /// fails.
+        fn unexpected(name: &str, mut failures: Vec<String>, boundary: RetainedBoundary) -> ! {
+            match settle(boundary, EXPLICIT_ATTEMPTS, RetainedBoundary::retry) {
+                Settled::Confirmed(attempt) => {
+                    failures.push(format!(
+                        "its boundary was confirmed ended on explicit attempt {attempt}"
+                    ));
+                    panic!("{name}: {}", failures.join("; "))
+                }
+                Settled::Unconfirmed(owner, attempts) => {
+                    failures.push(format!(
+                        "its boundary is still unconfirmed after {attempts} explicit attempts"
+                    ));
+                    stop_unconfirmed(name, &failures, owner)
+                }
+            }
+        }
+
+        /// A cleanup still unconfirmed after the bounded attempts: every
+        /// failure is reported, the owner is released explicitly to the
+        /// boundary's drop backstop (never a confirmation), and the suite
+        /// stops; no further case starts.
+        fn stop_unconfirmed(name: &str, failures: &[String], owner: RetainedBoundary) -> ! {
+            let report = release(owner, name, failures);
+            panic!("{report}")
         }
 
         fn case(
@@ -939,57 +1036,75 @@ mod live {
             };
             let children_before = children();
             let scopes_before = loaded_scopes()
-                .unwrap_or_else(|error| panic!("{name}: the loaded scopes: {error}"));
+                .unwrap_or_else(|error| panic!("{name}: the loaded scopes: {}", reported(error)));
             let (report, most) = watched(&marker, || {
                 execution::run_with_fault(scopes, &HelperProgram::at(HELPER), spec, &limits, fault)
             });
             let class = report.classify(0);
-            assert_ne!(class, ExitClass::Passed, "{name}: {report:?}");
-            if tree_seen {
-                assert!(most > 0, "{name}: the verifier's tree was running");
+            // Whatever the report still owns is taken out of it before any
+            // check: a retained boundary is settled explicitly and only then
+            // judged, so no failing check, format or early return drops a
+            // boundary that still owns the verifier's tree.
+            let ExecutionReport {
+                not_run,
+                outcome,
+                ended_by,
+                output_lost,
+                cleanup,
+                ..
+            } = report;
+            let mut failures = Vec::new();
+            if class == ExitClass::Passed {
+                failures.push("an interrupted execution was passed".to_string());
             }
-            match expect {
-                Expect::NotRun => {
-                    assert!(report.cleanup.is_confirmed(), "{name}: {report:?}");
-                    assert!(
-                        matches!(report.not_run, Some(NotRun::Interrupted)),
-                        "{name}"
-                    );
-                    assert_eq!(class, ExitClass::SandboxSetupFailed, "{name}");
-                    gone(&name, &marker, children_before, &scopes_before);
+            match most {
+                None => failures.push("the verifier's tree could not be watched".to_string()),
+                Some(0) if tree_seen => {
+                    failures.push("the verifier's tree was never seen running".to_string())
                 }
-                Expect::Interrupted => {
-                    assert!(report.cleanup.is_confirmed(), "{name}: {report:?}");
-                    assert_eq!(report.ended_by, Some(EndedBy::Interrupted), "{name}");
-                    assert!(report.outcome.is_none(), "{name}: nothing observed is kept");
-                    assert_eq!(class, ExitClass::SandboxFailed, "{name}");
-                    gone(&name, &marker, children_before, &scopes_before);
+                Some(_) => {}
+            }
+            let boundary = match cleanup {
+                Cleanup::Confirmed => None,
+                Cleanup::Failed(boundary) => Some(boundary),
+            };
+            match (expect, boundary) {
+                (Expect::Retained, Some(boundary)) => retained(
+                    &name,
+                    &marker,
+                    children_before,
+                    &scopes_before,
+                    class,
+                    failures,
+                    boundary,
+                ),
+                (_, Some(boundary)) => {
+                    failures.push(format!("the cleanup is unconfirmed ({class:?})"));
+                    unexpected(&name, failures, boundary)
                 }
-                Expect::OutputLost => {
-                    assert!(report.cleanup.is_confirmed(), "{name}: {report:?}");
-                    assert!(report.output_lost, "{name}: {report:?}");
-                    assert_eq!(class, ExitClass::SandboxFailed, "{name}");
-                    gone(&name, &marker, children_before, &scopes_before);
-                }
-                Expect::Retained => {
-                    assert_eq!(class, ExitClass::CleanupFailed, "{name}: {report:?}");
-                    let Cleanup::Failed(boundary) = report.cleanup else {
-                        unreachable!("classified as unconfirmed")
-                    };
-                    // The unfinished boundary is owned: its scope and its
-                    // unreaped helper, with the verifier's tree still alive.
-                    assert!(boundary.holds_scope() && boundary.holds_helper(), "{name}");
-                    assert!(tree(&marker) > 0, "{name}: the retained tree is alive");
-                    assert_eq!(children(), children_before + 1, "{name}: helper unreaped");
-                    // The scope is observed as kept while the boundary holds
-                    // it. An explicit retry then ends it and confirms it,
-                    // whatever that observation was; only then is the
-                    // observation judged.
-                    let kept = loaded_scopes();
-                    if let Err(failure) =
-                        after_retry(kept, &scopes_before, || boundary.retry().is_ok())
-                    {
-                        panic!("{name}: {failure}");
+                (expect, None) => {
+                    // Nothing is owned any more: the checks may fail at once.
+                    assert!(failures.is_empty(), "{name}: {}", failures.join("; "));
+                    match expect {
+                        Expect::NotRun => {
+                            assert!(
+                                matches!(not_run, Some(NotRun::Interrupted)),
+                                "{name}: {not_run:?}"
+                            );
+                            assert_eq!(class, ExitClass::SandboxSetupFailed, "{name}");
+                        }
+                        Expect::Interrupted => {
+                            assert_eq!(ended_by, Some(EndedBy::Interrupted), "{name}");
+                            assert!(outcome.is_none(), "{name}: nothing observed is kept");
+                            assert_eq!(class, ExitClass::SandboxFailed, "{name}");
+                        }
+                        Expect::OutputLost => {
+                            assert!(output_lost, "{name}: the output record is lost");
+                            assert_eq!(class, ExitClass::SandboxFailed, "{name}");
+                        }
+                        Expect::Retained => panic!(
+                            "{name}: a confirmed cleanup, not a retained boundary ({class:?})"
+                        ),
                     }
                     gone(&name, &marker, children_before, &scopes_before);
                 }

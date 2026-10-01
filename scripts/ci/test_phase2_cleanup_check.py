@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
-"""P2-V1-R1 fixture controls for `phase2_cleanup_check.py` and for the live
-step of `.github/workflows/ci-phase2-linux-sandbox.yml` that runs it.
+"""P2-V1-R1/R2 fixture controls for `phase2_cleanup_check.py` and for the
+live step of `.github/workflows/ci-phase2-linux-sandbox.yml` that runs it.
 
 These are not live evidence. No user manager is contacted and nothing is
 created outside this test's temporary directories: stand-in queries are
-`/bin/sh` scripts, bounded and reaped by the observation itself; runtime
-directories are fixture trees in which this test's uid stands in for root;
-failures this host's permissions cannot produce deterministically (a refused
-open or listing, a failing or foreign stat) are injected. The live step runs
-as GitHub runs a bash step, with stand-ins for the live suite and the
+`/bin/sh` scripts; runtime directories are fixture trees in which this test's
+uid stands in for root; failures this host's permissions cannot produce
+deterministically (a refused open or listing, a failing or foreign stat, a
+refused signal or reap) are injected. A stand-in that leaves a process behind
+reports it over a FIFO and waits until this test holds it by pidfd: the
+test's own cleanup ends it, and reaps what is this process's child, whatever
+the observer did. The live step runs as GitHub runs a bash step, with
+stand-ins for the live suite, the capture of its output and the
 observations.
 
     python3 scripts/ci/test_phase2_cleanup_check.py
 """
 
+import contextlib
 import errno
 import os
+import select
 import shlex
 import shutil
 import signal
@@ -23,6 +28,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -62,28 +68,123 @@ def expected_environment(bus):
     }
 
 
-def gone(pid, within=5.0):
-    """Whether `pid` is gone (or a zombie awaiting its new parent) within
-    the bound."""
-    deadline = time.monotonic() + within
-    while True:
-        try:
-            with open(f"/proc/{pid}/stat") as stat_file:
-                state = stat_file.read().rsplit(") ", 1)[1][:1]
-        except (FileNotFoundError, ProcessLookupError):
-            return True
-        if state == "Z":
-            return True
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.02)
-
-
 def temporary(test, prefix="p2v1r1-"):
     directory = tempfile.mkdtemp(prefix=prefix)
     test.addCleanup(shutil.rmtree, directory, True)
     os.chmod(directory, 0o755)
     return directory
+
+
+class Held:
+    """A process this test holds by pidfd: its own handle, which the
+    observer under test never shares, so the test's cleanup never depends on
+    that observer."""
+
+    def __init__(self, pid):
+        self.pid = pid
+        self.fd = os.pidfd_open(pid)
+
+    def exited_within(self, within):
+        """Whether the process has exited within `within` seconds: its pidfd
+        is readable once it has. An exit, never a reap."""
+        poller = select.poll()
+        poller.register(self.fd, select.POLLIN)
+        return bool(poller.poll(int(within * 1000)))
+
+    def unreaped_child(self):
+        """Whether it is still this process's unreaped child: it was never
+        reaped, by anyone."""
+        try:
+            os.waitid(os.P_PIDFD, self.fd, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+        except ChildProcessError:
+            return False
+        return True
+
+    def kill(self):
+        """SIGKILL to exactly this process, through its pidfd."""
+        with contextlib.suppress(ProcessLookupError):
+            signal.pidfd_send_signal(self.fd, signal.SIGKILL)
+
+    def reap(self):
+        """Reap it, if it is still this process's child."""
+        with contextlib.suppress(ChildProcessError):
+            os.waitid(os.P_PIDFD, self.fd, os.WEXITED)
+
+    def close(self):
+        os.close(self.fd)
+
+
+class Survivor:
+    """A stand-in query whose leader starts one descendant in its own
+    process group (every standard stream on /dev/null unless `keep_output`,
+    so it never holds the query's output), reports both pids over a FIFO,
+    waits until this test holds both by pidfd, then exits with `status`
+    without writing anything. Whatever the observer does, this test's
+    cleanup ends what is left: the descendant through its pidfd, and the
+    leader, this process's child, reaped."""
+
+    def __init__(self, test, status=0, keep_output=False):
+        directory = temporary(test)
+        self.pids = os.path.join(directory, "pids")
+        self.go = os.path.join(directory, "go")
+        for fifo in (self.pids, self.go):
+            os.mkfifo(fifo, 0o600)
+        redirect = "" if keep_output else " </dev/null >/dev/null 2>&1"
+        self.script = (
+            f"/bin/sleep 600{redirect} &\n"
+            f'echo "$$ $!" > {self.pids}\n'
+            f"read go < {self.go}\n"
+            f"exit {status}\n"
+        )
+        self.held = None
+        test.addCleanup(self.cleanup)
+
+    def observe(self, **bounds):
+        """The stand-in query, observed while this test takes both of its
+        processes by pidfd: a handshake over the FIFOs, never a sleep."""
+        failed = []
+
+        def handshake():
+            try:
+                with open(self.pids) as fifo:
+                    leader, descendant = (int(pid) for pid in fifo.read().split())
+                # Both are alive here: the leader waits for `go`, the
+                # descendant sleeps.
+                self.held = (Held(leader), Held(descendant))
+                with open(self.go, "w") as fifo:
+                    fifo.write("go\n")
+            except BaseException as error:  # reported by the test below
+                failed.append(error)
+
+        thread = threading.Thread(target=handshake, daemon=True)
+        thread.start()
+        try:
+            return check.observe(*stand_in(self.script), **bounds)
+        finally:
+            self.unblock()
+            thread.join(timeout=30)
+            if thread.is_alive() or failed:
+                raise AssertionError(f"the handshake failed: {failed!r}")
+
+    def unblock(self):
+        """Release a handshake still waiting on a FIFO the stand-in never
+        opened."""
+        for path, flags in ((self.pids, os.O_WRONLY), (self.go, os.O_RDONLY)):
+            with contextlib.suppress(OSError):
+                os.close(os.open(path, flags | os.O_NONBLOCK))
+
+    def cleanup(self):
+        self.unblock()
+        if self.held:
+            leader, descendant = self.held
+            if not descendant.exited_within(0):
+                descendant.kill()
+                descendant.exited_within(5)
+            if leader.unreaped_child():
+                leader.kill()
+                leader.reap()
+            leader.close()
+            descendant.close()
 
 
 class Fixture:
@@ -189,23 +290,25 @@ class ScopeObservation(unittest.TestCase):
                     check.systemctl()
                 self.assertEqual(raised.exception.kind, "spawn")
 
-    def test_a_query_that_does_not_finish_is_killed_reaped_and_an_error(self):
+    def test_a_query_that_does_not_finish_is_ended_reaped_and_an_error(self):
         started = time.monotonic()
         error = self.fails("timeout", "exec /bin/sleep 30", timeout=0.3)
         self.assertIn(KILLED, str(error))
         self.assertLess(time.monotonic() - started, 8)
 
     def test_a_query_whose_output_stays_open_is_ended_with_its_process_group(self):
-        # The query exits at once, but a process it left behind keeps its
-        # output open: no answer is complete, and the bound still holds.
-        pid_file = os.path.join(temporary(self), "pid")
-        started = time.monotonic()
-        self.fails("timeout", f"/bin/sleep 30 & echo $! > {pid_file}; exit 0", timeout=0.5)
-        self.assertLess(time.monotonic() - started, 8)
-        with open(pid_file) as pid:
-            self.assertTrue(gone(int(pid.read())), "the query's process group was killed")
+        # The leader exits, but the descendant it left keeps its output
+        # open: no answer is complete, and the bound still holds.
+        survivor = Survivor(self, 0, keep_output=True)
+        with self.assertRaises(check.ObservationError) as raised:
+            survivor.observe(timeout=3)
+        self.assertEqual(raised.exception.kind, "timeout")
+        self.assertIn("leader status 0", str(raised.exception))
+        leader, descendant = survivor.held
+        self.assertTrue(descendant.exited_within(5), "the query's process group was ended")
+        self.assertFalse(leader.unreaped_child(), "the leader was reaped")
 
-    def test_a_query_that_writes_too_much_is_killed_and_an_error(self):
+    def test_a_query_that_writes_too_much_is_ended_and_an_error(self):
         line = "nexus-verifier-0a1b.scope loaded active running Nexus verifier execution"
         for stream in ("", " >&2"):
             with self.subTest(stream=stream):
@@ -268,6 +371,141 @@ class ScopeObservation(unittest.TestCase):
             for key in poisoned:
                 os.environ.pop(key, None)
             self.assertEqual(started_with(stand_in("")[1]), expected_environment(BUS))
+
+
+def refused(*_):
+    raise PermissionError(errno.EPERM, "Operation not permitted")
+
+
+class Counted:
+    """A process operation that counts its calls before it runs `then`."""
+
+    def __init__(self, then):
+        self.calls = 0
+        self.then = then
+
+    def __call__(self, *args):
+        self.calls += 1
+        return self.then(*args)
+
+
+class QueryOwnership(unittest.TestCase):
+    """A query's process group is ended before any answer; one that cannot
+    be confirmed ended stays owned, for an explicit retry."""
+
+    def unfinalized(self, survivor, **ops):
+        with self.assertRaises(check.ObservationError) as raised:
+            survivor.observe(ops=check.PROCESS.replace(**ops))
+        self.assertEqual(raised.exception.kind, "unfinalized", raised.exception)
+        return raised.exception
+
+    def test_a_descendant_left_by_a_successful_query_is_ended_before_the_answer(self):
+        # The leader exits 0 without output; its descendant, in its group,
+        # holds none of the query's output. Neither the end of the output nor
+        # the leader's exit ends the query.
+        survivor = Survivor(self, 0)
+        self.assertEqual(survivor.observe(), [])
+        leader, descendant = survivor.held
+        self.assertTrue(descendant.exited_within(5), "the query's process group was ended")
+        self.assertFalse(leader.unreaped_child(), "the leader was reaped")
+
+    def test_a_descendant_left_by_a_failed_query_is_ended_with_it(self):
+        survivor = Survivor(self, 3)
+        with self.assertRaises(check.ObservationError) as raised:
+            survivor.observe()
+        self.assertEqual(raised.exception.kind, "failed")
+        self.assertIn("status 3", str(raised.exception))
+        leader, descendant = survivor.held
+        self.assertTrue(descendant.exited_within(5))
+        self.assertFalse(leader.unreaped_child())
+
+    def test_an_unreadable_query_is_ended_and_an_error(self):
+        survivor = Survivor(self, 0)
+
+        def unreadable(_):
+            raise OSError(errno.EIO, "Input/output error")
+
+        with self.assertRaises(check.ObservationError) as raised:
+            survivor.observe(ops=check.PROCESS.replace(exited=unreadable))
+        self.assertEqual(raised.exception.kind, "io")
+        self.assertIn("Input/output error", str(raised.exception))
+        leader, descendant = survivor.held
+        self.assertTrue(descendant.exited_within(5))
+        self.assertFalse(leader.unreaped_child())
+
+    def test_an_unconfirmed_group_end_keeps_the_query_owned_for_an_explicit_retry(self):
+        survivor = Survivor(self, 0)
+        error = self.unfinalized(survivor, signal_group=refused)
+        self.assertEqual(error.first[0], 0, "the answer came first")
+        self.assertIsInstance(error.failure, PermissionError)
+        leader, descendant = survivor.held
+        self.assertEqual(error.query.process.pid, leader.pid)
+        self.assertTrue(leader.unreaped_child(), "still owned: the leader unreaped")
+        self.assertFalse(descendant.exited_within(0), "nothing ended the group")
+        # A later explicit retry, without the injected failure, ends it.
+        error.query.ops = check.PROCESS
+        self.assertEqual(error.query.finalize(), 0)
+        self.assertTrue(descendant.exited_within(5))
+        self.assertFalse(leader.unreaped_child())
+
+    def test_an_unreaped_leader_keeps_the_query_owned_and_anchored(self):
+        survivor = Survivor(self, 0)
+        error = self.unfinalized(survivor, reap=lambda process, deadline: None)
+        self.assertIsInstance(error.failure, TimeoutError)
+        leader, descendant = survivor.held
+        self.assertTrue(descendant.exited_within(5), "the group was signalled, anchored")
+        self.assertTrue(leader.unreaped_child(), "the anchor is kept")
+        error.query.ops = check.PROCESS
+        self.assertEqual(error.query.finalize(), 0)
+        self.assertFalse(leader.unreaped_child())
+
+    def test_a_leader_in_an_unknown_state_is_never_signalled_again(self):
+        survivor = Survivor(self, 0)
+        signalled = Counted(check.kill_group)
+
+        def unknown(process, deadline):
+            raise ChildProcessError(errno.ECHILD, "No child processes")
+
+        error = self.unfinalized(survivor, signal_group=signalled, reap=unknown)
+        self.assertEqual(signalled.calls, 1, "signalled once, anchored")
+        leader, descendant = survivor.held
+        self.assertTrue(descendant.exited_within(5))
+        # Its reap failed, so the leader's state is unknown: neither a retry
+        # nor the release signals that group id again.
+        with self.assertRaises(OSError) as raised:
+            error.query.finalize()
+        self.assertIn("never signalled again", str(raised.exception))
+        error.query.release()
+        self.assertEqual(signalled.calls, 1)
+        # The leader is in fact still this process's child: reaped here,
+        # explicitly.
+        self.assertTrue(leader.unreaped_child())
+        self.assertEqual(error.query.process.wait(timeout=5), 0)
+        self.assertFalse(leader.unreaped_child())
+
+    def test_a_reported_unconfirmed_query_is_retried_then_released(self):
+        survivor = Survivor(self, 0)
+        refusing = Counted(refused)
+        error = self.unfinalized(survivor, signal_group=refusing)
+        report = check.reported(error)
+        self.assertIn("still not confirmed ended after 3 explicit attempts", report)
+        self.assertIn("released to its backstop, never a confirmation", report)
+        # The run's attempt, each explicit attempt, then the release's
+        # backstop, which still held the group's anchor.
+        self.assertEqual(refusing.calls, 1 + check.EXPLICIT_ATTEMPTS + 1)
+        leader, descendant = survivor.held
+        self.assertFalse(leader.unreaped_child(), "the release reaped the leader")
+        self.assertFalse(descendant.exited_within(0), "nothing could end the group")
+
+    def test_a_reported_query_is_finalized_again_explicitly(self):
+        survivor = Survivor(self, 0)
+        error = self.unfinalized(survivor, signal_group=refused)
+        error.query.ops = check.PROCESS
+        report = check.reported(error)
+        self.assertIn("confirmed ended only on explicit attempt 1", report)
+        leader, descendant = survivor.held
+        self.assertTrue(descendant.exited_within(5))
+        self.assertFalse(leader.unreaped_child())
 
 
 def symlinked(path, real):
@@ -482,6 +720,44 @@ class BothObservations(unittest.TestCase):
         self.assertFalse(clean)
         self.assertEqual(report.count("::error::"), 2, report)
 
+    def test_a_query_still_owned_by_a_failure_is_finalized_before_it_is_reported(self):
+        class Owned:
+            """A query's ownership standing in: it ends after `failures`
+            refused attempts; every finalization and release is counted."""
+
+            def __init__(self, failures):
+                self.failures, self.finalized, self.released = failures, 0, 0
+
+            def finalize(self):
+                self.finalized += 1
+                if self.failures:
+                    self.failures -= 1
+                    raise PermissionError(errno.EPERM, "refused")
+                return 0
+
+            def release(self):
+                self.released += 1
+
+        def unfinalized(owned):
+            return check.ObservationError(
+                "unfinalized",
+                "the query answered; its process group is not confirmed ended",
+                query=owned,
+                first=(0, b"", b""),
+                failure=PermissionError(errno.EPERM, "refused"),
+            )
+
+        recovered = Owned(1)
+        clean, report = self.outcome(unfinalized(recovered), [])
+        self.assertFalse(clean, "a confirmation later is still a failed observation")
+        self.assertIn("confirmed ended only on explicit attempt 2", report)
+        self.assertEqual((recovered.finalized, recovered.released), (2, 0))
+        stuck = Owned(10)
+        clean, report = self.outcome(unfinalized(stuck), [])
+        self.assertFalse(clean)
+        self.assertIn("still not confirmed ended after 3 explicit attempts", report)
+        self.assertEqual((stuck.finalized, stuck.released), (3, 1))
+
     def test_the_command_takes_no_arguments(self):
         self.assertEqual(check.main(["--root", "/tmp"]), 2)
 
@@ -502,14 +778,19 @@ class WorkflowLiveStep(unittest.TestCase):
             body.append(line[10:])
         return "\n".join(body).rstrip() + "\n"
 
-    def step(self, live_status, live_output, observed_status):
+    def step(self, live_status, live_output, observed_status, tee_status=0):
         work = temporary(self, "p2v1r1-step-")
         stand_ins = os.path.join(work, "bin")
         os.makedirs(stand_ins)
         os.makedirs(os.path.join(work, "scripts", "ci"))
         marker = os.path.join(work, "observed")
+        tee = shutil.which("tee")
+        self.assertTrue(tee and os.path.isabs(tee), "a tee to stand behind")
         stand_in_scripts = {
             "cargo": f"printf '%s\\n' {shlex.quote(live_output)}\nexit {live_status}\n",
+            # The capture: the real tee, then the given status (no disk is
+            # ever exhausted).
+            "tee": f'{shlex.quote(tee)} "$@"\nexit {tee_status}\n',
             # Never a real user manager, whatever the step runs.
             "systemctl": f"echo systemctl >> {shlex.quote(marker)}\nexit 97\n",
         }
@@ -542,9 +823,10 @@ class WorkflowLiveStep(unittest.TestCase):
 
     def test_the_step_queries_nothing_itself_and_hides_no_error(self):
         script = self.script()
-        for needle in ("systemctl", "2>/dev/null", "ls -A", "|| true", "grep -q ."):
+        for needle in ("systemctl", "2>/dev/null", "ls -A", "|| true", "grep -q .", "|| live="):
             self.assertNotIn(needle, script)
         self.assertIn(f"grep -qx '{PASSED}' phase2-live.log || passed=$?", script)
+        self.assertEqual(script.count('statuses=("${PIPESTATUS[@]}")'), 2)
 
     def test_a_passing_suite_with_nothing_left_passes(self):
         result, observed = self.step(0, PASSED, 0)
@@ -557,7 +839,29 @@ class WorkflowLiveStep(unittest.TestCase):
                 result, observed = self.step(101, PASSED, observed_status)
                 self.assertEqual(result.returncode, 101, result.stdout + result.stderr)
                 self.assertEqual(observed, 1, "the observations run after a failed suite")
-                self.assertIn("::error::the live suite failed (exit 101)", result.stdout)
+                self.assertIn("::error::the live suite failed (cargo exit 101)", result.stdout)
+
+    def test_each_pipeline_command_keeps_its_own_status(self):
+        captured = "::error::the live suite's output was not fully captured (tee exit 73)"
+        failed = "::error::the live suite failed (cargo exit 101)"
+        uncounted = "::error::the live suite did not report 31 passed cases"
+        for cargo, tee, observed_status, output, status, present, absent in (
+            (101, 73, 0, PASSED, 101, [failed, captured], [uncounted]),
+            (0, 73, 0, PASSED, 1, [captured], ["the live suite failed"]),
+            (101, 0, 0, PASSED, 101, [failed], ["not fully captured"]),
+            (101, 73, 1, "", 101, [failed, captured, uncounted], []),
+            (0, 73, 1, PASSED, 1, [captured], ["the live suite failed"]),
+            (0, 0, 1, "", 1, [uncounted], ["the live suite failed", "not fully captured"]),
+            (0, 0, 0, "", 1, [uncounted], ["the live suite failed", "not fully captured"]),
+        ):
+            with self.subTest(cargo=cargo, tee=tee, observed=observed_status, output=output):
+                result, observed = self.step(cargo, output, observed_status, tee_status=tee)
+                self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+                self.assertEqual(observed, 1, "both observations run after the attempted suite")
+                for message in present:
+                    self.assertIn(message, result.stdout)
+                for message in absent:
+                    self.assertNotIn(message, result.stdout)
 
     def test_a_missing_passed_count_fails_and_is_still_observed(self):
         for output in (

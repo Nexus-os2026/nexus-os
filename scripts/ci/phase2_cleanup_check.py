@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Phase Two cleanup observations for the supported-host workflow (P2-V1-R1).
+"""Phase Two cleanup observations for the supported-host workflow (P2-V1-R1, R2).
 
 After the live suite, `.github/workflows/ci-phase2-linux-sandbox.yml` runs
 this script, with no arguments, to observe what the suite left behind. It
-changes nothing: names it reports are identifiers only, and it never stops,
-kills, creates, repairs or removes anything.
+changes nothing it observes: names it reports are identifiers only, and it
+never stops, kills, creates, repairs or removes anything but its own query.
 
 * Scopes: the `nexus-verifier-*.scope` units the systemd user manager of this
   process's real uid has loaded. The query is `systemctl --user` on
@@ -14,8 +14,16 @@ kills, creates, repairs or removes anything.
   uid; the bus a socket of the uid). Only `systemctl` itself is found through
   `PATH`: the query's whole environment is that bus address and fixed output
   settings, so an inherited `DBUS_SESSION_BUS_ADDRESS` or `XDG_RUNTIME_DIR`
-  can never redirect it. It is bounded in time and output and runs in its own
-  process group, which is killed, and the query reaped, at a bound.
+  can never redirect it. It is bounded in time and output. Its processes
+  stay owned until they are ended: the query leads its own process group,
+  and until its leader is reaped the leader's pid anchors the group id.
+  Whatever the query did, the group is ended with SIGKILL while the leader is
+  unreaped and the output still open, and only then is the leader reaped; an
+  answer comes only with its group ended, and a query whose group cannot be
+  confirmed ended stays owned in its error, is finalized again explicitly
+  and, still unconfirmed, released only once reported. This owns the query's
+  processes; it confines nothing: a process that leaves the group is not
+  reached.
 * Workspaces: the entries of `/run/user/<uid>/nexus-verifier`, reached the
   same way and checked to be an owner-only directory of the uid on the
   runtime directory's filesystem before it is listed. It may be absent only
@@ -32,6 +40,7 @@ the other; the exit status is 0 only if both answered and found nothing.
 
 import contextlib
 import ctypes
+import errno
 import os
 import re
 import selectors
@@ -45,6 +54,7 @@ import time
 QUERY_TIMEOUT = 10.0
 QUERY_OUTPUT_LIMIT = 64 * 1024
 REAP_TIMEOUT = 5.0
+EXPLICIT_ATTEMPTS = 3
 SCOPE_PATTERN = "nexus-verifier-*.scope"
 SCOPE_QUERY_ARGS = (
     "--user",
@@ -65,11 +75,17 @@ _PLAIN_PATH = re.compile(r"[A-Za-z0-9_/.-]+")
 
 
 class ObservationError(Exception):
-    """An observation without an answer; `kind` says which failure."""
+    """An observation without an answer; `kind` says which failure. An
+    `unfinalized` one still owns its query (`query`, an OwnedQuery), with what
+    came first (`first`: the answer, or why it was stopped) and why its group
+    is not confirmed ended (`failure`)."""
 
-    def __init__(self, kind, message):
+    def __init__(self, kind, message, query=None, first=None, failure=None):
         super().__init__(message)
         self.kind = kind
+        self.query = query
+        self.first = first
+        self.failure = failure
 
 
 class Host:
@@ -212,21 +228,140 @@ def _collect(process, deadline, limit):
     return bytes(output[process.stdout]), bytes(output[process.stderr])
 
 
-def _end(process):
-    """Kill the query's process group, then reap the query within a bound.
-    The query leads that group and is not yet reaped, so the group is still
-    its own."""
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(process.pid, signal.SIGKILL)
+class Ops:
+    """The process operations a query's finalization uses: PROCESS, or a
+    fixture's injected failures."""
+
+    def __init__(self, exited, signal_group, reap):
+        self.exited = exited
+        self.signal_group = signal_group
+        self.reap = reap
+
+    def replace(self, **changes):
+        values = {"exited": self.exited, "signal_group": self.signal_group, "reap": self.reap}
+        values.update(changes)
+        return Ops(**values)
+
+
+def leader_exited(process):
+    """The leader's status once it has exited, read without reaping it
+    (WNOWAIT): it stays this process's unreaped child, still anchoring its
+    group. A negative status is the signal that ended it, as Popen has it."""
+    result = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    if result is None or result.si_pid == 0:
+        return None
+    if result.si_code == os.CLD_EXITED:
+        return result.si_status
+    if result.si_code in (os.CLD_KILLED, os.CLD_DUMPED):
+        return -result.si_status
+    raise OSError(errno.EINVAL, f"unexpected child state {result.si_code}")
+
+
+def kill_group(group):
+    """SIGKILL to every member of process group `group`."""
+    os.killpg(group, signal.SIGKILL)
+
+
+def reap(process, deadline):
+    """Reap the leader, waiting until `deadline` at most; None if it was not
+    reaped in time."""
     try:
-        return f"reaped, status {process.wait(timeout=REAP_TIMEOUT)}"
+        return process.wait(timeout=max(deadline - time.monotonic(), 0))
     except subprocess.TimeoutExpired:
-        return "not reaped"
+        return None
 
 
-def run(argv, env, timeout=QUERY_TIMEOUT, limit=QUERY_OUTPUT_LIMIT):
+PROCESS = Ops(leader_exited, kill_group, reap)
+
+
+class OwnedQuery:
+    """A started query's processes, owned through its leader: the child this
+    observer spawned, which leads the query's process group. Until the leader
+    is reaped, its pid anchors the group's id, so signalling the group reaches
+    only the query's own members. Finalizing ends the group, then reaps the
+    leader."""
+
+    def __init__(self, process, ops):
+        self.process = process
+        self.group = process.pid
+        # The unreaped leader still anchors the group id. Cleared once the
+        # leader is reaped, or when reaping it failed and its state is
+        # unknown: the group is never signalled again.
+        self.anchored = True
+        self.ops = ops
+
+    def finalize(self):
+        """End the query: SIGKILL to every member of its group while the
+        unreaped leader anchors the group id, then reap the leader within the
+        bound. Returns the leader's status; raises OSError, the query still
+        owned, otherwise."""
+        if not self.anchored:
+            raise OSError(
+                errno.ECHILD, "the leader's state is unknown: its group is never signalled again"
+            )
+        self.ops.signal_group(self.group)
+        try:
+            status = self.ops.reap(self.process, time.monotonic() + REAP_TIMEOUT)
+        except BaseException:
+            self.anchored = False
+            raise
+        if status is None:
+            raise TimeoutError("the leader was not reaped in time")
+        self.anchored = False
+        return status
+
+    def release(self):
+        """Defense in depth for a query released without a confirmed
+        finalization: while the unreaped leader still anchors the group id,
+        SIGKILL the group and try once to reap the leader. Never a
+        confirmation."""
+        if self.anchored:
+            with contextlib.suppress(OSError):
+                self.ops.signal_group(self.group)
+            with contextlib.suppress(Exception):
+                if self.process.poll() is not None:
+                    self.anchored = False
+
+
+def _exit_by(query, deadline):
+    """Wait, without reaping, until the leader exits or `deadline` passes."""
+    while True:
+        status = query.ops.exited(query.process)
+        if status is not None:
+            return status
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.005)
+
+
+def _attempt(query, deadline, limit):
+    """The query's answer (its leader's status, stdout and stderr), its
+    leader exited but not reaped; or why it was stopped (a _Stop)."""
+    try:
+        stdout, stderr = _collect(query.process, deadline, limit)
+        status = _exit_by(query, deadline)
+    except _Stop as stop:
+        return stop
+    except OSError as error:
+        return _Stop("io", f"could not be read or awaited ({error})")
+    if status is None:
+        return _Stop("timeout", "did not finish in time")
+    return status, stdout, stderr
+
+
+def _came_first(first):
+    if isinstance(first, _Stop):
+        return f"the query {first}"
+    return f"the query answered (leader status {first[0]})"
+
+
+def run(argv, env, timeout=QUERY_TIMEOUT, limit=QUERY_OUTPUT_LIMIT, ops=None):
     """Run the query `argv` with exactly `env`, to completion within its
-    bounds: its status, stdout and stderr."""
+    bounds: its leader's status, stdout and stderr. Whatever happens, the
+    query's process group is ended while its leader is still unreaped and its
+    output still open, and only then is the leader reaped: an answer comes
+    only with its group ended, and a query whose group cannot be confirmed
+    ended stays owned in the error (kind `unfinalized`)."""
     try:
         process = subprocess.Popen(
             argv,
@@ -239,30 +374,35 @@ def run(argv, env, timeout=QUERY_TIMEOUT, limit=QUERY_OUTPUT_LIMIT):
         )
     except OSError as error:
         raise ObservationError("spawn", f"the query could not be started: {error}") from error
-    deadline = time.monotonic() + timeout
-    # A stopped query is ended by the kill below while its output is still
-    # open, never by a pipe closed under it.
+    query = OwnedQuery(process, ops or PROCESS)
     try:
-        stdout, stderr = _collect(process, deadline, limit)
+        first = _attempt(query, time.monotonic() + timeout, limit)
         try:
-            status = process.wait(timeout=max(deadline - time.monotonic(), 0))
-        except subprocess.TimeoutExpired:
-            raise _Stop("timeout", "did not finish in time") from None
-        return status, stdout, stderr
-    except _Stop as stop:
-        reaped = _end(process)
-        raise ObservationError(stop.kind, f"the query {stop} and was killed ({reaped})") from None
-    except OSError as error:
-        reaped = _end(process)
-        raise ObservationError(
-            "io", f"the query could not be read or awaited ({error}) and was killed ({reaped})"
-        ) from error
+            status = query.finalize()
+        except OSError as failure:
+            raise ObservationError(
+                "unfinalized",
+                f"{_came_first(first)}; its process group is not confirmed ended ({failure})",
+                query=query,
+                first=first,
+                failure=failure,
+            ) from failure
+    except ObservationError:
+        raise
     except BaseException:
-        _end(process)
+        # Interrupted: what this query owns is still ended before it goes on.
+        query.release()
         raise
     finally:
         process.stdout.close()
         process.stderr.close()
+    if isinstance(first, _Stop):
+        raise ObservationError(
+            first.kind,
+            f"{_came_first(first)}; its process group was ended (leader status {status})",
+        )
+    _, stdout, stderr = first
+    return status, stdout, stderr
 
 
 def _excerpt(data):
@@ -294,10 +434,10 @@ def parse_scopes(stdout):
     return sorted(scopes)
 
 
-def observe(argv, env, timeout=QUERY_TIMEOUT, limit=QUERY_OUTPUT_LIMIT):
+def observe(argv, env, timeout=QUERY_TIMEOUT, limit=QUERY_OUTPUT_LIMIT, ops=None):
     """Run the query and read its answer: the loaded verifier scopes. Only a
     successful query that wrote nothing to its error output answers."""
-    status, stdout, stderr = run(argv, env, timeout, limit)
+    status, stdout, stderr = run(argv, env, timeout, limit, ops)
     if status != 0:
         raise ObservationError("failed", f"the query failed (status {status}): {_excerpt(stderr)}")
     if stderr:
@@ -356,14 +496,50 @@ def _line(error):
     return " ".join(str(error).split()) or type(error).__name__
 
 
+def reported(error):
+    """An observation failure, made reportable without losing what it owns:
+    a query whose process group is not confirmed ended is finalized again
+    explicitly (at most EXPLICIT_ATTEMPTS times) and, if still unconfirmed,
+    released to its backstop only once that is described. The failure itself
+    always remains one."""
+    query = getattr(error, "query", None)
+    if query is None:
+        return _line(error)
+    failures = [error.failure]
+    for attempt in range(1, EXPLICIT_ATTEMPTS + 1):
+        try:
+            query.finalize()
+        except OSError as failure:
+            failures.append(failure)
+        else:
+            return _line(
+                f"{_came_first(error.first)}; its process group was confirmed ended only on "
+                f"explicit attempt {attempt} ({'; '.join(map(str, failures))})"
+            )
+    report = _line(
+        f"{_came_first(error.first)}; its process group is still not confirmed ended after "
+        f"{EXPLICIT_ATTEMPTS} explicit attempts ({'; '.join(map(str, failures))})"
+    )
+    query.release()
+    return f"{report}; released to its backstop, never a confirmation"
+
+
+def _reportable(error):
+    try:
+        return reported(error)
+    except Exception as nested:  # describing must not hide the other observation
+        return f"{_line(error)} (its query could not be finalized: {_line(nested)})"
+
+
 def check(scopes=observe_scopes, workspaces=observe_workspaces, out=print):
     """Both observations, reported; True only if both answered and found
-    nothing. A failure of either never suppresses the other."""
+    nothing. A failure of either never suppresses the other, and a query
+    still owned by a failure is finalized explicitly before it is reported."""
     clean = True
     try:
         found = scopes()
     except Exception as error:  # any failure is a failed observation
-        out(f"::error::the verifier scope observation failed: {_line(error)}")
+        out(f"::error::the verifier scope observation failed: {_reportable(error)}")
         clean = False
     else:
         if found:
@@ -374,7 +550,7 @@ def check(scopes=observe_scopes, workspaces=observe_workspaces, out=print):
     try:
         found = workspaces()
     except Exception as error:  # any failure is a failed observation
-        out(f"::error::the verification workspace observation failed: {_line(error)}")
+        out(f"::error::the verification workspace observation failed: {_reportable(error)}")
         clean = False
     else:
         if found:

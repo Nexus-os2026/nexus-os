@@ -1,4 +1,4 @@
-//! Checked cleanup observations for the live sandbox suite (P2-V1-R1).
+//! Checked cleanup observations for the live sandbox suite (P2-V1-R1, R2).
 //!
 //! The live suite counts the verifier scopes the user manager has loaded
 //! before and after an execution. An observation is the exact set of loaded
@@ -15,8 +15,24 @@
 //! itself is found through `PATH`; the query's whole environment is that bus
 //! address and fixed output settings, so an inherited
 //! `DBUS_SESSION_BUS_ADDRESS` or `XDG_RUNTIME_DIR` can never redirect it. It
-//! is bounded in time and output and runs in its own process group, which is
-//! killed, and the query reaped, when a bound is reached.
+//! is bounded in time and output.
+//!
+//! The query's processes stay owned until they are ended. The query leads
+//! its own process group, and its leader is this process's child: until the
+//! leader is reaped, its pid anchors the group's id, which no other group can
+//! then be given. Whatever the query did (answered, timed out, wrote too much
+//! or could not be read), its group is ended with SIGKILL while the leader is
+//! still unreaped and the output still open, and only then is the leader
+//! reaped; the leader's exit and the end of its output are never taken as the
+//! end of its group. An answer is returned only once its group is ended, and
+//! a query whose group cannot be confirmed ended stays owned in its error,
+//! for an explicit retry. This owns the query's processes; it confines
+//! nothing: a process that leaves the group is not reached.
+//!
+//! A retained boundary is judged only after its explicit, bounded cleanup:
+//! [`settle`] keeps the owner every failed attempt returns, [`judge_retained`]
+//! keeps every failure, and an owner still unconfirmed after the attempts is
+//! released explicitly ([`release`]), once reported, never dropped silently.
 //!
 //! Shared by the live suite (`phase2_live_sandbox.rs`) and its fixture
 //! controls (`phase2_cleanup_observation.rs`, which never reach a real user
@@ -27,11 +43,12 @@ use std::collections::BTreeSet;
 use std::ffi::{CString, OsString};
 use std::fmt;
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
@@ -40,8 +57,11 @@ use std::time::{Duration, Instant};
 pub const QUERY_TIMEOUT: Duration = Duration::from_secs(10);
 /// Bound on one query's output, both streams together.
 pub const QUERY_OUTPUT_LIMIT: usize = 64 * 1024;
-/// Bound on reaping a query that was killed.
+/// Bound on reaping a query's leader once its group is ended.
 const REAP_TIMEOUT: Duration = Duration::from_secs(5);
+/// Bound on the explicit attempts made for an owner whose cleanup is not
+/// confirmed (each attempt is bounded itself).
+pub const EXPLICIT_ATTEMPTS: usize = 3;
 /// The units observed.
 pub const SCOPE_PATTERN: &str = "nexus-verifier-*.scope";
 /// The query's arguments: no pager, no legend, no glyphs, nothing
@@ -61,6 +81,24 @@ const TMPFS_MAGIC: i64 = 0x0102_1994;
 /// Loaded verifier scopes, by unit name.
 pub type Scopes = BTreeSet<String>;
 
+/// Why a query was stopped before it answered.
+#[derive(Debug)]
+pub enum Stop {
+    Timeout,
+    OutputLimit,
+    Io(io::Error),
+}
+
+impl fmt::Display for Stop {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Timeout => write!(f, "the query did not finish in time"),
+            Self::OutputLimit => write!(f, "the query wrote more than its output bound"),
+            Self::Io(error) => write!(f, "the query could not be read or awaited ({error})"),
+        }
+    }
+}
+
 /// Why an observation has no answer.
 #[derive(Debug)]
 pub enum ObservationError {
@@ -68,17 +106,12 @@ pub enum ObservationError {
     Runtime(String),
     /// The query could not be started.
     Spawn(io::Error),
-    /// The query did not finish in time. It was killed; this is its reaped
-    /// status (`None`: it could not be reaped in time either).
-    Timeout(Option<ExitStatus>),
-    /// The query wrote more than the bound. It was killed (as on a timeout).
-    OutputLimit(Option<ExitStatus>),
-    /// Reading the answer or waiting for the query failed. It was killed (as
-    /// on a timeout).
-    Io {
-        error: io::Error,
-        reaped: Option<ExitStatus>,
-    },
+    /// The query was stopped before it answered; its process group was
+    /// ended, and its leader reaped with this status.
+    Stopped { stop: Stop, status: ExitStatus },
+    /// The query's process group could not be confirmed ended: the query is
+    /// still owned here.
+    Unfinalized(Box<Unfinalized>),
     /// The query failed.
     Failed { status: ExitStatus, stderr: String },
     /// The query succeeded but wrote to its error output.
@@ -87,10 +120,23 @@ pub enum ObservationError {
     Malformed(String),
 }
 
-fn reaped(status: &Option<ExitStatus>) -> String {
-    status.map_or("not reaped".to_string(), |status| {
-        format!("reaped: {status}")
-    })
+/// A query whose process group could not be confirmed ended, still owned.
+#[derive(Debug)]
+pub struct Unfinalized {
+    /// The query, its leader unreaped: for an explicit retry of
+    /// [`OwnedQuery::finalize`].
+    pub query: OwnedQuery,
+    /// What came first: the query's answer, or why it was stopped.
+    pub first: Result<Answer, Stop>,
+    /// Why its group is not confirmed ended.
+    pub failure: io::Error,
+}
+
+fn came_first(first: &Result<Answer, Stop>) -> String {
+    match first {
+        Ok(answer) => format!("the query answered (leader {})", answer.status),
+        Err(stop) => stop.to_string(),
+    }
 }
 
 impl fmt::Display for ObservationError {
@@ -98,23 +144,14 @@ impl fmt::Display for ObservationError {
         match self {
             Self::Runtime(why) => write!(f, "no usable user manager bus: {why}"),
             Self::Spawn(error) => write!(f, "the query could not be started: {error}"),
-            Self::Timeout(status) => write!(
+            Self::Stopped { stop, status } => {
+                write!(f, "{stop}; its process group was ended (leader {status})")
+            }
+            Self::Unfinalized(unfinalized) => write!(
                 f,
-                "the query did not finish in time and was killed ({})",
-                reaped(status)
-            ),
-            Self::OutputLimit(status) => write!(
-                f,
-                "the query wrote more than {QUERY_OUTPUT_LIMIT} bytes and was killed ({})",
-                reaped(status)
-            ),
-            Self::Io {
-                error,
-                reaped: status,
-            } => write!(
-                f,
-                "the query could not be read or awaited ({error}) and was killed ({})",
-                reaped(status)
+                "{}; its process group is not confirmed ended ({})",
+                came_first(&unfinalized.first),
+                unfinalized.failure
             ),
             Self::Failed { status, stderr } => write!(f, "the query failed ({status}): {stderr}"),
             Self::Diagnostics(stderr) => write!(f, "the query reported: {stderr}"),
@@ -283,6 +320,25 @@ fn systemctl() -> Result<PathBuf, ObservationError> {
         .ok_or_else(missing)
 }
 
+/// The process operations a query's finalization uses: [`PROCESS`], or a
+/// fixture's injected failures.
+#[derive(Debug, Clone, Copy)]
+pub struct Ops {
+    /// The leader's status once it has exited, read without reaping it.
+    pub exited: fn(&Child) -> io::Result<Option<ExitStatus>>,
+    /// SIGKILL to every member of a process group.
+    pub signal_group: fn(libc::pid_t) -> io::Result<()>,
+    /// Reap the leader, waiting until the deadline at most.
+    pub reap: fn(&mut Child, Instant) -> io::Result<Option<ExitStatus>>,
+}
+
+/// The real process operations.
+pub const PROCESS: Ops = Ops {
+    exited: leader_exited,
+    signal_group: kill_group,
+    reap: wait_until,
+};
+
 /// One query: its program, its arguments and its whole environment.
 pub struct Query {
     pub program: PathBuf,
@@ -290,6 +346,7 @@ pub struct Query {
     pub env: Vec<(OsString, OsString)>,
     pub timeout: Duration,
     pub output_limit: usize,
+    pub ops: Ops,
 }
 
 /// The query of the loaded verifier scopes on the user bus at `bus`, run by
@@ -325,6 +382,7 @@ pub fn scope_query(
             .collect(),
         timeout: QUERY_TIMEOUT,
         output_limit: QUERY_OUTPUT_LIMIT,
+        ops: PROCESS,
     })
 }
 
@@ -336,15 +394,125 @@ pub struct Answer {
     pub stderr: Vec<u8>,
 }
 
-enum Stop {
-    Timeout,
-    OutputLimit,
-    Io(io::Error),
+/// A started query's processes, owned through its leader: the child this
+/// observer spawned, which leads the query's process group. Until the leader
+/// is reaped, its pid anchors the group's id, so signalling the group reaches
+/// only the query's own members. Finalizing ends the group, then reaps the
+/// leader.
+#[derive(Debug)]
+pub struct OwnedQuery {
+    leader: Child,
+    group: libc::pid_t,
+    /// The unreaped leader still anchors the group id. Cleared once the
+    /// leader is reaped, or when reaping it failed and its state is unknown:
+    /// the group is never signalled again.
+    anchored: bool,
+    ops: Ops,
 }
 
-/// Run `query` to completion within its bounds.
+impl OwnedQuery {
+    /// The leader's pid (fixture controls).
+    pub fn leader(&self) -> u32 {
+        self.leader.id()
+    }
+
+    /// The process operations to use from now on (fixture controls: a later
+    /// explicit retry without the injected failure).
+    pub fn with_ops(mut self, ops: Ops) -> Self {
+        self.ops = ops;
+        self
+    }
+
+    /// End the query: SIGKILL to every member of its group while the
+    /// unreaped leader anchors the group id, then reap the leader within the
+    /// bound. The leader's status only once both succeeded; otherwise the
+    /// query stays owned, with why.
+    pub fn finalize(mut self) -> Result<ExitStatus, (Self, io::Error)> {
+        if !self.anchored {
+            return Err((
+                self,
+                io::Error::other(
+                    "the leader's state is unknown: its group is never signalled again",
+                ),
+            ));
+        }
+        if let Err(error) = (self.ops.signal_group)(self.group) {
+            return Err((self, error));
+        }
+        match (self.ops.reap)(&mut self.leader, Instant::now() + REAP_TIMEOUT) {
+            Ok(Some(status)) => {
+                self.anchored = false;
+                Ok(status)
+            }
+            Ok(None) => Err((
+                self,
+                io::Error::new(io::ErrorKind::TimedOut, "the leader was not reaped in time"),
+            )),
+            Err(error) => {
+                self.anchored = false;
+                Err((self, error))
+            }
+        }
+    }
+}
+
+impl Drop for OwnedQuery {
+    /// Defense in depth for a query released without a confirmed
+    /// finalization: while the unreaped leader still anchors the group id,
+    /// SIGKILL the group and try once to reap the leader. Never a
+    /// confirmation.
+    fn drop(&mut self) {
+        if self.anchored {
+            let _ = (self.ops.signal_group)(self.group);
+            let _ = self.leader.try_wait();
+        }
+    }
+}
+
+/// The leader's status once it has exited, read without reaping it: the
+/// leader stays this process's unreaped child, still anchoring its group.
+fn leader_exited(leader: &Child) -> io::Result<Option<ExitStatus>> {
+    // SAFETY: siginfo_t is plain data; waitid fills it.
+    let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+    // SAFETY: waits for this process's own child only, without reaping it
+    // (WNOWAIT) and without blocking (WNOHANG).
+    check(unsafe {
+        libc::waitid(
+            libc::P_PID,
+            leader.id(),
+            &mut info,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    })?;
+    // SAFETY: waitid filled `info`; its pid is 0 while the child runs.
+    if unsafe { info.si_pid() } == 0 {
+        return Ok(None);
+    }
+    // SAFETY: as above, for an exited child.
+    let value = unsafe { info.si_status() };
+    let raw = match info.si_code {
+        libc::CLD_EXITED => (value & 0xff) << 8,
+        libc::CLD_KILLED => value & 0x7f,
+        libc::CLD_DUMPED => (value & 0x7f) | 0x80,
+        code => return Err(io::Error::other(format!("unexpected child state {code}"))),
+    };
+    Ok(Some(ExitStatus::from_raw(raw)))
+}
+
+/// SIGKILL to every member of process group `group`.
+fn kill_group(group: libc::pid_t) -> io::Result<()> {
+    // SAFETY: signals one process group, whose id the caller's unreaped
+    // leader anchors.
+    check(unsafe { libc::kill(-group, libc::SIGKILL) }).map(drop)
+}
+
+/// Run `query` to completion within its bounds. Whatever happens, the
+/// query's process group is ended while its leader is still unreaped and its
+/// output still open, and only then is the leader reaped: an answer comes
+/// only with its group ended, and a query whose group cannot be confirmed
+/// ended stays owned in the error.
 pub fn run(query: &Query) -> Result<Answer, ObservationError> {
-    let mut child = Command::new(&query.program)
+    let mut leader = Command::new(&query.program)
         .args(&query.args)
         .env_clear()
         .envs(query.env.iter().map(|(key, value)| (key, value)))
@@ -354,40 +522,69 @@ pub fn run(query: &Query) -> Result<Answer, ObservationError> {
         .process_group(0)
         .spawn()
         .map_err(ObservationError::Spawn)?;
-    let deadline = Instant::now() + query.timeout;
     let mut pipes = [
-        child
+        leader
             .stdout
             .take()
             .map(|pipe| File::from(OwnedFd::from(pipe))),
-        child
+        leader
             .stderr
             .take()
             .map(|pipe| File::from(OwnedFd::from(pipe))),
     ];
-    let stop = match collect(&mut pipes, deadline, query.output_limit) {
-        Ok([stdout, stderr]) => match wait_until(&mut child, deadline) {
-            Ok(Some(status)) => {
-                return Ok(Answer {
-                    status,
-                    stdout,
-                    stderr,
-                })
-            }
-            Ok(None) => Stop::Timeout,
-            Err(error) => Stop::Io(error),
-        },
-        Err(stop) => stop,
+    let Ok(group) = libc::pid_t::try_from(leader.id()) else {
+        // A pid always fits; without a group id, end the leader alone.
+        let _ = leader.kill();
+        let _ = leader.wait();
+        return Err(ObservationError::Spawn(io::Error::other(
+            "the leader's pid is not a process group id",
+        )));
     };
-    // A stopped query is ended by this kill while its output is still open,
-    // never by a pipe closed under it.
-    let reaped = end(&mut child);
+    let owned = OwnedQuery {
+        leader,
+        group,
+        anchored: true,
+        ops: query.ops,
+    };
+    let deadline = Instant::now() + query.timeout;
+    let first = match collect(&mut pipes, deadline, query.output_limit) {
+        Ok([stdout, stderr]) => match exit_by(&owned, deadline) {
+            Ok(Some(status)) => Ok(Answer {
+                status,
+                stdout,
+                stderr,
+            }),
+            Ok(None) => Err(Stop::Timeout),
+            Err(error) => Err(Stop::Io(error)),
+        },
+        Err(stop) => Err(stop),
+    };
+    let finalized = owned.finalize();
     drop(pipes);
-    Err(match stop {
-        Stop::Timeout => ObservationError::Timeout(reaped),
-        Stop::OutputLimit => ObservationError::OutputLimit(reaped),
-        Stop::Io(error) => ObservationError::Io { error, reaped },
-    })
+    match (first, finalized) {
+        (Ok(answer), Ok(status)) => Ok(Answer { status, ..answer }),
+        (Err(stop), Ok(status)) => Err(ObservationError::Stopped { stop, status }),
+        (first, Err((query, failure))) => {
+            Err(ObservationError::Unfinalized(Box::new(Unfinalized {
+                query,
+                first,
+                failure,
+            })))
+        }
+    }
+}
+
+/// Wait, without reaping, until the leader exits or `deadline` passes.
+fn exit_by(query: &OwnedQuery, deadline: Instant) -> io::Result<Option<ExitStatus>> {
+    loop {
+        if let Some(status) = (query.ops.exited)(&query.leader)? {
+            return Ok(Some(status));
+        }
+        if Instant::now() >= deadline {
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
 }
 
 fn nonblocking(file: &File) -> io::Result<()> {
@@ -474,19 +671,6 @@ fn wait_until(child: &mut Child, deadline: Instant) -> io::Result<Option<ExitSta
         }
         std::thread::sleep(Duration::from_millis(5));
     }
-}
-
-/// Kill the query's process group, then reap the query within a bound. The
-/// query leads that group and is not yet reaped, so the group is still its
-/// own.
-fn end(child: &mut Child) -> Option<ExitStatus> {
-    if let Ok(group) = libc::pid_t::try_from(child.id()) {
-        // SAFETY: signals only the process group this query leads.
-        unsafe { libc::kill(-group, libc::SIGKILL) };
-    }
-    wait_until(child, Instant::now() + REAP_TIMEOUT)
-        .ok()
-        .flatten()
 }
 
 fn excerpt(bytes: &[u8]) -> String {
@@ -586,73 +770,181 @@ pub fn wait_for(
     }
 }
 
-/// How a retained boundary's check failed.
-#[derive(Debug)]
-pub enum Retained {
-    /// The scopes could not be observed while the boundary held its scope;
-    /// whether the explicit retry then confirmed the cleanup is kept with it.
-    Unobserved {
-        error: ObservationError,
-        retried: bool,
-    },
-    /// The explicit retry did not confirm the cleanup; whether the scope was
-    /// observed as kept is kept with it.
-    NotConfirmed { kept: bool },
-    /// No more verifier scopes were loaded than before the execution.
-    NotKept { before: usize, observed: Scopes },
+/// `describe()`, or `otherwise` should it panic: describing never unwinds
+/// through an owner the caller still holds.
+fn contained<T>(describe: impl FnOnce() -> T, otherwise: T) -> T {
+    catch_unwind(AssertUnwindSafe(describe)).unwrap_or(otherwise)
 }
 
-impl fmt::Display for Retained {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let confirmed = |retried: bool| {
-            if retried {
-                "confirmed"
-            } else {
-                "did not confirm"
-            }
-        };
-        match self {
-            Self::Unobserved { error, retried } => write!(
-                f,
-                "the scope could not be observed while the boundary was retained ({error}); \
-                 the explicit retry {} the cleanup",
-                confirmed(*retried)
-            ),
-            Self::NotConfirmed { kept } => write!(
-                f,
-                "the retry did not confirm the cleanup (the scope was {}observed as kept)",
-                if *kept { "" } else { "not " }
-            ),
-            Self::NotKept { before, observed } => write!(
-                f,
-                "the scope is not kept: {} loaded verifier scopes {observed:?}, not more than \
-                 the {before} before the execution",
-                observed.len()
-            ),
+fn joined(errors: &[io::Error]) -> String {
+    errors
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// An observation failure, made reportable without losing what it owns: a
+/// query whose process group is not confirmed ended is finalized again
+/// explicitly (at most [`EXPLICIT_ATTEMPTS`] times) and, if still
+/// unconfirmed, released to its drop backstop only once that is described.
+/// The failure itself always remains one.
+pub fn reported(error: ObservationError) -> String {
+    let unfinalized = match error {
+        ObservationError::Unfinalized(unfinalized) => *unfinalized,
+        other => {
+            return contained(
+                || other.to_string(),
+                "(the failure could not be described)".to_string(),
+            )
+        }
+    };
+    let Unfinalized {
+        query,
+        first,
+        failure,
+    } = unfinalized;
+    let mut failures = vec![failure];
+    let settled = settle(query, EXPLICIT_ATTEMPTS, |query| {
+        query.finalize().map(drop).map_err(|(query, error)| {
+            failures.push(error);
+            query
+        })
+    });
+    let what = contained(
+        || came_first(&first),
+        "(the query could not be described)".to_string(),
+    );
+    match settled {
+        Settled::Confirmed(attempt) => contained(
+            || {
+                format!(
+                    "{what}; its process group was confirmed ended only on explicit attempt \
+                     {attempt} ({})",
+                    joined(&failures)
+                )
+            },
+            "(the failure could not be described)".to_string(),
+        ),
+        Settled::Unconfirmed(query, attempts) => {
+            let why = contained(
+                || {
+                    format!(
+                        "{what}; its process group is still not confirmed ended after \
+                         {attempts} explicit attempts ({})",
+                        joined(&failures)
+                    )
+                },
+                "(the failure could not be described)".to_string(),
+            );
+            release(query, "an unconfirmed query", &[why])
         }
     }
 }
 
-/// Judge a retained boundary only after its explicit retry. `observed` was
-/// taken while the boundary still held its scope; `retry` always runs, first,
-/// whatever that observation was. A failed observation stays a failure even
-/// when the retry then confirms the cleanup.
-pub fn after_retry(
-    observed: Result<Scopes, ObservationError>,
+/// What an owner's explicit cleanup came to.
+#[derive(Debug)]
+pub enum Settled<B> {
+    /// An attempt confirmed the cleanup: this many were made.
+    Confirmed(usize),
+    /// Every attempt failed: the owner, still held, and how many were made.
+    Unconfirmed(B, usize),
+}
+
+/// Retry `owner`'s cleanup explicitly, at most `attempts` times, keeping the
+/// owner each failed attempt returns. `retry` must not unwind (a retained
+/// boundary's never does).
+pub fn settle<B>(
+    mut owner: B,
+    attempts: usize,
+    mut retry: impl FnMut(B) -> Result<(), B>,
+) -> Settled<B> {
+    for attempt in 1..=attempts {
+        owner = match retry(owner) {
+            Ok(()) => return Settled::Confirmed(attempt),
+            Err(owner) => owner,
+        };
+    }
+    Settled::Unconfirmed(owner, attempts)
+}
+
+/// A retained boundary, judged after its explicit cleanup.
+#[derive(Debug)]
+pub enum Verdict<B> {
+    /// The cleanup is confirmed and every check holds.
+    Passed,
+    /// The cleanup is confirmed, but these checks failed.
+    Failed(Vec<String>),
+    /// The cleanup is still unconfirmed after the bounded attempts: the
+    /// owner, still held for explicit recovery or release, and every failure.
+    Unconfirmed { owner: B, failures: Vec<String> },
+}
+
+/// Judge a retained boundary only after its explicit cleanup. `failures`
+/// come from the evidence taken while it was held, and `observed` is the
+/// scope observation taken then (already reported, its own query ended). The
+/// cleanup is settled first, whatever they were. Every failure is kept: an
+/// observation failure even when the cleanup is then confirmed, a cleanup
+/// confirmed only after the first attempt, and an unconfirmed cleanup, which
+/// keeps its owner.
+pub fn judge_retained<B>(
+    mut failures: Vec<String>,
+    observed: Result<Scopes, String>,
     before: &Scopes,
-    retry: impl FnOnce() -> bool,
-) -> Result<(), Retained> {
-    let retried = retry();
-    let observed = observed.map_err(|error| Retained::Unobserved { error, retried })?;
-    let kept = observed.len() > before.len();
-    if !retried {
-        return Err(Retained::NotConfirmed { kept });
+    owner: B,
+    attempts: usize,
+    retry: impl FnMut(B) -> Result<(), B>,
+) -> Verdict<B> {
+    let settled = settle(owner, attempts, retry);
+    let judged = contained(
+        || {
+            let mut found = Vec::new();
+            match &observed {
+                Err(error) => found.push(format!(
+                    "the scope could not be observed while the boundary was retained: {error}"
+                )),
+                Ok(kept) if kept.len() <= before.len() => found.push(format!(
+                    "the scope is not kept: {} loaded verifier scopes {kept:?}, not more than \
+                     the {} before",
+                    kept.len(),
+                    before.len()
+                )),
+                Ok(_) => {}
+            }
+            match &settled {
+                Settled::Confirmed(1) => {}
+                Settled::Confirmed(attempt) => found.push(format!(
+                    "the cleanup was confirmed only on explicit attempt {attempt}"
+                )),
+                Settled::Unconfirmed(_, attempts) => found.push(format!(
+                    "the cleanup is still unconfirmed after {attempts} explicit attempts"
+                )),
+            }
+            found
+        },
+        vec!["(the failures could not be described)".to_string()],
+    );
+    failures.extend(judged);
+    match settled {
+        Settled::Confirmed(_) if failures.is_empty() => Verdict::Passed,
+        Settled::Confirmed(_) => Verdict::Failed(failures),
+        Settled::Unconfirmed(owner, _) => Verdict::Unconfirmed { owner, failures },
     }
-    if !kept {
-        return Err(Retained::NotKept {
-            before: before.len(),
-            observed,
-        });
-    }
-    Ok(())
+}
+
+/// Release an owner whose cleanup stays unconfirmed after the bounded
+/// attempts, explicitly and only once reported: dropping it runs its
+/// defense-in-depth backstop (a retained boundary's or a query's), which is
+/// never a confirmation. Returns the report.
+pub fn release<B>(owner: B, what: &str, failures: &[String]) -> String {
+    let report = contained(
+        || format!("{what}: {}", failures.join("; ")),
+        "(the failures could not be described)".to_string(),
+    );
+    let _ = writeln!(
+        io::stderr(),
+        "{report}: releasing the unconfirmed owner to its drop backstop, never a confirmation"
+    );
+    drop(owner);
+    report
 }

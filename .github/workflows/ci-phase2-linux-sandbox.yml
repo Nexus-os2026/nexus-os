@@ -178,24 +178,35 @@ jobs:
           NEXUS_VERIFIER_TOOLCHAIN: packaged
         run: |
           set -o pipefail
-          # Every result is kept: the cleanup observations run whatever the
-          # suite reported (both of them, neither failure suppressing the
-          # other), and the step fails if the suite, its passed-case count or
-          # an observation failed; a failed suite keeps its own exit status.
-          live=0
-          cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox 2>&1 | tee phase2-live.log || live=$?
+          # Every result is kept. Each command of the suite's pipeline keeps
+          # its own status, taken at once (the next command replaces
+          # PIPESTATUS); the cleanup observations run whatever the suite
+          # reported (both of them, neither failure suppressing the other);
+          # and the step fails if the suite, the capture of its output, its
+          # passed-case count or an observation failed. A failed suite keeps
+          # its own exit status, whatever else failed.
+          if cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox 2>&1 | tee phase2-live.log; then
+            statuses=("${PIPESTATUS[@]}")
+          else
+            statuses=("${PIPESTATUS[@]}")
+          fi
+          live=${statuses[0]:-255}
+          captured=${statuses[1]:-255}
           passed=0
           grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log || passed=$?
           observed=0
           python3 scripts/ci/phase2_cleanup_check.py || observed=$?
+          if (( captured != 0 )); then
+            echo "::error::the live suite's output was not fully captured (tee exit $captured)"
+          fi
           if (( passed != 0 )); then
             echo "::error::the live suite did not report 31 passed cases"
           fi
           if (( live != 0 )); then
-            echo "::error::the live suite failed (exit $live)"
+            echo "::error::the live suite failed (cargo exit $live)"
             exit "$live"
           fi
-          if (( passed != 0 || observed != 0 )); then
+          if (( captured != 0 || passed != 0 || observed != 0 )); then
             exit 1
           fi
 
