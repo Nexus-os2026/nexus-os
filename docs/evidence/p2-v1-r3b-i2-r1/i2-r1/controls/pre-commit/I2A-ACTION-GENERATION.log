@@ -1,0 +1,24 @@
+
+running 1 test
+test c09_digests_bind_every_identity_instant_variant_and_field ... FAILED
+
+failures:
+
+---- c09_digests_bind_every_identity_instant_variant_and_field stdout ----
+
+thread 'c09_digests_bind_every_identity_instant_variant_and_field' (2956611) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs:1605:5:
+assertion `left != right` failed: [identity-bound] the embedded action generation
+  left: [26, 91, 61, 124, 246, 211, 227, 215, 70, 110, 226, 217, 61, 36, 215, 159, 126, 254, 173, 145, 243, 121, 159, 14, 255, 138, 211, 118, 41, 105, 174, 132]
+ right: [26, 91, 61, 124, 246, 211, 227, 215, 70, 110, 226, 217, 61, 36, 215, 159, 126, 254, 173, 145, 243, 121, 159, 14, 255, 138, 211, 118, 41, 105, 174, 132]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c09_digests_bind_every_identity_instant_variant_and_field
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.63s
+     Running tests/phase2_custody_codec.rs (target/debug/deps/phase2_custody_codec-9296cffc986e9dd6)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_codec`

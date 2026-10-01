@@ -1,0 +1,88 @@
+# workflow triggers at 45898e05178a56efaadeb1f8f9ee7a0a521c72c9  2026-10-01T20:47:45Z
+## workflow tree is unchanged from the base: yes
+=== .github/workflows/audit.yml (64ba05fe9196)
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+=== .github/workflows/ci-fast-local.yml (2285811e6ca9)
+on:
+  push:
+    branches:
+      - "implement/**"
+      - "repair/**"
+  workflow_dispatch:
+
+=== .github/workflows/ci-phase2-linux-sandbox.yml (1a5b1732e6ad)
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: "Exact 40-character candidate commit (the head of the dispatched ref)"
+        required: true
+        type: string
+
+=== .github/workflows/ci-portability.yml (e8517eff7fc5)
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: "Full 40-character SHA of the Architect-approved candidate commit"
+        required: true
+        type: string
+
+=== .github/workflows/ci.yml (f205e8394d38)
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: "Full 40-character SHA of the Architect-approved candidate commit"
+        required: true
+        type: string
+
+=== .github/workflows/local-runner-smoke.yml (657259ccc80b)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - rebuild/phase0-trust-boundary
+    paths:
+      - ".github/workflows/local-runner-smoke.yml"
+
+=== .github/workflows/pages.yml (ebdc8fc43d37)
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "website/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+=== .github/workflows/release.yml (65247b8fa2d9)
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+
+# default-branch (main 4b36f60694148b60029733bc7b3d26e5a215d460) workflow events, for create/delete-style events evaluated there
+.github/workflows/audit.yml                      push schedule workflow_dispatch 
+.github/workflows/ci-fast-local.yml              push workflow_dispatch 
+.github/workflows/ci-phase2-linux-sandbox.yml    workflow_dispatch 
+.github/workflows/ci-portability.yml             workflow_dispatch 
+.github/workflows/ci.yml                         push workflow_dispatch 
+.github/workflows/local-runner-smoke.yml         workflow_dispatch push 
+.github/workflows/pages.yml                      push workflow_dispatch 
+.github/workflows/release.yml                    workflow_dispatch push 
+
+# any create/delete/branch_protection/pull_request-free push trigger at the candidate or main?
+  (end of matches)

@@ -1,0 +1,5 @@
+# Kept byte for byte. A unified diff's empty context lines are a single
+# space, and the trigger log is verbatim tool output with trailing spaces,
+# so Git's whitespace checks do not apply to these two files.
+i2-r1/controls/negative_controls.as-run.diff -whitespace
+i2-r1/publication/i2r1-prepush-triggers.log -whitespace

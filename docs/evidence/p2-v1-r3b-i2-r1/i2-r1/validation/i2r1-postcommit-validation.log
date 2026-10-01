@@ -1,0 +1,162 @@
+# validation  2026-10-01T20:49:26Z
+repository root: /home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers
+branch: review/p2-v1-cleanup-observers
+HEAD: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9  tree: cd197e047cb5a57e458b2af5d32f9c5406371301
+expected HEAD: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+worktree entries before (status --porcelain, untracked included): 0
+toolchain: rustc 1.94.0 (4a4ef493e 2026-03-02) | cargo 1.94.0 (85eff7c80 2026-01-15) | clippy 0.1.94 (4a4ef493e3 2026-03-02) | rustfmt 1.8.0-stable (4a4ef493e3 2026-03-02)
+host: Linux 6.17.0-35-generic x86_64
+=== $ cargo clean --locked -p nexus-verifier-sandbox
+     Removed 1450 files, 397.5MiB total
+=== exit 0
+=== $ cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_codec
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.77s
+     Running tests/phase2_custody_codec.rs (target/debug/deps/phase2_custody_codec-9296cffc986e9dd6)
+
+running 21 tests
+test c00_format_constants_are_the_documented_ones ... ok
+test c02_request_golden_vectors_decode_encode_and_digest_exactly ... ok
+test c12_core_refuses_acknowledgements_for_altered_bytes ... ok
+test c13_request_receipts_bind_the_full_payload ... ok
+test custody::core::commitment_boundary::r2a_commit_boundary_installs_only_before_the_custody_is_shared ... ok
+test custody::core::commitment_boundary::r2a_cancellation_accepted_at_the_commitment_entry_fails_the_run ... ok
+test c11_core_issued_records_encode_decode_and_check ... ok
+test custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record ... ok
+test c17_core_retains_the_canonical_request_digest_in_its_receipts ... ok
+test c06_invalid_tags_booleans_and_presence_bytes_are_refused ... ok
+test c10_frames_never_cross_domains ... ok
+test c03_vectors_cover_every_variant_tag_and_form ... ok
+test c04_decoding_takes_exactly_one_complete_frame ... ok
+test c01_record_golden_vectors_decode_encode_and_digest_exactly ... ok
+test c05_envelope_refusals_come_before_any_field ... ok
+test c16_core_digest_paths_use_the_codec ... ok
+test c09_digests_bind_every_identity_instant_variant_and_field ... ok
+test c15_decoding_is_plain_data_without_authority ... ok
+test c07_digest_and_payload_mutations_are_detected ... ok
+test c08_every_payload_byte_is_bound_canonically ... ok
+test c14_malformed_corpus_is_refused_or_canonical ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s
+
+=== exit 0
+=== $ cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_core
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.99s
+     Running tests/phase2_custody_core.rs (target/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+
+running 47 tests
+test custody::core::commitment_boundary::r2a_commit_boundary_installs_only_before_the_custody_is_shared ... ok
+test h01_same_owner_survives_failed_cleanup_and_exhausted_budgets ... ok
+test h02_reporting_snapshots_and_lending_cannot_consume_the_owner ... ok
+test h03_explicit_recovery_resolves_without_erasing_earlier_failure ... ok
+test custody::core::commitment_boundary::r2a_cancellation_accepted_at_the_commitment_entry_fails_the_run ... ok
+test custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record ... ok
+test h05_cancellation_before_admission_prevents_native_creation ... ok
+test h04_shutdown_is_refused_while_native_or_evidence_state_is_unresolved ... ok
+test h06_cancellation_after_admission_still_adopts_the_later_owner ... ok
+test h07_status_never_renews_the_lease ... ok
+test h10_unexpected_failure_stays_failed_after_recovery ... ok
+test h12_unknown_outcome_blocks_launch_discard_and_fresh_admission ... ok
+test h13_late_stale_and_duplicate_results_cannot_act_on_another_operation ... ok
+test h09_expected_retained_boundary_needs_its_first_attempt_to_confirm ... ok
+test h11_dependencies_release_only_after_native_completion ... ok
+test h13_acknowledgements_bind_exact_records_in_order ... ok
+test h15_physical_cleanup_and_recording_failure_stay_distinct ... ok
+test h16_refused_deposits_and_admissions_return_or_retain_ownership ... ok
+test h21_failure_history_is_bounded_classified_and_never_cleared ... ok
+test h20_prior_incidents_need_a_bound_external_disposition ... ok
+test h19_replayed_evicted_conflicting_and_foreign_requests_execute_nothing ... ok
+test h24_finalization_boundary_candidate_terminal_and_final ... ok
+test h22_group_bounds_refuse_before_creation ... ok
+test r01_actual_failure_closes_admission_within_its_case ... ok
+test r03_failed_evidence_keeps_the_custody_open ... ok
+test r04_finalized_verdict_matches_acknowledged_terminal_evidence ... ok
+test h14_capacity_reservation_prevents_unrecordable_admission ... ok
+test h25_declared_output_detachment_is_expected_and_checked ... ok
+test r06_detached_output_is_output_loss_never_a_clean_pass ... ok
+test r07_cancellation_accepted_in_candidate_prevents_a_pass ... ok
+test r05_late_owner_is_a_bound_incident_never_the_retired_action ... ok
+test r09_failed_first_attempt_of_a_retained_boundary_closes_admission_at_once ... ok
+test r08_lease_expiry_observed_in_candidate_prevents_a_pass ... ok
+test h26_every_failure_entry_point_closes_admission_itself ... ok
+test r11_finalization_winning_makes_a_later_cancellation_late ... ok
+test r15_shutdown_request_is_no_second_finalization_rule ... ok
+test h08_stalled_adapters_do_not_block_the_control_side ... ok
+test r02_failed_case_cleanup_never_permits_a_next_case ... ok
+test r14_expected_first_attempt_success_and_ordinary_retries_keep_their_semantics ... ok
+test r13_every_unconfirmed_first_attempt_latches_its_expectation ... ok
+test r10_cancellation_while_the_recorder_is_paused_precedes_the_commitment ... ok
+test r16_commitment_wiring_reaches_the_tested_primitive ... ok
+test h23_public_api_phase_matrix ... ok
+test h05_admission_linearizes_against_concurrent_cancellation ... ok
+test r12_commitment_and_concurrent_cancellation_agree_whichever_wins ... ok
+test h17_no_api_path_exits_aborts_leaks_or_drops_unresolved_ownership ... ok
+test h18_adversarial_transition_sequences_keep_every_invariant ... ok
+
+test result: ok. 47 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.82s
+
+=== exit 0
+=== $ cargo clippy --locked -p nexus-verifier-sandbox --test phase2_custody_codec --test phase2_custody_core -- -D warnings
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers/crates/nexus-verifier-sandbox)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.55s
+=== exit 0
+=== $ cargo test --locked -p nexus-verifier-sandbox --test phase2_cleanup_observation
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.31s
+     Running tests/phase2_cleanup_observation.rs (target/debug/deps/phase2_cleanup_observation-c0f53b91d5757d19)
+
+running 36 tests
+test controls::a_cleanup_confirmed_only_on_a_later_attempt_still_fails ... ok
+test controls::a_kept_scope_and_a_first_confirmed_cleanup_pass ... ok
+test controls::a_failed_retry_keeps_its_owner_for_a_later_explicit_retry ... ok
+test controls::a_panicking_observation_is_a_failure_and_the_other_still_runs ... ok
+test controls::a_connection_closed_before_the_answer_is_an_error ... ok
+test controls::a_failed_handshake_or_hello_is_an_error ... ok
+test controls::a_reply_lists_each_loaded_verifier_scope ... ok
+test controls::a_reply_with_more_body_data_never_ends_a_wait_or_reads_as_clean ... ok
+test controls::each_failed_attempt_returns_the_same_owner ... ok
+test controls::each_probe_or_driver_mode_is_chosen_by_its_own_first_argument ... ok
+test controls::a_reply_of_another_shape_is_malformed ... ok
+test controls::evidence_is_judged_only_after_the_cleanup ... ok
+case: the scope could not be observed while the boundary was retained: the query failed; the cleanup is still unconfirmed after 3 explicit attempts: releasing the unconfirmed owner to its drop backstop, never a confirmation
+test controls::observation_and_cleanup_failures_are_kept_together_with_the_owner ... ok
+test controls::only_two_answers_of_nothing_left_are_clean_and_neither_failure_hides_the_other ... ok
+test controls::an_empty_workspaces_directory_is_nothing_left ... ok
+test controls::an_observation_failure_survives_a_confirming_retry ... ok
+test controls::absence_is_only_a_missing_final_component_of_a_checked_runtime_directory ... ok
+test controls::a_manager_error_is_an_error_never_no_scopes ... ok
+test controls::the_observation_mode_and_invalid_arguments_never_enter_the_suite ... ok
+test controls::a_refused_or_failing_inspection_is_never_empty ... ok
+test controls::a_wrong_owner_mode_or_filesystem_is_never_empty ... ok
+test controls::where_the_sandbox_does_not_exist_only_the_suites_note_remains ... ok
+test controls::a_symlink_or_another_type_is_never_empty ... ok
+test controls::duplicate_or_out_of_pattern_units_are_malformed ... ok
+test controls::the_request_is_exactly_the_managers_listing_of_verifier_scopes ... ok
+test controls::an_unusable_runtime_directory_or_bus_is_an_error_and_nothing_is_reached ... ok
+test controls::whatever_the_workspaces_directory_holds_is_left_behind ... ok
+test controls::poisoned_or_absent_ambient_environment_never_redirects_the_observation ... ok
+test controls::the_observer_has_no_process_path_and_reads_no_environment ... ok
+test controls::a_complete_list_followed_by_more_body_data_is_malformed ... ok
+test controls::every_bound_on_an_accepted_reply_is_enforced ... ok
+test controls::a_complete_reply_decodes_in_either_byte_order_whatever_its_padding ... ok
+test controls::a_failed_observation_never_ends_a_wait_as_done ... ok
+test controls::the_bus_is_reached_only_through_the_checked_runtime_directory ... ok
+test controls::a_wait_gives_every_observation_its_callers_one_deadline ... ok
+test controls::an_observation_that_does_not_finish_times_out_and_releases_its_connection ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+
+=== exit 0
+=== $ cargo test --locked -p nexus-verifier-sandbox --test phase2_live_sandbox --no-run
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.37s
+  Executable tests/phase2_live_sandbox.rs (target/debug/deps/phase2_live_sandbox-54a4964f6371dd7e)
+=== exit 0
+=== $ cargo fmt --all -- --check
+=== exit 0
+=== $ git diff --check
+=== exit 0
+worktree entries after (status --porcelain, untracked included): 0
+HEAD after: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+RESULT: 0 failure(s)

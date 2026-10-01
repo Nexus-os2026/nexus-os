@@ -1,0 +1,47 @@
+const RECEIPT_VECTORS: &[RequestVector] = &[
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000001 01 0000000000000000",
+        digest: "fa39efc25ef1f1b8d6e29a9235d66dd59b124a9081237aab0220590a950f6de4",
+        request: Request { generation: Generation::new(G3C), seq: 1, op: RequestOp::Retry { epoch: 0 } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0019 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000002 02",
+        digest: "e65434b8803345efc5d1ff2b4911b4909356612cbe4a7d6daabf172300b82272",
+        request: Request { generation: Generation::new(G3C), seq: 2, op: RequestOp::Shutdown },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000003 01 0000000000000001",
+        digest: "9a227c00586d95650e6d5aa9493e09953b2d063269e30613fe83db67703ac694",
+        request: Request { generation: Generation::new(G3C), seq: 3, op: RequestOp::Retry { epoch: 1 } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000004 01 ffffffffffffffff",
+        digest: "69a101a9786c39730c16ea2ee1c692aa96992667a1697b911ab378dd0b8c8948",
+        request: Request { generation: Generation::new(G3C), seq: 4, op: RequestOp::Retry { epoch: u64::MAX } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000005 01 0000000000000000",
+        digest: "9ffecc155b972e94d992d533fa4cc4ff99e93081c861658491667ce03e831c2d",
+        request: Request { generation: Generation::new(G3C), seq: 5, op: RequestOp::Retry { epoch: 0 } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5 0000000000000001 01 0000000000000000",
+        digest: "b55792d6176f5c3ce7a34a8177f994340e64c53faf2b1ea81a58b543d82e6749",
+        request: Request { generation: Generation::new(GA5), seq: 1, op: RequestOp::Retry { epoch: 0 } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0019 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000001 02",
+        digest: "0bf26bf71b4c7345f3dff3dfe9ceb77bc7f77e45a9498e343acd392bbfa7bf23",
+        request: Request { generation: Generation::new(G3C), seq: 1, op: RequestOp::Shutdown },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000002 01 0000000000000000",
+        digest: "7d486ff6b72427b30ba1525b6586a7f991d527de6052c5780ef7ec045ecfa6ea",
+        request: Request { generation: Generation::new(G3C), seq: 2, op: RequestOp::Retry { epoch: 0 } },
+    },
+    RequestVector {
+        frame: "4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000003 01 0000000000000002",
+        digest: "1a0c59e036b9e331eeedb39ee3976d23ec90e2afd8ce446d833d40a2bd5a43f2",
+        request: Request { generation: Generation::new(G3C), seq: 3, op: RequestOp::Retry { epoch: 2 } },
+    },
+];

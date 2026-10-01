@@ -1,0 +1,18 @@
+# evidence ref and worktree setup  2026-10-01T20:54:26Z
+## preconditions (no prior work)
+local ref: absent
+remote ref: []
+worktree path: absent
+registered worktrees at that path: 0
+## create
+$ git worktree add -b evidence/p2-v1-r3b-i2-r1 /home/nexus/NEXUS/nexus-os-p2-v1-r3b-i2-r1-evidence 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+Preparing worktree (new branch 'evidence/p2-v1-r3b-i2-r1')
+HEAD is now at 45898e05 test(custody): verify canonical request receipt binding
+exit 0
+## readback
+toplevel: /home/nexus/NEXUS/nexus-os-p2-v1-r3b-i2-r1-evidence
+branch: evidence/p2-v1-r3b-i2-r1
+HEAD: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9  tree: cd197e047cb5a57e458b2af5d32f9c5406371301
+upstream: none
+status entries: 0
+docs/evidence present at HEAD: 0

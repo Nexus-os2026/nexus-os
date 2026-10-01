@@ -1,0 +1,23 @@
+
+running 1 test
+test custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record ... FAILED
+
+failures:
+
+---- custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record stdout ----
+1. execution owner: acknowledge(last earlier record) -> try_finalize -> Shared::commit, boundary at Decided, met: Some(Decided); 2. control side: gate.try_lock() -> Free; 3. control side: cancel at the boundary -> Accepted(Closure { reason: Cancelled(Requested), at: Tick(10), after: 0 }); 4. control side: release; 5. execution owner: acknowledge -> Acknowledged (release missed: false); 6. control side: cancel after the commitment -> Late(Commitment { at: Tick(9) }); outcome: terminal record Some((4, Passed)), published Passed, failures [], admission AdmissionView { admitted: 0, closure: Some(Closure { reason: Cancelled(Requested), at: Tick(10), after: 0 }), committed: Some(Commitment { at: Tick(9) }) }
+
+thread 'custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record' (2941669) panicked at crates/nexus-verifier-sandbox/tests/support/custody/core.rs:3488:9:
+[commit-atomic] an accepted cancellation is missing from the committed outcome: 1. execution owner: acknowledge(last earlier record) -> try_finalize -> Shared::commit, boundary at Decided, met: Some(Decided); 2. control side: gate.try_lock() -> Free; 3. control side: cancel at the boundary -> Accepted(Closure { reason: Cancelled(Requested), at: Tick(10), after: 0 }); 4. control side: release; 5. execution owner: acknowledge -> Acknowledged (release missed: false); 6. control side: cancel after the commitment -> Late(Commitment { at: Tick(9) }); outcome: terminal record Some((4, Passed)), published Passed, failures [], admission AdmissionView { admitted: 0, closure: Some(Closure { reason: Cancelled(Requested), at: Tick(10), after: 0 }), committed: Some(Commitment { at: Tick(9) }) }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.97s
+     Running tests/phase2_custody_core.rs (target/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`

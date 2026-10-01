@@ -1,0 +1,39 @@
+# revalidation tool self-check  2026-10-01T20:57:08Z
+Each tool must reject a copy of the committed test file with one published value altered.
+altered copies: receipt vector A1 digest fa39... -> fb39...; receipt vector A1 frame epoch 0 -> 1
+
+=== $ python3 -B i2r1-golden-revalidate.py <altered-digest copy>
+  generator: i2r1-golden-vectors.py sha256 9e2ae381a403a5f6b35d4dc724141cf1020622e97aaf19b7f71a88a8b3eae872
+  RECORD_VECTORS: 50 published, 50 generated, identical: True
+  REQUEST_VECTORS: 4 published, 4 generated, identical: True
+  RECEIPT_VECTORS: 9 published, 9 generated, identical: False
+    entry 0 differs:
+      published RequestVector{frame:"4e584344510100213c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c0000000000000001010000000000000000",digest:"fb39efc25ef1f1b8d6e29a9235d66dd59b124a9081237aab0220590a950f6de4",request:Request{generation:Generation::new(G3C),seq:1,op:RequestOp::Retry{epoch:0}}},
+      generated RequestVector{frame:"4e584344510100213c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c0000000000000001010000000000000000",digest:"fa39efc25ef1f1b8d6e29a9235d66dd59b124a9081237aab0220590a950f6de4",request:Request{generation:Generation::new(G3C),seq:1,op:RequestOp::Retry{epoch:0}}},
+    digest mismatch for 4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000001 01 0000000000000000
+  frames re-hashed with hashlib: 62 of 63 match
+  RESULT: MISMATCH
+=== exit 1 (must be nonzero)
+=== $ bash golden_coreutils.sh <altered-digest copy>
+  mismatch: frame 4e584344510100213c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c0000000000000001010000000000000000 hashes to fa39efc25ef1f1b8d6e29a9235d66dd59b124a9081237aab0220590a950f6de4, published fb39efc25ef1f1b8d6e29a9235d66dd59b124a9081237aab0220590a950f6de4
+  sha256sum (GNU coreutils) 9.4, basenc (GNU coreutils) 9.4
+  frames re-hashed with coreutils: 62 of 63 match
+=== exit 1 (must be nonzero)
+
+=== $ python3 -B i2r1-golden-revalidate.py <altered-frame copy>
+  generator: i2r1-golden-vectors.py sha256 9e2ae381a403a5f6b35d4dc724141cf1020622e97aaf19b7f71a88a8b3eae872
+  RECORD_VECTORS: 50 published, 50 generated, identical: True
+  REQUEST_VECTORS: 4 published, 4 generated, identical: True
+  RECEIPT_VECTORS: 9 published, 9 generated, identical: False
+    entry 0 differs:
+      published RequestVector{frame:"4e584344510100213c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c0000000000000001010000000000000001",digest:"fa39efc25ef1f1b8d6e29a9235d66dd59b124a9081237aab0220590a950f6de4",request:Request{generation:Generation::new(G3C),seq:1,op:RequestOp::Retry{epoch:0}}},
+      generated RequestVector{frame:"4e584344510100213c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c0000000000000001010000000000000000",digest:"fa39efc25ef1f1b8d6e29a9235d66dd59b124a9081237aab0220590a950f6de4",request:Request{generation:Generation::new(G3C),seq:1,op:RequestOp::Retry{epoch:0}}},
+    digest mismatch for 4e584344 51 01 0021 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c 0000000000000001 01 0000000000000001
+  frames re-hashed with hashlib: 62 of 63 match
+  RESULT: MISMATCH
+=== exit 1 (must be nonzero)
+=== $ bash golden_coreutils.sh <altered-frame copy>
+  mismatch: frame 4e584344510100213c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c0000000000000001010000000000000001 hashes to 5d93481509e2de30003932bf04103f70aea1c4748b5cd538b897400cb93c8737, published fa39efc25ef1f1b8d6e29a9235d66dd59b124a9081237aab0220590a950f6de4
+  sha256sum (GNU coreutils) 9.4, basenc (GNU coreutils) 9.4
+  frames re-hashed with coreutils: 62 of 63 match
+=== exit 1 (must be nonzero)

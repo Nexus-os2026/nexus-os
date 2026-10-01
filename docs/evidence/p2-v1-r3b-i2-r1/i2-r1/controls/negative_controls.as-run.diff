@@ -1,0 +1,67 @@
+--- i2r1-negative-controls.py	2026-10-01 21:42:57.740752198 +0100
++++ negative_controls.py	2026-10-01 21:52:59.550899512 +0100
+@@ -11,6 +11,17 @@
+ six edit-envelope files are verified byte-identical (sha256) before every
+ control and after every restoration (always performed, in `finally`); the
+ worktree must show exactly the expected status throughout.
++
++Reproducible form, published with the I2-R1 evidence. It differs from the
++script as first run (i2r1-negative-controls.py, beside the pre-commit
++logs) only in where it runs: the checkout and log directory come from
++the command line, the checkout must be clean, and its six envelope files
++must be byte-identical to candidate 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
++(CANDIDATE_SOURCES). The controls, their tests, markers and checks are
++unchanged. It mutates and restores files in the given checkout, so run it
++alone, with nothing else building, testing or editing there.
++
++Usage: negative_controls.py <clean checkout of the candidate> <log directory>
+ """
+ import hashlib
+ import json
+@@ -18,7 +29,7 @@
+ import subprocess
+ import sys
+ 
+-ROOT = pathlib.Path("/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers")
++ROOT = pathlib.Path()  # the checkout, from the command line (main)
+ TESTS = "crates/nexus-verifier-sandbox/tests"
+ CUSTODY = f"{TESTS}/support/custody"
+ FILES = [
+@@ -29,11 +40,16 @@
+     f"{TESTS}/phase2_custody_codec.rs",
+     f"{TESTS}/phase2_custody_core.rs",
+ ]
+-LOG = pathlib.Path("/home/nexus/.claude/jobs/4a4dc130/tmp/i2r1-negative-controls")
+-EXPECTED_STATUS = {
+-    f" M {CUSTODY}/core.rs",
+-    f" M {CUSTODY}/model.rs",
+-    f" M {TESTS}/phase2_custody_codec.rs",
++LOG = pathlib.Path()  # the log directory, from the command line (main)
++# A clean checkout of the committed candidate.
++EXPECTED_STATUS = set()
++CANDIDATE_SOURCES = {
++    f"{CUSTODY}/codec.rs": "83fd29a8eebdefea9178be4c4ed83609f24113ca8184f7061e61514b3112534c",
++    f"{CUSTODY}/core.rs": "a5dc3b33162547a7f518950684b8212892c2a4439acfe72c5dd995cdc77422a4",
++    f"{CUSTODY}/mod.rs": "b7fab623ea6fc9afb1a47266226ae57030301a865de7d8ba94e5449866fe1746",
++    f"{CUSTODY}/model.rs": "3b32071bc90b9bf1a974be60a39a87693108dbf0697ea75a72bee4e2a45d5709",
++    f"{TESTS}/phase2_custody_codec.rs": "2ceffcc19f274d2dd158d4a777dbcb034f8c7b85bfc9748625c5a1c74acf4500",
++    f"{TESTS}/phase2_custody_core.rs": "801588711b04173136bebb2e9e36382cc65ed9e617f98ee4958faf162237fd16",
+ }
+ BOUNDARY = "custody::core::commitment_boundary::"
+ DECIDED = BOUNDARY + "r2a_commitment_excludes_cancellation_between_its_decision_and_its_record"
+@@ -549,8 +565,15 @@
+ 
+ 
+ def main() -> int:
++    global ROOT, LOG
++    if len(sys.argv) != 3:
++        raise SystemExit(__doc__)
++    ROOT = pathlib.Path(sys.argv[1]).resolve()
++    LOG = pathlib.Path(sys.argv[2]).resolve()
+     LOG.mkdir(parents=True, exist_ok=True)
+     original_state = state()
++    if original_state != CANDIDATE_SOURCES:
++        raise SystemExit("the six envelope files are not the candidate's")
+     originals = {path: (ROOT / path).read_bytes() for path in FILES}
+     if status() != EXPECTED_STATUS:
+         raise SystemExit(f"unexpected worktree state before the controls: {status()}")

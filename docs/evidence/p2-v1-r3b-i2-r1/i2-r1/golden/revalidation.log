@@ -1,0 +1,45 @@
+# golden vector revalidation  2026-10-01T20:56:55Z
+commit: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+file: crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs
+blob: ebb5032fceba8907384ec02fa1b640d9ed09eff5
+file sha256: 2ceffcc19f274d2dd158d4a777dbcb034f8c7b85bfc9748625c5a1c74acf4500
+tools: Python 3.12.3; sha256sum (GNU coreutils) 9.4
+tool sha256:
+  9e2ae381a403a5f6b35d4dc724141cf1020622e97aaf19b7f71a88a8b3eae872  i2r1-golden-vectors.py
+  ae97c259486983a3f9c8b83c9c45d091835a798fb94e9bcdc5910260ad227f0e  i2r1-golden-revalidate.py
+  49f2e29333b2463610b931aa28c7150b335a9341ebea81642446b2b5b0738de8  golden_coreutils.sh
+  89e7ca26b3ef47b8253254f08dc74d107955ce8340c45e8940107a9c94327cf2  ../../original-i2a/i2a-golden-vectors.py
+
+## 1. every published vector against the independent generator, re-hashed with hashlib
+
+=== $ python3 -B i2r1-golden-revalidate.py /home/nexus/.claude/jobs/4a4dc130/tmp/golden-check/phase2_custody_codec.rs
+generator: i2r1-golden-vectors.py sha256 9e2ae381a403a5f6b35d4dc724141cf1020622e97aaf19b7f71a88a8b3eae872
+RECORD_VECTORS: 50 published, 50 generated, identical: True
+REQUEST_VECTORS: 4 published, 4 generated, identical: True
+RECEIPT_VECTORS: 9 published, 9 generated, identical: True
+frames re-hashed with hashlib: 63 of 63 match
+RESULT: all published vectors match the independent generator
+=== exit 0
+
+## 2. every published frame re-hashed with GNU coreutils alone
+
+=== $ bash golden_coreutils.sh /home/nexus/.claude/jobs/4a4dc130/tmp/golden-check/phase2_custody_codec.rs
+sha256sum (GNU coreutils) 9.4, basenc (GNU coreutils) 9.4
+frames re-hashed with coreutils: 63 of 63 match
+=== exit 0
+
+## 3. the generator reproduces the retained listings byte for byte
+IDENTICAL  i2r1-golden-vectors.py --with-receipts (R/Q/T lines) = i2r1-all-vectors.txt  (346afb3f2965fc4161431b8c69c35e3e8c9922faaae9a224b20f00dbe790cf24)
+IDENTICAL  i2r1-golden-vectors.py --with-receipts (T lines) = i2r1-receipts.txt  (23d870a6ed07f5ae19814c8784add2e762e1c6ef1d83656646e5d3f861cf7daf)
+IDENTICAL  i2r1-golden-vectors.py --rust-receipts = i2r1-receipts.rs.txt  (f5f5af55c2807b3ff5735d6c1b68f0ffeab79fd4eaace7e04804d7e32cd0a333)
+
+## 4. the I2A vectors are unchanged by the I2-R1 extension
+IDENTICAL  i2r1-golden-vectors.py --rust = i2a-golden-vectors.py --rust  (393c65d563b019d9649875c1d1ee78acc675eb3c4302511e140cb73f5e6f8615)
+IDENTICAL  i2a-golden-vectors.py --rust = original-i2a/i2a-vectors.rs.txt  (393c65d563b019d9649875c1d1ee78acc675eb3c4302511e140cb73f5e6f8615)
+IDENTICAL  i2a-golden-vectors.py (R/Q lines) = original-i2a/i2a-all.txt  (d0b859ca150c25b72223bede52e2e2cd6bc9e324aa40f9247a8fc85bf1fe7794)
+RECORD_VECTORS: 50 entries in the candidate
+IDENTICAL  RECORD_VECTORS at the candidate = RECORD_VECTORS at the base 0eb2a947e839b5639d9688da4e6b51b5e72a4d13  (7d8bc2f6e2a50a0ef28fc8161d05834cf4508932204eedbde732170dc21f784f)
+REQUEST_VECTORS: 4 entries in the candidate
+IDENTICAL  REQUEST_VECTORS at the candidate = REQUEST_VECTORS at the base 0eb2a947e839b5639d9688da4e6b51b5e72a4d13  (c3738437d907eb05dc5dcba5bc65e4d53f1c5cbda46518c2b8c361de0340e914)
+
+RESULT: 0 failure(s)

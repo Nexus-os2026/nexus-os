@@ -1,0 +1,24 @@
+
+running 1 test
+test c04_decoding_takes_exactly_one_complete_frame ... FAILED
+
+failures:
+
+---- c04_decoding_takes_exactly_one_complete_frame stdout ----
+
+thread 'c04_decoding_takes_exactly_one_complete_frame' (2934914) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs:1060:13:
+assertion `left == right` failed: [single-frame] 1 trailing bytes were accepted
+  left: Ok(())
+ right: Err(TrailingBytes { extra: 1 })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c04_decoding_takes_exactly_one_complete_frame
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.67s
+     Running tests/phase2_custody_codec.rs (target/debug/deps/phase2_custody_codec-9296cffc986e9dd6)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_codec`

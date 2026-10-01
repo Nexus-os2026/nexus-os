@@ -1,0 +1,24 @@
+
+running 1 test
+test h11_dependencies_release_only_after_native_completion ... FAILED
+
+failures:
+
+---- h11_dependencies_release_only_after_native_completion stdout ----
+
+thread 'h11_dependencies_release_only_after_native_completion' (2937123) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs:3376:9:
+assertion `left == right` failed: [dependency-order] a dependency was released before native completion (nothing confirmed)
+  left: 2
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    h11_dependencies_release_only_after_native_completion
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.98s
+     Running tests/phase2_custody_core.rs (target/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`

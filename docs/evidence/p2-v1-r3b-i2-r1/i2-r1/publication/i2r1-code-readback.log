@@ -1,0 +1,52 @@
+# remote readback of the code candidate  2026-10-01T20:48:24Z
+## ls-remote
+45898e05178a56efaadeb1f8f9ee7a0a521c72c9	refs/heads/review/p2-v1-cleanup-observers
+## GitHub API: branch head
+45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+## GitHub API: commit, tree, parents, subject
+sha: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+tree: cd197e047cb5a57e458b2af5d32f9c5406371301
+parents: 0eb2a947e839b5639d9688da4e6b51b5e72a4d13
+subject: test(custody): verify canonical request receipt binding
+author: Suresh Karicheti
+files: 3
+## GitHub API: changed paths (status, +/-)
+modified +230 -3 crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs
+modified +8 -0 crates/nexus-verifier-sandbox/tests/support/custody/core.rs
+modified +3 -1 crates/nexus-verifier-sandbox/tests/support/custody/model.rs
+## GitHub API: compare base...candidate
+status: ahead  ahead_by: 1  behind_by: 0  total_commits: 1
+## local view of the same commit
+sha: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+tree: cd197e047cb5a57e458b2af5d32f9c5406371301
+parents: 0eb2a947e839b5639d9688da4e6b51b5e72a4d13
+subject: test(custody): verify canonical request receipt binding
+ .../tests/phase2_custody_codec.rs                  | 233 ++++++++++++++++++++-
+ .../tests/support/custody/core.rs                  |   8 +
+ .../tests/support/custody/model.rs                 |   4 +-
+ 3 files changed, 241 insertions(+), 4 deletions(-)
+## full commit message (remote)
+test(custody): verify canonical request receipt binding
+
+Close the I2A review findings on the canonical codec's assurance:
+
+- A: the request receipt control now observes the digest the real core
+  stores. Real requests go through Control::submit, Custody::serve,
+  sequencing and execution in three custodies (one requiring recovery,
+  so its retries run as real attempts); each retained receipt's digest,
+  read through a cfg(test), read-only, per-instance accessor, must equal
+  the digest of that request's version-1 frame, given literally by the
+  independent derivation and re-derived from the frame with sha2. Pairs
+  differing only in generation, sequence, operation or retry epoch are
+  retained under different digests; duplicates and conflicts leave the
+  retained digest unchanged.
+- B: RecordIntent's documentation now states the digest's exact
+  coverage: the frame header and payload, excluding the 32-byte digest
+  trailer.
+
+The accessor changes no core behaviour and offers no way to alter a
+receipt. Codec, module documentation, the core regression target and the
+version-1 wire format are unchanged.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01N5tKJB1n4kYCCSym5GnaZY

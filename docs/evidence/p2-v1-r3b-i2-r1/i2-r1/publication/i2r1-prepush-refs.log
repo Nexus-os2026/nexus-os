@@ -1,0 +1,28 @@
+# I2-R1 pre-push ref check  2026-10-01T20:47:27Z
+## worktree identity (git)
+/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers
+review/p2-v1-cleanup-observers
+45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+cd197e047cb5a57e458b2af5d32f9c5406371301
+parents: 0eb2a947e839b5639d9688da4e6b51b5e72a4d13
+subject: test(custody): verify canonical request receipt binding
+1
+0
+## main worktree (porcelain)
+worktree /home/nexus/NEXUS/nexus-os
+HEAD f727f5c39fab8d5c729a55eb28ad576d3d56ce47
+branch refs/heads/rebuild/phase0-trust-boundary
+## fixed refs: local vs remote vs expected
+main                                       local=4b36f6069414 remote=4b36f6069414 OK
+repair/p2-validation-workflow-bootstrap    local=4b36f6069414 remote=4b36f6069414 OK
+implement/phase2-governed-verification     local=4d6763a8afe9 remote=4d6763a8afe9 OK
+rebuild/phase0-trust-boundary              local=f727f5c39fab remote=f727f5c39fab OK
+evidence/phase0-closure                    local=e33cf1ff1b8d remote=e33cf1ff1b8d OK
+rebuild/phase1-governed-coding             local=14270a9a3877 remote=14270a9a3877 OK
+evidence/phase1-closure                    local=c237937189b5 remote=c237937189b5 OK
+## review branch remote (must still be the base 0eb2a947)
+0eb2a947e839b5639d9688da4e6b51b5e72a4d13	refs/heads/review/p2-v1-cleanup-observers
+## evidence ref (must be absent locally and remotely)
+local: absent
+remote: []
+evidence worktree path: absent

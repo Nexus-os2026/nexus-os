@@ -1,0 +1,22 @@
+
+running 1 test
+test r07_cancellation_accepted_in_candidate_prevents_a_pass ... FAILED
+
+failures:
+
+---- r07_cancellation_accepted_in_candidate_prevents_a_pass stdout ----
+
+thread 'r07_cancellation_accepted_in_candidate_prevents_a_pass' (2979664) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs:1375:13:
+[cancel-observed] an observed cancellation of a candidate is not its failure at once: published Pending, failures [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r07_cancellation_accepted_in_candidate_prevents_a_pass
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.92s
+     Running tests/phase2_custody_core.rs (target/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`

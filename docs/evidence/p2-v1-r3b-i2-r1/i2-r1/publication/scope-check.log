@@ -1,0 +1,49 @@
+# scope check of candidate 45898e05178a56efaadeb1f8f9ee7a0a521c72c9 against base 0eb2a947e839b5639d9688da4e6b51b5e72a4d13  2026-10-01T20:59:05Z
+## changed paths (name-status)
+M	crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs
+M	crates/nexus-verifier-sandbox/tests/support/custody/core.rs
+M	crates/nexus-verifier-sandbox/tests/support/custody/model.rs
+## files byte-identical to the base (blob ids)
+IDENTICAL 22edb43924fda13ff9eb6a9e04b9ddef86521292 crates/nexus-verifier-sandbox/tests/support/custody/codec.rs
+IDENTICAL 74f7b6e87bc3a8e8054390c24a6cf521b53214b6 crates/nexus-verifier-sandbox/tests/support/custody/mod.rs
+IDENTICAL f21d14eb9eb633ef49dc699c089ae477c6845679 crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs
+IDENTICAL a7334e0a10282c83150347fbc8b776b3859a5ce4 crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs
+IDENTICAL 0ebea1abf6600f8c98c75265002bfa6a47e9d2fe crates/nexus-verifier-sandbox/tests/phase2_cleanup_observation.rs
+IDENTICAL 52b2ba7a87589d6c8a200fef83fe3f2d6837386b crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+IDENTICAL a222608b2e71c9222b628f35e86f35b6c8537869 crates/nexus-verifier-sandbox/tests/phase2_package_layout.rs
+IDENTICAL efa6fd5ed582fde1ae95f777aee1649c64fd05fe crates/nexus-verifier-sandbox/build.rs
+IDENTICAL dadabd04080a68e8ca1145251157c05e8ee0e819 crates/nexus-verifier-sandbox/Cargo.toml
+IDENTICAL 53f391ef63db315576eb5723d06223db6a5f0565 Cargo.toml
+IDENTICAL 837a99704503f72cfc51adfff083ebdfbc7b1041 Cargo.lock
+IDENTICAL 726005b29561a04536edea412bf551a9884d6639 rust-toolchain.toml
+IDENTICAL 05a42b50174e235b183b220afeb58922c96d17a1 .cargo/config.toml
+## trees identical to the base
+IDENTICAL 30ac28a8bd4b2d017e4c731911b4b822e23681e9 crates/nexus-verifier-sandbox/src/
+IDENTICAL d90ac07018fb8c1cae92d01d7124819aa160e9bd .github/
+IDENTICAL 74d6de645d7b86c43187681ebab8d0933fa27ec5 kernel/
+IDENTICAL aad70ee0e817cbe52a1a57a385e1bdd3cda2a187 protocols/
+IDENTICAL de307e70734d599746034a6d43e6a890440f6370 app/
+every Cargo.toml / Cargo.lock / build.rs / toolchain file in the tree unchanged: 0 changed
+## model.rs: every changed line is a /// documentation line
+doc lines changed: 4, other lines changed: 0
+@@ -453 +453,3 @@ pub enum RecordKind {
+## core.rs: additions only
+8	0	crates/nexus-verifier-sandbox/tests/support/custody/core.rs
++    /// Test observation only: the digest the retained receipt for request
++    /// `seq` holds, if one is retained. It reads this custody's real receipt
++    /// and changes nothing.
++    #[cfg(test)]
++    pub(crate) fn retained_request_digest(&self, seq: u64) -> Option<[u8; 32]> {
++        self.requests.receipt(seq).map(|receipt| receipt.digest)
++    }
+## codec test: assertion macros (base -> candidate) and removed lines
+assert macros: 135 -> 147
+test functions: 17 -> 18
+-//! plain data that can do nothing.
+-            Custody::new(config, GENERATION, Vec::new(), Tick(0)).expect("a valid configuration");
+-            generation: GENERATION,
+## existing test functions all still present (by name)
+(end of missing list)
+## whitespace check of the commit's own diff
+$ git diff --check 0eb2a947e839b5639d9688da4e6b51b5e72a4d13 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+exit 0

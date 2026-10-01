@@ -1,0 +1,16 @@
+# negative controls on the committed candidate  2026-10-01T20:53:19Z
+checkout: /home/nexus/NEXUS/nexus-os-p2-v1-cleanup-observers
+HEAD: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9  tree: cd197e047cb5a57e458b2af5d32f9c5406371301  expected: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+status entries before: 0
+python: Python 3.12.3  script sha256: df5c06e881542d51a976e0590f07a542b3c8cea72919e06355d4612342043764
+$ python3 -B negative_controls.py <checkout> <log directory> | tee <log directory>/run.log
+exit: 0   finished: 2026-10-01T20:53:52Z
+status entries after: 0
+HEAD after: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+six envelope files after the run, worktree sha256 vs committed blob sha256:
+  83fd29a8eebdefea9178be4c4ed83609f24113ca8184f7061e61514b3112534c 83fd29a8eebdefea9178be4c4ed83609f24113ca8184f7061e61514b3112534c IDENTICAL  crates/nexus-verifier-sandbox/tests/support/custody/codec.rs
+  a5dc3b33162547a7f518950684b8212892c2a4439acfe72c5dd995cdc77422a4 a5dc3b33162547a7f518950684b8212892c2a4439acfe72c5dd995cdc77422a4 IDENTICAL  crates/nexus-verifier-sandbox/tests/support/custody/core.rs
+  b7fab623ea6fc9afb1a47266226ae57030301a865de7d8ba94e5449866fe1746 b7fab623ea6fc9afb1a47266226ae57030301a865de7d8ba94e5449866fe1746 IDENTICAL  crates/nexus-verifier-sandbox/tests/support/custody/mod.rs
+  3b32071bc90b9bf1a974be60a39a87693108dbf0697ea75a72bee4e2a45d5709 3b32071bc90b9bf1a974be60a39a87693108dbf0697ea75a72bee4e2a45d5709 IDENTICAL  crates/nexus-verifier-sandbox/tests/support/custody/model.rs
+  2ceffcc19f274d2dd158d4a777dbcb034f8c7b85bfc9748625c5a1c74acf4500 2ceffcc19f274d2dd158d4a777dbcb034f8c7b85bfc9748625c5a1c74acf4500 IDENTICAL  crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs
+  801588711b04173136bebb2e9e36382cc65ed9e617f98ee4958faf162237fd16 801588711b04173136bebb2e9e36382cc65ed9e617f98ee4958faf162237fd16 IDENTICAL  crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs
