@@ -1,7 +1,7 @@
 //! The live harness's custody core (P2-V1-R3B-I1, corrected by -R1 and
-//! -R2): the reusable logic the future custody owner keeps its native owners,
-//! operations, evidence and failures in. It is not that owner, and not a
-//! service.
+//! -R2; its evidence and request codec, -I2A): the reusable logic the future
+//! custody owner keeps its native owners, operations, evidence and failures
+//! in. It is not that owner, and not a service.
 //!
 //! What it is: ownership-preserving slots for one resource group (a native
 //! process tree, the workspace and the fixture it uses) with dependency
@@ -116,6 +116,24 @@
 //! (`r16`); it does not enumerate other interleavings, and the barrier race
 //! (`r12`) remains supplementary.
 //!
+//! Evidence and request codec, version 1 (-I2A, [`codec`], which holds the
+//! complete table). One canonical binary frame per evidence record and per
+//! control request: magic `NXCD`, a domain byte (`R` record, `Q` request),
+//! version `01`, a big-endian payload length, the payload (every model
+//! field, with explicit stable tags, fixed-width big-endian integers,
+//! canonical booleans and presence bytes), and the SHA-256 of every byte
+//! before it; at most 4096 bytes. The core's record digest, which
+//! acknowledgements bind to, and its request digest, which request receipts
+//! (duplicates, conflicts, replays) bind to, are the digests of exactly
+//! these frames, written by one encoder; no formatting contributes to
+//! either. Decoding accepts exactly one complete, consistent frame of the
+//! expected domain, checks every length before reading, allocates nothing
+//! and returns plain data. A decoded record is not proof of durability and
+//! not an acknowledgement; a decoded request is not authenticated; a
+//! matching digest is integrity, never authentication (whoever can rewrite
+//! the bytes can rewrite it). Nothing in the codec can start, admit,
+//! acknowledge, disposition, clean up or reconstruct anything.
+//!
 //! Integration obligations (none is met here):
 //!
 //! - Destruction: this module does not preserve owners when its enclosing
@@ -124,9 +142,16 @@
 //!   while closure is refused, including after a recording failure, which
 //!   refuses closure for good.
 //! - Durability: records are made durable (write-ahead) by the recorder, not
-//!   here.
+//!   here: it stores each record's canonical frame and acknowledges exactly
+//!   the digest it stored.
+//! - Journal and recovery: decoding one frame proves nothing about the
+//!   frames around it. A future journal must itself establish completeness
+//!   and order (a deleted suffix, a reordered, repeated or foreign frame),
+//!   and recovery must never treat a decoded record as confirmation that
+//!   native cleanup happened. Neither exists here.
 //! - Transport: peers are authenticated outside this module; a generation or
-//!   sequence number is a freshness binding, never authentication.
+//!   sequence number is a freshness binding, and a frame's digest an
+//!   integrity check, never authentication.
 //! - Threads: one execution-owner thread owns the [`Custody`]; other threads
 //!   use [`Control`] only.
 //! - Lease: the core reads no clock. An expired lease cancels the run only
@@ -148,6 +173,7 @@
 // Shared fixture support: not every target that includes it uses every item.
 #![allow(dead_code)]
 
+pub mod codec;
 mod core;
 mod model;
 

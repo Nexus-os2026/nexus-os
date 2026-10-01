@@ -48,8 +48,7 @@ use std::fmt;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use sha2::{Digest, Sha256};
-
+use super::codec;
 use super::model::*;
 
 /// An owner's own declaration of the slot it occupies. Custody asks it with
@@ -1016,7 +1015,7 @@ impl Ledger {
             generation: self.generation,
             seq: self.issued() + 1,
         };
-        let digest = record_digest(id, at, &kind);
+        let digest = codec::record_digest(id, at, &kind);
         self.digests.push(digest);
         self.unsent.push_back(RecordIntent {
             id,
@@ -2746,7 +2745,7 @@ impl<R: Resource> Custody<R> {
         if request.generation != self.generation {
             return RequestOutcome::Foreign;
         }
-        let digest = request_digest(request);
+        let digest = codec::request_digest(request);
         let last = self.requests.last;
         let known = self
             .requests
@@ -3173,25 +3172,6 @@ fn bounded(text: &str, limit: usize) -> String {
         out.push(c);
     }
     out
-}
-
-fn record_digest(id: RecordId, at: Tick, kind: &RecordKind) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(b"nexus-phase2-custody-record\0");
-    hasher.update(id.generation.bytes());
-    hasher.update(id.seq.to_be_bytes());
-    hasher.update(at.0.to_be_bytes());
-    hasher.update(format!("{kind:?}").as_bytes());
-    hasher.finalize().into()
-}
-
-fn request_digest(request: &Request) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(b"nexus-phase2-custody-request\0");
-    hasher.update(request.generation.bytes());
-    hasher.update(request.seq.to_be_bytes());
-    hasher.update(format!("{:?}", request.op).as_bytes());
-    hasher.finalize().into()
 }
 
 /// R2A: the terminal commitment's atomicity, at the primitive's own

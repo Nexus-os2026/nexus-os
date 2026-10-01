@@ -5,8 +5,10 @@
 //! Nothing in this module holds a native owner or can construct one. An
 //! identity ([`ActionId`], [`EntryId`], [`IncidentId`], [`RecordId`]) locates
 //! something the core holds or issued; its fields are private to the custody
-//! module, so no caller can mint one, and no operation turns an identity, a
-//! name, a path, a process id or a record back into an owner.
+//! module, so outside it an identity comes only from the core or, as plain
+//! data, from decoding evidence bytes ([`super::codec`]). Either way, holding
+//! one grants nothing, and no operation turns an identity, a name, a path, a
+//! process id or a record back into an owner.
 
 use std::sync::Arc;
 
@@ -447,7 +449,8 @@ pub enum RecordKind {
 }
 
 /// One record the recorder must make durable, in `id` order. The digest binds
-/// the acknowledgement to exactly this record.
+/// the acknowledgement to exactly this record: it is the SHA-256 of the
+/// record's canonical frame ([`super::codec::encode_record`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordIntent {
     pub id: RecordId,
