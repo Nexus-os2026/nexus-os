@@ -160,6 +160,17 @@ jobs:
       - name: Verifier sandbox unit tests
         run: cargo test -p nexus-verifier-sandbox --locked --lib
 
+      # The checked cleanup observations the live suite and its step rely on,
+      # against fixtures only (no user manager is contacted, nothing is
+      # created outside the tests' temporary directories): a failed query or
+      # inspection is never "nothing left".
+      - name: Cleanup observation controls (fixtures only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test -p nexus-verifier-sandbox --locked --test phase2_cleanup_observation
+          python3 scripts/ci/test_phase2_cleanup_check.py
+
       - name: Live Phase Two isolation, escape and cleanup suite (every layer required)
         shell: bash
         env:
@@ -167,14 +178,24 @@ jobs:
           NEXUS_VERIFIER_TOOLCHAIN: packaged
         run: |
           set -o pipefail
-          cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox 2>&1 | tee phase2-live.log
-          grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log
-          if systemctl --user list-units --all --no-legend 'nexus-verifier-*' | grep -q .; then
-            echo "::error::a verifier scope was left behind"
-            exit 1
+          # Every result is kept: the cleanup observations run whatever the
+          # suite reported (both of them, neither failure suppressing the
+          # other), and the step fails if the suite, its passed-case count or
+          # an observation failed; a failed suite keeps its own exit status.
+          live=0
+          cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox 2>&1 | tee phase2-live.log || live=$?
+          passed=0
+          grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log || passed=$?
+          observed=0
+          python3 scripts/ci/phase2_cleanup_check.py || observed=$?
+          if (( passed != 0 )); then
+            echo "::error::the live suite did not report 31 passed cases"
           fi
-          if [[ -n "$(ls -A "/run/user/$(id -u)/nexus-verifier" 2>/dev/null)" ]]; then
-            echo "::error::a verification workspace was left behind"
+          if (( live != 0 )); then
+            echo "::error::the live suite failed (exit $live)"
+            exit "$live"
+          fi
+          if (( passed != 0 || observed != 0 )); then
             exit 1
           fi
 

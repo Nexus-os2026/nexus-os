@@ -542,3 +542,171 @@ fn p2_g_05_verification_commands_are_registered_granted_and_nothing_else() {
         ]
     );
 }
+
+/// The top-level item of `source` starting at `head`, through its closing
+/// brace (or the end of `source`).
+fn item<'a>(source: &'a str, head: &str) -> &'a str {
+    let start = source.find(head).unwrap_or_else(|| panic!("{head}"));
+    let rest = &source[start..];
+    &rest[..rest.find("\n}\n").map_or(rest.len(), |end| end + 2)]
+}
+
+#[test]
+fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
+    let read = |path: &str| std::fs::read_to_string(repo().join(path)).unwrap();
+    // The live suite and its fixture controls share one checked scope
+    // observation; the suite queries nothing itself and never reads a failed
+    // query as "no scopes".
+    let support = code(&read(
+        "crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs",
+    ));
+    let harness = code(&read(
+        "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs",
+    ));
+    let controls = code(&read(
+        "crates/nexus-verifier-sandbox/tests/phase2_cleanup_observation.rs",
+    ));
+    for source in [&harness, &controls] {
+        assert_eq!(
+            source
+                .matches("#[path = \"support/cleanup_observation.rs\"]")
+                .count(),
+            1
+        );
+    }
+    for needle in ["systemctl", "loaded_scopes() <", "loaded_scopes() >"] {
+        assert!(!harness.contains(needle), "{needle}");
+    }
+    assert!(harness.contains(
+        "pub fn loaded_scopes() -> Result<Scopes, ObservationError> {\n            \
+         cleanup_observation::observe_scopes()\n"
+    ));
+    // Each use: checked before anything is owned, checked by a wait that
+    // ends at a failed observation, or the retained boundary's.
+    assert_eq!(harness.matches("loaded_scopes()").count(), 4);
+    assert_eq!(
+        harness.matches("loaded_scopes().unwrap_or_else(").count()
+            + harness
+                .matches("loaded_scopes()\n                .unwrap_or_else(")
+                .count(),
+        2
+    );
+    assert_eq!(
+        harness
+            .matches("wait_for(Duration::from_secs(10), loaded_scopes, |now| {")
+            .count(),
+        2
+    );
+    // The retained boundary's scope is observed while it is held; the retry
+    // always runs before that observation is judged, and nothing else uses
+    // the observation or the boundary in between.
+    let held = harness
+        .find("let Cleanup::Failed(boundary) = report.cleanup else")
+        .expect("the retained boundary");
+    let observed = harness
+        .find("let kept = loaded_scopes();")
+        .expect("the retained observation");
+    let judged = harness
+        .find("after_retry(kept, &scopes_before, || boundary.retry().is_ok())")
+        .expect("the retained judgement");
+    assert!(held < observed && observed < judged);
+    let between = &harness[observed + "let kept = loaded_scopes();".len()..judged];
+    assert!(
+        !between.contains("kept") && !between.contains("boundary"),
+        "{between}"
+    );
+    assert_eq!(harness.matches("boundary.retry()").count(), 1);
+    let after_retry = item(&support, "pub fn after_retry(");
+    assert!(
+        after_retry.find("let retried = retry();").unwrap()
+            < after_retry.find("observed.map_err(").unwrap()
+    );
+    // The query: this uid's checked bus, an environment of exactly that bus
+    // and fixed output settings, bounded, its exit status checked first.
+    assert!(item(&support, "pub fn observe_scopes()").contains(
+        "let bus = user_bus(&Host::real())?;\n    \
+         observe(&scope_query(systemctl()?, &[], &bus)?)\n"
+    ));
+    assert!(item(&support, "impl Host<'static>").contains("uid: unsafe { libc::getuid() },"));
+    let run = item(&support, "pub fn run(");
+    for needle in [
+        ".env_clear()",
+        ".process_group(0)",
+        "let reaped = end(&mut child);",
+    ] {
+        assert!(run.contains(needle), "{needle}");
+    }
+    let observe = item(&support, "pub fn observe(");
+    assert!(
+        observe.find("if !answer.status.success() {").unwrap()
+            < observe.find("parse_scopes(&answer.stdout)").unwrap()
+    );
+    assert_eq!(support.matches("DBUS_SESSION_BUS_ADDRESS").count(), 1);
+    assert!(!support.contains("XDG_RUNTIME_DIR"));
+    assert!(!support.contains("env::var("));
+    assert_eq!(support.matches("var_os(").count(), 1);
+    assert!(support.contains("std::env::var_os(\"PATH\")"));
+
+    // The workflow observes only through its checked observations, after
+    // running their fixture controls, and keeps every result of the live
+    // step: the suite's own failure, its exact passed count and both
+    // observations.
+    let workflow = read(".github/workflows/ci-phase2-linux-sandbox.yml");
+    for needle in [
+        "systemctl",
+        "ls -A",
+        "grep -q .",
+        "|| true",
+        "continue-on-error",
+    ] {
+        assert!(!workflow.contains(needle), "{needle}");
+    }
+    let live = &workflow[workflow
+        .find("- name: Live Phase Two isolation")
+        .expect("the live step")..];
+    let live = &live[..live.find("\n      - name: ").expect("the next step")];
+    assert!(!live.contains("2>/dev/null"), "{live}");
+    let mut at = 0;
+    for line in [
+        "- name: Cleanup observation controls (fixtures only)\n",
+        "cargo test -p nexus-verifier-sandbox --locked --test phase2_cleanup_observation\n",
+        "python3 scripts/ci/test_phase2_cleanup_check.py\n",
+        "- name: Live Phase Two isolation, escape and cleanup suite (every layer required)\n",
+        "NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX: \"1\"\n",
+        "live=0\n",
+        "cargo test -p nexus-verifier-sandbox --locked --features development-toolchain \
+         --test phase2_live_sandbox 2>&1 | tee phase2-live.log || live=$?\n",
+        "passed=0\n",
+        "grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log || passed=$?\n",
+        "observed=0\n",
+        "python3 scripts/ci/phase2_cleanup_check.py || observed=$?\n",
+        "if (( live != 0 )); then\n",
+        "exit \"$live\"\n",
+        "if (( passed != 0 || observed != 0 )); then\n",
+        "exit 1\n",
+        "- name: Phase Two kernel and desktop controls\n",
+    ] {
+        let found = workflow[at..]
+            .find(line)
+            .unwrap_or_else(|| panic!("the workflow lacks, in order: {line}"));
+        at += found + line.len();
+    }
+    for script in ["phase2_cleanup_check.py", "test_phase2_cleanup_check.py"] {
+        assert_eq!(
+            workflow.matches(&format!("scripts/ci/{script}")).count(),
+            1,
+            "{script}"
+        );
+    }
+    let checker = read("scripts/ci/phase2_cleanup_check.py");
+    for needle in [
+        "    bus = user_bus(Host())\n    return observe(*scope_query([systemctl()], bus))\n",
+        "        self.uid = os.getuid() if uid is None else uid\n",
+        "            env=env,\n",
+        "    return 0 if check() else 1\n",
+    ] {
+        assert!(checker.contains(needle), "{needle}");
+    }
+    assert_eq!(checker.matches("os.environ").count(), 1);
+    assert_eq!(checker.matches("except FileNotFoundError:").count(), 1);
+}

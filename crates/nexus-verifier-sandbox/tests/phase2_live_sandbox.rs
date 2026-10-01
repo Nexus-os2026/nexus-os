@@ -18,6 +18,11 @@ fn main() {
     println!("p2c live sandbox: not an x86_64 Linux build; the helper is unavailable here");
 }
 
+/// Checked observation of the loaded verifier scopes (P2-V1-R1).
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "support/cleanup_observation.rs"]
+mod cleanup_observation;
+
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod live {
     use std::collections::{BTreeMap, BTreeSet};
@@ -598,6 +603,7 @@ mod live {
 
     mod p2d {
         use super::*;
+        use crate::cleanup_observation::{self, wait_for, ObservationError, Scopes};
         pub use nexus_verifier_sandbox::execution::{self, EndedBy, ExitClass};
         pub use nexus_verifier_sandbox::policy::ResourcePolicy;
         pub use nexus_verifier_sandbox::scope::{Occupancy, ScopeError, ScopeManager};
@@ -761,29 +767,29 @@ mod live {
         }
 
         /// Transient verifier scopes the user manager currently has loaded
-        /// (observation only).
-        pub fn loaded_scopes() -> usize {
-            let out = Command::new("systemctl")
-                .args(["--user", "list-units", "--all", "--plain", "--no-legend"])
-                .arg("nexus-verifier-*.scope")
-                .output()
-                .unwrap();
-            String::from_utf8_lossy(&out.stdout).lines().count()
+        /// (observation only), or why they could not be observed: a failed
+        /// query is never "no scopes".
+        pub fn loaded_scopes() -> Result<Scopes, ObservationError> {
+            cleanup_observation::observe_scopes()
         }
 
         pub fn unmovable_process(scopes: &ScopeManager) {
             // A helper that is no longer running cannot be placed in a
             // scope: no scope is confirmed for it, and the empty unit made
             // for it is not left behind.
-            let before = loaded_scopes();
+            let before =
+                loaded_scopes().unwrap_or_else(|error| panic!("the loaded scopes: {error}"));
             let (mut helper, _output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
             helper.kill().unwrap();
             let refused = scopes.start(&helper, &limits());
             assert!(refused.is_err(), "{refused:?}");
             helper.reap().unwrap();
+            let stopped = wait_for(Duration::from_secs(10), loaded_scopes, |now| {
+                now.len() <= before.len()
+            });
             assert!(
-                wait_until(Duration::from_secs(10), || loaded_scopes() <= before),
-                "the refused scope was stopped"
+                matches!(stopped, Ok(true)),
+                "the refused scope was stopped: {stopped:?}"
             );
         }
 
@@ -820,6 +826,7 @@ mod live {
     mod p2r1 {
         use super::p2d::{execution, loaded_scopes, EndedBy, ExitClass, ResourcePolicy};
         use super::*;
+        use crate::cleanup_observation::{after_retry, wait_for, Scopes};
         use execution::{Cleanup, Fault, FaultPoint, NotRun};
         use nexus_verifier_sandbox::scope::ScopeManager;
         use std::sync::atomic::AtomicBool;
@@ -893,12 +900,15 @@ mod live {
 
         /// Everything of a confirmed execution is gone: its tree, its helper
         /// (reaped) and its scope.
-        fn gone(name: &str, marker: &str, children_before: usize, scopes_before: usize) {
+        fn gone(name: &str, marker: &str, children_before: usize, scopes_before: &Scopes) {
             assert_eq!(tree(marker), 0, "{name}: no process of the tree survives");
             assert_eq!(children(), children_before, "{name}: the helper is reaped");
+            let removed = wait_for(Duration::from_secs(10), loaded_scopes, |now| {
+                now.len() <= scopes_before.len()
+            });
             assert!(
-                wait_until(Duration::from_secs(10), || loaded_scopes() <= scopes_before),
-                "{name}: the scope is gone"
+                matches!(removed, Ok(true)),
+                "{name}: the scope is gone: {removed:?}"
             );
         }
 
@@ -927,7 +937,9 @@ mod live {
                 runtime_backstop_secs: 120,
                 ..ResourcePolicy::RUST_OFFLINE_V1
             };
-            let (children_before, scopes_before) = (children(), loaded_scopes());
+            let children_before = children();
+            let scopes_before = loaded_scopes()
+                .unwrap_or_else(|error| panic!("{name}: the loaded scopes: {error}"));
             let (report, most) = watched(&marker, || {
                 execution::run_with_fault(scopes, &HelperProgram::at(HELPER), spec, &limits, fault)
             });
@@ -944,20 +956,20 @@ mod live {
                         "{name}"
                     );
                     assert_eq!(class, ExitClass::SandboxSetupFailed, "{name}");
-                    gone(&name, &marker, children_before, scopes_before);
+                    gone(&name, &marker, children_before, &scopes_before);
                 }
                 Expect::Interrupted => {
                     assert!(report.cleanup.is_confirmed(), "{name}: {report:?}");
                     assert_eq!(report.ended_by, Some(EndedBy::Interrupted), "{name}");
                     assert!(report.outcome.is_none(), "{name}: nothing observed is kept");
                     assert_eq!(class, ExitClass::SandboxFailed, "{name}");
-                    gone(&name, &marker, children_before, scopes_before);
+                    gone(&name, &marker, children_before, &scopes_before);
                 }
                 Expect::OutputLost => {
                     assert!(report.cleanup.is_confirmed(), "{name}: {report:?}");
                     assert!(report.output_lost, "{name}: {report:?}");
                     assert_eq!(class, ExitClass::SandboxFailed, "{name}");
-                    gone(&name, &marker, children_before, scopes_before);
+                    gone(&name, &marker, children_before, &scopes_before);
                 }
                 Expect::Retained => {
                     assert_eq!(class, ExitClass::CleanupFailed, "{name}: {report:?}");
@@ -969,12 +981,17 @@ mod live {
                     assert!(boundary.holds_scope() && boundary.holds_helper(), "{name}");
                     assert!(tree(&marker) > 0, "{name}: the retained tree is alive");
                     assert_eq!(children(), children_before + 1, "{name}: helper unreaped");
-                    assert!(loaded_scopes() > scopes_before, "{name}: the scope is kept");
-                    // An explicit retry ends it and confirms it.
-                    if boundary.retry().is_err() {
-                        panic!("{name}: the retry did not confirm the cleanup");
+                    // The scope is observed as kept while the boundary holds
+                    // it. An explicit retry then ends it and confirms it,
+                    // whatever that observation was; only then is the
+                    // observation judged.
+                    let kept = loaded_scopes();
+                    if let Err(failure) =
+                        after_retry(kept, &scopes_before, || boundary.retry().is_ok())
+                    {
+                        panic!("{name}: {failure}");
                     }
-                    gone(&name, &marker, children_before, scopes_before);
+                    gone(&name, &marker, children_before, &scopes_before);
                 }
             }
         }
