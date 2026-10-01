@@ -166,7 +166,7 @@ jobs:
       # every deviation the Linux package must never ship.
       - name: Linux package inspection negative controls
         shell: bash
-        run: node --test packaging/verifier-toolchain/test/
+        run: node --test packaging/verifier-toolchain/test/inspect-deb.test.mjs
 
       - name: Packaged Builder toolchain verification and governed launch
         shell: bash

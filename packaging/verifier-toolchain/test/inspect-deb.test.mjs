@@ -2,7 +2,7 @@
 // (scripts/inspect-deb.mjs): a synthetic package with the release layout is
 // accepted, and every deviation the release must never ship is refused.
 // Needs `dpkg-deb` (Debian and Ubuntu hosts):
-//   node --test packaging/verifier-toolchain/test/
+//   node --test packaging/verifier-toolchain/test/inspect-deb.test.mjs
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -187,5 +187,5 @@ test('nothing runs at install, and everything is root-owned and plain', () => {
 test('the inspection script is the one the release runs', () => {
   const workflow = fs.readFileSync(path.join(here, '..', '..', '..', '.github', 'workflows', 'release.yml'), 'utf8');
   assert.ok(workflow.includes('node packaging/verifier-toolchain/scripts/inspect-deb.mjs'));
-  assert.ok(workflow.includes('node --test packaging/verifier-toolchain/test/'));
+  assert.ok(workflow.includes('node --test packaging/verifier-toolchain/test/inspect-deb.test.mjs'));
 });

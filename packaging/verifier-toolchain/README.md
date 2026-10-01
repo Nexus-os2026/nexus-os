@@ -12,7 +12,7 @@ as the installed package; a user's rustup installation never is.
 | `scripts/assemble.mjs` | Release/CI assembly (never packaged, never run by the app). |
 | `scripts/stage-helper.mjs` | Release: builds the verifier sandbox helper and stages it as the Linux package's Tauri sidecar (P2-R1). |
 | `scripts/inspect-deb.mjs` | Release: inspects the Debian package as it ships (P2-R1). |
-| `test/inspect-deb.test.mjs` | The inspection's negative controls (`node --test packaging/verifier-toolchain/test/`; needs `dpkg-deb`). |
+| `test/inspect-deb.test.mjs` | The inspection's negative controls (`node --test packaging/verifier-toolchain/test/inspect-deb.test.mjs`; needs `dpkg-deb`). |
 
 ## Packaged tree (84 files)
 
@@ -68,7 +68,7 @@ and `NEXUS_VERIFIER_TOOLCHAIN=packaged`, and then:
 ```
 node packaging/verifier-toolchain/scripts/stage-helper.mjs --out app/src-tauri/binaries
 npm run tauri build -- --bundles deb --config src-tauri/tauri.builder-toolchain.conf.json --config src-tauri/tauri.verifier-runtime.conf.json
-node --test packaging/verifier-toolchain/test/
+node --test packaging/verifier-toolchain/test/inspect-deb.test.mjs
 node packaging/verifier-toolchain/scripts/inspect-deb.mjs --deb <.deb> --application nexus-desktop-backend \
   --builder-toolchain app/src-tauri/builder-toolchain --verifier-toolchain app/src-tauri/verifier-toolchain \
   --helper app/src-tauri/binaries/nexus-verifier-sandbox-x86_64-unknown-linux-gnu --helper-sha256 <staged digest>

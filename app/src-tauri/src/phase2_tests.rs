@@ -460,7 +460,7 @@ fn p2_g_08_the_linux_package_installs_the_verifier_runtime() {
         "npm run tauri build -- --bundles deb --config src-tauri/tauri.",
         ".conf.json --config src-tauri/tauri.verifier-runtime.conf.json\n",
         "assemble.mjs --compare app/src-tauri/verifier-toolchain",
-        "node --test packaging/verifier-toolchain/test/",
+        "node --test packaging/verifier-toolchain/test/inspect-deb.test.mjs",
         "HELPER_SHA256: ${{ steps.helper.outputs.sha256 }}",
         "packaging/verifier-toolchain/scripts/inspect-deb.mjs",
         "--application nexus-desktop-backend",
