@@ -850,10 +850,11 @@ mod linux {
     }
 
     /// The scopes a reply lists: exactly the documented `a(ssssssouso)`, its
-    /// body no larger than [`MAX_REPLY_BODY`] (checked before it is decoded),
-    /// no descriptors, at most [`MAX_UNITS`] units, each a distinct verifier
-    /// scope with bounded fields. Anything else is malformed, never "no
-    /// scopes".
+    /// body no larger than [`MAX_REPLY_BODY`] (checked before it is decoded)
+    /// and nothing but that one list (every byte of it consumed by decoding
+    /// it), no descriptors, at most [`MAX_UNITS`] units, each a distinct
+    /// verifier scope with bounded fields. Anything else is malformed, never
+    /// "no scopes".
     pub fn decode_scopes(reply: &zbus::Message) -> Result<Scopes, ObservationError> {
         if reply.message_type() != zbus::message::Type::MethodReturn {
             return Err(malformed(format!(
@@ -880,9 +881,21 @@ mod linux {
                 )))
             }
         }
-        let rows: Vec<UnitRow> = body
-            .deserialize()
+        // Decoded from the body's own data (its context and descriptors),
+        // keeping how many bytes the list took: the body must be that list
+        // and nothing more.
+        let (rows, consumed): (Vec<UnitRow>, usize) = body
+            .data()
+            .deserialize_for_dynamic_signature(REPLY_SIGNATURE)
             .map_err(|error| malformed(format!("it cannot be decoded: {error}")))?;
+        if consumed != body.len() {
+            return Err(malformed(format!(
+                "{} bytes of its body come after the list it declares (the list took {consumed} \
+                 of {})",
+                body.len().abs_diff(consumed),
+                body.len()
+            )));
+        }
         if rows.len() > MAX_UNITS {
             return Err(malformed(format!(
                 "{} units, more than {MAX_UNITS}",

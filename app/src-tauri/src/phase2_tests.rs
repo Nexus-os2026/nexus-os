@@ -686,13 +686,28 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
         assert_eq!(support.matches(needle).count(), count, "{needle}");
     }
     // The reply: exactly the documented list, its body bounded before it is
-    // decoded, every unit a distinct verifier scope with bounded fields.
+    // decoded, the whole body consumed by decoding that one list (decoded
+    // from the body's own data, keeping the bytes consumed) before anything
+    // succeeds, every unit a distinct verifier scope with bounded fields.
     let decode = indented_item(&support, "    pub fn decode_scopes(");
     let bounded = decode
         .find("if body.len() > MAX_REPLY_BODY {")
         .expect("the body bound");
-    let decoded = decode.find(".deserialize()").expect("the decoding");
-    assert!(bounded < decoded);
+    let decoded = decode
+        .find(
+            "let (rows, consumed): (Vec<UnitRow>, usize) = body\n            .data()\n            \
+             .deserialize_for_dynamic_signature(REPLY_SIGNATURE)\n",
+        )
+        .expect("the decoding, keeping the bytes it consumed");
+    let complete = decode
+        .find("if consumed != body.len() {\n            return Err(malformed(")
+        .expect("a body not wholly consumed is refused");
+    let answered = decode.find("Ok(scopes)").expect("the answer");
+    assert!(bounded < decoded && decoded < complete && complete < answered);
+    assert!(!decode[..complete].contains("Ok("));
+    for needle in [".deserialize()", ".deserialize::<", "deserialize_unchecked"] {
+        assert!(!support.contains(needle), "{needle}");
+    }
     for needle in [
         "if !reply.data().fds().is_empty() {",
         "Some(signature) if signature.as_str() == REPLY_SIGNATURE => {}",

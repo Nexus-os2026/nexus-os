@@ -650,6 +650,218 @@ mod controls {
         }
     }
 
+    /// The listing call as the observer's request contract has it, for
+    /// replies decoded without a transport.
+    fn listing_call() -> Message {
+        Message::method(MANAGER_PATH, LIST_UNITS)
+            .unwrap()
+            .destination(MANAGER)
+            .unwrap()
+            .interface(MANAGER_INTERFACE)
+            .unwrap()
+            .build(&(&STATES[..], &PATTERNS[..]))
+            .unwrap()
+    }
+
+    /// The library's own encoding of `rows` as a reply body in `endian` (a
+    /// body starts 8-aligned, as position 0 is).
+    fn encoded(rows: &[UnitRow], endian: Endian) -> Vec<u8> {
+        zbus::zvariant::to_bytes(Context::new_dbus(endian, 0), &rows.to_vec())
+            .unwrap()
+            .bytes()
+            .to_vec()
+    }
+
+    /// A method return to `call` in `endian` whose whole declared body is
+    /// `body`, with the expected signature and no descriptors.
+    fn raw_reply(call: &Message, endian: Endian, body: &[u8]) -> Message {
+        // SAFETY: `body` may deliberately not be exactly one value of the
+        // signature: zbus checks only the header, the observer the body.
+        let reply = unsafe {
+            Message::method_reply(call)
+                .unwrap()
+                .endian(endian)
+                .build_raw_body(body, REPLY_SIGNATURE, Vec::new())
+                .unwrap()
+        };
+        assert_eq!(reply.message_type(), Type::MethodReturn);
+        assert_eq!(reply.body().len(), body.len(), "every byte is in the body");
+        assert_eq!(reply.primary_header().body_len() as usize, body.len());
+        assert_eq!(
+            reply.body().signature().map(|s| s.as_str().to_string()),
+            Some(REPLY_SIGNATURE.to_string())
+        );
+        assert!(reply.data().fds().is_empty() && body.len() <= MAX_REPLY_BODY);
+        reply
+    }
+
+    fn answer_raw(endian: Endian, body: Vec<u8>) -> Option<Reply> {
+        Some(Box::new(move |call: &Message| {
+            raw_reply(call, endian, &body)
+        }))
+    }
+
+    /// Rows whose fields differ in length, so that their padding differs.
+    fn varied(count: usize) -> Vec<UnitRow> {
+        (0..count)
+            .map(|i| {
+                let mut unit = row(&format!("nexus-verifier-{}.scope", "a".repeat(i + 1)));
+                unit.1 = "d".repeat(i * 3);
+                unit.4 = ["running", "dead", "abandoned"][i % 3].to_string();
+                unit.7 = u32::try_from(i).unwrap();
+                unit
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_complete_reply_decodes_in_either_byte_order_whatever_its_padding() {
+        let call = listing_call();
+        for endian in [Endian::Little, Endian::Big] {
+            for count in 0..5 {
+                let rows = varied(count);
+                let names: Scopes = rows.iter().map(|unit| unit.0.clone()).collect();
+                let body = encoded(&rows, endian);
+                if count == 0 {
+                    // Even an empty list is its length, then padding to its
+                    // records' 8-byte alignment.
+                    assert_eq!(body.len(), 8, "{endian:?}");
+                }
+                // The library's own reply holds exactly that body.
+                let built = Message::method_reply(&call)
+                    .unwrap()
+                    .endian(endian)
+                    .build(&rows)
+                    .unwrap();
+                assert_eq!(built.body().data().bytes(), body.as_slice());
+                let what = format!("{endian:?} {count}");
+                assert_eq!(decode_scopes(&built).unwrap(), names, "{what}");
+                assert_eq!(
+                    decode_scopes(&raw_reply(&call, endian, &body)).unwrap(),
+                    names,
+                    "{what}"
+                );
+                // And through the observer, from the fixture peer.
+                assert_eq!(observe(answer_raw(endian, body)).unwrap(), names, "{what}");
+                let reply = rows.clone();
+                let built = Some(Box::new(move |call: &Message| {
+                    Message::method_reply(call)
+                        .unwrap()
+                        .endian(endian)
+                        .build(&reply)
+                        .unwrap()
+                }) as Reply);
+                assert_eq!(observe(built).unwrap(), names, "{what}");
+            }
+        }
+    }
+
+    /// Complete lists in `endian`, each followed by more bytes inside the
+    /// declared body: what, the complete list's own length, and the body.
+    fn trailing_bodies(endian: Endian) -> Vec<(&'static str, usize, Vec<u8>)> {
+        let empty = encoded(&[], endian);
+        let one = encoded(&varied(1), endian);
+        let record = zbus::zvariant::to_bytes(Context::new_dbus(endian, 0), &varied(1)[0])
+            .unwrap()
+            .bytes()
+            .to_vec();
+        vec![
+            (
+                "an empty list, then nonzero bytes",
+                empty.len(),
+                [&empty[..], &[1, 2, 3, 4, 5, 6, 7, 8]].concat(),
+            ),
+            (
+                "an empty list, then zero bytes",
+                empty.len(),
+                [&empty[..], &[0; 8]].concat(),
+            ),
+            (
+                "an empty list, then one zero byte",
+                empty.len(),
+                [&empty[..], &[0]].concat(),
+            ),
+            (
+                "a list of one, then nonzero bytes",
+                one.len(),
+                [&one[..], &[0xff; 3]].concat(),
+            ),
+            (
+                "a list of one, then zero bytes",
+                one.len(),
+                [&one[..], &[0; 8]].concat(),
+            ),
+            (
+                "an empty list, then a second list",
+                empty.len(),
+                [&empty[..], &one[..]].concat(),
+            ),
+            (
+                "an empty list, then a record",
+                empty.len(),
+                [&empty[..], &record[..]].concat(),
+            ),
+        ]
+    }
+
+    #[test]
+    fn a_complete_list_followed_by_more_body_data_is_malformed() {
+        let call = listing_call();
+        let mut accepted = Vec::new();
+        for endian in [Endian::Little, Endian::Big] {
+            for (what, list, body) in trailing_bodies(endian) {
+                // The decoder consumed exactly the complete list and refused
+                // the rest.
+                let took = format!(
+                    "after the list it declares (the list took {list} of {})",
+                    body.len()
+                );
+                let refused = |result: &Result<Scopes, ObservationError>| matches!(result, Err(ObservationError::Malformed(why)) if why.contains(&took));
+                let direct = decode_scopes(&raw_reply(&call, endian, &body));
+                if !refused(&direct) {
+                    accepted.push(format!("{endian:?}, {what}: decoded as {direct:?}"));
+                }
+                let observed = observe(answer_raw(endian, body));
+                if !refused(&observed) {
+                    accepted.push(format!("{endian:?}, {what}: observed as {observed:?}"));
+                }
+            }
+        }
+        assert!(
+            accepted.is_empty(),
+            "a reply with more body data than its list was not refused:\n{}",
+            accepted.join("\n")
+        );
+    }
+
+    #[test]
+    fn a_reply_with_more_body_data_never_ends_a_wait_or_reads_as_clean() {
+        let body = || [&encoded(&[], Endian::Little)[..], &[0; 8]].concat();
+        let waited = wait_for(
+            Duration::from_secs(5),
+            |_| observe(answer_raw(Endian::Little, body())),
+            |now| now.is_empty(),
+        );
+        assert!(
+            matches!(&waited, Err(ObservationError::Malformed(why)) if why.contains("after the list")),
+            "a wait for no scopes ended as {waited:?}"
+        );
+        let mut lines = Vec::new();
+        let clean = report_cleanup(
+            || observe(answer_raw(Endian::Little, body())),
+            || Ok(Workspaces::Absent),
+            &mut |line| lines.push(line),
+        );
+        assert!(!clean, "reported clean: {lines:?}");
+        assert!(
+            lines[0].starts_with(
+                "::error::the verifier scope observation failed: the answer is not a list of \
+                 verifier scopes"
+            ),
+            "{lines:?}"
+        );
+    }
+
     #[test]
     fn duplicate_or_out_of_pattern_units_are_malformed() {
         let lists: Vec<(&str, Vec<UnitRow>)> = vec![
