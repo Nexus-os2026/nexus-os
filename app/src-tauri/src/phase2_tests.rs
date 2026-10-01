@@ -130,21 +130,9 @@ fn p2_g_02_the_sandbox_crate_spawns_only_its_helper_and_reads_no_environment() {
     }
 }
 
-#[test]
-fn p2_g_03_the_development_toolchain_is_never_production() {
-    let toolchain = include_str!("../../../crates/nexus-verifier-sandbox/src/toolchain.rs");
-    let at = toolchain
-        .find("pub fn development(")
-        .expect("development constructor");
-    let before = &toolchain[..at];
-    let attribute = before
-        .rfind("#[cfg(feature = \"development-toolchain\")]")
-        .unwrap();
-    assert!(
-        !before[attribute..].contains("pub fn "),
-        "the development constructor is compiled only with its feature"
-    );
-    // Only the sandbox crate names the feature; nothing enables it.
+/// Every Cargo manifest of the repository (build output, dependencies and
+/// assembled toolchains aside).
+fn manifests() -> Vec<PathBuf> {
     let mut manifests = Vec::new();
     let mut pending = vec![repo()];
     while let Some(dir) = pending.pop() {
@@ -165,7 +153,25 @@ fn p2_g_03_the_development_toolchain_is_never_production() {
         }
     }
     assert!(manifests.len() > 10, "workspace manifests not found");
-    for manifest in manifests {
+    manifests
+}
+
+#[test]
+fn p2_g_03_the_development_toolchain_is_never_production() {
+    let toolchain = include_str!("../../../crates/nexus-verifier-sandbox/src/toolchain.rs");
+    let at = toolchain
+        .find("pub fn development(")
+        .expect("development constructor");
+    let before = &toolchain[..at];
+    let attribute = before
+        .rfind("#[cfg(feature = \"development-toolchain\")]")
+        .unwrap();
+    assert!(
+        !before[attribute..].contains("pub fn "),
+        "the development constructor is compiled only with its feature"
+    );
+    // Only the sandbox crate names the feature; nothing enables it.
+    for manifest in manifests() {
         let text = std::fs::read_to_string(&manifest).unwrap();
         if text.contains("development-toolchain") {
             assert!(
@@ -226,6 +232,94 @@ fn p2_g_04_the_profile_and_policies_are_pinned() {
             actual, pinned,
             "the {what} changed: review it, then update the pin"
         );
+    }
+}
+
+/// The attribute that compiles an item only for the sandbox crate's own
+/// tests and its live sandbox harness.
+const HARNESS_ONLY: &str = "#[cfg(any(test, feature = \"live-sandbox-harness\"))]";
+
+/// Whether the public function `name` in `source` is compiled only under
+/// `attribute` (the attribute directly precedes it, with only its
+/// documentation between).
+fn gated(source: &str, name: &str, attribute: &str) -> bool {
+    let Some(at) = source.find(&format!("pub fn {name}(")) else {
+        return false;
+    };
+    let before = &source[..at];
+    before.rfind(attribute).is_some_and(|start| {
+        before[start + attribute.len()..]
+            .lines()
+            .all(|line| line.trim().is_empty() || line.trim().starts_with("///"))
+    })
+}
+
+#[test]
+fn p2_g_06_production_cannot_construct_a_helper_from_an_arbitrary_path() {
+    let sandbox = repo().join("crates/nexus-verifier-sandbox");
+    let launcher = std::fs::read_to_string(sandbox.join("src/launcher.rs")).unwrap();
+    let execution = std::fs::read_to_string(sandbox.join("src/execution.rs")).unwrap();
+    // A helper is a backend-installed program (`installed`) or, only for the
+    // sandbox crate's own tests and live harness, the build's own helper
+    // (`at`). Nothing else constructs one.
+    assert!(gated(&launcher, "at", HARNESS_ONLY), "HelperProgram::at");
+    assert!(!gated(&launcher, "installed", HARNESS_ONLY));
+    assert_eq!(code(&launcher).matches("Self { path").count(), 2);
+    for function in ["run_with_fault", "holds_scope", "holds_helper"] {
+        assert!(gated(&execution, function, HARNESS_ONLY), "{function}");
+    }
+    let mut sources = Vec::new();
+    production_files(&sandbox.join("src"), &mut sources);
+    assert!(
+        count_in(&sources, "HelperProgram { path").is_empty(),
+        "only its own constructors build a helper"
+    );
+    // Only the sandbox crate names the harness feature, and only its own
+    // dev-dependency enables it: no normal build (the desktop backend, the
+    // release package) is compiled with it.
+    let manifest = std::fs::read_to_string(sandbox.join("Cargo.toml")).unwrap();
+    let section = |name: &str| {
+        let header = format!("\n[{name}]\n");
+        let start = manifest.find(&header).expect(name) + header.len();
+        let rest = &manifest[start..];
+        rest[..rest.find("\n[").unwrap_or(rest.len())].to_string()
+    };
+    let enabling: Vec<String> = manifest
+        .lines()
+        .filter(|line| line.contains("live-sandbox-harness") && !line.trim_start().starts_with('#'))
+        .map(str::to_string)
+        .collect();
+    assert_eq!(enabling.len(), 2, "{enabling:?}");
+    assert!(section("features").contains("live-sandbox-harness = []"));
+    assert!(section("dev-dependencies").contains(
+        "nexus-verifier-sandbox = { path = \".\", features = [\"live-sandbox-harness\"] }"
+    ));
+    let mut desktop = Vec::new();
+    production_files(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut desktop,
+    );
+    for needle in [
+        "HelperProgram::at",
+        "run_with_fault",
+        "Fault::",
+        "FaultPoint",
+        "holds_scope",
+        "holds_helper",
+        "live-sandbox-harness",
+        "live_sandbox_harness",
+    ] {
+        assert!(count_in(&desktop, needle).is_empty(), "{needle}");
+    }
+    for manifest in manifests() {
+        if !manifest.ends_with("crates/nexus-verifier-sandbox/Cargo.toml") {
+            let text = std::fs::read_to_string(&manifest).unwrap();
+            assert!(
+                !text.contains("live-sandbox-harness"),
+                "{} names the live sandbox harness",
+                manifest.display()
+            );
+        }
     }
 }
 

@@ -545,13 +545,14 @@ restored exactly, showed every layer and check below is load-bearing.
 | 44 | `/proc` | live `read_proc_status`, `list_proc`; P2G `no_host_files` |
 | 45 | no raw shell | `p2b_the_profile_has_no_shell_path_or_network_escape`; live `exec_shell`; P2G `no_shell` |
 
-P2-R1 controls (the panic invariant):
+P2-R1 controls (the panic invariant and helper construction):
 
 | Control | Test |
 |---|---|
 | a panic after the helper spawned, while proving the scope, after the scope was proven, after the launch, while running (2 s, a detached marker tree), while draining output, in an output thread, immediately before finalization, and in finalization (panic or failed step) | live `p2r1_live_panic_after_helper_spawn_is_finalized`, `p2r1_live_panic_while_proving_the_scope_stops_it`, `p2r1_live_panic_after_the_scope_is_proven_is_finalized`, `p2r1_live_panic_after_launch_ends_the_tree`, `p2r1_live_panic_while_running_ends_every_descendant`, `p2r1_live_panic_while_draining_output_ends_the_tree`, `p2r1_live_output_thread_panic_is_never_a_result`, `p2r1_live_panic_before_finalization_is_never_a_pass`, `p2r1_live_panic_in_finalization_retains_the_live_boundary`, `p2r1_live_failed_finalization_is_retried_to_confirmation`: never a pass; confirmed cleanup only with the helper reaped, no process of the verifier's tree alive and the scope gone; otherwise a retained boundary that still owns the live tree, which a retry ends |
 | the finalizer and a retained boundary without a scope | `p2r1_finalization_ends_and_reaps_a_helper_without_a_scope`, `p2r1_a_failed_or_panicking_finalization_retains_the_live_boundary`, `p2r1_a_dropped_boundary_still_ends_its_helper`, `p2r1_a_panicking_output_thread_loses_its_record`, `p2r1_an_interrupted_execution_is_never_passed` |
 | the desktop's panic path, retry and discard | `p2r1_a_panic_after_the_execution_retains_its_unconfirmed_boundary`, `p2r1_a_panic_with_nothing_unconfirmed_is_an_unknown_result`, `p2_g_07_a_retained_verification_cleanup_is_never_dropped`; kernel `p2r1_a_panicked_verification_keeps_apply_refused_until_its_cleanup_is_confirmed` |
+| no arbitrary helper path in production | `p2_g_06_production_cannot_construct_a_helper_from_an_arbitrary_path`; a normal build of the desktop cannot name `HelperProgram::at` (it does not exist without the harness feature) |
 
 CI: a dedicated exact-SHA workflow on the self-hosted runner
 (`.github/workflows/ci-phase2-linux-sandbox.yml`) runs the live suite and
@@ -579,7 +580,7 @@ the eight runtime files) and with path-based metadata mutation denied.
 
 | Authority | Where | Governed by |
 |---|---|---|
-| Spawn a process | `launcher::Helper::spawn` (the only `Command::new` in the sandbox crate) | only `execution::run`, only from the desktop's verification module after the owner's recorded native approval; the program is `HelperProgram::installed()` (root-owned, `/usr/bin`, beside the installed application); cleared environment, no arguments, `/` as working directory, no `pre_exec` |
+| Spawn a process | `launcher::Helper::spawn` (the only `Command::new` in the sandbox crate) | only `execution::run`, only from the desktop's verification module after the owner's recorded native approval; the program is `HelperProgram::installed()` (root-owned, `/usr/bin`, beside the installed application; the arbitrary-path `HelperProgram::at` and the other live-harness seams exist only for the sandbox crate's own tests, through its `live-sandbox-harness` feature, which only its own dev-dependency enables); cleared environment, no arguments, `/` as working directory, no `pre_exec` |
 | Execute project code | the helper's verifier child (`execveat` of the verified `cargo` by descriptor) | every mandatory layer established and re-checked first; any failure reports a setup stage and executes nothing |
 | Namespaces | the helper (`unshare` once) | uid/gid identity maps written only for the backend's own unreaped child; identities verified by `readlink` of `/proc/self/ns/*` |
 | cgroup scope | `scope::ScopeManager` over the user manager's fixed D-Bus interface | bus from the real uid, owner-checked; backend-random unit names; limits verified from the cgroup files; `StopUnit` only for a scope this call created and could not prove; kill, counters and emptiness through the retained descriptor |

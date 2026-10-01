@@ -31,9 +31,10 @@ nexus-verifier-sandbox = { path = ".", features = ["live-sandbox-harness"] }
 # Verify a development (user-owned) toolchain tree against the embedded
 # manifest. Never production authority; enabled only for the live suite.
 development-toolchain = []
-# The live sandbox harness only: deterministic fault injection (the live
-# panic controls). Never production authority; only the dev-dependency
-# above enables it.
+# The live sandbox harness only: a helper at an arbitrary path (the build's
+# own helper binary) and deterministic fault injection (the live panic
+# controls). Never production authority; only the dev-dependency above
+# enables it.
 live-sandbox-harness = []
 
 [[test]]

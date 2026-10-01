@@ -51,8 +51,11 @@ pub struct HelperProgram {
 }
 
 impl HelperProgram {
-    /// The helper at `path`. Tests only; production code obtains the
-    /// helper from the installed layout ([`Self::installed`]).
+    /// The helper at `path`: the live sandbox harness's own build of the
+    /// helper. Compiled only for this crate's tests and the harness feature,
+    /// never into a normal build; production code obtains the helper from
+    /// the installed layout ([`Self::installed`]) alone.
+    #[cfg(any(test, feature = "live-sandbox-harness"))]
     pub fn at(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
     }
