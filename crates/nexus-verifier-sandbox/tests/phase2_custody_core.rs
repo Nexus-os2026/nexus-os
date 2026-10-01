@@ -1,11 +1,15 @@
-//! P2-V1-R3B-I1 fixture controls for the custody core (`support/custody/`):
-//! the same owner survives failed and exhausted cleanup, reporting, refused
-//! shutdown and explicit recovery; admission is reserved, acknowledged and
-//! linearized against cancellation; an unknown native outcome stays pending
-//! until its own bound completion; expected injected conditions stay apart
-//! from real failures, and no recovery clears a failure; dependencies are
-//! released only after native completion; evidence is reserved before
-//! admission and every acknowledgement binds one exact record; replayed,
+//! P2-V1-R3B-I1 and -R1 fixture controls for the custody core
+//! (`support/custody/`): the same owner survives failed and exhausted
+//! cleanup, reporting, refused shutdown and explicit recovery; admission is
+//! reserved, acknowledged and linearized against cancellation, and the first
+//! actual failure closes it for good (no next case, no reopening); an unknown
+//! native outcome stays pending until its own bound completion; expected
+//! injected conditions stay apart from actual failures, and output
+//! detachment is output loss, never completeness; a run is final only when
+//! its terminal record is acknowledged, after which its verdict never
+//! changes and a late owner is an incident of its own; failed or pending
+//! evidence keeps the custody from closing; dependencies are released only
+//! after native completion; acknowledgements bind exact records; replayed,
 //! stale and conflicting events act on nothing.
 //!
 //! These are not live evidence. No process, cgroup, scope, user manager, bus,
@@ -38,10 +42,19 @@ const TEST: Config = Config {
     record_capacity: 128,
     control_reserve: 2,
     receipt_limit: 4,
-    unexpected_limit: 2,
+    late_limit: 2,
     failure_detail_limit: 8,
     detail_chars: 64,
     incident_limit: 4,
+};
+
+/// A process operation's own end with every native fact confirmed but its
+/// output detached.
+const DETACHED_END: EndFacts = EndFacts {
+    subtree: true,
+    reaped: true,
+    output: OutputObserved::Detached,
+    removed: false,
 };
 
 /// How long a control waits for another thread before failing: a watchdog,
@@ -118,6 +131,8 @@ enum Plan {
     ReapedOnly,
     /// The tree ended natively; its output is still pending.
     OutputPending,
+    /// The tree ended natively; its output was detached (lost), not drained.
+    Detached,
     /// The attempt panics.
     Panic,
 }
@@ -131,13 +146,19 @@ fn report(kind: SlotKind, plan: Plan) -> CleanupReport {
         }
     };
     match kind {
+        SlotKind::Process if plan == Plan::Detached => CleanupReport {
+            subtree: Observed::Confirmed,
+            reaped: Observed::Confirmed,
+            output: OutputObserved::Detached,
+            removed: Observed::NotLooked,
+        },
         SlotKind::Process => {
             let (subtree, reaped, output) = match plan {
                 Plan::Confirm => (true, true, true),
                 Plan::SubtreeOnly => (true, false, false),
                 Plan::ReapedOnly => (false, true, false),
                 Plan::OutputPending => (true, true, false),
-                Plan::Fail | Plan::Panic => (false, false, false),
+                Plan::Fail | Plan::Panic | Plan::Detached => (false, false, false),
             };
             CleanupReport {
                 subtree: fact(subtree),
@@ -151,7 +172,7 @@ fn report(kind: SlotKind, plan: Plan) -> CleanupReport {
             }
         }
         SlotKind::Workspace | SlotKind::Fixture => CleanupReport {
-            removed: fact(plan == Plan::Confirm),
+            removed: fact(matches!(plan, Plan::Confirm | Plan::Detached)),
             ..CleanupReport::NOTHING
         },
     }
@@ -381,23 +402,35 @@ impl Lab {
         }
     }
 
-    /// Flush, then acknowledge everything submitted.
+    /// Flush and acknowledge until nothing is left: acknowledging a
+    /// completion candidate's last record issues its terminal record, which
+    /// is then flushed and acknowledged too.
     fn ack_all(&mut self) {
-        self.flush();
-        self.ack_until(self.journal.submitted.len());
-    }
-
-    /// Flush and acknowledge in order, stopping at the first record custody
-    /// does not accept (after a recording failure).
-    fn try_ack_all(&mut self) {
-        self.flush();
-        while self.acked < self.journal.submitted.len() {
-            let ack = RecordAck::of(&self.journal.submitted[self.acked]);
-            let now = self.now();
-            if self.c().acknowledge(&ack, now) != AckOutcome::Acknowledged {
+        loop {
+            self.flush();
+            if self.acked == self.journal.submitted.len() {
                 return;
             }
-            self.acked += 1;
+            self.ack_until(self.journal.submitted.len());
+        }
+    }
+
+    /// As [`Self::ack_all`], stopping at the first record custody does not
+    /// accept (after a recording failure).
+    fn try_ack_all(&mut self) {
+        loop {
+            self.flush();
+            if self.acked == self.journal.submitted.len() {
+                return;
+            }
+            while self.acked < self.journal.submitted.len() {
+                let ack = RecordAck::of(&self.journal.submitted[self.acked]);
+                let now = self.now();
+                if self.c().acknowledge(&ack, now) != AckOutcome::Acknowledged {
+                    return;
+                }
+                self.acked += 1;
+            }
         }
     }
 
@@ -409,7 +442,9 @@ impl Lab {
         now
     }
 
+    /// Begin a case once every earlier record is acknowledged.
     fn begin(&mut self, case: u32, expectation: Expectation) {
+        self.try_ack_all();
         let now = self.now();
         self.c()
             .begin_case(CaseId(case), expectation, now)
@@ -452,6 +487,14 @@ impl Lab {
     fn end_case(&mut self, cleanup: &mut Scripted) -> CaseOutcome {
         let now = self.now();
         self.c().end_case(cleanup, now).expect("the case ends")
+    }
+
+    /// Finish the run and settle its evidence: the phase it ends in.
+    fn finish(&mut self) -> RunPhase {
+        let now = self.now();
+        self.c().finish_run(now).expect("the run finishes");
+        self.ack_all();
+        self.snap().phase
     }
 
     fn serve(&mut self, request: Request, cleanup: &mut Scripted, now: Tick) -> RequestOutcome {
@@ -524,6 +567,17 @@ impl Lab {
             .map(|intent| intent.kind)
             .collect()
     }
+
+    /// The submitted terminal record, if any: its identity and verdict.
+    fn terminal_record(&self) -> Option<(RecordId, Verdict)> {
+        self.journal
+            .submitted
+            .iter()
+            .find_map(|intent| match intent.kind {
+                RecordKind::RunEnded { verdict, .. } => Some((intent.id, verdict)),
+                _ => None,
+            })
+    }
 }
 
 /// The one held entry.
@@ -538,16 +592,681 @@ fn count(snapshot: &Snapshot, class: FailureClass) -> u32 {
     snapshot.failure_counts[class.index()]
 }
 
+fn fault_count(snapshot: &Snapshot, class: FailureClass) -> u32 {
+    snapshot.fault_counts[class.index()]
+}
+
 fn is_refused_with(decision: &ShutdownDecision, wanted: Unresolved) -> bool {
     matches!(decision, ShutdownDecision::Refused(unresolved) if unresolved.contains(&wanted))
 }
 
-fn only_evidence_pending(decision: &ShutdownDecision) -> bool {
-    matches!(
-        decision,
-        ShutdownDecision::Refused(unresolved)
-            if matches!(unresolved.as_slice(), [Unresolved::EvidencePending(_)])
-    )
+fn closed_by_failure(closure: Option<Closure>) -> Option<FailureClass> {
+    match closure?.reason {
+        ClosureReason::Failed(class) => Some(class),
+        ClosureReason::Cancelled(_) => None,
+    }
+}
+
+/// General (non-control) records issued.
+fn general_issued(snapshot: &Snapshot, config: &Config) -> u64 {
+    snapshot.evidence.issued - u64::from(config.control_reserve - snapshot.evidence.control_left)
+}
+
+/// R1 finding A (within a case): the first actual failure closes execution
+/// admission for good. Nothing further is reserved or admitted in that case
+/// (not even an action reserved before the failure), the closure names the
+/// failure rather than a cancellation, an operation admitted before it is
+/// still adopted for cleanup, and nothing reopens admission after cleanup.
+#[test]
+fn r01_actual_failure_closes_admission_within_its_case() {
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let now = lab.now();
+    lab.c()
+        .record_assertion_failure("an observation failed", now)
+        .expect("recorded");
+    let now = lab.now();
+    let reserved = lab.c().reserve(SlotKind::Process, now);
+    let admission = lab.control.status().control.admission;
+    assert!(
+        matches!(
+            reserved,
+            Err(Refusal::AdmissionClosed(Closure {
+                reason: ClosureReason::Failed(FailureClass::Assertion),
+                ..
+            }))
+        ),
+        "[fail-stop] after an actual failure: reserve -> {reserved:?}; admission {admission:?}"
+    );
+    assert_eq!(admission.admitted, 0);
+    assert!(lab.native.produced.is_empty());
+
+    // An action reserved before the failure is not admitted after it.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let now = lab.now();
+    let reservation = lab
+        .c()
+        .reserve(SlotKind::Process, now)
+        .expect("the action is reserved");
+    lab.ack_all();
+    let now = lab.now();
+    lab.c()
+        .record_assertion_failure("an observation failed", now)
+        .expect("recorded");
+    let now = lab.now();
+    let refused = lab.c().admit(reservation, now).unwrap_err();
+    assert!(
+        matches!(refused.refusal, Refusal::AdmissionClosed(_)),
+        "[fail-stop] a reservation made before the failure was admitted after it"
+    );
+    assert!(refused.reservation.is_none(), "the action is settled");
+    lab.flush();
+    assert!(lab.records().iter().any(|kind| matches!(
+        kind,
+        RecordKind::ActionSettled {
+            how: Settlement::NotAdmitted,
+            ..
+        }
+    )));
+
+    // An operation admitted before the failure still delivers, and its owner
+    // is adopted for cleanup; admission stays closed after the cleanup.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let ticket = lab.admit(SlotKind::Process);
+    let now = lab.now();
+    lab.c()
+        .record_assertion_failure("an observation failed", now)
+        .expect("recorded");
+    let owner = lab.native.produce(&ticket);
+    let token = owner.token;
+    let now = lab.now();
+    let Ok(Completion::Deposited(entry)) =
+        lab.c()
+            .complete(&ticket, NativeOutcome::Created(owner), now)
+    else {
+        panic!("the admitted operation's owner was not adopted");
+    };
+    let snapshot = lab.snap();
+    assert_eq!(
+        (only_entry(&snapshot).entry, only_entry(&snapshot).phase),
+        (entry, EntryPhase::CleanupRequired)
+    );
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
+    assert_eq!(
+        (outcome.passed, outcome.resolved, outcome.stopped),
+        (false, true, true)
+    );
+    assert_eq!(lab.released(), vec![token]);
+    let now = lab.now();
+    assert!(lab.c().reserve(SlotKind::Process, now).is_err());
+    assert_eq!(
+        closed_by_failure(lab.control.status().control.admission.closure),
+        Some(FailureClass::Assertion),
+        "an actual failure is never recorded as a cancellation"
+    );
+    assert_eq!(count(&lab.snap(), FailureClass::Cancelled), 0);
+    assert!(lab.dropped().is_empty());
+}
+
+/// One way an actual failure enters a running case whose owners the case's
+/// end can still clean up.
+type FailureScenario = (&'static str, Expectation, FailureClass, fn(&mut Lab));
+
+/// R1 finding A (between cases): every actual failure the core classifies,
+/// once its case's resources are confirmed cleaned up, still stops the run:
+/// no next case begins and nothing further is admitted, after any amount of
+/// acknowledged evidence.
+#[test]
+fn r02_failed_case_cleanup_never_permits_a_next_case() {
+    let scenarios: [FailureScenario; 9] = [
+        (
+            "an assertion",
+            Expectation::Clean,
+            FailureClass::Assertion,
+            |lab| {
+                lab.create(SlotKind::Process);
+                let now = lab.now();
+                lab.c()
+                    .record_assertion_failure("an observation failed", now)
+                    .expect("recorded");
+            },
+        ),
+        (
+            "a panicking borrower",
+            Expectation::Clean,
+            FailureClass::Assertion,
+            |lab| {
+                let (entry, _) = lab.create(SlotKind::Process);
+                let now = lab.now();
+                let panicked = lab
+                    .c()
+                    .lend(entry, now, |_| -> u64 { panic!("injected borrower panic") });
+                assert_eq!(panicked, Err(LendError::Panicked));
+            },
+        ),
+        (
+            "an unexpected retained boundary",
+            Expectation::Clean,
+            FailureClass::UnexpectedRetained,
+            |lab| {
+                lab.deposit(SlotKind::Process, true);
+            },
+        ),
+        (
+            "a misfit owner",
+            Expectation::Clean,
+            FailureClass::UnexpectedOwner,
+            |lab| {
+                let ticket = lab.admit(SlotKind::Workspace);
+                let owner = lab.native.produce_as(&ticket, Some(SlotKind::Fixture));
+                let now = lab.now();
+                assert!(matches!(
+                    lab.c()
+                        .complete(&ticket, NativeOutcome::Created(owner), now),
+                    Ok(Completion::Unexpected(_))
+                ));
+            },
+        ),
+        (
+            "a late owner",
+            Expectation::Clean,
+            FailureClass::LateOwner,
+            |lab| {
+                let ticket = lab.admit(SlotKind::Process);
+                let now = lab.now();
+                let proof = NoEffectProof::for_ticket(&ticket, "refused");
+                lab.c()
+                    .complete(&ticket, NativeOutcome::NoEffect(proof), now)
+                    .expect("resolved");
+                let late = lab.native.produce(&ticket);
+                let now = lab.now();
+                assert!(matches!(
+                    lab.c().complete(&ticket, NativeOutcome::Created(late), now),
+                    Ok(Completion::Late { .. })
+                ));
+            },
+        ),
+        (
+            "a detached output",
+            Expectation::Clean,
+            FailureClass::OutputLost,
+            |lab| {
+                let ticket = lab.admit(SlotKind::Process);
+                let now = lab.now();
+                assert!(matches!(
+                    lab.c()
+                        .complete(&ticket, NativeOutcome::Ended(DETACHED_END), now),
+                    Ok(Completion::OutputLost)
+                ));
+            },
+        ),
+        (
+            "an unmet expected condition",
+            Expectation::RetainedBoundary,
+            FailureClass::ExpectedConditionUnmet,
+            |lab| {
+                lab.create(SlotKind::Process);
+            },
+        ),
+        (
+            "a recorder adapter panic",
+            Expectation::Clean,
+            FailureClass::RecorderFault,
+            |lab| {
+                let now = lab.now();
+                assert!(matches!(
+                    lab.c().flush_records(&mut PanickingSink, now),
+                    Err(FlushError::SinkPanicked { .. })
+                ));
+            },
+        ),
+        (
+            "a recording failure",
+            Expectation::Clean,
+            FailureClass::RecordFailed,
+            |lab| {
+                lab.flush();
+                let id = lab.journal.submitted[lab.acked].id;
+                let now = lab.now();
+                assert_eq!(lab.c().record_failed(id, now), AckOutcome::FailureRecorded);
+            },
+        ),
+    ];
+    for (what, expectation, class, inject) in scenarios {
+        let mut lab = Lab::new(TEST);
+        lab.start();
+        lab.begin(1, expectation);
+        inject(&mut lab);
+        let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
+        assert!(!outcome.passed && outcome.resolved, "{what}: {outcome:?}");
+        assert!(
+            outcome.stopped,
+            "[no-next-case] after {what}, the run went on past its failed case: {outcome:?}"
+        );
+        lab.released();
+        lab.try_ack_all();
+        let admitted = lab.control.status().control.admission.admitted;
+        let now = lab.now();
+        let next = lab.c().begin_case(CaseId(2), Expectation::Clean, now);
+        assert!(
+            matches!(
+                next,
+                Err(Refusal::AdmissionClosed(Closure {
+                    reason: ClosureReason::Failed(first),
+                    ..
+                })) if first == class
+            ),
+            "[no-next-case] after {what} and its cleanup, the next case -> {next:?}"
+        );
+        let now = lab.now();
+        assert!(lab.c().reserve(SlotKind::Process, now).is_err(), "{what}");
+        assert_eq!(
+            lab.control.status().control.admission.admitted,
+            admitted,
+            "{what}"
+        );
+        assert_ne!(lab.snap().verdict, Verdict::Passed, "{what}");
+        assert!(lab.dropped().is_empty(), "{what}");
+    }
+}
+
+/// R1 finding B: physical cleanup can be confirmed while required evidence
+/// failed; the custody then refuses ordinary closure for good, returning the
+/// same custody with the failed record, the pending settlement and the
+/// verdict intact, and never recreates the ended owner.
+#[test]
+fn r03_failed_evidence_keeps_the_custody_open() {
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let (entry, token) = lab.create(SlotKind::Process);
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
+    assert!(outcome.passed);
+    assert_eq!(lab.released(), vec![token], "physically ended and released");
+    lab.flush();
+    let settled = lab
+        .journal
+        .submitted
+        .iter()
+        .position(|intent| matches!(intent.kind, RecordKind::ActionSettled { .. }))
+        .expect("the settlement was issued");
+    lab.ack_until(settled);
+    let settlement = lab.journal.submitted[settled].clone();
+    let now = lab.now();
+    assert_eq!(
+        lab.c().record_failed(settlement.id, now),
+        AckOutcome::FailureRecorded
+    );
+
+    let decision = lab.request_shutdown();
+    let failed_record = matches!(
+        &decision,
+        ShutdownDecision::Refused(unresolved) if unresolved.iter().any(|item| matches!(
+            item,
+            Unresolved::EvidenceFailed { record, .. } if *record == settlement.id
+        ))
+    );
+    assert!(
+        failed_record,
+        "[evidence-close] the shutdown decision hid the failed evidence: {decision:?}"
+    );
+    let closed = lab.close();
+    assert!(
+        closed.is_none(),
+        "[evidence-close] closed with failed evidence: {closed:?}"
+    );
+    // The same custody: the failed record, the settlement that can never be
+    // durable and the verdict are all as they were.
+    let snapshot = lab.snap();
+    assert_eq!(
+        snapshot.evidence.failed.map(|(id, _)| id),
+        Some(settlement.id)
+    );
+    let settling: Vec<_> = snapshot
+        .settling
+        .iter()
+        .map(|view| (view.entry, view.record, view.how))
+        .collect();
+    assert_eq!(
+        settling,
+        vec![(Some(entry), settlement.id, Settlement::Confirmed)]
+    );
+    assert_eq!(snapshot.verdict, Verdict::Failed);
+    assert!(snapshot.entries.is_empty());
+    // A later acknowledgement cannot heal the recorder.
+    let now = lab.now();
+    assert_eq!(
+        lab.c().acknowledge(&RecordAck::of(&settlement), now),
+        AckOutcome::LedgerFailed
+    );
+    assert!(
+        lab.close().is_none(),
+        "[evidence-close] closed after an unbound acknowledgement"
+    );
+    assert_eq!(lab.native.produced.len(), 1, "the owner was not recreated");
+    assert!(lab.dropped().is_empty());
+}
+
+/// R1 finding C: a run's verdict is published as a pass only once its
+/// terminal record is acknowledged, and from then on it never changes:
+/// ordinary case mutations are refused, a later fault is the custody's (not
+/// the run's), and the closed result reports exactly the acknowledged
+/// terminal record.
+#[test]
+fn r04_finalized_verdict_matches_acknowledged_terminal_evidence() {
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let ticket = lab.admit(SlotKind::Process);
+    let owner = lab.native.produce(&ticket);
+    let now = lab.now();
+    lab.c()
+        .complete(&ticket, NativeOutcome::Created(owner), now)
+        .expect("deposited");
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+    lab.released();
+    let now = lab.now();
+    assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Candidate));
+    let snapshot = lab.snap();
+    assert_eq!(
+        (snapshot.verdict, snapshot.terminal),
+        (Verdict::Pending, None),
+        "no pass before the terminal record"
+    );
+    lab.ack_all();
+    let (terminal, recorded) = lab.terminal_record().expect("the terminal record");
+    assert_eq!(recorded, Verdict::Passed);
+    let snapshot = lab.snap();
+    assert_eq!(
+        (snapshot.phase, snapshot.verdict),
+        (RunPhase::Finalized, Verdict::Passed)
+    );
+
+    // Ordinary case mutations are refused, changing nothing.
+    let now = lab.now();
+    assert_eq!(
+        lab.c().record_assertion_failure("a late observation", now),
+        Err(Refusal::Phase(RunPhase::Finalized))
+    );
+    let now = lab.now();
+    assert!(lab
+        .c()
+        .begin_case(CaseId(2), Expectation::Clean, now)
+        .is_err());
+    let now = lab.now();
+    assert!(lab.c().reserve(SlotKind::Process, now).is_err());
+    let now = lab.now();
+    assert!(lab.c().finish_run(now).is_err());
+    assert_eq!(lab.snap().verdict, Verdict::Passed);
+
+    // A late owner after finalization is a fault of the custody: the run's
+    // acknowledged verdict stands.
+    let late = lab.native.produce(&ticket);
+    let late_token = late.token;
+    let now = lab.now();
+    assert!(matches!(
+        lab.c().complete(&ticket, NativeOutcome::Created(late), now),
+        Ok(Completion::Late { .. })
+    ));
+    let snapshot = lab.snap();
+    assert_eq!(
+        (snapshot.verdict, snapshot.phase),
+        (Verdict::Passed, RunPhase::Finalized),
+        "[finalized-verdict] a fault after the terminal record changed the run's outcome"
+    );
+    assert_eq!(fault_count(&snapshot, FailureClass::LateOwner), 1);
+    assert_eq!(snapshot.failure_counts, [0; FailureClass::COUNT]);
+
+    // Its recovery and evidence, then the closed result: the acknowledged
+    // terminal record and its verdict, with the fault beside them.
+    assert!(
+        lab.close().is_none(),
+        "a held late incident refuses closure"
+    );
+    assert_eq!(
+        lab.retry(&mut Scripted::always(Plan::Confirm)),
+        Response::Retried {
+            attempt: 1,
+            resolved: true,
+            epoch: 1
+        }
+    );
+    assert_eq!(lab.released(), vec![late_token]);
+    lab.ack_all();
+    let issued = lab.snap().evidence.issued;
+    let closed = lab.close().expect("closes once nothing is unresolved");
+    assert_eq!(
+        (closed.terminal, closed.verdict, closed.records),
+        (Some(terminal), recorded, issued),
+        "[finalized-verdict] the closed result does not match the acknowledged terminal record"
+    );
+    assert_eq!(closed.fault_counts[FailureClass::LateOwner.index()], 1);
+    assert_eq!(lab.snap().verdict, Verdict::Passed);
+}
+
+/// R1 finding C: an owner delivered for an operation already retired is a
+/// late incident with its own identity and records, never attached to the
+/// retired action's lifecycle; before the terminal record it is a failure of
+/// the run, after it a fault that leaves the finalized run as recorded; past
+/// the bound it is returned, never dropped.
+#[test]
+fn r05_late_owner_is_a_bound_incident_never_the_retired_action() {
+    // Before the terminal record: the run fails and requires recovery.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let ticket = lab.admit(SlotKind::Process);
+    let owner = lab.native.produce(&ticket);
+    let now = lab.now();
+    lab.c()
+        .complete(&ticket, NativeOutcome::Created(owner), now)
+        .expect("deposited");
+    lab.end_case(&mut Scripted::always(Plan::Confirm));
+    lab.released();
+    let now = lab.now();
+    assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Candidate));
+    lab.flush();
+    let settled_at = lab.journal.submitted.len();
+    let late = lab.native.produce(&ticket);
+    let late_token = late.token;
+    let now = lab.now();
+    let Ok(Completion::Late { incident, entry }) =
+        lab.c().complete(&ticket, NativeOutcome::Created(late), now)
+    else {
+        panic!("[late-incident] the late owner was not held as an incident");
+    };
+    lab.flush();
+    let after: Vec<RecordKind> = lab.records()[settled_at..].to_vec();
+    let reuses = after.iter().any(|kind| {
+        matches!(kind,
+            RecordKind::ActionFailed { action } | RecordKind::ActionSettled { action, .. }
+                if *action == ticket.action())
+    });
+    let opened = after.contains(&RecordKind::IncidentOpened {
+        incident,
+        action: ticket.action(),
+        kind: Some(SlotKind::Process),
+    });
+    assert!(
+        opened && !reuses,
+        "[late-incident] the late owner's evidence is not its own incident's: {after:?}"
+    );
+    let snapshot = lab.snap();
+    let held = only_entry(&snapshot);
+    assert_eq!(
+        (held.entry, held.incident, held.action, held.origin),
+        (entry, Some(incident), ticket.action(), Origin::Late)
+    );
+    assert_eq!(snapshot.phase, RunPhase::RecoveryRequired);
+    assert_eq!(count(&snapshot, FailureClass::LateOwner), 1);
+    assert_eq!(
+        lab.retry(&mut Scripted::always(Plan::Confirm)),
+        Response::Retried {
+            attempt: 1,
+            resolved: true,
+            epoch: 1
+        }
+    );
+    assert_eq!(lab.released(), vec![late_token]);
+    lab.flush();
+    assert!(lab.records().contains(&RecordKind::IncidentSettled {
+        incident,
+        how: Settlement::Confirmed
+    }));
+    lab.ack_all();
+    assert_eq!(
+        lab.terminal_record().map(|(_, verdict)| verdict),
+        Some(Verdict::Failed)
+    );
+
+    // After the terminal record: the finalized run is not rewritten.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let ticket = lab.admit(SlotKind::Process);
+    let now = lab.now();
+    let proof = NoEffectProof::for_ticket(&ticket, "refused");
+    lab.c()
+        .complete(&ticket, NativeOutcome::NoEffect(proof), now)
+        .expect("resolved");
+    lab.end_case(&mut Scripted::always(Plan::Confirm));
+    assert_eq!(lab.finish(), RunPhase::Finalized);
+    let terminal = lab.terminal_record();
+    let late = lab.native.produce(&ticket);
+    let now = lab.now();
+    let Ok(Completion::Late { incident, .. }) =
+        lab.c().complete(&ticket, NativeOutcome::Created(late), now)
+    else {
+        panic!("[late-incident] a late owner after finalization was not held as an incident");
+    };
+    let snapshot = lab.snap();
+    assert_eq!(
+        (snapshot.phase, snapshot.verdict),
+        (RunPhase::Finalized, Verdict::Passed)
+    );
+    assert!(is_refused_with(
+        &lab.c().shutdown_decision(),
+        Unresolved::LateIncidents(1)
+    ));
+    lab.flush();
+    assert!(lab
+        .records()
+        .iter()
+        .any(|kind| matches!(kind, RecordKind::IncidentOpened { incident: opened, .. } if *opened == incident)));
+    assert_eq!(lab.terminal_record(), terminal, "one terminal record");
+
+    // Past the bound: returned, unrecorded, never dropped.
+    let mut lab = Lab::new(Config {
+        late_limit: 1,
+        ..TEST
+    });
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let ticket = lab.admit(SlotKind::Process);
+    let now = lab.now();
+    let proof = NoEffectProof::for_ticket(&ticket, "refused");
+    lab.c()
+        .complete(&ticket, NativeOutcome::NoEffect(proof), now)
+        .expect("resolved");
+    let first = lab.native.produce(&ticket);
+    let now = lab.now();
+    assert!(matches!(
+        lab.c()
+            .complete(&ticket, NativeOutcome::Created(first), now),
+        Ok(Completion::Late { .. })
+    ));
+    let second = lab.native.produce(&ticket);
+    let second_token = second.token;
+    let now = lab.now();
+    match lab
+        .c()
+        .complete(&ticket, NativeOutcome::Created(second), now)
+    {
+        Err(Rejected::CustodyFull { owner }) => {
+            assert_eq!(owner.token, second_token, "the same owner comes back");
+            lab.returned.push(owner);
+        }
+        other => panic!("[late-incident] an owner past the bound: {other:?}"),
+    }
+    lab.flush();
+    let opened = lab
+        .records()
+        .iter()
+        .filter(|kind| matches!(kind, RecordKind::IncidentOpened { .. }))
+        .count();
+    assert_eq!(opened, 1, "no incident record for a returned owner");
+    assert_eq!(
+        count(&lab.snap(), FailureClass::LateOwner),
+        2,
+        "[late-incident] a returned late owner is still a failure"
+    );
+    assert!(lab.dropped().is_empty());
+}
+
+/// R1 finding D: detached output is output loss, never completeness. In an
+/// ordinary clean case it is an actual failure by either route (the
+/// operation's own end, or the cleanup of a stored owner); the native
+/// resources that genuinely ended are still released, and the settlement
+/// record says the output was lost.
+#[test]
+fn r06_detached_output_is_output_loss_never_a_clean_pass() {
+    // Route 1: the operation's own end reports detached output.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let ticket = lab.admit(SlotKind::Process);
+    let now = lab.now();
+    let completion = lab
+        .c()
+        .complete(&ticket, NativeOutcome::Ended(DETACHED_END), now);
+    let failures = count(&lab.snap(), FailureClass::OutputLost);
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
+    assert!(
+        matches!(completion, Ok(Completion::OutputLost)) && failures == 1 && !outcome.passed,
+        "[output-lost] the operation's end: {completion:?}, failures {failures}, case {outcome:?}"
+    );
+    lab.ack_all();
+    assert!(lab.records().contains(&RecordKind::ActionSettled {
+        action: ticket.action(),
+        how: Settlement::OutputLost
+    }));
+    assert_eq!(
+        lab.terminal_record().map(|(_, verdict)| verdict),
+        Some(Verdict::Failed)
+    );
+
+    // Route 2: cleanup of a stored owner reports detached output.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let (_, token) = lab.create(SlotKind::Process);
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Detached));
+    let snapshot = lab.snap();
+    assert!(
+        !outcome.passed && count(&snapshot, FailureClass::OutputLost) == 1,
+        "[output-lost] the cleanup route: case {outcome:?}, failures {:?}",
+        snapshot.failure_counts
+    );
+    assert!(outcome.resolved, "a natively ended tree is still released");
+    assert_eq!(lab.released(), vec![token]);
+    assert_eq!(
+        closed_by_failure(lab.control.status().control.admission.closure),
+        Some(FailureClass::OutputLost)
+    );
+    lab.ack_all();
+    assert!(lab.records().iter().any(|kind| matches!(
+        kind,
+        RecordKind::ActionSettled {
+            how: Settlement::OutputLost,
+            ..
+        }
+    )));
+    assert_eq!(lab.snap().verdict, Verdict::Failed);
 }
 
 /// H1. The same owner survives a failed cleanup, its automatic budget and
@@ -644,7 +1363,7 @@ fn h01_same_owner_survives_failed_cleanup_and_exhausted_budgets() {
 
 /// H2. Reporting, snapshots, refusals and lending cannot consume the owner;
 /// a panicking borrower or cleanup adapter unwinds through its own frames
-/// only.
+/// only (and is an actual failure).
 #[test]
 fn h02_reporting_snapshots_and_lending_cannot_consume_the_owner() {
     let mut lab = Lab::new(TEST);
@@ -689,15 +1408,18 @@ fn h02_reporting_snapshots_and_lending_cannot_consume_the_owner() {
     );
     assert_eq!(
         (outcome.passed, outcome.resolved, outcome.stopped),
-        (false, true, false)
+        (false, true, true)
     );
     assert_eq!(cleanup.attempts_on(token), 2);
     assert_eq!(lab.released(), vec![token], "the same owner is released");
-    assert_eq!(count(&lab.snap(), FailureClass::UnexpectedCleanup), 1);
+    let snapshot = lab.snap();
+    assert_eq!(count(&snapshot, FailureClass::UnexpectedCleanup), 1);
+    assert_eq!(count(&snapshot, FailureClass::Assertion), 1);
 }
 
 /// H3. A later explicit recovery resolves the run without erasing the
-/// earlier failure, and durable completion still needs every record.
+/// earlier failure, and the run is final only once its evidence, ending in
+/// its terminal record, is acknowledged.
 #[test]
 fn h03_explicit_recovery_resolves_without_erasing_earlier_failure() {
     let mut lab = Lab::new(TEST);
@@ -733,7 +1455,7 @@ fn h03_explicit_recovery_resolves_without_erasing_earlier_failure() {
     let snapshot = lab.snap();
     assert_eq!(
         (snapshot.phase, snapshot.verdict),
-        (RunPhase::Complete, Verdict::Failed),
+        (RunPhase::Candidate, Verdict::Failed),
         "recovery never turns a failure into a pass"
     );
     assert_eq!(snapshot.recovery.resolved_by, Some(2));
@@ -741,12 +1463,13 @@ fn h03_explicit_recovery_resolves_without_erasing_earlier_failure() {
     assert!(snapshot.failures.iter().any(|failure| {
         failure.class == FailureClass::UnexpectedCleanup && failure.case == Some(CaseId(1))
     }));
-    assert_eq!(
-        snapshot.evidence.reserved, 0,
-        "every reserved record was issued or released"
+    let decision = lab.c().shutdown_decision();
+    assert!(
+        is_refused_with(&decision, Unresolved::RunEnding),
+        "{decision:?}"
     );
 
-    lab.flush();
+    lab.ack_all();
     let records = lab.records();
     assert!(records.contains(&RecordKind::RecoveryAttempt {
         attempt: 1,
@@ -763,14 +1486,21 @@ fn h03_explicit_recovery_resolves_without_erasing_earlier_failure() {
             resolved_by: Some(2)
         })
     );
-
-    assert!(only_evidence_pending(&lab.c().shutdown_decision()));
-    lab.ack_all();
+    let snapshot = lab.snap();
+    assert_eq!(snapshot.phase, RunPhase::Finalized);
+    assert_eq!(
+        snapshot.evidence.reserved, 2,
+        "only the two unused recovery attempts stay reserved"
+    );
     assert_eq!(lab.c().shutdown_decision(), ShutdownDecision::Permitted);
     let closed = lab.close().expect("closes once resolved and durable");
     assert_eq!(
-        (closed.verdict, closed.resolved_by, closed.durable),
-        (Verdict::Failed, Some(2), true)
+        (closed.verdict, closed.resolved_by, closed.terminal),
+        (
+            Verdict::Failed,
+            Some(2),
+            lab.terminal_record().map(|(id, _)| id)
+        )
     );
     assert_eq!(
         closed.failure_counts[FailureClass::UnexpectedCleanup.index()],
@@ -810,7 +1540,7 @@ fn h04_shutdown_is_refused_while_native_or_evidence_state_is_unresolved() {
             .admission
             .closure
             .map(|closure| closure.reason),
-        Some(CancelReason::Shutdown),
+        Some(ClosureReason::Cancelled(CancelReason::Shutdown)),
         "a shutdown request closes admission"
     );
     assert_eq!(
@@ -845,11 +1575,14 @@ fn h04_shutdown_is_refused_while_native_or_evidence_state_is_unresolved() {
         }
     );
     let decision = lab.request_shutdown();
-    assert!(only_evidence_pending(&decision), "{decision:?}");
+    assert!(
+        is_refused_with(&decision, Unresolved::RunEnding),
+        "{decision:?}"
+    );
     lab.ack_all();
     assert_eq!(lab.request_shutdown(), ShutdownDecision::Permitted);
     let closed = lab.close().expect("closes once nothing is unresolved");
-    assert!(closed.durable);
+    assert_eq!(closed.terminal, lab.terminal_record().map(|(id, _)| id));
     let released: Vec<u64> = closed
         .released
         .iter()
@@ -900,7 +1633,7 @@ fn h05_cancellation_before_admission_prevents_native_creation() {
     assert_eq!(
         receipt.closure,
         Closure {
-            reason: CancelReason::Requested,
+            reason: ClosureReason::Cancelled(CancelReason::Requested),
             at: now,
             after: 0
         }
@@ -1072,7 +1805,7 @@ fn h06_cancellation_after_admission_still_adopts_the_later_owner() {
     let snapshot = lab.snap();
     assert_eq!(
         (snapshot.phase, snapshot.verdict),
-        (RunPhase::Complete, Verdict::Failed)
+        (RunPhase::Candidate, Verdict::Failed)
     );
     assert_eq!(count(&snapshot, FailureClass::Cancelled), 1);
 
@@ -1159,7 +1892,7 @@ fn h07_status_never_renews_the_lease() {
         .expect("losing the lease closes admission");
     assert_eq!(
         (closure.reason, closure.at),
-        (CancelReason::LeaseLost, deadline)
+        (ClosureReason::Cancelled(CancelReason::LeaseLost), deadline)
     );
     let cap = lab.cap.take().expect("the run's lease capability");
     assert_eq!(
@@ -1171,7 +1904,7 @@ fn h07_status_never_renews_the_lease() {
     assert_eq!(lab.c().observe_control(now), Ok(Some(closure)));
     assert_eq!(
         lab.snap().phase,
-        RunPhase::Complete,
+        RunPhase::Candidate,
         "an idle run stops at its next safe point"
     );
 
@@ -1381,8 +2114,10 @@ fn h08_stalled_adapters_do_not_block_the_control_side() {
 
 /// H9. An expected retained boundary (an injected negative control) passes
 /// only when it was observed and its first cleanup attempt confirmed every
-/// required fact; a confirmation by a later attempt does not satisfy it, and
-/// the expected condition itself is never a failure.
+/// fact, complete output included; a confirmation by a later attempt does
+/// not satisfy it, and the expected condition itself is never a failure. A
+/// passing control lets the next case begin only once its evidence is
+/// acknowledged.
 #[test]
 fn h09_expected_retained_boundary_needs_its_first_attempt_to_confirm() {
     let mut lab = Lab::new(TEST);
@@ -1395,8 +2130,14 @@ fn h09_expected_retained_boundary_needs_its_first_attempt_to_confirm() {
         Some(true)
     );
     assert_eq!(
-        snapshot.failure_counts, [0; 9],
+        snapshot.failure_counts,
+        [0; FailureClass::COUNT],
         "the expected condition is not a failure"
+    );
+    assert_eq!(
+        lab.control.status().control.admission.closure,
+        None,
+        "an expected condition does not close admission"
     );
     let held = only_entry(&snapshot);
     assert_eq!(
@@ -1414,8 +2155,22 @@ fn h09_expected_retained_boundary_needs_its_first_attempt_to_confirm() {
         }
     );
     assert_eq!(lab.released(), vec![token]);
+    assert_eq!(lab.control.status().control.admission.closure, None);
     let now = lab.now();
-    assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Complete));
+    assert_eq!(
+        lab.c().begin_case(CaseId(2), Expectation::Clean, now),
+        Err(Refusal::EvidencePending),
+        "the next case waits for the control's evidence"
+    );
+    lab.ack_all();
+    let now = lab.now();
+    assert_eq!(
+        lab.c().begin_case(CaseId(2), Expectation::Clean, now),
+        Ok(())
+    );
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
+    assert!(outcome.passed);
+    assert_eq!(lab.finish(), RunPhase::Finalized);
     assert_eq!(lab.snap().verdict, Verdict::Passed);
 
     for (first, why) in [
@@ -1430,7 +2185,11 @@ fn h09_expected_retained_boundary_needs_its_first_attempt_to_confirm() {
         let (_, token) = lab.deposit(SlotKind::Process, true);
         let mut cleanup = Scripted::always(Plan::Confirm).first(SlotKind::Process, &[first]);
         let outcome = lab.end_case(&mut cleanup);
-        assert_eq!((outcome.passed, outcome.resolved), (false, true), "{why}");
+        assert_eq!(
+            (outcome.passed, outcome.resolved, outcome.stopped),
+            (false, true, true),
+            "{why}"
+        );
         assert_eq!(cleanup.attempts_on(token), 2, "{why}");
         assert_eq!(lab.released(), vec![token], "{why}");
         let snapshot = lab.snap();
@@ -1441,6 +2200,18 @@ fn h09_expected_retained_boundary_needs_its_first_attempt_to_confirm() {
         );
         assert_eq!(snapshot.cases_failed, 1, "{why}");
     }
+
+    // A first attempt that detaches the output does not confirm every fact.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::RetainedBoundary);
+    let (_, token) = lab.deposit(SlotKind::Process, true);
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Detached));
+    assert!(!outcome.passed && outcome.resolved);
+    assert_eq!(lab.released(), vec![token]);
+    let snapshot = lab.snap();
+    assert_eq!(count(&snapshot, FailureClass::ExpectedConditionUnmet), 1);
+    assert_eq!(count(&snapshot, FailureClass::OutputLost), 1);
 
     let mut lab = Lab::new(TEST);
     lab.start();
@@ -1486,10 +2257,10 @@ fn h10_unexpected_failure_stays_failed_after_recovery() {
     );
     assert_eq!(
         (snapshot.phase, snapshot.verdict),
-        (RunPhase::Complete, Verdict::Failed)
+        (RunPhase::Candidate, Verdict::Failed)
     );
     assert_eq!(lab.released(), vec![token]);
-    lab.flush();
+    lab.ack_all();
     assert_eq!(
         lab.records().last(),
         Some(&RecordKind::RunEnded {
@@ -1497,6 +2268,7 @@ fn h10_unexpected_failure_stays_failed_after_recovery() {
             resolved_by: Some(1)
         })
     );
+    assert_eq!(lab.snap().phase, RunPhase::Finalized);
 }
 
 /// H11. A workspace or fixture is released only after the native tree that
@@ -1731,7 +2503,7 @@ fn h12_unknown_outcome_blocks_launch_discard_and_fresh_admission() {
 
 /// H13. Late, stale and duplicate results cannot act on another operation:
 /// they resolve nothing, replace nothing and reopen nothing; an owner they
-/// bring is held as unexpected (or returned past the bound), never dropped.
+/// bring is a late incident (or returned past the bound), never dropped.
 #[test]
 fn h13_late_stale_and_duplicate_results_cannot_act_on_another_operation() {
     let mut lab = Lab::new(TEST);
@@ -1785,7 +2557,7 @@ fn h13_late_stale_and_duplicate_results_cannot_act_on_another_operation() {
     let now = lab.now();
     assert!(matches!(
         lab.c().complete(&first, NativeOutcome::Created(late), now),
-        Ok(Completion::Unexpected(_))
+        Ok(Completion::Late { .. })
     ));
     assert!(
         in_flight(&lab),
@@ -1807,7 +2579,7 @@ fn h13_late_stale_and_duplicate_results_cannot_act_on_another_operation() {
     assert!(matches!(
         lab.c()
             .complete(&second, NativeOutcome::Created(duplicate), now),
-        Ok(Completion::Unexpected(_))
+        Ok(Completion::Late { .. })
     ));
     let extra = lab.native.produce(&second);
     let extra_token = extra.token;
@@ -1831,7 +2603,11 @@ fn h13_late_stale_and_duplicate_results_cannot_act_on_another_operation() {
         .map(|view| view.entry)
         .collect();
     assert_eq!(placed, vec![entry], "the held owner was not replaced");
-    assert_eq!(count(&snapshot, FailureClass::UnexpectedOwner), 2);
+    assert_eq!(
+        count(&snapshot, FailureClass::LateOwner),
+        3,
+        "two held late owners and one returned are all failures"
+    );
 
     let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
     assert!(outcome.resolved && !outcome.passed);
@@ -1942,10 +2718,11 @@ fn h14_capacity_reservation_prevents_unrecordable_admission() {
     );
     assert!(lab.native.produced.is_empty() && lab.snap().operation.is_none());
 
-    let mut lab = Lab::new(Config {
+    let exact = Config {
         record_capacity: TEST.control_reserve + needed,
         ..TEST
-    });
+    };
+    let mut lab = Lab::new(exact);
     lab.start();
     lab.begin(1, Expectation::Clean);
     let now = lab.now();
@@ -1973,9 +2750,9 @@ fn h14_capacity_reservation_prevents_unrecordable_admission() {
         .c()
         .admit(reservation, now)
         .expect("admitted once its start is durable");
-    let evidence = lab.snap().evidence.clone();
+    let snapshot = lab.snap();
     assert_eq!(
-        evidence.issued + u64::from(evidence.reserved),
+        general_issued(&snapshot, &exact) + u64::from(snapshot.evidence.reserved),
         u64::from(needed),
         "everything the action may need is reserved"
     );
@@ -2010,13 +2787,16 @@ fn h14_capacity_reservation_prevents_unrecordable_admission() {
         }
     );
     assert_eq!(lab.released(), vec![token]);
-    let evidence = lab.snap().evidence.clone();
+    lab.ack_all();
+    let snapshot = lab.snap();
     assert_eq!(
-        (evidence.issued, evidence.reserved),
+        (
+            general_issued(&snapshot, &exact),
+            snapshot.evidence.reserved
+        ),
         (u64::from(needed), 0),
         "every record was recorded within capacity"
     );
-    lab.flush();
     assert_eq!(
         lab.records().last(),
         Some(&RecordKind::RunEnded {
@@ -2024,12 +2804,13 @@ fn h14_capacity_reservation_prevents_unrecordable_admission() {
             resolved_by: Some(last)
         })
     );
+    assert_eq!(snapshot.phase, RunPhase::Finalized);
 }
 
 /// H15. Physical cleanup and recording failure stay distinct: the owner's
 /// end stays confirmed and the owner is not recreated, the settlement stays
-/// not durable, admission stays closed and completion is never claimed
-/// durable.
+/// not durable, admission stays closed, and closure is refused because
+/// required evidence is unresolved.
 #[test]
 fn h15_physical_cleanup_and_recording_failure_stay_distinct() {
     let mut lab = Lab::new(TEST);
@@ -2076,17 +2857,14 @@ fn h15_physical_cleanup_and_recording_failure_stay_distinct() {
     );
     assert_eq!(count(&snapshot, FailureClass::RecordFailed), 1);
     assert_eq!(
-        (snapshot.phase, snapshot.verdict),
-        (RunPhase::Complete, Verdict::Failed)
+        (snapshot.phase, snapshot.verdict, snapshot.terminal),
+        (RunPhase::Candidate, Verdict::Failed, None),
+        "no terminal record after failed evidence"
     );
-    let closure = lab
-        .control
-        .status()
-        .control
-        .admission
-        .closure
-        .expect("a recording failure closes admission");
-    assert_eq!(closure.reason, CancelReason::RecordFailed);
+    assert_eq!(
+        closed_by_failure(lab.control.status().control.admission.closure),
+        Some(FailureClass::RecordFailed)
+    );
     let now = lab.now();
     assert!(matches!(
         lab.c().begin_case(CaseId(2), Expectation::Clean, now),
@@ -2098,14 +2876,21 @@ fn h15_physical_cleanup_and_recording_failure_stay_distinct() {
         AckOutcome::LedgerFailed,
         "nothing makes it durable later"
     );
-    assert_eq!(
-        lab.c().shutdown_decision(),
-        ShutdownDecision::PermittedWithoutDurableCompletion
+    let decision = lab.c().shutdown_decision();
+    assert!(
+        is_refused_with(
+            &decision,
+            Unresolved::EvidenceFailed {
+                record: settlement.id,
+                at: snapshot.evidence.failed.map(|(_, at)| at).expect("failed")
+            }
+        ),
+        "[evidence-close] {decision:?}"
     );
-    let closed = lab.close().expect("nothing native is unresolved");
-    assert!(!closed.durable);
-    assert_eq!(closed.verdict, Verdict::Failed);
-    assert!(closed.released.is_empty());
+    assert!(
+        lab.close().is_none(),
+        "[evidence-close] closed while required evidence failed"
+    );
     assert_eq!(lab.native.produced.len(), 1, "the owner was not recreated");
     assert!(lab.dropped().is_empty());
 }
@@ -2327,7 +3112,7 @@ fn h17_no_api_path_exits_aborts_leaks_or_drops_unresolved_ownership() {
         .record_assertion_failure("an observation failed", now)
         .expect("recorded");
     let now = lab.now();
-    assert_eq!(lab.c().observe_control(now), Ok(None));
+    assert!(lab.c().observe_control(now).is_ok());
     let now = lab.now();
     assert!(lab.c().finish_run(now).is_err());
     let now = lab.now();
@@ -2392,8 +3177,13 @@ fn h17_no_api_path_exits_aborts_leaks_or_drops_unresolved_ownership() {
         Err(Rejected::ClockRegression { owner: None })
     ));
     held(&lab, "earlier instants");
-    let now = lab.now();
-    assert!(lab.c().observe_control(now).is_ok());
+    assert!(matches!(
+        lab.retry(&mut failing),
+        Response::Retried {
+            resolved: false,
+            ..
+        }
+    ));
     lab.flush();
     let next = lab.journal.submitted[lab.acked].id;
     let now = lab.now();
@@ -2402,6 +3192,8 @@ fn h17_no_api_path_exits_aborts_leaks_or_drops_unresolved_ownership() {
         AckOutcome::FailureRecorded
     );
     held(&lab, "a recording failure");
+    assert!(lab.close().is_none());
+    held(&lab, "a refused close after failed evidence");
 }
 
 /// The adversarial events: every way the control side, the native
@@ -2413,29 +3205,37 @@ enum Event {
     Timeout,
     Late,
     LateNone,
+    LateDetached,
     EndFail,
     EndOk,
+    EndDetached,
+    Assert,
     StaleAck,
     RecordFail,
     RetryOk,
     RetryFail,
     AckAll,
+    Shutdown,
     Close,
 }
 
-const EVENTS: [Event; 13] = [
+const EVENTS: [Event; 17] = [
     Event::Admit,
     Event::Cancel,
     Event::Timeout,
     Event::Late,
     Event::LateNone,
+    Event::LateDetached,
     Event::EndFail,
     Event::EndOk,
+    Event::EndDetached,
+    Event::Assert,
     Event::StaleAck,
     Event::RecordFail,
     Event::RetryOk,
     Event::RetryFail,
     Event::AckAll,
+    Event::Shutdown,
     Event::Close,
 ];
 
@@ -2447,7 +3247,7 @@ const ADVERSARIAL: Config = Config {
     record_capacity: 48,
     control_reserve: 2,
     receipt_limit: 2,
-    unexpected_limit: 1,
+    late_limit: 1,
     failure_detail_limit: 4,
     detail_chars: 32,
     incident_limit: 0,
@@ -2458,12 +3258,27 @@ const ADVERSARIAL: Config = Config {
 struct Coverage {
     adopted_after_cancel: bool,
     unknown_resolved: bool,
-    stray_held: bool,
-    stray_returned: bool,
+    late_held: bool,
+    late_returned: bool,
     record_failed: bool,
     recovered: bool,
-    reopened: bool,
+    fail_stop_refused: bool,
+    next_case_refused: bool,
+    post_terminal_refused: bool,
+    late_after_terminal: bool,
+    output_lost: bool,
+    evidence_close_refused: bool,
     closed: bool,
+}
+
+/// The oracle's own facts, taken from what the custody published (its
+/// snapshots, its records and its answers), never from its phases.
+#[derive(Debug, Default)]
+struct Oracle {
+    /// Admissions and the case when an actual failure was first published.
+    failed_at: Option<(u64, Option<CaseId>)>,
+    /// The acknowledged terminal record and the verdict it carries.
+    terminal: Option<(RecordId, Verdict)>,
 }
 
 /// One adversarial run: a lab, every ticket it issued, and what was last
@@ -2477,6 +3292,7 @@ struct Adversary {
     last_control: ControlView,
     trail: Vec<Event>,
     coverage: Coverage,
+    oracle: Oracle,
 }
 
 impl Adversary {
@@ -2493,6 +3309,7 @@ impl Adversary {
             last_control: status.control,
             trail: Vec::new(),
             coverage: Coverage::default(),
+            oracle: Oracle::default(),
         };
         for event in events {
             adversary.apply(*event);
@@ -2512,7 +3329,8 @@ impl Adversary {
             .filter(|op| !matches!(op.phase, OpPhase::Reserved))
             .map(|op| op.action);
         let bound = open.is_some() && self.tickets.last().map(OpTicket::action) == open;
-        let resolving = bound && matches!(event, Event::Late | Event::LateNone);
+        let resolving =
+            bound && matches!(event, Event::Late | Event::LateNone | Event::LateDetached);
         match event {
             Event::Admit => self.admit(),
             Event::Cancel => {
@@ -2526,13 +3344,17 @@ impl Adversary {
             Event::LateNone => self.complete(|_, ticket| {
                 NativeOutcome::NoEffect(NoEffectProof::for_ticket(ticket, "late refusal"))
             }),
+            Event::LateDetached => self.complete(|_, _| NativeOutcome::Ended(DETACHED_END)),
             Event::EndFail => self.end(Plan::Fail),
             Event::EndOk => self.end(Plan::Confirm),
+            Event::EndDetached => self.end(Plan::Detached),
+            Event::Assert => self.assert(),
             Event::StaleAck => self.stale_ack(),
             Event::RecordFail => self.record_fail(),
-            Event::RetryOk => self.retry(Plan::Confirm),
-            Event::RetryFail => self.retry(Plan::Fail),
+            Event::RetryOk => self.request(RequestOp::Retry { epoch: 0 }, Plan::Confirm),
+            Event::RetryFail => self.request(RequestOp::Retry { epoch: 0 }, Plan::Fail),
             Event::AckAll => self.lab.try_ack_all(),
+            Event::Shutdown => self.request(RequestOp::Shutdown, Plan::Fail),
             Event::Close => self.close(),
         }
         if self.closed.is_none() {
@@ -2544,7 +3366,9 @@ impl Adversary {
     fn admit(&mut self) {
         let kinds = [SlotKind::Process, SlotKind::Workspace, SlotKind::Fixture];
         let kind = kinds[self.tickets.len() % kinds.len()];
+        let failed = self.oracle.failed_at.is_some();
         if self.lab.snap().case.is_none() {
+            self.lab.try_ack_all();
             self.cases += 1;
             let now = self.lab.now();
             let case = CaseId(self.cases);
@@ -2554,17 +3378,20 @@ impl Adversary {
                 .begin_case(case, Expectation::Clean, now)
                 .is_err()
             {
+                self.coverage.next_case_refused |= failed;
                 return;
             }
         }
         let now = self.lab.now();
         let Ok(reservation) = self.lab.c().reserve(kind, now) else {
+            self.coverage.fail_stop_refused |= failed;
             return;
         };
         self.lab.try_ack_all();
         let now = self.lab.now();
-        if let Ok(ticket) = self.lab.c().admit(reservation, now) {
-            self.tickets.push(ticket);
+        match self.lab.c().admit(reservation, now) {
+            Ok(ticket) => self.tickets.push(ticket),
+            Err(_) => self.coverage.fail_stop_refused |= failed,
         }
     }
 
@@ -2575,12 +3402,20 @@ impl Adversary {
         let outcome = make(&mut self.lab.native, ticket);
         let now = self.lab.now();
         let custody = self.lab.custody.as_mut().expect("the custody is open");
-        if let Err(rejected) = custody.complete(ticket, outcome, now) {
-            if matches!(rejected, Rejected::CustodyFull { .. }) {
-                self.coverage.stray_returned = true;
+        match custody.complete(ticket, outcome, now) {
+            Ok(Completion::Late { .. }) => {
+                self.coverage.late_held = true;
+                self.coverage.late_after_terminal |= self.oracle.terminal.is_some();
             }
-            if let Some(owner) = rejected.into_owner() {
-                self.lab.returned.push(owner);
+            Ok(Completion::OutputLost) => self.coverage.output_lost = true,
+            Ok(_) => {}
+            Err(rejected) => {
+                if matches!(rejected, Rejected::CustodyFull { .. }) {
+                    self.coverage.late_returned = true;
+                }
+                if let Some(owner) = rejected.into_owner() {
+                    self.lab.returned.push(owner);
+                }
             }
         }
     }
@@ -2595,6 +3430,19 @@ impl Adversary {
                 .expect("an active case ends");
         } else {
             let _ = self.lab.c().finish_run(now);
+        }
+    }
+
+    fn assert(&mut self) {
+        let now = self.lab.now();
+        let result = self.lab.c().record_assertion_failure("adversarial", now);
+        if self.oracle.terminal.is_some() {
+            assert!(
+                result.is_err(),
+                "{:?}: an assertion was accepted after the terminal record was acknowledged",
+                self.trail
+            );
+            self.coverage.post_terminal_refused = true;
         }
     }
 
@@ -2637,19 +3485,25 @@ impl Adversary {
         let next = self.lab.snap().evidence.acknowledged as usize;
         if let Some(id) = self.lab.journal.submitted.get(next).map(|intent| intent.id) {
             let now = self.lab.now();
-            let _ = self.lab.c().record_failed(id, now);
+            if self.lab.c().record_failed(id, now) == AckOutcome::FailureRecorded {
+                self.coverage.record_failed = true;
+            }
         }
     }
 
-    fn retry(&mut self, plan: Plan) {
+    fn request(&mut self, op: RequestOp, plan: Plan) {
         let mut cleanup = Scripted::always(plan);
         self.lab.seq += 1;
+        let op = match op {
+            RequestOp::Retry { .. } => RequestOp::Retry {
+                epoch: self.lab.snap().recovery.epoch,
+            },
+            RequestOp::Shutdown => RequestOp::Shutdown,
+        };
         let request = Request {
             generation: GENERATION,
             seq: self.lab.seq,
-            op: RequestOp::Retry {
-                epoch: self.lab.snap().recovery.epoch,
-            },
+            op,
         };
         let now = self.lab.later(ADVERSARIAL.recovery_spacing_millis);
         let outcome = self.lab.serve(request, &mut cleanup, now);
@@ -2658,24 +3512,61 @@ impl Adversary {
             "{:?}: a fresh request was not executed: {outcome:?}",
             self.trail
         );
+        if matches!(
+            outcome,
+            RequestOutcome::Executed(Response::Retried { resolved: true, .. })
+        ) {
+            self.coverage.recovered = true;
+        }
     }
 
     fn close(&mut self) {
+        let before = self.lab.snap();
         let refused = matches!(
             self.lab.c().shutdown_decision(),
             ShutdownDecision::Refused(_)
         );
+        let evidence_unresolved = before.evidence.failed.is_some()
+            || before.evidence.acknowledged < before.evidence.issued;
         match self.lab.close() {
             Some(closed) => {
-                assert!(!refused, "{:?}: closed while refused", self.trail);
+                let trail = &self.trail;
+                assert!(!refused, "{trail:?}: closed while refused");
+                assert!(
+                    !evidence_unresolved,
+                    "{trail:?}: closed with evidence pending or failed"
+                );
+                assert!(
+                    before.entries.is_empty() && before.operation.is_none(),
+                    "{trail:?}: closed holding native state"
+                );
+                // The closed result reports exactly the acknowledged
+                // terminal record.
+                assert_eq!(
+                    closed.terminal,
+                    self.oracle.terminal.map(|(record, _)| record),
+                    "{trail:?}"
+                );
+                assert_eq!(
+                    closed.verdict,
+                    self.oracle
+                        .terminal
+                        .map_or(Verdict::Pending, |(_, verdict)| verdict),
+                    "{trail:?}"
+                );
+                assert_eq!(closed.records, before.evidence.issued, "{trail:?}");
                 self.closed = Some(closed);
                 self.coverage.closed = true;
             }
-            None => assert!(refused, "{:?}: not closed while permitted", self.trail),
+            None => {
+                assert!(refused, "{:?}: not closed while permitted", self.trail);
+                self.coverage.evidence_close_refused |= before.evidence.failed.is_some();
+            }
         }
     }
 
     fn check(&mut self, event: Event, resolving: bool, open: Option<ActionId>) {
+        let known_terminal = self.oracle.terminal;
         let trail = &self.trail;
         let status = self.lab.control.status();
         let now = &status.snapshot;
@@ -2701,8 +3592,8 @@ impl Adversary {
             ),
         }
 
-        // Admission: one ticket per admission, none after the closure, and
-        // the closure never changes.
+        // Admission: one ticket per admission, the closure never changes and
+        // nothing is admitted after it.
         let control = status.control;
         if let Some(closure) = self.last_control.admission.closure {
             assert_eq!(
@@ -2715,16 +3606,46 @@ impl Adversary {
                 "{trail:?}: admitted after the closure"
             );
         }
-        if let Some(closure) = control.admission.closure {
-            assert!(closure.after <= control.admission.admitted);
-        }
         assert_eq!(
             control.admission.admitted,
             self.tickets.len() as u64,
             "{trail:?}: an admission without exactly one ticket"
         );
 
-        // Failures and the verdict only accumulate.
+        // Fail-stop: from the first published actual failure (or evidence
+        // failure) on, nothing more is admitted and no other case begins.
+        let failed_now =
+            now.failure_counts.iter().any(|count| *count > 0) || now.evidence.failed.is_some();
+        match self.oracle.failed_at {
+            Some((admitted, case)) => {
+                assert_eq!(
+                    control.admission.admitted, admitted,
+                    "{trail:?}: admitted after an actual failure"
+                );
+                let current = now.case.as_ref().map(|view| view.case);
+                assert!(
+                    current.is_none() || current == case,
+                    "{trail:?}: a case began after an actual failure"
+                );
+                assert!(
+                    control.admission.closure.is_some(),
+                    "{trail:?}: an actual failure left admission open"
+                );
+            }
+            None if failed_now => {
+                assert!(
+                    control.admission.closure.is_some(),
+                    "{trail:?}: an actual failure left admission open"
+                );
+                self.oracle.failed_at = Some((
+                    control.admission.admitted,
+                    now.case.as_ref().map(|view| view.case),
+                ));
+            }
+            None => {}
+        }
+
+        // Failures and faults only accumulate, and a failed verdict stays.
         if before.verdict == Verdict::Failed {
             assert_eq!(
                 now.verdict,
@@ -2732,13 +3653,18 @@ impl Adversary {
                 "{trail:?}: a failed verdict changed"
             );
         }
-        assert!(
-            now.failure_counts
-                .iter()
-                .zip(before.failure_counts.iter())
-                .all(|(now, before)| now >= before),
-            "{trail:?}: a failure count fell"
-        );
+        for (now_counts, before_counts) in [
+            (&now.failure_counts, &before.failure_counts),
+            (&now.fault_counts, &before.fault_counts),
+        ] {
+            assert!(
+                now_counts
+                    .iter()
+                    .zip(before_counts.iter())
+                    .all(|(now, before)| now >= before),
+                "{trail:?}: a failure count fell"
+            );
+        }
         assert!(
             now.failures.starts_with(&before.failures),
             "{trail:?}: a recorded failure changed"
@@ -2750,10 +3676,9 @@ impl Adversary {
         assert!(evidence.acknowledged <= evidence.issued);
         assert!(evidence.acknowledged >= before.evidence.acknowledged);
         assert!(evidence.issued >= before.evidence.issued);
-        let control_used = u64::from(ADVERSARIAL.control_reserve - evidence.control_left);
-        let general = evidence.issued - control_used + u64::from(evidence.reserved);
         assert!(
-            general <= u64::from(ADVERSARIAL.record_capacity - ADVERSARIAL.control_reserve),
+            general_issued(now, &ADVERSARIAL) + u64::from(evidence.reserved)
+                <= u64::from(ADVERSARIAL.record_capacity - ADVERSARIAL.control_reserve),
             "{trail:?}: evidence beyond capacity"
         );
         if before.evidence.failed.is_some() {
@@ -2763,21 +3688,123 @@ impl Adversary {
             );
         }
 
-        // Phases move only forward, except that an owner arriving after
-        // completion requires recovery again.
-        let legal = before.phase == now.phase
-            || matches!(
-                (before.phase, now.phase),
-                (
-                    RunPhase::Running,
-                    RunPhase::RecoveryRequired | RunPhase::Complete
-                ) | (RunPhase::RecoveryRequired, RunPhase::Complete)
-                    | (
-                        RunPhase::Complete,
-                        RunPhase::RecoveryRequired | RunPhase::Closed
-                    )
+        // Records, as the recorder received them.
+        if self.closed.is_none() {
+            self.lab.flush();
+        }
+        let records = &self.lab.journal.submitted;
+        let acknowledged = self.lab.snap().evidence.acknowledged as usize;
+        let terminals: Vec<(usize, RecordId, Verdict)> = records
+            .iter()
+            .enumerate()
+            .filter_map(|(index, intent)| match intent.kind {
+                RecordKind::RunEnded { verdict, .. } => Some((index, intent.id, verdict)),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            terminals.len() <= 1,
+            "{trail:?}: more than one terminal record"
+        );
+        if let Some(&(index, record, verdict)) = terminals.first() {
+            // No case or action starts after the terminal record, and a run
+            // with an earlier actual failure or output loss never ends passed.
+            assert!(
+                records[index + 1..].iter().all(|intent| !matches!(
+                    intent.kind,
+                    RecordKind::CaseStarted { .. } | RecordKind::ActionStarted { .. }
+                )),
+                "{trail:?}: work after the terminal record"
             );
-        assert!(legal, "{trail:?}: {:?} -> {:?}", before.phase, now.phase);
+            let lost = records[..index].iter().any(|intent| {
+                matches!(
+                    intent.kind,
+                    RecordKind::ActionSettled {
+                        how: Settlement::OutputLost,
+                        ..
+                    } | RecordKind::IncidentOpened { .. }
+                        | RecordKind::ActionFailed { .. }
+                )
+            });
+            if lost {
+                assert_eq!(
+                    verdict,
+                    Verdict::Failed,
+                    "{trail:?}: a failure or output loss before the terminal record, yet it passed"
+                );
+            }
+            if index < acknowledged {
+                match self.oracle.terminal {
+                    Some(known) => assert_eq!(known, (record, verdict), "{trail:?}"),
+                    None => self.oracle.terminal = Some((record, verdict)),
+                }
+            }
+        }
+        // A settled action's lifecycle ends with its settlement; an incident
+        // has its own opening record and identity.
+        let mut settled: Vec<ActionId> = Vec::new();
+        let mut opened: Vec<IncidentId> = Vec::new();
+        for intent in records.iter() {
+            match intent.kind {
+                RecordKind::ActionSettled { action, .. } | RecordKind::ActionFailed { action } => {
+                    assert!(
+                        !settled.contains(&action),
+                        "{trail:?}: a settled action's lifecycle was reused"
+                    );
+                    if matches!(intent.kind, RecordKind::ActionSettled { .. }) {
+                        settled.push(action);
+                    }
+                }
+                RecordKind::IncidentOpened { incident, .. } => {
+                    assert!(!opened.contains(&incident), "{trail:?}: incident reused");
+                    opened.push(incident);
+                }
+                RecordKind::IncidentSettled { incident, .. } => {
+                    assert!(opened.contains(&incident), "{trail:?}: unopened incident");
+                }
+                _ => {}
+            }
+        }
+        let now = self.lab.snap();
+        // The published verdict: a pass only with its acknowledged terminal
+        // record, and once that record is acknowledged, exactly its verdict.
+        if now.verdict == Verdict::Passed {
+            assert_eq!(
+                self.oracle.terminal.map(|(_, verdict)| verdict),
+                Some(Verdict::Passed),
+                "{trail:?}: a pass published without its acknowledged terminal record"
+            );
+        }
+        if let Some((record, verdict)) = self.oracle.terminal {
+            assert_eq!(
+                now.verdict, verdict,
+                "{trail:?}: the finalized verdict changed"
+            );
+            assert_eq!(
+                now.terminal
+                    .map(|terminal| (terminal.record, terminal.acknowledged)),
+                Some((record, true)),
+                "{trail:?}"
+            );
+        }
+        if known_terminal.is_some() {
+            assert_eq!(
+                now.failure_counts, before.failure_counts,
+                "{trail:?}: a run failure after the terminal record was acknowledged"
+            );
+        }
+
+        // Nothing returns to running once it stopped, and a final run stays
+        // final.
+        if before.phase != RunPhase::Running && before.phase != RunPhase::NotStarted {
+            assert_ne!(now.phase, RunPhase::Running, "{trail:?}: the run reopened");
+        }
+        if before.phase == RunPhase::Finalized {
+            assert!(
+                matches!(now.phase, RunPhase::Finalized | RunPhase::Closed),
+                "{trail:?}"
+            );
+        }
 
         // An admitted operation resolves only by its own bound completion.
         if let Some(action) = open {
@@ -2801,11 +3828,18 @@ impl Adversary {
                 assert_eq!(
                     (
                         previous.action,
+                        previous.incident,
                         previous.kind,
                         previous.origin,
                         previous.since
                     ),
-                    (entry.action, entry.kind, entry.origin, entry.since),
+                    (
+                        entry.action,
+                        entry.incident,
+                        entry.kind,
+                        entry.origin,
+                        entry.since
+                    ),
                     "{trail:?}: a held entry changed identity"
                 );
                 assert!(entry.automatic_attempts >= previous.automatic_attempts);
@@ -2816,9 +3850,13 @@ impl Adversary {
         }
         assert!(now.recovery.attempts <= ADVERSARIAL.recovery_budget);
 
-        // Nothing unresolved may shut down.
+        // Nothing unresolved, pending or failed may close.
         if self.closed.is_none()
-            && (!now.entries.is_empty() || now.operation.is_some() || !now.lost.is_empty())
+            && (!now.entries.is_empty()
+                || now.operation.is_some()
+                || !now.lost.is_empty()
+                || now.evidence.failed.is_some()
+                || now.evidence.acknowledged < now.evidence.issued)
         {
             assert!(
                 matches!(
@@ -2828,7 +3866,6 @@ impl Adversary {
                 "{trail:?}: shutdown permitted while unresolved"
             );
         }
-        assert!(now.published >= before.published);
 
         let coverage = &mut self.coverage;
         if event == Event::Late
@@ -2848,23 +3885,7 @@ impl Adversary {
         if was_unknown && resolving && now.operation.is_none() {
             coverage.unknown_resolved = true;
         }
-        if now
-            .entries
-            .iter()
-            .any(|entry| entry.origin == Origin::Unexpected)
-        {
-            coverage.stray_held = true;
-        }
-        if evidence.failed.is_some() {
-            coverage.record_failed = true;
-        }
-        if now.recovery.resolved_by.is_some() {
-            coverage.recovered = true;
-        }
-        if before.phase == RunPhase::Complete && now.phase == RunPhase::RecoveryRequired {
-            coverage.reopened = true;
-        }
-        self.last = Arc::clone(&status.snapshot);
+        self.last = now;
         self.last_control = control;
     }
 }
@@ -2873,15 +3894,17 @@ impl Adversary {
 type Witnessed = (&'static [Event], fn(&Coverage) -> bool);
 
 /// The finite adversarial transition-sequence control: every sequence of
-/// four events (admit, cancel, timeout, late result, late refusal, failing
-/// and confirming case ends, stale acknowledgement, record failure, failing
-/// and confirming retries, acknowledgement and close), a deterministic sample
-/// of longer ones, and witness sequences proving each guarded state is
-/// reached; after every event, no owner was dropped and every invariant
-/// holds.
+/// four events (admit, cancel, timeout, late results with an owner, without
+/// one and with detached output, failing, confirming and detaching case ends,
+/// assertions, stale acknowledgements, record failures, failing and
+/// confirming retries, acknowledgement, shutdown and close), a deterministic
+/// sample of longer ones, and witness sequences proving each guarded state is
+/// reached. After every event an independent oracle (from published
+/// snapshots, records and answers, not phases) checks ownership, fail-stop,
+/// finalization, evidence, late-incident and output-loss contracts.
 #[test]
 fn h18_adversarial_transition_sequences_keep_every_invariant() {
-    let witnesses: [Witnessed; 8] = [
+    let witnesses: [Witnessed; 13] = [
         (
             &[Event::Admit, Event::Cancel, Event::Late, Event::EndOk],
             |coverage| coverage.adopted_after_cancel,
@@ -2891,11 +3914,11 @@ fn h18_adversarial_transition_sequences_keep_every_invariant() {
             |coverage| coverage.unknown_resolved,
         ),
         (&[Event::Admit, Event::LateNone, Event::Late], |coverage| {
-            coverage.stray_held
+            coverage.late_held
         }),
         (
             &[Event::Admit, Event::LateNone, Event::Late, Event::Late],
-            |coverage| coverage.stray_returned,
+            |coverage| coverage.late_returned,
         ),
         (
             &[Event::Admit, Event::Late, Event::EndOk, Event::RecordFail],
@@ -2905,15 +3928,54 @@ fn h18_adversarial_transition_sequences_keep_every_invariant() {
             &[Event::Admit, Event::Late, Event::EndFail, Event::RetryOk],
             |coverage| coverage.recovered,
         ),
+        (&[Event::Admit, Event::Assert, Event::Admit], |coverage| {
+            coverage.fail_stop_refused
+        }),
         (
             &[
                 Event::Admit,
-                Event::LateNone,
+                Event::Late,
+                Event::Assert,
+                Event::EndOk,
+                Event::Admit,
+            ],
+            |coverage| coverage.next_case_refused,
+        ),
+        (
+            &[
+                Event::Admit,
+                Event::Late,
                 Event::EndOk,
                 Event::EndOk,
+                Event::AckAll,
+                Event::Assert,
+            ],
+            |coverage| coverage.post_terminal_refused,
+        ),
+        (
+            &[
+                Event::Admit,
+                Event::Late,
+                Event::EndOk,
+                Event::EndOk,
+                Event::AckAll,
                 Event::Late,
             ],
-            |coverage| coverage.reopened,
+            |coverage| coverage.late_after_terminal,
+        ),
+        (
+            &[Event::Admit, Event::LateDetached, Event::EndOk],
+            |coverage| coverage.output_lost,
+        ),
+        (
+            &[
+                Event::Admit,
+                Event::Late,
+                Event::EndOk,
+                Event::RecordFail,
+                Event::Close,
+            ],
+            |coverage| coverage.evidence_close_refused,
         ),
         (
             &[
@@ -2948,8 +4010,8 @@ fn h18_adversarial_transition_sequences_keep_every_invariant() {
     assert_eq!(sequences, EVENTS.len().pow(4));
 
     let mut state = 0x5eed_c0de_u64;
-    for _ in 0..4_000 {
-        let mut events = [Event::Admit; 8];
+    for _ in 0..6_000 {
+        let mut events = [Event::Admit; 10];
         for event in &mut events {
             state = state
                 .wrapping_mul(6_364_136_223_846_793_005)
@@ -3073,8 +4135,8 @@ fn h19_replayed_evicted_conflicting_and_foreign_requests_execute_nothing() {
 }
 
 /// Prior incidents block the run until an external validator dispositions
-/// each, bound to exactly that incident; nothing else can, and the incident's
-/// own outcome is kept beside its disposition.
+/// each (before the run starts), bound to exactly that incident; nothing
+/// else can, and the incident's own outcome is kept beside its disposition.
 #[test]
 fn h20_prior_incidents_need_a_bound_external_disposition() {
     let unresolved = PriorIncident {
@@ -3136,6 +4198,11 @@ fn h20_prior_incidents_need_a_bound_external_disposition() {
             Err(Refusal::Undisposable)
         );
     }
+    assert_eq!(
+        lab.control.status().control.admission.closure,
+        None,
+        "a validator panic before the run is no run failure"
+    );
     let now = lab.now();
     assert_eq!(
         lab.c().apply_disposition(&resolved.binding, &bound, now),
@@ -3166,19 +4233,19 @@ fn h20_prior_incidents_need_a_bound_external_disposition() {
     );
 
     assert_eq!(
-        lab.snap().incidents,
+        lab.snap().prior,
         vec![
-            IncidentView {
+            PriorView {
                 binding: unresolved.binding,
                 outcome: unresolved.outcome,
                 disposition: Some(DispositionReason::OwnerDestroyed)
             },
-            IncidentView {
+            PriorView {
                 binding: malformed.binding,
                 outcome: malformed.outcome,
                 disposition: Some(DispositionReason::RecordsMalformed)
             },
-            IncidentView {
+            PriorView {
                 binding: resolved.binding,
                 outcome: resolved.outcome,
                 disposition: None
@@ -3190,12 +4257,18 @@ fn h20_prior_incidents_need_a_bound_external_disposition() {
         lab.records().first(),
         Some(&RecordKind::RunStarted { dispositioned: 2 })
     );
+    let now = lab.now();
+    assert_eq!(
+        lab.c().apply_disposition(&resolved.binding, &bound, now),
+        Err(Refusal::Phase(RunPhase::Running)),
+        "dispositions belong before the run"
+    );
 }
 
 /// Failure history is bounded: details up to the bound (escaped and
 /// truncated), beyond it only classified and counted; nothing clears it, and
-/// a failed case whose owners are resolved lets the run go on to its next
-/// case.
+/// a failed case stops the run (its successor is refused) however cleanly
+/// its owners were resolved.
 #[test]
 fn h21_failure_history_is_bounded_classified_and_never_cleared() {
     let mut lab = Lab::new(Config {
@@ -3231,25 +4304,26 @@ fn h21_failure_history_is_bounded_classified_and_never_cleared() {
     let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
     assert_eq!(
         (outcome.passed, outcome.resolved, outcome.stopped),
-        (false, true, false)
+        (false, true, true)
     );
-    lab.begin(2, Expectation::Clean);
-    let (_, token) = lab.create(SlotKind::Fixture);
-    let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
-    assert!(outcome.passed);
-    assert_eq!(lab.released(), vec![token]);
+    lab.ack_all();
     let now = lab.now();
-    assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Complete));
+    assert!(matches!(
+        lab.c().begin_case(CaseId(2), Expectation::Clean, now),
+        Err(Refusal::AdmissionClosed(_))
+    ));
     let snapshot = lab.snap();
     assert_eq!(
         (
+            snapshot.phase,
             snapshot.cases_passed,
             snapshot.cases_failed,
             snapshot.verdict
         ),
-        (1, 1, Verdict::Failed)
+        (RunPhase::Finalized, 0, 1, Verdict::Failed)
     );
     assert_eq!(count(&snapshot, FailureClass::Assertion), 10);
+    assert_eq!(snapshot.failure_overflow, 7);
 }
 
 /// The group's bounds: one open native operation, and one process tree, one
@@ -3308,5 +4382,582 @@ fn h22_group_bounds_refuse_before_creation() {
     assert_eq!(
         Custody::<Witness>::new(unrecordable, GENERATION, Vec::new(), Tick(0)).err(),
         Some(Refusal::Capacity)
+    );
+}
+
+/// A phase in which the public API is probed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum At {
+    NotStarted,
+    RunningCase,
+    RunningIdle,
+    FailedCase,
+    Recovery,
+    Candidate,
+    Finalizing,
+    Finalized,
+}
+
+const PHASES: [At; 8] = [
+    At::NotStarted,
+    At::RunningCase,
+    At::RunningIdle,
+    At::FailedCase,
+    At::Recovery,
+    At::Candidate,
+    At::Finalizing,
+    At::Finalized,
+];
+
+/// One probed public call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Call {
+    StartRun,
+    BeginCase,
+    Reserve,
+    Assert,
+    EndCase,
+    FinishRun,
+    Lend,
+    Retry,
+    Close,
+}
+
+/// A fresh lab in `at`, with an entry id held there (or held earlier).
+fn lab_at(at: At) -> (Lab, Option<EntryId>) {
+    let mut lab = Lab::new(TEST);
+    let mut entry = None;
+    if at != At::NotStarted {
+        lab.start();
+    }
+    if !matches!(at, At::NotStarted | At::RunningIdle) {
+        lab.begin(1, Expectation::Clean);
+        entry = Some(lab.create(SlotKind::Process).0);
+    }
+    match at {
+        At::NotStarted | At::RunningIdle | At::RunningCase => {}
+        At::FailedCase => {
+            let now = lab.now();
+            lab.c()
+                .record_assertion_failure("an observation failed", now)
+                .expect("recorded");
+        }
+        At::Recovery => {
+            lab.end_case(&mut Scripted::always(Plan::Fail));
+        }
+        At::Candidate | At::Finalizing | At::Finalized => {
+            lab.end_case(&mut Scripted::always(Plan::Confirm));
+            lab.released();
+            let now = lab.now();
+            lab.c().finish_run(now).expect("the run finishes");
+            match at {
+                At::Finalizing => {
+                    lab.flush();
+                    lab.ack_until(lab.journal.submitted.len());
+                }
+                At::Finalized => lab.ack_all(),
+                _ => {}
+            }
+        }
+    }
+    let phase = lab.snap().phase;
+    let expected = match at {
+        At::NotStarted => RunPhase::NotStarted,
+        At::RunningCase | At::RunningIdle | At::FailedCase => RunPhase::Running,
+        At::Recovery => RunPhase::RecoveryRequired,
+        At::Candidate => RunPhase::Candidate,
+        At::Finalizing => RunPhase::Finalizing,
+        At::Finalized => RunPhase::Finalized,
+    };
+    assert_eq!(phase, expected, "{at:?}");
+    (lab, entry)
+}
+
+/// Whether `call` is accepted in `at`.
+fn probe(at: At, call: Call) -> bool {
+    let (mut lab, entry) = lab_at(at);
+    let before = lab.snap();
+    let admission = lab.control.status().control.admission;
+    let now = lab.now();
+    let accepted = match call {
+        Call::StartRun => lab.c().start_run(now).is_ok(),
+        Call::BeginCase => lab
+            .c()
+            .begin_case(CaseId(9), Expectation::Clean, now)
+            .is_ok(),
+        Call::Reserve => lab.c().reserve(SlotKind::Fixture, now).is_ok(),
+        Call::Assert => lab.c().record_assertion_failure("probed", now).is_ok(),
+        Call::EndCase => lab
+            .c()
+            .end_case(&mut Scripted::always(Plan::Confirm), now)
+            .is_ok(),
+        Call::FinishRun => lab.c().finish_run(now).is_ok(),
+        Call::Lend => {
+            // An entry from a twin custody of the same generation where this
+            // phase never held one: refused by phase, or unknown here.
+            let entry = entry.unwrap_or_else(|| {
+                let mut twin = Lab::new(TEST);
+                twin.start();
+                twin.begin(1, Expectation::Clean);
+                twin.create(SlotKind::Process).0
+            });
+            lab.c().lend(entry, now, |owner| owner.token).is_ok()
+        }
+        Call::Retry => {
+            let request = Request {
+                generation: GENERATION,
+                seq: 1,
+                op: RequestOp::Retry { epoch: 0 },
+            };
+            matches!(
+                lab.serve(request, &mut Scripted::always(Plan::Confirm), now),
+                RequestOutcome::Executed(Response::Retried { .. })
+            )
+        }
+        Call::Close => lab.close().is_some(),
+    };
+    if !accepted && lab.custody.is_some() {
+        // A refusal changes nothing.
+        let after = lab.snap();
+        assert_eq!(
+            (
+                after.phase,
+                after.failure_counts,
+                after.evidence.issued,
+                after.entries.len()
+            ),
+            (
+                before.phase,
+                before.failure_counts,
+                before.evidence.issued,
+                before.entries.len()
+            ),
+            "{call:?} refused in {at:?} changed the custody"
+        );
+        assert_eq!(
+            lab.control.status().control.admission,
+            admission,
+            "{call:?} in {at:?}"
+        );
+    }
+    accepted
+}
+
+/// The public API's phase matrix, checked call by call in fresh labs: what
+/// each phase accepts, and that every refusal changes nothing. Terminal
+/// phases refuse every case-level mutation; only closure (once final) and
+/// reporting remain.
+#[test]
+fn h23_public_api_phase_matrix() {
+    use At::*;
+    let matrix: [(Call, &[At]); 9] = [
+        (Call::StartRun, &[NotStarted]),
+        (Call::BeginCase, &[RunningIdle]),
+        (Call::Reserve, &[RunningCase]),
+        (
+            Call::Assert,
+            &[RunningCase, RunningIdle, FailedCase, Recovery, Candidate],
+        ),
+        (Call::EndCase, &[RunningCase, FailedCase]),
+        (Call::FinishRun, &[RunningIdle]),
+        (Call::Lend, &[RunningCase, FailedCase, Recovery]),
+        (Call::Retry, &[Recovery]),
+        (Call::Close, &[NotStarted, Finalized]),
+    ];
+    for (call, accepting) in matrix {
+        for at in PHASES {
+            assert_eq!(
+                probe(at, call),
+                accepting.contains(&at),
+                "{call:?} in {at:?}"
+            );
+        }
+    }
+}
+
+/// The finalization boundary: a completion candidate issues its terminal
+/// record only once every earlier record is acknowledged, the run is final
+/// only when that record is acknowledged, no pass is published before, and
+/// the closed result, the final snapshot and the acknowledged records name
+/// the same outcome. A failure while a candidate is carried by the terminal
+/// record; a failing terminal record leaves the run unfinalized and the
+/// custody open.
+#[test]
+fn h24_finalization_boundary_candidate_terminal_and_final() {
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    lab.create(SlotKind::Process);
+    lab.end_case(&mut Scripted::always(Plan::Confirm));
+    lab.released();
+    let now = lab.now();
+    assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Candidate));
+    let decision = lab.c().shutdown_decision();
+    assert!(
+        is_refused_with(&decision, Unresolved::RunEnding),
+        "{decision:?}"
+    );
+    lab.flush();
+    let earlier = lab.journal.submitted.len();
+    lab.ack_until(earlier - 1);
+    let snapshot = lab.snap();
+    assert_eq!(
+        (snapshot.phase, snapshot.terminal, snapshot.verdict),
+        (RunPhase::Candidate, None, Verdict::Pending),
+        "no terminal record while an earlier record is pending"
+    );
+    lab.ack_until(earlier);
+    let snapshot = lab.snap();
+    let terminal = snapshot.terminal.expect("the terminal record is issued");
+    assert_eq!(
+        (
+            snapshot.phase,
+            terminal.verdict,
+            terminal.acknowledged,
+            snapshot.verdict
+        ),
+        (
+            RunPhase::Finalizing,
+            Verdict::Passed,
+            false,
+            Verdict::Pending
+        ),
+        "no pass before the terminal record is acknowledged"
+    );
+    assert!(is_refused_with(
+        &lab.c().shutdown_decision(),
+        Unresolved::TerminalPending(terminal.record)
+    ));
+    lab.flush();
+    assert_eq!(
+        lab.journal
+            .submitted
+            .last()
+            .map(|intent| (intent.id, intent.kind)),
+        Some((
+            terminal.record,
+            RecordKind::RunEnded {
+                verdict: Verdict::Passed,
+                resolved_by: None
+            }
+        )),
+        "the terminal record is the last"
+    );
+    lab.ack_all();
+    let snapshot = lab.snap();
+    assert_eq!(
+        (snapshot.phase, snapshot.verdict),
+        (RunPhase::Finalized, Verdict::Passed)
+    );
+    assert_eq!(lab.c().shutdown_decision(), ShutdownDecision::Permitted);
+    let records = lab.journal.submitted.len() as u64;
+    let closed = lab.close().expect("final and durable");
+    assert_eq!(
+        (closed.terminal, closed.verdict, closed.records),
+        (Some(terminal.record), Verdict::Passed, records)
+    );
+    let last = lab.snap();
+    assert_eq!(
+        (last.phase, last.verdict, last.evidence.acknowledged),
+        (RunPhase::Closed, Verdict::Passed, records)
+    );
+
+    // A failure while a candidate (its case records still pending) is
+    // carried by the terminal record.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+    let now = lab.now();
+    assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Candidate));
+    let now = lab.now();
+    lab.c()
+        .record_assertion_failure("observed before the end", now)
+        .expect("a candidate's verdict is still open");
+    lab.ack_all();
+    assert_eq!(
+        lab.terminal_record().map(|(_, verdict)| verdict),
+        Some(Verdict::Failed)
+    );
+    assert_eq!(lab.snap().verdict, Verdict::Failed);
+
+    // With nothing pending, the terminal record is issued at once.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    let now = lab.now();
+    assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Finalizing));
+
+    // A failing terminal record: never final, never closed, and the fault
+    // does not rewrite the verdict fixed in it.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+    let now = lab.now();
+    assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Candidate));
+    lab.flush();
+    lab.ack_until(lab.journal.submitted.len());
+    lab.flush();
+    let (record, verdict) = lab.terminal_record().expect("issued");
+    assert_eq!(verdict, Verdict::Passed);
+    let now = lab.now();
+    assert_eq!(
+        lab.c().record_failed(record, now),
+        AckOutcome::FailureRecorded
+    );
+    let snapshot = lab.snap();
+    assert_eq!(
+        (snapshot.phase, snapshot.verdict),
+        (RunPhase::Finalizing, Verdict::Pending)
+    );
+    assert_eq!(fault_count(&snapshot, FailureClass::RecordFailed), 1);
+    assert_eq!(snapshot.failure_counts, [0; FailureClass::COUNT]);
+    let decision = lab.c().shutdown_decision();
+    assert!(
+        is_refused_with(&decision, Unresolved::TerminalPending(record)),
+        "{decision:?}"
+    );
+    assert!(lab.close().is_none());
+}
+
+/// A declared output detachment is an expected injected condition: observed
+/// once in its own case, it is no failure (its settlement still records the
+/// output as lost); undeclared, unobserved or repeated, it is.
+#[test]
+fn h25_declared_output_detachment_is_expected_and_checked() {
+    // By cleanup of a stored owner.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::OutputDetached);
+    let (_, token) = lab.create(SlotKind::Process);
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Detached));
+    assert_eq!(
+        (outcome.passed, outcome.resolved, outcome.stopped),
+        (true, true, false)
+    );
+    assert_eq!(lab.released(), vec![token]);
+    let snapshot = lab.snap();
+    assert_eq!(snapshot.failure_counts, [0; FailureClass::COUNT]);
+    lab.ack_all();
+    assert!(lab.records().iter().any(|kind| matches!(
+        kind,
+        RecordKind::ActionSettled {
+            how: Settlement::OutputLost,
+            ..
+        }
+    )));
+    assert_eq!(lab.finish(), RunPhase::Finalized);
+    assert_eq!(lab.snap().verdict, Verdict::Passed);
+
+    // By the operation's own end.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::OutputDetached);
+    let ticket = lab.admit(SlotKind::Process);
+    let now = lab.now();
+    assert!(matches!(
+        lab.c()
+            .complete(&ticket, NativeOutcome::Ended(DETACHED_END), now),
+        Ok(Completion::OutputLost)
+    ));
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+
+    // Declared but not observed.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::OutputDetached);
+    lab.create(SlotKind::Process);
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
+    assert!(!outcome.passed);
+    assert_eq!(count(&lab.snap(), FailureClass::ExpectedConditionUnmet), 1);
+
+    // Declared once, observed twice.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::OutputDetached);
+    let ticket = lab.admit(SlotKind::Process);
+    let now = lab.now();
+    assert!(matches!(
+        lab.c()
+            .complete(&ticket, NativeOutcome::Ended(DETACHED_END), now),
+        Ok(Completion::OutputLost)
+    ));
+    lab.create(SlotKind::Process);
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Detached));
+    assert!(!outcome.passed);
+    assert_eq!(count(&lab.snap(), FailureClass::OutputLost), 1);
+}
+
+/// One entry point at which the core recognizes an actual failure, and the
+/// failure it names.
+type EntryPoint = (FailureClass, fn(&mut Lab));
+
+/// Every entry point that recognizes an actual failure closes execution
+/// admission itself, naming the failure; an expected condition does not; a
+/// validator panic before the run is no run failure (the incident just keeps
+/// blocking the start).
+#[test]
+fn h26_every_failure_entry_point_closes_admission_itself() {
+    let points: [EntryPoint; 8] = [
+        (FailureClass::Assertion, |lab| {
+            let now = lab.now();
+            lab.c()
+                .record_assertion_failure("observed", now)
+                .expect("recorded");
+        }),
+        (FailureClass::Assertion, |lab| {
+            let (entry, _) = lab.create(SlotKind::Process);
+            let now = lab.now();
+            let _ = lab
+                .c()
+                .lend(entry, now, |_| -> u64 { panic!("injected borrower panic") });
+        }),
+        (FailureClass::UnexpectedCleanup, |lab| {
+            let (entry, _) = lab.create(SlotKind::Process);
+            let now = lab.now();
+            let mut cleanup =
+                Scripted::always(Plan::Confirm).first(SlotKind::Process, &[Plan::Panic]);
+            assert_eq!(lab.c().end_entry(entry, &mut cleanup, now), Ok(true));
+        }),
+        (FailureClass::UnexpectedRetained, |lab| {
+            lab.deposit(SlotKind::Process, true);
+        }),
+        (FailureClass::UnexpectedOwner, |lab| {
+            let ticket = lab.admit(SlotKind::Process);
+            let owner = lab.native.produce_as(&ticket, None);
+            let now = lab.now();
+            lab.c()
+                .complete(&ticket, NativeOutcome::Created(owner), now)
+                .expect("held");
+        }),
+        (FailureClass::AuthorityLost, |lab| {
+            let ticket = lab.admit(SlotKind::Process);
+            let now = lab.now();
+            let unconfirmed = EndFacts {
+                subtree: false,
+                reaped: true,
+                output: OutputObserved::Complete,
+                removed: false,
+            };
+            assert!(matches!(
+                lab.c()
+                    .complete(&ticket, NativeOutcome::Ended(unconfirmed), now),
+                Ok(Completion::AuthorityLost)
+            ));
+        }),
+        (FailureClass::OutputLost, |lab| {
+            let (entry, _) = lab.create(SlotKind::Process);
+            let now = lab.now();
+            let mut cleanup = Scripted::always(Plan::Detached);
+            assert_eq!(lab.c().end_entry(entry, &mut cleanup, now), Ok(true));
+        }),
+        (FailureClass::RecorderFault, |lab| {
+            let now = lab.now();
+            let _ = lab.c().flush_records(&mut PanickingSink, now);
+        }),
+    ];
+    for (class, inject) in points {
+        let mut lab = Lab::new(TEST);
+        lab.start();
+        lab.begin(1, Expectation::Clean);
+        inject(&mut lab);
+        let closure = lab.control.status().control.admission.closure;
+        assert_eq!(closed_by_failure(closure), Some(class), "{class:?}");
+        let now = lab.now();
+        assert!(
+            matches!(
+                lab.c().reserve(SlotKind::Fixture, now),
+                Err(Refusal::AdmissionClosed(_))
+            ),
+            "{class:?}"
+        );
+        assert!(lab.dropped().is_empty(), "{class:?}");
+    }
+
+    // Failures recognized at the end of a case close admission the same way.
+    for (expectation, class) in [
+        (
+            Expectation::RetainedBoundary,
+            FailureClass::ExpectedConditionUnmet,
+        ),
+        (Expectation::Clean, FailureClass::UnknownOutcome),
+    ] {
+        let mut lab = Lab::new(TEST);
+        lab.start();
+        lab.begin(1, expectation);
+        if class == FailureClass::UnknownOutcome {
+            lab.admit(SlotKind::Process);
+        } else {
+            lab.create(SlotKind::Process);
+        }
+        lab.end_case(&mut Scripted::always(Plan::Confirm));
+        assert_eq!(
+            closed_by_failure(lab.control.status().control.admission.closure),
+            Some(class)
+        );
+    }
+
+    // An expected condition met is no failure: admission stays open.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::RetainedBoundary);
+    lab.deposit(SlotKind::Process, true);
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+    assert_eq!(lab.control.status().control.admission.closure, None);
+
+    // Between cases, a failure stops the run at once: an assertion makes it
+    // a (failed) completion candidate, a late owner makes it require
+    // recovery; no later call is needed for either.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+    let now = lab.now();
+    lab.c()
+        .record_assertion_failure("observed between cases", now)
+        .expect("recorded");
+    let snapshot = lab.snap();
+    assert_eq!(
+        (snapshot.phase, snapshot.verdict),
+        (RunPhase::Candidate, Verdict::Failed)
+    );
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let ticket = lab.admit(SlotKind::Process);
+    let now = lab.now();
+    let proof = NoEffectProof::for_ticket(&ticket, "refused");
+    lab.c()
+        .complete(&ticket, NativeOutcome::NoEffect(proof), now)
+        .expect("resolved");
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+    let late = lab.native.produce(&ticket);
+    let now = lab.now();
+    assert!(matches!(
+        lab.c().complete(&ticket, NativeOutcome::Created(late), now),
+        Ok(Completion::Late { .. })
+    ));
+    assert_eq!(lab.snap().phase, RunPhase::RecoveryRequired);
+
+    // A validator panic before the run.
+    let blocked = PriorIncident {
+        binding: IncidentBinding::new([7; 32]),
+        outcome: PriorOutcome::Malformed,
+    };
+    let mut lab = Lab::with(TEST, GENERATION, vec![blocked]);
+    let panicking = Validator {
+        answers: Vec::new(),
+        panics: true,
+    };
+    let now = lab.now();
+    assert_eq!(
+        lab.c().apply_disposition(&blocked.binding, &panicking, now),
+        Err(Refusal::Undisposable)
+    );
+    assert_eq!(lab.control.status().control.admission.closure, None);
+    let now = lab.now();
+    assert_eq!(
+        lab.c().start_run(now).unwrap_err(),
+        Refusal::PriorUnresolved
     );
 }

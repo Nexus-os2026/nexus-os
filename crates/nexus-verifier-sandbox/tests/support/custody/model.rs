@@ -3,10 +3,10 @@
 //! and the bounded snapshot the control side reads.
 //!
 //! Nothing in this module holds a native owner or can construct one. An
-//! identity ([`ActionId`], [`EntryId`], [`RecordId`]) locates something the
-//! core holds; its fields are private to the custody module, so no caller can
-//! mint one, and no operation turns an identity, a name, a path, a process id
-//! or a record back into an owner.
+//! identity ([`ActionId`], [`EntryId`], [`IncidentId`], [`RecordId`]) locates
+//! something the core holds or issued; its fields are private to the custody
+//! module, so no caller can mint one, and no operation turns an identity, a
+//! name, a path, a process id or a record back into an owner.
 
 use std::sync::Arc;
 
@@ -40,7 +40,9 @@ impl Generation {
     }
 }
 
-/// One native action of one generation, numbered by the core.
+/// One native action of one generation, numbered by the core. Action numbers
+/// are never reused, and at most one action is open at a time, so every
+/// action numbered below the open one (or below the next) is retired.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ActionId {
     pub(super) generation: Generation,
@@ -50,6 +52,15 @@ pub struct ActionId {
 /// One custody entry (a held owner) of one generation, numbered by the core.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EntryId {
+    pub(super) generation: Generation,
+    pub(super) seq: u64,
+}
+
+/// One late incident (an owner delivered for an operation already retired)
+/// of one generation, numbered by the core: its own lifecycle, never the
+/// retired action's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IncidentId {
     pub(super) generation: Generation,
     pub(super) seq: u64,
 }
@@ -82,6 +93,16 @@ impl EntryId {
     }
 }
 
+impl IncidentId {
+    pub fn generation(&self) -> Generation {
+        self.generation
+    }
+
+    pub fn seq(&self) -> u64 {
+        self.seq
+    }
+}
+
 impl RecordId {
     pub fn generation(&self) -> Generation {
         self.generation
@@ -105,16 +126,23 @@ pub enum SlotKind {
     Fixture,
 }
 
-/// What a case expects of its native cleanup.
+/// What a case declares about its native outcomes. A declared condition is
+/// an expected injected condition: observing it is not a failure, not
+/// observing it (or observing it more than once) is one. Nothing undeclared
+/// is ever expected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Expectation {
-    /// Every owner the case creates is ended by its first confirming attempts;
-    /// a retained owner is an unexpected failure.
+    /// No injected condition: a retained owner or a detached output is an
+    /// actual failure.
     Clean,
-    /// An expected negative control: one native operation's own finalization
-    /// is expected to leave a retained process owner, and the first cleanup
-    /// attempt on it must confirm its end.
+    /// One process operation's own finalization is expected to leave a
+    /// retained owner, and the first cleanup attempt on it must confirm every
+    /// fact: its subtree gone, its direct child reaped and its output
+    /// complete.
     RetainedBoundary,
+    /// One process tree's output is expected to be detached (given up)
+    /// instead of drained.
+    OutputDetached,
 }
 
 /// One completion fact: confirmed once (and when), never revoked.
@@ -130,8 +158,10 @@ impl Fact {
     }
 }
 
-/// Whether a process owner's output evidence is complete: drained to its end,
-/// or explicitly given up (detached) and recorded as such.
+/// A process owner's output evidence: drained to its end (`Complete`), or
+/// given up (`Detached`), which is output loss, never completeness. Either
+/// settles the output, so a natively ended tree can be released; only
+/// `Complete` is complete output evidence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFact {
     Pending,
@@ -140,8 +170,13 @@ pub enum OutputFact {
 }
 
 impl OutputFact {
+    /// No longer pending: complete or detached.
     pub fn settled(&self) -> bool {
         !matches!(self, OutputFact::Pending)
+    }
+
+    pub fn complete(&self) -> bool {
+        matches!(self, OutputFact::Complete(_))
     }
 }
 
@@ -166,10 +201,10 @@ pub enum OutputObserved {
 }
 
 /// The separate facts one cleanup attempt reports. A process owner is ended
-/// only when its native subtree is gone (`subtree`) *and* its direct child is
-/// reaped (`reaped`); its entry finishes only when its output is also settled.
-/// A workspace or fixture owner finishes only when its removal is confirmed.
-/// No fact implies another.
+/// natively only when its subtree is gone (`subtree`) *and* its direct child
+/// is reaped (`reaped`); its entry finishes only when its output is also
+/// settled (complete or detached). A workspace or fixture owner finishes
+/// only when its removal is confirmed. No fact implies another.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CleanupReport {
     pub subtree: Observed,
@@ -190,8 +225,9 @@ impl CleanupReport {
 
 /// The facts an operation reports when it ended natively without leaving an
 /// owner (its own finalization confirmed the end). A process operation's end
-/// is confirmed only by `subtree`, `reaped` and a settled `output` together; a
-/// workspace or fixture operation's only by `removed`.
+/// is confirmed only by `subtree`, `reaped` and a settled `output` together
+/// (a detached output is output loss); a workspace or fixture operation's
+/// only by `removed`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EndFacts {
     pub subtree: bool,
@@ -208,10 +244,13 @@ pub enum Origin {
     /// Returned by an operation whose own finalization could not confirm its
     /// end: cleanup is required at once.
     Retained,
-    /// Returned where custody did not expect it (another kind, an occupied
-    /// slot, or an operation already resolved). Retained for cleanup and
-    /// counted as a failure, never dropped.
+    /// Returned by the open operation where custody did not expect it
+    /// (another kind, or a slot already held). Held for cleanup under that
+    /// operation's own records and counted as a failure, never dropped.
     Unexpected,
+    /// Returned for an operation already retired: a late incident with its
+    /// own identity and records.
+    Late,
 }
 
 /// Whether a held owner is in use or awaiting its confirmed end.
@@ -234,43 +273,57 @@ pub enum OpPhase {
     Unknown { since: Tick, admitted: u64 },
 }
 
-/// The kinds of failure a run can record. They are kept apart: an expected
-/// injected condition is not a failure at all, and a later operational
-/// recovery never removes one.
+/// The kinds of actual failure. They are kept apart: an expected injected
+/// condition is not a failure at all, and a later operational recovery never
+/// removes one. Every actual failure closes execution admission for good.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FailureClass {
-    /// An assertion or observation of the case itself failed.
+    /// An assertion or observation of the case itself failed (including a
+    /// borrower that panicked).
     Assertion,
     /// A native operation's own cleanup was unconfirmed in a case that did not
     /// expect it.
     UnexpectedRetained,
-    /// A cleanup attempt that was required to confirm an end did not.
+    /// A cleanup attempt that was required to confirm an end did not (or its
+    /// adapter panicked).
     UnexpectedCleanup,
     /// An expected condition did not occur, or did not meet its requirement.
     ExpectedConditionUnmet,
-    /// An owner arrived where custody did not expect one.
+    /// The open operation returned an owner custody did not reserve a slot
+    /// for.
     UnexpectedOwner,
+    /// An operation already retired returned another owner.
+    LateOwner,
     /// A native outcome stayed unknown when its case ended.
     UnknownOutcome,
+    /// A process tree's output was detached instead of drained, undeclared.
+    OutputLost,
     /// An operation reported an end without the facts that confirm it and
     /// without an owner: native authority was lost.
     AuthorityLost,
-    /// An evidence record could not be made durable.
+    /// The recorder reported that a record could not be made durable.
     RecordFailed,
-    /// The run was cancelled before it finished.
+    /// The recorder adapter panicked while a record was submitted.
+    RecorderFault,
+    /// The run was cancelled by the control side before it finished.
     Cancelled,
 }
 
 impl FailureClass {
-    pub const ALL: [FailureClass; 9] = [
+    pub const COUNT: usize = 12;
+
+    pub const ALL: [FailureClass; FailureClass::COUNT] = [
         FailureClass::Assertion,
         FailureClass::UnexpectedRetained,
         FailureClass::UnexpectedCleanup,
         FailureClass::ExpectedConditionUnmet,
         FailureClass::UnexpectedOwner,
+        FailureClass::LateOwner,
         FailureClass::UnknownOutcome,
+        FailureClass::OutputLost,
         FailureClass::AuthorityLost,
         FailureClass::RecordFailed,
+        FailureClass::RecorderFault,
         FailureClass::Cancelled,
     ];
 
@@ -291,18 +344,22 @@ pub struct Failure {
     pub detail: String,
 }
 
-/// How an action settled.
+/// How an action or a late incident settled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Settlement {
-    /// Everything it created was confirmed ended.
+    /// Its native end was confirmed, and (for a process tree) its output was
+    /// complete.
     Confirmed,
+    /// Its native end was confirmed, but its output was detached: output
+    /// loss, recorded as such whether or not the case declared it.
+    OutputLost,
     /// It had no native effect.
     NothingCreated,
     /// It was never admitted.
     NotAdmitted,
 }
 
-/// Why admission closed.
+/// Why the control side cancelled the run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CancelReason {
     Requested,
@@ -310,15 +367,21 @@ pub enum CancelReason {
     Shutdown,
     Stop,
     RunBudget,
-    /// The recorder could not make a record durable: nothing further may be
-    /// admitted, since nothing further could be recorded.
-    RecordFailed,
+}
+
+/// Why execution admission closed: a control-side cancellation, or the
+/// run's first actual failure (fail-stop). An actual failure is never
+/// recorded as a cancellation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClosureReason {
+    Cancelled(CancelReason),
+    Failed(FailureClass),
 }
 
 /// A control fact that must itself become evidence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ControlFact {
-    AdmissionClosed { reason: CancelReason, after: u64 },
+    AdmissionClosed { reason: ClosureReason, after: u64 },
     ShutdownRefused,
 }
 
@@ -355,11 +418,26 @@ pub enum RecordKind {
         attempt: u32,
         resolved: bool,
     },
-    /// `resolved_by`: the explicit recovery attempt that resolved the run's
-    /// native state, if one did. It never changes the verdict.
+    /// The run's terminal record: issued only when every earlier record is
+    /// acknowledged and nothing native is unresolved; once acknowledged, the
+    /// run's outcome is final. `resolved_by`: the explicit recovery attempt
+    /// that resolved the run's native state, if one did (it never changes the
+    /// verdict).
     RunEnded {
         verdict: Verdict,
         resolved_by: Option<u32>,
+    },
+    /// A late incident opened: `action` is the retired operation that
+    /// delivered the owner; `kind` its owner's own declaration (none if the
+    /// declaration panicked).
+    IncidentOpened {
+        incident: IncidentId,
+        action: ActionId,
+        kind: Option<SlotKind>,
+    },
+    IncidentSettled {
+        incident: IncidentId,
+        how: Settlement,
     },
 }
 
@@ -405,7 +483,7 @@ pub enum AckOutcome {
     NotIssued,
     /// Another generation's record: rejected, no effect.
     Foreign,
-    /// Recording already failed: nothing further is acknowledged.
+    /// Recording already failed: nothing further is acknowledged, for good.
     LedgerFailed,
     /// The recorder's failure to make this record durable is now recorded.
     FailureRecorded,
@@ -417,16 +495,26 @@ pub enum AckOutcome {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunPhase {
     NotStarted,
+    /// Cases may run, while execution admission is open.
     Running,
-    /// Native or evidence state stayed unresolved after the bounded automatic
-    /// attempts: only explicit recovery requests proceed.
+    /// Native state stayed unresolved: only explicit recovery requests
+    /// proceed.
     RecoveryRequired,
-    /// Everything native is resolved and the run's end record is issued.
-    Complete,
+    /// A provisional completion candidate: nothing native is unresolved and
+    /// no case may begin, but the terminal record waits until every earlier
+    /// record is acknowledged. The verdict may still become a failure.
+    Candidate,
+    /// The terminal record is issued (the run's verdict is fixed in it) and
+    /// not yet acknowledged.
+    Finalizing,
+    /// The terminal record is acknowledged: the run's outcome is final.
+    Finalized,
     Closed,
 }
 
-/// The run's verdict. A failure makes it `Failed` for good.
+/// The run's verdict. `Failed` from the first actual failure, for good;
+/// `Passed` only once a terminal record carrying a pass is acknowledged;
+/// `Pending` otherwise. A fault after the terminal record never changes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
     Pending,
@@ -464,7 +552,7 @@ pub enum Refusal {
 /// Actions numbered up to `after` were admitted before it; none after.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Closure {
-    pub reason: CancelReason,
+    pub reason: ClosureReason,
     pub at: Tick,
     pub after: u64,
 }
@@ -535,28 +623,36 @@ pub enum Response {
     Shutdown(ShutdownDecision),
 }
 
-/// Whether the application may shut down.
+/// Whether the application may shut down (close the custody). There is no
+/// permission without durable completion: unresolved evidence refuses it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShutdownDecision {
     Permitted,
-    /// Nothing native is held, but the run's evidence cannot be completed:
-    /// shutting down leaves its durable state outstanding, which a later
-    /// generation must refuse until it is dispositioned.
-    PermittedWithoutDurableCompletion,
     Refused(Vec<Unresolved>),
 }
 
-/// What keeps the application from shutting down.
+/// What keeps the custody from closing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unresolved {
     RunActive,
     RecoveryRequired,
+    /// A completion candidate: its terminal record is not issued yet.
+    RunEnding,
+    /// The terminal record is issued and not acknowledged.
+    TerminalPending(RecordId),
     CaseActive,
     OwnersHeld(u32),
+    LateIncidents(u32),
     OperationPending,
     OutcomeUnknown,
     AuthorityLost(u32),
     EvidencePending(u64),
+    /// The recorder failed this record: it, and everything after it, can
+    /// never be durable.
+    EvidenceFailed {
+        record: RecordId,
+        at: Tick,
+    },
 }
 
 /// A prior generation's incident, as the records layer bound it (owner, last
@@ -592,11 +688,12 @@ pub enum DispositionReason {
     Other,
 }
 
-/// An external validator's verdict that an incident was dispositioned. The
-/// core accepts one only from a [`super::core::DispositionValidator`] it asked
-/// about exactly that incident, and only for that incident's binding; it never
-/// derives one from a request, a filename or a string. A disposition allows
-/// later admission; it never turns the incident into a confirmed cleanup.
+/// An external validator's verdict that a prior incident was dispositioned.
+/// The core accepts one only from a [`super::core::DispositionValidator`] it
+/// asked about exactly that incident, and only for that incident's binding;
+/// it never derives one from a request, a filename or a string. A disposition
+/// allows a later run to start; it never turns the incident into a confirmed
+/// cleanup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ValidatedDisposition {
     pub(super) binding: IncidentBinding,
@@ -616,7 +713,8 @@ impl ValidatedDisposition {
 pub struct Config {
     /// Automatic cleanup attempts per entry (the case's own and its end).
     pub automatic_attempts: u32,
-    /// Explicit recovery attempts per run.
+    /// Explicit recovery attempts per custody (the run's and its late
+    /// incidents'), each with its record reserved when the run starts.
     pub recovery_budget: u32,
     /// The least time between two explicit recovery attempts.
     pub recovery_spacing_millis: u64,
@@ -627,12 +725,11 @@ pub struct Config {
     pub control_reserve: u32,
     /// Retained responses of executed requests.
     pub receipt_limit: usize,
-    /// Owners from operations already resolved that custody will still hold
-    /// as unexpected; further ones are returned to their caller. An open
-    /// operation's own misfit owner is always held (so the unexpected list
-    /// holds at most one more than this).
-    pub unexpected_limit: usize,
-    /// Failures kept in detail (beyond it, only classified and counted).
+    /// Late incidents custody will hold at once; a further late owner is
+    /// returned to its caller.
+    pub late_limit: usize,
+    /// Failures (and faults) kept in detail (beyond it, only classified and
+    /// counted).
     pub failure_detail_limit: usize,
     /// Characters of one failure detail.
     pub detail_chars: usize,
@@ -649,7 +746,7 @@ impl Config {
         record_capacity: 512,
         control_reserve: 2,
         receipt_limit: 16,
-        unexpected_limit: 2,
+        late_limit: 2,
         failure_detail_limit: 32,
         detail_chars: 512,
         incident_limit: 16,
@@ -660,7 +757,12 @@ impl Config {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntryView {
     pub entry: EntryId,
+    /// The operation that delivered it (for a late incident, the retired one).
     pub action: ActionId,
+    /// The late incident it is held under, if it is one.
+    pub incident: Option<IncidentId>,
+    /// The case whose operation delivered it, if any.
+    pub case: Option<CaseId>,
     pub kind: SlotKind,
     pub origin: Origin,
     pub phase: EntryPhase,
@@ -671,6 +773,8 @@ pub struct EntryView {
     pub removed: Fact,
     pub automatic_attempts: u32,
     pub explicit_attempts: u32,
+    /// Whether its first cleanup attempt confirmed every fact (for a process
+    /// tree, with complete output).
     pub first_attempt_confirmed: Option<bool>,
     pub failure_recorded: bool,
 }
@@ -686,12 +790,15 @@ pub struct OpView {
     pub start_acknowledged: bool,
 }
 
-/// An action physically settled whose settlement record is not yet durable.
+/// An action or late incident physically settled whose settlement record is
+/// not yet durable.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettlingView {
     pub action: ActionId,
     pub entry: Option<EntryId>,
+    pub incident: Option<IncidentId>,
     pub record: RecordId,
+    pub how: Settlement,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -727,11 +834,21 @@ pub struct RecoveryView {
     pub resolved_by: Option<u32>,
 }
 
+/// A prior generation's incident and its disposition, if any.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IncidentView {
+pub struct PriorView {
     pub binding: IncidentBinding,
     pub outcome: PriorOutcome,
     pub disposition: Option<DispositionReason>,
+}
+
+/// The run's terminal record: the verdict fixed in it, and whether the
+/// recorder acknowledged it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerminalView {
+    pub record: RecordId,
+    pub verdict: Verdict,
+    pub acknowledged: bool,
 }
 
 /// An adapter call in progress.
@@ -760,9 +877,11 @@ pub struct Snapshot {
     pub at: Tick,
     pub phase: RunPhase,
     pub verdict: Verdict,
+    pub terminal: Option<TerminalView>,
     pub cases_passed: u32,
     pub cases_failed: u32,
     pub case: Option<CaseView>,
+    /// Every held owner, late incidents included.
     pub entries: Vec<EntryView>,
     pub operation: Option<OpView>,
     pub lost: Vec<ActionId>,
@@ -770,10 +889,15 @@ pub struct Snapshot {
     pub released_waiting: usize,
     pub evidence: EvidenceView,
     pub recovery: RecoveryView,
+    /// The run's actual failures (fixed once its terminal record is issued).
     pub failures: Vec<Failure>,
     pub failure_overflow: u32,
-    pub failure_counts: [u32; 9],
-    pub incidents: Vec<IncidentView>,
+    pub failure_counts: [u32; FailureClass::COUNT],
+    /// Faults after the terminal record: never part of the run's verdict.
+    pub faults: Vec<Failure>,
+    pub fault_overflow: u32,
+    pub fault_counts: [u32; FailureClass::COUNT],
+    pub prior: Vec<PriorView>,
     pub busy: Option<BusyView>,
     pub cancel_observed: Option<Tick>,
 }

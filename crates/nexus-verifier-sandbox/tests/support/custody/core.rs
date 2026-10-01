@@ -2,33 +2,40 @@
 //! operations, evidence and failures, and the control side's view of it.
 //!
 //! [`Custody`] lives with the execution owner (one thread) and is never
-//! shared: it holds every native owner, as a value, from the moment an
-//! operation's completion deposits it until its end is confirmed, and then
-//! hands it back ([`Custody::take_released`]). [`Control`] is the only shared
-//! part: the admission gate, the lease, the request queue (one slot) and the
-//! last published [`Snapshot`], each under its own lock, never two at once,
-//! and none ever held across a callback, a cleanup attempt, a record
-//! submission or a wait. Reading status renews nothing.
+//! shared. It holds every native owner, as a value, from the moment a
+//! completion deposits it until its end is confirmed, and then hands it back
+//! ([`Custody::take_released`]). [`Control`] is the only shared part: the
+//! admission gate, the lease, the request queue (one slot) and the last
+//! published [`Snapshot`], each under its own lock, never two at once, and
+//! none held across a callback, a cleanup attempt, a record submission or a
+//! wait. Reading status renews nothing.
 //!
-//! One native action runs through: [`Custody::reserve`] (capacity and evidence
-//! space are reserved and its start record is issued; nothing may start), the
-//! recorder's acknowledgement of that start record, [`Custody::admit`] (the
-//! admission linearization point: one critical section on the gate decides it
-//! against any closure), the native work itself (outside this module), and
-//! [`Custody::complete`] with the operation's ticket. A result that arrives
-//! after cancellation is still adopted; a result that is unknown stays unknown
-//! until a completion bound to the same ticket resolves it.
+//! Admission. One native action runs through [`Custody::reserve`] (capacity
+//! and evidence space reserved, its start record issued), the recorder's
+//! acknowledgement of that start record, and [`Custody::admit`]: the
+//! admission linearization point, one critical section on the gate, decides
+//! it against any closure. The gate closes for good on a control-side
+//! cancellation or on the run's first actual failure (fail-stop), whatever
+//! reported it; nothing reopens it, and a closed gate also ends the run's
+//! cases. Operations admitted before the closure may still deliver owners,
+//! which are adopted for cleanup.
 //!
-//! Owners are only lent: to cleanup adapters ([`Cleanup`]), to the case's own
-//! code ([`Custody::lend`]) and to the owner's own [`Resource::kind`]. A panic
-//! inside any of them unwinds through the callback's frames only, and the
-//! owner stays where custody keeps it. No path here drops, forgets, leaks or
-//! exits with an unresolved owner: a failed attempt keeps it, an exhausted
-//! budget keeps it, reporting borrows it, a refused shutdown keeps it, and
-//! [`Custody::close`] hands the same custody back when it cannot close. What
-//! this module cannot do is survive the destruction of its own process, or of
-//! a [`Custody`] value the integration drops: that remains the integration's
-//! obligation.
+//! Finalization. A run whose native state is resolved becomes a completion
+//! candidate. Its terminal record (the run's verdict) is issued only once
+//! every earlier record is acknowledged, and the run is final only when that
+//! terminal record is acknowledged; no pass is published before. From the
+//! terminal record on, the run's verdict and failures are fixed: a later
+//! failure is a fault of this custody, and a later owner a late incident with
+//! its own identity and records. The custody closes only when nothing is held
+//! or pending and every record is acknowledged: failed evidence keeps it
+//! open, with no exception.
+//!
+//! Limits. A callback's unwinding panic is contained at the callback (the
+//! owner stays held), and so is a panic in dropping its payload; an abort, a
+//! panic while panicking, a payload whose drop panics again, stack overflow,
+//! allocation failure and the destruction of this process are not. Owners are
+//! lent by `&mut`, which does not stop a callback from replacing or altering
+//! one; custody cannot detect that (an integration obligation).
 
 use std::collections::VecDeque;
 use std::fmt;
@@ -40,22 +47,22 @@ use sha2::{Digest, Sha256};
 use super::model::*;
 
 /// An owner's own declaration of the slot it occupies. Custody asks it with
-/// the owner borrowed: a panic in it leaves the owner held (as an unexpected
-/// owner of unknown kind, treated as a native process tree).
+/// the owner borrowed: if the declaration panics, the owner is still held
+/// (with an unknown kind, treated as a native process tree).
 pub trait Resource {
     fn kind(&self) -> SlotKind;
 }
 
 /// One bounded cleanup attempt on a held owner.
 ///
-/// The owner is only borrowed: an attempt cannot consume it, and a panic
-/// inside one unwinds through the attempt's frames while the owner stays where
-/// custody keeps it. An attempt must not replace the owner (for example with
-/// `mem::replace`): the value custody holds is the authority, and that same
-/// value is the one released. The report states each fact separately, and the
-/// core confirms nothing the report does not establish. An attempt must be
-/// bounded: the control side stays responsive while it runs, the execution
-/// owner does not.
+/// The owner is lent by `&mut`: custody keeps the value, and a panic inside
+/// an attempt unwinds through the attempt's frames only. A mutable borrow
+/// does not stop the attempt from replacing or altering the owner (with
+/// `mem::replace`, `mem::swap` or the owner's own methods); custody cannot
+/// detect that, and an attempt must not do it. The report states each fact
+/// separately, and the core confirms nothing the report does not establish.
+/// An attempt must be bounded: the control side stays responsive while it
+/// runs, the execution owner does not.
 ///
 /// Production cleanup calls that consume their owner
 /// (`RetainedBoundary::retry(self) -> Result<(), Self>`,
@@ -83,7 +90,7 @@ pub trait RecordSink {
 }
 
 /// The external authority on prior incidents' dispositions (the records
-/// layer), asked about exactly one incident binding.
+/// layer), asked about exactly one incident binding before the run starts.
 pub trait DispositionValidator {
     fn validate(&self, binding: &IncidentBinding) -> Option<ValidatedDisposition>;
 }
@@ -103,7 +110,10 @@ impl Reservation {
 }
 
 /// The permit for one admitted native operation, and the binding its result
-/// must carry. Not `Clone`, and never constructed outside the core.
+/// must carry. Not `Clone`, and never constructed outside the core. It is
+/// borrowed, not consumed, by [`Custody::complete`]: an unknown result keeps
+/// it valid, and a result delivered after the operation retired (a duplicate,
+/// or a late one) still needs a binding to be held under.
 #[derive(Debug)]
 pub struct OpTicket {
     action: ActionId,
@@ -197,11 +207,22 @@ impl<R> fmt::Debug for Released<R> {
 /// What custody did with a completion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Completion {
+    /// Held in its slot, under its operation's records.
     Deposited(EntryId),
-    /// Held, but where custody did not expect an owner: a failure, never a
-    /// dropped owner.
+    /// Held under the open operation's own records where custody did not
+    /// expect an owner: a failure, never a dropped owner.
     Unexpected(EntryId),
+    /// Delivered for an operation already retired: held as a late incident
+    /// with its own identity and records, never under the retired action's.
+    Late {
+        incident: IncidentId,
+        entry: EntryId,
+    },
+    /// The operation ended natively, its output complete.
     Ended,
+    /// The operation ended natively, but its output was detached: output
+    /// loss (a failure unless its case declared it).
+    OutputLost,
     NoEffect,
     StillUnknown,
     AuthorityLost,
@@ -213,13 +234,15 @@ pub enum Rejected<R> {
     Foreign { owner: Option<R> },
     /// An instant before one already seen: the owner is returned untouched.
     ClockRegression { owner: Option<R> },
-    /// The operation is already resolved and the result carries no owner.
+    /// The operation is already retired and the result carries no owner.
     Stale,
     /// A no-effect proof bound to another operation.
     UnboundProof,
-    /// Custody already holds as many unexpected owners as it may (or cannot
-    /// reserve their evidence): this one is returned to its caller, never
-    /// dropped.
+    /// A late owner custody cannot hold: as many late incidents as it may
+    /// are held, or their evidence cannot be reserved. It is returned to its
+    /// caller, never dropped. Its arrival is still a failure (a fault after
+    /// the terminal record), but no record identifies it: the integration
+    /// must keep it and dispose of it outside this custody.
     CustodyFull { owner: R },
 }
 
@@ -257,14 +280,18 @@ pub struct AdmitRefused {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LendError {
     UnknownEntry,
+    /// The borrower panicked: an actual failure; the owner is still held.
     Panicked,
     ClockRegression,
+    /// Lending serves a run that is still running or recovering.
+    Phase(RunPhase),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlushError {
     ClockRegression,
-    /// The sink panicked; the record it was given is still unsent.
+    /// The sink panicked (an actual failure); the record it was given is
+    /// still unsent.
     SinkPanicked {
         sent: usize,
     },
@@ -280,26 +307,37 @@ pub struct CaseOutcome {
     pub stopped: bool,
 }
 
-/// A closed custody: its verdict, its failures and every owner still
-/// awaiting its caller.
+/// A closed custody: the outcome its acknowledged evidence records, and
+/// every owner still awaiting its caller.
 pub struct Closed<R> {
+    /// The run's acknowledged terminal record (none for a custody whose run
+    /// never started).
+    pub terminal: Option<RecordId>,
+    /// The verdict that terminal record carries (`Pending` without one).
     pub verdict: Verdict,
     pub resolved_by: Option<u32>,
-    /// Every issued record was acknowledged as durable.
-    pub durable: bool,
+    /// Records issued in all, every one acknowledged.
+    pub records: u64,
     pub failures: Vec<Failure>,
-    pub failure_counts: [u32; 9],
+    pub failure_counts: [u32; FailureClass::COUNT],
     pub failure_overflow: u32,
+    /// Faults after the terminal record (late incidents, evidence faults):
+    /// recorded, never part of the run's verdict.
+    pub faults: Vec<Failure>,
+    pub fault_counts: [u32; FailureClass::COUNT],
+    pub fault_overflow: u32,
     pub released: Vec<Released<R>>,
 }
 
 impl<R> fmt::Debug for Closed<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Closed")
+            .field("terminal", &self.terminal)
             .field("verdict", &self.verdict)
             .field("resolved_by", &self.resolved_by)
-            .field("durable", &self.durable)
+            .field("records", &self.records)
             .field("failure_counts", &self.failure_counts)
+            .field("fault_counts", &self.fault_counts)
             .field("released", &self.released.len())
             .finish_non_exhaustive()
     }
@@ -318,9 +356,10 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Run one adapter or owner callback, containing a panic in it: only the
-/// callback's frames unwind, never the core's. The panic's payload is dropped
-/// under containment too (a payload whose drop panics again is beyond it).
+/// Run one adapter or owner callback, containing an unwinding panic in it:
+/// only the callback's frames unwind, never the core's. The panic's payload
+/// is dropped under containment too (a payload whose drop panics again is
+/// beyond it).
 fn contained<T>(callback: impl FnOnce() -> T) -> Option<T> {
     match catch_unwind(AssertUnwindSafe(callback)) {
         Ok(value) => Some(value),
@@ -356,7 +395,7 @@ struct Shared {
 
 impl Shared {
     /// Close admission, once: a later request returns the first closure.
-    fn close(&self, reason: CancelReason, at: Tick) -> CancelReceipt {
+    fn close(&self, reason: ClosureReason, at: Tick) -> CancelReceipt {
         let mut gate = lock(&self.gate);
         match gate.closure {
             Some(closure) => CancelReceipt {
@@ -423,7 +462,7 @@ impl Control {
     /// Accept cancellation: admission closes at once, for good. It does not
     /// claim that anything in flight has ended.
     pub fn cancel(&self, reason: CancelReason, now: Tick) -> CancelReceipt {
-        self.shared.close(reason, now)
+        self.shared.close(ClosureReason::Cancelled(reason), now)
     }
 
     /// Renew the lease. Only the holder of the run's [`LeaseCap`] can, and only
@@ -454,7 +493,8 @@ impl Control {
             }
         }
         // The lease's lock is released before the gate's is taken.
-        self.shared.close(CancelReason::LeaseLost, now);
+        self.shared
+            .close(ClosureReason::Cancelled(CancelReason::LeaseLost), now);
         Err(LeaseError::Expired)
     }
 
@@ -475,7 +515,8 @@ impl Control {
             }
         };
         if lost {
-            self.shared.close(CancelReason::LeaseLost, now);
+            self.shared
+                .close(ClosureReason::Cancelled(CancelReason::LeaseLost), now);
         }
         state
     }
@@ -498,6 +539,15 @@ enum SlotRef {
     Workspace,
     Fixture,
     Unexpected(usize),
+    Late(usize),
+}
+
+fn slot_of(kind: SlotKind) -> SlotRef {
+    match kind {
+        SlotKind::Process => SlotRef::Process,
+        SlotKind::Workspace => SlotRef::Workspace,
+        SlotKind::Fixture => SlotRef::Fixture,
+    }
 }
 
 /// An action's failure record: still reserved, or issued.
@@ -507,11 +557,33 @@ enum FailureRecord {
     Issued,
 }
 
+/// What an entry is held under, and so which records settle it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Hold {
+    /// An action's own owner: the action's failure record (still reserved, or
+    /// issued) and its settlement record (reserved).
+    Action { failure: FailureRecord },
+    /// A late incident: its opening record (issued) and its settlement
+    /// record (reserved).
+    Incident { incident: IncidentId },
+}
+
+/// Where a new entry comes from and what it is held under.
+struct Binding {
+    action: ActionId,
+    case: Option<CaseId>,
+    kind: SlotKind,
+    origin: Origin,
+    hold: Hold,
+}
+
 struct Entry<R> {
     id: EntryId,
     action: ActionId,
+    case: Option<CaseId>,
     kind: SlotKind,
     origin: Origin,
+    hold: Hold,
     phase: EntryPhase,
     owner: R,
     since: Tick,
@@ -522,27 +594,18 @@ struct Entry<R> {
     automatic: u32,
     explicit: u32,
     first: Option<bool>,
-    /// The action's failure record (its settlement record is reserved until
-    /// the entry finishes).
-    failure: FailureRecord,
     unresolved_noted: bool,
 }
 
 impl<R> Entry<R> {
-    fn new(
-        id: EntryId,
-        action: ActionId,
-        kind: SlotKind,
-        origin: Origin,
-        failure: FailureRecord,
-        owner: R,
-        since: Tick,
-    ) -> Self {
+    fn new(id: EntryId, binding: Binding, owner: R, since: Tick) -> Self {
         Self {
             id,
-            action,
-            kind,
-            origin,
+            action: binding.action,
+            case: binding.case,
+            kind: binding.kind,
+            origin: binding.origin,
+            hold: binding.hold,
             phase: EntryPhase::CleanupRequired,
             owner,
             since,
@@ -553,7 +616,6 @@ impl<R> Entry<R> {
             automatic: 0,
             explicit: 0,
             first: None,
-            failure,
             unresolved_noted: false,
         }
     }
@@ -568,7 +630,7 @@ impl<R> Entry<R> {
     }
 
     /// Everything custody requires before it releases the owner: the native
-    /// end, and for a process tree its output settled too.
+    /// end, and for a process tree its output settled (complete or detached).
     fn finished(&self) -> bool {
         match self.kind {
             SlotKind::Process => self.natively_ended() && self.output.settled(),
@@ -576,9 +638,35 @@ impl<R> Entry<R> {
         }
     }
 
-    /// Apply the facts one attempt established. A fact is confirmed once and
-    /// never revoked, and no fact implies another.
-    fn apply(&mut self, report: &CleanupReport, now: Tick) {
+    /// Every fact confirmed: the native end, and for a process tree complete
+    /// output (a detached output is not).
+    fn confirmed(&self) -> bool {
+        match self.kind {
+            SlotKind::Process => self.natively_ended() && self.output.complete(),
+            SlotKind::Workspace | SlotKind::Fixture => self.natively_ended(),
+        }
+    }
+
+    /// How a finished entry settled.
+    fn settlement(&self) -> Settlement {
+        if matches!(self.output, OutputFact::Detached(_)) {
+            Settlement::OutputLost
+        } else {
+            Settlement::Confirmed
+        }
+    }
+
+    fn incident(&self) -> Option<IncidentId> {
+        match self.hold {
+            Hold::Incident { incident } => Some(incident),
+            Hold::Action { .. } => None,
+        }
+    }
+
+    /// Apply the facts one attempt established, and say whether it detached
+    /// the output. A fact is confirmed once and never revoked, and no fact
+    /// implies another.
+    fn apply(&mut self, report: &CleanupReport, now: Tick) -> bool {
         let confirm = |fact: &mut Fact, observed: Observed| {
             if observed == Observed::Confirmed && !fact.confirmed() {
                 *fact = Fact::Confirmed(now);
@@ -591,19 +679,25 @@ impl<R> Entry<R> {
                 if self.output == OutputFact::Pending {
                     match report.output {
                         OutputObserved::Complete => self.output = OutputFact::Complete(now),
-                        OutputObserved::Detached => self.output = OutputFact::Detached(now),
+                        OutputObserved::Detached => {
+                            self.output = OutputFact::Detached(now);
+                            return true;
+                        }
                         OutputObserved::NotLooked | OutputObserved::StillPending => {}
                     }
                 }
             }
             SlotKind::Workspace | SlotKind::Fixture => confirm(&mut self.removed, report.removed),
         }
+        false
     }
 
     fn view(&self) -> EntryView {
         EntryView {
             entry: self.id,
             action: self.action,
+            incident: self.incident(),
+            case: self.case,
             kind: self.kind,
             origin: self.origin,
             phase: self.phase,
@@ -615,7 +709,10 @@ impl<R> Entry<R> {
             automatic_attempts: self.automatic,
             explicit_attempts: self.explicit,
             first_attempt_confirmed: self.first,
-            failure_recorded: self.failure == FailureRecord::Issued,
+            failure_recorded: self.hold
+                == Hold::Action {
+                    failure: FailureRecord::Issued,
+                },
         }
     }
 }
@@ -633,12 +730,14 @@ struct Op {
 }
 
 /// The resource group: one process tree, the workspace and the fixture it
-/// uses, owners that arrived unexpectedly, and the one open operation.
+/// uses, an open operation's unexpected owner, late incidents, and the one
+/// open operation.
 struct Group<R> {
     process: Option<Entry<R>>,
     workspace: Option<Entry<R>>,
     fixture: Option<Entry<R>>,
     unexpected: Vec<Entry<R>>,
+    late: Vec<Entry<R>>,
     op: Option<Op>,
 }
 
@@ -649,6 +748,7 @@ impl<R> Group<R> {
             workspace: None,
             fixture: None,
             unexpected: Vec::new(),
+            late: Vec::new(),
             op: None,
         }
     }
@@ -675,6 +775,7 @@ impl<R> Group<R> {
             .chain(self.workspace.iter())
             .chain(self.fixture.iter())
             .chain(self.unexpected.iter())
+            .chain(self.late.iter())
     }
 
     fn find(&self, id: EntryId) -> Option<SlotRef> {
@@ -685,11 +786,13 @@ impl<R> Group<R> {
             Some(SlotRef::Workspace)
         } else if at(&self.fixture) {
             Some(SlotRef::Fixture)
+        } else if let Some(index) = self.unexpected.iter().position(|entry| entry.id == id) {
+            Some(SlotRef::Unexpected(index))
         } else {
-            self.unexpected
+            self.late
                 .iter()
                 .position(|entry| entry.id == id)
-                .map(SlotRef::Unexpected)
+                .map(SlotRef::Late)
         }
     }
 
@@ -699,6 +802,7 @@ impl<R> Group<R> {
             SlotRef::Workspace => self.workspace.as_ref(),
             SlotRef::Fixture => self.fixture.as_ref(),
             SlotRef::Unexpected(index) => self.unexpected.get(index),
+            SlotRef::Late(index) => self.late.get(index),
         }
     }
 
@@ -708,6 +812,7 @@ impl<R> Group<R> {
             SlotRef::Workspace => self.workspace.as_mut(),
             SlotRef::Fixture => self.fixture.as_mut(),
             SlotRef::Unexpected(index) => self.unexpected.get_mut(index),
+            SlotRef::Late(index) => self.late.get_mut(index),
         }
     }
 
@@ -721,6 +826,7 @@ impl<R> Group<R> {
             SlotRef::Unexpected(index) => {
                 (index < self.unexpected.len()).then(|| self.unexpected.remove(index))
             }
+            SlotRef::Late(index) => (index < self.late.len()).then(|| self.late.remove(index)),
         }
     }
 
@@ -737,9 +843,11 @@ impl<R> Group<R> {
     }
 
     /// Whether anything must be ended before another action may start: an
-    /// entry awaiting its confirmed end, or any unexpected owner.
+    /// entry awaiting its confirmed end, an unexpected owner or a late
+    /// incident.
     fn awaiting_cleanup(&self) -> bool {
         !self.unexpected.is_empty()
+            || !self.late.is_empty()
             || self
                 .entries()
                 .any(|entry| entry.phase == EntryPhase::CleanupRequired)
@@ -910,7 +1018,7 @@ struct FailureLog {
     limit: usize,
     details: Vec<Failure>,
     overflow: u32,
-    counts: [u32; 9],
+    counts: [u32; FailureClass::COUNT],
 }
 
 impl FailureLog {
@@ -919,7 +1027,7 @@ impl FailureLog {
             limit,
             details: Vec::new(),
             overflow: 0,
-            counts: [0; 9],
+            counts: [0; FailureClass::COUNT],
         }
     }
 
@@ -995,21 +1103,21 @@ impl CaseState {
     }
 }
 
-struct Incident {
+struct Prior {
     binding: IncidentBinding,
     outcome: PriorOutcome,
     disposition: Option<DispositionReason>,
 }
 
-impl Incident {
-    /// An unresolved or malformed incident blocks the run until an external
-    /// validator dispositions it.
+impl Prior {
+    /// An unresolved or malformed prior incident blocks the run until an
+    /// external validator dispositions it.
     fn blocks(&self) -> bool {
         self.outcome != PriorOutcome::Resolved && self.disposition.is_none()
     }
 
-    fn view(&self) -> IncidentView {
-        IncidentView {
+    fn view(&self) -> PriorView {
+        PriorView {
             binding: self.binding,
             outcome: self.outcome,
             disposition: self.disposition,
@@ -1024,12 +1132,20 @@ struct RecoveryState {
     resolved_by: Option<u32>,
 }
 
-/// The run's own records still reserved: its end, recovery-required, and one
-/// per explicit recovery attempt it may still make.
+/// The run's own records still reserved: its end (the terminal record),
+/// recovery-required, and one per explicit recovery attempt it may still
+/// make (the run's or its late incidents').
 struct RunRecords {
     ended: bool,
     recovery: bool,
     retries: u32,
+}
+
+/// The issued terminal record and the verdict fixed in it.
+#[derive(Debug, Clone, Copy)]
+struct Terminal {
+    record: RecordId,
+    verdict: Verdict,
 }
 
 /// One execution owner's custody. Not shared; see the module documentation.
@@ -1039,9 +1155,9 @@ pub struct Custody<R> {
     shared: Arc<Shared>,
     clock: Tick,
     phase: RunPhase,
-    verdict: Verdict,
     next_action: u64,
     next_entry: u64,
+    next_incident: u64,
     case: Option<CaseState>,
     cases_passed: u32,
     cases_failed: u32,
@@ -1051,10 +1167,12 @@ pub struct Custody<R> {
     settling: Vec<SettlingView>,
     ledger: Ledger,
     failures: FailureLog,
+    faults: FailureLog,
     recovery: RecoveryState,
     requests: RequestGate,
-    incidents: Vec<Incident>,
+    prior: Vec<Prior>,
     run_records: RunRecords,
+    terminal: Option<Terminal>,
     cancel_observed: Option<Tick>,
     cancel_noted: bool,
     shutdown_refusal_recorded: bool,
@@ -1067,7 +1185,7 @@ impl<R> fmt::Debug for Custody<R> {
         f.debug_struct("Custody")
             .field("generation", &self.generation)
             .field("phase", &self.phase)
-            .field("verdict", &self.verdict)
+            .field("terminal", &self.terminal)
             .field("held", &self.group.held())
             .field("open_operation", &self.group.op.is_some())
             .field("lost", &self.lost.len())
@@ -1114,9 +1232,9 @@ impl<R: Resource> Custody<R> {
             shared: Arc::clone(&shared),
             clock: now,
             phase: RunPhase::NotStarted,
-            verdict: Verdict::Pending,
             next_action: 1,
             next_entry: 1,
+            next_incident: 1,
             case: None,
             cases_passed: 0,
             cases_failed: 0,
@@ -1126,6 +1244,7 @@ impl<R: Resource> Custody<R> {
             settling: Vec::new(),
             ledger: Ledger::new(generation, &config),
             failures: FailureLog::new(config.failure_detail_limit),
+            faults: FailureLog::new(config.failure_detail_limit),
             recovery: RecoveryState {
                 attempts: 0,
                 epoch: 0,
@@ -1136,9 +1255,9 @@ impl<R: Resource> Custody<R> {
                 last: 0,
                 receipts: VecDeque::new(),
             },
-            incidents: prior
+            prior: prior
                 .into_iter()
-                .map(|incident| Incident {
+                .map(|incident| Prior {
                     binding: incident.binding,
                     outcome: incident.outcome,
                     disposition: None,
@@ -1149,6 +1268,7 @@ impl<R: Resource> Custody<R> {
                 recovery: false,
                 retries: 0,
             },
+            terminal: None,
             cancel_observed: None,
             cancel_noted: false,
             shutdown_refusal_recorded: false,
@@ -1174,9 +1294,9 @@ impl<R: Resource> Custody<R> {
         Arc::clone(&lock(&self.shared.snapshot))
     }
 
-    /// Ask the validator about one prior incident. Only a disposition bound
-    /// to exactly that incident is accepted; the incident's own outcome is
-    /// kept beside it.
+    /// Before the run starts: ask the validator about one prior incident.
+    /// Only a disposition bound to exactly that incident is accepted; the
+    /// incident's own outcome is kept beside it.
     pub fn apply_disposition<V: DispositionValidator>(
         &mut self,
         binding: &IncidentBinding,
@@ -1184,10 +1304,14 @@ impl<R: Resource> Custody<R> {
         now: Tick,
     ) -> Result<(), Refusal> {
         self.advance(now)?;
+        if self.phase != RunPhase::NotStarted {
+            self.publish();
+            return Err(Refusal::Phase(self.phase));
+        }
         let Some(index) = self
-            .incidents
+            .prior
             .iter()
-            .position(|incident| incident.binding == *binding && incident.blocks())
+            .position(|prior| prior.binding == *binding && prior.blocks())
         else {
             self.publish();
             return Err(Refusal::Undisposable);
@@ -1198,11 +1322,12 @@ impl<R: Resource> Custody<R> {
             entry: None,
         });
         self.publish();
+        // A panicking validator validates nothing: the incident still blocks.
         let validated = contained(|| validator.validate(binding)).flatten();
         self.busy = None;
         let result = match validated {
             Some(disposition) if disposition.binding == *binding => {
-                self.incidents[index].disposition = Some(disposition.reason);
+                self.prior[index].disposition = Some(disposition.reason);
                 Ok(())
             }
             _ => Err(Refusal::Undisposable),
@@ -1225,7 +1350,7 @@ impl<R: Resource> Custody<R> {
         if self.phase != RunPhase::NotStarted {
             return Err(Refusal::Phase(self.phase));
         }
-        if self.incidents.iter().any(Incident::blocks) {
+        if self.prior.iter().any(Prior::blocks) {
             return Err(Refusal::PriorUnresolved);
         }
         if self.ledger.failed.is_some() {
@@ -1239,9 +1364,9 @@ impl<R: Resource> Custody<R> {
             return Err(Refusal::EvidenceCapacity);
         }
         let dispositioned = self
-            .incidents
+            .prior
             .iter()
-            .filter(|incident| incident.disposition.is_some())
+            .filter(|prior| prior.disposition.is_some())
             .count() as u32;
         self.ledger
             .issue_reserved(now, RecordKind::RunStarted { dispositioned });
@@ -1266,8 +1391,9 @@ impl<R: Resource> Custody<R> {
         })
     }
 
-    /// Begin a case: only while running, with admission open, recording
-    /// intact and nothing of an earlier case unresolved.
+    /// Begin a case: only while running, with nothing halting the run (no
+    /// cancellation and no actual failure), recording intact, nothing of an
+    /// earlier case unresolved and every earlier record acknowledged.
     pub fn begin_case(
         &mut self,
         case: CaseId,
@@ -1286,7 +1412,9 @@ impl<R: Resource> Custody<R> {
         expectation: Expectation,
         now: Tick,
     ) -> Result<(), Refusal> {
-        if let Some(closure) = self.observe_closure(now) {
+        // A halted run never begins another case, however clean its last one
+        // ended.
+        if let Some(closure) = self.halted(now) {
             return Err(Refusal::AdmissionClosed(closure));
         }
         if self.phase != RunPhase::Running {
@@ -1300,6 +1428,9 @@ impl<R: Resource> Custody<R> {
         }
         if self.unresolved() {
             return Err(Refusal::GroupUnresolved);
+        }
+        if self.ledger.unacknowledged() > 0 {
+            return Err(Refusal::EvidencePending);
         }
         if !self.ledger.reserve(2) {
             return Err(Refusal::EvidenceCapacity);
@@ -1461,8 +1592,9 @@ impl<R: Resource> Custody<R> {
         }
     }
 
-    /// Report an admitted operation's result, bound to its ticket. An owner it
-    /// brings is held from here on (even after cancellation); an owner custody
+    /// Report an admitted operation's result, bound to its ticket, in any
+    /// phase. An owner it brings is held from here on (even after
+    /// cancellation, a failure or the terminal record); an owner custody
     /// refuses is in the rejection, never dropped.
     pub fn complete(
         &mut self,
@@ -1482,6 +1614,7 @@ impl<R: Resource> Custody<R> {
         }
         self.clock = now;
         let result = self.apply_completion(ticket, outcome, now);
+        self.settle_idle(now);
         self.publish();
         result
     }
@@ -1498,10 +1631,11 @@ impl<R: Resource> Custody<R> {
                 && matches!(op.phase, OpPhase::InFlight { .. } | OpPhase::Unknown { .. })
         );
         if !open {
-            // A late, stale or duplicate result of an operation already
-            // resolved acts on nothing; an owner it brings is still held.
+            // The operation is retired (action numbers are never reused and
+            // only one is open): a late or duplicate result acts on nothing,
+            // and an owner it brings becomes a late incident.
             return match outcome.into_owner() {
-                Some(owner) => self.retain_stray(ticket.action, owner, now),
+                Some(owner) => self.retain_late(ticket.action, owner, now),
                 None => Err(Rejected::Stale),
             };
         }
@@ -1550,29 +1684,45 @@ impl<R: Resource> Custody<R> {
             self.settling.push(SettlingView {
                 action: op.action,
                 entry: None,
+                incident: None,
                 record,
+                how,
             });
         }
         match how {
             Settlement::Confirmed => Completion::Ended,
+            Settlement::OutputLost => Completion::OutputLost,
             Settlement::NothingCreated | Settlement::NotAdmitted => Completion::NoEffect,
         }
     }
 
-    /// An end without an owner is confirmed only by its facts; without them,
-    /// native authority is lost: never a clean end, and never resolvable here.
+    /// An end without an owner is confirmed only by its facts (a detached
+    /// output is output loss, recorded as such); without them, native
+    /// authority is lost: never a clean end, and never resolvable here.
     fn resolve_ended(&mut self, facts: EndFacts, now: Tick) -> Completion {
+        let Some((kind, case)) = self.group.op.as_ref().map(|op| (op.kind, op.case)) else {
+            return Completion::StillUnknown;
+        };
         let output = matches!(
             facts.output,
             OutputObserved::Complete | OutputObserved::Detached
         );
-        let confirmed = match self.group.op.as_ref().map(|op| op.kind) {
-            Some(SlotKind::Process) => facts.subtree && facts.reaped && output,
-            Some(SlotKind::Workspace | SlotKind::Fixture) => facts.removed,
-            None => false,
+        let ended = match kind {
+            SlotKind::Process => facts.subtree && facts.reaped && output,
+            SlotKind::Workspace | SlotKind::Fixture => facts.removed,
         };
-        if confirmed {
-            return self.resolve_without_owner(Settlement::Confirmed, now);
+        if ended {
+            let lost = kind == SlotKind::Process && facts.output == OutputObserved::Detached;
+            let how = if lost {
+                Settlement::OutputLost
+            } else {
+                Settlement::Confirmed
+            };
+            let completion = self.resolve_without_owner(how, now);
+            if lost {
+                self.note_output_lost(Some(case), now);
+            }
+            return completion;
         }
         if let Some(mut op) = self.group.op.take() {
             // Its settlement record stays reserved: it can never settle here.
@@ -1588,8 +1738,9 @@ impl<R: Resource> Custody<R> {
     }
 
     /// Hold the owner the open operation returned. An owner of another kind,
-    /// or for a slot already held, is held as unexpected (a failure), never
-    /// dropped and never put in place of the held one.
+    /// or for a slot already held, is held as unexpected under the
+    /// operation's own records (a failure), never dropped and never put in
+    /// place of the held one. The owner is stored before any bookkeeping.
     fn deposit(
         &mut self,
         ticket: &OpTicket,
@@ -1597,25 +1748,31 @@ impl<R: Resource> Custody<R> {
         origin: Origin,
         now: Tick,
     ) -> Result<Completion, Rejected<R>> {
-        let Some(mut op) = self.group.op.take() else {
-            return self.retain_stray(ticket.action, owner, now);
+        let Some(op) = self.group.op.take() else {
+            return self.retain_late(ticket.action, owner, now);
         };
         // The owner's own declaration, asked with the owner borrowed.
         let declared = contained(|| owner.kind());
         let id = self.new_entry_id();
-        if declared != Some(op.kind) || self.group.slot(op.kind).is_some() {
-            self.issue_failure(&mut op.failure, op.action, now);
-            let kind = declared.unwrap_or(SlotKind::Process);
-            let entry = Entry::new(
-                id,
-                op.action,
-                kind,
-                Origin::Unexpected,
-                op.failure,
-                owner,
-                now,
-            );
+        let fits = declared == Some(op.kind) && self.group.slot(op.kind).is_none();
+        let binding = Binding {
+            action: op.action,
+            case: Some(op.case),
+            kind: if fits {
+                op.kind
+            } else {
+                declared.unwrap_or(SlotKind::Process)
+            },
+            origin: if fits { origin } else { Origin::Unexpected },
+            hold: Hold::Action {
+                failure: op.failure,
+            },
+        };
+        let mut entry = Entry::new(id, binding, owner, now);
+        if !fits {
             self.group.unexpected.push(entry);
+            let slot = SlotRef::Unexpected(self.group.unexpected.len() - 1);
+            self.issue_entry_failure(slot, now);
             self.fail(
                 FailureClass::UnexpectedOwner,
                 "an operation returned an owner custody did not reserve a slot for",
@@ -1623,25 +1780,25 @@ impl<R: Resource> Custody<R> {
             );
             return Ok(Completion::Unexpected(id));
         }
-        let mut entry = Entry::new(id, op.action, op.kind, origin, op.failure, owner, now);
-        let open = self.shared.closure().is_none();
-        if origin == Origin::Created && self.case.is_some() && open {
+        if origin == Origin::Created && self.case.is_some() && self.shared.closure().is_none() {
             entry.phase = EntryPhase::Live;
         }
+        let expected = origin == Origin::Retained
+            && op.kind == SlotKind::Process
+            && self.case.as_ref().is_some_and(|case| {
+                case.id == op.case
+                    && case.expectation == Expectation::RetainedBoundary
+                    && case.retained_entry.is_none()
+            });
+        *self.group.slot_mut(op.kind) = Some(entry);
         if origin == Origin::Retained {
-            let expected = op.kind == SlotKind::Process
-                && self.case.as_ref().is_some_and(|case| {
-                    case.id == op.case
-                        && case.expectation == Expectation::RetainedBoundary
-                        && case.retained_entry.is_none()
-                });
             match self.case.as_mut() {
                 Some(case) if expected => {
                     case.expected_observed = true;
                     case.retained_entry = Some(id);
                 }
                 _ => {
-                    self.issue_failure(&mut entry.failure, op.action, now);
+                    self.issue_entry_failure(slot_of(op.kind), now);
                     self.fail(
                         FailureClass::UnexpectedRetained,
                         "an operation's own cleanup was unconfirmed where none was expected",
@@ -1650,57 +1807,72 @@ impl<R: Resource> Custody<R> {
                 }
             }
         }
-        *self.group.slot_mut(op.kind) = Some(entry);
         Ok(Completion::Deposited(id))
     }
 
-    /// An owner from an operation already resolved: held as unexpected while
-    /// custody may hold more (and can reserve its evidence), otherwise
-    /// returned to the caller. If the run had already completed, it requires
-    /// recovery again.
-    fn retain_stray(
+    /// An owner delivered for an operation already retired: a late incident
+    /// with its own identity and records (never the retired action's), held
+    /// while custody may hold another and can reserve its evidence, otherwise
+    /// returned to the caller. Either way it is a failure: before the terminal
+    /// record an actual failure of the run (and a completion candidate holding
+    /// it requires recovery again); after it, a fault of this custody that
+    /// leaves the run's outcome as recorded.
+    fn retain_late(
         &mut self,
         action: ActionId,
         owner: R,
         now: Tick,
     ) -> Result<Completion, Rejected<R>> {
-        let reopen = self.phase == RunPhase::Complete;
-        // Its failure and settlement records; reopening a completed run also
-        // needs recovery-required, a new end and the remaining attempts'.
-        let retries = self
-            .config
-            .recovery_budget
-            .saturating_sub(self.recovery.attempts);
-        let records = if reopen { retries.saturating_add(4) } else { 2 };
-        if self.group.unexpected.len() >= self.config.unexpected_limit
-            || !self.ledger.reserve(records)
-        {
+        // A candidate's recovery-required record, if its own was used.
+        let recovery = self.phase == RunPhase::Candidate && !self.run_records.recovery;
+        let records = 2 + u32::from(recovery);
+        if self.group.late.len() >= self.config.late_limit || !self.ledger.reserve(records) {
+            self.fail(
+                FailureClass::LateOwner,
+                "an operation already retired delivered another owner; returned, not held",
+                now,
+            );
             return Err(Rejected::CustodyFull { owner });
         }
+        if recovery {
+            self.run_records.recovery = true;
+        }
         let declared = contained(|| owner.kind());
+        let incident = IncidentId {
+            generation: self.generation,
+            seq: self.next_incident,
+        };
+        self.next_incident += 1;
         let id = self.new_entry_id();
-        let mut failure = FailureRecord::Reserved;
-        self.issue_failure(&mut failure, action, now);
-        let kind = declared.unwrap_or(SlotKind::Process);
-        let entry = Entry::new(id, action, kind, Origin::Unexpected, failure, owner, now);
-        self.group.unexpected.push(entry);
+        let binding = Binding {
+            action,
+            case: None,
+            kind: declared.unwrap_or(SlotKind::Process),
+            origin: Origin::Late,
+            hold: Hold::Incident { incident },
+        };
+        self.group.late.push(Entry::new(id, binding, owner, now));
+        self.ledger.issue_reserved(
+            now,
+            RecordKind::IncidentOpened {
+                incident,
+                action,
+                kind: declared,
+            },
+        );
         self.fail(
-            FailureClass::UnexpectedOwner,
-            "an operation already resolved returned another owner",
+            FailureClass::LateOwner,
+            "an operation already retired delivered another owner",
             now,
         );
-        if reopen {
-            // The run had ended holding nothing; it holds an owner again.
-            self.phase = RunPhase::RecoveryRequired;
-            self.run_records = RunRecords {
-                ended: true,
-                recovery: false,
-                retries,
-            };
-            self.ledger
-                .issue_reserved(now, RecordKind::RecoveryRequired);
+        if self.phase == RunPhase::Candidate {
+            // No terminal record yet: the run holds an owner again.
+            self.enter_recovery(now);
         }
-        Ok(Completion::Unexpected(id))
+        Ok(Completion::Late {
+            incident,
+            entry: id,
+        })
     }
 
     /// Issue an action's failure record from its reservation, once.
@@ -1709,6 +1881,26 @@ impl<R: Resource> Custody<R> {
             *record = FailureRecord::Issued;
             self.ledger
                 .issue_reserved(now, RecordKind::ActionFailed { action });
+        }
+    }
+
+    /// Issue a held entry's action failure record, once (a late incident's
+    /// own records tell its story instead).
+    fn issue_entry_failure(&mut self, slot: SlotRef, now: Tick) {
+        let reserved = self.group.entry(slot).and_then(|entry| match entry.hold {
+            Hold::Action {
+                failure: FailureRecord::Reserved,
+            } => Some(entry.action),
+            Hold::Action { .. } | Hold::Incident { .. } => None,
+        });
+        if let Some(action) = reserved {
+            self.ledger
+                .issue_reserved(now, RecordKind::ActionFailed { action });
+            if let Some(entry) = self.group.entry_mut(slot) {
+                entry.hold = Hold::Action {
+                    failure: FailureRecord::Issued,
+                };
+            }
         }
     }
 
@@ -1721,9 +1913,10 @@ impl<R: Resource> Custody<R> {
         id
     }
 
-    /// Lend a held owner to the case's own code (for evidence). The owner
-    /// stays in custody whatever `f` does; a panic in `f` is contained. `f`
-    /// must not replace the owner.
+    /// Lend a held owner to the run's own code (for evidence), while the run
+    /// is running or recovering. The owner stays in custody whatever `f`
+    /// does, but `f` must not replace it (see [`Cleanup`]); a panic in `f` is
+    /// contained and is an actual failure.
     pub fn lend<T>(
         &mut self,
         entry: EntryId,
@@ -1732,6 +1925,9 @@ impl<R: Resource> Custody<R> {
     ) -> Result<T, LendError> {
         if self.advance(now).is_err() {
             return Err(LendError::ClockRegression);
+        }
+        if !matches!(self.phase, RunPhase::Running | RunPhase::RecoveryRequired) {
+            return Err(LendError::Phase(self.phase));
         }
         let Some(slot) = self.group.find(entry) else {
             return Err(LendError::UnknownEntry);
@@ -1742,19 +1938,42 @@ impl<R: Resource> Custody<R> {
             entry: Some(entry),
         });
         self.publish();
-        let result = match self.group.entry_mut(slot) {
-            Some(held) => contained(|| f(&mut held.owner)).ok_or(LendError::Panicked),
+        let lent = self
+            .group
+            .entry_mut(slot)
+            .map(|held| contained(|| f(&mut held.owner)));
+        self.busy = None;
+        let result = match lent {
+            Some(Some(value)) => Ok(value),
+            Some(None) => {
+                self.fail(
+                    FailureClass::Assertion,
+                    "a borrower panicked; its owner is still held",
+                    now,
+                );
+                Err(LendError::Panicked)
+            }
             None => Err(LendError::UnknownEntry),
         };
-        self.busy = None;
+        self.settle_idle(now);
         self.publish();
         result
     }
 
-    /// Record an actual failed assertion or observation of the case.
+    /// Record an actual failed assertion or observation. Only while the
+    /// run's outcome is open (running, recovering or a completion candidate);
+    /// once the terminal record is issued it is refused and changes nothing.
     pub fn record_assertion_failure(&mut self, detail: &str, now: Tick) -> Result<(), Refusal> {
         self.advance(now)?;
+        if !matches!(
+            self.phase,
+            RunPhase::Running | RunPhase::RecoveryRequired | RunPhase::Candidate
+        ) {
+            self.publish();
+            return Err(Refusal::Phase(self.phase));
+        }
         self.fail(FailureClass::Assertion, detail, now);
+        self.settle_idle(now);
         self.publish();
         Ok(())
     }
@@ -1811,8 +2030,8 @@ impl<R: Resource> Custody<R> {
     /// one still open becomes unknown, every held owner's end becomes
     /// required, the automatic attempts run (native trees first, a dependency
     /// only after the tree that used it ended), and the case is judged. The
-    /// run stops if anything stays unresolved, admission is closed or
-    /// recording failed.
+    /// run stops if anything stays unresolved, the run is halted (cancelled,
+    /// or failed by this or an earlier failure) or recording failed.
     pub fn end_case<C: Cleanup<R>>(
         &mut self,
         cleanup: &mut C,
@@ -1829,6 +2048,9 @@ impl<R: Resource> Custody<R> {
         cleanup: &mut C,
         now: Tick,
     ) -> Result<CaseOutcome, Refusal> {
+        if self.phase != RunPhase::Running {
+            return Err(Refusal::Phase(self.phase));
+        }
         let Some(case) = self.case.as_ref().map(|case| case.id) else {
             return Err(Refusal::NoCase);
         };
@@ -1865,8 +2087,8 @@ impl<R: Resource> Custody<R> {
         }
         self.case = None;
         let resolved = !self.unresolved();
-        let closed = self.observe_closure(now).is_some();
-        let stopped = !resolved || closed || self.ledger.failed.is_some();
+        let halted = self.halted(now).is_some();
+        let stopped = !resolved || halted || self.ledger.failed.is_some();
         if stopped {
             self.stop(now);
         }
@@ -1900,7 +2122,8 @@ impl<R: Resource> Custody<R> {
     }
 
     /// An entry still held after required attempts: its failure record is
-    /// issued (if it was not already) and the failure counted, once.
+    /// issued (if it has one and it was not already) and the failure counted,
+    /// once.
     fn note_unresolved(&mut self, id: EntryId, now: Tick) {
         let Some(slot) = self.group.find(id) else {
             return;
@@ -1912,17 +2135,35 @@ impl<R: Resource> Custody<R> {
             return;
         }
         entry.unresolved_noted = true;
-        let action = entry.action;
-        let mut failure = entry.failure;
-        self.issue_failure(&mut failure, action, now);
-        if let Some(entry) = self.group.entry_mut(slot) {
-            entry.failure = failure;
-        }
+        self.issue_entry_failure(slot, now);
         self.fail(
             FailureClass::UnexpectedCleanup,
             "a required cleanup attempt did not confirm its end",
             now,
         );
+    }
+
+    /// A process tree's output was detached instead of drained: output loss,
+    /// an actual failure unless its own case declared exactly that (once).
+    fn note_output_lost(&mut self, case: Option<CaseId>, now: Tick) {
+        let declared = match self.case.as_mut() {
+            Some(active)
+                if Some(active.id) == case
+                    && active.expectation == Expectation::OutputDetached
+                    && !active.expected_observed =>
+            {
+                active.expected_observed = true;
+                true
+            }
+            _ => false,
+        };
+        if !declared {
+            self.fail(
+                FailureClass::OutputLost,
+                "a process tree's output was detached instead of drained",
+                now,
+            );
+        }
     }
 
     fn judge_case(&mut self, now: Tick) -> bool {
@@ -1935,20 +2176,25 @@ impl<R: Resource> Custody<R> {
         }) else {
             return false;
         };
-        if expectation == Expectation::RetainedBoundary {
-            if !observed {
-                self.fail(
-                    FailureClass::ExpectedConditionUnmet,
-                    "the expected retained boundary was not observed",
-                    now,
-                );
-            } else if first != Some(true) {
-                self.fail(
-                    FailureClass::ExpectedConditionUnmet,
-                    "the retained boundary was not confirmed by its first cleanup attempt",
-                    now,
-                );
-            }
+        match expectation {
+            Expectation::Clean => {}
+            Expectation::RetainedBoundary if !observed => self.fail(
+                FailureClass::ExpectedConditionUnmet,
+                "the expected retained boundary was not observed",
+                now,
+            ),
+            Expectation::RetainedBoundary if first != Some(true) => self.fail(
+                FailureClass::ExpectedConditionUnmet,
+                "the retained boundary was not confirmed by its first cleanup attempt",
+                now,
+            ),
+            Expectation::RetainedBoundary => {}
+            Expectation::OutputDetached if !observed => self.fail(
+                FailureClass::ExpectedConditionUnmet,
+                "the declared output detachment was not observed",
+                now,
+            ),
+            Expectation::OutputDetached => {}
         }
         let failed = self.case.as_ref().is_some_and(|case| case.failed);
         !failed && !self.unresolved()
@@ -1971,15 +2217,22 @@ impl<R: Resource> Custody<R> {
     }
 
     /// Observe the control side's closure at a safe point: it is recorded once
-    /// (as a control fact), and an idle run stops.
+    /// (as a control fact), and an idle running run stops.
     pub fn observe_control(&mut self, now: Tick) -> Result<Option<Closure>, Refusal> {
         self.advance(now)?;
         let closure = self.observe_closure(now);
-        if closure.is_some() && self.phase == RunPhase::Running && self.case.is_none() {
-            self.stop(now);
-        }
+        self.settle_idle(now);
         self.publish();
         Ok(closure)
+    }
+
+    /// A running run with no case and admission closed (cancelled, or failed
+    /// by any entry point) stops at once: fail-stop needs no later call.
+    fn settle_idle(&mut self, now: Tick) {
+        if self.phase == RunPhase::Running && self.case.is_none() && self.shared.closure().is_some()
+        {
+            self.stop(now);
+        }
     }
 
     fn observe_closure(&mut self, now: Tick) -> Option<Closure> {
@@ -2001,6 +2254,13 @@ impl<R: Resource> Custody<R> {
         closure
     }
 
+    /// The closure that halts the run, if any (observed and recorded): a
+    /// control-side cancellation or an actual failure. No case begins after
+    /// it, and ending a case stops the run on it.
+    fn halted(&mut self, now: Tick) -> Option<Closure> {
+        self.observe_closure(now)
+    }
+
     /// Native owners first; a dependency only once the native tree that used
     /// it has ended and no operation is open.
     fn cleanup_round<C: Cleanup<R>>(&mut self, cleanup: &mut C, explicit: bool, now: Tick) {
@@ -2016,7 +2276,7 @@ impl<R: Resource> Custody<R> {
 
     /// Whether dependencies may be released: no operation is open (an unknown
     /// one may still be using them), no authority was lost, and every process
-    /// tree has ended natively.
+    /// tree held (in its slot, unexpected or late) has ended natively.
     fn dependencies_releasable(&self) -> bool {
         let process_ended = self
             .group
@@ -2030,6 +2290,7 @@ impl<R: Resource> Custody<R> {
                 .group
                 .unexpected
                 .iter()
+                .chain(self.group.late.iter())
                 .all(|entry| entry.kind != SlotKind::Process || entry.natively_ended())
     }
 
@@ -2061,7 +2322,8 @@ impl<R: Resource> Custody<R> {
     }
 
     /// One attempt on one held owner. The owner is lent, never moved; a panic
-    /// in the adapter is contained and the owner stays held.
+    /// in the adapter is contained, the owner stays held and the panic is an
+    /// actual failure. A detached output is output loss.
     fn attempt<C: Cleanup<R>>(
         &mut self,
         slot: SlotRef,
@@ -2085,7 +2347,7 @@ impl<R: Resource> Custody<R> {
         self.busy = None;
         let panicked = report.is_none();
         let report = report.unwrap_or(CleanupReport::NOTHING);
-        let (finished, first) = match self.group.entry_mut(slot) {
+        let (finished, first, detached) = match self.group.entry_mut(slot) {
             Some(entry) => {
                 if explicit {
                     entry.explicit = entry.explicit.saturating_add(1);
@@ -2093,22 +2355,28 @@ impl<R: Resource> Custody<R> {
                     entry.automatic = entry.automatic.saturating_add(1);
                 }
                 entry.phase = EntryPhase::CleanupRequired;
-                entry.apply(&report, now);
+                let detached = entry.apply(&report, now);
                 let finished = entry.finished();
-                let first = entry.first.is_none();
-                if first {
-                    entry.first = Some(finished);
-                }
-                (finished, first)
+                let first = if entry.first.is_none() {
+                    let confirmed = entry.confirmed();
+                    entry.first = Some(confirmed);
+                    Some(confirmed)
+                } else {
+                    None
+                };
+                (finished, first, detached)
             }
-            None => (false, false),
+            None => (false, None, false),
         };
-        if first {
+        if let Some(confirmed) = first {
             if let Some(case) = self.case.as_mut() {
                 if case.retained_entry == Some(view.entry) {
-                    case.retained_first = Some(finished);
+                    case.retained_first = Some(confirmed);
                 }
             }
+        }
+        if detached {
+            self.note_output_lost(view.case, now);
         }
         if panicked {
             self.fail(
@@ -2125,34 +2393,44 @@ impl<R: Resource> Custody<R> {
     }
 
     /// Release an owner whose end is confirmed: it is handed back to the
-    /// caller, and its settlement record is issued.
+    /// caller first, then its settlement record (which says whether its
+    /// output was complete or lost) is issued.
     fn finish(&mut self, slot: SlotRef, now: Tick) {
         let Some(entry) = self.group.take(slot) else {
             return;
         };
+        let how = entry.settlement();
         let Entry {
             id,
             action,
             owner,
-            failure,
+            hold,
             ..
         } = entry;
         // Handed over first; the bookkeeping follows.
         self.released.push(Released { entry: id, owner });
-        let record = self.ledger.issue_reserved(
-            now,
-            RecordKind::ActionSettled {
-                action,
-                how: Settlement::Confirmed,
-            },
-        );
-        if failure == FailureRecord::Reserved {
-            self.ledger.release(1);
-        }
+        let (record, incident) = match hold {
+            Hold::Action { failure } => {
+                let record = self
+                    .ledger
+                    .issue_reserved(now, RecordKind::ActionSettled { action, how });
+                if failure == FailureRecord::Reserved {
+                    self.ledger.release(1);
+                }
+                (record, None)
+            }
+            Hold::Incident { incident } => (
+                self.ledger
+                    .issue_reserved(now, RecordKind::IncidentSettled { incident, how }),
+                Some(incident),
+            ),
+        };
         self.settling.push(SettlingView {
             action,
             entry: Some(id),
+            incident,
             record,
+            how,
         });
     }
 
@@ -2168,13 +2446,15 @@ impl<R: Resource> Custody<R> {
         self.group.held() > 0 || self.group.op.is_some() || !self.lost.is_empty()
     }
 
-    /// No further case: the run either completes or requires recovery.
+    /// No further case: the run requires recovery, or becomes a completion
+    /// candidate. A control-side cancellation is itself a failure; an actual
+    /// failure is never recorded as a cancellation.
     fn stop(&mut self, now: Tick) {
         if self.phase != RunPhase::Running {
             return;
         }
         if let Some(closure) = self.observe_closure(now) {
-            if closure.reason != CancelReason::RecordFailed && !self.cancel_noted {
+            if matches!(closure.reason, ClosureReason::Cancelled(_)) && !self.cancel_noted {
                 self.cancel_noted = true;
                 self.fail(
                     FailureClass::Cancelled,
@@ -2184,46 +2464,87 @@ impl<R: Resource> Custody<R> {
             }
         }
         if self.unresolved() {
-            self.phase = RunPhase::RecoveryRequired;
-            self.verdict = Verdict::Failed;
-            if self.run_records.recovery {
-                self.run_records.recovery = false;
-                self.ledger
-                    .issue_reserved(now, RecordKind::RecoveryRequired);
-            }
+            self.enter_recovery(now);
         } else {
-            self.complete_run(now, None);
+            self.become_candidate(now, None);
         }
     }
 
-    /// The run's native state is resolved: its end is recorded. A verdict once
-    /// failed stays failed.
-    fn complete_run(&mut self, now: Tick, resolved_by: Option<u32>) {
+    fn enter_recovery(&mut self, now: Tick) {
+        self.phase = RunPhase::RecoveryRequired;
+        if self.run_records.recovery {
+            self.run_records.recovery = false;
+            self.ledger
+                .issue_reserved(now, RecordKind::RecoveryRequired);
+        }
+    }
+
+    /// The run's native state is resolved: it is a completion candidate,
+    /// finalized as soon as its evidence allows.
+    fn become_candidate(&mut self, now: Tick, resolved_by: Option<u32>) {
         self.recovery.resolved_by = resolved_by;
-        if self.failures.total() > 0 || self.cases_failed > 0 {
-            self.verdict = Verdict::Failed;
+        self.phase = RunPhase::Candidate;
+        self.try_finalize(now);
+    }
+
+    /// Issue the terminal record of a completion candidate once every earlier
+    /// record is acknowledged (and recording has not failed): no outcome is
+    /// published while required evidence is pending. The verdict is fixed in
+    /// it from here on.
+    fn try_finalize(&mut self, now: Tick) {
+        if self.phase != RunPhase::Candidate
+            || self.ledger.failed.is_some()
+            || self.ledger.unacknowledged() > 0
+            || self.unresolved()
+        {
+            return;
         }
-        if self.verdict != Verdict::Failed {
-            self.verdict = Verdict::Passed;
-        }
+        let verdict = self.run_verdict();
         if self.run_records.recovery {
             self.run_records.recovery = false;
             self.ledger.release(1);
         }
-        self.ledger.release(self.run_records.retries);
-        self.run_records.retries = 0;
-        if self.run_records.ended {
-            self.run_records.ended = false;
-            let verdict = self.verdict;
-            self.ledger.issue_reserved(
-                now,
-                RecordKind::RunEnded {
-                    verdict,
-                    resolved_by,
-                },
-            );
+        self.run_records.ended = false;
+        let record = self.ledger.issue_reserved(
+            now,
+            RecordKind::RunEnded {
+                verdict,
+                resolved_by: self.recovery.resolved_by,
+            },
+        );
+        self.terminal = Some(Terminal { record, verdict });
+        self.phase = RunPhase::Finalizing;
+    }
+
+    /// The terminal record is acknowledged: the run is final.
+    fn note_finalized(&mut self) {
+        let acknowledged = self
+            .terminal
+            .is_some_and(|terminal| self.ledger.is_acknowledged(terminal.record));
+        if self.phase == RunPhase::Finalizing && acknowledged {
+            self.phase = RunPhase::Finalized;
         }
-        self.phase = RunPhase::Complete;
+    }
+
+    /// The run's verdict as its failures stand.
+    fn run_verdict(&self) -> Verdict {
+        if self.failures.total() > 0 || self.cases_failed > 0 {
+            Verdict::Failed
+        } else {
+            Verdict::Passed
+        }
+    }
+
+    /// The published verdict: failed from the first actual failure; passed
+    /// only once a terminal record carrying a pass is acknowledged.
+    fn verdict(&self) -> Verdict {
+        if self.run_verdict() == Verdict::Failed {
+            return Verdict::Failed;
+        }
+        match self.terminal {
+            Some(terminal) if self.ledger.is_acknowledged(terminal.record) => terminal.verdict,
+            _ => Verdict::Pending,
+        }
     }
 
     /// Serve the queued request, if any. State-changing requests are bound to
@@ -2293,13 +2614,15 @@ impl<R: Resource> Custody<R> {
         RequestOutcome::Executed(response)
     }
 
-    /// One explicit recovery attempt: only while recovery is required, decided
-    /// against the current epoch, within the budget and the spacing, and with
-    /// its record's space reserved (since the run started). Each unresolved
-    /// owner gets one attempt (native trees first). Nothing is removed because
-    /// a budget is spent, and no earlier failure is forgotten.
+    /// One explicit recovery attempt: while the run requires recovery, or
+    /// (after its terminal record) while late incidents are held; decided
+    /// against the current epoch, within the budget and the spacing, with its
+    /// record reserved since the run started. Each held owner gets one
+    /// attempt (native trees first). Nothing is removed because a budget is
+    /// spent, and no earlier failure is forgotten.
     fn retry<C: Cleanup<R>>(&mut self, epoch: u64, cleanup: &mut C, now: Tick) -> Response {
-        if self.phase != RunPhase::RecoveryRequired {
+        let incidents = self.terminal.is_some() && !self.group.late.is_empty();
+        if self.phase != RunPhase::RecoveryRequired && !incidents {
             return Response::RetryRefused(Refusal::NotRecoveryRequired);
         }
         if epoch != self.recovery.epoch {
@@ -2325,8 +2648,8 @@ impl<R: Resource> Custody<R> {
         let resolved = !self.unresolved();
         self.ledger
             .issue_reserved(now, RecordKind::RecoveryAttempt { attempt, resolved });
-        if resolved {
-            self.complete_run(now, Some(attempt));
+        if resolved && self.phase == RunPhase::RecoveryRequired {
+            self.become_candidate(now, Some(attempt));
         }
         Response::Retried {
             attempt,
@@ -2336,12 +2659,13 @@ impl<R: Resource> Custody<R> {
     }
 
     /// An application shutdown request: never an exit, a release or a drop.
-    /// While the run is active it closes admission (the shutdown waits until
-    /// everything is resolved); while anything is unresolved it is refused,
-    /// and the first refusal becomes evidence.
+    /// While the run is active it closes admission (a cancellation; the
+    /// shutdown waits until everything is resolved); while anything is
+    /// unresolved it is refused, and the first refusal becomes evidence.
     fn shutdown_requested(&mut self, now: Tick) -> ShutdownDecision {
         if self.phase == RunPhase::Running {
-            self.shared.close(CancelReason::Shutdown, now);
+            self.shared
+                .close(ClosureReason::Cancelled(CancelReason::Shutdown), now);
             self.observe_closure(now);
             if self.case.is_none() {
                 self.stop(now);
@@ -2360,20 +2684,41 @@ impl<R: Resource> Custody<R> {
         decision
     }
 
-    /// Whether the application may shut down now (it changes nothing).
+    /// Whether the custody may close now (it changes nothing): only with the
+    /// run final (or never started), nothing held or pending, and every
+    /// issued record acknowledged. Failed or pending evidence refuses it,
+    /// with no exception.
     pub fn shutdown_decision(&self) -> ShutdownDecision {
+        let unresolved = self.unresolved_now();
+        if unresolved.is_empty() {
+            ShutdownDecision::Permitted
+        } else {
+            ShutdownDecision::Refused(unresolved)
+        }
+    }
+
+    fn unresolved_now(&self) -> Vec<Unresolved> {
         let mut unresolved = Vec::new();
-        match self.phase {
-            RunPhase::Running => unresolved.push(Unresolved::RunActive),
-            RunPhase::RecoveryRequired => unresolved.push(Unresolved::RecoveryRequired),
-            RunPhase::NotStarted | RunPhase::Complete | RunPhase::Closed => {}
+        match (self.phase, self.terminal) {
+            (RunPhase::Running, _) => unresolved.push(Unresolved::RunActive),
+            (RunPhase::RecoveryRequired, _) => unresolved.push(Unresolved::RecoveryRequired),
+            (RunPhase::Candidate, _) => unresolved.push(Unresolved::RunEnding),
+            (RunPhase::Finalizing, Some(terminal)) => {
+                unresolved.push(Unresolved::TerminalPending(terminal.record))
+            }
+            (RunPhase::Finalizing, None) => unresolved.push(Unresolved::RunEnding),
+            (RunPhase::NotStarted | RunPhase::Finalized | RunPhase::Closed, _) => {}
         }
         if self.case.is_some() {
             unresolved.push(Unresolved::CaseActive);
         }
-        let held = self.group.held() as u32;
+        let late = self.group.late.len();
+        let held = self.group.held() - late;
         if held > 0 {
-            unresolved.push(Unresolved::OwnersHeld(held));
+            unresolved.push(Unresolved::OwnersHeld(held as u32));
+        }
+        if late > 0 {
+            unresolved.push(Unresolved::LateIncidents(late as u32));
         }
         match self.group.op.as_ref().map(|op| op.phase) {
             Some(OpPhase::Unknown { .. }) => unresolved.push(Unresolved::OutcomeUnknown),
@@ -2385,51 +2730,50 @@ impl<R: Resource> Custody<R> {
         if !self.lost.is_empty() {
             unresolved.push(Unresolved::AuthorityLost(self.lost.len() as u32));
         }
-        if self.ledger.failed.is_none() {
-            let pending = self.ledger.unacknowledged();
-            if pending > 0 {
-                unresolved.push(Unresolved::EvidencePending(pending));
+        match self.ledger.failed {
+            Some((record, at)) => unresolved.push(Unresolved::EvidenceFailed { record, at }),
+            None => {
+                let pending = self.ledger.unacknowledged();
+                if pending > 0 {
+                    unresolved.push(Unresolved::EvidencePending(pending));
+                }
             }
         }
-        if !unresolved.is_empty() {
-            ShutdownDecision::Refused(unresolved)
-        } else if self.ledger.failed.is_some() {
-            ShutdownDecision::PermittedWithoutDurableCompletion
-        } else {
-            ShutdownDecision::Permitted
-        }
+        unresolved
     }
 
     /// Close the custody if nothing is unresolved; otherwise the same custody
-    /// comes back, unchanged in what it holds.
+    /// comes back, unchanged in what it holds. The closed result carries the
+    /// acknowledged terminal record and its verdict.
     pub fn close(mut self, now: Tick) -> Result<Closed<R>, Box<Custody<R>>> {
         if self.advance(now).is_err() {
             return Err(Box::new(self));
         }
-        let durable = match self.shutdown_decision() {
-            ShutdownDecision::Permitted => true,
-            ShutdownDecision::PermittedWithoutDurableCompletion => false,
-            ShutdownDecision::Refused(_) => {
-                self.publish();
-                return Err(Box::new(self));
-            }
-        };
+        if self.shutdown_decision() != ShutdownDecision::Permitted {
+            self.publish();
+            return Err(Box::new(self));
+        }
         let released = std::mem::take(&mut self.released);
+        let verdict = self.verdict();
         self.phase = RunPhase::Closed;
         self.publish();
         Ok(Closed {
-            verdict: self.verdict,
+            terminal: self.terminal.map(|terminal| terminal.record),
+            verdict,
             resolved_by: self.recovery.resolved_by,
-            durable,
+            records: self.ledger.issued(),
             failures: self.failures.details.clone(),
             failure_counts: self.failures.counts,
             failure_overflow: self.failures.overflow,
+            faults: self.faults.details.clone(),
+            fault_counts: self.faults.counts,
+            fault_overflow: self.faults.overflow,
             released,
         })
     }
 
     /// Hand the issued, unsent records to the recorder, in order. A record the
-    /// sink panics on stays unsent.
+    /// sink panics on stays unsent, and the panic is an actual failure.
     pub fn flush_records<S: RecordSink>(
         &mut self,
         sink: &mut S,
@@ -2449,6 +2793,12 @@ impl<R: Resource> Custody<R> {
             let submitted = contained(|| sink.submit(&intent));
             self.busy = None;
             if submitted.is_none() {
+                self.fail(
+                    FailureClass::RecorderFault,
+                    "the recorder adapter panicked; the record is still unsent",
+                    now,
+                );
+                self.settle_idle(now);
                 self.publish();
                 return Err(FlushError::SinkPanicked { sent });
             }
@@ -2459,7 +2809,9 @@ impl<R: Resource> Custody<R> {
         Ok(sent)
     }
 
-    /// The recorder's acknowledgement that one record is durable.
+    /// The recorder's acknowledgement that one record is durable. The last
+    /// earlier record's acknowledgement lets a completion candidate issue its
+    /// terminal record; the terminal record's makes the run final.
     pub fn acknowledge(&mut self, ack: &RecordAck, now: Tick) -> AckOutcome {
         if self.advance(now).is_err() {
             return AckOutcome::ClockRegression;
@@ -2469,30 +2821,29 @@ impl<R: Resource> Custody<R> {
             let ledger = &self.ledger;
             self.settling
                 .retain(|settling| !ledger.is_acknowledged(settling.record));
+            self.try_finalize(now);
+            self.note_finalized();
         }
         self.publish();
         outcome
     }
 
-    /// The recorder's report that the next record could not be made durable.
-    /// Recording stays failed: admission closes for good, and completion can
-    /// never be claimed durable.
+    /// The recorder's report that the next record could not be made durable:
+    /// an actual failure (fail-stop). Recording stays failed: no later
+    /// acknowledgement is accepted, no terminal record is issued after it, and
+    /// the custody never closes.
     pub fn record_failed(&mut self, id: RecordId, now: Tick) -> AckOutcome {
         if self.advance(now).is_err() {
             return AckOutcome::ClockRegression;
         }
         let outcome = self.ledger.fail(id, now);
         if outcome == AckOutcome::FailureRecorded {
-            self.shared.close(CancelReason::RecordFailed, now);
-            self.observe_closure(now);
             self.fail(
                 FailureClass::RecordFailed,
                 "an evidence record could not be made durable",
                 now,
             );
-            if self.phase == RunPhase::Running && self.case.is_none() {
-                self.stop(now);
-            }
+            self.settle_idle(now);
         }
         self.publish();
         outcome
@@ -2506,19 +2857,33 @@ impl<R: Resource> Custody<R> {
         Ok(())
     }
 
+    /// Record an actual failure, from whichever entry point recognized it,
+    /// and close execution admission for good (fail-stop). Before the
+    /// terminal record it is the run's failure (and its case's); after it,
+    /// the run's outcome is fixed and the failure is a fault of this custody.
     fn fail(&mut self, class: FailureClass, detail: &str, now: Tick) {
-        let case = self.case.as_mut().map(|case| {
-            case.failed = true;
-            case.id
-        });
         let detail = bounded(detail, self.config.detail_chars);
-        self.failures.push(Failure {
-            class,
-            case,
-            at: now,
-            detail,
-        });
-        self.verdict = Verdict::Failed;
+        if self.terminal.is_some() {
+            self.faults.push(Failure {
+                class,
+                case: None,
+                at: now,
+                detail,
+            });
+        } else {
+            let case = self.case.as_mut().map(|case| {
+                case.failed = true;
+                case.id
+            });
+            self.failures.push(Failure {
+                class,
+                case,
+                at: now,
+                detail,
+            });
+        }
+        self.shared.close(ClosureReason::Failed(class), now);
+        self.observe_closure(now);
     }
 
     /// Publish a new snapshot. The lock is held only to swap the pointer.
@@ -2535,7 +2900,12 @@ impl<R: Resource> Custody<R> {
             published: self.published,
             at: self.clock,
             phase: self.phase,
-            verdict: self.verdict,
+            verdict: self.verdict(),
+            terminal: self.terminal.map(|terminal| TerminalView {
+                record: terminal.record,
+                verdict: terminal.verdict,
+                acknowledged: self.ledger.is_acknowledged(terminal.record),
+            }),
             cases_passed: self.cases_passed,
             cases_failed: self.cases_failed,
             case: self.case.as_ref().map(CaseState::view),
@@ -2562,7 +2932,10 @@ impl<R: Resource> Custody<R> {
             failures: self.failures.details.clone(),
             failure_overflow: self.failures.overflow,
             failure_counts: self.failures.counts,
-            incidents: self.incidents.iter().map(Incident::view).collect(),
+            faults: self.faults.details.clone(),
+            fault_overflow: self.faults.overflow,
+            fault_counts: self.faults.counts,
+            prior: self.prior.iter().map(Prior::view).collect(),
             busy: self.busy,
             cancel_observed: self.cancel_observed,
         }
@@ -2576,6 +2949,7 @@ fn blank_snapshot(generation: Generation, at: Tick, config: &Config) -> Snapshot
         at,
         phase: RunPhase::NotStarted,
         verdict: Verdict::Pending,
+        terminal: None,
         cases_passed: 0,
         cases_failed: 0,
         case: None,
@@ -2602,8 +2976,11 @@ fn blank_snapshot(generation: Generation, at: Tick, config: &Config) -> Snapshot
         },
         failures: Vec::new(),
         failure_overflow: 0,
-        failure_counts: [0; 9],
-        incidents: Vec::new(),
+        failure_counts: [0; FailureClass::COUNT],
+        faults: Vec::new(),
+        fault_overflow: 0,
+        fault_counts: [0; FailureClass::COUNT],
+        prior: Vec::new(),
         busy: None,
         cancel_observed: None,
     }
