@@ -361,6 +361,55 @@ fn p2h_nc_41_an_active_or_uncleaned_verification_blocks_apply() {
 }
 
 #[test]
+fn p2r1_a_panicked_verification_keeps_apply_refused_until_its_cleanup_is_confirmed() {
+    // What the desktop records when its verification thread panics with the
+    // execution's boundary retained, from every active phase: an unknown
+    // result whose cleanup is unconfirmed.
+    for active in 0..3 {
+        let e = env();
+        let (mut run, binding) = verified(&e, default_edits());
+        let generation = launched(&e, &mut run);
+        if active >= 1 {
+            run.verification_running(generation).unwrap();
+        }
+        if active >= 2 {
+            run.verification_finalizing(generation).unwrap();
+        }
+        let result = run
+            .finish_verification(
+                generation,
+                outcome(VerifierExit::CleanupFailed, VerifierCleanup::Failed),
+            )
+            .unwrap();
+        assert!(!result.outcome.exit.passed());
+        assert_eq!(run.verification_phase(), VerificationPhase::CleanupFailed);
+        assert_eq!(
+            run.request_approval(&e.info.name, &p1_apply::Confirm::yes())
+                .err(),
+            Some(ApplyError::Refused(Refusal::VerificationCleanupFailed)),
+            "{active}"
+        );
+        // Only the retained boundary's confirmed cleanup releases Apply.
+        run.confirm_verification_cleanup(generation).unwrap();
+        approve_and_apply(&e, &mut run, binding).unwrap();
+        assert_eq!(run.apply_state(), ApplyState::Applied);
+    }
+    // A panic whose cleanup was confirmed is an unknown result: advisory,
+    // never a pass.
+    let e = env();
+    let (mut run, binding) = verified(&e, default_edits());
+    let result = finished(
+        &e,
+        &mut run,
+        VerifierExit::SandboxFailed,
+        VerifierCleanup::Confirmed,
+    );
+    assert!(!result.outcome.exit.passed());
+    assert_eq!(run.verification_phase(), VerificationPhase::Idle);
+    approve_and_apply(&e, &mut run, binding).unwrap();
+}
+
+#[test]
 fn p2h_nc_42_a_failed_verification_with_clean_cleanup_is_advisory() {
     let e = env();
     let (mut run, binding) = verified(&e, default_edits());

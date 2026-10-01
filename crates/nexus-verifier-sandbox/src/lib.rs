@@ -22,6 +22,8 @@ pub mod seccomp_policy;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub mod execution;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+mod fault;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub mod helper;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub mod landlock_rules;

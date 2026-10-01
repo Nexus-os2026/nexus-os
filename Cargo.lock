@@ -6006,6 +6006,7 @@ dependencies = [
  "hex",
  "landlock",
  "libc",
+ "nexus-verifier-sandbox",
  "seccompiler",
  "serde",
  "sha2",

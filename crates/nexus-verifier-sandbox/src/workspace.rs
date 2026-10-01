@@ -325,9 +325,12 @@ impl Workspace {
         Ok(())
     }
 
-    /// Remove the workspace (see the module documentation).
+    /// Remove the workspace (see the module documentation). A panic while
+    /// removing it leaves it retained for a retry, like any other failure.
     pub fn remove(mut self) -> Result<(), RetainedWorkspace> {
-        match self.remove_all() {
+        let removed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.remove_all()))
+            .unwrap_or_else(|_| Err(io::Error::other("workspace removal interrupted")));
+        match removed {
             Ok(()) => {
                 self.removed = true;
                 Ok(())

@@ -9,6 +9,7 @@ fn report() -> ExecutionReport {
         duration: Duration::from_millis(5),
         stdout: StreamRecord::default(),
         stderr: StreamRecord::default(),
+        output_lost: false,
         events: Some(ScopeEvents::default()),
         cleanup: Cleanup::Confirmed,
     }
@@ -168,4 +169,150 @@ fn p2d_a_removed_directory_lists_as_empty_through_its_descriptor() {
     std::fs::remove_file(base.join("entry")).unwrap();
     std::fs::remove_dir(&base).unwrap();
     assert!(crate::sys::directory_is_empty(dir.as_fd()).unwrap());
+}
+
+#[test]
+fn p2r1_an_interrupted_execution_is_never_passed() {
+    // A panic before the launch could reach the helper: nothing ran.
+    let mut before = report();
+    before.outcome = None;
+    before.events = None;
+    before.not_run = Some(NotRun::Interrupted);
+    assert_eq!(before.classify(0), ExitClass::SandboxSetupFailed);
+    // After it, whatever the verifier reported, the result is unknown.
+    let mut after = report();
+    after.ended_by = Some(EndedBy::Interrupted);
+    assert_eq!(after.classify(0), ExitClass::SandboxFailed);
+    // A lost output record is lost accounting, even with a passing exit.
+    let mut lost = report();
+    lost.output_lost = true;
+    assert_eq!(lost.classify(0), ExitClass::SandboxFailed);
+    // An unconfirmed cleanup still outranks each of them.
+    for mut interrupted in [before, after, lost] {
+        interrupted.cleanup = failed_cleanup();
+        assert_eq!(interrupted.classify(0), ExitClass::CleanupFailed);
+    }
+    // What a panic leaves observed depends only on whether the launch could
+    // have reached the helper.
+    let mut owned = Owned::default();
+    assert!(matches!(
+        interrupted(&owned).not_run,
+        Some(NotRun::Interrupted)
+    ));
+    owned.launched = true;
+    let observed = interrupted(&owned);
+    assert!(observed.not_run.is_none() && observed.outcome.is_none());
+    assert_eq!(observed.ended_by, Some(EndedBy::Interrupted));
+}
+
+/// A stand-in helper for ownership tests without a scope: `cat` keeps its
+/// control socket (stdin) open and stays alive until it is ended. Returns
+/// its process id.
+fn stand_in(owned: &mut Owned, fault: Option<Fault>) -> u32 {
+    let (helper, output) = Helper::spawn(&HelperProgram::at("/bin/cat")).unwrap();
+    let pid = helper.pid();
+    let limits = ResourcePolicy::RUST_OFFLINE_V1;
+    let flag = || Arc::new(AtomicBool::new(false));
+    owned.helper = Some(helper);
+    owned.stdout = Some(drain(output.stdout, &limits, flag(), flag(), fault).unwrap());
+    owned.stderr = Some(drain(output.stderr, &limits, flag(), flag(), fault).unwrap());
+    pid
+}
+
+/// Whether `pid` is still this process's child, running or unreaped.
+fn is_child(pid: u32) -> bool {
+    let parent = format!("PPid:\t{}", std::process::id());
+    std::fs::read_to_string(format!("/proc/{pid}/status"))
+        .is_ok_and(|status| status.lines().any(|line| line == parent))
+}
+
+/// Whether `pid` is still running (neither gone nor a zombie).
+fn is_running(pid: u32) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| {
+        stat.rsplit_once(") ")
+            .is_some_and(|(_, rest)| !rest.starts_with('Z'))
+    })
+}
+
+#[test]
+fn p2r1_finalization_ends_and_reaps_a_helper_without_a_scope() {
+    let mut owned = Owned::default();
+    let pid = stand_in(&mut owned, None);
+    assert!(is_child(pid) && is_running(pid));
+    let finalized = finalize(&mut owned, None);
+    assert!(finalized.cleanup.is_confirmed());
+    assert!(!finalized.output_lost);
+    assert!(!is_child(pid), "the helper is killed and reaped");
+    assert!(owned.helper.is_none() && owned.scope.is_none());
+    // Nothing owned: nothing to confirm, nothing retained.
+    let mut empty = Owned::default();
+    assert!(finalize(&mut empty, None).cleanup.is_confirmed());
+    assert!(empty.retain().is_confirmed());
+}
+
+#[test]
+fn p2r1_a_failed_or_panicking_finalization_retains_the_live_boundary() {
+    for fault in [
+        Fault::Fail(FaultPoint::Finalizing),
+        Fault::Panic(FaultPoint::Finalizing),
+    ] {
+        let mut owned = Owned::default();
+        let pid = stand_in(&mut owned, Some(fault));
+        let finalized = finalize(&mut owned, Some(fault));
+        let Cleanup::Failed(boundary) = finalized.cleanup else {
+            panic!("{fault:?}: cleanup reported confirmed without proof");
+        };
+        // The unfinished boundary is retained, live and unreaped, never
+        // dropped.
+        assert!(boundary.holds_helper(), "{fault:?}");
+        assert!(is_child(pid) && is_running(pid), "{fault:?}");
+        assert!(owned.helper.is_none(), "{fault:?}: moved, not copied");
+        // A retry ends and reaps it.
+        boundary.retry().unwrap();
+        assert!(!is_child(pid), "{fault:?}");
+    }
+}
+
+#[test]
+fn p2r1_a_dropped_boundary_still_ends_its_helper() {
+    // Defense in depth only: owners keep a retained boundary until a retry
+    // succeeds, but one that is dropped does not leave its helper running.
+    let mut owned = Owned::default();
+    let pid = stand_in(&mut owned, None);
+    let Cleanup::Failed(boundary) = owned.retain() else {
+        panic!("a live helper is retained");
+    };
+    drop(boundary);
+    let start = Instant::now();
+    while is_running(pid) && start.elapsed() < FINALIZE_TIMEOUT {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(!is_running(pid));
+}
+
+#[test]
+fn p2r1_a_panicking_output_thread_loses_its_record() {
+    use std::io::Write;
+    let (read, write) = crate::sys::pipe().unwrap();
+    let limits = ResourcePolicy::RUST_OFFLINE_V1;
+    let flag = || Arc::new(AtomicBool::new(false));
+    let thread = drain(
+        read,
+        &limits,
+        flag(),
+        flag(),
+        Some(Fault::Panic(FaultPoint::DrainThread)),
+    )
+    .unwrap();
+    std::fs::File::from(write).write_all(b"output").unwrap();
+    let (record, lost) = join(Some(thread));
+    assert!(lost);
+    assert_eq!(record, StreamRecord::default());
+    // An output thread that ended normally is never lost.
+    let (read, write) = crate::sys::pipe().unwrap();
+    let thread = drain(read, &limits, flag(), flag(), None).unwrap();
+    std::fs::File::from(write).write_all(b"output").unwrap();
+    let (record, lost) = join(Some(thread));
+    assert!(!lost);
+    assert_eq!(record.bytes, 6);
 }

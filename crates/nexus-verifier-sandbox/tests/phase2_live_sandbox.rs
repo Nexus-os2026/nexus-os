@@ -507,7 +507,7 @@ mod live {
             }
             Ok(scopes) => {
                 type ScopedCase = (&'static str, fn(&p2d::ScopeManager));
-                let scoped: [ScopedCase; 11] = [
+                let scoped: [ScopedCase; 21] = [
                     (
                         "p2d_live_execution_runs_in_a_verified_scope",
                         p2d::scoped_run_passes,
@@ -542,6 +542,46 @@ mod live {
                     (
                         "p2g_live_offline_rust_profile_runs_cargo_test",
                         p2g::cargo_test,
+                    ),
+                    (
+                        "p2r1_live_panic_after_helper_spawn_is_finalized",
+                        p2r1::after_spawn,
+                    ),
+                    (
+                        "p2r1_live_panic_while_proving_the_scope_stops_it",
+                        p2r1::scope_proof,
+                    ),
+                    (
+                        "p2r1_live_panic_after_the_scope_is_proven_is_finalized",
+                        p2r1::after_scope,
+                    ),
+                    (
+                        "p2r1_live_panic_after_launch_ends_the_tree",
+                        p2r1::after_launch,
+                    ),
+                    (
+                        "p2r1_live_panic_while_running_ends_every_descendant",
+                        p2r1::running,
+                    ),
+                    (
+                        "p2r1_live_panic_while_draining_output_ends_the_tree",
+                        p2r1::draining,
+                    ),
+                    (
+                        "p2r1_live_output_thread_panic_is_never_a_result",
+                        p2r1::drain_thread,
+                    ),
+                    (
+                        "p2r1_live_panic_before_finalization_is_never_a_pass",
+                        p2r1::before_finalize,
+                    ),
+                    (
+                        "p2r1_live_panic_in_finalization_retains_the_live_boundary",
+                        p2r1::finalizing_panic,
+                    ),
+                    (
+                        "p2r1_live_failed_finalization_is_retried_to_confirmation",
+                        p2r1::finalizing_failure,
                     ),
                 ];
                 for (name, case) in scoped {
@@ -722,7 +762,7 @@ mod live {
 
         /// Transient verifier scopes the user manager currently has loaded
         /// (observation only).
-        fn loaded_scopes() -> usize {
+        pub fn loaded_scopes() -> usize {
             let out = Command::new("systemctl")
                 .args(["--user", "list-units", "--all", "--plain", "--no-legend"])
                 .arg("nexus-verifier-*.scope")
@@ -768,6 +808,289 @@ mod live {
                 }
             });
             assert!(ScopeManager::connect_at(path.to_str().unwrap()).is_err());
+        }
+    }
+
+    /// P2-R1 live panic controls: a panic injected at each real ownership
+    /// point of an execution never loses the execution's last owner. Each
+    /// case ends either with confirmed cleanup (the helper reaped, no
+    /// process of the verifier's tree left, the scope gone) or with a
+    /// retained boundary that still owns the live tree, which a retry then
+    /// ends and confirms. None is ever a pass.
+    mod p2r1 {
+        use super::p2d::{execution, loaded_scopes, EndedBy, ExitClass, ResourcePolicy};
+        use super::*;
+        use execution::{Cleanup, Fault, FaultPoint, NotRun};
+        use nexus_verifier_sandbox::scope::ScopeManager;
+        use std::sync::atomic::AtomicBool;
+
+        fn process_ids() -> impl Iterator<Item = PathBuf> {
+            fs::read_dir("/proc")
+                .unwrap()
+                .flatten()
+                .filter(|entry| {
+                    entry
+                        .file_name()
+                        .to_str()
+                        .is_some_and(|name| name.parse::<u32>().is_ok())
+                })
+                .map(|entry| entry.path())
+        }
+
+        /// Live processes of the verifier's tree for `marker`: the probe,
+        /// its detached daemons and their grandchildren (a zombie has no
+        /// command line).
+        fn tree(marker: &str) -> usize {
+            let needle = format!("marker={marker}\0");
+            process_ids()
+                .filter(|proc| {
+                    fs::read(proc.join("cmdline"))
+                        .is_ok_and(|cmdline| String::from_utf8_lossy(&cmdline).contains(&needle))
+                })
+                .count()
+        }
+
+        /// This driver's children, running or unreaped: a spawned helper is
+        /// one until it is reaped.
+        fn children() -> usize {
+            let parent = format!("PPid:\t{}", std::process::id());
+            process_ids()
+                .filter(|proc| {
+                    fs::read_to_string(proc.join("status"))
+                        .is_ok_and(|status| status.lines().any(|line| line == parent))
+                })
+                .count()
+        }
+
+        /// Run `run` while watching the tree; returns the most of its
+        /// processes seen alive at once.
+        fn watched<T>(marker: &str, run: impl FnOnce() -> T) -> (T, usize) {
+            let stop = Arc::new(AtomicBool::new(false));
+            let (flag, marker) = (stop.clone(), marker.to_string());
+            let watcher = std::thread::spawn(move || {
+                let mut most = 0;
+                while !flag.load(Ordering::SeqCst) {
+                    most = most.max(tree(&marker));
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                most
+            });
+            let result = run();
+            stop.store(true, Ordering::SeqCst);
+            (result, watcher.join().unwrap())
+        }
+
+        enum Expect {
+            /// Confirmed; the launch never reached the helper.
+            NotRun,
+            /// Confirmed; the result is unknown.
+            Interrupted,
+            /// Confirmed; an output record is lost.
+            OutputLost,
+            /// A retained boundary that still owns the live tree.
+            Retained,
+        }
+
+        /// Everything of a confirmed execution is gone: its tree, its helper
+        /// (reaped) and its scope.
+        fn gone(name: &str, marker: &str, children_before: usize, scopes_before: usize) {
+            assert_eq!(tree(marker), 0, "{name}: no process of the tree survives");
+            assert_eq!(children(), children_before, "{name}: the helper is reaped");
+            assert!(
+                wait_until(Duration::from_secs(10), || loaded_scopes() <= scopes_before),
+                "{name}: the scope is gone"
+            );
+        }
+
+        fn case(
+            scopes: &ScopeManager,
+            fault: Fault,
+            probe: &str,
+            wall_timeout_secs: u64,
+            expect: Expect,
+            tree_seen: bool,
+        ) {
+            let name = format!("{fault:?}");
+            let marker = format!(
+                "p2r1-{}-{}",
+                name.replace(['(', ')'], "-"),
+                std::process::id()
+            );
+            let fixture = Fixture::new("p2r1");
+            let listeners = Listeners::start(&fixture.outside);
+            let spec = fixture.spec(
+                40,
+                probe_argv(&fixture, &listeners, &marker, &[format!("only={probe}")]),
+            );
+            let limits = ResourcePolicy {
+                wall_timeout_secs,
+                runtime_backstop_secs: 120,
+                ..ResourcePolicy::RUST_OFFLINE_V1
+            };
+            let (children_before, scopes_before) = (children(), loaded_scopes());
+            let (report, most) = watched(&marker, || {
+                execution::run_with_fault(scopes, &HelperProgram::at(HELPER), spec, &limits, fault)
+            });
+            let class = report.classify(0);
+            assert_ne!(class, ExitClass::Passed, "{name}: {report:?}");
+            if tree_seen {
+                assert!(most > 0, "{name}: the verifier's tree was running");
+            }
+            match expect {
+                Expect::NotRun => {
+                    assert!(report.cleanup.is_confirmed(), "{name}: {report:?}");
+                    assert!(
+                        matches!(report.not_run, Some(NotRun::Interrupted)),
+                        "{name}"
+                    );
+                    assert_eq!(class, ExitClass::SandboxSetupFailed, "{name}");
+                    gone(&name, &marker, children_before, scopes_before);
+                }
+                Expect::Interrupted => {
+                    assert!(report.cleanup.is_confirmed(), "{name}: {report:?}");
+                    assert_eq!(report.ended_by, Some(EndedBy::Interrupted), "{name}");
+                    assert!(report.outcome.is_none(), "{name}: nothing observed is kept");
+                    assert_eq!(class, ExitClass::SandboxFailed, "{name}");
+                    gone(&name, &marker, children_before, scopes_before);
+                }
+                Expect::OutputLost => {
+                    assert!(report.cleanup.is_confirmed(), "{name}: {report:?}");
+                    assert!(report.output_lost, "{name}: {report:?}");
+                    assert_eq!(class, ExitClass::SandboxFailed, "{name}");
+                    gone(&name, &marker, children_before, scopes_before);
+                }
+                Expect::Retained => {
+                    assert_eq!(class, ExitClass::CleanupFailed, "{name}: {report:?}");
+                    let Cleanup::Failed(boundary) = report.cleanup else {
+                        unreachable!("classified as unconfirmed")
+                    };
+                    // The unfinished boundary is owned: its scope and its
+                    // unreaped helper, with the verifier's tree still alive.
+                    assert!(boundary.holds_scope() && boundary.holds_helper(), "{name}");
+                    assert!(tree(&marker) > 0, "{name}: the retained tree is alive");
+                    assert_eq!(children(), children_before + 1, "{name}: helper unreaped");
+                    assert!(loaded_scopes() > scopes_before, "{name}: the scope is kept");
+                    // An explicit retry ends it and confirms it.
+                    if boundary.retry().is_err() {
+                        panic!("{name}: the retry did not confirm the cleanup");
+                    }
+                    gone(&name, &marker, children_before, scopes_before);
+                }
+            }
+        }
+
+        fn panic_at(point: FaultPoint) -> Fault {
+            Fault::Panic(point)
+        }
+
+        pub fn after_spawn(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::AfterSpawn),
+                "noop",
+                60,
+                Expect::NotRun,
+                false,
+            );
+        }
+
+        pub fn scope_proof(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::ScopeProof),
+                "noop",
+                60,
+                Expect::NotRun,
+                false,
+            );
+        }
+
+        pub fn after_scope(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::AfterScope),
+                "noop",
+                60,
+                Expect::NotRun,
+                false,
+            );
+        }
+
+        pub fn after_launch(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::AfterLaunch),
+                "hang",
+                60,
+                Expect::Interrupted,
+                false,
+            );
+        }
+
+        pub fn running(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::Running),
+                "hang",
+                60,
+                Expect::Interrupted,
+                true,
+            );
+        }
+
+        pub fn draining(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::Draining),
+                "chatter",
+                60,
+                Expect::Interrupted,
+                true,
+            );
+        }
+
+        pub fn drain_thread(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::DrainThread),
+                "chatter",
+                60,
+                Expect::OutputLost,
+                true,
+            );
+        }
+
+        pub fn before_finalize(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::BeforeFinalize),
+                "daemons",
+                60,
+                Expect::Interrupted,
+                true,
+            );
+        }
+
+        pub fn finalizing_panic(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::Finalizing),
+                "hang",
+                3,
+                Expect::Retained,
+                true,
+            );
+        }
+
+        pub fn finalizing_failure(scopes: &ScopeManager) {
+            case(
+                scopes,
+                Fault::Fail(FaultPoint::Finalizing),
+                "hang",
+                3,
+                Expect::Retained,
+                true,
+            );
         }
     }
 
@@ -1998,6 +2321,24 @@ const ABSTRACT: &str = {abstract_name:?};
                     let signal = status.ok().and_then(|s| s.signal()).unwrap_or(0);
                     println!("check child_killed_by_signal ALLOWED {signal}");
                     return;
+                }
+                Some("chatter") => {
+                    // Detached descendants, then output until the end:
+                    // once the output is gone, the next line panics.
+                    for _ in 0..2 {
+                        let _ = Command::new(&c["self_exe"])
+                            .arg("--probe-daemon")
+                            .args(args)
+                            .process_group(0)
+                            .spawn();
+                    }
+                    std::thread::sleep(Duration::from_millis(500));
+                    let mut line = 0u64;
+                    loop {
+                        println!("chatter {line}");
+                        line += 1;
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
                 }
                 Some("flood") => {
                     let chunk = vec![b'x'; 64 * 1024];

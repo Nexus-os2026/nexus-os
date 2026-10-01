@@ -24,8 +24,10 @@
 use std::ffi::CString;
 use std::io;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::time::{Duration, Instant};
 
+use crate::fault::{self, Fault, FaultPoint};
 use crate::launcher::Helper;
 use crate::policy::ResourcePolicy;
 use crate::sys;
@@ -149,6 +151,16 @@ impl ScopeManager {
     /// child, with `limits`, and prove it. The helper's process id is only
     /// the locator of that retained child.
     pub fn start(&self, helper: &Helper, limits: &ResourcePolicy) -> Result<Scope, ScopeError> {
+        self.start_with_fault(helper, limits, None)
+    }
+
+    /// [`Self::start`], with the live panic controls' fault injection.
+    pub(crate) fn start_with_fault(
+        &self,
+        helper: &Helper,
+        limits: &ResourcePolicy,
+        fault: Option<Fault>,
+    ) -> Result<Scope, ScopeError> {
         use zbus::zvariant::Value;
         let helper_pid = helper.pid();
         let unit = format!("nexus-verifier-{}.scope", random_hex()?);
@@ -182,11 +194,15 @@ impl ScopeManager {
             "StartTransientUnit",
             &(unit.as_str(), "fail", properties, aux),
         )?;
-        let proven = self.prove(helper_pid, unit.clone(), limits);
-        if proven.is_err() {
-            // The unit is this call's own creation. A helper that never
-            // entered it leaves it empty, and an empty scope is never
-            // stopped by its manager, so it is stopped here.
+        // The unit is this call's own creation: one that is not proven, a
+        // panic while proving it included, is stopped here (a helper that
+        // never entered it leaves it empty, and an empty scope is never
+        // stopped by its manager). The panic then continues to the
+        // execution, which still owns the helper.
+        let proven = catch_unwind(AssertUnwindSafe(|| {
+            self.prove(helper_pid, unit.clone(), limits, fault)
+        }));
+        if !matches!(proven, Ok(Ok(_))) {
             let _: Result<zbus::zvariant::OwnedObjectPath, _> = self.call(
                 SYSTEMD_PATH,
                 MANAGER,
@@ -194,7 +210,7 @@ impl ScopeManager {
                 &(unit.as_str(), "replace"),
             );
         }
-        proven
+        proven.unwrap_or_else(|panic| resume_unwind(panic))
     }
 
     fn prove(
@@ -202,8 +218,10 @@ impl ScopeManager {
         helper_pid: u32,
         unit: String,
         limits: &ResourcePolicy,
+        fault: Option<Fault>,
     ) -> Result<Scope, ScopeError> {
         let path = wait_for_placement(helper_pid, &unit)?;
+        fault::at(fault, FaultPoint::ScopeProof);
         let scope = Scope::open(&path, unit, helper_pid)?;
         scope.verify_limits(limits)?;
         let unit_path: zbus::zvariant::OwnedObjectPath =

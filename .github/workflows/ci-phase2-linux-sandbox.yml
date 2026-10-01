@@ -168,7 +168,7 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox 2>&1 | tee phase2-live.log
-          grep -qx 'test result: ok. 21 live sandbox cases passed' phase2-live.log
+          grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log
           if systemctl --user list-units --all --no-legend 'nexus-verifier-*' | grep -q .; then
             echo "::error::a verifier scope was left behind"
             exit 1

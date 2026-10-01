@@ -168,10 +168,13 @@ impl Helper {
             .map_err(LaunchError::Spawn)?;
         // The Command and its copies of the child's ends are gone here, so
         // the output pipes reach end of file when the verifier tree exits.
-        let helper = Helper { child, control };
-        helper
-            .set_receive_timeout(Some(SETUP_STEP_TIMEOUT))
-            .map_err(LaunchError::Control)?;
+        let mut helper = Helper { child, control };
+        if let Err(error) = helper.set_receive_timeout(Some(SETUP_STEP_TIMEOUT)) {
+            // The helper is never left running or unreaped.
+            let _ = helper.child.kill();
+            let _ = helper.child.wait();
+            return Err(LaunchError::Control(error));
+        }
         Ok((
             helper,
             HelperOutput {

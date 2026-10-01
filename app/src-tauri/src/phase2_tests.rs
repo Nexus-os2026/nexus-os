@@ -229,6 +229,54 @@ fn p2_g_04_the_profile_and_policies_are_pinned() {
     }
 }
 
+/// The body of `fn name` in `source`, up to the next item at its depth.
+fn function<'a>(source: &'a str, name: &str) -> &'a str {
+    let start = [format!("fn {name}("), format!("fn {name}<")]
+        .iter()
+        .find_map(|head| source.find(head.as_str()))
+        .unwrap_or_else(|| panic!("fn {name}"));
+    let rest = &source[start..];
+    let end = rest[1..]
+        .find("\n    fn ")
+        .into_iter()
+        .chain(rest[1..].find("\n    pub(crate) fn "))
+        .chain(rest[1..].find("\nfn "))
+        .min()
+        .unwrap_or(rest.len() - 1);
+    &rest[..end + 1]
+}
+
+#[test]
+fn p2_g_07_a_retained_verification_cleanup_is_never_dropped() {
+    let flow = code(include_str!("coding_flow/verification.rs"));
+    // The verification thread holds what it owns outside the panicking
+    // work, and a panic is settled from it.
+    let execute = function(&flow, "execute");
+    assert!(execute.contains("let mut owned = Owned::new(Some(workspace));"));
+    assert!(execute.contains("guarded(&mut owned,"));
+    let guarded = function(&flow, "guarded");
+    assert!(guarded.contains("Err(_) => after_panic(owned)"));
+    // The execution's unconfirmed boundary leaves its report at once.
+    let launch = function(&flow, "run_launch");
+    let run = launch.find("execution::run(").unwrap();
+    let stash = launch.find("owned.boundary = Some(boundary);").unwrap();
+    assert!(run < stash);
+    assert!(!launch[run..stash].contains("with_run("));
+    // A retry claims the run before it takes the retained cleanup, so a
+    // refused claim cannot drop it.
+    let retry = function(&flow, "retry_verification_cleanup");
+    let claimed = retry.find("claim(&slot").unwrap();
+    let taken = retry.find("take_retained(").unwrap();
+    assert!(claimed < taken);
+    // A run whose verification cleanup is unconfirmed cannot be discarded.
+    let root = code(include_str!("coding_flow.rs"));
+    let discard = function(&root, "discard");
+    let refused = discard
+        .find("verification_phase().blocks_apply()")
+        .expect("discard refuses an unconfirmed verification cleanup");
+    assert!(refused < discard.find("discard_run(&mut run)").unwrap());
+}
+
 // Reviewed Phase Two identities (P2I).
 const PROFILE_PIN: &str = "3b1726e81a65a3e3b2159fc500a98f77b688d639dfc2a5f2d2685f6b0aa24848";
 const SANDBOX_POLICY_PIN: &str = "ce975e476e999e426253cfef71c50cd0e96ce1a0c7a4e88ab2fdd56a78342f7b";

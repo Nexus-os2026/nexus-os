@@ -13,10 +13,19 @@
 //! the result bound into the owner's review. A cleanup that cannot be
 //! confirmed retains the boundary for a retry and keeps Apply refused.
 //!
+//! A panic never drops what a verification owns. The sandbox's execution
+//! itself never unwinds (it finalizes or retains its own boundary); here the
+//! boundary it leaves unconfirmed and the workspace are held outside every
+//! closure that can panic, and a panic in this thread is settled from them
+//! like any other end: the workspace is removed only once no verifier
+//! process can remain, and whatever is unconfirmed is retained for a retry.
+//!
 //! The only execution route is `nexus_verifier_sandbox::execution::run`;
 //! output is untrusted data, kept only as bounded, escaped tails.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use nexus_kernel::coding_run::{
@@ -24,7 +33,9 @@ use nexus_kernel::coding_run::{
     VerifierExit, VerifierInputs, VerifierLaunchConfirmer, VerifierLaunchFacts, VerifierOutcome,
 };
 use nexus_verifier_sandbox::applicability;
-use nexus_verifier_sandbox::execution::{self, Cleanup, ExitClass, RetainedBoundary, StreamRecord};
+use nexus_verifier_sandbox::execution::{
+    self, Cleanup, ExecutionReport, ExitClass, RetainedBoundary, StreamRecord,
+};
 use nexus_verifier_sandbox::launcher::HelperProgram;
 use nexus_verifier_sandbox::policy::SandboxPolicy;
 use nexus_verifier_sandbox::profile::{VerifierProfile, VerifierProfileId};
@@ -41,11 +52,32 @@ const MAX_METADATA_BYTES: u64 = 1 << 20;
 /// The displayed tail of each output stream.
 const EXCERPT_CHARS: usize = 4096;
 
-/// What remains of a verification whose cleanup is unconfirmed.
+/// An execution boundary whose cleanup is unconfirmed: the sandbox's
+/// [`RetainedBoundary`]. Generic only so the panic paths below can be
+/// tested without a live sandbox.
+trait Boundary: Sized {
+    /// End it again; `Err` keeps it retained.
+    fn retry(self) -> Result<(), Self>;
+}
+
+impl Boundary for RetainedBoundary {
+    fn retry(self) -> Result<(), Self> {
+        RetainedBoundary::retry(self)
+    }
+}
+
+/// What of a verification is still unconfirmed.
+struct Unconfirmed<B = RetainedBoundary> {
+    /// The execution's boundary: a verifier process may remain.
+    boundary: Option<B>,
+    workspace: Option<Leftover>,
+}
+
+/// A verification whose cleanup is unconfirmed, kept for its run until a
+/// retry confirms it.
 pub(crate) struct Retained {
     generation: ExecutionGeneration,
-    boundary: Option<RetainedBoundary>,
-    workspace: Option<Leftover>,
+    unconfirmed: Unconfirmed,
 }
 
 enum Leftover {
@@ -55,6 +87,8 @@ enum Leftover {
 }
 
 impl Leftover {
+    /// Try the removal (the sandbox's removal never unwinds); what remains
+    /// stays retained.
     fn remove(self) -> Option<Leftover> {
         match self {
             Self::Pending(workspace) => workspace.remove().err().map(Self::Retained),
@@ -309,12 +343,25 @@ impl CodingFlow {
         };
         let flow = Arc::clone(self);
         let worker = Arc::clone(&slot);
-        // A launch the thread never received runs nothing; the Launch
-        // (and its workspace) is dropped with the closure.
+        // The launch is handed over only once its thread exists. A launch no
+        // thread received ran nothing; it is settled here, its workspace
+        // removed or retained like any other.
+        let (hand, receive) = std::sync::mpsc::sync_channel::<Launch>(1);
         let spawned = std::thread::Builder::new()
             .name("nexus-verifier".to_string())
-            .spawn(move || execute(&flow, &worker, id, generation, launch));
-        if spawned.is_err() {
+            .spawn(move || {
+                if let Ok(launch) = receive.recv() {
+                    execute(&flow, &worker, id, generation, launch);
+                }
+            });
+        let unreceived = match spawned {
+            Ok(_) => hand.send(launch).err().map(|unsent| unsent.0),
+            Err(_) => Some(launch),
+        };
+        if let Some(launch) = unreceived {
+            let mut owned = Owned::<RetainedBoundary>::new(Some(launch.workspace));
+            owned.release_workspace();
+            let unconfirmed = owned.unconfirmed();
             finish(
                 self,
                 &slot,
@@ -325,8 +372,8 @@ impl CodingFlow {
                     duration: Duration::ZERO,
                     stdout: StreamRecord::default(),
                     stderr: StreamRecord::default(),
-                    cleanup_confirmed: true,
-                    retained: None,
+                    cleanup_confirmed: unconfirmed.is_none(),
+                    unconfirmed,
                 },
             );
         }
@@ -336,52 +383,66 @@ impl CodingFlow {
     /// Retry the cleanup of a verification whose cleanup was unconfirmed.
     pub(crate) fn retry_verification_cleanup(&self, run_id: &str) -> Result<RunView, String> {
         let (id, slot) = self.slot(run_id)?;
-        let retained = self
-            .retained
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .remove(&id);
+        // The run is claimed before its retained cleanup is taken, so a
+        // refused claim can never drop it.
+        let mut run = claim(&slot, &["review"], "verifying")?;
         let Some(Retained {
             generation,
-            boundary,
-            workspace,
-        }) = retained
+            unconfirmed,
+        }) = take_retained(&self.retained, id)
         else {
+            slot.refresh(&run, "review", None);
             return Err("there is no verification cleanup to retry".to_string());
         };
-        let mut run = claim(&slot, &["review"], "verifying")?;
-        let boundary = boundary.and_then(|boundary| boundary.retry().err());
-        // The workspace goes only once no verifier process can remain.
-        let workspace = match boundary {
-            Some(_) => workspace,
-            None => workspace.and_then(Leftover::remove),
-        };
-        let message = if boundary.is_none() && workspace.is_none() {
-            match run.confirm_verification_cleanup(generation) {
+        let message = match retry(unconfirmed) {
+            None => match run.confirm_verification_cleanup(generation) {
                 Ok(()) => "The verification's cleanup is now confirmed.".to_string(),
                 Err(error) => format!("The confirmed cleanup could not be recorded: {error}."),
+            },
+            Some(unconfirmed) => {
+                self.retained
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .insert(
+                        id,
+                        Retained {
+                            generation,
+                            unconfirmed,
+                        },
+                    );
+                "The verification's cleanup is still unconfirmed; Apply stays refused.".to_string()
             }
-        } else {
-            self.retained
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .insert(
-                    id,
-                    Retained {
-                        generation,
-                        boundary,
-                        workspace,
-                    },
-                );
-            "The verification's cleanup is still unconfirmed; Apply stays refused.".to_string()
         };
         slot.refresh(&run, "review", Some(message));
         Ok(slot.view(id))
     }
 }
 
+fn take_retained(retained: &Mutex<HashMap<RunId, Retained>>, id: RunId) -> Option<Retained> {
+    retained
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .remove(&id)
+}
+
+/// Retry what is unconfirmed: the boundary first, and the workspace only
+/// once no verifier process can remain. Returns what is still unconfirmed.
+fn retry<B: Boundary>(unconfirmed: Unconfirmed<B>) -> Option<Unconfirmed<B>> {
+    let boundary = unconfirmed
+        .boundary
+        .and_then(|boundary| boundary.retry().err());
+    let workspace = match boundary {
+        Some(_) => unconfirmed.workspace,
+        None => unconfirmed.workspace.and_then(Leftover::remove),
+    };
+    (boundary.is_some() || workspace.is_some()).then_some(Unconfirmed {
+        boundary,
+        workspace,
+    })
+}
+
 /// What finalization observed.
-struct Finished {
+struct Finished<B = RetainedBoundary> {
     exit: VerifierExit,
     duration: Duration,
     stdout: StreamRecord,
@@ -389,13 +450,93 @@ struct Finished {
     /// Whether the execution's boundary and workspace are proven gone.
     cleanup_confirmed: bool,
     /// What can still be retried, if cleanup is unconfirmed.
-    retained: Option<Retained>,
+    unconfirmed: Option<Unconfirmed<B>>,
 }
 
-/// The verification thread: set up, run and finalize one launch. A panic
-/// here still finalizes the run, as an unknown result whose cleanup can
-/// never be confirmed (nothing is left to retry, so Apply stays refused and
-/// the owner may discard the run).
+/// What a verification owns while its thread works. It lives in
+/// [`execute`]'s own frame and is only ever borrowed by the code that can
+/// panic.
+struct Owned<B> {
+    /// The execution's unconfirmed boundary, taken from its report at once.
+    boundary: Option<B>,
+    /// The workspace, until it is removed or retained.
+    workspace: Option<Workspace>,
+    /// A workspace whose removal is unconfirmed.
+    leftover: Option<Leftover>,
+}
+
+impl<B> Owned<B> {
+    fn new(workspace: Option<Workspace>) -> Self {
+        Self {
+            boundary: None,
+            workspace,
+            leftover: None,
+        }
+    }
+
+    /// Remove the workspace once no verifier process can remain: only
+    /// without an unconfirmed boundary. A removal that is unconfirmed is
+    /// kept for a retry.
+    fn release_workspace(&mut self) {
+        if self.boundary.is_none() {
+            if let Some(workspace) = self.workspace.take() {
+                self.leftover = workspace.remove().err().map(Leftover::Retained);
+            }
+        }
+    }
+
+    /// Everything still unconfirmed, handed on for a retry; `None` once
+    /// nothing is.
+    fn unconfirmed(&mut self) -> Option<Unconfirmed<B>> {
+        let boundary = self.boundary.take();
+        let workspace = self
+            .workspace
+            .take()
+            .map(Leftover::Pending)
+            .or_else(|| self.leftover.take());
+        (boundary.is_some() || workspace.is_some()).then_some(Unconfirmed {
+            boundary,
+            workspace,
+        })
+    }
+}
+
+/// Do `work` over what the verification owns; if it panics, settle what
+/// is still owned instead (see [`after_panic`]).
+fn guarded<B>(
+    owned: &mut Owned<B>,
+    work: impl FnOnce(&mut Owned<B>) -> Finished<B>,
+) -> Finished<B> {
+    match catch_unwind(AssertUnwindSafe(|| work(owned))) {
+        Ok(finished) => finished,
+        Err(_) => after_panic(owned),
+    }
+}
+
+/// A panic in the verification thread: nothing it observed is trusted (an
+/// unknown result). What it owns is settled like any other end: the
+/// workspace is removed only if no verifier process can remain, and
+/// whatever is unconfirmed is retained for a retry, so Apply stays refused
+/// until a retry confirms it.
+fn after_panic<B>(owned: &mut Owned<B>) -> Finished<B> {
+    owned.release_workspace();
+    let unconfirmed = owned.unconfirmed();
+    let cleanup_confirmed = unconfirmed.is_none();
+    Finished {
+        exit: if cleanup_confirmed {
+            VerifierExit::SandboxFailed
+        } else {
+            VerifierExit::CleanupFailed
+        },
+        duration: Duration::ZERO,
+        stdout: StreamRecord::default(),
+        stderr: StreamRecord::default(),
+        cleanup_confirmed,
+        unconfirmed,
+    }
+}
+
+/// The verification thread: set up, run and finalize one launch.
 fn execute(
     flow: &Arc<CodingFlow>,
     slot: &RunSlot,
@@ -403,88 +544,88 @@ fn execute(
     generation: ExecutionGeneration,
     launch: Launch,
 ) {
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_launch(slot, generation, launch)
-    }));
-    let finished = outcome.unwrap_or(Finished {
-        exit: VerifierExit::SandboxFailed,
-        duration: Duration::ZERO,
-        stdout: StreamRecord::default(),
-        stderr: StreamRecord::default(),
-        cleanup_confirmed: false,
-        retained: None,
-    });
-    finish(flow, slot, id, generation, finished);
-}
-
-fn run_launch(slot: &RunSlot, generation: ExecutionGeneration, launch: Launch) -> Finished {
     let Launch {
         profile,
         toolchain,
         workspace,
         helper,
     } = launch;
+    let mut owned = Owned::new(Some(workspace));
+    let finished = guarded(&mut owned, |owned| {
+        run_launch(slot, generation, profile, &toolchain, &helper, owned)
+    });
+    finish(flow, slot, id, generation, finished);
+}
+
+fn run_launch(
+    slot: &RunSlot,
+    generation: ExecutionGeneration,
+    profile: &'static VerifierProfile,
+    toolchain: &VerifiedVerifierToolchain,
+    helper: &HelperProgram,
+    owned: &mut Owned<RetainedBoundary>,
+) -> Finished {
     // Set-up failures ran nothing.
-    let mut ran = None;
-    let ran_exit = match launch_spec(profile, &toolchain, &workspace, generation.get()) {
-        Err(error) => setup_exit(&error),
-        Ok(spec) => match ScopeManager::connect() {
+    let mut ran = (
+        Duration::ZERO,
+        StreamRecord::default(),
+        StreamRecord::default(),
+    );
+    let spec = owned
+        .workspace
+        .as_ref()
+        .map(|workspace| launch_spec(profile, toolchain, workspace, generation.get()));
+    let ran_exit = match spec {
+        // Never: the workspace is owned until the end is settled.
+        None => VerifierExit::SandboxSetupFailed,
+        Some(Err(error)) => setup_exit(&error),
+        Some(Ok(spec)) => match ScopeManager::connect() {
             Err(_) => VerifierExit::SandboxUnavailable,
             Ok(scopes) => {
                 let _ = with_run(slot, |run| run.verification_running(generation));
-                let report = execution::run(&scopes, &helper, spec, &profile.resources);
+                let report = execution::run(&scopes, helper, spec, &profile.resources);
                 let exit = exit_of(report.classify(profile.passing_exit_code));
-                ran = Some(report);
+                let ExecutionReport {
+                    duration,
+                    stdout,
+                    stderr,
+                    cleanup,
+                    ..
+                } = report;
+                // An unconfirmed boundary leaves the report at once for what
+                // `execute` owns: from here on no panic can drop it.
+                if let Cleanup::Failed(boundary) = cleanup {
+                    owned.boundary = Some(boundary);
+                }
+                ran = (duration, stdout, stderr);
                 exit
             }
         },
     };
     let _ = with_run(slot, |run| run.verification_finalizing(generation));
-    let (duration, stdout, stderr, boundary) = match ran {
-        None => (
-            Duration::ZERO,
-            StreamRecord::default(),
-            StreamRecord::default(),
-            None,
-        ),
-        Some(report) => (
-            report.duration,
-            report.stdout,
-            report.stderr,
-            match report.cleanup {
-                Cleanup::Confirmed => None,
-                Cleanup::Failed(boundary) => Some(boundary),
-            },
-        ),
-    };
-    let (workspace, input_unchanged) = if boundary.is_some() {
-        // A verifier process may remain: nothing is removed or trusted yet.
-        (Some(Leftover::Pending(workspace)), false)
-    } else {
-        let unchanged = workspace
-            .directory(Area::Input)
-            .map(|input| with_run(slot, |run| run.check_verification_input(input).is_ok()))
-            .unwrap_or(false);
-        (workspace.remove().err().map(Leftover::Retained), unchanged)
-    };
+    // The input is trusted, and the workspace removed, only once no
+    // verifier process can remain.
+    let input_unchanged = owned.boundary.is_none()
+        && owned
+            .workspace
+            .as_ref()
+            .and_then(|workspace| workspace.directory(Area::Input).ok())
+            .is_some_and(|input| with_run(slot, |run| run.check_verification_input(input).is_ok()));
+    owned.release_workspace();
     let (exit, cleanup_confirmed) = settle(
         ran_exit,
-        boundary.is_some(),
-        workspace.is_some(),
+        owned.boundary.is_some(),
+        owned.workspace.is_some() || owned.leftover.is_some(),
         input_unchanged,
     );
-    let retained = (!cleanup_confirmed).then_some(Retained {
-        generation,
-        boundary,
-        workspace,
-    });
+    let (duration, stdout, stderr) = ran;
     Finished {
         exit,
         duration,
         stdout,
         stderr,
         cleanup_confirmed,
-        retained,
+        unconfirmed: owned.unconfirmed(),
     }
 }
 
@@ -508,11 +649,17 @@ fn finish(
         stderr: summary(&finished.stderr),
         cleanup,
     };
-    if let Some(retained) = finished.retained {
+    if let Some(unconfirmed) = finished.unconfirmed {
         flow.retained
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .insert(id, retained);
+            .insert(
+                id,
+                Retained {
+                    generation,
+                    unconfirmed,
+                },
+            );
     }
     let mut run = slot.run.lock().unwrap_or_else(|p| p.into_inner());
     slot.display().excerpts = (excerpt(&finished.stdout), excerpt(&finished.stderr));
@@ -530,6 +677,81 @@ fn finish(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    /// A stand-in boundary that records being dropped.
+    struct Fake {
+        dropped: Arc<AtomicBool>,
+        confirms: bool,
+    }
+
+    impl Boundary for Fake {
+        fn retry(self) -> Result<(), Self> {
+            if self.confirms {
+                Ok(())
+            } else {
+                Err(self)
+            }
+        }
+    }
+
+    impl Drop for Fake {
+        fn drop(&mut self) {
+            self.dropped.store(true, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn p2r1_a_panic_after_the_execution_retains_its_unconfirmed_boundary() {
+        let dropped = Arc::new(AtomicBool::new(false));
+        let mut owned = Owned::<Fake>::new(None);
+        let finished = guarded(&mut owned, |owned| {
+            // The execution left its boundary unconfirmed; then a later step
+            // of the verification thread panics.
+            owned.boundary = Some(Fake {
+                dropped: Arc::clone(&dropped),
+                confirms: false,
+            });
+            panic!("a later step of the verification thread");
+        });
+        assert_eq!(finished.exit, VerifierExit::CleanupFailed);
+        assert!(!finished.cleanup_confirmed);
+        let unconfirmed = finished
+            .unconfirmed
+            .expect("retained for a retry, never dropped");
+        assert!(unconfirmed.boundary.is_some());
+        assert!(
+            !dropped.load(Ordering::SeqCst),
+            "the boundary is still owned"
+        );
+        // A retry that cannot confirm it keeps it; one that confirms it
+        // releases it.
+        let mut unconfirmed = retry(unconfirmed).expect("still unconfirmed");
+        assert!(!dropped.load(Ordering::SeqCst));
+        unconfirmed.boundary.as_mut().unwrap().confirms = true;
+        assert!(retry(unconfirmed).is_none());
+        assert!(dropped.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn p2r1_a_panic_with_nothing_unconfirmed_is_an_unknown_result() {
+        let mut owned = Owned::<Fake>::new(None);
+        let finished = guarded(&mut owned, |_| panic!("before any execution"));
+        assert_eq!(finished.exit, VerifierExit::SandboxFailed);
+        assert!(!finished.exit.passed());
+        assert!(finished.cleanup_confirmed);
+        assert!(finished.unconfirmed.is_none());
+        // A verification that returns is taken as it is.
+        let finished = guarded(&mut Owned::<Fake>::new(None), |_| Finished {
+            exit: VerifierExit::Failed { exit_code: 101 },
+            duration: Duration::from_millis(5),
+            stdout: StreamRecord::default(),
+            stderr: StreamRecord::default(),
+            cleanup_confirmed: true,
+            unconfirmed: None,
+        });
+        assert_eq!(finished.exit, VerifierExit::Failed { exit_code: 101 });
+    }
 
     #[test]
     fn p2h_finalization_never_reports_more_than_it_proved() {

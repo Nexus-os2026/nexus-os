@@ -609,6 +609,15 @@ mod linux {
                 slot.refresh(&run, "applied", Some(refusal.clone()));
                 return Err(refusal);
             }
+            // A sandboxed verification whose cleanup is unconfirmed keeps its
+            // run: its retained boundary is retried from the review, never
+            // abandoned by a discard.
+            if run.verification_phase().blocks_apply() {
+                let refusal = "the sandboxed verification's cleanup is unconfirmed; retry it first"
+                    .to_string();
+                slot.refresh(&run, "review", Some(refusal.clone()));
+                return Err(refusal);
+            }
             let (stage, message) = discard_run(&mut run);
             slot.refresh(&run, stage, Some(message));
             Ok(slot.view(id))

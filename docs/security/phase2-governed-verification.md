@@ -130,6 +130,10 @@ desktop verification driver (long-lived thread; owns the execution)
   the kernel then kills anything left in the PID namespace. The parent-death
   chain (driver → helper → init) and the scope's runtime backstop cover
   crashes. `cgroup.kill` is the finalization backstop.
+- A panic never abandons a live execution (P2-R1, section 9): the helper,
+  the scope and the output threads are owned outside every closure that
+  can panic, and one finalizer runs whether the launch and the wait return
+  or panic.
 
 ## 6. Landlock policy (roles → rights; host ABI ≥ 6, handled rights = all ABI 1–5 filesystem rights, TCP bind/connect, both ABI 6 scopes)
 
@@ -226,6 +230,32 @@ directory lists nothing), never by path or unit name. Only then is cleanup
 reported clean. Otherwise the execution is `CleanupFailed`, which retains
 the boundary and blocks another verifier for the run and blocks Apply until
 cleanup is confirmed. No PID-only cleanup and no startup sweep by name.
+
+Panic safety (P2-R1). `execution::run` never unwinds. Everything an
+execution creates is stored, as it is created, in an owner held in `run`'s
+own frame: the helper (before its output threads start), its scope (before
+any launch message), the output threads. The spawn, placement, launch and
+wait run behind `catch_unwind`; whether they return or panic, the same
+finalizer then runs over whatever exists: read the counters, `cgroup.kill`,
+kill the helper, a bounded reap, a bounded wait for the scope to be empty or
+removed. A helper without a scope never received a launch, so reaping it
+ends everything it started. A panic inside the finalizer, or any step it
+cannot confirm, moves the scope and the unreaped helper into a
+`RetainedBoundary`, which a retry ends with the same steps (a panic while
+retrying keeps it retained). A scope whose proof panics is stopped
+(`StopUnit`) before the panic continues. A panicked execution is never a
+pass: before its launch could reach the helper it is a setup failure
+(nothing untrusted ran); after it, `SandboxFailed` (an unknown result); a
+panicked output thread loses its record, which is `SandboxFailed` too.
+`RetainedBoundary` and the execution's owner end what they hold on drop,
+without waiting, only as defense in depth: never a confirmation. The
+desktop holds the boundary an execution leaves unconfirmed, and the
+workspace, outside its own panicking work; a panic there is settled from
+them: the workspace is removed only once no verifier process can remain,
+and whatever is unconfirmed is retained (`CleanupFailed`, Apply refused)
+for an explicit retry. A retry claims the run before it takes the retained
+cleanup, and a run whose verification cleanup is unconfirmed cannot be
+discarded.
 
 ## 10. Toolchain authority
 
@@ -444,8 +474,11 @@ begin, and the execution thread: `launch_spec` (toolchain re-verified,
 workspace paths re-checked), `ScopeManager::connect`, `execution::run`, input
 rescan, workspace removal, finish. Anything failing before the launch ran
 nothing and records nothing beyond what was already recorded. A panic in
-the execution thread still finalizes the run as `SandboxFailed` with cleanup
-unconfirmed.
+the execution thread is settled from what the thread owns (section 9): an
+unknown result (`SandboxFailed`) with confirmed cleanup, or `CleanupFailed`
+with the boundary and workspace retained for a retry. A launch whose thread
+never received it ran nothing; its workspace is removed or retained like
+any other.
 
 ## 14. Result, review and apply
 
@@ -512,6 +545,14 @@ restored exactly, showed every layer and check below is load-bearing.
 | 44 | `/proc` | live `read_proc_status`, `list_proc`; P2G `no_host_files` |
 | 45 | no raw shell | `p2b_the_profile_has_no_shell_path_or_network_escape`; live `exec_shell`; P2G `no_shell` |
 
+P2-R1 controls (the panic invariant):
+
+| Control | Test |
+|---|---|
+| a panic after the helper spawned, while proving the scope, after the scope was proven, after the launch, while running (2 s, a detached marker tree), while draining output, in an output thread, immediately before finalization, and in finalization (panic or failed step) | live `p2r1_live_panic_after_helper_spawn_is_finalized`, `p2r1_live_panic_while_proving_the_scope_stops_it`, `p2r1_live_panic_after_the_scope_is_proven_is_finalized`, `p2r1_live_panic_after_launch_ends_the_tree`, `p2r1_live_panic_while_running_ends_every_descendant`, `p2r1_live_panic_while_draining_output_ends_the_tree`, `p2r1_live_output_thread_panic_is_never_a_result`, `p2r1_live_panic_before_finalization_is_never_a_pass`, `p2r1_live_panic_in_finalization_retains_the_live_boundary`, `p2r1_live_failed_finalization_is_retried_to_confirmation`: never a pass; confirmed cleanup only with the helper reaped, no process of the verifier's tree alive and the scope gone; otherwise a retained boundary that still owns the live tree, which a retry ends |
+| the finalizer and a retained boundary without a scope | `p2r1_finalization_ends_and_reaps_a_helper_without_a_scope`, `p2r1_a_failed_or_panicking_finalization_retains_the_live_boundary`, `p2r1_a_dropped_boundary_still_ends_its_helper`, `p2r1_a_panicking_output_thread_loses_its_record`, `p2r1_an_interrupted_execution_is_never_passed` |
+| the desktop's panic path, retry and discard | `p2r1_a_panic_after_the_execution_retains_its_unconfirmed_boundary`, `p2r1_a_panic_with_nothing_unconfirmed_is_an_unknown_result`, `p2_g_07_a_retained_verification_cleanup_is_never_dropped`; kernel `p2r1_a_panicked_verification_keeps_apply_refused_until_its_cleanup_is_confirmed` |
+
 CI: a dedicated exact-SHA workflow on the self-hosted runner
 (`.github/workflows/ci-phase2-linux-sandbox.yml`) runs the live suite and
 fails if a layer is missing. Hosted CI runs the portable tests and asserts
@@ -563,8 +604,11 @@ build-output directories.
   release packaging.
 - A workspace left by a crashed backend stays (owner-only, on the session
   tmpfs) until the session ends; there is no startup sweep by name.
-- A panic in the desktop's verification thread finalizes the run as
-  `SandboxFailed` with cleanup unconfirmed and nothing to retry: Apply stays
-  refused for that run; the owner can discard it.
+- Retained boundaries live in the backend's memory: if the backend process
+  itself ends, the parent-death chain and the scope's runtime backstop end
+  what remained, and nothing is left to confirm.
+- A panic inside the kernel's own result recording, after the desktop has
+  stored the retained boundary, leaves the run's phase unfinished (Apply
+  refused); the boundary itself stays owned.
 - Timing: a verification's generation binds the toolchain verification it
   was prepared with; a re-verification from scratch is a new binding.
