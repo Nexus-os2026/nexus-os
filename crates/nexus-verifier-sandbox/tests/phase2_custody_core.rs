@@ -1,16 +1,19 @@
-//! P2-V1-R3B-I1 and -R1 fixture controls for the custody core
+//! P2-V1-R3B-I1, -R1 and -R2 fixture controls for the custody core
 //! (`support/custody/`): the same owner survives failed and exhausted
 //! cleanup, reporting, refused shutdown and explicit recovery; admission is
 //! reserved, acknowledged and linearized against cancellation, and the first
-//! actual failure closes it for good (no next case, no reopening); an unknown
-//! native outcome stays pending until its own bound completion; expected
-//! injected conditions stay apart from actual failures, and output
-//! detachment is output loss, never completeness; a run is final only when
-//! its terminal record is acknowledged, after which its verdict never
-//! changes and a late owner is an incident of its own; failed or pending
-//! evidence keeps the custody from closing; dependencies are released only
-//! after native completion; acknowledgements bind exact records; replayed,
-//! stale and conflicting events act on nothing.
+//! actual failure closes it for good (no next case, no reopening), an
+//! expected retained boundary's failed first attempt included, at once; an
+//! unknown native outcome stays pending until its own bound completion;
+//! expected injected conditions stay apart from actual failures, and output
+//! detachment is output loss, never completeness; the terminal commitment is
+//! ordered against cancellation and lease expiry (accepted before it, they
+//! fail the run; after it, they are late and change nothing); a run is final
+//! only when its terminal record is acknowledged, after which its verdict
+//! never changes and a late owner is an incident of its own; failed or
+//! pending evidence keeps the custody from closing; dependencies are released
+//! only after native completion; acknowledgements bind exact records;
+//! replayed, stale and conflicting events act on nothing.
 //!
 //! These are not live evidence. No process, cgroup, scope, user manager, bus,
 //! socket, file or record storage is touched: every adapter is an in-process
@@ -1269,6 +1272,993 @@ fn r06_detached_output_is_output_loss_never_a_clean_pass() {
     assert_eq!(lab.snap().verdict, Verdict::Failed);
 }
 
+/// A completion candidate whose case passed and whose earlier evidence is
+/// issued but not yet acknowledged: every record but the last is
+/// acknowledged, so the next acknowledgement reaches the commitment point.
+fn candidate_before_last_ack(lab: &mut Lab) {
+    lab.begin(1, Expectation::Clean);
+    let (_, token) = lab.create(SlotKind::Process);
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+    assert_eq!(lab.released(), vec![token]);
+    let now = lab.now();
+    assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Candidate));
+    lab.flush();
+    lab.ack_until(lab.journal.submitted.len() - 1);
+    let snapshot = lab.snap();
+    assert_eq!(
+        (snapshot.phase, snapshot.terminal, snapshot.verdict),
+        (RunPhase::Candidate, None, Verdict::Pending)
+    );
+    assert_eq!(lab.control.status().control.admission.committed, None);
+}
+
+/// After a cancellation accepted before the commitment: the terminal record
+/// failed the run, the cancellation is the run's only failure (no case's,
+/// and no test failure), its control fact is recorded once before the
+/// terminal record, and the closed result says the same. The capture of
+/// what was observed.
+fn cancelled_outcome(lab: &mut Lab, closure: Closure) -> (bool, String) {
+    lab.ack_all();
+    let snapshot = lab.snap();
+    let admission = lab.control.status().control.admission;
+    let terminal = lab.terminal_record();
+    let records = lab.records();
+    let facts: Vec<usize> = records
+        .iter()
+        .enumerate()
+        .filter(|(_, kind)| {
+            matches!(kind, RecordKind::Control {
+                fact: ControlFact::AdmissionClosed { reason, .. }
+            } if *reason == closure.reason)
+        })
+        .map(|(index, _)| index)
+        .collect();
+    let ended = records
+        .iter()
+        .position(|kind| matches!(kind, RecordKind::RunEnded { .. }));
+    let failures: Vec<(FailureClass, Option<CaseId>)> = snapshot
+        .failures
+        .iter()
+        .map(|failure| (failure.class, failure.case))
+        .collect();
+    let closed = lab.close();
+    let capture = format!(
+        "admission {admission:?}; failures {failures:?}; terminal {terminal:?}; published {:?}; \
+         control facts at {facts:?}, terminal at {ended:?}; close {closed:?}",
+        snapshot.verdict
+    );
+    let failed = terminal.map(|(_, verdict)| verdict) == Some(Verdict::Failed)
+        && failures == vec![(FailureClass::Cancelled, None)]
+        && snapshot.verdict == Verdict::Failed
+        && admission.closure == Some(closure)
+        && admission.committed.is_some()
+        && facts.len() == 1
+        && ended.is_some_and(|ended| facts[0] < ended)
+        && closed
+            .as_ref()
+            .map(|closed| (closed.terminal, closed.verdict))
+            == Some((terminal.map(|(record, _)| record), Verdict::Failed));
+    (failed, capture)
+}
+
+/// R2 finding A (explicit cancellation): a cancellation accepted while the
+/// run is a completion candidate (its earlier evidence unacknowledged, no
+/// terminal record yet) is part of the terminal commitment's outcome: the run
+/// fails, the cancellation recorded once as its own failure, whether or not
+/// the execution owner observed control before the last acknowledgement.
+/// Observed, it is the run's failure at once.
+#[test]
+fn r07_cancellation_accepted_in_candidate_prevents_a_pass() {
+    for observe in [false, true] {
+        let mut lab = Lab::new(TEST);
+        lab.start();
+        candidate_before_last_ack(&mut lab);
+        let now = lab.now();
+        let receipt = lab.control.cancel(CancelReason::Requested, now);
+        let closure = Closure {
+            reason: ClosureReason::Cancelled(CancelReason::Requested),
+            at: now,
+            after: 1,
+        };
+        assert_eq!(
+            receipt,
+            CancelReceipt::Accepted(closure),
+            "observe {observe}"
+        );
+        if observe {
+            let now = lab.now();
+            assert_eq!(lab.c().observe_control(now), Ok(Some(closure)));
+            let snapshot = lab.snap();
+            assert!(
+                snapshot.verdict == Verdict::Failed
+                    && count(&snapshot, FailureClass::Cancelled) == 1
+                    && snapshot.terminal.is_none(),
+                "[cancel-observed] an observed cancellation of a candidate is not its failure at \
+                 once: published {:?}, failures {:?}",
+                snapshot.verdict,
+                snapshot.failure_counts
+            );
+        }
+        let (failed, capture) = cancelled_outcome(&mut lab, closure);
+        assert!(
+            failed,
+            "[cancel-before-commit] observe {observe}: receipt {receipt:?}; {capture}"
+        );
+        assert!(lab.dropped().is_empty());
+    }
+}
+
+/// R2 finding A (lease expiry): an expiry observed while the run is a
+/// completion candidate is a cancellation accepted before the commitment:
+/// the run fails, with or without an explicit observation before the last
+/// acknowledgement. Reading status never renews or expires the lease;
+/// instants are injected, nothing sleeps.
+#[test]
+fn r08_lease_expiry_observed_in_candidate_prevents_a_pass() {
+    for observe in [false, true] {
+        let mut lab = Lab::new(TEST);
+        let started = lab.start();
+        candidate_before_last_ack(&mut lab);
+        let deadline = started.plus(TEST.lease_millis);
+        for _ in 0..3 {
+            assert_eq!(
+                lab.control.status().control.lease,
+                LeaseView {
+                    state: LeaseState::Active { deadline },
+                    renewals: 0
+                }
+            );
+        }
+        let now = lab.later(TEST.lease_millis);
+        assert!(now >= deadline);
+        assert_eq!(lab.control.check_lease(now), LeaseState::Lost { at: now });
+        let closure = Closure {
+            reason: ClosureReason::Cancelled(CancelReason::LeaseLost),
+            at: now,
+            after: 1,
+        };
+        assert_eq!(
+            lab.control.status().control.admission.closure,
+            Some(closure)
+        );
+        if observe {
+            let now = lab.now();
+            assert_eq!(lab.c().observe_control(now), Ok(Some(closure)));
+            let snapshot = lab.snap();
+            assert!(
+                snapshot.verdict == Verdict::Failed
+                    && count(&snapshot, FailureClass::Cancelled) == 1,
+                "[lease-observed] published {:?}, failures {:?}",
+                snapshot.verdict,
+                snapshot.failure_counts
+            );
+        }
+        let (failed, capture) = cancelled_outcome(&mut lab, closure);
+        assert!(failed, "[lease-before-commit] observe {observe}: {capture}");
+    }
+}
+
+/// R2 finding B: a retained boundary whose first cleanup attempt does not
+/// confirm every fact has failed for good at that attempt. Ended through
+/// `end_entry` (the next attempt confirming), the expectation is recorded
+/// unmet and admission closed before the case ends, so no further native
+/// action is admitted in that case; the cleanup still ends and releases the
+/// same owner, a dependency in use stays held until its turn, the later
+/// success undoes nothing, and the case's end records nothing twice.
+#[test]
+fn r09_failed_first_attempt_of_a_retained_boundary_closes_admission_at_once() {
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::RetainedBoundary);
+    let (workspace, workspace_token) = lab.create(SlotKind::Workspace);
+    let (entry, token) = lab.deposit(SlotKind::Process, true);
+    let mut cleanup = Scripted::always(Plan::Confirm).first(SlotKind::Process, &[Plan::Fail]);
+    let now = lab.now();
+    let ended = lab.c().end_entry(entry, &mut cleanup, now);
+    let snapshot = lab.snap();
+    let case = snapshot.case.clone().expect("the case is still active");
+    let failures: Vec<FailureClass> = snapshot
+        .failures
+        .iter()
+        .map(|failure| failure.class)
+        .collect();
+    let gate = lab.control.status().control.admission;
+    let attempts = cleanup.attempts_on(token);
+    let released = lab.released();
+    let now = lab.now();
+    let reserved = lab.c().reserve(SlotKind::Fixture, now);
+    let capture = format!(
+        "end_entry {ended:?} after {attempts} attempts, released {released:?}; case {case:?}; \
+         failures {failures:?}; gate {gate:?}; reserve {reserved:?}"
+    );
+    assert!(
+        failures == vec![FailureClass::ExpectedConditionUnmet]
+            && case.failed
+            && case.retained_first_confirmed == Some(false)
+            && matches!(
+                gate.closure,
+                Some(Closure {
+                    reason: ClosureReason::Failed(FailureClass::ExpectedConditionUnmet),
+                    ..
+                })
+            )
+            && matches!(reserved, Err(Refusal::AdmissionClosed(_))),
+        "[expectation-latched] {capture}"
+    );
+    // The cleanup went on within its budget and released the same owner; the
+    // dependency in use is still held, nothing was admitted or produced.
+    assert_eq!((ended, attempts, released), (Ok(true), 2, vec![token]));
+    let held = only_entry(&snapshot);
+    assert_eq!((held.entry, held.phase), (workspace, EntryPhase::Live));
+    assert_eq!(gate.admitted, 2);
+    assert_eq!(lab.native.produced.len(), 2);
+    assert_eq!(
+        lab.control.status().control.admission,
+        gate,
+        "a refused reservation changes nothing"
+    );
+
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
+    assert_eq!(
+        (outcome.passed, outcome.resolved, outcome.stopped),
+        (false, true, true)
+    );
+    assert_eq!(lab.released(), vec![workspace_token]);
+    let snapshot = lab.snap();
+    assert_eq!(
+        count(&snapshot, FailureClass::ExpectedConditionUnmet),
+        1,
+        "[expectation-once] the case's end recorded the latched expectation again: {:?}",
+        snapshot.failure_counts
+    );
+    assert_eq!(lab.control.status().control.admission.closure, gate.closure);
+    lab.try_ack_all();
+    let now = lab.now();
+    assert!(matches!(
+        lab.c().begin_case(CaseId(2), Expectation::Clean, now),
+        Err(Refusal::AdmissionClosed(_))
+    ));
+    lab.ack_all();
+    assert_eq!(
+        lab.terminal_record().map(|(_, verdict)| verdict),
+        Some(Verdict::Failed)
+    );
+    assert_eq!(lab.returned.len(), 2);
+    assert!(lab.dropped().is_empty());
+}
+
+/// R2 finding A (a cancellation concurrent with the last acknowledgement):
+/// the recorder stand-in pauses inside a submission, after the execution
+/// owner last looked at control; the control side's cancellation is accepted
+/// during the pause; the acknowledgement that follows reaches the commitment
+/// point, which sees the cancellation: the run fails, with and without an
+/// explicit observation in between. Channels order the threads; nothing
+/// sleeps, and the pause is the stand-in's, outside the core.
+#[test]
+fn r10_cancellation_while_the_recorder_is_paused_precedes_the_commitment() {
+    for observe in [false, true] {
+        let mut lab = Lab::new(TEST);
+        lab.start();
+        lab.begin(1, Expectation::Clean);
+        let (_, token) = lab.create(SlotKind::Process);
+        assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+        assert_eq!(lab.released(), vec![token]);
+        let now = lab.now();
+        assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Candidate));
+
+        let (entered, entered_rx) = mpsc::channel();
+        let (release, release_rx) = mpsc::channel();
+        let mut sink = StallingSink {
+            inner: std::mem::take(&mut lab.journal),
+            entered,
+            release: release_rx,
+            stalled: false,
+        };
+        let mut custody = lab.custody.take().expect("the custody is open");
+        let at = lab.now();
+        let executor = thread::spawn(move || {
+            let sent = custody.flush_records(&mut sink, at);
+            (custody, sink, sent)
+        });
+        entered_rx
+            .recv_timeout(WATCHDOG)
+            .expect("the recorder holds a pending record");
+        let control = lab.control.clone();
+        let cancel_at = lab.now();
+        let receipt = answered("cancellation", move || {
+            control.cancel(CancelReason::Requested, cancel_at)
+        });
+        let closure = Closure {
+            reason: ClosureReason::Cancelled(CancelReason::Requested),
+            at: cancel_at,
+            after: 1,
+        };
+        assert_eq!(
+            receipt,
+            CancelReceipt::Accepted(closure),
+            "observe {observe}"
+        );
+        release.send(()).expect("the recorder is waiting");
+        let (custody, sink, sent) = executor.join().expect("the execution owner");
+        lab.custody = Some(custody);
+        lab.journal = sink.inner;
+        assert_eq!(sent, Ok(2), "both pending records were submitted");
+        if observe {
+            let now = lab.now();
+            assert_eq!(lab.c().observe_control(now), Ok(Some(closure)));
+        }
+        let (failed, capture) = cancelled_outcome(&mut lab, closure);
+        assert!(failed, "[cancel-in-flight] observe {observe}: {capture}");
+    }
+}
+
+/// R2 finding A (finalization winning): once the last earlier
+/// acknowledgement made the terminal commitment (its terminal record
+/// issued), a cancellation or an observed lease expiry is late: its receipt
+/// names the commitment and claims no cancellation, admission is not closed
+/// by it, the terminal record and its verdict stay as committed, and no pass
+/// is published until that record is acknowledged. A pending or failed
+/// terminal record still refuses closure. Repeated acknowledgements,
+/// observations, cancellations and status reads leave exactly one terminal
+/// record, and a later owner is still a late incident (returned past the
+/// bound), never a change of the outcome.
+#[test]
+fn r11_finalization_winning_makes_a_later_cancellation_late() {
+    let mut lab = Lab::new(Config {
+        late_limit: 1,
+        ..TEST
+    });
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let ticket = lab.admit(SlotKind::Process);
+    let owner = lab.native.produce(&ticket);
+    let now = lab.now();
+    lab.c()
+        .complete(&ticket, NativeOutcome::Created(owner), now)
+        .expect("deposited");
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+    lab.released();
+    let now = lab.now();
+    assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Candidate));
+    lab.flush();
+    lab.ack_until(lab.journal.submitted.len());
+    let commitment = Commitment {
+        at: Tick(lab.clock),
+    };
+    let snapshot = lab.snap();
+    let terminal = snapshot
+        .terminal
+        .expect("committed: the terminal record is issued");
+    assert_eq!(
+        (
+            snapshot.phase,
+            terminal.verdict,
+            terminal.acknowledged,
+            snapshot.verdict
+        ),
+        (
+            RunPhase::Finalizing,
+            Verdict::Passed,
+            false,
+            Verdict::Pending
+        )
+    );
+    let admission = lab.control.status().control.admission;
+    assert_eq!(
+        (admission.closure, admission.committed),
+        (None, Some(commitment))
+    );
+
+    let now = lab.now();
+    let receipt = lab.control.cancel(CancelReason::Requested, now);
+    let after = lab.control.status().control.admission;
+    assert!(
+        receipt == CancelReceipt::Late(commitment) && after == admission,
+        "[late-cancel] after the commitment: receipt {receipt:?}, admission {after:?}"
+    );
+    let now = lab.later(TEST.lease_millis);
+    assert_eq!(lab.control.check_lease(now), LeaseState::Lost { at: now });
+    assert_eq!(
+        lab.control.status().control.admission,
+        admission,
+        "[late-cancel] a lease expiry after the commitment closed admission"
+    );
+    let cap = lab.cap.take().expect("the run's lease capability");
+    let now = lab.now();
+    assert_eq!(lab.control.renew_lease(&cap, now), Err(LeaseError::Lost));
+    for reason in [
+        CancelReason::Stop,
+        CancelReason::Shutdown,
+        CancelReason::RunBudget,
+    ] {
+        let now = lab.now();
+        assert_eq!(lab.c().observe_control(now), Ok(None));
+        let now = lab.now();
+        assert_eq!(
+            lab.control.cancel(reason, now),
+            CancelReceipt::Late(commitment)
+        );
+        assert_eq!(lab.control.status().control.admission, admission);
+    }
+    let snapshot = lab.snap();
+    assert_eq!(
+        (
+            snapshot.phase,
+            snapshot.verdict,
+            snapshot.failure_counts,
+            snapshot.cancel_observed
+        ),
+        (
+            RunPhase::Finalizing,
+            Verdict::Pending,
+            [0; FailureClass::COUNT],
+            None
+        ),
+        "no pass before the terminal record is acknowledged, and no cancellation"
+    );
+    let decision = lab.c().shutdown_decision();
+    assert!(
+        is_refused_with(&decision, Unresolved::TerminalPending(terminal.record)),
+        "[terminal-ack] {decision:?}"
+    );
+    assert!(
+        lab.close().is_none(),
+        "[terminal-ack] closed with the terminal record pending"
+    );
+
+    lab.ack_all();
+    let terminal_intent = lab
+        .journal
+        .submitted
+        .iter()
+        .find(|intent| intent.id == terminal.record)
+        .cloned()
+        .expect("submitted");
+    for _ in 0..3 {
+        let now = lab.now();
+        assert_eq!(
+            lab.c().acknowledge(&RecordAck::of(&terminal_intent), now),
+            AckOutcome::Duplicate
+        );
+        let now = lab.now();
+        assert_eq!(lab.c().observe_control(now), Ok(None));
+        let _ = lab.control.status();
+    }
+    lab.flush();
+    let terminals: Vec<_> = lab
+        .records()
+        .into_iter()
+        .filter(|kind| matches!(kind, RecordKind::RunEnded { .. }))
+        .collect();
+    assert_eq!(
+        terminals,
+        vec![RecordKind::RunEnded {
+            verdict: Verdict::Passed,
+            resolved_by: None
+        }],
+        "exactly one terminal record"
+    );
+    assert!(
+        !lab.records()
+            .iter()
+            .any(|kind| matches!(kind, RecordKind::Control { .. })),
+        "a late cancellation is no control fact"
+    );
+    let snapshot = lab.snap();
+    assert_eq!(
+        (snapshot.phase, snapshot.verdict),
+        (RunPhase::Finalized, Verdict::Passed)
+    );
+
+    // Later owners: a late incident, then (past the bound) returned; faults
+    // of the custody beside the unchanged outcome.
+    let late = lab.native.produce(&ticket);
+    let late_token = late.token;
+    let now = lab.now();
+    assert!(matches!(
+        lab.c().complete(&ticket, NativeOutcome::Created(late), now),
+        Ok(Completion::Late { .. })
+    ));
+    let second = lab.native.produce(&ticket);
+    let second_token = second.token;
+    let now = lab.now();
+    match lab
+        .c()
+        .complete(&ticket, NativeOutcome::Created(second), now)
+    {
+        Err(Rejected::CustodyFull { owner }) => {
+            assert_eq!(owner.token, second_token);
+            lab.returned.push(owner);
+        }
+        other => panic!("a late owner past the bound: {other:?}"),
+    }
+    let snapshot = lab.snap();
+    assert_eq!(
+        (
+            snapshot.verdict,
+            snapshot.failure_counts,
+            fault_count(&snapshot, FailureClass::LateOwner)
+        ),
+        (Verdict::Passed, [0; FailureClass::COUNT], 2)
+    );
+    assert_eq!(lab.control.status().control.admission, admission);
+    assert_eq!(
+        lab.retry(&mut Scripted::always(Plan::Confirm)),
+        Response::Retried {
+            attempt: 1,
+            resolved: true,
+            epoch: 1
+        }
+    );
+    assert_eq!(lab.released(), vec![late_token]);
+    lab.ack_all();
+    let closed = lab.close().expect("closes once nothing is unresolved");
+    assert_eq!(
+        (closed.terminal, closed.verdict),
+        (Some(terminal.record), Verdict::Passed)
+    );
+    assert!(lab.dropped().is_empty());
+
+    // A failing terminal record (after a late cancellation, and of a run a
+    // cancellation failed before its commitment): never final, never
+    // closed, its verdict as committed.
+    for cancel_first in [false, true] {
+        let mut lab = Lab::new(TEST);
+        lab.start();
+        candidate_before_last_ack(&mut lab);
+        if cancel_first {
+            let now = lab.now();
+            assert!(matches!(
+                lab.control.cancel(CancelReason::Requested, now),
+                CancelReceipt::Accepted(_)
+            ));
+        }
+        let last = lab.journal.submitted.len();
+        lab.ack_until(last);
+        lab.flush();
+        let (record, verdict) = lab.terminal_record().expect("committed");
+        if !cancel_first {
+            let now = lab.now();
+            assert!(matches!(
+                lab.control.cancel(CancelReason::Requested, now),
+                CancelReceipt::Late(_)
+            ));
+        }
+        // Acknowledge what precedes the terminal record, then fail it.
+        let index = lab
+            .journal
+            .submitted
+            .iter()
+            .position(|intent| intent.id == record)
+            .expect("submitted");
+        lab.ack_until(index);
+        let now = lab.now();
+        assert_eq!(
+            lab.c().record_failed(record, now),
+            AckOutcome::FailureRecorded
+        );
+        let snapshot = lab.snap();
+        let expected = if cancel_first {
+            (Verdict::Failed, Verdict::Failed)
+        } else {
+            (Verdict::Passed, Verdict::Pending)
+        };
+        assert_eq!(
+            (verdict, snapshot.verdict),
+            expected,
+            "cancel first {cancel_first}"
+        );
+        assert_eq!(snapshot.phase, RunPhase::Finalizing);
+        assert_eq!(fault_count(&snapshot, FailureClass::RecordFailed), 1);
+        let decision = lab.c().shutdown_decision();
+        assert!(
+            is_refused_with(&decision, Unresolved::TerminalPending(record)),
+            "[terminal-ack] cancel first {cancel_first}: {decision:?}"
+        );
+        assert!(
+            lab.close().is_none(),
+            "[terminal-ack] closed with a failed terminal record"
+        );
+        let admission = lab.control.status().control.admission;
+        let now = lab.now();
+        assert!(matches!(
+            lab.control.cancel(CancelReason::Requested, now),
+            CancelReceipt::Late(_)
+        ));
+        assert_eq!(lab.control.status().control.admission, admission);
+        assert_eq!(
+            lab.records()
+                .iter()
+                .filter(|kind| matches!(kind, RecordKind::RunEnded { .. }))
+                .count(),
+            1
+        );
+    }
+}
+
+/// The commitment point and a concurrent cancellation raced on the gate's
+/// critical section. This is supplementary: the ordered controls above are
+/// the proof, and nothing here depends on which side wins a round. Whichever
+/// does, the receipt and the outcome agree: an accepted cancellation failed
+/// the run, a late one changed nothing.
+#[test]
+fn r12_commitment_and_concurrent_cancellation_agree_whichever_wins() {
+    let (mut accepted, mut late) = (0, 0);
+    for _ in 0..64 {
+        let mut lab = Lab::new(TEST);
+        lab.start();
+        lab.begin(1, Expectation::Clean);
+        assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+        let now = lab.now();
+        assert_eq!(lab.c().finish_run(now), Ok(RunPhase::Candidate));
+        lab.flush();
+        let last = lab.journal.submitted.len();
+        lab.ack_until(last - 1);
+        let ack = RecordAck::of(&lab.journal.submitted[last - 1]);
+        let barrier = Arc::new(Barrier::new(2));
+        let control = lab.control.clone();
+        let canceller_barrier = Arc::clone(&barrier);
+        let cancel_at = lab.now();
+        let canceller = thread::spawn(move || {
+            canceller_barrier.wait();
+            control.cancel(CancelReason::Requested, cancel_at)
+        });
+        barrier.wait();
+        let now = lab.now();
+        assert_eq!(lab.c().acknowledge(&ack, now), AckOutcome::Acknowledged);
+        lab.acked += 1;
+        let receipt = canceller.join().expect("the canceller");
+        lab.ack_all();
+        let snapshot = lab.snap();
+        let admission = lab.control.status().control.admission;
+        let verdict = lab.terminal_record().map(|(_, verdict)| verdict);
+        match receipt {
+            CancelReceipt::Accepted(closure) => {
+                accepted += 1;
+                assert_eq!(
+                    (
+                        verdict,
+                        snapshot.verdict,
+                        count(&snapshot, FailureClass::Cancelled),
+                        admission.closure
+                    ),
+                    (Some(Verdict::Failed), Verdict::Failed, 1, Some(closure))
+                );
+            }
+            CancelReceipt::Late(commitment) => {
+                late += 1;
+                assert_eq!(
+                    (
+                        verdict,
+                        snapshot.verdict,
+                        snapshot.failure_counts,
+                        admission.closure,
+                        admission.committed
+                    ),
+                    (
+                        Some(Verdict::Passed),
+                        Verdict::Passed,
+                        [0; FailureClass::COUNT],
+                        None,
+                        Some(commitment)
+                    )
+                );
+            }
+            CancelReceipt::AlreadyClosed(closure) => {
+                panic!("nothing else closed admission: {closure:?}")
+            }
+        }
+        assert!(lab.close().is_some());
+    }
+    assert_eq!(accepted + late, 64);
+}
+
+/// R2 finding B, by failure mode: a retained boundary's first attempt that
+/// leaves its output pending, its direct child unreaped, its subtree
+/// unconfirmed or nothing confirmed latches the unmet expectation at once
+/// (through `end_entry`), closing admission before the next attempt
+/// confirms; an adapter panic, a detached output and exhausted cleanup keep
+/// their own failures (which close admission first, as before) beside it,
+/// each recorded once.
+#[test]
+fn r13_every_unconfirmed_first_attempt_latches_its_expectation() {
+    let latched = |lab: &mut Lab, first: Plan| {
+        lab.start();
+        lab.begin(1, Expectation::RetainedBoundary);
+        let (entry, token) = lab.deposit(SlotKind::Process, true);
+        let mut cleanup = Scripted::always(Plan::Confirm).first(SlotKind::Process, &[first]);
+        let now = lab.now();
+        let ended = lab.c().end_entry(entry, &mut cleanup, now);
+        (ended, cleanup.attempts_on(token), token)
+    };
+    for (first, why) in [
+        (Plan::OutputPending, "output still pending"),
+        (Plan::SubtreeOnly, "the direct child unreaped"),
+        (Plan::ReapedOnly, "the subtree unconfirmed"),
+        (Plan::Fail, "nothing confirmed"),
+    ] {
+        let mut lab = Lab::new(TEST);
+        let (ended, attempts, token) = latched(&mut lab, first);
+        let snapshot = lab.snap();
+        let failures: Vec<FailureClass> = snapshot
+            .failures
+            .iter()
+            .map(|failure| failure.class)
+            .collect();
+        let closure = lab.control.status().control.admission.closure;
+        assert!(
+            failures == vec![FailureClass::ExpectedConditionUnmet]
+                && closed_by_failure(closure) == Some(FailureClass::ExpectedConditionUnmet),
+            "[expectation-latched] {why}: failures {failures:?}, closure {closure:?}"
+        );
+        assert_eq!((ended, attempts), (Ok(true), 2), "{why}");
+        let now = lab.now();
+        assert!(
+            matches!(
+                lab.c().reserve(SlotKind::Workspace, now),
+                Err(Refusal::AdmissionClosed(_))
+            ),
+            "{why}"
+        );
+        assert_eq!(lab.released(), vec![token], "{why}");
+        let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
+        assert!(!outcome.passed && outcome.stopped, "{why}");
+        assert_eq!(
+            count(&lab.snap(), FailureClass::ExpectedConditionUnmet),
+            1,
+            "{why}"
+        );
+    }
+
+    for (first, class, attempts, why) in [
+        (
+            Plan::Panic,
+            FailureClass::UnexpectedCleanup,
+            2,
+            "the adapter panicked",
+        ),
+        (
+            Plan::Detached,
+            FailureClass::OutputLost,
+            1,
+            "the output detached",
+        ),
+    ] {
+        let mut lab = Lab::new(TEST);
+        let (ended, made, token) = latched(&mut lab, first);
+        assert_eq!((ended, made), (Ok(true), attempts), "{why}");
+        let snapshot = lab.snap();
+        let failures: Vec<FailureClass> = snapshot
+            .failures
+            .iter()
+            .map(|failure| failure.class)
+            .collect();
+        assert_eq!(
+            failures,
+            vec![class, FailureClass::ExpectedConditionUnmet],
+            "{why}"
+        );
+        assert_eq!(
+            closed_by_failure(lab.control.status().control.admission.closure),
+            Some(class),
+            "{why}"
+        );
+        assert_eq!(lab.released(), vec![token], "{why}");
+        lab.end_case(&mut Scripted::always(Plan::Confirm));
+        let snapshot = lab.snap();
+        assert_eq!(
+            (
+                count(&snapshot, FailureClass::ExpectedConditionUnmet),
+                count(&snapshot, class)
+            ),
+            (1, 1),
+            "{why}"
+        );
+    }
+
+    // Exhausted: the owner stays held (and admission closed) until explicit
+    // recovery ends it; each failure once.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::RetainedBoundary);
+    let (entry, token) = lab.deposit(SlotKind::Process, true);
+    let mut failing = Scripted::always(Plan::Fail);
+    let now = lab.now();
+    assert_eq!(lab.c().end_entry(entry, &mut failing, now), Ok(false));
+    assert_eq!(failing.attempts_on(token), 3);
+    let snapshot = lab.snap();
+    let failures: Vec<FailureClass> = snapshot
+        .failures
+        .iter()
+        .map(|failure| failure.class)
+        .collect();
+    assert_eq!(
+        failures,
+        vec![
+            FailureClass::ExpectedConditionUnmet,
+            FailureClass::UnexpectedCleanup
+        ]
+    );
+    assert_eq!(only_entry(&snapshot).entry, entry);
+    let now = lab.now();
+    assert!(matches!(
+        lab.c().reserve(SlotKind::Workspace, now),
+        Err(Refusal::AdmissionClosed(_))
+    ));
+    let outcome = lab.end_case(&mut failing);
+    assert_eq!((outcome.resolved, outcome.stopped), (false, true));
+    assert_eq!(lab.snap().phase, RunPhase::RecoveryRequired);
+    assert_eq!(lab.snap().failures.len(), 2, "nothing recorded twice");
+    assert!(matches!(
+        lab.retry(&mut Scripted::always(Plan::Confirm)),
+        Response::Retried { resolved: true, .. }
+    ));
+    assert_eq!(lab.released(), vec![token]);
+    assert_eq!(lab.snap().failures.len(), 2);
+    assert!(lab.dropped().is_empty());
+}
+
+/// R2 finding B's boundary: an expected retained boundary whose first
+/// attempt confirms every fact is still a passing control, and admission
+/// stays open for its case's further actions; an ordinary owner whose
+/// cleanup is pending at first and confirmed within its budget is no
+/// failure at all, in a clean case and as a dependency in a retained-boundary
+/// case.
+#[test]
+fn r14_expected_first_attempt_success_and_ordinary_retries_keep_their_semantics() {
+    // The expected first-attempt success, through `end_entry`.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::RetainedBoundary);
+    let (entry, token) = lab.deposit(SlotKind::Process, true);
+    let now = lab.now();
+    assert_eq!(
+        lab.c()
+            .end_entry(entry, &mut Scripted::always(Plan::Confirm), now),
+        Ok(true)
+    );
+    let snapshot = lab.snap();
+    assert_eq!(
+        snapshot
+            .case
+            .as_ref()
+            .map(|case| (case.retained_first_confirmed, case.failed)),
+        Some((Some(true), false))
+    );
+    assert_eq!(snapshot.failure_counts, [0; FailureClass::COUNT]);
+    assert_eq!(lab.control.status().control.admission.closure, None);
+    assert_eq!(lab.released(), vec![token]);
+    let (_, workspace) = lab.create(SlotKind::Workspace);
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
+    assert!(outcome.passed && !outcome.stopped);
+    assert_eq!(lab.released(), vec![workspace]);
+    assert_eq!(lab.finish(), RunPhase::Finalized);
+    assert_eq!(lab.snap().verdict, Verdict::Passed);
+
+    // Ordinary cleanup, pending then confirmed, in a clean case.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    let (entry, token) = lab.create(SlotKind::Process);
+    let mut cleanup = Scripted::always(Plan::Confirm).first(SlotKind::Process, &[Plan::Fail]);
+    let now = lab.now();
+    assert_eq!(lab.c().end_entry(entry, &mut cleanup, now), Ok(true));
+    assert_eq!(cleanup.attempts_on(token), 2);
+    assert_eq!(lab.snap().failure_counts, [0; FailureClass::COUNT]);
+    assert_eq!(lab.control.status().control.admission.closure, None);
+    lab.released();
+    lab.create(SlotKind::Fixture);
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+    assert_eq!(lab.finish(), RunPhase::Finalized);
+    assert_eq!(lab.snap().verdict, Verdict::Passed);
+
+    // A dependency's ordinary retries in a retained-boundary case.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::RetainedBoundary);
+    let (workspace, _) = lab.create(SlotKind::Workspace);
+    let (entry, _) = lab.deposit(SlotKind::Process, true);
+    let now = lab.now();
+    assert_eq!(
+        lab.c()
+            .end_entry(entry, &mut Scripted::always(Plan::Confirm), now),
+        Ok(true)
+    );
+    let mut cleanup = Scripted::always(Plan::Confirm).first(SlotKind::Workspace, &[Plan::Fail]);
+    let now = lab.now();
+    assert_eq!(lab.c().end_entry(workspace, &mut cleanup, now), Ok(true));
+    assert_eq!(lab.snap().failure_counts, [0; FailureClass::COUNT]);
+    assert_eq!(lab.control.status().control.admission.closure, None);
+    assert!(lab.end_case(&mut Scripted::always(Plan::Confirm)).passed);
+    assert_eq!(lab.released().len(), 2);
+    assert!(lab.dropped().is_empty());
+}
+
+/// R2, the shutdown route against the commitment point: a shutdown request
+/// cancels (through the same gate, so necessarily before the commitment)
+/// only while the run is running. To a completion candidate it only answers:
+/// it neither cancels, commits, finalizes nor fails it, and the run then
+/// commits through the one commitment point; after the commitment it
+/// changes nothing.
+#[test]
+fn r15_shutdown_request_is_no_second_finalization_rule() {
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    candidate_before_last_ack(&mut lab);
+    let decision = lab.request_shutdown();
+    assert!(
+        is_refused_with(&decision, Unresolved::RunEnding),
+        "{decision:?}"
+    );
+    let snapshot = lab.snap();
+    let admission = lab.control.status().control.admission;
+    assert!(
+        admission.closure.is_none()
+            && admission.committed.is_none()
+            && snapshot.phase == RunPhase::Candidate
+            && snapshot.verdict == Verdict::Pending
+            && snapshot.failure_counts == [0; FailureClass::COUNT],
+        "[shutdown-candidate] a shutdown request decided a completion candidate's outcome: \
+         admission {admission:?}, phase {:?}, published {:?}, failures {:?}",
+        snapshot.phase,
+        snapshot.verdict,
+        snapshot.failure_counts
+    );
+    lab.ack_all();
+    assert_eq!(
+        lab.terminal_record().map(|(_, verdict)| verdict),
+        Some(Verdict::Passed)
+    );
+    assert_eq!(lab.request_shutdown(), ShutdownDecision::Permitted);
+    assert_eq!(
+        lab.close().map(|closed| closed.verdict),
+        Some(Verdict::Passed)
+    );
+
+    // After the commitment, before the terminal acknowledgement.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    candidate_before_last_ack(&mut lab);
+    let last = lab.journal.submitted.len();
+    lab.ack_until(last);
+    let admission = lab.control.status().control.admission;
+    assert!(admission.committed.is_some());
+    let decision = lab.request_shutdown();
+    assert!(
+        is_refused_with(&decision, Unresolved::EvidencePending(1)),
+        "{decision:?}"
+    );
+    assert_eq!(lab.control.status().control.admission, admission);
+    lab.ack_all();
+    assert_eq!(lab.snap().verdict, Verdict::Passed);
+
+    // While running: a cancellation through the same gate.
+    let mut lab = Lab::new(TEST);
+    lab.start();
+    lab.begin(1, Expectation::Clean);
+    lab.create(SlotKind::Process);
+    assert!(matches!(
+        lab.request_shutdown(),
+        ShutdownDecision::Refused(_)
+    ));
+    let closure = lab
+        .control
+        .status()
+        .control
+        .admission
+        .closure
+        .expect("a running run's shutdown request closes admission");
+    assert_eq!(
+        closure.reason,
+        ClosureReason::Cancelled(CancelReason::Shutdown)
+    );
+    let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
+    assert!(outcome.stopped);
+    lab.released();
+    let (failed, capture) = cancelled_outcome(&mut lab, closure);
+    assert!(failed, "{capture}");
+}
+
 /// H1. The same owner survives a failed cleanup, its automatic budget and
 /// the recovery budget; only destroying the custody value itself drops it.
 #[test]
@@ -1629,9 +2619,11 @@ fn h05_cancellation_before_admission_prevents_native_creation() {
     lab.ack_all();
     let now = lab.now();
     let receipt = lab.control.cancel(CancelReason::Requested, now);
-    assert!(receipt.first);
+    let CancelReceipt::Accepted(closure) = receipt else {
+        panic!("the first cancellation before the commitment is accepted: {receipt:?}");
+    };
     assert_eq!(
-        receipt.closure,
+        closure,
         Closure {
             reason: ClosureReason::Cancelled(CancelReason::Requested),
             at: now,
@@ -1644,7 +2636,7 @@ fn h05_cancellation_before_admission_prevents_native_creation() {
         .c()
         .admit(reservation, now)
         .expect_err("admission is closed");
-    assert_eq!(refused.refusal, Refusal::AdmissionClosed(receipt.closure));
+    assert_eq!(refused.refusal, Refusal::AdmissionClosed(closure));
     assert!(
         refused.reservation.is_none(),
         "a closed admission settles the action"
@@ -1658,7 +2650,8 @@ fn h05_cancellation_before_admission_prevents_native_creation() {
         status.control.admission,
         AdmissionView {
             admitted: 0,
-            closure: Some(receipt.closure)
+            closure: Some(closure),
+            committed: None
         }
     );
     assert!(status.snapshot.operation.is_none());
@@ -1677,15 +2670,12 @@ fn h05_cancellation_before_admission_prevents_native_creation() {
     let now = lab.now();
     assert_eq!(
         lab.control.cancel(CancelReason::Stop, now),
-        CancelReceipt {
-            closure: receipt.closure,
-            first: false
-        }
+        CancelReceipt::AlreadyClosed(closure)
     );
     let now = lab.now();
     assert_eq!(
         lab.c().reserve(SlotKind::Workspace, now).unwrap_err(),
-        Refusal::AdmissionClosed(receipt.closure)
+        Refusal::AdmissionClosed(closure)
     );
     let outcome = lab.end_case(&mut Scripted::always(Plan::Confirm));
     assert!(outcome.resolved && outcome.stopped);
@@ -1698,7 +2688,8 @@ fn h05_cancellation_before_admission_prevents_native_creation() {
         lab.control.status().control.admission,
         AdmissionView {
             admitted: 0,
-            closure: Some(receipt.closure)
+            closure: Some(closure),
+            committed: None
         }
     );
     assert!(lab.native.produced.is_empty());
@@ -1733,11 +2724,14 @@ fn h05_admission_linearizes_against_concurrent_cancellation() {
         let now = lab.now();
         let result = lab.c().admit(reservation, now);
         let receipt = canceller.join().expect("the canceller");
+        let CancelReceipt::Accepted(closure) = receipt else {
+            panic!("a running run's cancellation is accepted: {receipt:?}");
+        };
         match result {
             Ok(ticket) => {
                 admitted += 1;
                 assert_eq!(
-                    receipt.closure.after, 1,
+                    closure.after, 1,
                     "an admission before the closure is counted in it"
                 );
                 let owner = lab.native.produce(&ticket);
@@ -1753,14 +2747,14 @@ fn h05_admission_linearizes_against_concurrent_cancellation() {
             }
             Err(refusal) => {
                 refused += 1;
-                assert_eq!(refusal.refusal, Refusal::AdmissionClosed(receipt.closure));
-                assert_eq!(receipt.closure.after, 0);
+                assert_eq!(refusal.refusal, Refusal::AdmissionClosed(closure));
+                assert_eq!(closure.after, 0);
                 assert!(lab.native.produced.is_empty());
             }
         }
         assert_eq!(
             lab.control.status().control.admission.admitted,
-            receipt.closure.after
+            closure.after
         );
         assert!(lab.dropped().is_empty());
     }
@@ -1778,9 +2772,9 @@ fn h06_cancellation_after_admission_still_adopts_the_later_owner() {
     let ticket = lab.admit(SlotKind::Process);
     let now = lab.now();
     let receipt = lab.control.cancel(CancelReason::Requested, now);
-    assert_eq!(
-        receipt.closure.after, 1,
-        "the admitted action precedes the closure"
+    assert!(
+        matches!(receipt, CancelReceipt::Accepted(closure) if closure.after == 1),
+        "the admitted action precedes the closure: {receipt:?}"
     );
 
     let owner = lab.native.produce(&ticket);
@@ -2009,7 +3003,7 @@ fn h08_stalled_adapters_do_not_block_the_control_side() {
     let receipt = answered("cancellation", move || {
         control.cancel(CancelReason::Requested, cancel_at)
     });
-    assert!(receipt.first);
+    assert!(matches!(receipt, CancelReceipt::Accepted(_)), "{receipt:?}");
 
     release.send(()).expect("the adapter is waiting");
     let (custody, outcome) = executor.join().expect("the execution owner");
@@ -3201,16 +4195,29 @@ fn h17_no_api_path_exits_aborts_leaks_or_drops_unresolved_ownership() {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Event {
     Admit,
+    /// Admit a process action in a retained-boundary case (begun if none is
+    /// active).
+    AdmitRetained,
     Cancel,
+    /// The lease's deadline passes and the control side observes it.
+    LeaseExpire,
+    ObserveControl,
     Timeout,
     Late,
+    /// The open operation's own finalization leaves a retained owner.
+    Retained,
     LateNone,
     LateDetached,
+    /// End the first held owner now: its first attempt confirms nothing, the
+    /// next everything.
+    EndEntry,
     EndFail,
     EndOk,
     EndDetached,
     Assert,
     StaleAck,
+    /// Acknowledge only the next record.
+    AckOne,
     RecordFail,
     RetryOk,
     RetryFail,
@@ -3219,18 +4226,24 @@ enum Event {
     Close,
 }
 
-const EVENTS: [Event; 17] = [
+const EVENTS: [Event; 23] = [
     Event::Admit,
+    Event::AdmitRetained,
     Event::Cancel,
+    Event::LeaseExpire,
+    Event::ObserveControl,
     Event::Timeout,
     Event::Late,
+    Event::Retained,
     Event::LateNone,
     Event::LateDetached,
+    Event::EndEntry,
     Event::EndFail,
     Event::EndOk,
     Event::EndDetached,
     Event::Assert,
     Event::StaleAck,
+    Event::AckOne,
     Event::RecordFail,
     Event::RetryOk,
     Event::RetryFail,
@@ -3269,6 +4282,11 @@ struct Coverage {
     output_lost: bool,
     evidence_close_refused: bool,
     closed: bool,
+    cancel_before_commit: bool,
+    lease_before_commit: bool,
+    cancel_late: bool,
+    expectation_latched: bool,
+    retained_confirmed: bool,
 }
 
 /// The oracle's own facts, taken from what the custody published (its
@@ -3329,27 +4347,43 @@ impl Adversary {
             .filter(|op| !matches!(op.phase, OpPhase::Reserved))
             .map(|op| op.action);
         let bound = open.is_some() && self.tickets.last().map(OpTicket::action) == open;
-        let resolving =
-            bound && matches!(event, Event::Late | Event::LateNone | Event::LateDetached);
+        let resolving = bound
+            && matches!(
+                event,
+                Event::Late | Event::Retained | Event::LateNone | Event::LateDetached
+            );
         match event {
-            Event::Admit => self.admit(),
-            Event::Cancel => {
+            Event::Admit => self.admit(Expectation::Clean, None),
+            Event::AdmitRetained => {
+                self.admit(Expectation::RetainedBoundary, Some(SlotKind::Process))
+            }
+            Event::Cancel => self.cancel(),
+            Event::LeaseExpire => self.expire_lease(),
+            Event::ObserveControl => {
                 let now = self.lab.now();
-                self.lab.control.cancel(CancelReason::Requested, now);
+                self.lab
+                    .c()
+                    .observe_control(now)
+                    .expect("an instant after every earlier one");
             }
             Event::Timeout => self.complete(|_, _| NativeOutcome::Unknown),
             Event::Late => {
                 self.complete(|native, ticket| NativeOutcome::Created(native.produce(ticket)))
             }
+            Event::Retained => {
+                self.complete(|native, ticket| NativeOutcome::Retained(native.produce(ticket)))
+            }
             Event::LateNone => self.complete(|_, ticket| {
                 NativeOutcome::NoEffect(NoEffectProof::for_ticket(ticket, "late refusal"))
             }),
             Event::LateDetached => self.complete(|_, _| NativeOutcome::Ended(DETACHED_END)),
+            Event::EndEntry => self.end_entry(),
             Event::EndFail => self.end(Plan::Fail),
             Event::EndOk => self.end(Plan::Confirm),
             Event::EndDetached => self.end(Plan::Detached),
             Event::Assert => self.assert(),
             Event::StaleAck => self.stale_ack(),
+            Event::AckOne => self.ack_one(),
             Event::RecordFail => self.record_fail(),
             Event::RetryOk => self.request(RequestOp::Retry { epoch: 0 }, Plan::Confirm),
             Event::RetryFail => self.request(RequestOp::Retry { epoch: 0 }, Plan::Fail),
@@ -3363,21 +4397,16 @@ impl Adversary {
         self.check(event, resolving, open);
     }
 
-    fn admit(&mut self) {
+    fn admit(&mut self, expectation: Expectation, kind: Option<SlotKind>) {
         let kinds = [SlotKind::Process, SlotKind::Workspace, SlotKind::Fixture];
-        let kind = kinds[self.tickets.len() % kinds.len()];
+        let kind = kind.unwrap_or(kinds[self.tickets.len() % kinds.len()]);
         let failed = self.oracle.failed_at.is_some();
         if self.lab.snap().case.is_none() {
             self.lab.try_ack_all();
             self.cases += 1;
             let now = self.lab.now();
             let case = CaseId(self.cases);
-            if self
-                .lab
-                .c()
-                .begin_case(case, Expectation::Clean, now)
-                .is_err()
-            {
+            if self.lab.c().begin_case(case, expectation, now).is_err() {
                 self.coverage.next_case_refused |= failed;
                 return;
             }
@@ -3392,6 +4421,102 @@ impl Adversary {
         match self.lab.c().admit(reservation, now) {
             Ok(ticket) => self.tickets.push(ticket),
             Err(_) => self.coverage.fail_stop_refused |= failed,
+        }
+    }
+
+    /// A cancellation, and its receipt checked against the control facts
+    /// published just before it: late once committed, else the closure
+    /// already made, else a new one.
+    fn cancel(&mut self) {
+        let before = self.lab.control.status();
+        let now = self.lab.now();
+        let receipt = self.lab.control.cancel(CancelReason::Requested, now);
+        let gate = before.control.admission;
+        let expected = match (gate.committed, gate.closure) {
+            (Some(commitment), _) => CancelReceipt::Late(commitment),
+            (None, Some(closure)) => CancelReceipt::AlreadyClosed(closure),
+            (None, None) => CancelReceipt::Accepted(Closure {
+                reason: ClosureReason::Cancelled(CancelReason::Requested),
+                at: now,
+                after: gate.admitted,
+            }),
+        };
+        assert_eq!(
+            receipt, expected,
+            "{:?}: the receipt does not match the gate",
+            self.trail
+        );
+        let phase = before.snapshot.phase;
+        match receipt {
+            CancelReceipt::Accepted(_) => {
+                self.coverage.cancel_before_commit |= phase == RunPhase::Candidate
+            }
+            CancelReceipt::Late(_) => self.coverage.cancel_late |= phase == RunPhase::Finalizing,
+            CancelReceipt::AlreadyClosed(_) => {}
+        }
+    }
+
+    /// The lease's deadline passes and is observed: before the commitment,
+    /// an active lease's loss closes an open gate as a cancellation; after
+    /// it, nothing but the lease changes.
+    fn expire_lease(&mut self) {
+        let before = self.lab.control.status();
+        let now = self.lab.later(ADVERSARIAL.lease_millis);
+        let state = self.lab.control.check_lease(now);
+        let gate = before.control.admission;
+        let active = matches!(before.control.lease.state, LeaseState::Active { .. });
+        assert!(matches!(state, LeaseState::Lost { .. }), "{:?}", self.trail);
+        let closes = active && gate.committed.is_none() && gate.closure.is_none();
+        let expected = if closes {
+            Some(Closure {
+                reason: ClosureReason::Cancelled(CancelReason::LeaseLost),
+                at: now,
+                after: gate.admitted,
+            })
+        } else {
+            gate.closure
+        };
+        let after = self.lab.control.status().control.admission;
+        assert_eq!(
+            (after.closure, after.committed),
+            (expected, gate.committed),
+            "{:?}: a lease expiry closed admission wrongly",
+            self.trail
+        );
+        self.coverage.lease_before_commit |= closes && before.snapshot.phase == RunPhase::Candidate;
+    }
+
+    /// End the first held owner through `end_entry`.
+    fn end_entry(&mut self) {
+        let first = self
+            .lab
+            .snap()
+            .entries
+            .first()
+            .map(|view| (view.entry, view.kind));
+        let Some((entry, kind)) = first else {
+            return;
+        };
+        let mut cleanup = Scripted::always(Plan::Confirm).first(kind, &[Plan::Fail]);
+        let now = self.lab.now();
+        let _ = self.lab.c().end_entry(entry, &mut cleanup, now);
+    }
+
+    /// Acknowledge the next record only, if any is issued and acceptable.
+    fn ack_one(&mut self) {
+        self.lab.flush();
+        let Some(ack) = self
+            .lab
+            .journal
+            .submitted
+            .get(self.lab.acked)
+            .map(RecordAck::of)
+        else {
+            return;
+        };
+        let now = self.lab.now();
+        if self.lab.c().acknowledge(&ack, now) == AckOutcome::Acknowledged {
+            self.lab.acked += 1;
         }
     }
 
@@ -3612,10 +4737,35 @@ impl Adversary {
             "{trail:?}: an admission without exactly one ticket"
         );
 
-        // Fail-stop: from the first published actual failure (or evidence
-        // failure) on, nothing more is admitted and no other case begins.
-        let failed_now =
-            now.failure_counts.iter().any(|count| *count > 0) || now.evidence.failed.is_some();
+        // The terminal commitment: made with the terminal record, never
+        // changed, and nothing closes admission after it.
+        if let Some(commitment) = self.last_control.admission.committed {
+            assert_eq!(
+                control.admission.committed,
+                Some(commitment),
+                "{trail:?}: the commitment changed"
+            );
+            assert_eq!(
+                control.admission.closure, self.last_control.admission.closure,
+                "{trail:?}: admission closed after the commitment"
+            );
+        }
+        assert_eq!(
+            control.admission.committed.is_some(),
+            now.terminal.is_some(),
+            "{trail:?}: a commitment without its terminal record, or the reverse"
+        );
+
+        // Fail-stop: from the first published actual failure on, nothing more
+        // is admitted and no other case begins; a recording failure after the
+        // commitment is a fault, and the commitment already ended admission.
+        let failed_now = now.failure_counts.iter().any(|count| *count > 0);
+        if now.evidence.failed.is_some() {
+            assert!(
+                control.admission.closure.is_some() || control.admission.committed.is_some(),
+                "{trail:?}: failed evidence left admission open"
+            );
+        }
         match self.oracle.failed_at {
             Some((admitted, case)) => {
                 assert_eq!(
@@ -3766,6 +4916,72 @@ impl Adversary {
             }
         }
         let now = self.lab.snap();
+        // A closure (made only before the commitment) is part of the
+        // committed outcome: a run whose admission closed never ends passed,
+        // and a cancellation is its failure exactly once; a published pass
+        // means admission never closed.
+        let cancelled = count(&now, FailureClass::Cancelled);
+        assert!(cancelled <= 1, "{trail:?}: a cancellation counted twice");
+        if let (Some(&(_, _, verdict)), Some(closure)) =
+            (terminals.first(), control.admission.closure)
+        {
+            assert_eq!(
+                verdict,
+                Verdict::Failed,
+                "{trail:?}: admission closed before the commitment ({closure:?}), yet the run passed"
+            );
+            if matches!(closure.reason, ClosureReason::Cancelled(_)) {
+                assert_eq!(
+                    cancelled, 1,
+                    "{trail:?}: a cancellation before the commitment is not the run's failure"
+                );
+            }
+        }
+        if now.verdict == Verdict::Passed {
+            assert_eq!(
+                control.admission.closure, None,
+                "{trail:?}: a pass published after admission closed"
+            );
+        }
+        // An expected retained boundary whose first attempt did not confirm
+        // every fact failed at that attempt: while its case is still active,
+        // the unmet expectation is recorded and admission is closed. An
+        // expectation is unmet at most once per case.
+        if let Some(case) = now.case.as_ref() {
+            if case.expectation == Expectation::RetainedBoundary
+                && case.retained_first_confirmed == Some(false)
+            {
+                assert!(
+                    count(&now, FailureClass::ExpectedConditionUnmet) >= 1
+                        && case.failed
+                        && control.admission.closure.is_some(),
+                    "{trail:?}: a failed first attempt left its expectation open"
+                );
+                self.coverage.expectation_latched = true;
+            }
+        }
+        let mut expecting = 0;
+        let mut retained_cases: Vec<CaseId> = Vec::new();
+        for intent in records.iter() {
+            match intent.kind {
+                RecordKind::CaseStarted { case, expectation } => {
+                    if expectation != Expectation::Clean {
+                        expecting += 1;
+                    }
+                    if expectation == Expectation::RetainedBoundary {
+                        retained_cases.push(case);
+                    }
+                }
+                RecordKind::CaseEnded { case, passed: true } if retained_cases.contains(&case) => {
+                    self.coverage.retained_confirmed = true
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            count(&now, FailureClass::ExpectedConditionUnmet) <= expecting,
+            "{trail:?}: an expectation unmet twice, or one never declared"
+        );
         // The published verdict: a pass only with its acknowledged terminal
         // record, and once that record is acknowledged, exactly its verdict.
         if now.verdict == Verdict::Passed {
@@ -3893,18 +5109,43 @@ impl Adversary {
 /// A witness sequence, and the state it must reach.
 type Witnessed = (&'static [Event], fn(&Coverage) -> bool);
 
+/// A completion candidate whose case passed, its evidence pending.
+const CANDIDATE_PENDING: &[Event] = &[Event::Admit, Event::LateNone, Event::EndOk, Event::EndOk];
+
+/// The same run committed: its terminal record issued, not acknowledged.
+const COMMITTED_PENDING: &[Event] = &[
+    Event::Admit,
+    Event::LateNone,
+    Event::EndOk,
+    Event::EndOk,
+    Event::AckOne,
+    Event::AckOne,
+];
+
+/// An expected retained boundary held in its active case.
+const RETAINED_HELD: &[Event] = &[Event::AdmitRetained, Event::Retained];
+
+/// A run requiring recovery: its owner's cleanup failed.
+const RECOVERY_REQUIRED: &[Event] = &[Event::Admit, Event::Late, Event::EndFail];
+
 /// The finite adversarial transition-sequence control: every sequence of
-/// four events (admit, cancel, timeout, late results with an owner, without
-/// one and with detached output, failing, confirming and detaching case ends,
-/// assertions, stale acknowledgements, record failures, failing and
-/// confirming retries, acknowledgement, shutdown and close), a deterministic
-/// sample of longer ones, and witness sequences proving each guarded state is
+/// four events (admit, in a clean or a retained-boundary case, cancel, lease
+/// expiry, control observation, timeout, late results with an owner, a
+/// retained one, without one and with detached output, ending an owner now,
+/// failing, confirming and detaching case ends, assertions, stale
+/// acknowledgements, single and complete acknowledgement, record failures,
+/// failing and confirming retries, shutdown and close), every three-event
+/// continuation of four prefixes (a completion candidate with evidence
+/// pending, a committed run whose terminal record is pending, an expected
+/// retained boundary held, a run requiring recovery), a deterministic sample
+/// of longer sequences, and witness sequences proving each guarded state is
 /// reached. After every event an independent oracle (from published
 /// snapshots, records and answers, not phases) checks ownership, fail-stop,
-/// finalization, evidence, late-incident and output-loss contracts.
+/// commitment, finalization, evidence, late-incident, expectation and
+/// output-loss contracts.
 #[test]
 fn h18_adversarial_transition_sequences_keep_every_invariant() {
-    let witnesses: [Witnessed; 13] = [
+    let witnesses: [Witnessed; 18] = [
         (
             &[Event::Admit, Event::Cancel, Event::Late, Event::EndOk],
             |coverage| coverage.adopted_after_cancel,
@@ -3988,6 +5229,54 @@ fn h18_adversarial_transition_sequences_keep_every_invariant() {
             ],
             |coverage| coverage.closed,
         ),
+        (
+            &[
+                Event::Admit,
+                Event::LateNone,
+                Event::EndOk,
+                Event::EndOk,
+                Event::Cancel,
+                Event::AckAll,
+            ],
+            |coverage| coverage.cancel_before_commit,
+        ),
+        (
+            &[
+                Event::Admit,
+                Event::LateNone,
+                Event::EndOk,
+                Event::EndOk,
+                Event::LeaseExpire,
+                Event::AckAll,
+            ],
+            |coverage| coverage.lease_before_commit,
+        ),
+        (
+            &[
+                Event::Admit,
+                Event::LateNone,
+                Event::EndOk,
+                Event::EndOk,
+                Event::AckOne,
+                Event::AckOne,
+                Event::Cancel,
+                Event::AckOne,
+            ],
+            |coverage| coverage.cancel_late,
+        ),
+        (
+            &[
+                Event::AdmitRetained,
+                Event::Retained,
+                Event::EndEntry,
+                Event::Admit,
+            ],
+            |coverage| coverage.expectation_latched && coverage.fail_stop_refused,
+        ),
+        (
+            &[Event::AdmitRetained, Event::Retained, Event::EndOk],
+            |coverage| coverage.retained_confirmed && !coverage.expectation_latched,
+        ),
     ];
     for (events, reached) in witnesses {
         assert!(
@@ -4008,6 +5297,23 @@ fn h18_adversarial_transition_sequences_keep_every_invariant() {
         }
     }
     assert_eq!(sequences, EVENTS.len().pow(4));
+
+    for prefix in [
+        CANDIDATE_PENDING,
+        COMMITTED_PENDING,
+        RETAINED_HELD,
+        RECOVERY_REQUIRED,
+    ] {
+        for a in EVENTS {
+            for b in EVENTS {
+                for c in EVENTS {
+                    let mut events = prefix.to_vec();
+                    events.extend([a, b, c]);
+                    Adversary::run(&events);
+                }
+            }
+        }
+    }
 
     let mut state = 0x5eed_c0de_u64;
     for _ in 0..6_000 {
@@ -4392,17 +5698,21 @@ enum At {
     RunningCase,
     RunningIdle,
     FailedCase,
+    /// A retained-boundary case whose first cleanup attempt failed (ended
+    /// through `end_entry`; the case is still active).
+    FailedExpectation,
     Recovery,
     Candidate,
     Finalizing,
     Finalized,
 }
 
-const PHASES: [At; 8] = [
+const PHASES: [At; 9] = [
     At::NotStarted,
     At::RunningCase,
     At::RunningIdle,
     At::FailedCase,
+    At::FailedExpectation,
     At::Recovery,
     At::Candidate,
     At::Finalizing,
@@ -4421,6 +5731,8 @@ enum Call {
     Lend,
     Retry,
     Close,
+    /// The control side's cancellation, accepted only if it closes the gate.
+    Cancel,
 }
 
 /// A fresh lab in `at`, with an entry id held there (or held earlier).
@@ -4430,12 +5742,22 @@ fn lab_at(at: At) -> (Lab, Option<EntryId>) {
     if at != At::NotStarted {
         lab.start();
     }
-    if !matches!(at, At::NotStarted | At::RunningIdle) {
+    if at == At::FailedExpectation {
+        lab.begin(1, Expectation::RetainedBoundary);
+        entry = Some(lab.deposit(SlotKind::Process, true).0);
+    } else if !matches!(at, At::NotStarted | At::RunningIdle) {
         lab.begin(1, Expectation::Clean);
         entry = Some(lab.create(SlotKind::Process).0);
     }
     match at {
         At::NotStarted | At::RunningIdle | At::RunningCase => {}
+        At::FailedExpectation => {
+            let entry = entry.expect("the retained boundary");
+            let mut cleanup =
+                Scripted::always(Plan::Confirm).first(SlotKind::Process, &[Plan::Fail]);
+            let now = lab.now();
+            assert_eq!(lab.c().end_entry(entry, &mut cleanup, now), Ok(true));
+        }
         At::FailedCase => {
             let now = lab.now();
             lab.c()
@@ -4463,7 +5785,9 @@ fn lab_at(at: At) -> (Lab, Option<EntryId>) {
     let phase = lab.snap().phase;
     let expected = match at {
         At::NotStarted => RunPhase::NotStarted,
-        At::RunningCase | At::RunningIdle | At::FailedCase => RunPhase::Running,
+        At::RunningCase | At::RunningIdle | At::FailedCase | At::FailedExpectation => {
+            RunPhase::Running
+        }
         At::Recovery => RunPhase::RecoveryRequired,
         At::Candidate => RunPhase::Candidate,
         At::Finalizing => RunPhase::Finalizing,
@@ -4515,6 +5839,22 @@ fn probe(at: At, call: Call) -> bool {
             )
         }
         Call::Close => lab.close().is_some(),
+        Call::Cancel => {
+            // Its receipt follows the gate as it stood: late once committed,
+            // the earlier closure if one was made, else accepted.
+            let receipt = lab.control.cancel(CancelReason::Requested, now);
+            let expected = match (admission.committed, admission.closure) {
+                (Some(commitment), _) => CancelReceipt::Late(commitment),
+                (None, Some(closure)) => CancelReceipt::AlreadyClosed(closure),
+                (None, None) => CancelReceipt::Accepted(Closure {
+                    reason: ClosureReason::Cancelled(CancelReason::Requested),
+                    at: now,
+                    after: admission.admitted,
+                }),
+            };
+            assert_eq!(receipt, expected, "{at:?}");
+            matches!(receipt, CancelReceipt::Accepted(_))
+        }
     };
     if !accepted && lab.custody.is_some() {
         // A refusal changes nothing.
@@ -4546,23 +5886,38 @@ fn probe(at: At, call: Call) -> bool {
 /// The public API's phase matrix, checked call by call in fresh labs: what
 /// each phase accepts, and that every refusal changes nothing. Terminal
 /// phases refuse every case-level mutation; only closure (once final) and
-/// reporting remain.
+/// reporting remain. A failed first attempt of an expected retained boundary
+/// refuses every further native action of its still-active case. A
+/// cancellation closes the gate only before the commitment (in a completion
+/// candidate too); after an actual failure it finds the gate closed, after
+/// the commitment it is late, and neither changes anything.
 #[test]
 fn h23_public_api_phase_matrix() {
     use At::*;
-    let matrix: [(Call, &[At]); 9] = [
+    let matrix: [(Call, &[At]); 10] = [
         (Call::StartRun, &[NotStarted]),
         (Call::BeginCase, &[RunningIdle]),
         (Call::Reserve, &[RunningCase]),
         (
             Call::Assert,
-            &[RunningCase, RunningIdle, FailedCase, Recovery, Candidate],
+            &[
+                RunningCase,
+                RunningIdle,
+                FailedCase,
+                FailedExpectation,
+                Recovery,
+                Candidate,
+            ],
         ),
-        (Call::EndCase, &[RunningCase, FailedCase]),
+        (Call::EndCase, &[RunningCase, FailedCase, FailedExpectation]),
         (Call::FinishRun, &[RunningIdle]),
         (Call::Lend, &[RunningCase, FailedCase, Recovery]),
         (Call::Retry, &[Recovery]),
         (Call::Close, &[NotStarted, Finalized]),
+        (
+            Call::Cancel,
+            &[NotStarted, RunningCase, RunningIdle, Candidate],
+        ),
     ];
     for (call, accepting) in matrix {
         for at in PHASES {

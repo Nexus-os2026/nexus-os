@@ -138,7 +138,8 @@ pub enum Expectation {
     /// One process operation's own finalization is expected to leave a
     /// retained owner, and the first cleanup attempt on it must confirm every
     /// fact: its subtree gone, its direct child reaped and its output
-    /// complete.
+    /// complete. A first attempt that does not is an actual failure at once,
+    /// whatever later attempts confirm.
     RetainedBoundary,
     /// One process tree's output is expected to be detached (given up)
     /// instead of drained.
@@ -287,7 +288,8 @@ pub enum FailureClass {
     /// A cleanup attempt that was required to confirm an end did not (or its
     /// adapter panicked).
     UnexpectedCleanup,
-    /// An expected condition did not occur, or did not meet its requirement.
+    /// An expected condition did not occur, or did not meet its requirement
+    /// (recorded once, as soon as it can no longer be met).
     ExpectedConditionUnmet,
     /// The open operation returned an owner custody did not reserve a slot
     /// for.
@@ -305,7 +307,8 @@ pub enum FailureClass {
     RecordFailed,
     /// The recorder adapter panicked while a record was submitted.
     RecorderFault,
-    /// The run was cancelled by the control side before it finished.
+    /// A cancellation (an explicit one, an observed lease expiry or a
+    /// shutdown request) was accepted before the run's terminal commitment.
     Cancelled,
 }
 
@@ -418,11 +421,13 @@ pub enum RecordKind {
         attempt: u32,
         resolved: bool,
     },
-    /// The run's terminal record: issued only when every earlier record is
-    /// acknowledged and nothing native is unresolved; once acknowledged, the
-    /// run's outcome is final. `resolved_by`: the explicit recovery attempt
-    /// that resolved the run's native state, if one did (it never changes the
-    /// verdict).
+    /// The run's terminal record, issued at its terminal commitment: only
+    /// when every earlier record is acknowledged and nothing native is
+    /// unresolved, except that the record of a closure first observed at the
+    /// commitment itself immediately precedes it (that run has failed). Once
+    /// acknowledged, the run's outcome is final. `resolved_by`: the explicit
+    /// recovery attempt that resolved the run's native state, if one did (it
+    /// never changes the verdict).
     RunEnded {
         verdict: Verdict,
         resolved_by: Option<u32>,
@@ -501,11 +506,12 @@ pub enum RunPhase {
     /// proceed.
     RecoveryRequired,
     /// A provisional completion candidate: nothing native is unresolved and
-    /// no case may begin, but the terminal record waits until every earlier
-    /// record is acknowledged. The verdict may still become a failure.
+    /// no case may begin, but the terminal commitment waits until every
+    /// earlier record is acknowledged. The verdict may still become a failure
+    /// (an actual failure, or a cancellation accepted before the commitment).
     Candidate,
-    /// The terminal record is issued (the run's verdict is fixed in it) and
-    /// not yet acknowledged.
+    /// The terminal commitment is made and its record issued (the run's
+    /// verdict is fixed in it), not yet acknowledged.
     Finalizing,
     /// The terminal record is acknowledged: the run's outcome is final.
     Finalized,
@@ -549,12 +555,23 @@ pub enum Refusal {
 }
 
 /// The one closure of admission: why, when, and after how many admissions.
-/// Actions numbered up to `after` were admitted before it; none after.
+/// Actions numbered up to `after` were admitted before it; none after. It is
+/// made only before the terminal commitment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Closure {
     pub reason: ClosureReason,
     pub at: Tick,
     pub after: u64,
+}
+
+/// The run's terminal commitment: the instant its outcome became immutable
+/// (its terminal record is issued in the same step). A closure made before it
+/// is part of that outcome; nothing closes or cancels after it. It carries no
+/// verdict: the outcome is published only with the acknowledged terminal
+/// record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Commitment {
+    pub at: Tick,
 }
 
 /// The run's lease, as the control side holds it.
@@ -902,10 +919,15 @@ pub struct Snapshot {
     pub cancel_observed: Option<Tick>,
 }
 
+/// The admission gate, as the control side reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdmissionView {
     pub admitted: u64,
+    /// Why admission closed before the terminal commitment, if it did.
     pub closure: Option<Closure>,
+    /// The terminal commitment, once made: nothing is admitted, closed or
+    /// cancelled after it.
+    pub committed: Option<Commitment>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

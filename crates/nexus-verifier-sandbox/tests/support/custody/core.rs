@@ -16,19 +16,25 @@
 //! admission linearization point, one critical section on the gate, decides
 //! it against any closure. The gate closes for good on a control-side
 //! cancellation or on the run's first actual failure (fail-stop), whatever
-//! reported it; nothing reopens it, and a closed gate also ends the run's
-//! cases. Operations admitted before the closure may still deliver owners,
-//! which are adopted for cleanup.
+//! reported it, including an expected condition that can no longer be met;
+//! nothing reopens it, and a closed gate also ends the run's cases.
+//! Operations admitted before the closure may still deliver owners, which
+//! are adopted for cleanup.
 //!
 //! Finalization. A run whose native state is resolved becomes a completion
-//! candidate. Its terminal record (the run's verdict) is issued only once
-//! every earlier record is acknowledged, and the run is final only when that
-//! terminal record is acknowledged; no pass is published before. From the
-//! terminal record on, the run's verdict and failures are fixed: a later
-//! failure is a fault of this custody, and a later owner a late incident with
-//! its own identity and records. The custody closes only when nothing is held
-//! or pending and every record is acknowledged: failed evidence keeps it
-//! open, with no exception.
+//! candidate. Its terminal commitment is made only once every earlier record
+//! is acknowledged, in one critical section on the gate: the commitment
+//! point, after which the run's outcome is immutable. A cancellation (an
+//! explicit one, an observed lease expiry) accepted before it is part of
+//! that outcome: the run cannot pass. One after it closes nothing and changes
+//! nothing, and its receipt says it came too late. The terminal record (the
+//! run's verdict) is issued at the commitment, right after the record of a
+//! closure first observed there, and the run is final only when that terminal
+//! record is acknowledged; no pass is published before. From the commitment
+//! on, the run's verdict and failures are fixed: a later failure is a fault of
+//! this custody, and a later owner a late incident with its own identity and
+//! records. The custody closes only when nothing is held or pending and every
+//! record is acknowledged: failed evidence keeps it open, with no exception.
 //!
 //! Limits. A callback's unwinding panic is contained at the callback (the
 //! owner stays held), and so is a panic in dropping its payload; an abort, a
@@ -343,11 +349,20 @@ impl<R> fmt::Debug for Closed<R> {
     }
 }
 
-/// Admission's closure, and whether this request made it.
+/// What a cancellation came to, decided in the gate's critical section.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CancelReceipt {
-    pub closure: Closure,
-    pub first: bool,
+pub enum CancelReceipt {
+    /// It closed admission, before the terminal commitment: the run cannot
+    /// pass.
+    Accepted(Closure),
+    /// Admission was already closed (by an earlier cancellation or an actual
+    /// failure), before the commitment: this request changed nothing, and the
+    /// run cannot pass either way.
+    AlreadyClosed(Closure),
+    /// The run's outcome was already committed: this request closed nothing,
+    /// changed nothing and did not cancel the run. (The outcome is published
+    /// only with its acknowledged terminal record, never here.)
+    Late(Commitment),
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -373,6 +388,7 @@ fn contained<T>(callback: impl FnOnce() -> T) -> Option<T> {
 struct Gate {
     admitted: u64,
     closure: Option<Closure>,
+    committed: Option<Commitment>,
 }
 
 struct Lease {
@@ -394,14 +410,16 @@ struct Shared {
 }
 
 impl Shared {
-    /// Close admission, once: a later request returns the first closure.
+    /// Close admission before the terminal commitment, once: a later request
+    /// returns the first closure. After the commitment nothing closes: the
+    /// request is late, and its receipt says so.
     fn close(&self, reason: ClosureReason, at: Tick) -> CancelReceipt {
         let mut gate = lock(&self.gate);
+        if let Some(commitment) = gate.committed {
+            return CancelReceipt::Late(commitment);
+        }
         match gate.closure {
-            Some(closure) => CancelReceipt {
-                closure,
-                first: false,
-            },
+            Some(closure) => CancelReceipt::AlreadyClosed(closure),
             None => {
                 let closure = Closure {
                     reason,
@@ -409,12 +427,18 @@ impl Shared {
                     after: gate.admitted,
                 };
                 gate.closure = Some(closure);
-                CancelReceipt {
-                    closure,
-                    first: true,
-                }
+                CancelReceipt::Accepted(closure)
             }
         }
+    }
+
+    /// The terminal commitment point, in the gate's own critical section (the
+    /// one every closure takes): the closure made before it, if any, is part
+    /// of the outcome it fixes, and none can be made after it. Made once.
+    fn commit(&self, at: Tick) -> Option<Closure> {
+        let mut gate = lock(&self.gate);
+        gate.committed.get_or_insert(Commitment { at });
+        gate.closure
     }
 
     fn closure(&self) -> Option<Closure> {
@@ -439,6 +463,7 @@ impl Control {
             AdmissionView {
                 admitted: gate.admitted,
                 closure: gate.closure,
+                committed: gate.committed,
             }
         };
         let lease = {
@@ -459,8 +484,10 @@ impl Control {
         }
     }
 
-    /// Accept cancellation: admission closes at once, for good. It does not
-    /// claim that anything in flight has ended.
+    /// Accept cancellation before the run's terminal commitment: admission
+    /// closes at once, for good, and the run cannot pass. It does not claim
+    /// that anything in flight has ended. After the commitment it is late: it
+    /// changes nothing, and the receipt says so.
     pub fn cancel(&self, reason: CancelReason, now: Tick) -> CancelReceipt {
         self.shared.close(ClosureReason::Cancelled(reason), now)
     }
@@ -499,7 +526,7 @@ impl Control {
     }
 
     /// Expire the lease if its deadline has passed: losing it closes
-    /// admission.
+    /// admission (a cancellation, so only before the terminal commitment).
     pub fn check_lease(&self, now: Tick) -> LeaseState {
         let (state, lost) = {
             let mut lease = lock(&self.shared.lease);
@@ -1088,6 +1115,8 @@ struct CaseState {
     expected_observed: bool,
     retained_entry: Option<EntryId>,
     retained_first: Option<bool>,
+    /// The expected condition can no longer be met (its failure recorded).
+    unmet: bool,
 }
 
 impl CaseState {
@@ -1216,6 +1245,7 @@ impl<R: Resource> Custody<R> {
             gate: Mutex::new(Gate {
                 admitted: 0,
                 closure: None,
+                committed: None,
             }),
             lease: Mutex::new(Lease {
                 id: None,
@@ -1450,6 +1480,7 @@ impl<R: Resource> Custody<R> {
             expected_observed: false,
             retained_entry: None,
             retained_first: None,
+            unmet: false,
         });
         Ok(())
     }
@@ -2178,26 +2209,38 @@ impl<R: Resource> Custody<R> {
         };
         match expectation {
             Expectation::Clean => {}
-            Expectation::RetainedBoundary if !observed => self.fail(
-                FailureClass::ExpectedConditionUnmet,
-                "the expected retained boundary was not observed",
-                now,
-            ),
-            Expectation::RetainedBoundary if first != Some(true) => self.fail(
-                FailureClass::ExpectedConditionUnmet,
+            Expectation::RetainedBoundary if !observed => {
+                self.expectation_unmet("the expected retained boundary was not observed", now)
+            }
+            Expectation::RetainedBoundary if first != Some(true) => self.expectation_unmet(
                 "the retained boundary was not confirmed by its first cleanup attempt",
                 now,
             ),
             Expectation::RetainedBoundary => {}
-            Expectation::OutputDetached if !observed => self.fail(
-                FailureClass::ExpectedConditionUnmet,
-                "the declared output detachment was not observed",
-                now,
-            ),
+            Expectation::OutputDetached if !observed => {
+                self.expectation_unmet("the declared output detachment was not observed", now)
+            }
             Expectation::OutputDetached => {}
         }
         let failed = self.case.as_ref().is_some_and(|case| case.failed);
         !failed && !self.unresolved()
+    }
+
+    /// The active case's expected condition can no longer be met: an actual
+    /// failure, recorded once by whichever point recognizes it first (a
+    /// retained boundary's first cleanup attempt, or the case's end), which
+    /// closes execution admission at once (fail-stop).
+    fn expectation_unmet(&mut self, detail: &str, now: Tick) {
+        let first = match self.case.as_mut() {
+            Some(case) if !case.unmet => {
+                case.unmet = true;
+                true
+            }
+            _ => false,
+        };
+        if first {
+            self.fail(FailureClass::ExpectedConditionUnmet, detail, now);
+        }
     }
 
     /// The run is told no further case will begin.
@@ -2217,10 +2260,13 @@ impl<R: Resource> Custody<R> {
     }
 
     /// Observe the control side's closure at a safe point: it is recorded once
-    /// (as a control fact), and an idle running run stops.
+    /// (as a control fact), a cancellation outside a case becomes the run's
+    /// failure at once (while it recovers or is a completion candidate too),
+    /// and an idle running run stops.
     pub fn observe_control(&mut self, now: Tick) -> Result<Option<Closure>, Refusal> {
         self.advance(now)?;
         let closure = self.observe_closure(now);
+        self.note_cancellation(closure, now);
         self.settle_idle(now);
         self.publish();
         Ok(closure)
@@ -2238,20 +2284,54 @@ impl<R: Resource> Custody<R> {
     fn observe_closure(&mut self, now: Tick) -> Option<Closure> {
         let closure = self.shared.closure();
         if let Some(closure) = closure {
-            if self.cancel_observed.is_none() {
-                self.cancel_observed = Some(now);
-                self.ledger.issue_control(
-                    now,
-                    RecordKind::Control {
-                        fact: ControlFact::AdmissionClosed {
-                            reason: closure.reason,
-                            after: closure.after,
-                        },
-                    },
-                );
-            }
+            self.record_closure(closure, now);
         }
         closure
+    }
+
+    /// The closure is recorded once, as a control fact, when the execution
+    /// owner first observes it.
+    fn record_closure(&mut self, closure: Closure, now: Tick) {
+        if self.cancel_observed.is_none() {
+            self.cancel_observed = Some(now);
+            self.ledger.issue_control(
+                now,
+                RecordKind::Control {
+                    fact: ControlFact::AdmissionClosed {
+                        reason: closure.reason,
+                        after: closure.after,
+                    },
+                },
+            );
+        }
+    }
+
+    /// An accepted cancellation is a failure of the run, recognized once
+    /// (never an actual failure's closure), wherever the execution owner sees
+    /// it outside a case before the terminal commitment: when the run stops,
+    /// when it observes control while recovering or as a completion
+    /// candidate, and at the latest at the commitment, with the closure the
+    /// commitment itself saw.
+    fn note_cancellation(&mut self, closure: Option<Closure>, now: Tick) {
+        let Some(closure) = closure else {
+            return;
+        };
+        let open = matches!(
+            self.phase,
+            RunPhase::Running | RunPhase::RecoveryRequired | RunPhase::Candidate
+        );
+        if !open || self.case.is_some() || self.terminal.is_some() {
+            return;
+        }
+        self.record_closure(closure, now);
+        if matches!(closure.reason, ClosureReason::Cancelled(_)) && !self.cancel_noted {
+            self.cancel_noted = true;
+            self.fail(
+                FailureClass::Cancelled,
+                "the run was cancelled before it finished",
+                now,
+            );
+        }
     }
 
     /// The closure that halts the run, if any (observed and recorded): a
@@ -2368,10 +2448,12 @@ impl<R: Resource> Custody<R> {
             }
             None => (false, None, false),
         };
+        let mut unmet = false;
         if let Some(confirmed) = first {
             if let Some(case) = self.case.as_mut() {
                 if case.retained_entry == Some(view.entry) {
                     case.retained_first = Some(confirmed);
+                    unmet = !confirmed;
                 }
             }
         }
@@ -2382,6 +2464,16 @@ impl<R: Resource> Custody<R> {
             self.fail(
                 FailureClass::UnexpectedCleanup,
                 "a cleanup adapter panicked; its owner is still held",
+                now,
+            );
+        }
+        // The expected retained boundary's first attempt did not confirm
+        // every fact: the expectation can never be met. It fails now, closing
+        // admission before anything else can be admitted; the owner's cleanup
+        // goes on within its budget, and a later success changes nothing.
+        if unmet {
+            self.expectation_unmet(
+                "the retained boundary was not confirmed by its first cleanup attempt",
                 now,
             );
         }
@@ -2453,16 +2545,8 @@ impl<R: Resource> Custody<R> {
         if self.phase != RunPhase::Running {
             return;
         }
-        if let Some(closure) = self.observe_closure(now) {
-            if matches!(closure.reason, ClosureReason::Cancelled(_)) && !self.cancel_noted {
-                self.cancel_noted = true;
-                self.fail(
-                    FailureClass::Cancelled,
-                    "the run was cancelled before it finished",
-                    now,
-                );
-            }
-        }
+        let closure = self.observe_closure(now);
+        self.note_cancellation(closure, now);
         if self.unresolved() {
             self.enter_recovery(now);
         } else {
@@ -2487,10 +2571,14 @@ impl<R: Resource> Custody<R> {
         self.try_finalize(now);
     }
 
-    /// Issue the terminal record of a completion candidate once every earlier
+    /// The terminal commitment of a completion candidate, once every earlier
     /// record is acknowledged (and recording has not failed): no outcome is
-    /// published while required evidence is pending. The verdict is fixed in
-    /// it from here on.
+    /// decided while required evidence is pending. The commitment point is
+    /// one critical section on the gate, the one every closure takes: a
+    /// cancellation accepted before it is recorded with the outcome (its
+    /// control fact first, if this is its first observation) and fails the
+    /// run; none can be accepted after it. The terminal record, issued in the
+    /// same step, carries the verdict from here on.
     fn try_finalize(&mut self, now: Tick) {
         if self.phase != RunPhase::Candidate
             || self.ledger.failed.is_some()
@@ -2499,6 +2587,8 @@ impl<R: Resource> Custody<R> {
         {
             return;
         }
+        let closure = self.shared.commit(now);
+        self.note_cancellation(closure, now);
         let verdict = self.run_verdict();
         if self.run_records.recovery {
             self.run_records.recovery = false;
@@ -2659,9 +2749,12 @@ impl<R: Resource> Custody<R> {
     }
 
     /// An application shutdown request: never an exit, a release or a drop.
-    /// While the run is active it closes admission (a cancellation; the
-    /// shutdown waits until everything is resolved); while anything is
-    /// unresolved it is refused, and the first refusal becomes evidence.
+    /// While the run is running it closes admission through the same gate as
+    /// any cancellation (necessarily before the commitment; the shutdown waits
+    /// until everything is resolved). Otherwise it only decides: it never
+    /// commits, finalizes or cancels, and a completion candidate's own
+    /// commitment is what it waits for. While anything is unresolved it is
+    /// refused, and the first refusal becomes evidence.
     fn shutdown_requested(&mut self, now: Tick) -> ShutdownDecision {
         if self.phase == RunPhase::Running {
             self.shared
@@ -2860,7 +2953,8 @@ impl<R: Resource> Custody<R> {
     /// Record an actual failure, from whichever entry point recognized it,
     /// and close execution admission for good (fail-stop). Before the
     /// terminal record it is the run's failure (and its case's); after it,
-    /// the run's outcome is fixed and the failure is a fault of this custody.
+    /// the run's outcome is fixed and the failure is a fault of this custody
+    /// (the commitment left nothing to close).
     fn fail(&mut self, class: FailureClass, detail: &str, now: Tick) {
         let detail = bounded(detail, self.config.detail_chars);
         if self.terminal.is_some() {
