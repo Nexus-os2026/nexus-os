@@ -15,13 +15,15 @@
 //!   once per description; page reclaim may then revert **K** while a
 //!   descriptor is open; inode eviction (no descriptor open) drops the error.
 //!   The counter's finite width is modelled, not hidden: see [`Errseq`].
-//! - **Metadata.** `create`, `mkdir`, `link`, `unlink` and `rename` change
-//!   the visible entries at once and append halves to a pending log; a
-//!   directory sync guarantees that directory's halves. At F2 one permitted
-//!   schedule decides what became durable: an ordered prefix (assumption
-//!   A-M1, the supported profile) or the per-directory over-approximation,
-//!   which can split a rename (not ext4 behaviour; it shows what does not
-//!   depend on A-M1).
+//! - **Metadata.** `create`, `mkdir`, `link`, `unlink`, `rename` and (R3)
+//!   `rmdir` change the visible entries at once and append halves to a
+//!   pending log (`rmdir` only of an empty directory; a removed directory
+//!   takes no new entry; a `rename` between two names of one file changes
+//!   nothing, as POSIX specifies). A directory sync guarantees that
+//!   directory's halves. At F2 one permitted schedule decides what became
+//!   durable: an ordered prefix (assumption A-M1, the supported profile) or
+//!   the per-directory over-approximation, which can split a rename (not
+//!   ext4 behaviour; it shows what does not depend on A-M1).
 //! - **The journal behaviour activation relies on (A-M2).** A directory
 //!   sync through a new descriptor; a read-only superblock; a commit that
 //!   fails silently in the commit thread (an abort ext4 has not noticed);
@@ -845,6 +847,17 @@ impl SimState {
                 ino,
             });
         }
+    }
+
+    /// Whether a directory is still reachable: the root, or the target of a
+    /// visible entry. A removed directory takes no new entry (`ENOENT`, as in
+    /// Linux for a directory being deleted).
+    fn reachable(&self, dir: Ino) -> bool {
+        dir == self.root
+            || self.inodes.values().any(|inode| {
+                inode.kind == FileType::Directory
+                    && inode.ents_k.values().any(|entry| *entry == dir)
+            })
     }
 
     fn nlink(&self, ino: Ino) -> u64 {
@@ -1815,6 +1828,9 @@ impl StoreIo for SimIo {
             if !state.may(pid, at.ino, true) {
                 return Err(Errno::Acces);
             }
+            if !state.reachable(at.ino) {
+                return Err(Errno::NoEnt);
+            }
             if state
                 .inodes
                 .get(&at.ino)
@@ -1875,6 +1891,9 @@ impl StoreIo for SimIo {
             if !state.may(pid, at.ino, true) {
                 return Err(Errno::Acces);
             }
+            if !state.reachable(at.ino) {
+                return Err(Errno::NoEnt);
+            }
             if state
                 .inodes
                 .get(&at.ino)
@@ -1923,6 +1942,9 @@ impl StoreIo for SimIo {
             if !state.may(pid, to.ino, true) {
                 return Err(Errno::Acces);
             }
+            if !state.reachable(to.ino) {
+                return Err(Errno::NoEnt);
+            }
             if state
                 .inodes
                 .get(&to.ino)
@@ -1959,7 +1981,21 @@ impl StoreIo for SimIo {
             if !state.may(pid, from.ino, true) || !state.may(pid, to.ino, true) {
                 return Err(Errno::Acces);
             }
+            if !state.reachable(to.ino) {
+                return Err(Errno::NoEnt);
+            }
             state.check_journal()?;
+            if state
+                .inodes
+                .get(&to.ino)
+                .and_then(|directory| directory.ents_k.get(to_name))
+                == Some(&ino)
+            {
+                // POSIX: both names already name one file; the call succeeds
+                // and changes nothing.
+                state.record("rename", Some(to.ino), Some(to_name), Some(ino));
+                return Ok(());
+            }
             if let Some(directory) = state.inodes.get_mut(&from.ino) {
                 directory.ents_k.remove(from_name);
             }
@@ -1991,6 +2027,30 @@ impl StoreIo for SimIo {
             }
             state.meta(vec![(at.ino, name.to_string(), ino, false)]);
             state.record("unlink", Some(at.ino), Some(name), Some(ino));
+            Ok(())
+        })
+    }
+
+    fn remove_dir(&self, at: &SimDir, name: &str) -> Result<(), IoError> {
+        let pid = self.pid;
+        self.with("unlinkat", |state| {
+            let ino = Self::entry(state, at, name)?;
+            if !state.may(pid, at.ino, true) {
+                return Err(Errno::Acces);
+            }
+            let directory = state.inodes.get(&ino).ok_or(Errno::NoEnt)?;
+            if directory.kind != FileType::Directory {
+                return Err(Errno::NotDir);
+            }
+            if !directory.ents_k.is_empty() {
+                return Err(Errno::NotEmpty);
+            }
+            state.check_journal()?;
+            if let Some(parent) = state.inodes.get_mut(&at.ino) {
+                parent.ents_k.remove(name);
+            }
+            state.meta(vec![(at.ino, name.to_string(), ino, false)]);
+            state.record("rmdir", Some(at.ino), Some(name), Some(ino));
             Ok(())
         })
     }

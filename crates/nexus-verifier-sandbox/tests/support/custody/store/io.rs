@@ -222,6 +222,11 @@ pub trait StoreIo: Send + Sync {
         to_name: &str,
     ) -> Result<(), IoError>;
     fn unlink(&self, at: &Self::Dir, name: &str) -> Result<(), IoError>;
+    /// `unlinkat(at, name, AT_REMOVEDIR)` (P2-V1-R3B-I3-I1-R3): remove one
+    /// empty directory's entry, relative to an open directory. Never
+    /// recursive: a directory that is not empty refuses (`ENOTEMPTY`), and so
+    /// does an entry that is not a directory (`ENOTDIR`).
+    fn remove_dir(&self, at: &Self::Dir, name: &str) -> Result<(), IoError>;
     /// `fallocate` mode 0 over `0 .. len`.
     fn allocate(&self, file: &Self::File, len: u64) -> Result<(), IoError>;
     /// `fchown` of a file the caller just created (never one another process
@@ -450,6 +455,9 @@ impl<I: StoreIo> StoreIo for Faulty<I> {
     }
     fn unlink(&self, at: &Self::Dir, name: &str) -> Result<(), IoError> {
         self.inner.unlink(at, name)
+    }
+    fn remove_dir(&self, at: &Self::Dir, name: &str) -> Result<(), IoError> {
+        self.inner.remove_dir(at, name)
     }
     fn allocate(&self, file: &Self::File, len: u64) -> Result<(), IoError> {
         self.inner.allocate(file, len)
@@ -1055,6 +1063,17 @@ pub mod linux {
             // SAFETY: `entry` is NUL-terminated and valid for the call; `at` is
             // borrowed. Flags 0: a file entry, never a directory tree.
             let result = unsafe { libc::unlinkat(at.raw(), entry.as_ptr(), 0) };
+            if result != 0 {
+                return Err(IoError::new("unlinkat", last_errno()));
+            }
+            Ok(())
+        }
+
+        fn remove_dir(&self, at: &LinuxDir, entry: &str) -> Result<(), IoError> {
+            let entry = name(entry, "unlinkat")?;
+            // SAFETY: `entry` is NUL-terminated and valid for the call; `at` is
+            // borrowed. `AT_REMOVEDIR`: one empty directory, never a tree.
+            let result = unsafe { libc::unlinkat(at.raw(), entry.as_ptr(), libc::AT_REMOVEDIR) };
             if result != 0 {
                 return Err(IoError::new("unlinkat", last_errno()));
             }

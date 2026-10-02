@@ -1,0 +1,24 @@
+
+running 1 test
+test c11_core_issued_records_encode_decode_and_check ... FAILED
+
+failures:
+
+---- c11_core_issued_records_encode_decode_and_check stdout ----
+
+thread 'c11_core_issued_records_encode_decode_and_check' (84124) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs:1790:9:
+assertion `left == right` failed: [core-digest] the core issued RunStarted { dispositioned: 0 } with another digest
+  left: [253, 190, 139, 179, 241, 88, 92, 87, 81, 150, 65, 4, 5, 61, 94, 222, 233, 84, 207, 165, 31, 203, 99, 166, 87, 133, 86, 254, 110, 189, 190, 105]
+ right: [24, 154, 0, 120, 102, 234, 81, 190, 20, 198, 195, 181, 115, 250, 190, 117, 218, 91, 140, 116, 236, 231, 115, 210, 134, 214, 190, 102, 40, 152, 16, 49]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c11_core_issued_records_encode_decode_and_check
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.07s
+     Running tests/phase2_custody_codec.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_codec-9296cffc986e9dd6)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_codec`

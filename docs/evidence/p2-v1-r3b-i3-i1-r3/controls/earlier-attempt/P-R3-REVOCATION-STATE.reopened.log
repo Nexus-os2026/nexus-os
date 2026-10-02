@@ -1,0 +1,14 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 101
+--- probe body ---
+    let state = maint::interrupted_revocation(&fixture.root, &[], &[], &[0; 32], "x", &[0; 16]);
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand3/crates/nexus-verifier-sandbox)
+error: type `Revocation` is private
+  --> crates/nexus-verifier-sandbox/tests/r3_api_probe.rs:57:17
+   |
+57 |     let state = maint::interrupted_revocation(&fixture.root, &[], &[], &[0; 32], "x", &[0; 16]);
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private type
+
+error: could not compile `nexus-verifier-sandbox` (test "r3_api_probe") due to 1 previous error
+--- stdout ---

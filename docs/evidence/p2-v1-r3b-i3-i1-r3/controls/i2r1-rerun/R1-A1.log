@@ -1,0 +1,22 @@
+
+running 1 test
+test r01_actual_failure_closes_admission_within_its_case ... FAILED
+
+failures:
+
+---- r01_actual_failure_closes_admission_within_its_case stdout ----
+
+thread 'r01_actual_failure_closes_admission_within_its_case' (86268) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs:638:5:
+[fail-stop] after an actual failure: reserve -> Ok(Reservation { action: ActionId { generation: Generation([17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17]), seq: 1 } }); admission AdmissionView { admitted: 0, closure: None, committed: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r01_actual_failure_closes_admission_within_its_case
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.23s
+     Running tests/phase2_custody_core.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`

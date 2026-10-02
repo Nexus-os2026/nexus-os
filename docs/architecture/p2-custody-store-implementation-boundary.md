@@ -1,4 +1,4 @@
-# P2 custody store: implementation boundary (P2-V1-R3B-I3-I1, R1, R2)
+# P2 custody store: implementation boundary (P2-V1-R3B-I3-I1, R1, R2, R3)
 
 This document records what the custody store implementation is, what it is
 not, and what stays open. It belongs to the candidate on
@@ -17,6 +17,12 @@ binds maintenance to the session's own complete verification: succession's
 authorization, every procedure's gate and verify-after, and the procedures
 its audit repaired (section 8). Its evidence is in
 `docs/evidence/p2-v1-r3b-i3-i1-r2/`.
+
+P2-V1-R3B-I3-I1-R3 (repair base `66a245c183b04ff1e2ae30fbbd065a57381df09c`)
+closes the administrative crash recovery of design section 15.2: the
+repeated succession, R-SUCCESSOR, the revocation's bound and evidence, and
+R-REVOKE (section 9). Its evidence is in
+`docs/evidence/p2-v1-r3b-i3-i1-r3/`.
 
 ## 1. Acceptance status
 
@@ -39,18 +45,18 @@ All paths are under `crates/nexus-verifier-sandbox/tests/`.
 |---|---|
 | `support/custody/store/format.rs` | The container (4096-byte header, closure seal and one record block per record, around the unchanged version-1 frames); the `PROVISION` and disposition grammars; entry and archive names; content-addressed incident bindings; the storage identity record. Every byte is checked, with full consumption. |
 | `support/custody/store/classify.rs` | The record grammar G1 to G17 and GId; the streaming per-file classifier; the conservative refusal (every malformed file and every unsealed generation with an action start); pool-level and archive checks with arithmetic gap bounds; current and history incidents; the decision over the complete set; the bounded report (64 in detail, with a partial flag); (R2) the condition classes, the findings collector and the canonical entry names. |
-| `support/custody/store/io.rs` | The `StoreIo` trait; bounded write and sync retries (a failed sync is never retried into success); a controlled fault adapter; the Linux implementation (`openat2` with `RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS`, `RESOLVE_NO_MAGICLINKS` and `RESOLVE_NO_XDEV`, one component at a time). This is the store's only `unsafe` code. Each call has one wrapper, with a safety argument. |
+| `support/custody/store/io.rs` | The `StoreIo` trait; bounded write and sync retries (a failed sync is never retried into success); a controlled fault adapter; the Linux implementation (`openat2` with `RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS`, `RESOLVE_NO_MAGICLINKS` and `RESOLVE_NO_XDEV`, one component at a time). This is the store's only `unsafe` code. Each call has one wrapper, with a safety argument. (R3) `remove_dir`: `unlinkat(AT_REMOVEDIR)` of one empty directory, relative to an open directory, never a tree. |
 | `support/custody/store/open.rs` | Selection and post-lock revalidation by fresh walks; safe opening; the mount, effective-profile, journal-location, kernel and storage checks; the opening-bound `StorageAdmission`; durable activation (A1 to A5); the scan; the decision; the opening `Opened`, whose state is private (R1); the internal claim handoff; `StoreGuard` and `StartupReport`; the standalone verifier; the closed real entry (section 3); (R2) the scan through a findings collector. |
 | `support/custody/store/exchange.rs` | The bounded, idempotent exchange with one fatal latch (first cause and P); `ExchangeSink`; the owner's apply step; failure delivery at a record the core really issued; the store admission gate around `Custody::admit`; the one-way seal request; `RecorderStatus` (a stall is never a failure). Internal to the store (R1), apart from its plain data types. |
 | `support/custody/store/recorder.rs` | The worker's steps W1 to W6, claim and seal, with explicit interleaving points; the drop guard that latches worker loss; the threaded runner, which keeps the owner's guard; the Linux-only native wiring check (R1). The worker is internal to the store (R1). |
 | `support/custody/store/owner.rs` | (R1) `StoreOwner`, the one value that retains the custody, recorder, claimed header and worker, and exclusion guard; `start_owner`, its only constructor; `StoreOwner::close`, the only path from a closure to a seal; `ClosedStore`. |
 | `support/custody/store/faults.rs` | (R1) The narrow fault and interleaving interface the tests use. Each operation only makes the recorder fail closed or interleaves its real steps. |
 | `support/custody/store/disposition.rs` | The pure exact-restatement comparison, and the `DispositionValidator` that exists only as a borrow of one opening's verified state (R1): only a root-owned disposition that restates exactly the incident the store computed. |
-| `support/custody/store/maintenance.rs` | The maintenance session (the store lock held for the session's life; verification through that retained authority; R1: the session's own latest verification, consumed once and lapsed by any later procedure step; R2: that verification complete and bound, every procedure gated and verified after, succession authorized as section 8 states); the fixture qualification; every procedure of design section 13 as labelled, crash-injectable steps. |
-| `support/custody/store/sim.rs` | The simulated storage, error, persistence, journal, device and host model; the fixture host. |
+| `support/custody/store/maintenance.rs` | The maintenance session (the store lock held for the session's life; verification through that retained authority; R1: the session's own latest verification, consumed once and lapsed by any later procedure step; R2: that verification complete and bound, every procedure gated and verified after, succession authorized as section 8 states); the fixture qualification; every procedure of design section 13 as labelled, crash-injectable steps; (R3) the repeated succession, R-SUCCESSOR, the revocation's bound and evidence, and R-REVOKE (section 9). |
+| `support/custody/store/sim.rs` | The simulated storage, error, persistence, journal, device and host model; the fixture host; (R3) `rmdir` of an empty directory as a pending half of its parent, a removed directory taking no entry, and a rename between two names of one file changing nothing. |
 | `support/custody/store/mod.rs` | The module's documentation: what it is and is not. |
 | `support/custody/mod.rs` | Linux-only wiring of `store`, and one paragraph on the integration obligations the store addresses. |
-| `phase2_custody_store.rs` | The test target: 108 store tests (75 from I3-I1 and 9 R1 regressions, adapted to the R2 interface, and 24 R2 regressions `v01` to `v24`), plus the core's 3 commitment-boundary tests that every custody target compiles. |
+| `phase2_custody_store.rs` | The test target: 139 store tests (75 from I3-I1 and 9 R1 regressions, adapted to the R2 interface; 24 R2 regressions `v01` to `v24`; 31 R3 tests: 23 regressions `r301` to `r328`, 6 crash-model recoveries `r3x1` to `r3x6`, the simulator's `s06` and the native `n09`), plus the core's 3 commitment-boundary tests that every custody target compiles. |
 
 `core.rs`, `model.rs`, `codec.rs` and their tests are byte-identical to the
 baseline. So are the cleanup observer, the live harness, production `src/`,
@@ -557,7 +563,8 @@ through safe calls from outside the store (B-S1 to B-S6,
     It is defence in depth, and API/type guards show it.
   - P-REVOKE checks no bound on `dispositions/revoked/`, and R5 specifies
     none. A store pushed over it is Invalid, and succession can accept that
-    condition by name (test `v20`).
+    condition by name (test `v20`). (R3: P-REVOKE now refuses at the bound
+    and never replaces revoked evidence; section 9.4.)
   - Several roots that may hold history, and more claim gaps than the store
     could hold dispositions for, leave nothing to authorize. Both are for
     the Architect to dispose of.
@@ -566,3 +573,238 @@ through safe calls from outside the store (B-S1 to B-S6,
     a store. A root process acting outside every procedure is unsupported
     (design section 13.1).
   - G-AUTH, G-HOST, G-LIVE, G-NATIVE and G-PWR stay open.
+
+## 9. Administrative crash recovery (P2-V1-R3B-I3-I1-R3)
+
+The Architect's findings on the R2 candidate, reproduced at `66a245c1`
+through safe calls from outside the store (R3-B1 to R3-B8,
+`docs/evidence/p2-v1-r3b-i3-i1-r3/baseline/`):
+
+- R3-B1: a succession interrupted after step 2a could not be repeated. The
+  repeat ran step 2a again and failed at its `link` (`EEXIST`), leaving a
+  new `<PROVISION_PATH>.predecessor.tmp` behind.
+- R3-B2: an incomplete successor root had no recovery. The repeat failed
+  the same way, the root stayed, and the I/O trait had no directory
+  removal.
+- R3-B3: a successor root with a non-zero pool byte stayed after every
+  procedure available, with nothing to say why.
+- R3-B4: a kept copy that differed from the selected `PROVISION` was found
+  only by step 2a's failing `link`, after it had left a temporary.
+- R3-B5: a split revocation (one inode under both names, two links) had no
+  recovery procedure. A second revocation made it worse: two revoked
+  names, both with two links.
+- R3-B6: P-REVOKE took `revoked/` over its bound (4097 entries), after
+  which the store opened as Invalid.
+- R3-B7: P-REVOKE's `rename` replaced an existing revoked file, and that
+  revoked evidence was lost.
+- R3-B8: no crash matrix covered these recoveries; at the base the repeat
+  failed after crash points 4 to 27.
+
+### 9.1 Succession, repeated
+
+- **The kept copy decides step 2a** (design section 15.2). Before any
+  operation, at authorization and again at the gate,
+  `<PROVISION_PATH>.predecessor-<old root id>` is read afresh:
+  - absent: step 2a runs, and the succession is design section 15.3's 29
+    operations for one pool file, unchanged;
+  - exactly the selected `PROVISION` (a regular file, `root:root 0444`, one
+    link, opened by identity, and its complete bytes the bytes the session
+    selected, whose digest the selection carries): step 2a is skipped. The
+    copy is never recreated, rewritten or linked over;
+  - anything else (a byte changed, missing or added; another owner, mode,
+    link count or type): the succession refuses before any operation and
+    leaves it as it is.
+- **Leftovers first.** A `<PROVISION_PATH>.predecessor.tmp` or
+  `<PROVISION_PATH>.tmp` refuses the succession until R-LEFTOVER removes
+  it.
+- **A new root.** The successor's state root must be absent. An incomplete
+  one is removed first, by R-SUCCESSOR (section 9.2).
+- **The gate** rechecks the copy and the root, so a copy or a root that
+  appears after authorization refuses, with no operation.
+
+### 9.2 R-SUCCESSOR: an incomplete successor root
+
+Design section 15.2: "The incomplete successor root may be removed only if
+all its pool files are zero; under activation (§10.6) no owner claimed on
+it." `maintenance::recover_incomplete_successor(session, layout)` is a
+session procedure. The layout names the candidate: Owner input, never
+authority. What authorizes the removal is read afresh under the session's
+lock, at construction and again at the gate:
+
+1. The session holds its store's lock, its selection revalidates, and
+   `PROVISION` is the bytes it selected.
+2. A succession of the selected store was interrupted: its `PROVISION` is
+   kept exactly (section 9.1). Step 2a is synced before step 2b begins, so
+   any root step 2b made implies the copy. A leftover temporary refuses.
+3. The candidate is under the selected store's parent. It is neither the
+   selected store (by state name or root id) nor its recorded predecessor,
+   and no `<PROVISION_PATH>.predecessor-<candidate id>` exists: a kept
+   predecessor is evidence. Without these checks, a retained predecessor
+   whose pool files are all zero would pass the content checks.
+4. The candidate holds only what step 2b makes, exactly as step 2b makes
+   it:
+   - the root, `journals/`, `dispositions/`, `dispositions/revoked/` and
+     `archive/` as `root:root 0755` directories, each opened by identity;
+   - `LOCK` as the empty, store-owned `0600` file;
+   - pool files named for the layout's pool, store-owned `0600`, one link,
+     at most their size, and zero in every byte, read in full;
+   - `dispositions/` holding only `revoked`, and `revoked/` and `archive/`
+     empty.
+
+   Anything else refuses.
+5. `LOCK_EX | LOCK_NB` is taken on `LOCK` and on every pool file (Busy
+   refuses). The descriptions are retained until the procedure ends.
+
+Then, as section 9.3 lists:
+
+- each pool file is unlinked, and `journals/` synced;
+- `revoked/` is removed, and `dispositions/` synced;
+- `journals/`, `dispositions/` and `archive/` are removed and `LOCK`
+  unlinked, and the root synced;
+- the root is removed, and the parent synced.
+
+Each removal is of one entry, by name, and only while it is the inode the
+inspection found, in the directory the inspection found. A directory is
+removed with `unlinkat(AT_REMOVEDIR)`, which refuses one that is not empty.
+Nothing is recursive. An object step 2b had not made is not removed, and
+its operation is absent. A directory none of whose entries is removed is not
+synced. The parent is always synced, so a candidate already gone leaves
+that one step: the durability of its removal is not known.
+
+The verify-after is the generic one (section 8.2); then the candidate must
+be gone. A crashed cleanup is recovered by running it again: every state it
+can leave holds a subset of those objects.
+
+A non-zero pool byte, a pool file over its size, a lock held elsewhere, or
+anything unexpected refuses, and nothing is removed: such a root may hold
+history, or be in use. The succession can still be repeated at another new
+root id, and the refused root stays as it is.
+
+### 9.3 Operations
+
+Object names and labels follow design section 15.3. `rmdir` is
+`unlinkat(at, name, AT_REMOVEDIR)` of one empty directory.
+
+| Procedure | Operations | Each operation, in order |
+|---|---|---|
+| P-SUCCESSOR (repeat) | 23 | 1 mkdir `parent/root` (13.6/2b); 2 mkdir `root/journals` (13.6/2b); 3 mkdir `root/dispositions` (13.6/2b); 4 mkdir `root/archive` (13.6/2b); 5 mkdir `dispositions/revoked` (13.6/2b); 6 fsync_dir `revoked` (13.6/2b); 7 fsync_dir `dispositions` (13.6/2b); 8 fsync_dir `journals` (13.6/2b); 9 fsync_dir `archive` (13.6/2b); 10 fsync_dir `root` (13.6/2b); 11 fsync_dir `parent` (13.6/2b); 12 create `root/LOCK` (13.6/2b); 13 fsync `root/LOCK` (13.6/2b); 14 fsync_dir `root` (13.6/2b); 15 create `journals/pool` (13.6/2b); 16 write `journals/pool` (13.6/2b); 17 fsync `journals/pool` (13.6/2b); 18 fsync_dir `journals` (13.6/2b); 19 create `provdir/tmp` (13.6/2c); 20 write `provdir/tmp` (13.6/2c); 21 fsync `provdir/tmp` (13.6/2c); 22 rename `provdir/PROVISION` (13.6/2c); 23 fsync_dir `provdir` (13.6/2c) |
+| R-SUCCESSOR | 11 | 1 unlink `journals/pool` (15.2/successor-root); 2 fsync_dir `journals` (15.2/successor-root); 3 rmdir `dispositions/revoked` (15.2/successor-root); 4 fsync_dir `dispositions` (15.2/successor-root); 5 rmdir `root/journals` (15.2/successor-root); 6 rmdir `root/dispositions` (15.2/successor-root); 7 rmdir `root/archive` (15.2/successor-root); 8 unlink `root/LOCK` (15.2/successor-root); 9 fsync_dir `root` (15.2/successor-root); 10 rmdir `parent/root` (15.2/successor-root); 11 fsync_dir `parent` (15.2/successor-root) |
+| R-REVOKE | 2 | 1 unlink `dispositions/final` (13.4-revoke/recover); 2 fsync_dir `dispositions` (13.4-revoke/recover) |
+
+- **P-SUCCESSOR (repeat)** is design section 15.3's P-SUCCESSOR row from
+  its operation 7, unchanged: the succession with step 2a skipped.
+- **R-SUCCESSOR** is shown for one pool file and a complete step 2b. Its
+  `unlink` of `journals/pool` repeats for each pool file, in index order,
+  before the one `fsync_dir` of `journals`. On a partial root, an
+  operation on an object that does not exist is absent, and so is the
+  sync of a directory none of whose entries is removed. With the root
+  already gone, it is `fsync_dir` `parent` alone.
+- **R-REVOKE** is shown for the exact split. On a revocation already
+  completed, it is `fsync_dir` `dispositions` alone.
+
+### 9.4 Revocation
+
+**Normal revocation (P-REVOKE).** Before any operation, at construction
+and at the gate:
+
+- the time is a compact UTC time (`YYYYMMDDTHHMMSSZ`): the revoked name
+  must parse back to this binding;
+- the active disposition is read by the rules an opening reads one with:
+  regular, `root:root 0444`, one link, at most 4096 bytes, parsed exactly,
+  this binding and this root;
+- `revoked/` is counted first, from the names alone, before any entry is
+  examined. At 4096, its bound (design section 6.6), normal revocation is
+  unavailable. No revoked evidence is removed to make room;
+- the revoked name is absent. A revocation never replaces revoked
+  evidence, which a `rename` over it would do.
+
+The gate also requires the same active inode. The operations are design
+section 15.3's three, unchanged.
+
+**R-REVOKE** (`maintenance::resume_revocation(session, binding, time)`).
+Design section 13.4: "The Owner completes the revocation by unlinking the
+`dispositions/` name and syncing that directory." The binding and the time
+(Owner input) name the two entries. At construction and again at the gate,
+it proves the exact split, read afresh:
+
+- the revoked file is this store's canonical disposition for the binding:
+  it parses, renders back to its bytes, and is `root:root 0444`;
+- the active name is the same inode;
+- both names show two links.
+
+It then unlinks the active name, only while it is that inode, and syncs
+`dispositions/`. When the active name is already gone and the revoked file
+has one link, it repeats only the sync, since that sync's durability is
+not known. Anything else refuses. It never republishes, and never touches
+the revoked file. It adds no entry, so `revoked/` at its bound does not
+prevent it. Its verify-after is the generic one; then the revocation must
+be complete: the active name gone, and the revoked file, the same inode,
+alone.
+
+**The per-directory over-approximation.** A revocation crashed between its
+two syncs can also keep the removal from `dispositions/` and lose the
+addition to `revoked/`. The incident then blocks, and the revoked file is
+gone. R-REVOKE refuses ("no revoked artifact"): nothing is left to
+complete. Under A-M1 the rename is atomic, and this state does not occur.
+
+### 9.5 Design section 15.2, row by row
+
+| Outcome | Recovery | Status | Tests |
+|---|---|---|---|
+| unprovisioned, after provisioning began | R-REPUBLISH when `<PROVISION_PATH>.tmp` was left (the root is then complete and synced); otherwise P-PROV at a new root, which its gate admits since the interrupted root's pool files are all zero. A root with a non-zero pool byte is re-published (R2) | IMPLEMENTED + TESTED. Removing an all-zero root is an EXPLICIT EXTERNAL OWNER STEP | `r3x5`; `m06`, `v17` |
+| maintenance | R-LEFTOVER, then completion or repetition | IMPLEMENTED + TESTED (R2, and R3's repetitions) | `m09`, `r305`, `r3x6` |
+| lost, during recycling | R-RESUME | IMPLEMENTED + TESTED (R2) | `m09` |
+| invalid, after an interrupted revocation | R-REVOKE | IMPLEMENTED + TESTED (R3) | `r319` to `r324`, `r3x4` |
+| unsupported, before re-qualification is visible | R-LEFTOVER, then P-REQUALIFY again | IMPLEMENTED + TESTED (R3 tests; procedures unchanged) | `r3x6` |
+| predecessor, before the successor's `PROVISION` is visible or durable | R-LEFTOVER, R-SUCCESSOR, then the succession again, with step 2a skipped when the copy is exact | IMPLEMENTED + TESTED (R3) | `r301` to `r314`, `r3x1` to `r3x3` |
+
+**The one external step.** Row "unprovisioned" says that a root whose
+pool files are all zero "may be removed, with any `<PROVISION_PATH>.tmp`,
+and provisioning repeated." The store implements the repetition. Removing
+the root stays the Owner's own step:
+
+- the removal is optional: provisioning at a new root needs none;
+- before a `PROVISION` exists there is no store and no session, so there
+  is no lock to hold and no selection to revalidate;
+- design section 15.3 names no such procedure.
+
+A leftover `<PROVISION_PATH>.tmp` is removed by R-REPUBLISH. It exists
+only once the root is complete and synced.
+
+### 9.6 R3 verification and remaining limits
+
+- **Tests.** The store target has 142 tests:
+  - 139 store tests: 84 adapted to the R2 interface, R2's 24 regressions
+    `v01` to `v24`, and R3's 31 tests (23 regressions `r301` to `r328`, 6
+    crash-model recoveries `r3x1` to `r3x6`, the simulator's `s06` and the
+    native `n09`);
+  - the core's 3.
+- **Behavioural controls (by category, never one figure).** 179 counted:
+  R2's 137, each unchanged (the same edits, test, marker and checks), and
+  R3's 42:
+  - simulator and source conformance: 16 (R3: 4);
+  - implementation safety: 71 (R3: 2, the native removal);
+  - authority and API surface: 9 (R3: 1, a recursive I/O operation);
+  - R1 authority binding: 10;
+  - R2 maintenance authority: 38;
+  - R3 administrative recovery: 35.
+- **API/type guards (reported apart).** 25 compile-time probes (R3: 7,
+  each recovery's decision and removal helpers, and the session's hold
+  check, private to the store), the ownership guard, a positive control
+  (with the two R3 recoveries) and a harness check.
+- **Results.** Every figure's as-run result is in
+  `docs/evidence/p2-v1-r3b-i3-i1-r3/`.
+- **Limits.**
+  - Every recovery runs on simulated storage and a fixture host. The
+    native directory removal is exercised only on the test's own entries
+    beneath `CARGO_TARGET_TMPDIR`. Nothing here qualifies a filesystem or
+    proves recovery after a physical power loss.
+  - R-SUCCESSOR refuses a root with a pool file that is not all zero. Such
+    a root stays, and the succession can be repeated at another root id.
+    Deciding what it holds is for the Architect.
+  - Under the per-directory over-approximation only, a crashed revocation
+    can lose its revoked file (section 9.4).
+  - Removing an all-zero root after an interrupted provisioning is the
+    Owner's own step (section 9.5).
+  - G-AUTH, G-HOST, G-LIVE, G-NATIVE and G-PWR stay open. A-S5 remains
+    rejected.

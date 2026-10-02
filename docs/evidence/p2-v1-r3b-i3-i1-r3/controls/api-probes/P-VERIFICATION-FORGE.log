@@ -1,0 +1,33 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 101
+--- probe body ---
+    let io = fixture.store_process("probe");
+    let opened = open_owner(&io, &fixture.path, config, &mut NoHooks).expect("opens");
+    let session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
+        .expect("a session");
+    let forged = maint::Verification {
+        epoch: 0,
+        opening: opened.opening(),
+        root_id: [0; 16],
+        revision: 1,
+        digest: [0; 32],
+        state: String::new(),
+        assessment: session.assessment().expect("assessed"),
+    };
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+error[E0603]: struct `Verification` is private
+   --> crates/nexus-verifier-sandbox/tests/r3_api_probe.rs:61:25
+    |
+ 61 |     let forged = maint::Verification {
+    |                         ^^^^^^^^^^^^ private struct
+    |
+note: the struct `Verification` is defined here
+   --> crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs:992:1
+    |
+992 | struct Verification {
+    | ^^^^^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "r3_api_probe") due to 1 previous error
+--- stdout ---

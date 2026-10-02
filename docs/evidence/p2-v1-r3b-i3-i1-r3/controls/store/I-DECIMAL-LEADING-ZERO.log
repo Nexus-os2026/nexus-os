@@ -1,0 +1,22 @@
+
+running 1 test
+test f04_provision_grammar_is_exact ... FAILED
+
+failures:
+
+---- f04_provision_grammar_is_exact stdout ----
+
+thread 'f04_provision_grammar_is_exact' (33260) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:1165:9:
+[exact-bytes] PROVISION leading zero accepted
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    f04_provision_grammar_is_exact
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.09s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

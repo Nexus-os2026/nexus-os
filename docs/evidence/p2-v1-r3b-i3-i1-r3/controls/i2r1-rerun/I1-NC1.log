@@ -1,0 +1,22 @@
+
+running 1 test
+test h01_same_owner_survives_failed_cleanup_and_exhausted_budgets ... FAILED
+
+failures:
+
+---- h01_same_owner_survives_failed_cleanup_and_exhausted_budgets stdout ----
+
+thread 'h01_same_owner_survives_failed_cleanup_and_exhausted_budgets' (84354) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs:2366:5:
+[owner-retained] a failed cleanup let go of its owner
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    h01_same_owner_survives_failed_cleanup_and_exhausted_budgets
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.23s
+     Running tests/phase2_custody_core.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`

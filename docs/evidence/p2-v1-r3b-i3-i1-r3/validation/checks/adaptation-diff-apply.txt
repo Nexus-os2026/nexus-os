@@ -1,0 +1,24 @@
+$ patch -p1 -d <temporary copy of docs/evidence/p2-v1-r3b-i3-i1-r2/scripts> -i docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/scripts.adaptation.diff
+exit 0
+patching file api_probes.py
+patching file candidate_runs.sh
+patching file checks.sh
+patching file control_mapping.py
+patching file matrices.py
+patching file normalize.py
+patching file preflight.py
+patching file scope.py
+patching file store_controls.py
+patching file validate.sh
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/api_probes.py
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/candidate_runs.sh
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/checks.sh
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/control_mapping.py
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/matrices.py
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/normalize.py
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/preflight.py
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/scope.py
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/store_controls.py
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/validate.sh
+same docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/compare_i2r1.py
+RESULT: PASS

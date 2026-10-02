@@ -1,0 +1,26 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 101
+--- probe body ---
+    let state = maint::interrupted_revocation(&fixture.root, &[], &[], &[0; 32], "x", &[0; 16]);
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+error[E0603]: function `interrupted_revocation` is private
+    --> crates/nexus-verifier-sandbox/tests/r3_api_probe.rs:57:24
+     |
+  57 |     let state = maint::interrupted_revocation(&fixture.root, &[], &[], &[0; 32], "x", &[0; 16]);
+     |                        ^^^^^^^^^^^^^^^^^^^^^^ private function
+     |
+note: the function `interrupted_revocation` is defined here
+    --> crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs:2854:1
+     |
+2854 | / fn interrupted_revocation<P: Platform>(
+2855 | |     io: &P,
+2856 | |     dispositions_path: &[String],
+2857 | |     revoked_path: &[String],
+...    |
+2905 | | }
+     | |_^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "r3_api_probe") due to 1 previous error
+--- stdout ---

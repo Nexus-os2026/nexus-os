@@ -1,0 +1,1763 @@
+{
+  "rows": [
+    {
+      "old": "S-F1-DURABLE",
+      "new": "S-F1-DURABLE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-REOPEN-CERTIFIES",
+      "new": "S-REOPEN-CERTIFIES",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-TEAR-SPANS",
+      "new": "S-TEAR-SPANS",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-SCHEDULES-GUARANTEED-ONLY",
+      "new": "S-SCHEDULES-GUARANTEED-ONLY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-NO-RECLAIM-WHILE-OPEN",
+      "new": "S-NO-RECLAIM-WHILE-OPEN",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-ERRSEQ-NO-WRAP",
+      "new": "S-ERRSEQ-NO-WRAP",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-COMPLETED-TESTS-ABORT",
+      "new": "S-COMPLETED-TESTS-ABORT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-INVENTED-ABORT",
+      "new": "S-INVENTED-ABORT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-INFLIGHT-COMPLETE",
+      "new": "S-INFLIGHT-COMPLETE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-HOME-ERROR-SUCCESS",
+      "new": "S-HOME-ERROR-SUCCESS",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-TAIL-WITHOUT-HOME",
+      "new": "S-TAIL-WITHOUT-HOME",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "S-WRITEBACK-ERROR-SWALLOWED",
+      "new": "S-WRITEBACK-ERROR-SWALLOWED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": "I-HEADER-RESERVED",
+      "new": "I-HEADER-RESERVED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-SEAL-TAIL",
+      "new": "I-SEAL-TAIL",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-RECORD-PADDING",
+      "new": "I-RECORD-PADDING",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-INVALID-HEADER-ABANDONED",
+      "new": "I-INVALID-HEADER-ABANDONED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-DECIMAL-LEADING-ZERO",
+      "new": "I-DECIMAL-LEADING-ZERO",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-BINDING-LOCATION",
+      "new": "I-BINDING-LOCATION",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-BINDING-NO-CONTENT",
+      "new": "I-BINDING-NO-CONTENT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-GRAMMAR-G16",
+      "new": "I-GRAMMAR-G16",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-REFUSE-ONLY-RECORDED",
+      "new": "I-REFUSE-ONLY-RECORDED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-VISIBLE-RUNENDED-RESOLVES",
+      "new": "I-VISIBLE-RUNENDED-RESOLVES",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-LATE-NOTE-MISSING",
+      "new": "I-LATE-NOTE-MISSING",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-DECIDE-FROM-REPORT",
+      "new": "I-DECIDE-FROM-REPORT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-NONDETERMINISTIC-REPORT",
+      "new": "I-NONDETERMINISTIC-REPORT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-VALIDATOR-INEXACT",
+      "new": "I-VALIDATOR-INEXACT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-PRESERVATION-SKIPPED",
+      "new": "I-PRESERVATION-SKIPPED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-SYNC-BEFORE-LOCK",
+      "new": "I-SYNC-BEFORE-LOCK",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-NO-REVALIDATION",
+      "new": "I-NO-REVALIDATION",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-OPEN-BEFORE-TYPE",
+      "new": "I-OPEN-BEFORE-TYPE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-PROVISION-INODE-IGNORED",
+      "new": "I-PROVISION-INODE-IGNORED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-EXT4-MAGIC",
+      "new": "I-EXT4-MAGIC",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-NO-ACTIVATION",
+      "new": "I-NO-ACTIVATION",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-ACTIVATION-AFTER-SCAN",
+      "new": "I-ACTIVATION-AFTER-SCAN",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-R2-PROTOCOL",
+      "new": "I-R2-PROTOCOL",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-ACTIVATION-ERROR-IGNORED",
+      "new": "I-ACTIVATION-ERROR-IGNORED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-NO-PROBE",
+      "new": "I-NO-PROBE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-PROBE-FIRST",
+      "new": "I-PROBE-FIRST",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-NO-A4",
+      "new": "I-NO-A4",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-A2-IDENTITY",
+      "new": "I-A2-IDENTITY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-KERNEL-PREFIX",
+      "new": "I-KERNEL-PREFIX",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-EXTERNAL-JOURNAL",
+      "new": "I-EXTERNAL-JOURNAL",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-EXCLUDED-MODE",
+      "new": "I-EXCLUDED-MODE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-PROFILE-FROM-PINNED",
+      "new": "I-PROFILE-FROM-PINNED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-NO-A4-PROFILE",
+      "new": "I-NO-A4-PROFILE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-WRITE-CACHE-ALONE",
+      "new": "I-WRITE-CACHE-ALONE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-IDENTITY-UNCHECKED",
+      "new": "I-IDENTITY-UNCHECKED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-ATTESTATION-ADMITS",
+      "new": "I-ATTESTATION-ADMITS",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-CLAIM-UNBOUNDED",
+      "new": "I-CLAIM-UNBOUNDED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-TMP-DISPOSITION",
+      "new": "I-TMP-DISPOSITION",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-BOUND-AFTER-EXAMINE",
+      "new": "I-BOUND-AFTER-EXAMINE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-DURABLE-BEFORE-SYNC",
+      "new": "I-DURABLE-BEFORE-SYNC",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-SYNC-RETRIED-AFTER-EIO",
+      "new": "I-SYNC-RETRIED-AFTER-EIO",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-WORKER-IDENTITY",
+      "new": "I-WORKER-IDENTITY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-NO-GATE",
+      "new": "I-NO-GATE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-FAILURE-AT-CAUSE",
+      "new": "I-FAILURE-AT-CAUSE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-FUTURE-SILENT",
+      "new": "I-FUTURE-SILENT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-PUBLISH-AFTER-LATCH",
+      "new": "I-PUBLISH-AFTER-LATCH",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-UNEXPECTED-ACK-IGNORED",
+      "new": "I-UNEXPECTED-ACK-IGNORED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-FAIL-UNISSUED",
+      "new": "I-FAIL-UNISSUED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-DELIVERY-DROPPED",
+      "new": "I-DELIVERY-DROPPED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-DUP-CONFLICT",
+      "new": "I-DUP-CONFLICT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-DUP-RETAINED",
+      "new": "I-DUP-RETAINED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-TIMEOUT-STOPS",
+      "new": "I-TIMEOUT-STOPS",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-POISON-IGNORED",
+      "new": "I-POISON-IGNORED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-VANISHED-IGNORED",
+      "new": "I-VANISHED-IGNORED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-NO-DROP-GUARD",
+      "new": "I-NO-DROP-GUARD",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-SEAL-WHILE-LATCHED",
+      "new": "I-SEAL-WHILE-LATCHED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-SESSION-NEW-LOCK",
+      "new": "I-SESSION-NEW-LOCK",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-SESSION-SHARED",
+      "new": "I-SESSION-SHARED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-SESSION-RELOCK",
+      "new": "I-SESSION-RELOCK",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-BUSY-SUCCESS",
+      "new": "I-BUSY-SUCCESS",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-AUTHORITY-FLAG",
+      "new": "I-AUTHORITY-FLAG",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-VERIFY-CACHED",
+      "new": "I-VERIFY-CACHED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-RETIRE-NO-PRECONDITIONS",
+      "new": "I-RETIRE-NO-PRECONDITIONS",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-RETIRE-FROM-REPORT",
+      "new": "I-RETIRE-FROM-REPORT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-HIDDEN-STEP",
+      "new": "I-HIDDEN-STEP",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "I-FRESH-ROOT",
+      "new": "I-FRESH-ROOT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "N-DOT-NAME",
+      "new": "N-DOT-NAME",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "N-FOLLOW",
+      "new": "N-FOLLOW",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "N-BLOCKING",
+      "new": "N-BLOCKING",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": "A-ENTRY-CALLS",
+      "new": "A-ENTRY-CALLS",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-api-surface",
+      "result": true
+    },
+    {
+      "old": "A-ENTRY-SWITCH",
+      "new": "A-ENTRY-SWITCH",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-api-surface",
+      "result": true
+    },
+    {
+      "old": "A-ADMISSION-CLONE",
+      "new": "A-ADMISSION-CLONE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-api-surface",
+      "result": true
+    },
+    {
+      "old": "A-ADMISSION-FORGED",
+      "new": "A-ADMISSION-FORGED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-api-surface",
+      "result": true
+    },
+    {
+      "old": "A-LOCK-UNLOCK",
+      "new": "A-LOCK-UNLOCK",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-api-surface",
+      "result": true
+    },
+    {
+      "old": "A-WORKER-LOCK",
+      "new": "A-WORKER-LOCK",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-api-surface",
+      "result": true
+    },
+    {
+      "old": "A-GATE-SPLIT",
+      "new": "A-GATE-SPLIT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-api-surface",
+      "result": true
+    },
+    {
+      "old": "A-SELECTION-KEPT",
+      "new": "A-SELECTION-KEPT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-api-surface",
+      "result": true
+    },
+    {
+      "old": "R1-REFUSED-CLOSE-SEALS",
+      "new": "R1-REFUSED-CLOSE-SEALS",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-binding",
+      "result": true
+    },
+    {
+      "old": "R1-START-FROM-REPORT",
+      "new": "R1-START-FROM-REPORT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-binding",
+      "result": true
+    },
+    {
+      "old": "R1-VALIDATOR-UNCHECKED",
+      "new": "R1-VALIDATOR-UNCHECKED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-binding",
+      "result": true
+    },
+    {
+      "old": "R1-APPLIED-REASON-INVENTED",
+      "new": "R1-APPLIED-REASON-INVENTED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-binding",
+      "result": true
+    },
+    {
+      "old": "R1-FAULT-ACKS-UNDURABLE",
+      "new": "R1-FAULT-ACKS-UNDURABLE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-binding",
+      "result": true
+    },
+    {
+      "old": "R1-FAULT-INJECTS-NEXT",
+      "new": "R1-FAULT-INJECTS-NEXT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-binding",
+      "result": true
+    },
+    {
+      "old": "R1-LATCH-REPLACED",
+      "new": "R1-LATCH-REPLACED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-binding",
+      "result": true
+    },
+    {
+      "old": "R1-VERIFICATION-REUSED",
+      "new": "R1-VERIFICATION-REUSED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-binding",
+      "result": true
+    },
+    {
+      "old": "R1-VERIFICATION-NEVER-LAPSES",
+      "new": "R1-VERIFICATION-NEVER-LAPSES",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-binding",
+      "result": true
+    },
+    {
+      "old": "R1-GUARD-NOT-KEPT",
+      "new": "R1-GUARD-NOT-KEPT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "authority-binding",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-NO-VERIFY",
+      "new": "NC-SUCC-NO-VERIFY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-MISSING-DISPOSITION",
+      "new": "NC-SUCC-MISSING-DISPOSITION",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-REPORT-TRUNCATION",
+      "new": "NC-SUCC-REPORT-TRUNCATION",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-STALE",
+      "new": "NC-SUCC-STALE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-REUSE-AUTH",
+      "new": "NC-SUCC-REUSE-AUTH",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-OMIT-INVALID",
+      "new": "NC-SUCC-OMIT-INVALID",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-INVENT-INVALID",
+      "new": "NC-SUCC-INVENT-INVALID",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-REPEAT-INVALID",
+      "new": "NC-SUCC-REPEAT-INVALID",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-STATEMENT-CALLER",
+      "new": "NC-SUCC-STATEMENT-CALLER",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-STATEMENT-TRUNCATED",
+      "new": "NC-SUCC-STATEMENT-TRUNCATED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-CAPACITY-BYPASS",
+      "new": "NC-SUCC-CAPACITY-BYPASS",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-NO-POSTVERIFY",
+      "new": "NC-SUCC-NO-POSTVERIFY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-POSTVERIFY-IGNORED",
+      "new": "NC-SUCC-POSTVERIFY-IGNORED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-VERIFY-OLD-ROOT",
+      "new": "NC-SUCC-VERIFY-OLD-ROOT",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-NO-GATE",
+      "new": "NC-SUCC-NO-GATE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-MUTATE-BEFORE-GATE",
+      "new": "NC-SUCC-MUTATE-BEFORE-GATE",
+      "status": "adapted",
+      "changed": [
+        "what",
+        "edits"
+      ],
+      "guards": [],
+      "why": "R3's P-REVOKE gate rereads its admissibility, so a gate moved after the first operation of every procedure refuses v12's helper revocation after its own rename, before the succession v12 examines; the mutation is confined to the succession's gate (S17's subject)",
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-GATE-PROVISION",
+      "new": "NC-SUCC-GATE-PROVISION",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-UNDISPOSITIONED-HISTORY",
+      "new": "NC-SUCC-UNDISPOSITIONED-HISTORY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-LEFTOVER",
+      "new": "NC-SUCC-LEFTOVER",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-SAME-ROOT",
+      "new": "NC-SUCC-SAME-ROOT",
+      "status": "adapted",
+      "changed": [
+        "what",
+        "edits"
+      ],
+      "guards": [],
+      "why": "R3 also refuses a successor whose state root exists, and v22's layout is the predecessor's own; the equivalent defect point removes both R2's root-id check and R3's state-root check",
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-DUAL-LOCK",
+      "new": "NC-SUCC-DUAL-LOCK",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-SUCC-CAPACITY-REFUSED",
+      "new": "NC-SUCC-CAPACITY-REFUSED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-VERIFY-FIRST-ONLY",
+      "new": "NC-VERIFY-FIRST-ONLY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-OWNER-COLLECTS",
+      "new": "NC-OWNER-COLLECTS",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-VERIFY-AFTER-AUTHORIZES",
+      "new": "NC-VERIFY-AFTER-AUTHORIZES",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-GAP-UNBOUNDED",
+      "new": "NC-GAP-UNBOUNDED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-ENTRY-STAT-DETERMINATE",
+      "new": "NC-ENTRY-STAT-DETERMINATE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-REVOKED-BOUND-INDETERMINATE",
+      "new": "NC-REVOKED-BOUND-INDETERMINATE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-NAMES-EXAMINED-TWICE",
+      "new": "NC-NAMES-EXAMINED-TWICE",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-DISP-UNREPORTED",
+      "new": "NC-DISP-UNREPORTED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-DISP-FACTS-NOT-VERIFIED",
+      "new": "NC-DISP-FACTS-NOT-VERIFIED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-DISP-ARCHIVED-NAME-ONLY",
+      "new": "NC-DISP-ARCHIVED-NAME-ONLY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-ARCHIVE-CAPACITY",
+      "new": "NC-ARCHIVE-CAPACITY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-LEFTOVER-AFTER-ACCEPTED",
+      "new": "NC-LEFTOVER-AFTER-ACCEPTED",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-DISP-NO-POSTVERIFY",
+      "new": "NC-DISP-NO-POSTVERIFY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-PROV-OVER-EXISTING",
+      "new": "NC-PROV-OVER-EXISTING",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-REPUBLISH-OVER-EXISTING",
+      "new": "NC-REPUBLISH-OVER-EXISTING",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": "NC-PROV-OVER-HISTORY",
+      "new": "NC-PROV-OVER-HISTORY",
+      "status": "unchanged",
+      "changed": [],
+      "guards": [],
+      "why": null,
+      "category": "maintenance-authority",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-KEEP-OVERWRITE",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-KEEP-BLESS",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-NO-SKIP",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-ORDINARY-SKIP",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-KEEP-METADATA",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-LEFTOVER-IGNORED",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-ROOT-IGNORED",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-GATE-COPY",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-NONZERO",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-UNEXPECTED",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-SELECTED",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-UID",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-COPY-CONTENT",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-NOT-INTERRUPTED",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-NO-LOCK",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-RECURSIVE",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-RECURSIVE-API",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "authority-api-surface",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-IDENTITY",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-GATE",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-GONE-REFUSED",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-CLEAN-NO-PARENT-SYNC",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-SUCC-REUSE-VERIFY",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-RECOVERY-NO-POSTVERIFY-SUCC",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-BOUND-EARLY",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-OVERFLOW",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-REPLACE",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-TIME-IGNORED",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-NO-VERIFY-AFTER",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-GATE",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-RECOVER-WRONG",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-RECOVER-NAME",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-RECOVER-DELETE-TARGET",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-RECOVER-NO-SYNC",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-CAPACITY-CONFLATED",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-REVOKE-COMPLETED-REFUSED",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "NC-R3-RECOVERY-NO-POSTVERIFY",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "administrative-recovery",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "S-R3-RMDIR-NOT-EMPTY",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "S-R3-RMDIR-DURABLE",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "S-R3-REMOVED-DIR-ENTRY",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "S-R3-SAME-FILE-RENAME",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "simulator-source-conformance",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "N-R3-RMDIR-FLAG",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "implementation-safety",
+      "result": true
+    },
+    {
+      "old": null,
+      "new": "N-R3-RMDIR-NAME",
+      "status": "added (R3)",
+      "changed": [],
+      "guards": [],
+      "category": "implementation-safety",
+      "result": true
+    }
+  ],
+  "counts": {
+    "unchanged": 135,
+    "adapted": 2,
+    "added (R3)": 42
+  }
+}

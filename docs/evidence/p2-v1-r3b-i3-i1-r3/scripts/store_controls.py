@@ -1,0 +1,2922 @@
+#!/usr/bin/env python3
+"""P2-V1-R3B-I3-I1-R3 negative controls for the custody store.
+
+Adapted from docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/store_controls.py
+(which stays unchanged); scripts.adaptation.diff is the difference. R2's
+137 counted controls keep their ids, categories, intended tests and
+markers; 135 keep their edits unchanged. Two moved to the equivalent
+defect point of the R3 sources, where an R3 check had come to mask R2's
+mutation (REANCHORED_R3 names each and why).
+matrices/r2-to-r3-control-mapping.md states each one's result. R3 adds R3_RECOVERY (category administrative-recovery, and
+one authority-api-surface guard), R3_SIMULATOR (simulator-source-
+conformance) and R3_NATIVE (implementation-safety). Each restores one wrong
+behaviour of the R3 administrative recoveries, of the simulator's rmdir and
+rename rules, or of the native directory removal, and must fail its R3
+regression with its marker.
+
+R2's description follows.
+
+P2-V1-R3B-I3-I1-R2 negative controls for the custody store.
+
+Adapted from docs/evidence/p2-v1-r3b-i3-i1-r1/scripts/store_controls.py
+(which stays unchanged); the adaptation diff is
+store_controls.adaptation.diff. R1's 99 counted controls keep their ids,
+categories, intended tests, markers and intentions. Seven anchors moved to
+the equivalent defect point of the R2 sources, because the code they
+anchored now meets a findings collector or retains a bound verification
+(REANCHORED names each one and why). A-ADMISSION-UNBOUND stays in REMAPPED,
+as in R1. R2's maintenance authority adds its own behavioural controls
+(R2_MAINTENANCE, category maintenance-authority).
+
+R1's own history: adapted from docs/evidence/p2-v1-r3b-i3-i1/scripts/
+store_controls.py. Three I3-I1 anchors moved to the equivalent defect point
+of the R1 sources (I-VALIDATOR-INEXACT, I-SEAL-WHILE-LATCHED,
+A-WORKER-LOCK), and A-ADMISSION-UNBOUND has no remaining behavioural call
+site; its intention is carried by API/type guards (api_probes.py). The R1
+boundaries added R1_BINDINGS (category authority-binding).
+
+Each counted control restores one wrong behaviour in the store's own test
+infrastructure (support/custody/store/) and must:
+
+- apply: every edit's anchor occurs exactly once in its file, in order;
+- compile: the store target builds (no "error[E", no "could not compile");
+- run its one intended test alone (--exact) and fail it ("0 passed; 1
+  failed", "<test> ... FAILED");
+- fail the intended assertion: the panic message carries the control's
+  marker (and every `require` string, and no `forbid` string);
+- restore: the mutated files are written back byte for byte in `finally`;
+  every file of FILES is verified by SHA-256 before each control and after
+  each restoration, and the worktree status must equal the expected status.
+
+Categories, counted separately and never added into one figure:
+implementation-safety (the store's own logic, including the Linux
+primitives that the N- controls exercise beneath CARGO_TARGET_TMPDIR),
+simulator-source-conformance (the simulator's fidelity to the cited kernel
+paths), and authority-api-surface (an authority the store must not have,
+caught by a source or type guard rather than by behaviour),
+authority-binding (R1) and maintenance-authority (R2). Design controls
+of the R5 Python model that no Rust mutation restores are listed in the
+coverage matrix as historical Python-model controls; they are not counted
+here.
+
+The protected custody core (core.rs, model.rs, codec.rs) and its tests are
+never mutated by this script; they are hashed to prove it.
+
+Usage:
+  store_controls.py <checkout> <log directory> [--expected-status FILE]
+  store_controls.py <checkout> --check-anchors
+
+<checkout> must hold exactly the candidate's sources (CANDIDATE_SOURCES).
+Without --expected-status the checkout must be clean (the committed
+candidate). It mutates and restores files in the checkout, so run it alone,
+with nothing else building, testing or editing there.
+"""
+import hashlib
+import json
+import pathlib
+import subprocess
+import sys
+
+TESTS = "crates/nexus-verifier-sandbox/tests"
+CUSTODY = f"{TESTS}/support/custody"
+STORE = f"{CUSTODY}/store"
+TARGET = "phase2_custody_store"
+FILES = [
+    f"{STORE}/classify.rs",
+    f"{STORE}/disposition.rs",
+    f"{STORE}/exchange.rs",
+    f"{STORE}/faults.rs",
+    f"{STORE}/format.rs",
+    f"{STORE}/io.rs",
+    f"{STORE}/maintenance.rs",
+    f"{STORE}/mod.rs",
+    f"{STORE}/open.rs",
+    f"{STORE}/owner.rs",
+    f"{STORE}/recorder.rs",
+    f"{STORE}/sim.rs",
+    f"{TESTS}/{TARGET}.rs",
+    f"{CUSTODY}/mod.rs",
+    f"{CUSTODY}/core.rs",
+    f"{CUSTODY}/model.rs",
+    f"{CUSTODY}/codec.rs",
+    f"{TESTS}/phase2_custody_core.rs",
+    f"{TESTS}/phase2_custody_codec.rs",
+]
+# The frozen candidate's sources (store_controls.py <checkout> --print-sources).
+CANDIDATE_SOURCES = {}  # R3-CANDIDATE-SOURCES
+
+SIM = f"{STORE}/sim.rs"
+FMT = f"{STORE}/format.rs"
+CLS = f"{STORE}/classify.rs"
+OPN = f"{STORE}/open.rs"
+EXC = f"{STORE}/exchange.rs"
+REC = f"{STORE}/recorder.rs"
+MNT = f"{STORE}/maintenance.rs"
+IO = f"{STORE}/io.rs"
+DSP = f"{STORE}/disposition.rs"
+OWN = f"{STORE}/owner.rs"
+FLT = f"{STORE}/faults.rs"
+
+
+def control(cid, category, design, what, edits, test, marker, require=(), forbid=()):
+    return dict(
+        id=cid, category=category, design=list(design), what=what,
+        edits=[dict(file=f, anchor=a, replacement=r) for (f, a, r) in edits],
+        test=test, marker=marker, require=list(require), forbid=list(forbid),
+    )
+
+# ---------------------------------------------------------------------------
+# Simulator conformance: the simulator's fidelity to the cited kernel paths
+# ---------------------------------------------------------------------------
+
+SIMULATOR = [
+    control(
+        "S-F1-DURABLE", "simulator-source-conformance", ["NC01"],
+        "process death makes kernel-visible bytes durable",
+        [(SIM, r'''        if let Some(proc) = self.procs.get_mut(&pid) {
+            proc.alive = false;
+        }
+    }
+
+    fn power_loss(
+''', r'''        if let Some(proc) = self.procs.get_mut(&pid) {
+            proc.alive = false;
+        }
+        for inode in self.inodes.values_mut() {
+            if inode.kind != FileType::Directory {
+                inode.d = inode.k.clone();
+                inode.pending.clear();
+            }
+        }
+    }
+
+    fn power_loss(
+''')],
+        "s01_process_death_and_power_loss_keep_states_apart", "[F1-volatile]",
+        require=["process death made the write durable"],
+    ),
+    control(
+        "S-REOPEN-CERTIFIES", "simulator-source-conformance", ["NC03"],
+        "a sync that returns 0 (as a new description's does after an error was seen) makes the visible bytes durable",
+        [(SIM, r'''            if error != 0 && result.is_ok() {
+                result = Err(Errno::Io);
+            }
+        }
+        result
+    }
+''', r'''            if error != 0 && result.is_ok() {
+                result = Err(Errno::Io);
+            }
+        }
+        if result.is_ok() {
+            if let Some(inode) = state.inodes.get_mut(&ino) {
+                inode.d = inode.k.clone();
+            }
+        }
+        result
+    }
+''')],
+        "s02_writeback_errors_are_not_repaired_by_reopening", "[errseq-reopen]",
+        require=["the durable bytes lack the write"],
+    ),
+    control(
+        "S-TEAR-SPANS", "simulator-source-conformance", [],
+        "a torn write reaches past its own 4096-byte block",
+        [(SIM, r'''fn tear(inode: &mut Inode, block: u64, outcome: Tear) {
+    let lo = block as usize * BLOCK;
+    let hi = ((block as usize + 1) * BLOCK).min(inode.k.len());
+''', r'''fn tear(inode: &mut Inode, block: u64, outcome: Tear) {
+    let lo = block as usize * BLOCK;
+    let hi = ((block as usize + 2) * BLOCK).min(inode.k.len());
+''')],
+        "s05_tears_stay_within_their_block", "[tear-containment]",
+    ),
+    control(
+        "S-SCHEDULES-GUARANTEED-ONLY", "simulator-source-conformance", ["NC22a"],
+        "directory entries become durable only through a directory sync (the R1 model): the ordered family is the guaranteed minimum alone",
+        [(SIM, r'''        if ordered {
+            let last = self.log.last().map_or(self.op_count, |half| half.op + 1);
+            return (self.min_cut()..=last).map(Schedule::Ordered).collect();
+        }
+''', r'''        if ordered {
+            return vec![Schedule::Ordered(self.min_cut())];
+        }
+''')],
+        "s04_metadata_schedules_and_split_renames", "[metadata-schedules]",
+        require=["ordered prefixes"],
+    ),
+    control(
+        "S-NO-RECLAIM-WHILE-OPEN", "simulator-source-conformance", ["NC22b"],
+        "no page reclaim while a descriptor is open (the R1 model)",
+        [(SIM, r'''    pub fn reclaim_pages(&self, ino: Ino) {
+        let mut state = self.lock();
+''', r'''    pub fn reclaim_pages(&self, ino: Ino) {
+        let mut state = self.lock();
+        if state.ofds.values().any(|ofd| ofd.ino == ino) {
+            return;
+        }
+''')],
+        "s03_page_reclaim_with_a_descriptor_open", "[metadata-schedules]",
+    ),
+    control(
+        "S-ERRSEQ-NO-WRAP", "simulator-source-conformance", [],
+        "an invented detection: the error-sequence counter saturates instead of wrapping, so a 2^19-error collision would be detected",
+        [(SIM, r'''            new = new.wrapping_add(Self::CTR_INC);
+''', r'''            new = new.saturating_add(Self::CTR_INC);
+''')],
+        "j06_the_errseq_counter_limitation_is_documented_not_detected", "[errseq-limit]",
+        require=["no detection"],
+    ),
+    control(
+        "S-COMPLETED-TESTS-ABORT", "simulator-source-conformance", ["NC-FSYNC-COMPLETED"],
+        "R3's fsync model: the completed-transaction branch tests the abort flag",
+        [(SIM, r'''        self.trace.push(JournalTrace::CompletedBranch {
+            aborted: self.aborted,
+        });
+''', r'''        self.trace.push(JournalTrace::CompletedBranch {
+            aborted: self.aborted,
+        });
+        if self.aborted {
+            return Err(Errno::Io);
+        }
+''')],
+        "j01_the_completed_transaction_return", "[journal-conformance]",
+        require=["the completed branch returns 0 untested"],
+    ),
+    control(
+        "S-INVENTED-ABORT", "simulator-source-conformance", ["NC-ERR-DETECTED"],
+        "a discarded flush status treated as detected: an abort invented at an unchecked flush site",
+        [(SIM, r'''        if ok {
+            Flush::Ok
+        } else {
+            Flush::Failed
+        }
+''', r'''        if ok {
+            Flush::Ok
+        } else {
+            if !checked {
+                self.abort("an invented abort at an unchecked flush site");
+            }
+            Flush::Failed
+        }
+''')],
+        "j02_discarded_flushes_lose_history_on_a_volatile_cache", "[journal-conformance]",
+        require=["the discarded status changes nothing"],
+    ),
+    control(
+        "S-INFLIGHT-COMPLETE", "simulator-source-conformance", ["NC-STORAGE-COMPLETION"],
+        "durability before completion: a home write still in flight counts as done and releases the tail",
+        [(SIM, r'''            HomeState::Written | HomeState::Durable | HomeState::Failed
+''', r'''            HomeState::Written | HomeState::Durable | HomeState::Failed | HomeState::InFlight
+''')],
+        "j03_the_stable_completion_checkpoint", "[stable-completion]",
+        require=["in flight"],
+    ),
+    control(
+        "S-HOME-ERROR-SUCCESS", "simulator-source-conformance", ["NC-STORAGE-ERROR"],
+        "a reported home-write error converted into success (journal model)",
+        [(SIM, r'''        if outcome == Home::Fail {
+            self.dev_err = true;
+        }
+        if let Some(txn) = self.txns.get_mut(&tid) {
+            txn.home = match outcome {
+                Home::InFlight => HomeState::InFlight,
+                Home::Fail => HomeState::Failed,
+''', r'''        if let Some(txn) = self.txns.get_mut(&tid) {
+            txn.home = match outcome {
+                Home::InFlight => HomeState::InFlight,
+                Home::Fail => HomeState::Durable,
+''')],
+        "j03_the_stable_completion_checkpoint", "[stable-completion]",
+        require=["a failed home write is reported"],
+    ),
+    control(
+        "S-TAIL-WITHOUT-HOME", "simulator-source-conformance", ["NC-STORAGE-TAIL"],
+        "required history discarded: the log tail moves past a failed home write",
+        [(SIM, r'''        if self.dev_err {
+            self.abort("a home write failed (journal.c:1861-1864)");
+            return Err(Errno::Io);
+        }
+''', "")],
+        "j03_the_stable_completion_checkpoint", "[stable-completion]",
+        require=["a failed home write"],
+    ),
+    control(
+        "S-WRITEBACK-ERROR-SWALLOWED", "simulator-source-conformance", ["NC-STORAGE-ERROR"],
+        "a writeback error the storage reported is not recorded in the error sequence (the sync returns 0)",
+        [(SIM, r'''                if fail {
+                    inode.errseq.set(EIO);
+                    continue;
+                }
+''', r'''                if fail {
+                    continue;
+                }
+''')],
+        "r01_acknowledged_implies_durable_under_write_and_sync_faults", "[ack-durable]",
+        require=["a reported write error is never an acknowledgement"],
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# Implementation safety: formats, classification, bindings, dispositions
+# ---------------------------------------------------------------------------
+
+FORMATS = [
+    control(
+        "I-HEADER-RESERVED", "implementation-safety", ["NC10a"],
+        "header reserved bytes unchecked",
+        [(FMT, r'''    if !zero(&block[60..64]) || !zero(&block[89..92]) {
+''', r'''    if false {
+''')],
+        "f01_header_bytes_are_assigned_and_checked", "[exact-bytes]",
+        require=["reserved 60..64"],
+    ),
+    control(
+        "I-SEAL-TAIL", "implementation-safety", ["NC10b"],
+        "seal tail bytes unchecked (the first candidate's unassigned bytes)",
+        [(FMT, r'''    if !zero(&block[5..8]) || !zero(&block[126..128]) || !zero(&block[160..]) {
+''', r'''    if !zero(&block[5..8]) || !zero(&block[126..128]) {
+''')],
+        "f02_seal_bytes_are_assigned_and_checked", "[exact-bytes]",
+        require=["seal tail bytes"],
+    ),
+    control(
+        "I-RECORD-PADDING", "implementation-safety", ["NC10c"],
+        "record-block padding unchecked",
+        [(FMT, r'''        Ok(_) if !zero(&block[end..]) => RecordBlock::Invalid("padding".into()),
+''', "")],
+        "f03_record_blocks_take_exactly_one_frame", "[exact-bytes]",
+        require=["padding"],
+    ),
+    control(
+        "I-INVALID-HEADER-ABANDONED", "implementation-safety", ["NC10d"],
+        "a checksum-valid invalid header taken as an abandoned claim (the first candidate)",
+        [(CLS, r'''            Some(HeaderParse::Invalid(why)) => {
+                report.class = FileClass::MalformedPoolFile;
+                report.reason = format!("header invalid ({why})");
+                return finish_report(report);
+            }
+''', r'''            Some(HeaderParse::Invalid(_)) if self.rest_zero => {
+                report.class = FileClass::AbandonedClaim;
+                return finish_report(report);
+            }
+            Some(HeaderParse::Invalid(why)) => {
+                report.class = FileClass::MalformedPoolFile;
+                report.reason = format!("header invalid ({why})");
+                return finish_report(report);
+            }
+''')],
+        "f01_header_bytes_are_assigned_and_checked", "[exact-bytes]",
+        require=["taken as AbandonedClaim"],
+    ),
+    control(
+        "I-DECIMAL-LEADING-ZERO", "implementation-safety", ["NC10e"],
+        "non-canonical decimals (leading zeros) accepted in text",
+        [(FMT, r'''        && (bytes.len() == 1 || bytes[0] != b'0');
+''', r'''        && !bytes.is_empty();
+''')],
+        "f04_provision_grammar_is_exact", "[exact-bytes]",
+        require=["leading zero"],
+    ),
+    control(
+        "I-BINDING-LOCATION", "implementation-safety", ["NC11a"],
+        "a journal's binding depends on where its bytes lie (the pool index), so the archive copy loses it",
+        [(CLS, r'''            let binding = bind_journal(
+                &root_id,
+                header.claim,
+                &header.generation,
+                &report.content,
+                class,
+            );
+''', r'''            let binding = bind_journal(
+                &root_id,
+                header.claim,
+                &header.generation,
+                &super::format::sha256(&[&report.content[..], &index.to_be_bytes()[..]].concat()),
+                class,
+            );
+''')],
+        "m04_archival_recycling_retirement_and_succession", "[archive-binding]",
+    ),
+    control(
+        "I-BINDING-NO-CONTENT", "implementation-safety", ["NC11b"],
+        "a journal's binding ignores its content",
+        [(FMT, r'''    data.extend_from_slice(generation);
+    data.extend_from_slice(content);
+    data.push(class.byte());
+''', r'''    data.extend_from_slice(generation);
+    let _ = content;
+    data.push(class.byte());
+''')],
+        "f07_bindings_are_content_addressed", "[archive-binding]",
+        require=["journal binding bytes"],
+    ),
+    control(
+        "I-GRAMMAR-G16", "implementation-safety", ["NC13"],
+        "grammar rule G16 (a Failed verdict if and only if admission closed) removed",
+        [(CLS, r'''                if (verdict == Verdict::Failed) != self.closed {
+                    return Err(Rule::G16);
+                }
+''', "")],
+        "g01_grammar_fixtures_prefixes_and_mutations", "[grammar-conformance]",
+    ),
+    control(
+        "I-REFUSE-ONLY-RECORDED", "implementation-safety", ["NC09"],
+        "refuse an unsealed generation only when it recorded outstanding work",
+        [(CLS, r'''        if matches!(
+            report.class,
+            FileClass::UnsealedAction | FileClass::MalformedJournal
+        ) {
+''', r'''        if report.class == FileClass::MalformedJournal
+            || (report.class == FileClass::UnsealedAction && !report.recorded_unsettled.is_empty())
+        {
+'''), (CLS, r'''    report.refused = refused(class) || class == FileClass::SizeInvalid;
+''', r'''    report.refused = (refused(class)
+        && (class != FileClass::UnsealedAction || !report.recorded_unsettled.is_empty()))
+        || class == FileClass::SizeInvalid;
+''')],
+        "k04_a_late_owner_without_an_acknowledged_record_still_blocks", "[no-false-resolution]",
+    ),
+    control(
+        "I-VISIBLE-RUNENDED-RESOLVES", "implementation-safety", ["NC16"],
+        "a visible RunEnded taken as resolution",
+        [(CLS, r'''            SealParse::Unsealed | SealParse::Unreadable if summary.action_started => {
+                FileClass::UnsealedAction
+            }
+''', r'''            SealParse::Unsealed | SealParse::Unreadable
+                if summary.action_started && summary.run_ended.is_none() =>
+            {
+                FileClass::UnsealedAction
+            }
+''')],
+        "c01_classes_and_the_conservative_refusal", "[no-false-resolution]",
+        require=["a visible RunEnded is not resolution"],
+    ),
+    control(
+        "I-LATE-NOTE-MISSING", "implementation-safety", [],
+        "an unsealed generation's report omits that late owners may exist with no durable record",
+        [(CLS, r'''        report.notes.push(NOTE_LATE);
+''', "")],
+        "c01_classes_and_the_conservative_refusal", "[late-uncertain]",
+    ),
+    control(
+        "I-DECIDE-FROM-REPORT", "implementation-safety", ["NC24b"],
+        "a startup decided from the truncated report",
+        [(CLS, r'''    let current = current_incidents(level);
+    if current.len() > incident_limit {
+''', r'''    let current = bounded_report(level).detail;
+    if current.len() > incident_limit {
+''')],
+        "c03_pool_level_checks_and_bounded_reports", "[aggregate-bounds]",
+        require=["never from the report"],
+    ),
+    control(
+        "I-NONDETERMINISTIC-REPORT", "implementation-safety", [],
+        "a file's report depends on something other than its bytes (a call counter)",
+        [(CLS, r'''fn finish_report(mut report: FileReport) -> FileReport {
+    let class = report.class;
+''', r'''fn finish_report(mut report: FileReport) -> FileReport {
+    static CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let call = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    report.reason.push_str(&format!(" (call {call})"));
+    let class = report.class;
+''')],
+        "c02_classification_is_deterministic", "[archive-binding]",
+        require=["determinism"],
+    ),
+    control(
+        "I-VALIDATOR-INEXACT", "implementation-safety", [],
+        "the disposition validator accepts a disposition that does not restate the incident's facts",
+        [(DSP, r'''        && disposition.facts == incident.facts
+''', r'''        && {
+            let _ = incident;
+            true
+        }
+''')],
+        "f09_the_validator_accepts_only_an_exact_restatement", "[disposition-exact]",
+        require=["another count"],
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# Implementation safety: opening, activation, profile, storage, the scan
+# ---------------------------------------------------------------------------
+
+PROBE = r'''    io.touch(lock)
+        .map_err(|error| Refused::Unreliable(format!("activation probe: {:?}", error.errno)))?;
+    hooks.activation(ActivationPoint::ProbeFsync);
+    io.fsync(lock)
+        .map_err(|error| Refused::Unreliable(format!("activation probe: {:?}", error.errno)))?;
+'''
+
+OWNER_ACTIVATION = r'''    let admission = activate(
+        io,
+        &Activation {
+            path,
+            selection: &selection,
+            dirs: &dirs,
+            lock: &lock,
+            opening,
+            observed: &observed,
+            pinning: Pinning::Pinned,
+        },
+        hooks,
+    )
+    .map_err(|refused| fail(refused, revision))?;
+    drop(observed);
+'''
+
+OPENING = [
+    control(
+        "I-PRESERVATION-SKIPPED", "implementation-safety", ["NC02"],
+        "startup reports what it read without the evidence-preservation sync",
+        [(OPN, r'''        if mode == ScanMode::Owner && io.fdatasync(file).is_err() {
+            return Err(findings.stop(
+                format!("pool-unreliable {name}"),
+                Refused::Unreliable(name.clone()),
+            ));
+        }
+''', "")],
+        "o13_the_preservation_sync_makes_what_the_report_saw_durable", "[F1-F2-sync]",
+    ),
+    control(
+        "I-SYNC-BEFORE-LOCK", "implementation-safety", ["NC06"],
+        "startup syncs and reads journals before taking the store lock (the first candidate)",
+        [(OPN, r'''        let lock = open_checked(io, &dirs.root, "LOCK", &lock_stat)
+            .map_err(|refused| fail(refused, revision))?;
+        hooks.before_lock(attempt);
+''', r'''        let lock = open_checked(io, &dirs.root, "LOCK", &lock_stat)
+            .map_err(|refused| fail(refused, revision))?;
+        if let Ok(store_dirs) = open_store_dirs(io, &dirs.root, &selection.provision) {
+            for index in 0..selection.provision.pool() {
+                if let Ok(file) = io.open_read(&store_dirs.journals, &pool_name(index)) {
+                    let _ = io.fdatasync(&file);
+                    let mut block = [0u8; 16];
+                    let _ = io.pread(&file, 0, &mut block);
+                }
+            }
+        }
+        hooks.before_lock(attempt);
+''')],
+        "o03_busy_before_any_sync_or_read", "[busy-before-sync]",
+        require=["synced or read the store"],
+    ),
+    control(
+        "I-NO-REVALIDATION", "implementation-safety", ["NC21a"],
+        "no post-lock revalidation of the PROVISION selection",
+        [(OPN, r'''    fresh().unwrap_or(false)
+}
+''', r'''    let _ = fresh;
+    true
+}
+''')],
+        "o04_a_replaced_selection_never_regains_authority", "[provision-selection]",
+        require=["the new revision"],
+    ),
+    control(
+        "I-OPEN-BEFORE-TYPE", "implementation-safety", ["NC14a"],
+        "an untrusted pool entry is opened before its type is checked",
+        [(OPN, r'''    for (index, inode) in provision.pool_inodes.iter().enumerate() {
+        let name = pool_name(index as u32);
+''', r'''    for (index, inode) in provision.pool_inodes.iter().enumerate() {
+        let name = pool_name(index as u32);
+        let _ = io.open_read(&dirs.journals, &name);
+''')],
+        "o05_safe_open_refuses_before_opening", "[safe-open]",
+        require=["the entry was opened"],
+    ),
+    control(
+        "I-PROVISION-INODE-IGNORED", "implementation-safety", ["NC12b"],
+        "a pool file whose inode PROVISION does not record is accepted",
+        [(OPN, r'''        if stat.ino != *inode {
+            return Err(findings.stop(
+                format!("pool-replaced {name}"),
+                lost(format!("{name} replaced")),
+            ));
+        }
+''', r'''        let _ = inode;
+''')],
+        "o05_safe_open_refuses_before_opening", "[safe-open]",
+        require=["a replaced pool file"],
+    ),
+    control(
+        "I-EXT4-MAGIC", "implementation-safety", ["NC14b"],
+        "ext4 decided by the shared superblock magic alone: the mount's filesystem type is not checked",
+        [(OPN, r'''    if record.fstype != "ext4" {
+        return Err(unsupported(format!("filesystem {}", record.fstype)));
+    }
+''', "")],
+        "o06_the_mount_is_identified_through_the_descriptor", "[safe-open]",
+        require=["ext3"],
+    ),
+    control(
+        "I-NO-ACTIVATION", "implementation-safety", ["NC-ACT-VISIBLE"],
+        "a freshly revalidated, visible selection treated as activated: no directory syncs, no PROVISION sync, no probe",
+        [(OPN, r'''    for which in ACTIVATION_DIRECTORIES {
+        hooks.activation(ActivationPoint::BeforeSync(which));
+''', r'''    for which in ACTIVATION_DIRECTORIES.into_iter().take(0) {
+        hooks.activation(ActivationPoint::BeforeSync(which));
+'''), (OPN, r'''    sync_with_retries(io, &provision, true).map_err(|error| {
+        Refused::Unreliable(format!("activation sync of PROVISION: {:?}", error.errno))
+    })?;
+''', ""), (OPN, PROBE, r'''    hooks.activation(ActivationPoint::ProbeFsync);
+''')],
+        "o02_activation_precedes_every_decision_and_the_claim", "[durable-activation]",
+        require=["the probe"],
+    ),
+    control(
+        "I-ACTIVATION-AFTER-SCAN", "implementation-safety", ["NC-ACT-ORDER"],
+        "the scan, the decision (and so the claim) before the activation",
+        [(OPN, OWNER_ACTIVATION + r'''    hooks.before_scan();
+''', r'''    hooks.before_scan();
+'''), (OPN, r'''    let StoreDirs { journals, .. } = store_dirs;
+    Ok(Opened {
+''', OWNER_ACTIVATION + r'''    let StoreDirs { journals, .. } = store_dirs;
+    Ok(Opened {
+''')],
+        "o02_activation_precedes_every_decision_and_the_claim", "[durable-activation]",
+        require=["order"],
+    ),
+    control(
+        "I-R2-PROTOCOL", "implementation-safety", ["NC-ACT-COMPOSE"],
+        "the R2 protocol: no activation, and a root holding history not found after Unprovisioned (so a fresh one replaces it), run through the composed tests",
+        [(OPN, r'''    for which in ACTIVATION_DIRECTORIES {
+        hooks.activation(ActivationPoint::BeforeSync(which));
+''', r'''    for which in ACTIVATION_DIRECTORIES.into_iter().take(0) {
+        hooks.activation(ActivationPoint::BeforeSync(which));
+'''), (OPN, r'''    sync_with_retries(io, &provision, true).map_err(|error| {
+        Refused::Unreliable(format!("activation sync of PROVISION: {:?}", error.errno))
+    })?;
+''', ""), (OPN, PROBE, r'''    hooks.activation(ActivationPoint::ProbeFsync);
+'''), (MNT, r'''                if buf[..got].iter().any(|byte| *byte != 0) {
+                    history = true;
+                    break;
+                }
+''', r'''                if buf[..got].iter().any(|byte| *byte != 0) {
+                    break;
+                }
+''')],
+        "x01_composed_recovery_keeps_every_acknowledged_generation", "[composed-recovery]",
+    ),
+    control(
+        "I-ACTIVATION-ERROR-IGNORED", "implementation-safety", ["NC-ACT-ERROR"],
+        "a failed or uncertain activation directory sync treated as success",
+        [(OPN, r'''        sync_with_retries(io, &handle, false).map_err(|error| {
+            Refused::Unreliable(format!(
+                "activation sync of {}: {:?}",
+                which.label(),
+                error.errno
+            ))
+        })?;
+''', r'''        let _ = sync_with_retries(io, &handle, false);
+''')],
+        "o11_activation_refuses_on_failure_and_certifies_late_errors", "[durable-activation]",
+        require=["sync 0 failing"],
+    ),
+    control(
+        "I-NO-PROBE", "implementation-safety", ["NC-ACT-PROBE"],
+        "no certification probe: syncs that returned 0 after a silent commit failure are trusted",
+        [(OPN, PROBE, r'''    hooks.activation(ActivationPoint::ProbeFsync);
+''')],
+        "o11_activation_refuses_on_failure_and_certifies_late_errors", "[activation-proof]",
+        require=["a silent abort"],
+    ),
+    control(
+        "I-PROBE-FIRST", "implementation-safety", ["NC-PROOF-ORDER"],
+        "the probe runs before the directory syncs",
+        [(OPN, r'''    // A3: the probe, after the last A2 sync.
+    hooks.activation(ActivationPoint::Probe);
+''' + PROBE, r'''    // A3 moved before A2.
+'''), (OPN, r'''    // A2: each dependency directory, resolved afresh, checked, synced.
+''', r'''    hooks.activation(ActivationPoint::Probe);
+''' + PROBE + r'''    // A2: each dependency directory, resolved afresh, checked, synced.
+''')],
+        "o02_activation_precedes_every_decision_and_the_claim", "[durable-activation]",
+        require=["order"],
+    ),
+    control(
+        "I-NO-A4", "implementation-safety", ["NC-ACT-REVALIDATE"],
+        "the selection and directory revalidation after the activation syncs (A4) omitted",
+        [(OPN, r'''    hooks.activation(ActivationPoint::Revalidate);
+    for which in ACTIVATION_DIRECTORIES {
+        let (base, name, expected) =
+            resolve_activation(io, path, selection, which).map_err(|_| {
+                Refused::SelectionChanged(format!("after activation: {}", which.label()))
+            })?;
+        match io.stat_at(&base, &name) {
+            Ok(stat) if stat.ino == expected => {}
+            _ => {
+                return Err(Refused::SelectionChanged(format!(
+                    "after activation: {}",
+                    which.label()
+                )))
+            }
+        }
+    }
+    if !revalidate(io, path, selection, lock) {
+        return Err(Refused::SelectionChanged("after activation".into()));
+    }
+''', r'''    hooks.activation(ActivationPoint::Revalidate);
+''')],
+        "o11_activation_refuses_on_failure_and_certifies_late_errors", "[provision-selection]",
+        require=["a replacement racing activation"],
+    ),
+    control(
+        "I-A2-IDENTITY", "implementation-safety", [],
+        "an activation directory is synced without checking it is the selected one",
+        [(OPN, r'''        if stat.ino != expected || stat.file_type != FileType::Directory {
+            return Err(invalid(format!(
+                "activation: {} is not the selected directory",
+                which.label()
+            )));
+        }
+''', "")],
+        "o11_activation_refuses_on_failure_and_certifies_late_errors", "[durable-activation]",
+        require=["identity"],
+    ),
+    control(
+        "I-KERNEL-PREFIX", "implementation-safety", ["NC-ACT-UNQUALIFIED"],
+        "the kernel accepted by its release prefix, not its exact build identity",
+        [(OPN, r'''        if format!("{release} {version}") != provision.kernel {
+''', r'''        let _ = &version;
+        if !provision.kernel.starts_with(release.as_str()) {
+''')],
+        "o07_the_effective_profile_is_read_not_inferred", "[supported-profile]",
+        require=["another kernel"],
+    ),
+    control(
+        "I-EXTERNAL-JOURNAL", "implementation-safety", ["NC-PROF-JOURNAL"],
+        "an external journal accepted: the journal's location never checked",
+        [(OPN, r'''    let journal = format!("{name}-{JOURNAL_INODE}");
+    if !io
+        .jbd2_entry_exists(&journal)
+        .map_err(|error| unsupported(format!("journal location: {error}")))?
+    {
+        return Err(unsupported("journal not internal"));
+    }
+''', "")],
+        "o07_the_effective_profile_is_read_not_inferred", "[supported-profile]",
+        require=["an external journal"],
+    ),
+    control(
+        "I-EXCLUDED-MODE", "implementation-safety", ["NC-PROF-MODE"],
+        "an excluded mode in the effective listing accepted",
+        [(OPN, r'''        || EXCLUDED_OPTIONS
+            .iter()
+            .any(|option| listed.contains(option))
+''', "")],
+        "o07_the_effective_profile_is_read_not_inferred", "[supported-profile]",
+    ),
+    control(
+        "I-PROFILE-FROM-PINNED", "implementation-safety", ["NC-ACT-UNQUALIFIED"],
+        "the profile taken from the pinned mountinfo strings: the effective listing, journal and kernel never read",
+        [(OPN, r'''        .to_string();
+    let listing = io
+        .ext4_options(&name, OPTIONS_LIMIT)
+''', r'''        .to_string();
+    if !name.is_empty() {
+        return Ok(name);
+    }
+    let listing = io
+        .ext4_options(&name, OPTIONS_LIMIT)
+''')],
+        "o07_the_effective_profile_is_read_not_inferred", "[supported-profile]",
+    ),
+    control(
+        "I-NO-A4-PROFILE", "implementation-safety", ["NC-PROF-GUARD"],
+        "the effective profile not checked again after the activation syncs (A4)",
+        [(OPN, r'''    let (device, _) = check_mount(
+        io,
+        &selection.provision,
+        &fresh_root,
+        &[&fresh_provdir, &fresh_parent],
+        pinning,
+    )?;
+''', r'''    let _ = (&fresh_provdir, &fresh_parent);
+    let device = major_minor(
+        io.stat_dir(&fresh_root)
+            .map_err(|error| io_refusal(error, "state root"))?
+            .dev,
+    );
+''')],
+        "o08_a_profile_changed_during_activation_refuses_at_a4", "[supported-profile]",
+        require=["A4"],
+    ),
+    control(
+        "I-WRITE-CACHE-ALONE", "implementation-safety", ["NC-STORAGE-VOLATILE"],
+        "a volatile-completion profile admitted as stable: queue/write_cache alone decides",
+        [(OPN, r'''    let cache = (write_cache.as_slice(), fua.as_slice());
+    if cache == (&b"write back\n"[..], &b"1\n"[..]) {
+        return Err(unsupported("volatile write cache"));
+    }
+    if cache == (&b"write through\n"[..], &b"1\n"[..]) {
+        return Err(unsupported(
+            "volatile write cache, flushes disabled in the kernel's view only",
+        ));
+    }
+    if cache != (ADMITTED_CACHE.0.as_bytes(), ADMITTED_CACHE.1.as_bytes()) {
+        return Err(unsupported("contradictory storage information"));
+    }
+''', r'''    let _ = &fua;
+    if write_cache != ADMITTED_CACHE.0.as_bytes() {
+        return Err(unsupported("volatile write cache"));
+    }
+''')],
+        "o09_storage_that_is_not_admitted_refuses_before_any_claim", "[storage-qualification]",
+    ),
+    control(
+        "I-IDENTITY-UNCHECKED", "implementation-safety", ["NC-STORAGE-CLAIM"],
+        "the storage identity PROVISION records is not compared: another device of the same kind is admitted",
+        [(OPN, r'''            || observation.partition != provision.storage_partition
+            || observation.identity != provision.storage_identity)
+''', r'''            || observation.partition != provision.storage_partition)
+''')],
+        "o09_storage_that_is_not_admitted_refuses_before_any_claim", "[storage-qualification]",
+    ),
+    control(
+        "I-ATTESTATION-ADMITS", "implementation-safety", ["NC-STORAGE-COMPOSED"],
+        "storage admitted on the Owner's attestation (A-S5, R4's domain), whatever the device shows",
+        [(OPN, r''') -> Result<StorageObservation, Refused> {
+    let link = io
+        .block_device_link(device.0, device.1)
+''', r''') -> Result<StorageObservation, Refused> {
+    if !provision.storage_attestation.is_empty() {
+        return Ok(StorageObservation {
+            pci_function: provision.storage_pci_function.clone(),
+            partition: provision.storage_partition,
+            identity: provision.storage_identity,
+            controller_dir: String::new(),
+            disk_dir: String::new(),
+        });
+    }
+    let link = io
+        .block_device_link(device.0, device.1)
+''')],
+        "x03_storage_events_composed", "[storage-composed]",
+    ),
+    control(
+        "I-CLAIM-UNBOUNDED", "implementation-safety", ["NC17"],
+        "the claim counter is not bounded at 2^63",
+        [(OPN, r'''        .filter(|claim| *claim <= MAX_CLAIM)
+''', "")],
+        "c04_the_claim_counter_never_wraps", "[arith-bounds]",
+    ),
+    control(
+        "I-TMP-DISPOSITION", "implementation-safety", ["NC12a"],
+        "a disposition under a temporary name is read as a disposition",
+        [(OPN, r'''    name == "revoked" || format::parse_disposition_name(name).is_some()
+''', r'''    name == "revoked"
+        || name.starts_with(TMP_PREFIX)
+        || format::parse_disposition_name(name).is_some()
+'''), (OPN, r'''        if *name != format::disposition_name(&disposition.binding) {
+''', r'''        if !name.starts_with(TMP_PREFIX) && *name != format::disposition_name(&disposition.binding) {
+''')],
+        "m09_the_crash_matrix_is_the_documented_one", "[admin-crash]",
+    ),
+    control(
+        "I-BOUND-AFTER-EXAMINE", "implementation-safety", ["NC24a"],
+        "enumeration bounds checked only after the entries were examined",
+        [(OPN, r'''    match io.list_dir(dir, limit) {
+        Ok(Listing::Names(names)) => Ok(names),
+''', r'''    match io.list_dir(dir, usize::MAX) {
+        Ok(Listing::Names(names)) if names.len() > limit => {
+            for name in &names {
+                let _ = io.open_read(dir, name);
+            }
+            Err(invalid(format!("enumeration bound: {what}")))
+        }
+        Ok(Listing::Names(names)) => Ok(names),
+''')],
+        "m07_aggregate_bounds_refuse_before_any_entry_is_examined", "[aggregate-bounds]",
+        require=["an entry was examined"],
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# Implementation safety: the recorder, the exchange and the admission gate
+# ---------------------------------------------------------------------------
+
+RECORDER = [
+    control(
+        "I-DURABLE-BEFORE-SYNC", "implementation-safety", ["NC15a"],
+        "a record is published durable without its sync",
+        [(REC, r'''        if let Err(error) = sync_with_retries(&self.io, &self.file, true) {
+            return self.fail(Cause::Sync(seq, error.errno));
+        }
+''', "")],
+        "r01_acknowledged_implies_durable_under_write_and_sync_faults", "[ack-durable]",
+        require=["acknowledged before it was durable"],
+    ),
+    control(
+        "I-SYNC-RETRIED-AFTER-EIO", "implementation-safety", ["NC15b"],
+        "a failed sync (EIO) is retried into success",
+        [(IO, r'''            Err(IoError {
+                errno: Errno::Intr, ..
+            }) if attempts < RETRIES => attempts += 1,
+''', r'''            Err(IoError {
+                errno: Errno::Intr | Errno::Io,
+                ..
+            }) if attempts < RETRIES => attempts += 1,
+''')],
+        "r01_acknowledged_implies_durable_under_write_and_sync_faults", "[ack-durable]",
+    ),
+    control(
+        "I-WORKER-IDENTITY", "implementation-safety", [],
+        "the worker's recheck (W5) is skipped: a write to a replaced journal is published",
+        [(REC, r'''    fn identity_ok(&self) -> bool {
+''', r'''    fn identity_ok(&self) -> bool {
+        if !self.name.is_empty() {
+            return true;
+        }
+''')],
+        "r10_a_replaced_journal_latches_before_publication", "[ack-durable]",
+    ),
+    control(
+        "I-NO-GATE", "implementation-safety", ["NC18a"],
+        "no store admission gate: admission continues after a fatal condition",
+        [(EXC, r'''        let held = self.exchange.acquire();
+        if let Some((cause, _)) = held.state.fatal {
+            return Err(GateRefused::RecorderFatal { reservation, cause });
+        }
+''', r'''        let held = self.exchange.acquire();
+''')],
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record", "[admission-fence]",
+    ),
+    control(
+        "I-FAILURE-AT-CAUSE", "implementation-safety", ["NC18b"],
+        "R1 failure targeting: the failure is delivered at the cause's own sequence",
+        [(EXC, r'''        let target = evidence.acknowledged + 1;
+''', r'''        let target = match self.exchange.acquire().state.fatal {
+            Some((Cause::Conflict(seq) | Cause::InvalidSubmission(seq, _), _)) => seq,
+            _ => evidence.acknowledged + 1,
+        };
+''')],
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record", "[fatal-total]",
+    ),
+    control(
+        "I-FUTURE-SILENT", "implementation-safety", ["NC18c"],
+        "a submission for an unissued future sequence is ignored silently",
+        [(EXC, r'''    if seq != state.submitted_through + 1 {
+        state.latch(Cause::InvalidSubmission(seq, Invalid::Future));
+        return false;
+    }
+''', r'''    if seq != state.submitted_through + 1 {
+        return false;
+    }
+''')],
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record", "[fatal-total]",
+        require=["a future sequence"],
+    ),
+    control(
+        "I-PUBLISH-AFTER-LATCH", "implementation-safety", ["NC18d"],
+        "the worker publishes durability after the fatal latch",
+        [(REC, r'''            if !held.poisoned && held.state.fatal.is_none() && held.state.durable_through + 1 == seq
+            {
+''', r'''            if !held.poisoned && held.state.durable_through + 1 == seq {
+''')],
+        "r03_every_interleaving_of_gate_worker_apply_and_latch", "[admission-fence]",
+        require=["published after the latch"],
+    ),
+    control(
+        "I-UNEXPECTED-ACK-IGNORED", "implementation-safety", ["NC18e"],
+        "an unexpected acknowledgement outcome is ignored",
+        [(EXC, r'''                if outcome == AckOutcome::Acknowledged {
+                    self.applied_through = seq;
+                } else {
+                    self.exchange.latch(Cause::UnexpectedAck(seq, outcome));
+                    self.stopped = true;
+                    break;
+                }
+''', r'''                let _ = outcome;
+                self.applied_through = seq;
+''')],
+        "r05_in_flight_appends_and_unexpected_acknowledgement_outcomes", "[fatal-total]",
+        require=["an unexpected outcome latches"],
+    ),
+    control(
+        "I-FAIL-UNISSUED", "implementation-safety", ["NC18f"],
+        "record_failed for a record not issued yet, counted as delivered",
+        [(EXC, r'''        if target > evidence.issued {
+            self.delivery = Delivery::Waiting;
+            return;
+        }
+''', ""), (EXC, r'''        self.delivery = if outcome == AckOutcome::FailureRecorded {
+            Delivery::Delivered { target }
+        } else {
+            Delivery::IntegrationFault { target, outcome }
+        };
+''', r'''        let _ = outcome;
+        self.delivery = Delivery::Delivered { target };
+''')],
+        "r04_worker_loss_vanishing_and_poisoning", "[fatal-total]",
+        require=["no record to fail yet"],
+    ),
+    control(
+        "I-DELIVERY-DROPPED", "implementation-safety", ["NC08"],
+        "the failure is reported as a message the core never applies",
+        [(EXC, r'''        let outcome = custody.record_failed(id, now);
+''', r'''        let _ = (id, now);
+        let outcome = AckOutcome::FailureRecorded;
+''')],
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record", "[fatal-total]",
+        require=["the core recorded the failure"],
+    ),
+    control(
+        "I-DUP-CONFLICT", "implementation-safety", ["NC07"],
+        "an identical resubmission is a conflict (submission not idempotent)",
+        [(EXC, r'''            .is_some_and(|stored| stored.digest == intent.digest);
+        if !same {
+''', r'''            .is_some_and(|stored| stored.digest == intent.digest);
+        if !same || seq > 0 {
+''')],
+        "r09_resubmission_is_idempotent_and_bounded", "[dup-bounded]",
+        require=["a duplicate is not a conflict"],
+    ),
+    control(
+        "I-DUP-RETAINED", "implementation-safety", ["NC07"],
+        "an identical resubmission is stored and retained again (a growing queue)",
+        [(EXC, r'''        if !same {
+            state.latch(Cause::Conflict(seq));
+        }
+        return false;
+''', r'''        if !same {
+            state.latch(Cause::Conflict(seq));
+            return false;
+        }
+        return true;
+'''), (EXC, r'''            if self.recorder.retained.len() as u64 == seq - 1 {
+                self.recorder.retained.push(intent.clone());
+            }
+''', r'''            self.recorder.retained.push(intent.clone());
+''')],
+        "r09_resubmission_is_idempotent_and_bounded", "[dup-bounded]",
+        require=["one retained copy each"],
+    ),
+    control(
+        "I-TIMEOUT-STOPS", "implementation-safety", [],
+        "a bounded wait that times out is taken as the worker having stopped",
+        [(EXC, r'''            held = self.exchange.wait_owner(held);
+        }
+        held.state.durable_through
+''', r'''            held = self.exchange.wait_owner(held);
+        }
+        if held.state.durable_through < seq && held.state.fatal.is_none() {
+            held.state.latch(Cause::WorkerVanished);
+        }
+        held.state.durable_through
+''')],
+        "r06_a_stall_is_reported_never_failed_and_nothing_waits_on_storage", "[fatal-latched]",
+        require=["a timeout is never a failure"],
+    ),
+    control(
+        "I-POISON-IGNORED", "implementation-safety", [],
+        "a poisoned exchange mutex is used as if healthy",
+        [(EXC, r'''            Err(poisoned) => {
+                let mut state = poisoned.into_inner();
+                state.note_poison();
+                Held {
+                    state,
+                    poisoned: true,
+                }
+            }
+''', r'''            Err(poisoned) => Held {
+                state: poisoned.into_inner(),
+                poisoned: false,
+            },
+''')],
+        "r04_worker_loss_vanishing_and_poisoning", "[fatal-total]",
+        require=["a poisoned mutex"],
+    ),
+    control(
+        "I-VANISHED-IGNORED", "implementation-safety", [],
+        "a worker thread that ended without a recorded exit is not noticed",
+        [(EXC, r'''        if vanished {
+            self.exchange.latch(Cause::WorkerVanished);
+        }
+''', r'''        let _ = vanished;
+''')],
+        "r04_worker_loss_vanishing_and_poisoning", "[fatal-total]",
+        require=["a vanished worker"],
+    ),
+    control(
+        "I-NO-DROP-GUARD", "implementation-safety", [],
+        "a worker that unwinds latches nothing (its drop guard disarmed)",
+        [(REC, r'''        if self.armed {
+            self.exchange.latch(Cause::WorkerLost);
+        }
+''', r'''        let _ = self.armed;
+''')],
+        "r04_worker_loss_vanishing_and_poisoning", "[fatal-total]",
+        require=["worker loss latched by its drop guard"],
+    ),
+    control(
+        "I-SEAL-WHILE-LATCHED", "implementation-safety", [],
+        "a seal is requested although a fatal cause is latched",
+        [(EXC, r'''            if let Some((cause, _)) = held.state.fatal {
+                return Err(SealWithheld::Latched(cause));
+            }
+            if held.state.claim != ClaimState::Claimed {
+''', r'''            if held.state.claim != ClaimState::Claimed {
+'''), (EXC, r'''            if let Some((cause, _)) = held.state.fatal {
+                return Err(SealWithheld::Latched(cause));
+            }
+            held.state.seal = SealState::Requested(seal);
+''', r'''            held.state.seal = SealState::Requested(seal);
+''')],
+        "r08_claim_and_seal_boundaries", "[fatal-total]",
+        require=["no seal for a failed claim", "Latched(ClaimWrite)"],
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# Implementation safety: maintenance sessions and procedures
+# ---------------------------------------------------------------------------
+
+MAINTENANCE = [
+    control(
+        "I-SESSION-NEW-LOCK", "implementation-safety", ["NC20a"],
+        "in-session verification requests a new shared lock on the store lock (the R1 workflow)",
+        [(MNT, r'''        let OpenedRoot { dirs, .. } =
+            open_root(&self.io, &self.path, &self.selection, self.opening, pinning)
+                .map_err(|refused| findings.stop("open-root".into(), refused))?;
+''', r'''        let OpenedRoot { dirs, .. } =
+            open_root(&self.io, &self.path, &self.selection, self.opening, pinning)
+                .map_err(|refused| findings.stop("open-root".into(), refused))?;
+        let fresh = super::open::open_lock(&self.io, &dirs.root, &self.selection.provision)
+            .map_err(|refused| findings.stop("open-lock".into(), refused))?;
+        if self.io.flock(&fresh, LockRequest::Shared).is_err() {
+            return Err(findings.stop("busy".into(), Refused::Busy));
+        }
+''')],
+        "m01_sessions_verify_through_their_retained_lock", "[session-verify]",
+    ),
+    control(
+        "I-SESSION-SHARED", "implementation-safety", ["NC20b"],
+        "in-session verification converts the session's exclusive lock to shared",
+        [(MNT, r'''        let lock = self
+            .locks
+            .get(state)
+            .ok_or_else(|| findings.stop("not-authorized".into(), Refused::NotAuthorized))?;
+''', r'''        let lock = self
+            .locks
+            .get(state)
+            .ok_or_else(|| findings.stop("not-authorized".into(), Refused::NotAuthorized))?;
+        let _ = self.io.flock(lock, LockRequest::Shared);
+''')],
+        "m01_sessions_verify_through_their_retained_lock", "[session-verify]",
+    ),
+    control(
+        "I-SESSION-RELOCK", "implementation-safety", ["NC20c"],
+        "the session releases its lock around verification and takes it again",
+        [(MNT, r'''        let store_dirs = open_store_dirs(&self.io, &dirs.root, &self.selection.provision)
+            .map_err(|refused| findings.stop("store-directories".into(), refused))?;
+        let held: BTreeMap<u32, &P::File> = self
+''', r'''        let store_dirs = open_store_dirs(&self.io, &dirs.root, &self.selection.provision)
+            .map_err(|refused| findings.stop("store-directories".into(), refused))?;
+        if let Some(old) = self.locks.remove(state) {
+            drop(old);
+            let relocked = super::open::open_lock(&self.io, &dirs.root, &self.selection.provision)
+                .map_err(|refused| findings.stop("open-lock".into(), refused))?;
+            if self.io.flock(&relocked, LockRequest::Exclusive).is_err() {
+                return Err(findings.stop("busy".into(), Refused::Busy));
+            }
+            self.locks.insert(state.to_string(), relocked);
+        }
+        let held: BTreeMap<u32, &P::File> = self
+''')],
+        "m01_sessions_verify_through_their_retained_lock", "[session-verify]",
+    ),
+    control(
+        "I-BUSY-SUCCESS", "implementation-safety", ["NC20d"],
+        "a standalone verification that found the store busy proceeds as a success",
+        [(OPN, r'''        if io.flock(&lock, LockRequest::Shared).is_err() {
+            return Err(fail(Refused::Busy, revision));
+        }
+''', r'''        let _ = io.flock(&lock, LockRequest::Shared);
+''')],
+        "m01_sessions_verify_through_their_retained_lock", "[session-verify]",
+        require=["the standalone verifier is Busy"],
+    ),
+    control(
+        "I-AUTHORITY-FLAG", "implementation-safety", ["NC20e"],
+        "maintenance authority asserted by a flag instead of the retained lock",
+        [(MNT, r'''    pub fn authorized(&self, state: &str) -> bool {
+        if !self.active {
+            return false;
+        }
+''', r'''    pub fn authorized(&self, state: &str) -> bool {
+        if self.active && !state.is_empty() {
+            return true;
+        }
+        if !self.active {
+            return false;
+        }
+''')],
+        "m01_sessions_verify_through_their_retained_lock", "[session-verify]",
+        require=["authority only from the retained lock"],
+    ),
+    control(
+        "I-VERIFY-CACHED", "implementation-safety", ["NC20f"],
+        "in-session verification skipped: an earlier report reused",
+        [(MNT, r'''    pub fn verify(&mut self, config: &Config) -> Result<SessionReport, Refusal> {
+''', r'''    pub fn verify(&mut self, config: &Config) -> Result<SessionReport, Refusal> {
+        thread_local! {
+            static LAST: std::cell::RefCell<Option<SessionReport>> =
+                const { std::cell::RefCell::new(None) };
+        }
+        if let Some(last) = LAST.with(|last| last.borrow().clone()) {
+            return Ok(last);
+        }
+'''), (MNT, r'''        let outcome = assessment.outcome();
+''', r'''        let outcome = assessment.outcome();
+        if let Ok(report) = &outcome {
+            LAST.with(|last| *last.borrow_mut() = Some(report.clone()));
+        }
+''')],
+        "m01_sessions_verify_through_their_retained_lock", "[session-verify]",
+        require=["verify-after scans afresh"],
+    ),
+    control(
+        "I-RETIRE-NO-PRECONDITIONS", "implementation-safety", ["NC12c"],
+        "retirement without its preconditions hides pool claims",
+        [(MNT, r'''pub fn retirement_allowed(report: &SessionReport, through: u64) -> bool {
+''', r'''pub fn retirement_allowed(report: &SessionReport, through: u64) -> bool {
+    if through > 0 {
+        return true;
+    }
+''')],
+        "m04_archival_recycling_retirement_and_succession", "[admin-crash]",
+        require=["retirement without its preconditions"],
+    ),
+    control(
+        "I-RETIRE-FROM-REPORT", "implementation-safety", ["NC24c"],
+        "retirement preconditions evaluated on the truncated report",
+        [(MNT, r'''    report
+        .scan
+        .level
+        .incidents
+        .iter()
+        .all(|(binding, incident)| {
+''', r'''    report
+        .scan
+        .report
+        .detail
+        .iter()
+        .all(|(binding, incident)| {
+''')],
+        "m10_retirement_is_decided_from_the_complete_set", "[aggregate-bounds]",
+    ),
+    control(
+        "I-HIDDEN-STEP", "implementation-safety", ["NC23"],
+        "an undocumented directory sync in recycling (a step the protocol does not list)",
+        [(MNT, r'''    {
+        let (io, path, tmp) = (Rc::clone(&io), journals_path.clone(), tmp);
+        proc.add("13.8/3", move || {
+''', r'''    {
+        let (io, path) = (Rc::clone(&io), journals_path.clone());
+        proc.add("13.8/3", move || sync_dir(&*io, &dir_ref(&*io, &path)?));
+    }
+    {
+        let (io, path, tmp) = (Rc::clone(&io), journals_path.clone(), tmp);
+        proc.add("13.8/3", move || {
+''')],
+        "m08_procedures_perform_exactly_the_documented_steps", "[step-parity]",
+        require=["P-RECYCLE"],
+    ),
+    control(
+        "I-FRESH-ROOT", "implementation-safety", [],
+        "after Unprovisioned, a root holding history is not found, so a fresh root replaces it (the R2 protocol)",
+        [(MNT, r'''                if buf[..got].iter().any(|byte| *byte != 0) {
+                    history = true;
+                    break;
+                }
+''', r'''                if buf[..got].iter().any(|byte| *byte != 0) {
+                    break;
+                }
+''')],
+        "m06_an_unprovisioned_root_with_history_is_republished", "[composed-recovery]",
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# Native: the Linux primitives (exercised beneath CARGO_TARGET_TMPDIR only)
+# ---------------------------------------------------------------------------
+
+OPEN_READ_FLAGS = r'''                libc::O_RDONLY
+                    | libc::O_NONBLOCK
+                    | libc::O_NOCTTY
+                    | libc::O_NOFOLLOW
+                    | libc::O_CLOEXEC,
+                0,
+                "openat2 read",
+'''
+
+NATIVE = [
+    control(
+        "N-DOT-NAME", "implementation-safety", [],
+        "a component name of . or .. is accepted",
+        [(IO, r'''        if value.is_empty() || value == "." || value == ".." || value.contains('/') {
+''', r'''        if value.is_empty() || value.contains('/') {
+''')],
+        "n01_native_opening_is_descriptor_relative_and_no_follow", "[safe-open]",
+    ),
+    control(
+        "N-FOLLOW", "implementation-safety", [],
+        "symbolic links are followed (O_NOFOLLOW and RESOLVE_NO_SYMLINKS both removed)",
+        [(IO, r'''    const RESOLVE: u64 = libc::RESOLVE_BENEATH
+        | libc::RESOLVE_NO_SYMLINKS
+''', r'''    const RESOLVE: u64 = libc::RESOLVE_BENEATH
+'''), (IO, OPEN_READ_FLAGS, OPEN_READ_FLAGS.replace("                    | libc::O_NOFOLLOW\n", ""))],
+        "n01_native_opening_is_descriptor_relative_and_no_follow", "[safe-open]",
+        require=["a link refuses"],
+    ),
+    control(
+        "N-BLOCKING", "implementation-safety", [],
+        "an entry is opened for reading without O_NONBLOCK (a FIFO open blocks)",
+        [(IO, OPEN_READ_FLAGS, OPEN_READ_FLAGS.replace("                    | libc::O_NONBLOCK\n", ""))],
+        "n03_native_fifo_opens_without_blocking", "[safe-open]",
+        require=["the FIFO open blocked or failed"],
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# Authority surface: authority the store must not have, caught by a source
+# or type guard (not behaviour)
+# ---------------------------------------------------------------------------
+
+ENTRY = r'''    let _ = request;
+    Err(IntegrationUnavailable::DeploymentNotAuthorized)
+}
+'''
+
+AUTHORITY = [
+    control(
+        "A-ENTRY-CALLS", "authority-api-surface", [],
+        "the real configured-store entry evaluates its request before refusing",
+        [(OPN, ENTRY, r'''    let _ = request.provision_path.len();
+    Err(IntegrationUnavailable::DeploymentNotAuthorized)
+}
+''')],
+        "o01_the_real_store_entry_is_closed", "[real-entry-closed]",
+        require=["it calls nothing"],
+    ),
+    control(
+        "A-ENTRY-SWITCH", "authority-api-surface", [],
+        "the real configured-store entry reads an environment switch",
+        [(OPN, ENTRY, r'''    let _ = request;
+    if std::env::var_os("NEXUS_P2_REAL_STORE").is_some() {
+        return Err(IntegrationUnavailable::DeploymentNotAuthorized);
+    }
+    Err(IntegrationUnavailable::DeploymentNotAuthorized)
+}
+''')],
+        "o01_the_real_store_entry_is_closed", "[real-entry-closed]",
+        require=["a switch"],
+    ),
+    control(
+        "A-ADMISSION-CLONE", "authority-api-surface", [],
+        "a storage admission can be cloned (and so kept beyond its opening)",
+        [(OPN, r'''#[derive(Debug)]
+pub struct StorageAdmission {
+''', r'''#[derive(Debug, Clone)]
+pub struct StorageAdmission {
+''')],
+        "o10_a_storage_admission_is_bound_to_its_opening", "[storage-qualification]",
+        require=["no Clone or Default"],
+    ),
+    control(
+        "A-ADMISSION-FORGED", "authority-api-surface", [],
+        "a storage admission constructed outside the storage check (a second constructor)",
+        [(OPN, r'''impl StorageAdmission {
+    pub fn opening(&self) -> OpeningId {
+''', r'''pub fn forged_admission(opening: OpeningId, observation: StorageObservation) -> StorageAdmission {
+    StorageAdmission {
+        opening,
+        provision_digest: [0; 32],
+        observation,
+    }
+}
+
+impl StorageAdmission {
+    pub fn opening(&self) -> OpeningId {
+''')],
+        "o10_a_storage_admission_is_bound_to_its_opening", "[storage-qualification]",
+        require=["one constructor"],
+    ),
+    control(
+        "A-LOCK-UNLOCK", "authority-api-surface", ["NC05b"],
+        "the store's I/O trait gains a lock release (a duplicate's LOCK_UN releases the original's lock)",
+        [(IO, r'''    /// `LOCK_SH | LOCK_NB`.
+    Shared,
+}
+''', r'''    /// `LOCK_SH | LOCK_NB`.
+    Shared,
+    /// `LOCK_UN`.
+    Unlock,
+}
+'''), (IO, r'''                LockRequest::Shared => libc::LOCK_SH | libc::LOCK_NB,
+''', r'''                LockRequest::Shared => libc::LOCK_SH | libc::LOCK_NB,
+                LockRequest::Unlock => libc::LOCK_UN,
+'''), (SIM, r'''                LockRequest::Shared => "flock-sh",
+''', r'''                LockRequest::Shared => "flock-sh",
+                LockRequest::Unlock => "flock-un",
+'''), (SIM, r'''                LockRequest::Shared => LockMode::Shared,
+''', r'''                LockRequest::Shared => LockMode::Shared,
+                LockRequest::Unlock => LockMode::Shared,
+''')],
+        "a01_the_authority_surface_is_fixed_in_the_source", "[lock-retained]",
+        require=["a lock request only takes a lock"],
+    ),
+    control(
+        "A-WORKER-LOCK", "authority-api-surface", ["NC05a"],
+        "the recorder worker holds a lock description (the first candidate's recorder thread)",
+        [(REC, r'''pub(super) struct Worker<P: StoreIo> {
+    io: P,
+''', r'''pub(super) struct Worker<P: StoreIo> {
+    io: P,
+    lock: Option<P::File>,
+'''), (REC, r'''        Worker {
+            io,
+''', r'''        Worker {
+            io,
+            lock: None,
+''')],
+        "a01_the_authority_surface_is_fixed_in_the_source", "[lock-retained]",
+        require=["the worker holds a lock description"],
+    ),
+    control(
+        "A-GATE-SPLIT", "authority-api-surface", ["NC19"],
+        "the admission gate's health check is followed by an unprotected admission call",
+        [(EXC, r'''        let admitted = custody.admit(reservation, now);
+        drop(held);
+''', r'''        drop(held);
+        let admitted = custody.admit(reservation, now);
+''')],
+        "a01_the_authority_surface_is_fixed_in_the_source", "[admission-fence]",
+    ),
+    control(
+        "A-SELECTION-KEPT", "authority-api-surface", ["NC21b"],
+        "a selection keeps a descriptor from its read (through which revalidation could look)",
+        [(OPN, r'''pub struct Selection {
+    pub provision: Provision,
+''', r'''pub struct Selection {
+    pub kept: Option<std::os::fd::RawFd>,
+    pub provision: Provision,
+'''), (OPN, r'''    Ok(Selection {
+        provision,
+''', r'''    Ok(Selection {
+        kept: None,
+        provision,
+''')],
+        "a01_the_authority_surface_is_fixed_in_the_source", "[provision-selection]",
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# R1: behavioural controls of the authority bindings P2-V1-R3B-I3-I1-R1 added
+# (closure to seal, the opening's complete set, disposition provenance, the
+# exchange's containment, the session's verification, the exclusion's life)
+# ---------------------------------------------------------------------------
+
+R1_BINDINGS = [
+    control(
+        "R1-REFUSED-CLOSE-SEALS", "authority-binding", [],
+        "(B1) a refused closure still requests the seal, from the recorder's durable count",
+        [(OWN, r'''            Err(custody) => Err(Box::new(StoreOwner {
+                custody: *custody,
+''', r'''            Err(custody) => Err(Box::new(StoreOwner {
+                custody: {
+                    let durable = recorder.status().durable_through;
+                    let _ = recorder.request_seal(&header, durable, now.0);
+                    *custody
+                },
+''')],
+        "b01_a_refused_closure_requests_no_seal_and_keeps_its_owner", "[closure-seal]",
+        require=["no seal requested"],
+    ),
+    control(
+        "R1-START-FROM-REPORT", "authority-binding", [],
+        "(B3) the start decides over the incidents the bounded report lists, not the complete set",
+        [(OWN, r'''    let current = opened.current();
+''', r'''    let listed: Vec<[u8; 32]> = opened
+        .report()
+        .report
+        .detail
+        .iter()
+        .map(|(binding, _)| *binding)
+        .collect();
+    let current: Vec<([u8; 32], super::classify::Incident)> = opened
+        .current()
+        .into_iter()
+        .filter(|(binding, _)| listed.contains(binding))
+        .collect();
+''')],
+        "b04_a_truncated_report_hides_no_blocking_incident", "[complete-set]",
+    ),
+    control(
+        "R1-VALIDATOR-UNCHECKED", "authority-binding", [],
+        "(B5) the store's validator returns a validation for any disposition file, exact or not",
+        [(DSP, r'''        exact_restatement(&self.root_id, bytes, incident, disposition)
+            .then(|| ValidatedDisposition::new(*binding, disposition.reason))
+''', r'''        let _ = (incident, exact_restatement);
+        Some(ValidatedDisposition::new(*binding, disposition.reason))
+''')],
+        "b06_a_disposition_takes_effect_only_through_its_opening", "[disposition-provenance]",
+        require=["another count"],
+    ),
+    control(
+        "R1-APPLIED-REASON-INVENTED", "authority-binding", [],
+        "(B5) the claim's applied reasons are not the verified disposition files' reasons",
+        [(OPN, r'''                .map(|disposition| (*binding, disposition.reason))
+''', r'''                .map(|_| (*binding, DispositionReason::Other))
+''')],
+        "b06_a_disposition_takes_effect_only_through_its_opening", "[disposition-provenance]",
+        require=["the dispositioned store refused"],
+    ),
+    control(
+        "R1-FAULT-ACKS-UNDURABLE", "authority-binding", [],
+        "(B6) the fault interface acknowledges a record that is not durable",
+        [(FLT, r'''    if seq == 0 || seq > durable {
+''', r'''    if seq == 0 || durable == u64::MAX {
+''')],
+        "b07_status_copies_and_fault_operations_clear_and_manufacture_nothing",
+        "[exchange-contained]",
+        require=["no acknowledgement of a record that is not durable"],
+    ),
+    control(
+        "R1-FAULT-INJECTS-NEXT", "authority-binding", [],
+        "(B6) the fault interface submits a record the sink stores as the next one",
+        [(FLT, r'''        if stores_as_new(&held, intent) {
+''', r'''        if stores_as_new(&held, intent) && intent.id.seq() == 0 {
+''')],
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record",
+        "[exchange-contained]",
+        require=["the next valid record is not a fault"],
+    ),
+    control(
+        "R1-LATCH-REPLACED", "authority-binding", [],
+        "(B6) a later latch replaces the first cause (a latch is no longer monotonic)",
+        [(EXC, r'''    pub(super) fn latch(&mut self, cause: Cause) {
+        if self.fatal.is_none() {
+''', r'''    pub(super) fn latch(&mut self, cause: Cause) {
+        if self.fatal.is_none() || self.later_causes == 0 {
+''')],
+        "b07_status_copies_and_fault_operations_clear_and_manufacture_nothing",
+        "[exchange-contained]",
+        require=["the first cause stays"],
+    ),
+    control(
+        "R1-VERIFICATION-REUSED", "authority-binding", [],
+        "(session) one session verification authorizes more than one procedure",
+        [(MNT, r'''            .verified
+            .take()
+''', r'''            .verified
+            .clone()
+''')],
+        "b08_a_session_decides_only_from_its_own_current_verification", "[session-verify]",
+        require=["one verification, one procedure"],
+    ),
+    control(
+        "R1-VERIFICATION-NEVER-LAPSES", "authority-binding", [],
+        "(session) a procedure step does not lapse the session's earlier verification",
+        [(MNT, r'''            if let Some(mutations) = &step.session {
+                mutations.set(mutations.get() + 1);
+            }
+''', r'''            let _ = &step.session;
+''')],
+        "b08_a_session_decides_only_from_its_own_current_verification", "[session-verify]",
+        require=["older than the revocation"],
+    ),
+    control(
+        "R1-GUARD-NOT-KEPT", "authority-binding", [],
+        "(exclusion) the worker's thread does not keep the owner's guard: the exclusion ends with the owner, I/O in flight",
+        [(OWN, r'''        let handle = spawn_worker(*worker, hooks, Arc::clone(&self.guard));
+''', r'''        let handle = spawn_worker(*worker, hooks, ());
+''')],
+        "b09_exclusion_outlasts_the_owner_while_its_io_is_in_flight", "[closure-owner]",
+        require=["exclusion while I/O is in flight"],
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# R2: maintenance authority (P2-V1-R3B-I3-I1-R2). Each restores one wrong
+# behaviour of the session's verification, succession's authorization, the
+# procedures' gate and verify-after, or a procedure the maintenance audit
+# repaired. The verification's binding to the session's own selection and
+# opening (NC-SUCC-FOREIGN) has no behavioural call site: a verification
+# cannot be moved between sessions or built outside the store, which the
+# API/type guards show (api_probes.py, reported apart).
+# ---------------------------------------------------------------------------
+
+SUCCESSION_BLOCKING = r'''    if !report.blocking.is_empty() {
+        return Err(format!(
+            "{} current incident(s) without an exact disposition",
+            report.blocking.len()
+        ));
+    }
+'''
+
+R2_MAINTENANCE = [
+    control(
+        "NC-SUCC-NO-VERIFY", "maintenance-authority", [],
+        "(F1) succession needs no verify-before: without one it verifies for itself",
+        [(MNT, r'''    let assessment = session.borrow_mut().take_assessment()?;
+    let verified = succession_conditions(&assessment)?;
+''', r'''    let assessment = {
+        let mut s = session.borrow_mut();
+        match s.take_assessment() {
+            Ok(assessment) => assessment,
+            Err(_) => {
+                let limit = s.incident_limit;
+                s.assess(limit)
+            }
+        }
+    };
+    let verified = succession_conditions(&assessment)?;
+''')],
+        "v05_only_the_sessions_own_verify_before_authorizes", "[succession-verified]",
+        require=["store B's session has not verified"],
+    ),
+    control(
+        "NC-SUCC-MISSING-DISPOSITION", "maintenance-authority", [],
+        "(B-S1) succession over a current incident without an exact disposition",
+        [(MNT, SUCCESSION_BLOCKING, r'''''')],
+        "v01_succession_needs_every_bound_incident_dispositioned", "[succession-dispositioned]",
+        require=["two undispositioned incidents"],
+    ),
+    control(
+        "NC-SUCC-REPORT-TRUNCATION", "maintenance-authority", [],
+        "(B-S2) succession counts only the incidents the bounded report lists in detail",
+        [(MNT, SUCCESSION_BLOCKING, r'''    let listed = report
+        .blocking
+        .iter()
+        .filter(|binding| {
+            report
+                .scan
+                .report
+                .detail
+                .iter()
+                .any(|(found, _)| found == *binding)
+        })
+        .count();
+    if listed > 0 {
+        return Err(format!(
+            "{} current incident(s) without an exact disposition",
+            listed
+        ));
+    }
+''')],
+        "v03_succession_decides_over_the_complete_set_not_the_report", "[succession-complete-set]",
+        require=["the two unlisted incidents"],
+    ),
+    control(
+        "NC-SUCC-STALE", "maintenance-authority", [],
+        "(B-S4) a verification older than a procedure step still authorizes",
+        [(MNT, r'''        if verification.epoch != self.mutations.get() {
+''', r'''        if verification.epoch > self.mutations.get() {
+''')],
+        "v04_a_stale_or_consumed_verification_authorizes_no_succession", "[succession-current]",
+        require=["older than the revocation"],
+    ),
+    control(
+        "NC-SUCC-REUSE-AUTH", "maintenance-authority", [],
+        "one verification authorizes a second succession (not consumed)",
+        [(MNT, r'''    fn take_assessment(&mut self) -> Result<Assessment, String> {
+        Ok(self.take_verification()?.assessment)
+    }
+''', r'''    fn take_assessment(&mut self) -> Result<Assessment, String> {
+        let kept = self.verified.clone();
+        let taken = self.take_verification()?.assessment;
+        self.verified = kept;
+        Ok(taken)
+    }
+''')],
+        "v04_a_stale_or_consumed_verification_authorizes_no_succession", "[succession-verified]",
+        require=["the second use of one verification"],
+    ),
+    control(
+        "NC-SUCC-OMIT-INVALID", "maintenance-authority", [],
+        "(F2) the Owner's acceptance may omit a verified store-level Invalid condition",
+        [(MNT, r'''    if acceptance != verified {
+''', r'''    if !acceptance.iter().all(|name| verified.contains(name)) {
+''')],
+        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
+        "[succession-invalid-accepted]",
+        require=["one verified condition omitted"],
+    ),
+    control(
+        "NC-SUCC-INVENT-INVALID", "maintenance-authority", [],
+        "(F2) the Owner's acceptance may name a condition the verification did not find",
+        [(MNT, r'''    if acceptance != verified {
+''', r'''    if !verified.iter().all(|name| acceptance.contains(name)) {
+''')],
+        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
+        "[succession-invalid-accepted]",
+        require=["a condition not verified"],
+    ),
+    control(
+        "NC-SUCC-REPEAT-INVALID", "maintenance-authority", [],
+        "(F2) a condition the Owner accepts twice counts once",
+        [(MNT, r'''    acceptance.sort();
+    if acceptance != verified {
+''', r'''    acceptance.sort();
+    acceptance.dedup();
+    if acceptance != verified {
+''')],
+        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
+        "[succession-invalid-accepted]",
+        require=["a condition twice"],
+    ),
+    control(
+        "NC-SUCC-STATEMENT-CALLER", "maintenance-authority", [],
+        "(F2) the predecessor statement is the Owner's list as given, not generated from the verified set",
+        [(MNT, r'''    let statement = predecessor_statement(&verified)?;
+''', r'''    let statement = predecessor_statement(accepted)?;
+''')],
+        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
+        "[succession-invalid-accepted]",
+        require=["the predecessor statement"],
+    ),
+    control(
+        "NC-SUCC-STATEMENT-TRUNCATED", "maintenance-authority", [],
+        "(F2) a statement over 512 bytes is truncated instead of refused",
+        [(MNT, r'''    if text.len() > 512 {
+        return Err(format!(
+            "the accepted conditions need {} bytes; a statement holds 512",
+            text.len()
+        ));
+    }
+    Ok(text)
+''', r'''    let mut text = text;
+    text.truncate(512);
+    Ok(text)
+''')],
+        "v09_a_condition_set_that_does_not_fit_the_statement_refuses",
+        "[succession-invalid-accepted]",
+        require=["too long for a statement"],
+    ),
+    control(
+        "NC-SUCC-CAPACITY-BYPASS", "maintenance-authority", [],
+        "(F3) more claim gaps than the store can hold dispositions for count as a complete proof",
+        [(MNT, r'''        let complete = report
+            .as_ref()
+            .is_some_and(|report| report.scan.level.gaps_unenumerated == 0)
+''', r'''        let complete = report.as_ref().is_some()
+'''), (MNT, r'''    if report.scan.level.gaps_unenumerated > 0 {
+''', r'''    if report.scan.level.gaps_unenumerated == u64::MAX {
+''')],
+        "v07_capacity_without_a_complete_proof_refuses_succession", "[succession-complete-set]",
+        require=["counted, not enumerated"],
+    ),
+    control(
+        "NC-SUCC-NO-POSTVERIFY", "maintenance-authority", [],
+        "(F4) succession has no verify-after",
+        [(MNT, r'''    proc.gate(gate);
+    proc.finish(move || {
+        let mut s = finish_session.borrow_mut();
+''', r'''    proc.gate(gate);
+    let _unused = (move || -> Result<(), String> {
+        let mut s = finish_session.borrow_mut();
+''')],
+        "v02_succession_verifies_the_selected_successor_after_publication",
+        "[succession-verify-after]",
+        require=["re-selection, then verify-after"],
+    ),
+    control(
+        "NC-SUCC-POSTVERIFY-IGNORED", "maintenance-authority", [],
+        "(B-S3) the successor's verify-after runs and what it finds is ignored",
+        [(MNT, r'''        let assessment = s.verify_after();
+        if !assessment.complete || !assessment.conditions.is_empty() {
+''', r'''        let assessment = s.verify_after();
+        if assessment.revision == u64::MAX {
+''')],
+        "v10_a_successor_that_does_not_verify_leaves_the_succession_incomplete",
+        "[succession-verify-after]",
+        require=["the successor does not verify"],
+    ),
+    control(
+        "NC-SUCC-VERIFY-OLD-ROOT", "maintenance-authority", [],
+        "the verify-after runs before the re-selection: it verifies the predecessor, not the successor",
+        [(MNT, r'''        publish.add(last.label, move || {
+            (last.action)()?;
+            session.borrow_mut().reselect()
+        });
+''', r'''        publish.add(last.label, move || {
+            (last.action)()?;
+            let _ = &session;
+            Ok(())
+        });
+'''), (MNT, r'''        let mut s = finish_session.borrow_mut();
+        let selected = s.selection().provision.clone();
+''', r'''        let mut s = finish_session.borrow_mut();
+        let early = s.verify_after();
+        s.reselect()?;
+        let selected = s.selection().provision.clone();
+'''), (MNT, r'''        let assessment = s.verify_after();
+        if !assessment.complete || !assessment.conditions.is_empty() {
+''', r'''        let assessment = early;
+        if !assessment.complete || !assessment.conditions.is_empty() {
+''')],
+        "v10_a_successor_that_does_not_verify_leaves_the_succession_incomplete",
+        "[succession-verify-after]",
+        require=["the successor does not verify"],
+    ),
+    control(
+        "NC-SUCC-NO-GATE", "maintenance-authority", [],
+        "(B-S4) succession has no gate: an authorization overtaken by another procedure's step still runs",
+        [(MNT, r'''    proc.gate(gate);
+    proc.finish(move || {
+''', r'''    let _: &dyn FnMut() -> Result<(), String> = &gate;
+    proc.finish(move || {
+''')],
+        "v12_no_succession_operation_precedes_its_gate", "[succession-gate]",
+        require=["overtaken"],
+    ),
+    control(
+        "NC-SUCC-MUTATE-BEFORE-GATE", "maintenance-authority", [],
+        "the succession's gate is checked after its first operation, not before it",
+        [(MNT, r'''            if self.done == 0 {
+                if let Some(gate) = self.gate.as_mut() {
+                    gate().map_err(|why| format!("{} (gate): {why}", self.name))?;
+                }
+            }
+            let step = &mut self.steps[self.done];
+''', r'''            if self.done == 0 && self.name != "P-SUCCESSOR" {
+                if let Some(gate) = self.gate.as_mut() {
+                    gate().map_err(|why| format!("{} (gate): {why}", self.name))?;
+                }
+            }
+            let step = &mut self.steps[self.done];
+'''), (MNT, r'''            let mut result = (step.action)();
+            if result.is_ok() && self.done + 1 == last {
+''', r'''            let mut result = (step.action)();
+            if result.is_ok() && self.done == 0 && self.name == "P-SUCCESSOR" {
+                if let Some(gate) = self.gate.as_mut() {
+                    // Checked after the first operation, discounting that
+                    // operation's own step.
+                    if let Some(mutations) = &step.session {
+                        mutations.set(mutations.get() - 1);
+                    }
+                    result = gate().map_err(|why| format!("{} (gate): {why}", self.name));
+                    if let Some(mutations) = &step.session {
+                        mutations.set(mutations.get() + 1);
+                    }
+                }
+            }
+            if result.is_ok() && self.done + 1 == last {
+''')],
+        "v12_no_succession_operation_precedes_its_gate", "[succession-gate]",
+        require=["refused before any operation"],
+    ),
+    control(
+        "NC-SUCC-GATE-PROVISION", "maintenance-authority", [],
+        "succession's gate does not recheck PROVISION",
+        [(MNT, r'''            if now != old_provision {
+                return Err("PROVISION changed since the predecessor's verification".into());
+            }
+''', r'''            let _ = (&now, &old_provision);
+''')],
+        "v12_no_succession_operation_precedes_its_gate", "[succession-gate]",
+        require=["PROVISION changed"],
+    ),
+    control(
+        "NC-SUCC-UNDISPOSITIONED-HISTORY", "maintenance-authority", [],
+        "succession over archived history without its disposition",
+        [(MNT, r'''    if !report.scan.level.undispositioned_history.is_empty() {
+        return Err(format!(
+            "{} archived incident(s) without a disposition",
+            report.scan.level.undispositioned_history.len()
+        ));
+    }
+''', r'''''')],
+        "v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes",
+        "[succession-dispositioned]",
+        require=["archived history without a disposition"],
+    ),
+    control(
+        "NC-SUCC-LEFTOVER", "maintenance-authority", [],
+        "succession over a predecessor with a leftover temporary (no recovery first)",
+        [(MNT, r'''    if let Some(leftover) = assessment
+        .conditions
+        .iter()
+        .find(|condition| condition.class == ConditionClass::MaintenanceIncomplete)
+    {
+        return Err(format!(
+            "recover the interrupted procedure first: {}",
+            leftover.name
+        ));
+    }
+''', r'''''')],
+        "v22_a_successor_is_a_new_root_of_a_recovered_predecessor", "[succession-precondition]",
+        require=["a leftover temporary"],
+    ),
+    control(
+        "NC-SUCC-SAME-ROOT", "maintenance-authority", [],
+        "a successor may reuse the predecessor's root id (in R3: its root id and its existing state root)",
+        [(MNT, r'''    if layout.root_id == old.root_id
+        || old
+            .predecessor
+            .as_ref()
+            .is_some_and(|(id, _)| *id == layout.root_id)
+    {
+        return Err("the successor needs a new root id".into());
+    }
+''', r''''''), (MNT, r'''    if !state_root_absent(session.borrow().io(), layout)? {
+        return Err(format!(
+            "the successor's state root {} exists: an interrupted succession's incomplete root is recovered first (R-SUCCESSOR)",
+            layout.state_name
+        ));
+    }
+''', r'''''')],
+        "v22_a_successor_is_a_new_root_of_a_recovered_predecessor", "[succession-precondition]",
+        require=["the predecessor's own root id"],
+    ),
+    control(
+        "NC-SUCC-DUAL-LOCK", "maintenance-authority", [],
+        "(S18) adopting the successor's lock releases the predecessor's",
+        [(MNT, r'''        self.locks.insert(state.to_string(), lock);
+        self.events.push(SessionEvent::Adopt(state.to_string()));
+''', r'''        self.locks.clear();
+        self.locks.insert(state.to_string(), lock);
+        self.events.push(SessionEvent::Adopt(state.to_string()));
+''')],
+        "v13_both_locks_are_held_through_publication_and_verify_after", "[succession-locks]",
+        require=["the session holds both"],
+    ),
+    control(
+        "NC-SUCC-CAPACITY-REFUSED", "maintenance-authority", [],
+        "(S07) succession refuses every Capacity condition, even with a complete proof (design section 13.10's resolution lost)",
+        [(MNT, r'''    if !assessment.complete {
+        return Err(format!(
+            "the predecessor's verification is not complete: {}",
+            assessment.describe()
+        ));
+    }
+''', r'''    if !assessment.complete {
+        return Err(format!(
+            "the predecessor's verification is not complete: {}",
+            assessment.describe()
+        ));
+    }
+    if assessment
+        .conditions
+        .iter()
+        .any(|condition| condition.class == ConditionClass::Capacity)
+    {
+        return Err("the predecessor is over capacity".into());
+    }
+''')],
+        "v06_over_capacity_a_complete_proof_authorizes_succession", "[succession-complete-set]",
+        require=["Capacity with every incident dispositioned"],
+    ),
+    control(
+        "NC-VERIFY-FIRST-ONLY", "maintenance-authority", [],
+        "(F6) in-session verification stops at the first condition",
+        [(MNT, r'''        let mut findings = Findings::collecting();
+''', r'''        let mut findings = Findings::first_only();
+''')],
+        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
+        "[maintenance-verify]",
+        require=["every condition, in the order met"],
+    ),
+    control(
+        "NC-OWNER-COLLECTS", "maintenance-authority", [],
+        "an owner's opening collects past its first condition and proceeds",
+        [(OPN, r'''        ScanMode::Owner,
+        &BTreeMap::new(),
+        config.incident_limit,
+        &mut Findings::first_only(),
+''', r'''        ScanMode::Owner,
+        &BTreeMap::new(),
+        config.incident_limit,
+        &mut Findings::collecting(),
+''')],
+        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
+        "[maintenance-verify]",
+        require=["an owner's opening refuses an Invalid store"],
+    ),
+    control(
+        "NC-VERIFY-AFTER-AUTHORIZES", "maintenance-authority", [],
+        "a procedure's verify-after leaves a verification the next procedure consumes",
+        [(MNT, r'''        self.verified = None;
+        self.latest = Some(assessment.clone());
+        assessment
+''', r'''        self.verified = Some(Verification {
+            epoch: self.mutations.get(),
+            opening: self.opening,
+            root_id: self.selection.provision.root_id,
+            revision: self.selection.revision(),
+            digest: self.selection.digest,
+            state: self.selection.state_name.clone(),
+            assessment: assessment.clone(),
+        });
+        self.latest = Some(assessment.clone());
+        assessment
+''')],
+        "v05_only_the_sessions_own_verify_before_authorizes", "[succession-verified]",
+        require=["a verify-after is not a verify-before"],
+    ),
+    control(
+        "NC-GAP-UNBOUNDED", "maintenance-authority", [],
+        "claim gaps are enumerated without bound",
+        [(CLS, r'''        if gap_count > (format::DISPOSITIONS_ENTRY_LIMIT as u64).saturating_sub(1) {
+''', r'''        if gap_count == u64::MAX {
+''')],
+        "v07_capacity_without_a_complete_proof_refuses_succession", "[succession-complete-set]",
+        require=["counted, not enumerated"],
+    ),
+    control(
+        "NC-ENTRY-STAT-DETERMINATE", "maintenance-authority", [],
+        "a disposition entry that cannot be stat'ed is recorded as a determinate condition",
+        [(OPN, r'''        let seen = io.stat_at(&dirs.dispositions, name).map_err(|error| {
+            findings.stop(
+                format!("disposition-stat {what}"),
+                type_refusal(io_refusal(error, name)),
+            )
+        })?;
+''', r'''        let seen = match io.stat_at(&dirs.dispositions, name) {
+            Ok(seen) => seen,
+            Err(error) => {
+                findings.meet(
+                    ConditionClass::Invalid,
+                    format!("disposition-type {what}"),
+                    type_refusal(io_refusal(error, name)),
+                )?;
+                continue;
+            }
+        };
+''')],
+        "v20_what_cannot_be_examined_is_indeterminate", "[maintenance-verify]",
+        require=["a disposition that cannot be stat'ed"],
+    ),
+    control(
+        "NC-REVOKED-BOUND-INDETERMINATE", "maintenance-authority", [],
+        "dispositions/revoked over its bound stops the verification: no Owner can accept it",
+        [(OPN, r'''        Ok(Listing::TooMany) => {
+            findings.meet(
+                ConditionClass::Invalid,
+                "enumeration-bound dispositions/revoked".into(),
+                invalid("enumeration bound: dispositions/revoked"),
+            )?;
+            Vec::new()
+        }
+''', r'''        Ok(Listing::TooMany) => {
+            return Err(findings.stop(
+                "enumeration-bound dispositions/revoked".into(),
+                invalid("enumeration bound: dispositions/revoked"),
+            ))
+        }
+''')],
+        "v20_what_cannot_be_examined_is_indeterminate", "[maintenance-verify]",
+        require=["one determinate condition"],
+    ),
+    control(
+        "NC-NAMES-EXAMINED-TWICE", "maintenance-authority", [],
+        "a name recorded as unexpected or leftover is also examined as an entry of its directory",
+        [(OPN, r'''    Ok(names.into_iter().filter(|name| accept(name)).collect())
+''', r'''    Ok(names)
+''')],
+        "v23_a_recorded_name_is_one_condition", "[maintenance-verify]",
+        require=["each name once"],
+    ),
+    control(
+        "NC-DISP-UNREPORTED", "maintenance-authority", [],
+        "a disposition is published for a predictable binding (a claim gap's) no verification reported",
+        [(MNT, r'''        None => return Err("not an incident the session's latest verification reported".into()),
+''', r'''        None => {
+            let root_id = session.borrow().selection().provision.root_id;
+            (1..=4096u64)
+                .map(gap_facts)
+                .find(|facts| facts.binding(&root_id) == Some(binding))
+                .ok_or("not an incident the session's latest verification reported")?
+        }
+''')],
+        "v15_a_disposition_restates_only_a_verified_incident", "[disposition-verified]",
+        require=["no verification reported it"],
+    ),
+    control(
+        "NC-DISP-FACTS-NOT-VERIFIED", "maintenance-authority", [],
+        "a published disposition's facts are not the verified ones",
+        [(MNT, r'''        Some((_, incident)) => incident.facts.clone(),
+''', r'''        Some((_, incident)) => IncidentFacts {
+            recorded_unsettled: incident.facts.recorded_unsettled + 1,
+            ..incident.facts.clone()
+        },
+''')],
+        "v15_a_disposition_restates_only_a_verified_incident", "[disposition-verified]",
+        require=["the verified facts and the Owner's words"],
+    ),
+    control(
+        "NC-DISP-ARCHIVED-NAME-ONLY", "maintenance-authority", [],
+        "an archived journal's facts come from its name alone, not its archived bytes",
+        [(MNT, r'''                    recorded_unsettled: classified.recorded_unsettled.len() as u64,
+''', r'''                    recorded_unsettled: 0,
+''')],
+        "v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes",
+        "[disposition-verified]",
+        require=["the archived bytes' facts"],
+    ),
+    control(
+        "NC-ARCHIVE-CAPACITY", "maintenance-authority", [],
+        "archival is refused over capacity (design section 13.10's resolution lost)",
+        [(MNT, r'''    let report = session.take_complete(&[ConditionClass::Capacity])?;
+''', r'''    let report = session.take_complete(&[])?;
+''')],
+        "v18_over_capacity_archival_lets_dispositioned_history_leave", "[capacity-archival]",
+        require=["archival over capacity"],
+    ),
+    control(
+        "NC-LEFTOVER-AFTER-ACCEPTED", "maintenance-authority", [],
+        "a procedure's verify-after accepts a leftover temporary",
+        [(MNT, r'''        if let Some(leftover) = assessment
+            .conditions
+            .iter()
+            .find(|condition| condition.class == ConditionClass::MaintenanceIncomplete)
+        {
+            return Err(format!("a leftover temporary remains: {}", leftover.name));
+        }
+''', r'''''')],
+        "v21_a_leftover_temporary_fails_the_verify_after", "[maintenance-verify]",
+        require=["a leftover remains"],
+    ),
+    control(
+        "NC-DISP-NO-POSTVERIFY", "maintenance-authority", [],
+        "(F4) disposition publication has no verify-after",
+        [(MNT, r'''    proc.finish(verified_after(Rc::clone(&session)));
+    let io = Rc::new(io);
+''', r'''    let io = Rc::new(io);
+''')],
+        "v19_every_session_procedure_completes_with_its_verify_after", "[maintenance-verify]",
+        require=["complete with its verify-after"],
+    ),
+    control(
+        "NC-PROV-OVER-EXISTING", "maintenance-authority", [],
+        "provisioning replaces an existing PROVISION",
+        [(MNT, r'''    {
+        let (io, layout) = (Rc::clone(&io), Rc::clone(&layout));
+        proc.gate(move || unprovisioned(&*io, &layout, None));
+    }
+''', r'''''')],
+        "v17_provisioning_and_republication_never_replace_a_store", "[provision-unprovisioned]",
+        require=["PROVISION exists"],
+    ),
+    control(
+        "NC-REPUBLISH-OVER-EXISTING", "maintenance-authority", [],
+        "re-publication replaces an existing PROVISION",
+        [(MNT, r'''    unprovisioned(io, layout, Some(&layout.state_name))?;
+    let rc_io = Rc::new(io.clone());
+''', r'''    let rc_io = Rc::new(io.clone());
+'''), (MNT, r'''        proc.gate(move || unprovisioned(&*io, &layout, Some(&layout.state_name)));
+''', r'''        let _ = (io, layout);
+''')],
+        "v17_provisioning_and_republication_never_replace_a_store", "[provision-unprovisioned]",
+        require=["re-publication over a selected store"],
+    ),
+    control(
+        "NC-PROV-OVER-HISTORY", "maintenance-authority", [],
+        "provisioning over a parent where another root may hold history",
+        [(MNT, r'''    if !others.is_empty() {
+''', r'''    if others.len() > found.len() {
+''')],
+        "v17_provisioning_and_republication_never_replace_a_store", "[provision-unprovisioned]",
+        require=["a root with history"],
+    ),
+]
+
+# R1 controls whose anchor moved to the equivalent defect point of the R2
+# sources; the intention, test and marker are unchanged.
+# ---------------------------------------------------------------------------
+# P2-V1-R3B-I3-I1-R3: administrative crash recovery (category
+# administrative-recovery), and the simulator and native rules R3 added
+# (categories simulator-source-conformance and implementation-safety). Each
+# restores one wrong behaviour of the R3 sources and fails its R3 regression.
+# ---------------------------------------------------------------------------
+
+R3_RECOVERY = [
+    control(
+        "NC-R3-SUCC-KEEP-OVERWRITE", "administrative-recovery", ["R303", "R314"],
+        "a kept copy that is not the selected PROVISION is taken for absent, so step 2a runs over it",
+        [(MNT, r'''    if bytes != selected {
+        return Err(format!(
+            "the kept predecessor copy {name} is not the selected PROVISION: the repeat is refused"
+        ));
+    }
+    Ok(KeptCopy::Exact { ino: stat.ino })''', r'''    if bytes != selected {
+        return Ok(KeptCopy::Absent);
+    }
+    Ok(KeptCopy::Exact { ino: stat.ino })''')],
+        "r303_a_kept_copy_one_byte_off_refuses_the_repeat", "[succession-keep]",
+        require=["the repeat proceeded"],
+    ),
+    control(
+        "NC-R3-SUCC-KEEP-BLESS", "administrative-recovery", ["R303"],
+        "a kept copy that is not the selected PROVISION is blessed as the exact copy (step 2a skipped)",
+        [(MNT, r'''    if bytes != selected {
+        return Err(format!(
+            "the kept predecessor copy {name} is not the selected PROVISION: the repeat is refused"
+        ));
+    }
+    Ok(KeptCopy::Exact { ino: stat.ino })''', r'''    let _ = selected;
+    Ok(KeptCopy::Exact { ino: stat.ino })''')],
+        "r303_a_kept_copy_one_byte_off_refuses_the_repeat", "[succession-keep]",
+        require=["the repeat proceeded"],
+    ),
+    control(
+        "NC-R3-SUCC-NO-SKIP", "administrative-recovery", ["R302"],
+        "an exact kept copy does not skip step 2a",
+        [(MNT, "    if keep == KeptCopy::Absent {\n",
+          "    if matches!(keep, KeptCopy::Absent | KeptCopy::Exact { .. }) {\n")],
+        "r302_a_repeat_after_the_kept_copy_skips_step_2a", "[succession-repeat]",
+        require=["step 2a skipped"],
+    ),
+    control(
+        "NC-R3-SUCC-ORDINARY-SKIP", "administrative-recovery", ["R301"],
+        "the ordinary succession (no kept copy) skips step 2a",
+        [(MNT, "    if keep == KeptCopy::Absent {\n", "    if keep != KeptCopy::Absent {\n")],
+        "r301_an_ordinary_succession_is_the_documented_29_operations", "[succession-repeat]",
+        require=["the ordinary path runs step 2a"],
+    ),
+    control(
+        "NC-R3-SUCC-KEEP-METADATA", "administrative-recovery", ["R304"],
+        "a kept copy of another owner, mode or link count is taken for the exact copy",
+        [(MNT, r'''    if (stat.uid, stat.gid, stat.mode, stat.nlink) != (0, 0, 0o444, 1) {
+        return Err(format!(
+            "the kept predecessor copy {name} is not root:root 0444 with one link: the repeat is refused"
+        ));
+    }
+''', "")],
+        "r304_a_kept_copy_that_is_not_root_0444_with_one_link_refuses", "[succession-keep]",
+        require=["owner: the repeat proceeded"],
+    ),
+    control(
+        "NC-R3-SUCC-LEFTOVER-IGNORED", "administrative-recovery", ["R305"],
+        "a leftover PROVISION temporary does not refuse the repeat",
+        [(MNT, r'''    for leftover in [path.predecessor_tmp_name(), path.tmp_name()] {
+        if !absent(io, &provdir.dir, &leftover)? {''', r'''    for leftover in [path.predecessor_tmp_name(), path.tmp_name()] {
+        if false && !absent(io, &provdir.dir, &leftover)? {''')],
+        "r305_a_leftover_temporary_refuses_the_repeat_until_r_leftover", "[succession-keep]",
+        require=["the repeat proceeded"],
+    ),
+    control(
+        "NC-R3-SUCC-ROOT-IGNORED", "administrative-recovery", ["R306"],
+        "an existing successor root does not refuse the repeat",
+        [(MNT, r'''    if !state_root_absent(session.borrow().io(), layout)? {
+        return Err(format!(''', r'''    if false && !state_root_absent(session.borrow().io(), layout)? {
+        return Err(format!(''')],
+        "r306_a_zero_incomplete_successor_root_is_removed", "[succession-cleanup]",
+        require=["the incomplete root refuses the repeat"],
+    ),
+    control(
+        "NC-R3-SUCC-GATE-COPY", "administrative-recovery", ["R314"],
+        "the succession's gate does not recheck the kept copy",
+        [(MNT, r'''            if kept_copy(s.io(), &gate_path, &old_provision.root_id, &gate_bytes)? != keep {''',
+          r'''            if false && kept_copy(s.io(), &gate_path, &old_provision.root_id, &gate_bytes)? != keep {''')],
+        "r314_a_mismatched_kept_copy_is_never_overwritten", "[succession-keep]",
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-NONZERO", "administrative-recovery", ["R307"],
+        "a successor pool file with a non-zero byte is removed",
+        [(MNT, r'''                    if bytes.iter().any(|byte| *byte != 0) {
+                        return Err(format!(
+                            "journals/{pool} holds a non-zero byte: it may hold history, and is never removed"
+                        ));
+                    }''', r'''                    let _ = &bytes;''')],
+        "r307_a_successor_pool_byte_that_is_not_zero_refuses", "[succession-cleanup]",
+        require=["removable"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-UNEXPECTED", "administrative-recovery", ["R308"],
+        "an unexpected entry of the candidate's root is ignored",
+        [(MNT, r'''            other => {
+                return Err(format!(
+                    "{other} is not made by step 2b: the candidate is refused"
+                ))
+            }''', r'''            _ => {}''')],
+        "r308_an_unexpected_entry_refuses_the_cleanup", "[succession-cleanup]",
+        require=["an entry in place of archive/: removable"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-SELECTED", "administrative-recovery", ["R309"],
+        "the selected store is not refused as a candidate",
+        [(MNT, r'''    if layout.state_name == selection.state_name || layout.root_id == selection.provision.root_id {
+        return Err("the candidate is the selected store: it is never removed".into());
+    }
+''', "")],
+        "r309_a_referenced_candidate_refuses_the_cleanup", "[succession-cleanup]",
+        require=["the selected store"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-UID", "administrative-recovery", ["R309"],
+        "a candidate of another uid or gid is not refused as another store's",
+        [(MNT, r'''    if (layout.uid, layout.gid) != (selection.provision.uid, selection.provision.gid) {
+        return Err("the candidate is not this store's: another uid or gid".into());
+    }
+''', "")],
+        "r309_a_referenced_candidate_refuses_the_cleanup", "[succession-cleanup]",
+        require=["another store's uid"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-COPY-CONTENT", "administrative-recovery", ["R309"],
+        "what a kept copy records (root id, state root, predecessor) does not refuse the candidate",
+        [(MNT, r'''        if kept.root_id == layout.root_id
+            || kept.state_root == candidate
+            || kept
+                .predecessor
+                .as_ref()
+                .is_some_and(|(id, _)| *id == layout.root_id)
+        {''', r'''        if false {
+            let _ = (&kept, &candidate);''')],
+        "r309_a_referenced_candidate_refuses_the_cleanup", "[succession-cleanup]",
+        require=["referenced by a kept copy's content"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-NOT-INTERRUPTED", "administrative-recovery", ["R309"],
+        "the cleanup is built for a store with no interrupted succession",
+        [(MNT, r'''    unreferenced(&*io, &path, &selection, layout)?;
+    succession_interrupted(&*io, &path, &selection.provision.root_id, &selected)?;
+''', r'''    unreferenced(&*io, &path, &selection, layout)?;
+''')],
+        "r309_a_referenced_candidate_refuses_the_cleanup", "[succession-cleanup]",
+        require=["no interrupted succession"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-NO-LOCK", "administrative-recovery", ["R310"],
+        "the cleanup takes no lock on the candidate's LOCK",
+        [(MNT, r'''                if let Some(locks) = locks.as_mut() {
+                    io.flock(&file, LockRequest::Exclusive)
+                        .map_err(|_| "the candidate's LOCK is held by another process (Busy)")?;
+                    locks.push(file);
+                }''', r'''                if let Some(locks) = locks.as_mut() {
+                    locks.push(file);
+                }''')],
+        "r310_a_candidate_held_elsewhere_refuses_the_cleanup", "[succession-cleanup]",
+        require=["LOCK: removable while held"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-RECURSIVE", "administrative-recovery", ["R308", "R328"],
+        "a directory's removal first removes what it holds (recursive)",
+        [(MNT, r'''    if directory {
+        io.remove_dir(&at.dir, name).map_err(err)
+    } else {''', r'''    if directory {
+        let inner = io.open_dir(&at.dir, name).map_err(err)?;
+        if let Ok(Listing::Names(children)) = io.list_dir(&inner, 8192) {
+            for child in children {
+                let _ = io.unlink(&inner, &child);
+            }
+        }
+        io.remove_dir(&at.dir, name).map_err(err)
+    } else {''')],
+        "r308_an_unexpected_entry_refuses_the_cleanup", "[successor-cleanup-recursive]",
+        require=["a directory that is not empty"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-RECURSIVE-API", "authority-api-surface", ["R328"],
+        "the I/O trait gains a recursive removal",
+        [(IO, r'''    fn remove_dir(&self, at: &Self::Dir, name: &str) -> Result<(), IoError>;
+''', r'''    fn remove_dir(&self, at: &Self::Dir, name: &str) -> Result<(), IoError>;
+    /// A whole tree (the defect).
+    fn remove_tree(&self, at: &Self::Dir, name: &str) -> Result<(), IoError> {
+        self.remove_dir(at, name)
+    }
+''')],
+        "r328_no_new_public_authority_bearing_interface", "[successor-cleanup-recursive]",
+        require=["the I/O trait's operations"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-IDENTITY", "administrative-recovery", ["R308"],
+        "a removal does not check that the entry is the inode the inspection found",
+        [(MNT, r'''    if stat.ino != ino || (stat.file_type == FileType::Directory) != directory {
+        return Err(format!("{name} is not the entry the inspection found"));
+    }''', r'''    if (stat.file_type == FileType::Directory) != directory {
+        return Err(format!("{name} is not the entry the inspection found ({ino})"));
+    }''')],
+        "r308_an_unexpected_entry_refuses_the_cleanup", "[succession-cleanup]",
+        require=["a replaced entry"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-GATE", "administrative-recovery", ["R307"],
+        "the cleanup's gate does not inspect the candidate again",
+        [(MNT, r'''            if inspect_incomplete(s.io(), &gate_layout, None)? != gate_found {''',
+          r'''            if false && inspect_incomplete(s.io(), &gate_layout, None)? != gate_found {''')],
+        "r307_a_successor_pool_byte_that_is_not_zero_refuses", "[succession-cleanup]",
+        require=["the gate"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-GONE-REFUSED", "administrative-recovery", ["R311"],
+        "the cleanup refuses when the candidate is already gone, instead of syncing the parent",
+        [(MNT, "    let found = inspect_incomplete(&*io, layout, Some(&mut held))?;\n",
+          "    let found = inspect_incomplete(&*io, layout, Some(&mut held))?;\n"
+          "    if found.root.is_none() {\n"
+          "        return Err(\"the candidate is already gone\".into());\n"
+          "    }\n")],
+        "r3x3_every_interrupted_cleanup_recovers", "[succession-cleanup]",
+        require=["refused: the candidate is already gone"],
+    ),
+    control(
+        "NC-R3-SUCC-CLEAN-NO-PARENT-SYNC", "administrative-recovery", ["R306", "R311"],
+        "the cleanup does not sync the parent after removing the root",
+        [(MNT, r'''    {
+        let (io, dir) = (Rc::clone(&io), parent_path.clone());
+        proc.add(label, move || sync_known(&*io, &dir, parent_ino));
+    }
+''', "")],
+        "r306_a_zero_incomplete_successor_root_is_removed", "[succession-cleanup]",
+        require=["the parent's sync last"],
+    ),
+    control(
+        "NC-R3-SUCC-REUSE-VERIFY", "administrative-recovery", ["R312"],
+        "the cleanup runs outside the session's accounting and without its verify-after, so the verification before it still authorizes",
+        [(MNT, r'''    let mut proc = Procedure::new("R-SUCCESSOR");
+    proc.within(Rc::clone(&s.mutations));
+''', r'''    let mut proc = Procedure::new("R-SUCCESSOR");
+'''), (MNT, r'''        let _retained = &held;
+        generic()?;''', r'''        let _retained = &held;
+        let _ = &mut generic;''')],
+        "r312_the_repeat_needs_a_fresh_verification_after_the_cleanup", "[succession-current]",
+        require=["a verification older than the cleanup"],
+    ),
+    control(
+        "NC-R3-RECOVERY-NO-POSTVERIFY-SUCC", "administrative-recovery", ["R306"],
+        "R-SUCCESSOR's verify-after does not require the candidate gone",
+        [(MNT, r'''        if state_root_absent(s.io(), &candidate)? {
+            Ok(())
+        } else {
+            Err("the candidate's state root is still present".into())
+        }''', r'''        let _ = (&s, &candidate);
+        Ok(())''')],
+        "r306_a_zero_incomplete_successor_root_is_removed", "[succession-cleanup]",
+        require=["the candidate reappeared"],
+    ),
+    control(
+        "NC-R3-REVOKE-BOUND-EARLY", "administrative-recovery", ["R315"],
+        "a revocation refuses below revoked/'s bound (at 4095 entries)",
+        [(MNT, "        Listing::Names(names) if names.len() >= format::REVOKED_ENTRY_LIMIT => {\n",
+          "        Listing::Names(names) if names.len() + 1 >= format::REVOKED_ENTRY_LIMIT => {\n")],
+        "r315_a_revocation_below_the_bound_fills_it", "[revocation-bound]",
+        require=["below the bound"],
+    ),
+    control(
+        "NC-R3-REVOKE-OVERFLOW", "administrative-recovery", ["R316"],
+        "a revocation at revoked/'s bound proceeds and exceeds it",
+        [(MNT, "        Listing::Names(names) if names.len() >= format::REVOKED_ENTRY_LIMIT => {\n",
+          "        Listing::Names(names) if names.len() > format::REVOKED_ENTRY_LIMIT => {\n")],
+        "r316_a_revocation_at_the_bound_refuses_before_any_operation", "[revocation-bound]",
+        require=["at the bound"],
+    ),
+    control(
+        "NC-R3-REVOKE-REPLACE", "administrative-recovery", ["R317"],
+        "a revocation renames over an existing revoked file",
+        [(MNT, r'''    if !absent(io, &revoked.dir, revoked_name)? {
+        return Err(format!(
+            "revoked/{revoked_name} exists: a revocation never replaces revoked evidence"
+        ));
+    }
+''', "")],
+        "r317_a_revocation_never_replaces_revoked_evidence", "[revocation-replace]",
+        require=["the name exists"],
+    ),
+    control(
+        "NC-R3-REVOKE-TIME-IGNORED", "administrative-recovery", ["R318"],
+        "the revoked name ignores the revocation's time, so a second revocation of a binding meets the first",
+        [(MNT, r'''    let name = format::disposition_name(&binding);
+    let revoked_name = format::revoked_name(&binding, compact_time);
+''', r'''    let name = format::disposition_name(&binding);
+    let revoked_name = format::revoked_name(&binding, "20260101T000000Z");
+    let _ = compact_time;
+''')],
+        "r318_revocations_at_two_times_are_both_kept", "[revocation-replace]",
+        require=["a second revocation at another time"],
+    ),
+    control(
+        "NC-R3-REVOKE-NO-VERIFY-AFTER", "administrative-recovery", ["R323"],
+        "a normal revocation has no verify-after",
+        [(MNT, r'''    drop(s);
+    proc.finish(verified_after(Rc::clone(&session)));
+    {
+        let (io, from, to) = (''', r'''    drop(s);
+    {
+        let (io, from, to) = (''')],
+        "r323_a_revocation_completes_with_its_verify_after", "[revocation-verify-after]",
+    ),
+    control(
+        "NC-R3-REVOKE-GATE", "administrative-recovery", ["R316"],
+        "the revocation's gate does not read its admissibility again",
+        [(MNT, r'''            unchanged()?;
+            if revocation_admissible(''', r'''            unchanged()?;
+            if false && revocation_admissible(''')],
+        "r316_a_revocation_at_the_bound_refuses_before_any_operation", "[revocation-bound]",
+        require=["the gate"],
+    ),
+    control(
+        "NC-R3-REVOKE-RECOVER-WRONG", "administrative-recovery", ["R320"],
+        "R-REVOKE accepts another file under the revoked name",
+        [(MNT, r'''            if !active.same_inode(&artifact) {
+                Err(format!(
+                    "{name} is another file than revoked/{revoked_name}: not an interrupted revocation, and nothing is removed"
+                ))
+            } else if (active.nlink, artifact.nlink) != (2, 2) {
+                Err(format!(
+                    "{name} has {} links, not the 2 of an interrupted revocation",
+                    active.nlink
+                ))
+            } else {
+                Ok(Revocation::Split { ino: artifact.ino })
+            }''', r'''            let _ = (active, &name);
+            Ok(Revocation::Split { ino: artifact.ino })''')],
+        "r320_a_differing_revocation_state_refuses_r_revoke", "[revocation-recovery]",
+        require=["another file: applied"],
+    ),
+    control(
+        "NC-R3-REVOKE-RECOVER-NAME", "administrative-recovery", ["R320"],
+        "R-REVOKE takes a revocation time that is not a compact UTC time",
+        [(MNT, r'''    let s = session.borrow();
+    s.holds_selection()?;
+    let revoked_name = format::revoked_name(&binding, compact_time);
+    if format::parse_revoked_name(&revoked_name).map(|(found, _)| found) != Some(binding) {''',
+          r'''    let s = session.borrow();
+    s.holds_selection()?;
+    let revoked_name = format::revoked_name(&binding, compact_time);
+    if false && format::parse_revoked_name(&revoked_name).map(|(found, _)| found) != Some(binding) {''')],
+        "r320_a_differing_revocation_state_refuses_r_revoke", "[revocation-recovery]",
+        require=["2026-10-03T00:00:00Z"],
+    ),
+    control(
+        "NC-R3-REVOKE-RECOVER-DELETE-TARGET", "administrative-recovery", ["R319"],
+        "R-REVOKE removes the revoked file instead of the active name",
+        [(MNT, r'''        proc.add("13.4-revoke/recover", move || {
+            remove_known(&*io, &dir, dispositions_ino, &name, ino, false)
+        });''', r'''        let (revoked_dir, revoked_entry) = (revoked_path.clone(), revoked_name.clone());
+        proc.add("13.4-revoke/recover", move || {
+            let _ = (&dir, &name, ino, dispositions_ino);
+            let at = dir_ref(&*io, &revoked_dir)?;
+            io.unlink(&at.dir, &revoked_entry).map_err(err)
+        });''')],
+        "r319_r_revoke_unlinks_only_the_active_name_and_syncs", "[revocation-recovery]",
+        require=["the revoked file was removed"],
+    ),
+    control(
+        "NC-R3-REVOKE-RECOVER-NO-SYNC", "administrative-recovery", ["R319"],
+        "R-REVOKE does not sync dispositions/ after the unlink",
+        [(MNT, r'''    {
+        let (io, dir) = (Rc::clone(&io), dispositions_path.clone());
+        proc.add("13.4-revoke/recover", move || {
+            sync_known(&*io, &dir, dispositions_ino)
+        });
+    }
+''', "")],
+        "r319_r_revoke_unlinks_only_the_active_name_and_syncs", "[revocation-recovery]",
+        require=["the unlink and the sync"],
+    ),
+    control(
+        "NC-R3-REVOKE-CAPACITY-CONFLATED", "administrative-recovery", ["R321"],
+        "R-REVOKE refuses at revoked/'s bound as a normal revocation does",
+        [(MNT, r'''    let io = Rc::new(s.io().clone());
+    let state = interrupted_revocation(''', r'''    let io = Rc::new(s.io().clone());
+    if let Listing::Names(names) = io
+        .list_dir(&dir_ref(&*io, &revoked_path)?.dir, 8192)
+        .map_err(err)?
+    {
+        if names.len() >= format::REVOKED_ENTRY_LIMIT {
+            return Err("revoked/ is at its bound".into());
+        }
+    }
+    let state = interrupted_revocation(''')],
+        "r321_r_revoke_applies_at_the_bound", "[revocation-capacity]",
+        require=["at the bound"],
+    ),
+    control(
+        "NC-R3-REVOKE-COMPLETED-REFUSED", "administrative-recovery", ["R322"],
+        "R-REVOKE does not recognize a completed revocation (it refuses instead of repeating the sync)",
+        [(MNT, r'''            if artifact.nlink == 1 {
+                Ok(Revocation::Completed { ino: artifact.ino })''', r'''            if artifact.nlink == 1 && false {
+                Ok(Revocation::Completed { ino: artifact.ino })''')],
+        "r3x4_every_interrupted_revocation_recovers", "[revocation-recovery]",
+        require=["refused"],
+    ),
+    control(
+        "NC-R3-RECOVERY-NO-POSTVERIFY", "administrative-recovery", ["R324"],
+        "R-REVOKE's verify-after does not require the revocation completed",
+        [(MNT, r'''        match interrupted_revocation(
+            s.io(),
+            &dispositions_path,
+            &revoked_path,
+            &binding,
+            &revoked_name,
+            &root_id,
+        )? {
+            Revocation::Completed { ino: now } if now == ino => Ok(()),
+            other => Err(format!("the revocation is not complete: {other:?}")),
+        }''', r'''        let _ = (&s, &dispositions_path, &revoked_path, &binding, &revoked_name, &root_id, ino);
+        Ok(())''')],
+        "r324_r_revoke_completes_with_its_verify_after", "[revocation-verify-after]",
+        require=["not completed"],
+    ),
+]
+
+R3_SIMULATOR = [
+    control(
+        "S-R3-RMDIR-NOT-EMPTY", "simulator-source-conformance", ["R3-SIM"],
+        "the simulator's rmdir removes a directory that is not empty",
+        [(SIM, r'''            if !directory.ents_k.is_empty() {
+                return Err(Errno::NotEmpty);
+            }
+            state.check_journal()?;''', r'''            state.check_journal()?;''')],
+        "s06_rmdir_and_same_file_rename_follow_linux", "[sim-conformance]",
+        require=["not empty"],
+    ),
+    control(
+        "S-R3-RMDIR-DURABLE", "simulator-source-conformance", ["R3-SIM"],
+        "the simulator's rmdir is durable at once, with no pending half",
+        [(SIM, r'''            state.meta(vec![(at.ino, name.to_string(), ino, false)]);
+            state.record("rmdir", Some(at.ino), Some(name), Some(ino));''', r'''            if let Some(parent) = state.inodes.get_mut(&at.ino) {
+                parent.ents_d.remove(name);
+            }
+            state.record("rmdir", Some(at.ino), Some(name), Some(ino));''')],
+        "s06_rmdir_and_same_file_rename_follow_linux", "[sim-conformance]",
+        require=["pending until its parent's sync"],
+    ),
+    control(
+        "S-R3-REMOVED-DIR-ENTRY", "simulator-source-conformance", ["R3-SIM"],
+        "a removed directory takes new entries",
+        [(SIM, r'''    fn reachable(&self, dir: Ino) -> bool {
+        dir == self.root''', r'''    fn reachable(&self, dir: Ino) -> bool {
+        true || dir == self.root''')],
+        "s06_rmdir_and_same_file_rename_follow_linux", "[sim-conformance]",
+        require=["a removed directory"],
+    ),
+    control(
+        "S-R3-SAME-FILE-RENAME", "simulator-source-conformance", ["R3-SIM"],
+        "a rename between two names of one file removes the source name",
+        [(SIM, r'''                == Some(&ino)
+            {
+                // POSIX: both names already name one file; the call succeeds
+                // and changes nothing.''', r'''                == Some(&ino)
+                && false
+            {
+                // POSIX: both names already name one file; the call succeeds
+                // and changes nothing.''')],
+        "s06_rmdir_and_same_file_rename_follow_linux", "[sim-conformance]",
+        require=["both names remain"],
+    ),
+]
+
+R3_NATIVE = [
+    control(
+        "N-R3-RMDIR-FLAG", "implementation-safety", ["R3-NATIVE"],
+        "the native removal is unlinkat without AT_REMOVEDIR",
+        [(IO, "            let result = unsafe { libc::unlinkat(at.raw(), entry.as_ptr(), libc::AT_REMOVEDIR) };\n",
+          "            let result = unsafe { libc::unlinkat(at.raw(), entry.as_ptr(), 0) };\n")],
+        "n09_native_remove_dir_is_one_empty_directory", "[successor-cleanup-recursive]",
+        require=["native: not empty"],
+    ),
+    control(
+        "N-R3-RMDIR-NAME", "implementation-safety", ["R3-NATIVE"],
+        "the native removal passes a name with a separator or a dot to the kernel",
+        [(IO, r'''        fn remove_dir(&self, at: &LinuxDir, entry: &str) -> Result<(), IoError> {
+            let entry = name(entry, "unlinkat")?;''', r'''        fn remove_dir(&self, at: &LinuxDir, entry: &str) -> Result<(), IoError> {
+            let entry = std::ffi::CString::new(entry).map_err(|_| IoError::new("unlinkat", Errno::Inval))?;''')],
+        "n09_native_remove_dir_is_one_empty_directory", "[safe-open]",
+    ),
+]
+
+
+REANCHORED_R3 = {
+    "NC-SUCC-MUTATE-BEFORE-GATE": (
+        "R3's P-REVOKE gate rereads its admissibility, so a gate moved after the first operation of "
+        "every procedure refuses v12's helper revocation after its own rename, before the succession "
+        "v12 examines; the mutation is confined to the succession's gate (S17's subject)"),
+    "NC-SUCC-SAME-ROOT": (
+        "R3 also refuses a successor whose state root exists, and v22's layout is the predecessor's own; "
+        "the equivalent defect point removes both R2's root-id check and R3's state-root check"),
+}
+
+REANCHORED = {
+    "I-PRESERVATION-SKIPPED": "the scan's preservation sync now meets the findings collector",
+    "I-PROVISION-INODE-IGNORED": "the scan's pool-inode check now meets the findings collector",
+    "I-SESSION-NEW-LOCK": "verify_inner's opening now stops the findings collector",
+    "I-SESSION-SHARED": "verify_inner's lock lookup now stops the findings collector",
+    "I-SESSION-RELOCK": "verify_inner's store directories now stop the findings collector",
+    "I-VERIFY-CACHED": "verify now derives its outcome from the retained assessment",
+    "R1-VERIFICATION-REUSED": "the verification is now a bound Verification, taken by take_verification",
+}
+
+# ---------------------------------------------------------------------------
+# Remapped: I3-I1 controls whose defect point has no behavioural call site
+# left. Not run and not counted; their intention is carried by the API/type
+# guards named (api_probes.py), reported apart.
+# ---------------------------------------------------------------------------
+
+REMAPPED = [
+    control(
+        "A-ADMISSION-UNBOUND", "authority-api-surface", [],
+        "the claim accepts an admission from another opening of the same selection",
+        [(OPN, r'''        admission.opening == opening && admission.provision_digest == *provision_digest
+''', r'''        let _ = opening;
+        admission.provision_digest == *provision_digest
+''')],
+        "o10_a_storage_admission_is_bound_to_its_opening", "[storage-qualification]",
+        require=["an earlier opening"],
+    ),
+]
+REMAPPED_TO = {
+    "A-ADMISSION-UNBOUND": [
+        "P-B3-CLAIM-CALL (the claim is internal; it takes no caller admission)",
+        "P-B4-IDENTITY-EDIT (an opening's identity and selection cannot be rebound)",
+        "P-B4-OPENING-MINT (no opening identity is minted outside the store)",
+        "P-B4-ADMISSION-FORGE (no admission is built from parts)",
+    ],
+}
+
+COUNTED = (SIMULATOR + FORMATS + OPENING + RECORDER + MAINTENANCE + NATIVE + AUTHORITY
+           + R1_BINDINGS + R2_MAINTENANCE + R3_RECOVERY + R3_SIMULATOR + R3_NATIVE)
+
+# ---------------------------------------------------------------------------
+# The runner
+# ---------------------------------------------------------------------------
+
+ROOT = pathlib.Path()
+LOG = pathlib.Path()
+EXPECTED_STATUS = set()
+
+
+def sha256(path: pathlib.Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def state() -> dict:
+    return {path: sha256(ROOT / path) for path in FILES}
+
+
+def status() -> set:
+    out = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    ).stdout
+    return {line for line in out.splitlines() if line}
+
+
+def mutate(control_, originals):
+    """The mutated text of every file the control edits (anchors applied in
+    order, each exactly once in the text as it stands)."""
+    texts = {}
+    for edit in control_["edits"]:
+        text = texts.get(edit["file"], originals[edit["file"]].decode())
+        count = text.count(edit["anchor"])
+        if count != 1:
+            raise SystemExit(
+                f"{control_['id']}: anchor occurs {count} times in {edit['file']}: "
+                f"{edit['anchor'][:80]!r}")
+        texts[edit["file"]] = text.replace(edit["anchor"], edit["replacement"], 1)
+    return texts
+
+
+def run_test(test: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["cargo", "test", "-p", "nexus-verifier-sandbox", "--locked",
+         "--test", TARGET, "--", test, "--exact"],
+        cwd=ROOT, capture_output=True, text=True, timeout=1800,
+    )
+
+
+def message_of(output: str, test: str) -> str:
+    """The message of the last panic on the test's own thread: the assertion
+    that ended the test. Earlier panics (a fixture worker's, or a sink panic
+    the core contained) are not the intended assertion."""
+    lines = output.splitlines()
+    starts = [
+        i for i, line in enumerate(lines)
+        if line.startswith(f"thread '{test}'") and "panicked at" in line
+    ]
+    if not starts:
+        return ""
+    tail = []
+    for line in lines[starts[-1] + 1:]:
+        if (line.startswith("note: run with") or line.startswith("failures:")
+                or line.startswith("thread '")):
+            break
+        tail.append(line)
+    return "\n".join(tail).strip()
+
+
+def run_one(control_, originals, original_state):
+    texts = mutate(control_, originals)
+    if state() != original_state:
+        raise SystemExit(f"{control_['id']}: files changed before the control")
+    try:
+        for path, text in texts.items():
+            (ROOT / path).write_bytes(text.encode())
+        proc = run_test(control_["test"])
+    finally:
+        for path in texts:
+            (ROOT / path).write_bytes(originals[path])
+    restored = state() == original_state
+    worktree = status()
+    if worktree != EXPECTED_STATUS:
+        raise SystemExit(f"{control_['id']}: unexpected worktree state after restoring: {worktree}")
+    output = proc.stdout + proc.stderr
+    test = control_["test"]
+    compiled = (
+        "could not compile" not in output
+        and "error[E" not in output
+        and f"Running tests/{TARGET}.rs" in output
+    )
+    failed = (
+        proc.returncode != 0
+        and "test result: FAILED. 0 passed; 1 failed" in output
+        and f"{test} ... FAILED" in output
+    )
+    return output, compiled, failed, restored, message_of(output, test), proc.returncode
+
+
+def main() -> int:
+    global ROOT, LOG, EXPECTED_STATUS
+    args = sys.argv[1:]
+    if len(args) == 2 and args[1] in ("--check-anchors", "--print-sources"):
+        ROOT = pathlib.Path(args[0]).resolve()
+        if args[1] == "--print-sources":
+            print(json.dumps(state(), indent=4))
+            return 0
+        originals = {path: (ROOT / path).read_bytes() for path in FILES}
+        ids = [c["id"] for c in COUNTED]
+        if len(ids) != len(set(ids)):
+            raise SystemExit("duplicate control ids")
+        for c in COUNTED:
+            mutate(c, originals)
+            if not c["marker"].startswith("[") or not c["test"]:
+                raise SystemExit(f"{c['id']}: marker or test missing")
+            touched = {e["file"] for e in c["edits"]}
+            protected = {f"{CUSTODY}/core.rs", f"{CUSTODY}/model.rs", f"{CUSTODY}/codec.rs",
+                         f"{CUSTODY}/mod.rs", f"{TESTS}/{TARGET}.rs"}
+            if touched & protected:
+                raise SystemExit(f"{c['id']}: mutates a protected or test file")
+        print(json.dumps({"controls": len(COUNTED), "anchors": "ok"}))
+        return 0
+    only = None
+    if "--only" in args:
+        at = args.index("--only")
+        only = set(args[at + 1].split(","))
+        del args[at:at + 2]
+    expected_file = None
+    if "--expected-status" in args:
+        at = args.index("--expected-status")
+        expected_file = args[at + 1]
+        del args[at:at + 2]
+    if len(args) != 2:
+        raise SystemExit(__doc__)
+    ROOT = pathlib.Path(args[0]).resolve()
+    LOG = pathlib.Path(args[1]).resolve()
+    LOG.mkdir(parents=True, exist_ok=True)
+    if expected_file:
+        EXPECTED_STATUS = {
+            line for line in pathlib.Path(expected_file).read_text().splitlines() if line
+        }
+    original_state = state()
+    if CANDIDATE_SOURCES and original_state != CANDIDATE_SOURCES:
+        changed = sorted(p for p in FILES if original_state.get(p) != CANDIDATE_SOURCES.get(p))
+        raise SystemExit(f"the checkout's sources are not the candidate's: {changed}")
+    originals = {path: (ROOT / path).read_bytes() for path in FILES}
+    if status() != EXPECTED_STATUS:
+        raise SystemExit(f"unexpected worktree state before the controls: {status()}")
+    results = []
+    for c in COUNTED:
+        if only is not None and c["id"] not in only:
+            continue
+        output, compiled, failed, restored, message, code = run_one(c, originals, original_state)
+        (LOG / f"{c['id']}.log").write_text(output)
+        marked = c["marker"] in message
+        required = all(item in message for item in c["require"])
+        forbidden = any(item in message for item in c["forbid"])
+        ok = compiled and failed and marked and required and not forbidden and restored
+        result = dict(
+            id=c["id"], category=c["category"], design=c["design"], what=c["what"],
+            files=sorted({e["file"] for e in c["edits"]}), edits=len(c["edits"]),
+            test=c["test"], marker=c["marker"], require=c["require"],
+            compiled=compiled, failed_intended_test=failed, marker_in_assertion=marked,
+            required_present=required, forbidden_present=forbidden,
+            files_restored=restored, exit=code, ok=ok, assertion=message[:1500],
+        )
+        results.append(result)
+        print(json.dumps(result), flush=True)
+    final_state = state()
+    by_category = {}
+    for r in results:
+        by_category.setdefault(r["category"], []).append(r["id"])
+    summary = dict(
+        original=original_state,
+        final=final_state,
+        identical=final_state == original_state,
+        status=sorted(status()),
+        expected_status=sorted(EXPECTED_STATUS),
+        counted=len(results),
+        by_category={k: len(v) for k, v in sorted(by_category.items())},
+        all_required=all(r["ok"] for r in results),
+        failures=[r["id"] for r in results if not r["ok"]],
+    )
+    print(json.dumps(summary), flush=True)
+    (LOG / "summary.json").write_text(json.dumps(
+        dict(summary=summary, counted=results), indent=2) + "\n")
+    return 0 if summary["identical"] and summary["all_required"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

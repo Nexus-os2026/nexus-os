@@ -1,0 +1,35 @@
+
+running 1 test
+test m06_an_unprovisioned_root_with_history_is_republished ... FAILED
+
+failures:
+
+---- m06_an_unprovisioned_root_with_history_is_republished stdout ----
+
+thread 'm06_an_unprovisioned_root_with_history_is_republished' (51548) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:6558:5:
+assertion `left == right` failed: [composed-recovery] the root with history
+  left: []
+ right: ["uid-1001-101112131415161718191a1b1c1d1e1f"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    m06_an_unprovisioned_root_with_history_is_republished
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+warning: variable does not need to be mutable
+   --> crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs:781:13
+    |
+781 |         let mut history = false;
+    |             ----^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nexus-verifier-sandbox` (test "phase2_custody_store") generated 1 warning (run `cargo fix --test "phase2_custody_store" -p nexus-verifier-sandbox` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.25s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

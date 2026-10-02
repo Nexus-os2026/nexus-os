@@ -25,7 +25,9 @@ use super::format::{
     sha256, ArchiveClass, ArchiveName, Disposition, IncidentClass, IncidentFacts, IncidentKind,
     Provision, BLOCK, BLOCK_U64,
 };
-use super::io::{sync_with_retries, write_fully, Errno, FileType, IoError, LockRequest, StoreIo};
+use super::io::{
+    sync_with_retries, write_fully, Errno, FileType, IoError, Listing, LockRequest, Stat, StoreIo,
+};
 use super::open::{
     activate, check_mount, check_storage, open_root, open_store_dirs, revalidate, scan, select,
     Activation, NoHooks, OpenedRoot, OpeningHooks, OpeningId, Pinning, Platform, ProvisionPath,
@@ -1127,6 +1129,21 @@ impl<P: Platform> Session<P> {
         entry.same_inode(&held)
     }
 
+    /// The session's authority over its selection now (P2-V1-R3B-I3-I1-R3):
+    /// its retained lock on the selected root's `LOCK` entry, and the
+    /// selection revalidated afresh (design section 10.5).
+    pub(super) fn holds_selection(&self) -> Result<(), String> {
+        let state = &self.selection.state_name;
+        if !self.authorized(state) {
+            return Err("the session no longer holds its store's lock".into());
+        }
+        let lock = self.locks.get(state).ok_or("the session holds no lock")?;
+        if !revalidate(&self.io, &self.path, &self.selection, lock) {
+            return Err("the session's selection no longer revalidates".into());
+        }
+        Ok(())
+    }
+
     /// In-session verification (design section 13.11): the standalone
     /// verifier's checks under the session's own exclusion, with no lock
     /// request on the store lock, scanning afresh every time. It returns what
@@ -1749,11 +1766,20 @@ fn archived_facts<P: Platform>(
 /// takes nothing from a verification, and its only effect is that an
 /// incident blocks again (fail-closed). Its gate and verify-after are those
 /// of every session procedure.
+///
+/// P2-V1-R3B-I3-I1-R3: before the first mutation, at construction and again
+/// at the gate, under the session's lock ([`revocation_admissible`]): the
+/// active disposition is read by the rules an opening reads it with;
+/// `revoked/` is counted from its names first and must be below its bound
+/// (4096, design section 6.6), so a normal revocation never makes the store
+/// exceed it; and the revoked name must be absent, since revoked files stay
+/// as evidence and a revocation never replaces one. When `revoked/` is full,
+/// normal revocation is unavailable; no revoked entry is ever removed.
 pub fn revoke<P: Platform + Clone + 'static>(
     session: Rc<RefCell<Session<P>>>,
     binding: [u8; 32],
     compact_time: &str,
-) -> Procedure<'static> {
+) -> Result<Procedure<'static>, String> {
     let s = session.borrow();
     let io = Rc::new(s.io().clone());
     let mut dispositions_path = s.selection().parent.clone();
@@ -1763,9 +1789,44 @@ pub fn revoke<P: Platform + Clone + 'static>(
     revoked_path.push("revoked".into());
     let name = format::disposition_name(&binding);
     let revoked_name = format::revoked_name(&binding, compact_time);
+    if format::parse_revoked_name(&revoked_name).map(|(found, _)| found) != Some(binding) {
+        return Err("the revocation time is not a compact UTC time (YYYYMMDDTHHMMSSZ)".into());
+    }
+    let root_id = s.selection().provision.root_id;
+    let active = revocation_admissible(
+        &*io,
+        &dispositions_path,
+        &revoked_path,
+        &binding,
+        &revoked_name,
+        &root_id,
+    )?;
     let mut proc = Procedure::new("P-REVOKE");
     proc.within(Rc::clone(&s.mutations));
-    proc.gate(s.unchanged_since_now());
+    {
+        let mut unchanged = s.unchanged_since_now();
+        let (gate_io, gate_dispositions, gate_revoked, gate_name) = (
+            Rc::clone(&io),
+            dispositions_path.clone(),
+            revoked_path.clone(),
+            revoked_name.clone(),
+        );
+        proc.gate(move || {
+            unchanged()?;
+            if revocation_admissible(
+                &*gate_io,
+                &gate_dispositions,
+                &gate_revoked,
+                &binding,
+                &gate_name,
+                &root_id,
+            )? != active
+            {
+                return Err("the disposition to revoke was replaced".into());
+            }
+            Ok(())
+        });
+    }
     drop(s);
     proc.finish(verified_after(Rc::clone(&session)));
     {
@@ -1793,7 +1854,7 @@ pub fn revoke<P: Platform + Clone + 'static>(
             sync_dir(&*io, &dir_ref(&*io, &path)?)
         });
     }
-    proc
+    Ok(proc)
 }
 
 /// The archive entry name of a pool file the in-session report shows, if it
@@ -2323,6 +2384,15 @@ pub fn predecessor_statement(conditions: &[String]) -> Result<String, String> {
 ///   statement, and the successor verifies in-session with no condition and
 ///   no incident. Otherwise the procedure is not complete, and the selected
 ///   state stays as it is, as evidence: nothing is rolled back.
+///
+/// P2-V1-R3B-I3-I1-R3, the repeat (design section 15.2): `PROVISION` must be
+/// the bytes the session selected. The kept copy decides step 2a
+/// ([`kept_copy`]): absent, step 2a runs; exactly those bytes, step 2a is
+/// skipped and the copy is never rewritten; anything else, or a leftover
+/// `PROVISION` temporary, refuses. The successor's state root must be
+/// absent: an incomplete one is removed first by
+/// [`recover_incomplete_successor`]. The gate rechecks both, so nothing
+/// written later goes unnoticed.
 pub fn successor<P: Platform + Clone + 'static>(
     session: Rc<RefCell<Session<P>>>,
     layout: &Layout,
@@ -2357,11 +2427,26 @@ pub fn successor<P: Platform + Clone + 'static>(
     {
         return Err("the successor needs a new root id".into());
     }
+    if sha256(&old_bytes) != session.borrow().selection().digest {
+        return Err("PROVISION is not the bytes the session selected".into());
+    }
+    // A repeat of an interrupted succession (design section 15.2): the kept
+    // copy decides whether step 2a runs, and the successor's state root must
+    // be new (step 2b).
+    let keep = kept_copy(session.borrow().io(), &path, &old.root_id, &old_bytes)?;
+    if !state_root_absent(session.borrow().io(), layout)? {
+        return Err(format!(
+            "the successor's state root {} exists: an interrupted succession's incomplete root is recovered first (R-SUCCESSOR)",
+            layout.state_name
+        ));
+    }
     let gate = {
         let s = session.borrow();
         let mut unchanged = s.unchanged_since_now();
         let gate_session = Rc::clone(&session);
         let (old_state, old_provision) = (s.selection().state_name.clone(), old.clone());
+        let (gate_path, gate_layout, gate_bytes) =
+            (path.clone(), layout.clone(), old_bytes.clone());
         move || {
             unchanged()?;
             let s = gate_session.borrow();
@@ -2371,6 +2456,17 @@ pub fn successor<P: Platform + Clone + 'static>(
             let now = format::parse_provision(&s.provision_bytes()?).map_err(|error| error.0)?;
             if now != old_provision {
                 return Err("PROVISION changed since the predecessor's verification".into());
+            }
+            if kept_copy(s.io(), &gate_path, &old_provision.root_id, &gate_bytes)? != keep {
+                return Err(
+                    "the kept predecessor copy changed since the succession was authorized".into(),
+                );
+            }
+            if !state_root_absent(s.io(), &gate_layout)? {
+                return Err(
+                    "the successor's state root appeared since the succession was authorized"
+                        .into(),
+                );
             }
             Ok(())
         }
@@ -2396,62 +2492,65 @@ pub fn successor<P: Platform + Clone + 'static>(
     let path = Rc::new(path);
     let layout = Rc::new(layout.clone());
     let mut proc = Procedure::new("P-SUCCESSOR");
-    let file: Rc<RefCell<Option<P::File>>> = Rc::new(RefCell::new(None));
-    let predecessor_name = path.predecessor_name(&old.root_id);
-    {
-        let (io, path, file) = (Rc::clone(&io), Rc::clone(&path), Rc::clone(&file));
-        proc.add("13.6/2a", move || {
-            let provdir = dir_ref(&*io, &path.directory)?;
-            *file.borrow_mut() = Some(create_owned(
-                &*io,
-                &provdir.dir,
-                &path.predecessor_tmp_name(),
-                (0, 0, 0o444),
-                None,
-            )?);
-            Ok(())
-        });
-    }
-    {
-        let (io, file) = (Rc::clone(&io), Rc::clone(&file));
-        proc.add("13.6/2a", move || {
-            let guard = file.borrow();
-            write_all(&*io, guard.as_ref().ok_or("not created")?, &old_bytes)
-        });
-    }
-    {
-        let (io, file) = (Rc::clone(&io), Rc::clone(&file));
-        proc.add("13.6/2a", move || {
-            let handle = file.borrow_mut().take().ok_or("not created")?;
-            sync_file(&*io, &handle)
-        });
-    }
-    {
-        let (io, path) = (Rc::clone(&io), Rc::clone(&path));
-        proc.add("13.6/2a", move || {
-            let provdir = dir_ref(&*io, &path.directory)?;
-            io.link(
-                &provdir.dir,
-                &path.predecessor_tmp_name(),
-                &provdir.dir,
-                &predecessor_name,
-            )
-            .map_err(err)
-        });
-    }
-    {
-        let (io, path) = (Rc::clone(&io), Rc::clone(&path));
-        proc.add("13.6/2a", move || {
-            let provdir = dir_ref(&*io, &path.directory)?;
-            io.unlink(&provdir.dir, &path.predecessor_tmp_name())
+    // Step 2a, unless an exact copy is already kept (design section 15.2).
+    if keep == KeptCopy::Absent {
+        let file: Rc<RefCell<Option<P::File>>> = Rc::new(RefCell::new(None));
+        let predecessor_name = path.predecessor_name(&old.root_id);
+        {
+            let (io, path, file) = (Rc::clone(&io), Rc::clone(&path), Rc::clone(&file));
+            proc.add("13.6/2a", move || {
+                let provdir = dir_ref(&*io, &path.directory)?;
+                *file.borrow_mut() = Some(create_owned(
+                    &*io,
+                    &provdir.dir,
+                    &path.predecessor_tmp_name(),
+                    (0, 0, 0o444),
+                    None,
+                )?);
+                Ok(())
+            });
+        }
+        {
+            let (io, file) = (Rc::clone(&io), Rc::clone(&file));
+            proc.add("13.6/2a", move || {
+                let guard = file.borrow();
+                write_all(&*io, guard.as_ref().ok_or("not created")?, &old_bytes)
+            });
+        }
+        {
+            let (io, file) = (Rc::clone(&io), Rc::clone(&file));
+            proc.add("13.6/2a", move || {
+                let handle = file.borrow_mut().take().ok_or("not created")?;
+                sync_file(&*io, &handle)
+            });
+        }
+        {
+            let (io, path) = (Rc::clone(&io), Rc::clone(&path));
+            proc.add("13.6/2a", move || {
+                let provdir = dir_ref(&*io, &path.directory)?;
+                io.link(
+                    &provdir.dir,
+                    &path.predecessor_tmp_name(),
+                    &provdir.dir,
+                    &predecessor_name,
+                )
                 .map_err(err)
-        });
-    }
-    {
-        let (io, path) = (Rc::clone(&io), Rc::clone(&path));
-        proc.add("13.6/2a", move || {
-            sync_dir(&*io, &dir_ref(&*io, &path.directory)?)
-        });
+            });
+        }
+        {
+            let (io, path) = (Rc::clone(&io), Rc::clone(&path));
+            proc.add("13.6/2a", move || {
+                let provdir = dir_ref(&*io, &path.directory)?;
+                io.unlink(&provdir.dir, &path.predecessor_tmp_name())
+                    .map_err(err)
+            });
+        }
+        {
+            let (io, path) = (Rc::clone(&io), Rc::clone(&path));
+            proc.add("13.6/2a", move || {
+                sync_dir(&*io, &dir_ref(&*io, &path.directory)?)
+            });
+        }
     }
     let made = Rc::new(RefCell::new(Made::default()));
     proc.extend(store_steps(
@@ -2589,6 +2688,754 @@ pub fn leftover<P: Platform + Clone + 'static>(
     }
     drop(guard);
     proc.finish(verified_after(Rc::clone(&shared)));
+    Ok(proc)
+}
+
+// ---------------------------------------------------------------------------
+// Administrative crash recovery (P2-V1-R3B-I3-I1-R3; design sections 13.4,
+// 13.6 and 15.2)
+// ---------------------------------------------------------------------------
+
+/// A regular file as an administrative check reads it: its `fstatat` facts
+/// and its complete bytes, read through an open whose identity is the
+/// stat's, within `limit` bytes.
+fn read_entry<P: Platform>(
+    io: &P,
+    dir: &P::Dir,
+    name: &str,
+    limit: usize,
+) -> Result<(Stat, Vec<u8>), String> {
+    let stat = io.stat_at(dir, name).map_err(err)?;
+    if stat.file_type != FileType::Regular {
+        return Err(format!("{name} is a {:?}", stat.file_type));
+    }
+    let file = io.open_read(dir, name).map_err(err)?;
+    let opened = io.stat_file(&file).map_err(err)?;
+    if !opened.same_inode(&stat) || opened.file_type != FileType::Regular {
+        return Err(format!("{name} was replaced as it was opened"));
+    }
+    let bytes = read_whole(io, &file, limit).map_err(|why| format!("{name}: {why}"))?;
+    Ok((stat, bytes))
+}
+
+/// Whether `name` is absent from `dir` (`ENOENT`); any other error refuses.
+fn absent<P: Platform>(io: &P, dir: &P::Dir, name: &str) -> Result<bool, String> {
+    match io.stat_at(dir, name) {
+        Ok(_) => Ok(false),
+        Err(error) if error.errno == Errno::NoEnt => Ok(true),
+        Err(error) => Err(err(error)),
+    }
+}
+
+/// Whether the state root a layout names is absent from its parent.
+fn state_root_absent<P: Platform>(io: &P, layout: &Layout) -> Result<bool, String> {
+    let parent = dir_ref(io, &layout.parent)?;
+    absent(io, &parent.dir, &layout.state_name)
+}
+
+/// The predecessor's kept `PROVISION` (design section 13.6 step 2a), as a
+/// succession or its recovery finds it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KeptCopy {
+    /// No copy: step 2a runs.
+    Absent,
+    /// Exactly the selected `PROVISION`: a regular file, `root:root 0444`,
+    /// one link, the same complete bytes. Step 2a is skipped.
+    Exact { ino: u64 },
+}
+
+/// `<PROVISION_PATH>.predecessor-<root id>`, read afresh and classified
+/// (design section 15.2: step 2a "is skipped if [it] already holds exactly
+/// the current PROVISION's bytes; any other existing copy aborts the
+/// repeat"). A copy that is not exactly `selected` refuses; it is never
+/// replaced, unlinked or taken for the predecessor. A leftover
+/// `<PROVISION_PATH>.tmp` or `<PROVISION_PATH>.predecessor.tmp` refuses
+/// too: recovery (R-LEFTOVER) removes it first.
+fn kept_copy<P: Platform>(
+    io: &P,
+    path: &ProvisionPath,
+    root_id: &[u8; 16],
+    selected: &[u8],
+) -> Result<KeptCopy, String> {
+    let provdir = dir_ref(io, &path.directory)?;
+    for leftover in [path.predecessor_tmp_name(), path.tmp_name()] {
+        if !absent(io, &provdir.dir, &leftover)? {
+            return Err(format!(
+                "a leftover {leftover}: recovery (R-LEFTOVER) removes it first"
+            ));
+        }
+    }
+    let name = path.predecessor_name(root_id);
+    if absent(io, &provdir.dir, &name)? {
+        return Ok(KeptCopy::Absent);
+    }
+    let (stat, bytes) = read_entry(io, &provdir.dir, &name, format::PROVISION_LIMIT)
+        .map_err(|why| format!("the kept predecessor copy refuses the repeat: {why}"))?;
+    if (stat.uid, stat.gid, stat.mode, stat.nlink) != (0, 0, 0o444, 1) {
+        return Err(format!(
+            "the kept predecessor copy {name} is not root:root 0444 with one link: the repeat is refused"
+        ));
+    }
+    if bytes != selected {
+        return Err(format!(
+            "the kept predecessor copy {name} is not the selected PROVISION: the repeat is refused"
+        ));
+    }
+    Ok(KeptCopy::Exact { ino: stat.ino })
+}
+
+/// What a normal revocation needs (design sections 6.6 and 13.4), read
+/// afresh: the active disposition, by the rules an opening reads one with
+/// (regular, `root:root 0444`, one link, at most 4096 bytes, parsed exactly,
+/// this binding and this root); `revoked/` below its bound, counted from the
+/// names before any entry is examined; and the revoked name absent. Returns
+/// the active disposition's inode.
+fn revocation_admissible<P: Platform>(
+    io: &P,
+    dispositions_path: &[String],
+    revoked_path: &[String],
+    binding: &[u8; 32],
+    revoked_name: &str,
+    root_id: &[u8; 16],
+) -> Result<u64, String> {
+    let dispositions = dir_ref(io, dispositions_path)?;
+    let name = format::disposition_name(binding);
+    let (stat, bytes) = read_entry(io, &dispositions.dir, &name, format::DISPOSITION_LIMIT)
+        .map_err(|why| format!("no disposition to revoke: {why}"))?;
+    if (stat.uid, stat.gid, stat.mode, stat.nlink) != (0, 0, 0o444, 1) {
+        return Err(format!("{name} is not root:root 0444 with one link"));
+    }
+    let disposition =
+        format::parse_disposition(&bytes).map_err(|error| format!("{name}: {}", error.0))?;
+    if disposition.binding != *binding || disposition.root != *root_id {
+        return Err(format!(
+            "{name} is not this store's disposition for this binding"
+        ));
+    }
+    let revoked = dir_ref(io, revoked_path)?;
+    match io
+        .list_dir(&revoked.dir, format::REVOKED_ENTRY_LIMIT)
+        .map_err(err)?
+    {
+        Listing::TooMany => return Err("revoked/ is over its bound".into()),
+        Listing::Names(names) if names.len() >= format::REVOKED_ENTRY_LIMIT => {
+            return Err(format!(
+                "revoked/ holds {} entries, its bound: normal revocation is unavailable, and no revoked evidence is removed",
+                names.len()
+            ))
+        }
+        Listing::Names(_) => {}
+    }
+    if !absent(io, &revoked.dir, revoked_name)? {
+        return Err(format!(
+            "revoked/{revoked_name} exists: a revocation never replaces revoked evidence"
+        ));
+    }
+    Ok(stat.ino)
+}
+
+/// What an interrupted revocation left (design sections 13.4 and 15.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Revocation {
+    /// One inode under both names, with two links: the per-directory
+    /// over-approximation kept the addition to `revoked/` and lost the
+    /// removal from `dispositions/`. The active name is unlinked.
+    Split { ino: u64 },
+    /// The active name is gone and the revoked file has one link: only the
+    /// `dispositions/` sync is repeated, since its durability is not known.
+    Completed { ino: u64 },
+}
+
+/// The interrupted revocation of `binding` at the time `revoked_name`
+/// carries, read afresh: the revoked file is this store's canonical
+/// disposition for that binding, `root:root 0444`; and the active name is
+/// either the same inode with two links (split), or absent with the
+/// revoked file alone (completed). Anything else refuses.
+fn interrupted_revocation<P: Platform>(
+    io: &P,
+    dispositions_path: &[String],
+    revoked_path: &[String],
+    binding: &[u8; 32],
+    revoked_name: &str,
+    root_id: &[u8; 16],
+) -> Result<Revocation, String> {
+    let revoked = dir_ref(io, revoked_path)?;
+    let (artifact, bytes) = read_entry(io, &revoked.dir, revoked_name, format::DISPOSITION_LIMIT)
+        .map_err(|why| format!("no revoked artifact: {why}"))?;
+    if (artifact.uid, artifact.gid, artifact.mode) != (0, 0, 0o444) {
+        return Err(format!("revoked/{revoked_name} is not root:root 0444"));
+    }
+    let disposition = format::parse_disposition(&bytes)
+        .map_err(|error| format!("revoked/{revoked_name}: {}", error.0))?;
+    let canonical = render_disposition(&disposition).map_err(|error| error.0.to_string())?;
+    if disposition.binding != *binding || disposition.root != *root_id || canonical != bytes {
+        return Err(format!(
+            "revoked/{revoked_name} is not this store's canonical disposition for this binding"
+        ));
+    }
+    let dispositions = dir_ref(io, dispositions_path)?;
+    let name = format::disposition_name(binding);
+    match io.stat_at(&dispositions.dir, &name) {
+        Err(error) if error.errno == Errno::NoEnt => {
+            if artifact.nlink == 1 {
+                Ok(Revocation::Completed { ino: artifact.ino })
+            } else {
+                Err(format!(
+                    "revoked/{revoked_name} has {} links and no active name: not an interrupted revocation",
+                    artifact.nlink
+                ))
+            }
+        }
+        Err(error) => Err(err(error)),
+        Ok(active) => {
+            if !active.same_inode(&artifact) {
+                Err(format!(
+                    "{name} is another file than revoked/{revoked_name}: not an interrupted revocation, and nothing is removed"
+                ))
+            } else if (active.nlink, artifact.nlink) != (2, 2) {
+                Err(format!(
+                    "{name} has {} links, not the 2 of an interrupted revocation",
+                    active.nlink
+                ))
+            } else {
+                Ok(Revocation::Split { ino: artifact.ino })
+            }
+        }
+    }
+}
+
+/// What step 2b of design section 13.6 (section 13.2 steps 2 to 4) could
+/// have made of a successor's store, as an inspection found it: each
+/// existing object's inode, the pool files in name order.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct Incomplete {
+    root: Option<u64>,
+    lock: Option<u64>,
+    journals: Option<u64>,
+    pool: Vec<(String, u64)>,
+    dispositions: Option<u64>,
+    revoked: Option<u64>,
+    archive: Option<u64>,
+}
+
+/// Inspect the candidate state root `layout` names (design section 15.2:
+/// "the incomplete successor root may be removed only if all its pool files
+/// are zero"). Only what step 2b could have made may exist, each with the
+/// type, owner, mode and link count step 2b gives it; each pool file within
+/// its size and zero in every byte, read in full; nothing else. With
+/// `locks`, `LOCK` and every pool file are locked `LOCK_EX | LOCK_NB`
+/// (Busy refuses) and their descriptions kept there, to be retained through
+/// the cleanup. Any doubt refuses.
+fn inspect_incomplete<P: Platform>(
+    io: &P,
+    layout: &Layout,
+    mut locks: Option<&mut Vec<P::File>>,
+) -> Result<Incomplete, String> {
+    let mut found = Incomplete::default();
+    let parent = dir_ref(io, &layout.parent)?;
+    let root_stat = match io.stat_at(&parent.dir, &layout.state_name) {
+        Err(error) if error.errno == Errno::NoEnt => return Ok(found),
+        Err(error) => return Err(err(error)),
+        Ok(stat) => stat,
+    };
+    let open = |at: &P::Dir, name: &str, stat: &Stat| -> Result<P::Dir, String> {
+        if stat.file_type != FileType::Directory || (stat.uid, stat.gid, stat.mode) != (0, 0, 0o755)
+        {
+            return Err(format!("{name} is not a root:root 0755 directory"));
+        }
+        let dir = io.open_dir(at, name).map_err(err)?;
+        if io.stat_dir(&dir).map_err(err)?.ino != stat.ino {
+            return Err(format!("{name} was replaced as it was opened"));
+        }
+        Ok(dir)
+    };
+    let names = |dir: &P::Dir, at_most: usize, what: &str| -> Result<Vec<String>, String> {
+        match io.list_dir(dir, at_most).map_err(err)? {
+            Listing::Names(names) => Ok(names),
+            Listing::TooMany => Err(format!("{what} holds more than step 2b makes")),
+        }
+    };
+    let root = open(&parent.dir, &layout.state_name, &root_stat)?;
+    found.root = Some(root_stat.ino);
+    for name in names(&root, 4, "the candidate's state root")? {
+        let entry = io.stat_at(&root, &name).map_err(err)?;
+        match name.as_str() {
+            "LOCK" => {
+                if entry.file_type != FileType::Regular
+                    || (entry.uid, entry.gid, entry.mode, entry.nlink)
+                        != (layout.uid, layout.gid, 0o600, 1)
+                    || entry.size != 0
+                {
+                    return Err("LOCK is not the empty store-owned 0600 file step 2b makes".into());
+                }
+                let file = io.open_read(&root, "LOCK").map_err(err)?;
+                if !io.stat_file(&file).map_err(err)?.same_inode(&entry) {
+                    return Err("LOCK was replaced as it was opened".into());
+                }
+                if let Some(locks) = locks.as_mut() {
+                    io.flock(&file, LockRequest::Exclusive)
+                        .map_err(|_| "the candidate's LOCK is held by another process (Busy)")?;
+                    locks.push(file);
+                }
+                found.lock = Some(entry.ino);
+            }
+            "journals" => {
+                let journals = open(&root, "journals", &entry)?;
+                found.journals = Some(entry.ino);
+                let size = pool_file_size(layout.c_pool).ok_or("pool size")?;
+                for pool in names(&journals, layout.pool as usize, "journals/")? {
+                    if format::parse_pool_name(&pool, layout.pool).is_none() {
+                        return Err(format!("journals/{pool} is not a pool file step 2b makes"));
+                    }
+                    let stat = io.stat_at(&journals, &pool).map_err(err)?;
+                    if stat.file_type != FileType::Regular
+                        || (stat.uid, stat.gid, stat.mode, stat.nlink)
+                            != (layout.uid, layout.gid, 0o600, 1)
+                        || stat.size > size
+                    {
+                        return Err(format!(
+                            "journals/{pool} is not a store-owned 0600 pool file within its size"
+                        ));
+                    }
+                    let file = io.open_read(&journals, &pool).map_err(err)?;
+                    if !io.stat_file(&file).map_err(err)?.same_inode(&stat) {
+                        return Err(format!("journals/{pool} was replaced as it was opened"));
+                    }
+                    if locks.is_some() {
+                        io.flock(&file, LockRequest::Exclusive).map_err(|_| {
+                            format!("journals/{pool} is held by another process (Busy)")
+                        })?;
+                    }
+                    let bytes = read_whole(io, &file, size as usize)
+                        .map_err(|why| format!("journals/{pool}: {why}"))?;
+                    if bytes.iter().any(|byte| *byte != 0) {
+                        return Err(format!(
+                            "journals/{pool} holds a non-zero byte: it may hold history, and is never removed"
+                        ));
+                    }
+                    if let Some(locks) = locks.as_mut() {
+                        locks.push(file);
+                    }
+                    found.pool.push((pool, stat.ino));
+                }
+                found.pool.sort();
+            }
+            "dispositions" => {
+                let dispositions = open(&root, "dispositions", &entry)?;
+                found.dispositions = Some(entry.ino);
+                for child in names(&dispositions, 1, "dispositions/")? {
+                    if child != "revoked" {
+                        return Err(format!("dispositions/{child} is not made by step 2b"));
+                    }
+                    let stat = io.stat_at(&dispositions, "revoked").map_err(err)?;
+                    let revoked = open(&dispositions, "revoked", &stat)?;
+                    names(&revoked, 0, "dispositions/revoked/")?;
+                    found.revoked = Some(stat.ino);
+                }
+            }
+            "archive" => {
+                let archive = open(&root, "archive", &entry)?;
+                names(&archive, 0, "archive/")?;
+                found.archive = Some(entry.ino);
+            }
+            other => {
+                return Err(format!(
+                    "{other} is not made by step 2b: the candidate is refused"
+                ))
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// The cleanup's binding to an interrupted succession of the selected store
+/// (see [`recover_incomplete_successor`]): its `PROVISION` is kept exactly.
+/// Step 2a precedes step 2b and is synced first, so any root step 2b made
+/// implies the copy.
+fn succession_interrupted<P: Platform>(
+    io: &P,
+    path: &ProvisionPath,
+    root_id: &[u8; 16],
+    selected: &[u8],
+) -> Result<(), String> {
+    if kept_copy(io, path, root_id, selected)? == KeptCopy::Absent {
+        return Err(
+            "no succession of the selected store was interrupted: its PROVISION is not kept".into(),
+        );
+    }
+    Ok(())
+}
+
+/// Whether the candidate `layout` names is this store's and referenced by
+/// nothing (see [`recover_incomplete_successor`]); refuses otherwise. The
+/// candidate is under the selected store's parent, with the store's uid and
+/// gid (the `PROVISION` path is the uid's own, so no other store's root
+/// qualifies). It is not the selected store, by state name or root id, nor
+/// its recorded predecessor. And no kept copy references it: each
+/// `<PROVISION_PATH>.predecessor-<root id>` names a root id, and its bytes,
+/// parsed exactly, name a root id, a state root and a predecessor. A copy
+/// that cannot be read or parsed refuses.
+fn unreferenced<P: Platform>(
+    io: &P,
+    path: &ProvisionPath,
+    selection: &Selection,
+    layout: &Layout,
+) -> Result<(), String> {
+    if layout.parent != selection.parent {
+        return Err("the candidate is not under the selected store's parent".into());
+    }
+    if (layout.uid, layout.gid) != (selection.provision.uid, selection.provision.gid) {
+        return Err("the candidate is not this store's: another uid or gid".into());
+    }
+    if layout.state_name == selection.state_name || layout.root_id == selection.provision.root_id {
+        return Err("the candidate is the selected store: it is never removed".into());
+    }
+    if selection
+        .provision
+        .predecessor
+        .as_ref()
+        .is_some_and(|(id, _)| *id == layout.root_id)
+    {
+        return Err(
+            "the candidate is the selected store's predecessor: evidence, never removed".into(),
+        );
+    }
+    let provdir = dir_ref(io, &path.directory)?;
+    let names = match io.list_dir(&provdir.dir, 4096).map_err(err)? {
+        Listing::Names(names) => names,
+        Listing::TooMany => return Err("too many entries beside PROVISION to decide".into()),
+    };
+    let prefix = format!("{}.predecessor-", path.name);
+    let candidate = layout.state_root();
+    for name in names {
+        let Some(id) = name.strip_prefix(&prefix) else {
+            continue;
+        };
+        if id == hex(&layout.root_id) {
+            return Err("the candidate is a kept predecessor: evidence, never removed".into());
+        }
+        let (_, bytes) = read_entry(io, &provdir.dir, &name, format::PROVISION_LIMIT)
+            .map_err(|why| format!("a kept copy that cannot be read refuses: {why}"))?;
+        let kept = format::parse_provision(&bytes)
+            .map_err(|error| format!("{name} does not parse, which refuses: {}", error.0))?;
+        if kept.root_id == layout.root_id
+            || kept.state_root == candidate
+            || kept
+                .predecessor
+                .as_ref()
+                .is_some_and(|(id, _)| *id == layout.root_id)
+        {
+            return Err(format!(
+                "the candidate is referenced by {name}: evidence, never removed"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// One removal of a cleanup: `name` in the directory at `dir`, whose inode
+/// must still be `dir_ino`, only while it is still the inode the inspection
+/// found, and never recursively.
+fn remove_known<P: Platform>(
+    io: &P,
+    dir: &[String],
+    dir_ino: u64,
+    name: &str,
+    ino: u64,
+    directory: bool,
+) -> Result<(), String> {
+    let at = dir_ref(io, dir)?;
+    if io.stat_dir(&at.dir).map_err(err)?.ino != dir_ino {
+        return Err(format!("{} was replaced", at.name));
+    }
+    let stat = io.stat_at(&at.dir, name).map_err(err)?;
+    if stat.ino != ino || (stat.file_type == FileType::Directory) != directory {
+        return Err(format!("{name} is not the entry the inspection found"));
+    }
+    if directory {
+        io.remove_dir(&at.dir, name).map_err(err)
+    } else {
+        io.unlink(&at.dir, name).map_err(err)
+    }
+}
+
+/// `fsync` the directory at `dir` through a new description whose inode
+/// must be `ino`.
+fn sync_known<P: Platform>(io: &P, dir: &[String], ino: u64) -> Result<(), String> {
+    let at = dir_ref(io, dir)?;
+    let handle = io.open_dir_for_sync(&at.parent, &at.name).map_err(err)?;
+    if io.stat_file(&handle).map_err(err)?.ino != ino {
+        return Err(format!("{} was replaced", at.name));
+    }
+    sync_with_retries(io, &handle, false).map_err(err)
+}
+
+/// R-SUCCESSOR (design section 15.2, "predecessor, before the successor's
+/// PROVISION is visible or durable"): inside a session on the predecessor,
+/// remove the incomplete successor root an interrupted succession left,
+/// which "may be removed only if all its pool files are zero", so that
+/// section 13.6 can be repeated.
+///
+/// The Owner names the candidate with the successor's `layout`: Owner input,
+/// never authority. What authorizes the removal is read afresh under the
+/// session's lock, at construction and again at the gate:
+/// - the session holds its store's lock, its selection revalidates, and
+///   `PROVISION` is the bytes it selected;
+/// - the candidate is this store's (its parent, uid and gid), and nothing
+///   references it: neither the selected store, nor its recorded
+///   predecessor, nor any kept copy of a `PROVISION` ([`unreferenced`]);
+/// - a succession of that store was interrupted
+///   ([`succession_interrupted`]);
+/// - it holds only what step 2b could have made, exactly as step 2b makes
+///   it, every pool file zero in full ([`inspect_incomplete`]); `LOCK` and
+///   every pool file are locked `LOCK_EX | LOCK_NB` (Busy refuses), and the
+///   descriptions are retained until the procedure ends.
+///
+/// Then only those objects are removed, by name, each only while it is the
+/// inode found, bottom-up, never recursively, and each directory changed is
+/// synced, the parent last. A candidate already gone leaves one step, the
+/// parent's sync, since its durability is not known. The verify-after
+/// verifies the store in-session and requires the candidate gone. A crashed
+/// cleanup is recovered by this procedure again: every state it can leave
+/// holds a subset of those objects.
+pub fn recover_incomplete_successor<P: Platform + Clone + 'static>(
+    session: Rc<RefCell<Session<P>>>,
+    layout: &Layout,
+) -> Result<Procedure<'static>, String> {
+    let s = session.borrow();
+    let path = s.path().clone();
+    let selection = s.selection().clone();
+    s.holds_selection()?;
+    let selected = s.provision_bytes()?;
+    if sha256(&selected) != selection.digest {
+        return Err("PROVISION changed under the session".into());
+    }
+    let io = Rc::new(s.io().clone());
+    unreferenced(&*io, &path, &selection, layout)?;
+    succession_interrupted(&*io, &path, &selection.provision.root_id, &selected)?;
+    let mut held: Vec<P::File> = Vec::new();
+    let found = inspect_incomplete(&*io, layout, Some(&mut held))?;
+    let mut proc = Procedure::new("R-SUCCESSOR");
+    proc.within(Rc::clone(&s.mutations));
+    {
+        let mut unchanged = s.unchanged_since_now();
+        let gate_session = Rc::clone(&session);
+        let (gate_path, gate_layout, gate_selected, gate_found) = (
+            path.clone(),
+            layout.clone(),
+            selected.clone(),
+            found.clone(),
+        );
+        let root_id = selection.provision.root_id;
+        proc.gate(move || {
+            unchanged()?;
+            let s = gate_session.borrow();
+            s.holds_selection()?;
+            if s.provision_bytes()? != gate_selected {
+                return Err("PROVISION changed since the cleanup was built".into());
+            }
+            unreferenced(s.io(), &gate_path, s.selection(), &gate_layout)?;
+            succession_interrupted(s.io(), &gate_path, &root_id, &gate_selected)?;
+            if inspect_incomplete(s.io(), &gate_layout, None)? != gate_found {
+                return Err("the candidate changed since it was inspected".into());
+            }
+            Ok(())
+        });
+    }
+    let parent_path = layout.parent.clone();
+    let parent_ino = selection.parent_ino;
+    let mut root_path = parent_path.clone();
+    root_path.push(layout.state_name.clone());
+    let sub = |name: &str| {
+        let mut path = root_path.clone();
+        path.push(name.to_string());
+        path
+    };
+    let (journals_path, dispositions_path) = (sub("journals"), sub("dispositions"));
+    let label = "15.2/successor-root";
+    if let Some(root_ino) = found.root {
+        if let Some(journals_ino) = found.journals {
+            for (name, ino) in found.pool.clone() {
+                let (io, dir) = (Rc::clone(&io), journals_path.clone());
+                proc.add(label, move || {
+                    remove_known(&*io, &dir, journals_ino, &name, ino, false)
+                });
+            }
+            if !found.pool.is_empty() {
+                let (io, dir) = (Rc::clone(&io), journals_path.clone());
+                proc.add(label, move || sync_known(&*io, &dir, journals_ino));
+            }
+        }
+        if let (Some(dispositions_ino), Some(revoked_ino)) = (found.dispositions, found.revoked) {
+            {
+                let (io, dir) = (Rc::clone(&io), dispositions_path.clone());
+                proc.add(label, move || {
+                    remove_known(&*io, &dir, dispositions_ino, "revoked", revoked_ino, true)
+                });
+            }
+            let (io, dir) = (Rc::clone(&io), dispositions_path.clone());
+            proc.add(label, move || sync_known(&*io, &dir, dispositions_ino));
+        }
+        let mut root_changed = false;
+        for (name, ino, directory) in [
+            ("journals", found.journals, true),
+            ("dispositions", found.dispositions, true),
+            ("archive", found.archive, true),
+            ("LOCK", found.lock, false),
+        ] {
+            if let Some(ino) = ino {
+                let (io, dir) = (Rc::clone(&io), root_path.clone());
+                proc.add(label, move || {
+                    remove_known(&*io, &dir, root_ino, name, ino, directory)
+                });
+                root_changed = true;
+            }
+        }
+        if root_changed {
+            let (io, dir) = (Rc::clone(&io), root_path.clone());
+            proc.add(label, move || sync_known(&*io, &dir, root_ino));
+        }
+        let (io, dir, name) = (
+            Rc::clone(&io),
+            parent_path.clone(),
+            layout.state_name.clone(),
+        );
+        proc.add(label, move || {
+            remove_known(&*io, &dir, parent_ino, &name, root_ino, true)
+        });
+    }
+    {
+        let (io, dir) = (Rc::clone(&io), parent_path.clone());
+        proc.add(label, move || sync_known(&*io, &dir, parent_ino));
+    }
+    let finish_session = Rc::clone(&session);
+    let mut generic = verified_after(Rc::clone(&session));
+    let candidate = layout.clone();
+    drop(s);
+    proc.finish(move || {
+        let _retained = &held;
+        generic()?;
+        let s = finish_session.borrow();
+        if state_root_absent(s.io(), &candidate)? {
+            Ok(())
+        } else {
+            Err("the candidate's state root is still present".into())
+        }
+    });
+    Ok(proc)
+}
+
+/// R-REVOKE (design sections 13.4 and 15.2, "invalid, after an interrupted
+/// revocation"): "the Owner completes the revocation by unlinking the
+/// dispositions/ name and syncing that directory", as a session procedure.
+///
+/// The binding and the revocation's time (Owner input) name the two
+/// entries. What authorizes the removal is read afresh under the session's
+/// lock, at construction and again at the gate ([`interrupted_revocation`]):
+/// the revoked file is this store's canonical disposition for that binding,
+/// `root:root 0444`, and the active name is the same inode with two links,
+/// as the per-directory over-approximation leaves it. Only the active name
+/// is unlinked, then `dispositions/` is synced. No revoked entry is touched,
+/// created or rewritten, so `revoked/` at its bound does not prevent it.
+/// When the active name is already gone and the revoked file has one link,
+/// only the sync is repeated. Anything else refuses; nothing is republished.
+/// The verify-after verifies the store in-session and requires the active
+/// name gone and the revoked file alone.
+pub fn resume_revocation<P: Platform + Clone + 'static>(
+    session: Rc<RefCell<Session<P>>>,
+    binding: [u8; 32],
+    compact_time: &str,
+) -> Result<Procedure<'static>, String> {
+    let s = session.borrow();
+    s.holds_selection()?;
+    let revoked_name = format::revoked_name(&binding, compact_time);
+    if format::parse_revoked_name(&revoked_name).map(|(found, _)| found) != Some(binding) {
+        return Err("the revocation time is not a compact UTC time (YYYYMMDDTHHMMSSZ)".into());
+    }
+    let root_id = s.selection().provision.root_id;
+    let mut dispositions_path = s.selection().parent.clone();
+    dispositions_path.push(s.selection().state_name.clone());
+    dispositions_path.push("dispositions".into());
+    let mut revoked_path = dispositions_path.clone();
+    revoked_path.push("revoked".into());
+    let io = Rc::new(s.io().clone());
+    let state = interrupted_revocation(
+        &*io,
+        &dispositions_path,
+        &revoked_path,
+        &binding,
+        &revoked_name,
+        &root_id,
+    )?;
+    let dispositions_ino = {
+        let dir = dir_ref(&*io, &dispositions_path)?;
+        io.stat_dir(&dir.dir).map_err(err)?.ino
+    };
+    let mut proc = Procedure::new("R-REVOKE");
+    proc.within(Rc::clone(&s.mutations));
+    {
+        let mut unchanged = s.unchanged_since_now();
+        let gate_session = Rc::clone(&session);
+        let (gate_dispositions, gate_revoked, gate_name) = (
+            dispositions_path.clone(),
+            revoked_path.clone(),
+            revoked_name.clone(),
+        );
+        proc.gate(move || {
+            unchanged()?;
+            let s = gate_session.borrow();
+            s.holds_selection()?;
+            if interrupted_revocation(
+                s.io(),
+                &gate_dispositions,
+                &gate_revoked,
+                &binding,
+                &gate_name,
+                &root_id,
+            )? != state
+            {
+                return Err("the interrupted revocation changed since it was inspected".into());
+            }
+            Ok(())
+        });
+    }
+    if let Revocation::Split { ino } = state {
+        let (io, dir, name) = (
+            Rc::clone(&io),
+            dispositions_path.clone(),
+            format::disposition_name(&binding),
+        );
+        proc.add("13.4-revoke/recover", move || {
+            remove_known(&*io, &dir, dispositions_ino, &name, ino, false)
+        });
+    }
+    {
+        let (io, dir) = (Rc::clone(&io), dispositions_path.clone());
+        proc.add("13.4-revoke/recover", move || {
+            sync_known(&*io, &dir, dispositions_ino)
+        });
+    }
+    let ino = match state {
+        Revocation::Split { ino } | Revocation::Completed { ino } => ino,
+    };
+    let finish_session = Rc::clone(&session);
+    let mut generic = verified_after(Rc::clone(&session));
+    drop(s);
+    proc.finish(move || {
+        generic()?;
+        let s = finish_session.borrow();
+        match interrupted_revocation(
+            s.io(),
+            &dispositions_path,
+            &revoked_path,
+            &binding,
+            &revoked_name,
+            &root_id,
+        )? {
+            Revocation::Completed { ino: now } if now == ino => Ok(()),
+            other => Err(format!("the revocation is not complete: {other:?}")),
+        }
+    });
     Ok(proc)
 }
 

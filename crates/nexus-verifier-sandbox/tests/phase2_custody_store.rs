@@ -14,8 +14,11 @@
 //! exclusion's life); the maintenance authority of P2-V1-R3B-I3-I1-R2 (the
 //! session's complete verification, succession's authorization, every
 //! procedure's gate and verify-after, and the procedures the maintenance
-//! audit repaired); and unprivileged native primitives beneath
-//! `CARGO_TARGET_TMPDIR`.
+//! audit repaired); the administrative crash recovery of
+//! P2-V1-R3B-I3-I1-R3 (the repeated succession, R-SUCCESSOR, the
+//! revocation's bound and evidence, R-REVOKE, and each recovery row of
+//! design section 15.2 over the crash model); and unprivileged native
+//! primitives beneath `CARGO_TARGET_TMPDIR`.
 //!
 //! The custody module is included here exactly as the core and codec
 //! targets include it, never copied: every run uses the real `Custody`, its
@@ -28,9 +31,9 @@
 //!
 //! Every assertion that guards a requirement carries a bracketed marker; the
 //! negative controls of `docs/evidence/p2-v1-r3b-i3-i1/`,
-//! `docs/evidence/p2-v1-r3b-i3-i1-r1/` and
-//! `docs/evidence/p2-v1-r3b-i3-i1-r2/` restore one wrong behaviour each and
-//! must fail the assertion carrying their marker.
+//! `docs/evidence/p2-v1-r3b-i3-i1-r1/`, `docs/evidence/p2-v1-r3b-i3-i1-r2/`
+//! and `docs/evidence/p2-v1-r3b-i3-i1-r3/` restore one wrong behaviour each
+//! and must fail the assertion carrying their marker.
 
 #![cfg(target_os = "linux")]
 
@@ -1600,7 +1603,8 @@ fn f09_the_validator_accepts_only_an_exact_restatement() {
     );
     drop(opened);
     let session = session(&fixture, false);
-    let mut procedure = maint::revoke(Rc::clone(&session), binding, "20261002T000000Z");
+    let mut procedure =
+        maint::revoke(Rc::clone(&session), binding, "20261002T000000Z").expect("procedure");
     procedure.run_all(&mut quiet()).expect("revoked");
     drop(procedure);
     end(session);
@@ -6341,7 +6345,8 @@ fn m03_revocation_blocks_again() {
     let fixture = store_with_incident(2);
     let binding = publish_only_incident(&fixture);
     let session = session(&fixture, false);
-    let mut procedure = maint::revoke(Rc::clone(&session), binding, "20261001T130000Z");
+    let mut procedure =
+        maint::revoke(Rc::clone(&session), binding, "20261001T130000Z").expect("procedure");
     procedure.run_all(&mut quiet()).expect("revoked");
     drop(procedure);
     let report = verify(&session);
@@ -6667,8 +6672,15 @@ fn m10_retirement_is_decided_from_the_complete_set() {
 fn design_operations() -> BTreeMap<String, Vec<String>> {
     let start = DESIGN.find("### 15.3").expect("15.3");
     let end = DESIGN.find("### 15.4").expect("15.4");
+    operation_rows(&DESIGN[start..end])
+}
+
+/// The rows of a table in the form of design section 15.3: each
+/// procedure's operations, without their numbers (P2-V1-R3B-I3-I1-R3: also
+/// the implementation boundary's section 9.3).
+fn operation_rows(text: &str) -> BTreeMap<String, Vec<String>> {
     let mut table = BTreeMap::new();
-    for line in DESIGN[start..end].lines() {
+    for line in text.lines() {
         let cells: Vec<&str> = line.split(" | ").collect();
         if cells.len() == 3
             && (cells[0] == "| P-PROV"
@@ -6693,7 +6705,13 @@ fn design_operations() -> BTreeMap<String, Vec<String>> {
 
 /// Label the traced operations the way design section 15.3 names them.
 fn label_trace(fixture: &Fixture, trace: &[sim::TraceOp], roots: &[&str]) -> Vec<String> {
-    let mut dirs: BTreeMap<sim::Ino, &str> = BTreeMap::new();
+    label_ops(&trace_dirs(fixture, roots), trace)
+}
+
+/// The directories design section 15.3 names, by inode, as they are now
+/// (P2-V1-R3B-I3-I1-R3: taken before a procedure that removes them runs).
+fn trace_dirs(fixture: &Fixture, roots: &[&str]) -> BTreeMap<sim::Ino, &'static str> {
+    let mut dirs: BTreeMap<sim::Ino, &'static str> = BTreeMap::new();
     dirs.insert(ino_of(fixture, ROOTS_DIR), "parent");
     dirs.insert(ino_of(fixture, PROVDIR), "provdir");
     for root in roots {
@@ -6710,6 +6728,11 @@ fn label_trace(fixture: &Fixture, trace: &[sim::TraceOp], roots: &[&str]) -> Vec
             }
         }
     }
+    dirs
+}
+
+/// Label traced operations with the directories `dirs` names.
+fn label_ops(dirs: &BTreeMap<sim::Ino, &'static str>, trace: &[sim::TraceOp]) -> Vec<String> {
     let file_label = |dir: &str, name: &str| -> String {
         let label = match dir {
             "root" => name.to_string(),
@@ -6736,7 +6759,7 @@ fn label_trace(fixture: &Fixture, trace: &[sim::TraceOp], roots: &[&str]) -> Vec
             .and_then(|ino| dirs.get(&ino).copied())
             .unwrap_or("?");
         let object = match op.op {
-            "mkdir" | "create" | "link" | "unlink" | "rename" => {
+            "mkdir" | "create" | "link" | "unlink" | "rename" | "rmdir" => {
                 let object = file_label(dir, op.name.as_deref().unwrap_or(""));
                 if let Some(ino) = op.ino {
                     files.insert(ino, object.clone());
@@ -6810,7 +6833,7 @@ fn m08_procedures_perform_exactly_the_documented_steps() {
     check("P-DISP", &fixture, &trace, &[&state(&fixture)]);
     let trace = traced(
         &fixture,
-        maint::revoke(Rc::clone(&s), binding, "20261001T130000Z"),
+        maint::revoke(Rc::clone(&s), binding, "20261001T130000Z").expect("procedure"),
     );
     check("P-REVOKE", &fixture, &trace, &[&state(&fixture)]);
     verify(&s);
@@ -7000,7 +7023,7 @@ fn stage(proc: Proc) -> Staged {
             let binding = publish_only_incident(&fixture);
             with_session(fixture, false, &|s| {
                 (
-                    maint::revoke(Rc::clone(s), binding, "20261001T130000Z"),
+                    maint::revoke(Rc::clone(s), binding, "20261001T130000Z").expect("procedure"),
                     None,
                 )
             })
@@ -8452,7 +8475,8 @@ fn b06_a_disposition_takes_effect_only_through_its_opening() {
     plant_disposition(&fixture, &recount);
     blocked("a planted restatement with another count");
     let s = session(&fixture, false);
-    let mut procedure = maint::revoke(Rc::clone(&s), binding, "20261002T010000Z");
+    let mut procedure =
+        maint::revoke(Rc::clone(&s), binding, "20261002T010000Z").expect("procedure");
     procedure.run_all(&mut quiet()).expect("revoked");
     drop(procedure);
     end(s);
@@ -8588,7 +8612,8 @@ fn b08_a_session_decides_only_from_its_own_current_verification() {
         maint::archival_allowed(&report, 0).is_some(),
         "this verification allows the archival"
     );
-    let mut revocation = maint::revoke(Rc::clone(&s), binding, "20261002T120000Z");
+    let mut revocation =
+        maint::revoke(Rc::clone(&s), binding, "20261002T120000Z").expect("procedure");
     // The revocation's first step only (its rename): the verification lapses
     // as that step starts, before any verify-after (P2-V1-R3B-I3-I1-R2: a
     // completed procedure's verify-after also clears it).
@@ -9061,7 +9086,8 @@ fn v04_a_stale_or_consumed_verification_authorizes_no_succession() {
     assert!(before.blocking.is_empty(), "dispositioned when verified");
     // The revocation's first step only (its rename): a step ran, and no
     // verify-after has replaced anything.
-    let mut revocation = maint::revoke(Rc::clone(&s), binding, "20261002T130000Z");
+    let mut revocation =
+        maint::revoke(Rc::clone(&s), binding, "20261002T130000Z").expect("procedure");
     revocation.run(1, &mut quiet()).expect("renamed");
     drop(revocation);
     let refused = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
@@ -9488,7 +9514,8 @@ fn v12_no_succession_operation_precedes_its_gate() {
     verify(&s);
     let mut procedure =
         maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[]).expect("authorized");
-    let mut revocation = maint::revoke(Rc::clone(&s), binding, "20261002T140000Z");
+    let mut revocation =
+        maint::revoke(Rc::clone(&s), binding, "20261002T140000Z").expect("procedure");
     revocation
         .run(1, &mut quiet())
         .expect("a step of another procedure");
@@ -9731,6 +9758,7 @@ fn v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes() {
         .run_all(&mut quiet())
         .expect("archived");
     maint::revoke(Rc::clone(&s), binding, "20261002T150000Z")
+        .expect("procedure")
         .run_all(&mut quiet())
         .expect("revoked");
     let refused = s
@@ -10098,7 +10126,8 @@ fn v21_a_leftover_temporary_fails_the_verify_after() {
         (0, 0, 0o600),
     );
     let s = session(&fixture, false);
-    let mut procedure = maint::revoke(Rc::clone(&s), binding, "20261002T170000Z");
+    let mut procedure =
+        maint::revoke(Rc::clone(&s), binding, "20261002T170000Z").expect("procedure");
     let failed = procedure
         .run_all(&mut quiet())
         .expect_err("[maintenance-verify] a leftover remains");
@@ -10235,7 +10264,8 @@ fn v24_a_session_outlives_its_procedures() {
     let fixture = store_with_incident(2);
     let binding = publish_only_incident(&fixture);
     let s = session(&fixture, false);
-    let mut procedure = maint::revoke(Rc::clone(&s), binding, "20261002T180000Z");
+    let mut procedure =
+        maint::revoke(Rc::clone(&s), binding, "20261002T180000Z").expect("procedure");
     procedure.run(1, &mut quiet()).expect("renamed");
     let s = match Rc::try_unwrap(s) {
         Ok(_) => panic!("[maintenance-verify] the session ended under its procedure"),
@@ -10790,4 +10820,2644 @@ fn n08_native_worker_write_and_sync_wiring() {
         report.reason
     );
     assert_eq!(report.records.len(), 2);
+}
+
+// ---------------------------------------------------------------------------
+// R3: administrative crash recovery (P2-V1-R3B-I3-I1-R3; design sections
+// 13.4, 13.6 and 15.2)
+// ---------------------------------------------------------------------------
+
+const BOUNDARY: &str =
+    include_str!("../../../docs/architecture/p2-custody-store-implementation-boundary.md");
+const MAINTENANCE_SOURCE: &str = include_str!("support/custody/store/maintenance.rs");
+const SIM_SOURCE: &str = include_str!("support/custody/store/sim.rs");
+
+/// The operation rows of section 9.3 of the implementation boundary (the
+/// recoveries R3 adds and the repeat of a succession), in the form of
+/// design section 15.3.
+fn boundary_operations() -> BTreeMap<String, Vec<String>> {
+    let start = BOUNDARY.find("### 9.3").expect("9.3");
+    let end = BOUNDARY[start..]
+        .find("### 9.4")
+        .map(|at| start + at)
+        .expect("9.4");
+    operation_rows(&BOUNDARY[start..end])
+}
+
+/// A layout for another state root of the fixture's store, with root id
+/// `id`.
+fn layout_with(fixture: &Fixture, id: [u8; 16]) -> maint::Layout {
+    let mut layout = fixture.layout.clone();
+    layout.root_id = id;
+    layout.state_name = format!("uid-{}-{}", sim::STORE_UID, hexs(&id));
+    layout
+}
+
+/// F1 during a succession of a store with `pool` pool files: the session's
+/// process dies after `steps` of the procedure's operations, which releases
+/// its locks; nothing becomes durable.
+fn interrupted_succession(pool: u32, steps: usize) -> Fixture {
+    let fixture = Fixture::provisioned(pool, 16);
+    let s = session(&fixture, false);
+    verify(&s);
+    let mut procedure = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+        .expect("[succession-verified] authorized");
+    procedure
+        .run(steps, &mut quiet())
+        .expect("the steps before the crash");
+    let actor = s.borrow().io().clone();
+    fixture.world.kill(&actor);
+    drop(procedure);
+    drop(s);
+    fixture
+}
+
+/// The inode of `<PROVISION_PATH>.predecessor-<the fixture's root id>`, the
+/// fixture's own kept `PROVISION`, if any.
+fn kept_copy_ino(fixture: &Fixture) -> Option<sim::Ino> {
+    fixture
+        .world
+        .entries(ino_of(fixture, PROVDIR))
+        .get(&fixture.path.predecessor_name(&ROOT))
+        .copied()
+}
+
+/// The inode of an object below the successor's state root (`""` for the
+/// root itself).
+fn successor_ino(fixture: &Fixture, rest: &str) -> sim::Ino {
+    let path = format!("{}/{rest}", successor_layout(fixture).state_root());
+    fixture
+        .world
+        .lookup(&path)
+        .unwrap_or_else(|| panic!("no {path}"))
+}
+
+/// A directory tree as a fresh root process sees it: each entry's type,
+/// owner, mode, link count and inode, and a regular file's digest. What a
+/// refusal must leave as it was.
+fn tree(fixture: &Fixture, path: &str) -> Vec<String> {
+    let io = fixture.root_process("inspect");
+    let components: Vec<String> = path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(str::to_string)
+        .collect();
+    let mut out = Vec::new();
+    match maint::dir_ref(&io, &components) {
+        Ok(dir) => tree_into(&io, fixture, &dir.dir, path, &mut out),
+        Err(why) => out.push(format!("{path}: {why}")),
+    }
+    out
+}
+
+fn tree_into(
+    io: &SimIo,
+    fixture: &Fixture,
+    dir: &<SimIo as StoreIo>::Dir,
+    path: &str,
+    out: &mut Vec<String>,
+) {
+    let names = match io.list_dir(dir, 8192) {
+        Ok(custody::store::io::Listing::Names(names)) => names,
+        other => {
+            out.push(format!("{path}: {other:?}"));
+            return;
+        }
+    };
+    for name in names {
+        let Ok(stat) = io.stat_at(dir, &name) else {
+            out.push(format!("{path}/{name}: no stat"));
+            continue;
+        };
+        let mut line = format!(
+            "{path}/{name}: {:?} {}:{} {:o} nlink {} ino {}",
+            stat.file_type, stat.uid, stat.gid, stat.mode, stat.nlink, stat.ino
+        );
+        if stat.file_type == FileType::Regular {
+            line.push_str(&format!(
+                " sha256 {}",
+                hexs(&sha256(&fixture.world.visible(stat.ino)))
+            ));
+        }
+        out.push(line);
+        if stat.file_type == FileType::Directory {
+            if let Ok(child) = io.open_dir(dir, &name) {
+                tree_into(io, fixture, &child, &format!("{path}/{name}"), out);
+            }
+        }
+    }
+}
+
+/// Every state a crash at the current point leaves (design section 15.2):
+/// F1 (`actor`'s process dies), and F2 under every ordered and every
+/// per-directory schedule of the pending log, pending data old and new.
+fn crash_states(fixture: &Fixture, actor: &SimIo) -> Vec<(String, Fixture)> {
+    let world = fixture.world.clone();
+    let f1 = world.fork();
+    f1.kill(actor);
+    let mut states = vec![("F1".to_string(), view(fixture, f1))];
+    for (family, ordered) in [("ordered", true), ("per-directory", false)] {
+        for (index, schedule) in world.schedules(ordered).iter().enumerate() {
+            for data in [sim::Tear::Old, sim::Tear::New] {
+                let fork = world.fork();
+                fork.power_loss(Some(schedule), data, &BTreeMap::new());
+                states.push((format!("F2 {family} {index} {data:?}"), view(fixture, fork)));
+            }
+        }
+    }
+    states
+}
+
+/// How an interrupted succession was recovered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Recovered {
+    /// R-LEFTOVER's steps (one that removes nothing, when nothing was left).
+    leftover: usize,
+    /// R-SUCCESSOR's steps, when it ran.
+    cleanup: Option<usize>,
+    /// The repeated succession's steps (step 2a skipped or not).
+    repeat: usize,
+}
+
+/// The recovery of design section 15.2, row "predecessor", in one session
+/// on the predecessor: R-LEFTOVER; R-SUCCESSOR where the successor's state
+/// root exists (or always, with `cleanup_always`); a fresh verification; the
+/// succession again, through its verify-after.
+fn recover_succession(fixture: &Fixture, cleanup_always: bool) -> Recovered {
+    let layout = successor_layout(fixture);
+    let s = session(fixture, false);
+    let mut leftover = maint::leftover(Rc::clone(&s)).expect("[succession-recovery] R-LEFTOVER");
+    let leftover_steps = leftover.len();
+    leftover
+        .run_all(&mut quiet())
+        .unwrap_or_else(|why| panic!("[succession-recovery] R-LEFTOVER: {why}"));
+    drop(leftover);
+    let mut cleanup_steps = None;
+    if cleanup_always || successor_root_exists(fixture) {
+        let mut cleanup = maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+            .unwrap_or_else(|why| panic!("[succession-cleanup] refused: {why}"));
+        cleanup_steps = Some(cleanup.len());
+        cleanup
+            .run_all(&mut quiet())
+            .unwrap_or_else(|why| panic!("[succession-cleanup] {why}"));
+        assert!(cleanup.is_complete(), "[succession-cleanup] complete");
+        drop(cleanup);
+        assert!(
+            !successor_root_exists(fixture),
+            "[succession-cleanup] the candidate is gone"
+        );
+    }
+    verify(&s);
+    let mut repeat = maint::successor(Rc::clone(&s), &layout, &[])
+        .unwrap_or_else(|why| panic!("[succession-repeat] refused: {why}"));
+    let repeat_steps = repeat.len();
+    repeat
+        .run_all(&mut quiet())
+        .unwrap_or_else(|why| panic!("[succession-repeat] {why}"));
+    assert!(repeat.is_complete(), "[succession-repeat] complete");
+    drop(repeat);
+    end(s);
+    Recovered {
+        leftover: leftover_steps,
+        cleanup: cleanup_steps,
+        repeat: repeat_steps,
+    }
+}
+
+/// R301: an ordinary succession (no kept copy, no successor root) is still
+/// design section 15.3's 29 operations: R3's checks read and never write.
+#[test]
+fn r301_an_ordinary_succession_is_the_documented_29_operations() {
+    let fixture = Fixture::provisioned(1, 16);
+    let layout = successor_layout(&fixture);
+    let s = session(&fixture, false);
+    verify(&s);
+    let procedure =
+        maint::successor(Rc::clone(&s), &layout, &[]).expect("[succession-repeat] authorized");
+    assert_eq!(
+        procedure.len(),
+        29,
+        "[succession-repeat] the ordinary path runs step 2a"
+    );
+    let trace = traced(&fixture, procedure);
+    assert_eq!(
+        &label_trace(
+            &fixture,
+            &trace,
+            &[&fixture.layout.state_name, &layout.state_name]
+        ),
+        design_operations().get("P-SUCCESSOR").expect("P-SUCCESSOR"),
+        "[step-parity] P-SUCCESSOR"
+    );
+    end(s);
+    assert_eq!(outcome(&fixture, Proc::Successor), "successor");
+}
+
+/// R302: a succession interrupted after step 2a (F1 after its operation 6)
+/// is repeated with step 2a skipped, since the kept copy is exactly the
+/// selected `PROVISION` (design section 15.2): operations 7 to 29 of design
+/// section 15.3, the implementation boundary's "P-SUCCESSOR (repeat)" row.
+/// The copy keeps its inode and bytes: it is never recreated, rewritten or
+/// linked over.
+#[test]
+fn r302_a_repeat_after_the_kept_copy_skips_step_2a() {
+    let fixture = interrupted_succession(1, 6);
+    let selected = fixture.world.visible(ino_of(&fixture, sim::PROVISION_PATH));
+    let copy = kept_copy_ino(&fixture).expect("[succession-keep] kept by step 2a");
+    assert_eq!(fixture.world.visible(copy), selected);
+    let layout = successor_layout(&fixture);
+    let s = session(&fixture, false);
+    verify(&s);
+    let procedure =
+        maint::successor(Rc::clone(&s), &layout, &[]).expect("[succession-repeat] authorized");
+    assert_eq!(procedure.len(), 23, "[succession-repeat] step 2a skipped");
+    let trace = traced(&fixture, procedure);
+    let labelled = label_trace(
+        &fixture,
+        &trace,
+        &[&fixture.layout.state_name, &layout.state_name],
+    );
+    assert_eq!(
+        labelled,
+        design_operations().get("P-SUCCESSOR").expect("P-SUCCESSOR")[6..],
+        "[succession-repeat] operations 7 to 29"
+    );
+    assert_eq!(
+        &labelled,
+        boundary_operations()
+            .get("P-SUCCESSOR (repeat)")
+            .expect("the repeat's row"),
+        "[step-parity] P-SUCCESSOR (repeat)"
+    );
+    end(s);
+    assert_eq!(
+        kept_copy_ino(&fixture),
+        Some(copy),
+        "[succession-keep] the same inode"
+    );
+    assert_eq!(
+        fixture.world.visible(copy),
+        selected,
+        "[succession-keep] the same bytes"
+    );
+    assert_eq!(outcome(&fixture, Proc::Successor), "successor");
+    assert_eq!(provision_now(&fixture).root_id, sim::SUCCESSOR_ID);
+}
+
+/// R303: a kept copy one byte off the selected `PROVISION` (a byte changed,
+/// missing or added) refuses the repeat before any operation, and is left
+/// as it is.
+#[test]
+fn r303_a_kept_copy_one_byte_off_refuses_the_repeat() {
+    type Edit = fn(&mut Vec<u8>);
+    let variants: [(&str, Edit); 3] = [
+        ("changed", |bytes| {
+            let at = bytes.len() / 2;
+            bytes[at] ^= 0x01;
+        }),
+        ("missing", |bytes| {
+            bytes.pop();
+        }),
+        ("added", |bytes| bytes.push(b'\n')),
+    ];
+    for (what, edit) in variants {
+        let fixture = interrupted_succession(1, 6);
+        let copy = kept_copy_ino(&fixture).expect("kept");
+        let mut wrong = fixture.world.visible(copy);
+        edit(&mut wrong);
+        fixture.world.install(copy, &wrong);
+        let before = tree(&fixture, PROVDIR);
+        let s = session(&fixture, false);
+        verify(&s);
+        fixture.world.trace_start();
+        let refused = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+            .err()
+            .unwrap_or_else(|| panic!("[succession-keep] {what}: the repeat proceeded"));
+        assert!(
+            refused.contains("is not the selected PROVISION: the repeat is refused"),
+            "[succession-keep] {what}: {refused}"
+        );
+        assert!(
+            fixture.world.trace_take().is_empty(),
+            "[succession-keep] {what}: an operation ran"
+        );
+        end(s);
+        assert_eq!(
+            tree(&fixture, PROVDIR),
+            before,
+            "[succession-keep] {what}: the copy changed"
+        );
+        assert!(!successor_root_exists(&fixture));
+    }
+}
+
+/// R304: a kept copy of the wrong owner, mode, link count or type refuses
+/// the repeat before any operation, and is left as it is.
+#[test]
+fn r304_a_kept_copy_that_is_not_root_0444_with_one_link_refuses() {
+    type Edit = fn(&Fixture, sim::Ino, sim::Ino, &str);
+    let variants: [(&str, Edit); 6] = [
+        ("owner", |fixture, _, copy, _| {
+            fixture
+                .world
+                .fixture_owner(copy, sim::STORE_UID, sim::STORE_GID, 0o444)
+        }),
+        ("mode", |fixture, _, copy, _| {
+            fixture.world.fixture_owner(copy, 0, 0, 0o644)
+        }),
+        ("links", |fixture, provdir, copy, _| {
+            fixture.world.fixture_link(provdir, "another-name", copy)
+        }),
+        ("directory", |fixture, provdir, _, name| {
+            fixture.world.fixture_remove(provdir, name);
+            fixture
+                .world
+                .fixture_entry(provdir, name, FileType::Directory, (0, 0, 0o755));
+        }),
+        ("fifo", |fixture, provdir, _, name| {
+            fixture.world.fixture_remove(provdir, name);
+            fixture
+                .world
+                .fixture_entry(provdir, name, FileType::Fifo, (0, 0, 0o444));
+        }),
+        ("symbolic link", |fixture, provdir, _, name| {
+            fixture.world.fixture_remove(provdir, name);
+            fixture
+                .world
+                .fixture_entry(provdir, name, FileType::Symlink, (0, 0, 0o777));
+        }),
+    ];
+    for (what, edit) in variants {
+        let fixture = interrupted_succession(1, 6);
+        let provdir = ino_of(&fixture, PROVDIR);
+        let copy = kept_copy_ino(&fixture).expect("kept");
+        edit(
+            &fixture,
+            provdir,
+            copy,
+            &fixture.path.predecessor_name(&ROOT),
+        );
+        let before = tree(&fixture, PROVDIR);
+        let s = session(&fixture, false);
+        verify(&s);
+        fixture.world.trace_start();
+        let refused = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+            .err()
+            .unwrap_or_else(|| panic!("[succession-keep] {what}: the repeat proceeded"));
+        assert!(
+            refused.contains("the repeat is refused") || refused.contains("refuses the repeat"),
+            "[succession-keep] {what}: {refused}"
+        );
+        assert!(
+            fixture.world.trace_take().is_empty(),
+            "[succession-keep] {what}: an operation ran"
+        );
+        end(s);
+        assert_eq!(
+            tree(&fixture, PROVDIR),
+            before,
+            "[succession-keep] {what}: the copy changed"
+        );
+    }
+}
+
+/// R305: a leftover `<PROVISION_PATH>.predecessor.tmp` (F1 after operations
+/// 1 to 4) or `<PROVISION_PATH>.tmp` (after 25 to 27) refuses the repeat
+/// before any operation; R-LEFTOVER removes it, and the repeat completes,
+/// skipping step 2a exactly when the copy was kept.
+#[test]
+fn r305_a_leftover_temporary_refuses_the_repeat_until_r_leftover() {
+    for steps in [1, 2, 3, 4, 25, 26, 27] {
+        let fixture = interrupted_succession(1, steps);
+        let leftover = if steps <= 4 {
+            fixture.path.predecessor_tmp_name()
+        } else {
+            fixture.path.tmp_name()
+        };
+        assert!(fixture
+            .world
+            .entries(ino_of(&fixture, PROVDIR))
+            .contains_key(&leftover));
+        let before = tree(&fixture, PROVDIR);
+        let s = session(&fixture, false);
+        verify(&s);
+        fixture.world.trace_start();
+        let refused = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+            .err()
+            .unwrap_or_else(|| panic!("[succession-keep] point {steps}: the repeat proceeded"));
+        assert!(
+            refused.contains(&format!(
+                "a leftover {leftover}: recovery (R-LEFTOVER) removes it first"
+            )),
+            "[succession-keep] point {steps}: {refused}"
+        );
+        assert!(fixture.world.trace_take().is_empty());
+        assert_eq!(tree(&fixture, PROVDIR), before);
+        maint::leftover(Rc::clone(&s))
+            .expect("procedure")
+            .run_all(&mut quiet())
+            .expect("[succession-recovery] R-LEFTOVER");
+        if successor_root_exists(&fixture) {
+            maint::recover_incomplete_successor(Rc::clone(&s), &successor_layout(&fixture))
+                .expect("[succession-cleanup] removable")
+                .run_all(&mut quiet())
+                .expect("[succession-cleanup] removed");
+        }
+        verify(&s);
+        let mut repeat = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+            .expect("[succession-repeat] authorized");
+        assert_eq!(
+            repeat.len(),
+            if steps >= 4 { 23 } else { 29 },
+            "[succession-repeat] point {steps}"
+        );
+        repeat
+            .run_all(&mut quiet())
+            .expect("[succession-repeat] completes");
+        drop(repeat);
+        end(s);
+        assert_eq!(outcome(&fixture, Proc::Successor), "successor");
+    }
+}
+
+/// R306: an incomplete successor root whose pool files are zero, after F1
+/// at each operation of step 2b, refuses the repeat until R-SUCCESSOR
+/// removes it, with removals and syncs only, the parent's sync last, so
+/// that its absence is durable; the repeat then completes. With step 2b
+/// complete, the cleanup is the implementation boundary's R-SUCCESSOR row.
+/// Its verify-after requires the candidate gone.
+#[test]
+fn r306_a_zero_incomplete_successor_root_is_removed() {
+    for steps in 7..=24 {
+        let fixture = interrupted_succession(1, steps);
+        let layout = successor_layout(&fixture);
+        assert!(successor_root_exists(&fixture));
+        let s = session(&fixture, false);
+        verify(&s);
+        let refused = maint::successor(Rc::clone(&s), &layout, &[])
+            .err()
+            .expect("[succession-cleanup] the incomplete root refuses the repeat");
+        assert!(
+            refused.contains(
+                "exists: an interrupted succession's incomplete root is recovered first (R-SUCCESSOR)"
+            ),
+            "[succession-cleanup] point {steps}: {refused}"
+        );
+        let dirs = trace_dirs(&fixture, &[&fixture.layout.state_name, &layout.state_name]);
+        let cleanup = maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+            .unwrap_or_else(|why| panic!("[succession-cleanup] point {steps}: {why}"));
+        let labelled = label_ops(&dirs, &traced(&fixture, cleanup));
+        assert!(
+            labelled
+                .iter()
+                .all(|op| op.ends_with(" (15.2/successor-root)")
+                    && ["unlink ", "rmdir ", "fsync_dir "]
+                        .iter()
+                        .any(|kind| op.starts_with(kind))),
+            "[succession-cleanup] point {steps}: {labelled:?}"
+        );
+        assert_eq!(
+            labelled.last().map(String::as_str),
+            Some("fsync_dir `parent` (15.2/successor-root)"),
+            "[succession-cleanup] point {steps}: the parent's sync last"
+        );
+        if steps == 24 {
+            assert_eq!(
+                &labelled,
+                boundary_operations()
+                    .get("R-SUCCESSOR")
+                    .expect("R-SUCCESSOR"),
+                "[step-parity] R-SUCCESSOR"
+            );
+        }
+        assert!(!successor_root_exists(&fixture));
+        assert!(
+            !fixture
+                .world
+                .durable_entries(ino_of(&fixture, ROOTS_DIR))
+                .contains_key(&layout.state_name),
+            "[succession-cleanup] point {steps}: the removal is durable"
+        );
+        verify(&s);
+        maint::successor(Rc::clone(&s), &layout, &[])
+            .expect("[succession-repeat] authorized")
+            .run_all(&mut quiet())
+            .expect("[succession-repeat] completes");
+        end(s);
+        assert_eq!(outcome(&fixture, Proc::Successor), "successor");
+    }
+    // The verify-after: a candidate that reappears before the last step.
+    let fixture = interrupted_succession(1, 24);
+    let layout = successor_layout(&fixture);
+    let s = session(&fixture, false);
+    let mut cleanup =
+        maint::recover_incomplete_successor(Rc::clone(&s), &layout).expect("procedure");
+    let steps = cleanup.len();
+    cleanup
+        .run(steps - 1, &mut quiet())
+        .expect("every step but the parent's sync");
+    fixture.world.fixture_entry(
+        ino_of(&fixture, ROOTS_DIR),
+        &layout.state_name,
+        FileType::Directory,
+        (0, 0, 0o755),
+    );
+    let failed = cleanup
+        .run_all(&mut quiet())
+        .expect_err("[succession-cleanup] the candidate reappeared");
+    assert!(
+        failed.contains("verify-after")
+            && failed.contains("the candidate's state root is still present")
+            && !cleanup.is_complete(),
+        "[succession-cleanup] {failed}"
+    );
+    drop(cleanup);
+    end(s);
+}
+
+/// R307: a successor pool file with a non-zero byte anywhere, or longer
+/// than its size, may hold history: R-SUCCESSOR refuses before any
+/// operation, at construction or at its gate when the byte appears after it
+/// was built, and removes nothing.
+#[test]
+fn r307_a_successor_pool_byte_that_is_not_zero_refuses() {
+    let size = format::pool_file_size(16).expect("size") as usize;
+    for (what, at, len) in [
+        ("first byte", Some(0), size),
+        ("a byte inside", Some(BLOCK * 3 + 17), size),
+        ("last byte", Some(size - 1), size),
+        ("a byte of a shorter file", Some(10), BLOCK),
+        ("longer, zero", None, size + 1),
+    ] {
+        let fixture = interrupted_succession(1, 24);
+        let layout = successor_layout(&fixture);
+        let pool = successor_ino(&fixture, &format!("journals/{}", format::pool_name(0)));
+        let mut bytes = vec![0u8; len];
+        if let Some(at) = at {
+            bytes[at] = 0x5a;
+        }
+        fixture.world.install(pool, &bytes);
+        let before = tree(&fixture, &layout.state_root());
+        let s = session(&fixture, false);
+        fixture.world.trace_start();
+        let refused = maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+            .err()
+            .unwrap_or_else(|| panic!("[succession-cleanup] {what}: removable"));
+        assert!(
+            refused.contains("holds a non-zero byte: it may hold history, and is never removed")
+                || refused.contains("within its size"),
+            "[succession-cleanup] {what}: {refused}"
+        );
+        assert!(fixture.world.trace_take().is_empty());
+        end(s);
+        assert_eq!(
+            tree(&fixture, &layout.state_root()),
+            before,
+            "[succession-cleanup] {what}: changed"
+        );
+        assert_eq!(
+            maint::roots_with_history(&fixture.root, &fixture.layout.parent)
+                .expect("listed")
+                .contains(&layout.state_name),
+            at.is_some(),
+            "[succession-cleanup] {what}: history"
+        );
+    }
+    // At the gate: the byte is written after the cleanup was built (by a
+    // writer the advisory locks do not stop).
+    let fixture = interrupted_succession(1, 24);
+    let layout = successor_layout(&fixture);
+    let pool = successor_ino(&fixture, &format!("journals/{}", format::pool_name(0)));
+    let s = session(&fixture, false);
+    let mut cleanup = maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+        .expect("[succession-cleanup] zero: removable");
+    fixture.world.overwrite_visible(pool, 100, &[1]);
+    let before = tree(&fixture, &layout.state_root());
+    fixture.world.trace_start();
+    let refused = cleanup
+        .run_all(&mut quiet())
+        .expect_err("[succession-cleanup] the gate");
+    assert!(
+        refused.contains("(gate)") && refused.contains("may hold history"),
+        "[succession-cleanup] {refused}"
+    );
+    assert!(fixture.world.trace_take().is_empty() && cleanup.steps_done() == 0);
+    drop(cleanup);
+    end(s);
+    assert_eq!(tree(&fixture, &layout.state_root()), before);
+}
+
+/// R308: anything in the candidate that step 2b does not make, or makes
+/// otherwise, refuses R-SUCCESSOR before any operation, and nothing is
+/// removed. After the gate, each removal is of the entry the inspection
+/// found and never recursive: a file that appears in a directory makes that
+/// directory's removal refuse, an entry replaced under its name refuses its
+/// removal, and both stay.
+#[test]
+fn r308_an_unexpected_entry_refuses_the_cleanup() {
+    type Edit = fn(&Fixture);
+    let variants: [(&str, Edit); 13] = [
+        ("an entry of the root", |f| {
+            f.world.fixture_entry(
+                successor_ino(f, ""),
+                "extra",
+                FileType::Regular,
+                (0, 0, 0o444),
+            );
+        }),
+        ("an entry in place of archive/", |f| {
+            let root = successor_ino(f, "");
+            f.world.fixture_remove(root, "archive");
+            f.world
+                .fixture_entry(root, "extra", FileType::Regular, (0, 0, 0o444));
+        }),
+        ("a temporary in journals/", |f| {
+            f.world.fixture_entry(
+                successor_ino(f, "journals"),
+                ".tmp-0",
+                FileType::Regular,
+                (sim::STORE_UID, sim::STORE_GID, 0o600),
+            );
+        }),
+        ("a pool file beyond the pool", |f| {
+            f.world.fixture_entry(
+                successor_ino(f, "journals"),
+                &format::pool_name(1),
+                FileType::Regular,
+                (sim::STORE_UID, sim::STORE_GID, 0o600),
+            );
+        }),
+        ("a disposition", |f| {
+            f.world.fixture_entry(
+                successor_ino(f, "dispositions"),
+                &format::disposition_name(&[7; 32]),
+                FileType::Regular,
+                (0, 0, 0o444),
+            );
+        }),
+        ("a revoked entry", |f| {
+            f.world.fixture_entry(
+                successor_ino(f, "dispositions/revoked"),
+                &format::revoked_name(&[7; 32], "20261001T000000Z"),
+                FileType::Regular,
+                (0, 0, 0o444),
+            );
+        }),
+        ("an archive entry", |f| {
+            f.world.fixture_entry(
+                successor_ino(f, "archive"),
+                "entry",
+                FileType::Regular,
+                (0, 0, 0o444),
+            );
+        }),
+        ("LOCK of another mode", |f| {
+            f.world.fixture_owner(
+                successor_ino(f, "LOCK"),
+                sim::STORE_UID,
+                sim::STORE_GID,
+                0o644,
+            )
+        }),
+        ("LOCK with bytes", |f| {
+            f.world.install(successor_ino(f, "LOCK"), b"x")
+        }),
+        ("a directory of another mode", |f| {
+            f.world
+                .fixture_owner(successor_ino(f, "archive"), 0, 0, 0o700)
+        }),
+        ("a pool file owned by root", |f| {
+            f.world.fixture_owner(
+                successor_ino(f, &format!("journals/{}", format::pool_name(0))),
+                0,
+                0,
+                0o600,
+            )
+        }),
+        ("a symbolic link for a directory", |f| {
+            let root = successor_ino(f, "");
+            f.world.fixture_remove(root, "archive");
+            f.world
+                .fixture_entry(root, "archive", FileType::Symlink, (0, 0, 0o777));
+        }),
+        ("a directory for a pool file", |f| {
+            let journals = successor_ino(f, "journals");
+            f.world.fixture_remove(journals, &format::pool_name(0));
+            f.world.fixture_entry(
+                journals,
+                &format::pool_name(0),
+                FileType::Directory,
+                (sim::STORE_UID, sim::STORE_GID, 0o700),
+            );
+        }),
+    ];
+    for (what, edit) in variants {
+        let fixture = interrupted_succession(1, 24);
+        let layout = successor_layout(&fixture);
+        edit(&fixture);
+        let before = tree(&fixture, &layout.state_root());
+        let s = session(&fixture, false);
+        fixture.world.trace_start();
+        let refused = maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+            .err()
+            .unwrap_or_else(|| panic!("[succession-cleanup] {what}: removable"));
+        assert!(
+            fixture.world.trace_take().is_empty(),
+            "[succession-cleanup] {what}: an operation ran ({refused})"
+        );
+        end(s);
+        assert_eq!(
+            tree(&fixture, &layout.state_root()),
+            before,
+            "[succession-cleanup] {what}: changed ({refused})"
+        );
+        println!("R308 {what}: {refused}");
+    }
+    // After the gate: a file that appears in journals/ before journals/ is
+    // removed. Its directory's removal refuses (never recursive), and it
+    // stays.
+    let fixture = interrupted_succession(1, 24);
+    let layout = successor_layout(&fixture);
+    let s = session(&fixture, false);
+    let mut cleanup =
+        maint::recover_incomplete_successor(Rc::clone(&s), &layout).expect("procedure");
+    cleanup
+        .run(4, &mut quiet())
+        .expect("the pool file, revoked/ and their syncs");
+    let journals = successor_ino(&fixture, "journals");
+    let planted =
+        fixture
+            .world
+            .fixture_entry(journals, "planted", FileType::Regular, (0, 0, 0o444));
+    fixture.world.install(planted, b"may be history");
+    let failed = cleanup
+        .run_all(&mut quiet())
+        .expect_err("[successor-cleanup-recursive] a directory that is not empty");
+    assert!(
+        failed.contains("NotEmpty") && !cleanup.is_complete(),
+        "[successor-cleanup-recursive] {failed}"
+    );
+    assert_eq!(
+        fixture.world.entries(journals).get("planted"),
+        Some(&planted),
+        "[successor-cleanup-recursive] the planted file was removed"
+    );
+    drop(cleanup);
+    end(s);
+    // After the gate: LOCK replaced by another file under its name. Its
+    // removal refuses, and the replacement stays.
+    let fixture = interrupted_succession(1, 24);
+    let layout = successor_layout(&fixture);
+    let s = session(&fixture, false);
+    let mut cleanup =
+        maint::recover_incomplete_successor(Rc::clone(&s), &layout).expect("procedure");
+    cleanup
+        .run(7, &mut quiet())
+        .expect("every removal before LOCK's");
+    let root = successor_ino(&fixture, "");
+    fixture.world.fixture_remove(root, "LOCK");
+    let replaced = fixture.world.fixture_entry(
+        root,
+        "LOCK",
+        FileType::Regular,
+        (sim::STORE_UID, sim::STORE_GID, 0o600),
+    );
+    let failed = cleanup
+        .run_all(&mut quiet())
+        .expect_err("[succession-cleanup] a replaced entry");
+    assert!(
+        failed.contains("is not the entry the inspection found"),
+        "[succession-cleanup] {failed}"
+    );
+    assert_eq!(
+        fixture.world.entries(root).get("LOCK"),
+        Some(&replaced),
+        "[succession-cleanup] the replacement was removed"
+    );
+    drop(cleanup);
+    end(s);
+}
+
+/// R309: a candidate that is not this store's, or that anything references,
+/// refuses R-SUCCESSOR before any operation: the selected store (by state
+/// name or root id), a candidate under another parent or of another uid,
+/// the selected store's recorded predecessor, a kept predecessor, and a
+/// root a kept copy's content records (each of these an all-zero root,
+/// which the content checks alone would accept); a kept copy that does not
+/// parse refuses any candidate, and so does a store with no interrupted
+/// succession (its `PROVISION` not kept).
+#[test]
+fn r309_a_referenced_candidate_refuses_the_cleanup() {
+    let fixture = interrupted_succession(1, 24);
+    let mut by_name = successor_layout(&fixture);
+    by_name.state_name = fixture.layout.state_name.clone();
+    let mut by_id = successor_layout(&fixture);
+    by_id.root_id = ROOT;
+    let mut elsewhere = successor_layout(&fixture);
+    elsewhere.parent = vec!["var".into(), "lib".into()];
+    let mut another_uid = successor_layout(&fixture);
+    another_uid.uid = sim::STORE_UID + 1;
+    let before = tree(&fixture, ROOTS_DIR);
+    let s = session(&fixture, false);
+    for (what, layout, expected) in [
+        (
+            "the selected store",
+            fixture.layout.clone(),
+            "the candidate is the selected store: it is never removed",
+        ),
+        (
+            "its state name",
+            by_name,
+            "the candidate is the selected store: it is never removed",
+        ),
+        (
+            "its root id",
+            by_id,
+            "the candidate is the selected store: it is never removed",
+        ),
+        (
+            "another parent",
+            elsewhere,
+            "the candidate is not under the selected store's parent",
+        ),
+        (
+            "another store's uid",
+            another_uid,
+            "the candidate is not this store's: another uid or gid",
+        ),
+    ] {
+        let refused = maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+            .err()
+            .unwrap_or_else(|| panic!("[succession-cleanup] {what}: removable"));
+        assert!(
+            refused.contains(expected),
+            "[succession-cleanup] {what}: {refused}"
+        );
+    }
+    end(s);
+    assert_eq!(tree(&fixture, ROOTS_DIR), before);
+    // No interrupted succession: the selected store's PROVISION is not kept
+    // (an Owner removed the copy).
+    fixture.world.fixture_remove(
+        ino_of(&fixture, PROVDIR),
+        &fixture.path.predecessor_name(&ROOT),
+    );
+    let s = session(&fixture, false);
+    let refused = maint::recover_incomplete_successor(Rc::clone(&s), &successor_layout(&fixture))
+        .err()
+        .expect("[succession-cleanup] no interrupted succession");
+    assert!(
+        refused.contains(
+            "no succession of the selected store was interrupted: its PROVISION is not kept"
+        ),
+        "[succession-cleanup] {refused}"
+    );
+    end(s);
+    assert!(successor_root_exists(&fixture));
+    // A -> B -> C complete, C -> D interrupted after step 2a: on C, A is a
+    // kept predecessor and B the recorded predecessor, both all-zero roots.
+    let (c, d) = ([0x30; 16], [0x40; 16]);
+    let fixture = Fixture::provisioned(1, 16);
+    for next in [sim::SUCCESSOR_ID, c] {
+        let s = session(&fixture, false);
+        verify(&s);
+        maint::successor(Rc::clone(&s), &layout_with(&fixture, next), &[])
+            .expect("authorized")
+            .run_all(&mut quiet())
+            .expect("succession");
+        end(s);
+    }
+    let s = session(&fixture, false);
+    verify(&s);
+    let mut interrupted =
+        maint::successor(Rc::clone(&s), &layout_with(&fixture, d), &[]).expect("authorized");
+    interrupted.run(6, &mut quiet()).expect("step 2a");
+    drop(interrupted);
+    let before = tree(&fixture, ROOTS_DIR);
+    for (what, layout, expected) in [
+        (
+            "a kept predecessor",
+            fixture.layout.clone(),
+            "the candidate is a kept predecessor: evidence, never removed",
+        ),
+        (
+            "the recorded predecessor",
+            layout_with(&fixture, sim::SUCCESSOR_ID),
+            "the candidate is the selected store's predecessor: evidence, never removed",
+        ),
+    ] {
+        let refused = maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+            .err()
+            .unwrap_or_else(|| panic!("[succession-cleanup] {what}: removable"));
+        assert!(
+            refused.contains(expected),
+            "[succession-cleanup] {what}: {refused}"
+        );
+    }
+    // A's own copy removed (an Owner's error): B's kept copy still records
+    // A as its predecessor.
+    let provdir = ino_of(&fixture, PROVDIR);
+    fixture
+        .world
+        .fixture_remove(provdir, &fixture.path.predecessor_name(&ROOT));
+    let refused = maint::recover_incomplete_successor(Rc::clone(&s), &fixture.layout)
+        .err()
+        .expect("[succession-cleanup] referenced by a kept copy's content");
+    assert!(
+        refused.contains(&format!(
+            "the candidate is referenced by {}: evidence, never removed",
+            fixture.path.predecessor_name(&sim::SUCCESSOR_ID)
+        )),
+        "[succession-cleanup] {refused}"
+    );
+    // A kept copy that does not parse: nothing can be decided.
+    let unreadable = fixture.world.fixture_entry(
+        provdir,
+        &fixture.path.predecessor_name(&[0x60; 16]),
+        FileType::Regular,
+        (0, 0, 0o444),
+    );
+    fixture.world.install(unreadable, b"not a PROVISION\n");
+    let refused =
+        maint::recover_incomplete_successor(Rc::clone(&s), &layout_with(&fixture, [0x70; 16]))
+            .err()
+            .expect("[succession-cleanup] an unreadable kept copy");
+    assert!(
+        refused.contains("does not parse, which refuses"),
+        "[succession-cleanup] {refused}"
+    );
+    end(s);
+    assert_eq!(
+        tree(&fixture, ROOTS_DIR),
+        before,
+        "[succession-cleanup] evidence changed"
+    );
+}
+
+/// R310: R-SUCCESSOR takes `LOCK_EX | LOCK_NB` on the candidate's `LOCK`
+/// and on each pool file, and keeps them until it ends: one held by another
+/// process refuses it before any operation; released, the cleanup applies,
+/// and while it is built, no other process can take them.
+#[test]
+fn r310_a_candidate_held_elsewhere_refuses_the_cleanup() {
+    for (dir, name) in [("", "LOCK".to_string()), ("journals", format::pool_name(0))] {
+        let fixture = interrupted_succession(1, 24);
+        let layout = successor_layout(&fixture);
+        let holder = fixture.store_process("holder");
+        let mut components = layout.parent.clone();
+        components.push(layout.state_name.clone());
+        if !dir.is_empty() {
+            components.push(dir.to_string());
+        }
+        let at = maint::dir_ref(&holder, &components).expect("reachable");
+        let held = holder.open_read(&at.dir, &name).expect("open");
+        holder
+            .flock(&held, LockRequest::Exclusive)
+            .expect("held elsewhere");
+        let before = tree(&fixture, &layout.state_root());
+        let s = session(&fixture, false);
+        fixture.world.trace_start();
+        let refused = maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+            .err()
+            .unwrap_or_else(|| panic!("[succession-cleanup] {name}: removable while held"));
+        assert!(
+            refused.contains("held by another process (Busy)"),
+            "[succession-cleanup] {name}: {refused}"
+        );
+        assert!(fixture.world.trace_take().is_empty());
+        assert_eq!(tree(&fixture, &layout.state_root()), before);
+        drop(held);
+        let mut cleanup = maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+            .expect("[succession-cleanup] released");
+        let again = holder.open_read(&at.dir, &name).expect("open");
+        assert!(
+            holder.flock(&again, LockRequest::Exclusive).is_err(),
+            "[succession-cleanup] {name}: the cleanup does not hold it"
+        );
+        drop(again);
+        cleanup
+            .run_all(&mut quiet())
+            .expect("[succession-cleanup] removed");
+        drop(cleanup);
+        end(s);
+        assert!(!successor_root_exists(&fixture));
+    }
+}
+
+/// R312: R-SUCCESSOR's steps lapse the session's verification, and its
+/// verify-after is never a verify-before: the repeat needs a fresh
+/// verification after the cleanup.
+#[test]
+fn r312_the_repeat_needs_a_fresh_verification_after_the_cleanup() {
+    let fixture = interrupted_succession(1, 24);
+    let layout = successor_layout(&fixture);
+    let s = session(&fixture, false);
+    verify(&s);
+    maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+        .expect("procedure")
+        .run_all(&mut quiet())
+        .expect("removed");
+    let refused = maint::successor(Rc::clone(&s), &layout, &[])
+        .err()
+        .expect("[succession-current] a verification older than the cleanup");
+    assert!(
+        refused.contains("the session has not verified since its last procedure"),
+        "[succession-current] {refused}"
+    );
+    verify(&s);
+    maint::successor(Rc::clone(&s), &layout, &[])
+        .expect("[succession-current] verified afresh")
+        .run_all(&mut quiet())
+        .expect("[succession-repeat] completes");
+    end(s);
+    assert_eq!(outcome(&fixture, Proc::Successor), "successor");
+}
+
+/// R313: the repeat with the exact copy kept and the incomplete root
+/// removed completes with its verify-after (re-selection, then the
+/// successor verified in-session), keeps the copy's inode and bytes, and
+/// the next owner runs on the successor.
+#[test]
+fn r313_the_repeat_completes_with_its_verify_after() {
+    let fixture = interrupted_succession(1, 24);
+    let layout = successor_layout(&fixture);
+    let copy = kept_copy_ino(&fixture).expect("kept");
+    let bytes = fixture.world.visible(copy);
+    let s = session(&fixture, false);
+    maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+        .expect("procedure")
+        .run_all(&mut quiet())
+        .expect("removed");
+    verify(&s);
+    let mut repeat =
+        maint::successor(Rc::clone(&s), &layout, &[]).expect("[succession-repeat] authorized");
+    let steps = repeat.len();
+    assert_eq!(steps, 23);
+    repeat
+        .run(steps - 1, &mut quiet())
+        .expect("every step but the last");
+    assert!(!repeat.is_complete(), "[succession-verify-after] not yet");
+    repeat
+        .run_all(&mut quiet())
+        .expect("[succession-verify-after] the last step");
+    assert!(repeat.is_complete());
+    drop(repeat);
+    let events = s.borrow().events().to_vec();
+    let tail: Vec<&maint::SessionEvent> = events.iter().rev().take(2).collect();
+    assert!(
+        matches!(tail[0], maint::SessionEvent::VerifyAfter(Ok(())))
+            && matches!(tail[1], maint::SessionEvent::Reselect(2)),
+        "[succession-verify-after] {events:?}"
+    );
+    let assessment = s.borrow().assessment().expect("the verify-after");
+    assert!(
+        assessment.root_id == sim::SUCCESSOR_ID
+            && assessment.complete
+            && assessment.conditions.is_empty(),
+        "[succession-verify-after] {assessment:?}"
+    );
+    end(s);
+    assert_eq!(kept_copy_ino(&fixture), Some(copy));
+    assert_eq!(fixture.world.visible(copy), bytes);
+    assert_eq!(
+        provision_now(&fixture).predecessor.map(|(id, _)| id),
+        Some(ROOT)
+    );
+    let next = Run::claimed(&fixture, "next", SMALL);
+    assert_eq!(next.started.report().root_id, sim::SUCCESSOR_ID);
+}
+
+/// R314: a kept copy that is not the selected `PROVISION` is never
+/// overwritten: present before the authorization, the succession refuses;
+/// appearing after it (mismatched or exact), the gate refuses; nothing is
+/// written and the copy is as it was. An exact copy then authorizes the
+/// repeat that skips step 2a.
+#[test]
+fn r314_a_mismatched_kept_copy_is_never_overwritten() {
+    let plant = |fixture: &Fixture, bytes: &[u8]| -> sim::Ino {
+        let ino = fixture.world.fixture_entry(
+            ino_of(fixture, PROVDIR),
+            &fixture.path.predecessor_name(&ROOT),
+            FileType::Regular,
+            (0, 0, 0o444),
+        );
+        fixture.world.install(ino, bytes);
+        ino
+    };
+    let other = b"provision-version 1\nnot the selected PROVISION\n".to_vec();
+    // Before the authorization.
+    let fixture = Fixture::provisioned(1, 16);
+    plant(&fixture, &other);
+    let before = tree(&fixture, PROVDIR);
+    let s = session(&fixture, false);
+    verify(&s);
+    fixture.world.trace_start();
+    let refused = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+        .err()
+        .expect("[succession-keep] refused");
+    assert!(
+        refused.contains("is not the selected PROVISION"),
+        "[succession-keep] {refused}"
+    );
+    assert!(fixture.world.trace_take().is_empty());
+    end(s);
+    assert_eq!(tree(&fixture, PROVDIR), before);
+    // After the authorization: mismatched, then exact.
+    for exact in [false, true] {
+        let fixture = Fixture::provisioned(1, 16);
+        let selected = fixture.world.visible(ino_of(&fixture, sim::PROVISION_PATH));
+        let s = session(&fixture, false);
+        verify(&s);
+        let mut procedure = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+            .expect("authorized with no copy");
+        assert_eq!(procedure.len(), 29);
+        plant(&fixture, if exact { &selected } else { &other });
+        let before = tree(&fixture, PROVDIR);
+        fixture.world.trace_start();
+        let refused = procedure
+            .run_all(&mut quiet())
+            .expect_err("[succession-keep] the gate");
+        assert!(
+            refused.contains("(gate)"),
+            "[succession-keep] exact {exact}: {refused}"
+        );
+        assert!(fixture.world.trace_take().is_empty() && procedure.steps_done() == 0);
+        drop(procedure);
+        assert_eq!(tree(&fixture, PROVDIR), before);
+        if exact {
+            verify(&s);
+            let repeat = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+                .expect("[succession-repeat] authorized");
+            assert_eq!(repeat.len(), 23, "[succession-repeat] step 2a skipped");
+        }
+        end(s);
+    }
+}
+
+/// `count` revoked entries planted in the store's `revoked/` as root: empty
+/// `root:root 0444` files under well-formed names of other bindings.
+fn plant_revoked(fixture: &Fixture, count: usize) {
+    let revoked = ino_of(fixture, &state_path(fixture, "dispositions/revoked"));
+    for index in 0..count {
+        let mut binding = [0xee; 32];
+        binding[..8].copy_from_slice(&(index as u64).to_be_bytes());
+        fixture.world.fixture_entry(
+            revoked,
+            &format::revoked_name(&binding, "20250101T000000Z"),
+            FileType::Regular,
+            (0, 0, 0o444),
+        );
+    }
+}
+
+fn revoked_entries(fixture: &Fixture) -> BTreeMap<String, sim::Ino> {
+    fixture.world.entries(ino_of(
+        fixture,
+        &state_path(fixture, "dispositions/revoked"),
+    ))
+}
+
+fn active_entries(fixture: &Fixture) -> BTreeMap<String, sim::Ino> {
+    fixture
+        .world
+        .entries(ino_of(fixture, &state_path(fixture, "dispositions")))
+}
+
+/// R315: with 4095 entries in `revoked/`, a revocation is admissible and
+/// fills it to its bound, 4096, at which the store still opens.
+#[test]
+fn r315_a_revocation_below_the_bound_fills_it() {
+    let fixture = store_with_incident(1);
+    let binding = publish_only_incident(&fixture);
+    plant_revoked(&fixture, format::REVOKED_ENTRY_LIMIT - 1);
+    let s = session(&fixture, false);
+    maint::revoke(Rc::clone(&s), binding, "20261003T000000Z")
+        .expect("[revocation-bound] below the bound")
+        .run_all(&mut quiet())
+        .expect("[revocation-bound] revoked");
+    end(s);
+    assert_eq!(revoked_entries(&fixture).len(), format::REVOKED_ENTRY_LIMIT);
+    assert_eq!(outcome(&fixture, Proc::Revoke), "blocks");
+}
+
+/// R316: with `revoked/` at its bound, a revocation refuses before any
+/// operation, at construction, or at its gate when the last entry appears
+/// after it was built: the disposition stays published, and no revoked
+/// entry changes.
+#[test]
+fn r316_a_revocation_at_the_bound_refuses_before_any_operation() {
+    let fixture = store_with_incident(1);
+    let binding = publish_only_incident(&fixture);
+    plant_revoked(&fixture, format::REVOKED_ENTRY_LIMIT);
+    let before = tree(&fixture, &state_path(&fixture, "dispositions"));
+    let s = session(&fixture, false);
+    fixture.world.trace_start();
+    let refused = maint::revoke(Rc::clone(&s), binding, "20261003T000000Z")
+        .err()
+        .expect("[revocation-bound] at the bound");
+    assert!(
+        refused
+            .contains("revoked/ holds 4096 entries, its bound: normal revocation is unavailable"),
+        "[revocation-bound] {refused}"
+    );
+    assert!(fixture.world.trace_take().is_empty());
+    end(s);
+    assert_eq!(
+        tree(&fixture, &state_path(&fixture, "dispositions")),
+        before
+    );
+    assert_eq!(outcome(&fixture, Proc::Revoke), "published");
+    // At the gate.
+    let fixture = store_with_incident(1);
+    let binding = publish_only_incident(&fixture);
+    plant_revoked(&fixture, format::REVOKED_ENTRY_LIMIT - 1);
+    let s = session(&fixture, false);
+    let mut procedure =
+        maint::revoke(Rc::clone(&s), binding, "20261003T000000Z").expect("below the bound");
+    let revoked = ino_of(&fixture, &state_path(&fixture, "dispositions/revoked"));
+    fixture.world.fixture_entry(
+        revoked,
+        &format::revoked_name(&[0xdd; 32], "20250101T000000Z"),
+        FileType::Regular,
+        (0, 0, 0o444),
+    );
+    let before = tree(&fixture, &state_path(&fixture, "dispositions"));
+    fixture.world.trace_start();
+    let refused = procedure
+        .run_all(&mut quiet())
+        .expect_err("[revocation-bound] the gate");
+    assert!(
+        refused.contains("(gate)") && refused.contains("its bound"),
+        "[revocation-bound] {refused}"
+    );
+    assert!(fixture.world.trace_take().is_empty() && procedure.steps_done() == 0);
+    drop(procedure);
+    end(s);
+    assert_eq!(
+        tree(&fixture, &state_path(&fixture, "dispositions")),
+        before
+    );
+}
+
+/// R317: a revocation whose revoked name exists refuses before any
+/// operation, at construction or at its gate: the existing entry keeps its
+/// inode and bytes (revoked files are evidence), and the disposition stays
+/// published.
+#[test]
+fn r317_a_revocation_never_replaces_revoked_evidence() {
+    let time = "20261003T000000Z";
+    for at_gate in [false, true] {
+        let fixture = store_with_incident(1);
+        let binding = publish_only_incident(&fixture);
+        let name = format::revoked_name(&binding, time);
+        let revoked = ino_of(&fixture, &state_path(&fixture, "dispositions/revoked"));
+        let plant = || {
+            let ino = fixture
+                .world
+                .fixture_entry(revoked, &name, FileType::Regular, (0, 0, 0o444));
+            fixture.world.install(ino, b"earlier revoked evidence\n");
+        };
+        let s = session(&fixture, false);
+        let refused = if at_gate {
+            let mut procedure =
+                maint::revoke(Rc::clone(&s), binding, time).expect("the name is free");
+            plant();
+            fixture.world.trace_start();
+            let refused = procedure
+                .run_all(&mut quiet())
+                .expect_err("[revocation-replace] the gate");
+            assert!(refused.contains("(gate)") && procedure.steps_done() == 0);
+            refused
+        } else {
+            plant();
+            fixture.world.trace_start();
+            maint::revoke(Rc::clone(&s), binding, time)
+                .err()
+                .expect("[revocation-replace] the name exists")
+        };
+        assert!(
+            refused.contains(&format!(
+                "revoked/{name} exists: a revocation never replaces revoked evidence"
+            )),
+            "[revocation-replace] {refused}"
+        );
+        assert!(fixture.world.trace_take().is_empty());
+        end(s);
+        let kept = revoked_entries(&fixture)[&name];
+        assert_eq!(
+            fixture.world.visible(kept),
+            b"earlier revoked evidence\n",
+            "[revocation-replace] the evidence changed"
+        );
+        assert_eq!(outcome(&fixture, Proc::Revoke), "published");
+    }
+}
+
+/// R318: two revocations of one binding at two times keep both revoked
+/// files, each with its own bytes.
+#[test]
+fn r318_revocations_at_two_times_are_both_kept() {
+    let fixture = store_with_incident(1);
+    let binding = publish_only_incident(&fixture);
+    let first = fixture
+        .world
+        .visible(active_entries(&fixture)[&format::disposition_name(&binding)]);
+    let s = session(&fixture, false);
+    maint::revoke(Rc::clone(&s), binding, "20261003T000000Z")
+        .expect("procedure")
+        .run_all(&mut quiet())
+        .expect("revoked");
+    verify(&s);
+    maint::publish_disposition(
+        Rc::clone(&s),
+        binding,
+        &owner_words(
+            DispositionReason::OwnerDestroyed,
+            "published again",
+            "owner",
+            "2026-10-03T06:00:00Z",
+        ),
+    )
+    .expect("procedure")
+    .run_all(&mut quiet())
+    .expect("published again");
+    let second = fixture
+        .world
+        .visible(active_entries(&fixture)[&format::disposition_name(&binding)]);
+    assert_ne!(first, second);
+    maint::revoke(Rc::clone(&s), binding, "20261003T070000Z")
+        .expect("[revocation-replace] a second revocation at another time")
+        .run_all(&mut quiet())
+        .expect("[revocation-replace] revoked again");
+    end(s);
+    let revoked = revoked_entries(&fixture);
+    assert_eq!(revoked.len(), 2, "[revocation-replace] {revoked:?}");
+    assert_eq!(
+        fixture
+            .world
+            .visible(revoked[&format::revoked_name(&binding, "20261003T000000Z")]),
+        first,
+        "[revocation-replace] the first revoked file"
+    );
+    assert_eq!(
+        fixture
+            .world
+            .visible(revoked[&format::revoked_name(&binding, "20261003T070000Z")]),
+        second,
+        "[revocation-replace] the second revoked file"
+    );
+    assert_eq!(outcome(&fixture, Proc::Revoke), "blocks");
+}
+
+/// A store whose revocation of its one disposition at `time` was split, as
+/// the per-directory over-approximation leaves it (design section 13.4): the
+/// disposition's inode under its active and its revoked name, two links,
+/// durable. Returns the binding.
+fn split_revocation(fixture: &Fixture, time: &str) -> [u8; 32] {
+    let binding = publish_only_incident(fixture);
+    let active = active_entries(fixture)[&format::disposition_name(&binding)];
+    fixture.world.fixture_link(
+        ino_of(fixture, &state_path(fixture, "dispositions/revoked")),
+        &format::revoked_name(&binding, time),
+        active,
+    );
+    binding
+}
+
+/// R319: R-REVOKE completes an exact split by unlinking only the active
+/// name and syncing `dispositions/` (the implementation boundary's R-REVOKE
+/// row): the revoked file keeps its inode and bytes, now with one link, and
+/// the removal is durable. On a completed revocation it only syncs.
+#[test]
+fn r319_r_revoke_unlinks_only_the_active_name_and_syncs() {
+    let fixture = store_with_incident(1);
+    let time = "20261003T000000Z";
+    let binding = split_revocation(&fixture, time);
+    assert_eq!(outcome(&fixture, Proc::Revoke), "invalid");
+    let name = format::revoked_name(&binding, time);
+    let artifact = revoked_entries(&fixture)[&name];
+    let bytes = fixture.world.visible(artifact);
+    let s = session(&fixture, false);
+    let mut procedure = maint::resume_revocation(Rc::clone(&s), binding, time)
+        .expect("[revocation-recovery] the exact split");
+    assert_eq!(
+        procedure.len(),
+        2,
+        "[revocation-recovery] the unlink and the sync"
+    );
+    let world = fixture.world.clone();
+    world.trace_start();
+    let result = procedure.run_all(&mut |label| world.set_step(label));
+    let trace = world.trace_take();
+    drop(procedure);
+    assert_eq!(
+        revoked_entries(&fixture).get(&name),
+        Some(&artifact),
+        "[revocation-recovery] the revoked file was removed"
+    );
+    result.expect("[revocation-recovery] completed");
+    assert_eq!(
+        &label_trace(&fixture, &trace, &[&fixture.layout.state_name]),
+        boundary_operations().get("R-REVOKE").expect("R-REVOKE"),
+        "[step-parity] R-REVOKE"
+    );
+    let active = format::disposition_name(&binding);
+    let dispositions = ino_of(&fixture, &state_path(&fixture, "dispositions"));
+    assert!(!active_entries(&fixture).contains_key(&active));
+    assert!(
+        !fixture
+            .world
+            .durable_entries(dispositions)
+            .contains_key(&active),
+        "[revocation-recovery] the removal is durable"
+    );
+    assert_eq!(revoked_entries(&fixture).get(&name), Some(&artifact));
+    assert_eq!(fixture.world.visible(artifact), bytes);
+    let procedure = maint::resume_revocation(Rc::clone(&s), binding, time)
+        .expect("[revocation-recovery] completed");
+    assert_eq!(procedure.len(), 1);
+    let trace = traced(&fixture, procedure);
+    assert_eq!(
+        label_trace(&fixture, &trace, &[&fixture.layout.state_name]),
+        ["fsync_dir `dispositions` (13.4-revoke/recover)"],
+        "[revocation-recovery] completed: the sync only"
+    );
+    end(s);
+    assert_eq!(outcome(&fixture, Proc::Revoke), "blocks");
+}
+
+/// R320: anything other than the exact split, or its completion, refuses
+/// R-REVOKE before any operation, and nothing changes: another file under
+/// the revoked name, another incident's or another root's disposition under
+/// it, bytes that are not canonical, another mode, a third link, two links
+/// with no active name, no revoked file, a time that is not a compact UTC
+/// time.
+#[test]
+fn r320_a_differing_revocation_state_refuses_r_revoke() {
+    let time = "20261003T000000Z";
+    type Edit = fn(&Fixture, [u8; 32], &str) -> &'static str;
+    let variants: [(&str, Edit); 8] = [
+        ("another file", |fixture, binding, time| {
+            let active = active_entries(fixture)[&format::disposition_name(&binding)];
+            let bytes = fixture.world.visible(active);
+            let ino = fixture.world.fixture_entry(
+                ino_of(fixture, &state_path(fixture, "dispositions/revoked")),
+                &format::revoked_name(&binding, time),
+                FileType::Regular,
+                (0, 0, 0o444),
+            );
+            fixture.world.install(ino, &bytes);
+            "is another file than"
+        }),
+        (
+            "another incident's disposition",
+            |fixture, binding, time| {
+                let active = active_entries(fixture)[&format::disposition_name(&binding)];
+                let mut disposition =
+                    parse_disposition(&fixture.world.visible(active)).expect("a disposition");
+                disposition.facts.claim = disposition.facts.claim.map(|claim| claim + 1);
+                disposition.binding = disposition
+                    .facts
+                    .binding(&disposition.root)
+                    .expect("a binding");
+                plant_revoked_file(
+                    fixture,
+                    binding,
+                    time,
+                    &render_disposition(&disposition).expect("renders"),
+                );
+                "canonical disposition for this binding"
+            },
+        ),
+        ("another root's disposition", |fixture, binding, time| {
+            let active = active_entries(fixture)[&format::disposition_name(&binding)];
+            let mut disposition =
+                parse_disposition(&fixture.world.visible(active)).expect("a disposition");
+            disposition.root = [0x77; 16];
+            disposition.binding = disposition
+                .facts
+                .binding(&disposition.root)
+                .expect("a binding");
+            plant_revoked_file(
+                fixture,
+                binding,
+                time,
+                &render_disposition(&disposition).expect("renders"),
+            );
+            "canonical disposition for this binding"
+        }),
+        ("bytes that are not canonical", |fixture, binding, time| {
+            let active = active_entries(fixture)[&format::disposition_name(&binding)];
+            let mut bytes = fixture.world.visible(active);
+            bytes.extend_from_slice(b"\n");
+            plant_revoked_file(fixture, binding, time, &bytes);
+            "revoked/"
+        }),
+        ("another mode", |fixture, binding, time| {
+            let active = active_entries(fixture)[&format::disposition_name(&binding)];
+            fixture.world.fixture_link(
+                ino_of(fixture, &state_path(fixture, "dispositions/revoked")),
+                &format::revoked_name(&binding, time),
+                active,
+            );
+            fixture.world.fixture_owner(active, 0, 0, 0o644);
+            "is not root:root 0444"
+        }),
+        ("a third link", |fixture, binding, time| {
+            let active = active_entries(fixture)[&format::disposition_name(&binding)];
+            fixture.world.fixture_link(
+                ino_of(fixture, &state_path(fixture, "dispositions/revoked")),
+                &format::revoked_name(&binding, time),
+                active,
+            );
+            fixture.world.fixture_link(
+                ino_of(fixture, &state_path(fixture, "archive")),
+                "third",
+                active,
+            );
+            "has 3 links, not the 2"
+        }),
+        ("two links, no active name", |fixture, binding, time| {
+            let active = active_entries(fixture)[&format::disposition_name(&binding)];
+            fixture.world.fixture_link(
+                ino_of(fixture, &state_path(fixture, "dispositions/revoked")),
+                &format::revoked_name(&binding, time),
+                active,
+            );
+            fixture.world.fixture_link(
+                ino_of(fixture, &state_path(fixture, "archive")),
+                "second",
+                active,
+            );
+            fixture.world.fixture_remove(
+                ino_of(fixture, &state_path(fixture, "dispositions")),
+                &format::disposition_name(&binding),
+            );
+            "has 2 links and no active name"
+        }),
+        ("no revoked file", |_, _, _| "no revoked artifact"),
+    ];
+    for (what, edit) in variants {
+        let fixture = store_with_incident(1);
+        let binding = publish_only_incident(&fixture);
+        let expected = edit(&fixture, binding, time);
+        let before = tree(&fixture, &format!("/{}", fixture.state_root().join("/")));
+        let s = session(&fixture, false);
+        fixture.world.trace_start();
+        let refused = maint::resume_revocation(Rc::clone(&s), binding, time)
+            .err()
+            .unwrap_or_else(|| panic!("[revocation-recovery] {what}: applied"));
+        assert!(
+            refused.contains(expected),
+            "[revocation-recovery] {what}: {refused}"
+        );
+        assert!(fixture.world.trace_take().is_empty());
+        end(s);
+        assert_eq!(
+            tree(&fixture, &format!("/{}", fixture.state_root().join("/"))),
+            before,
+            "[revocation-recovery] {what}: changed"
+        );
+    }
+    // A time that is not a compact UTC time.
+    let fixture = store_with_incident(1);
+    let binding = split_revocation(&fixture, time);
+    let s = session(&fixture, false);
+    for bad in ["2026-10-03T00:00:00Z", "20261003T000000", "x/y"] {
+        let refused = maint::resume_revocation(Rc::clone(&s), binding, bad)
+            .err()
+            .unwrap_or_else(|| panic!("[revocation-recovery] {bad}: applied"));
+        assert!(
+            refused.contains("not a compact UTC time"),
+            "[revocation-recovery] {bad}: {refused}"
+        );
+    }
+    end(s);
+}
+
+/// A file under `binding`'s revoked name at `time`, `root:root 0444`, with
+/// `bytes`, the active name removed.
+fn plant_revoked_file(fixture: &Fixture, binding: [u8; 32], time: &str, bytes: &[u8]) {
+    fixture.world.fixture_remove(
+        ino_of(fixture, &state_path(fixture, "dispositions")),
+        &format::disposition_name(&binding),
+    );
+    let ino = fixture.world.fixture_entry(
+        ino_of(fixture, &state_path(fixture, "dispositions/revoked")),
+        &format::revoked_name(&binding, time),
+        FileType::Regular,
+        (0, 0, 0o444),
+    );
+    fixture.world.install(ino, bytes);
+}
+
+/// R321: R-REVOKE adds no entry, so it applies with `revoked/` at its
+/// bound, where a normal revocation is unavailable: capacity is never
+/// conflated with recovery.
+#[test]
+fn r321_r_revoke_applies_at_the_bound() {
+    let fixture = store_with_incident(1);
+    let time = "20261003T000000Z";
+    plant_revoked(&fixture, format::REVOKED_ENTRY_LIMIT - 1);
+    let binding = split_revocation(&fixture, time);
+    assert_eq!(revoked_entries(&fixture).len(), format::REVOKED_ENTRY_LIMIT);
+    let s = session(&fixture, false);
+    maint::resume_revocation(Rc::clone(&s), binding, time)
+        .expect("[revocation-capacity] at the bound")
+        .run_all(&mut quiet())
+        .expect("[revocation-capacity] completed at the bound");
+    end(s);
+    assert_eq!(
+        revoked_entries(&fixture).len(),
+        format::REVOKED_ENTRY_LIMIT,
+        "[revocation-capacity] no entry added"
+    );
+    assert_eq!(outcome(&fixture, Proc::Revoke), "blocks");
+    // A normal revocation of the disposition published again: unavailable.
+    let binding = publish_only_incident(&fixture);
+    let s = session(&fixture, false);
+    let refused = maint::revoke(Rc::clone(&s), binding, "20261003T070000Z")
+        .err()
+        .expect("[revocation-capacity] a normal revocation at the bound");
+    assert!(
+        refused.contains("its bound"),
+        "[revocation-capacity] {refused}"
+    );
+    end(s);
+}
+
+/// R323: a normal revocation is complete only with its verify-after, the
+/// session's last event; a leftover the verify-after finds fails it.
+#[test]
+fn r323_a_revocation_completes_with_its_verify_after() {
+    let fixture = store_with_incident(1);
+    let binding = publish_only_incident(&fixture);
+    let s = session(&fixture, false);
+    let mut procedure =
+        maint::revoke(Rc::clone(&s), binding, "20261003T000000Z").expect("procedure");
+    let steps = procedure.len();
+    procedure
+        .run(steps - 1, &mut quiet())
+        .expect("every step but the last");
+    assert!(
+        !procedure.is_complete(),
+        "[revocation-verify-after] not yet"
+    );
+    procedure
+        .run_all(&mut quiet())
+        .expect("[revocation-verify-after] the last step");
+    assert!(procedure.is_complete());
+    drop(procedure);
+    assert!(
+        matches!(
+            s.borrow().events().last(),
+            Some(maint::SessionEvent::VerifyAfter(Ok(())))
+        ),
+        "[revocation-verify-after] {:?}",
+        s.borrow().events()
+    );
+    end(s);
+    let fixture = store_with_incident(1);
+    let binding = publish_only_incident(&fixture);
+    let s = session(&fixture, false);
+    let mut procedure =
+        maint::revoke(Rc::clone(&s), binding, "20261003T000000Z").expect("procedure");
+    fixture.world.fixture_entry(
+        ino_of(&fixture, &state_path(&fixture, "dispositions")),
+        ".tmp-left-over",
+        FileType::Regular,
+        (0, 0, 0o444),
+    );
+    let failed = procedure
+        .run_all(&mut quiet())
+        .expect_err("[revocation-verify-after] a leftover remains");
+    assert!(
+        failed.contains("verify-after") && failed.contains("leftover") && !procedure.is_complete(),
+        "[revocation-verify-after] {failed}"
+    );
+    drop(procedure);
+    end(s);
+}
+
+/// R324: R-REVOKE is complete only with its verify-after, which verifies
+/// the store in session and requires the revocation completed: a leftover
+/// it finds fails it, and so does an active name that reappears before the
+/// last step.
+#[test]
+fn r324_r_revoke_completes_with_its_verify_after() {
+    let time = "20261003T000000Z";
+    let fixture = store_with_incident(1);
+    let binding = split_revocation(&fixture, time);
+    let s = session(&fixture, false);
+    let mut procedure = maint::resume_revocation(Rc::clone(&s), binding, time).expect("procedure");
+    procedure.run(1, &mut quiet()).expect("unlinked");
+    assert!(
+        !procedure.is_complete(),
+        "[revocation-verify-after] not yet"
+    );
+    procedure
+        .run_all(&mut quiet())
+        .expect("[revocation-verify-after] the sync");
+    assert!(procedure.is_complete());
+    drop(procedure);
+    assert!(
+        matches!(
+            s.borrow().events().last(),
+            Some(maint::SessionEvent::VerifyAfter(Ok(())))
+        ),
+        "[revocation-verify-after] {:?}",
+        s.borrow().events()
+    );
+    end(s);
+    // A leftover.
+    let fixture = store_with_incident(1);
+    let binding = split_revocation(&fixture, time);
+    let s = session(&fixture, false);
+    let mut procedure = maint::resume_revocation(Rc::clone(&s), binding, time).expect("procedure");
+    fixture.world.fixture_entry(
+        ino_of(&fixture, &state_path(&fixture, "archive")),
+        ".tmp-left-over",
+        FileType::Regular,
+        (0, 0, 0o444),
+    );
+    let failed = procedure
+        .run_all(&mut quiet())
+        .expect_err("[revocation-verify-after] a leftover remains");
+    assert!(
+        failed.contains("verify-after") && failed.contains("leftover") && !procedure.is_complete(),
+        "[revocation-verify-after] {failed}"
+    );
+    drop(procedure);
+    end(s);
+    // The active name reappears before the last step.
+    let fixture = store_with_incident(1);
+    let binding = split_revocation(&fixture, time);
+    let artifact = revoked_entries(&fixture)[&format::revoked_name(&binding, time)];
+    let s = session(&fixture, false);
+    let mut procedure = maint::resume_revocation(Rc::clone(&s), binding, time).expect("procedure");
+    procedure.run(1, &mut quiet()).expect("unlinked");
+    fixture.world.fixture_link(
+        ino_of(&fixture, &state_path(&fixture, "dispositions")),
+        &format::disposition_name(&binding),
+        artifact,
+    );
+    let failed = procedure
+        .run_all(&mut quiet())
+        .expect_err("[revocation-verify-after] not completed");
+    assert!(
+        failed.contains("verify-after")
+            && failed.contains("the revocation is not complete")
+            && !procedure.is_complete(),
+        "[revocation-verify-after] {failed}"
+    );
+    drop(procedure);
+    end(s);
+}
+
+/// R328: R3 adds no public interface that bears authority by itself. The
+/// store's public functions are R2's and the two R3 recoveries, which take
+/// only a session and return a procedure; everything they decide from is
+/// private to the store; the I/O trait's directory removal is one empty
+/// directory, and nothing in the store removes recursively.
+#[test]
+fn r328_no_new_public_authority_bearing_interface() {
+    let public: Vec<String> = MAINTENANCE_SOURCE
+        .lines()
+        .filter_map(|line| line.strip_prefix("pub fn "))
+        .map(|rest| {
+            rest.chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect()
+        })
+        .collect();
+    assert_eq!(
+        public,
+        [
+            "qualify",
+            "dir_ref",
+            "provision_for",
+            "provision",
+            "roots_with_history",
+            "republish",
+            "publish_disposition",
+            "disposition_for",
+            "revoke",
+            "archive_name",
+            "archival_allowed",
+            "archive",
+            "recycle",
+            "resume_recycle",
+            "retirement_allowed",
+            "retire",
+            "requalify",
+            "predecessor_statement",
+            "successor",
+            "leftover",
+            "recover_incomplete_successor",
+            "resume_revocation",
+            "header_block",
+            "record_offset",
+            "gap_facts",
+            "never_success",
+            "begin",
+        ],
+        "[authority-surface] the public functions"
+    );
+    for procedure in ["recover_incomplete_successor", "resume_revocation"] {
+        let item = source_item(MAINTENANCE_SOURCE, &format!("pub fn {procedure}<"));
+        let signature = &item[..item.find(" {\n").expect("a body")];
+        assert!(
+            signature.contains("session: Rc<RefCell<Session<P>>>,")
+                && signature.contains("-> Result<Procedure<'static>, String>"),
+            "[authority-surface] {procedure}: {signature}"
+        );
+    }
+    for helper in [
+        "fn read_entry<",
+        "fn absent<",
+        "fn state_root_absent<",
+        "fn kept_copy<",
+        "fn revocation_admissible<",
+        "fn interrupted_revocation<",
+        "fn inspect_incomplete<",
+        "fn succession_interrupted<",
+        "fn remove_known<",
+        "fn sync_known<",
+        "enum KeptCopy {",
+        "enum Revocation {",
+        "struct Incomplete {",
+    ] {
+        assert!(
+            MAINTENANCE_SOURCE.contains(&format!("\n{helper}")),
+            "[authority-surface] {helper} is not private to the store"
+        );
+    }
+    assert!(
+        MAINTENANCE_SOURCE.contains("\n    pub(super) fn holds_selection(&self)"),
+        "[authority-surface] holds_selection is not private to the store"
+    );
+    let trait_item = source_item(IO_SOURCE, "pub trait StoreIo: Send + Sync {");
+    let methods: Vec<&str> = trait_item
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("fn "))
+        .map(|rest| rest.split('(').next().unwrap_or(rest))
+        .collect();
+    assert_eq!(
+        methods,
+        [
+            "root_dir",
+            "open_dir",
+            "stat_at",
+            "stat_dir",
+            "stat_file",
+            "list_dir",
+            "open_read",
+            "open_write",
+            "open_dir_for_sync",
+            "flock",
+            "pread",
+            "pwrite",
+            "fdatasync",
+            "fsync",
+            "touch",
+            "random",
+            "create_exclusive",
+            "make_dir",
+            "link",
+            "rename",
+            "unlink",
+            "remove_dir",
+            "allocate",
+            "set_owner",
+        ],
+        "[successor-cleanup-recursive] the I/O trait's operations"
+    );
+    assert!(
+        trait_item
+            .contains("fn remove_dir(&self, at: &Self::Dir, name: &str) -> Result<(), IoError>;"),
+        "[successor-cleanup-recursive] the trait's removal"
+    );
+    let native = source_item(
+        IO_SOURCE,
+        "fn remove_dir(&self, at: &LinuxDir, entry: &str)",
+    );
+    assert!(
+        native.contains("libc::unlinkat(at.raw(), entry.as_ptr(), libc::AT_REMOVEDIR)")
+            && native.contains("let entry = name(entry, \"unlinkat\")?;"),
+        "[successor-cleanup-recursive] the native removal: {native}"
+    );
+    for (file, source) in [
+        ("io.rs", IO_SOURCE),
+        ("maintenance.rs", MAINTENANCE_SOURCE),
+        ("sim.rs", SIM_SOURCE),
+        ("open.rs", OPEN_SOURCE),
+    ] {
+        for token in ["remove_dir_all", "std::fs::remove", "fs::remove_dir"] {
+            assert!(
+                !source.contains(token),
+                "[successor-cleanup-recursive] {file} contains {token}"
+            );
+        }
+    }
+    let removal = source_item(MAINTENANCE_SOURCE, "fn remove_known<");
+    assert!(
+        removal.contains("io.remove_dir(&at.dir, name)")
+            && removal.contains("io.unlink(&at.dir, name)")
+            && removal.contains("if stat.ino != ino"),
+        "[successor-cleanup-recursive] one known entry per removal: {removal}"
+    );
+    let cleanup = source_item(MAINTENANCE_SOURCE, "pub fn recover_incomplete_successor<");
+    assert!(
+        !cleanup.contains("io.unlink(") && !cleanup.contains("io.remove_dir("),
+        "[successor-cleanup-recursive] the cleanup removes other than through remove_known"
+    );
+}
+
+/// R3's simulator conformance (P2-V1-R3B-I3-I1-R3): `rmdir` removes one
+/// empty directory (ENOTEMPTY, ENOTDIR and ENOENT otherwise), as one pending
+/// half of its parent, durable after the parent's sync or under a schedule
+/// that keeps it; a removed directory takes no new entry (ENOENT); a rename
+/// between two names of one file changes nothing (POSIX).
+#[test]
+fn s06_rmdir_and_same_file_rename_follow_linux() {
+    let world = SimWorld::new(HostFixture::qualified());
+    let parent = world.fixture_entry(world.root(), "p", FileType::Directory, (0, 0, 0o755));
+    let admin = world.process("admin", 0, 0);
+    let top = admin.root_dir().expect("/");
+    let p = admin.open_dir(&top, "p").expect("p");
+    let sync = |at: &<SimIo as StoreIo>::Dir, name: &str| {
+        let handle = admin
+            .open_dir_for_sync(at, name)
+            .expect("a directory to sync");
+        custody::store::io::sync_with_retries(&admin, &handle, false).expect("synced");
+    };
+    admin.make_dir(&p, "d", 0o755).expect("mkdir");
+    sync(&top, "p");
+    let d = admin.open_dir(&p, "d").expect("d");
+    drop(admin.create_exclusive(&d, "f", 0o600).expect("create"));
+    sync(&p, "d");
+    assert_eq!(
+        admin
+            .remove_dir(&p, "d")
+            .expect_err("[sim-conformance] not empty")
+            .errno,
+        Errno::NotEmpty
+    );
+    assert_eq!(
+        admin
+            .remove_dir(&d, "f")
+            .expect_err("[sim-conformance] not a directory")
+            .errno,
+        Errno::NotDir
+    );
+    assert_eq!(
+        admin
+            .remove_dir(&p, "absent")
+            .expect_err("[sim-conformance] absent")
+            .errno,
+        Errno::NoEnt
+    );
+    admin.unlink(&d, "f").expect("unlink");
+    sync(&p, "d");
+    admin
+        .remove_dir(&p, "d")
+        .expect("[sim-conformance] an empty directory");
+    assert!(!world.entries(parent).contains_key("d"), "visible at once");
+    assert!(
+        world.durable_entries(parent).contains_key("d"),
+        "[sim-conformance] pending until its parent's sync"
+    );
+    let mut kept = BTreeSet::new();
+    for ordered in [true, false] {
+        for schedule in world.schedules(ordered) {
+            let fork = world.fork();
+            fork.power_loss(Some(&schedule), sim::Tear::Old, &BTreeMap::new());
+            kept.insert(fork.entries(parent).contains_key("d"));
+        }
+    }
+    assert_eq!(
+        kept,
+        BTreeSet::from([false, true]),
+        "[sim-conformance] the removal is one pending half"
+    );
+    let fork = world.fork();
+    fork.power_loss(None, sim::Tear::Old, &BTreeMap::new());
+    assert!(
+        fork.entries(parent).contains_key("d"),
+        "[sim-conformance] not durable before the sync"
+    );
+    for result in [
+        admin.create_exclusive(&d, "g", 0o600).map(drop),
+        admin.make_dir(&d, "g", 0o755),
+    ] {
+        assert_eq!(
+            result
+                .expect_err("[sim-conformance] a removed directory")
+                .errno,
+            Errno::NoEnt
+        );
+    }
+    sync(&top, "p");
+    let fork = world.fork();
+    fork.power_loss(None, sim::Tear::Old, &BTreeMap::new());
+    assert!(
+        !fork.entries(parent).contains_key("d"),
+        "[sim-conformance] durable after the sync"
+    );
+    drop(admin.create_exclusive(&p, "one", 0o600).expect("create"));
+    admin.link(&p, "one", &p, "two").expect("link");
+    let before = world.entries(parent);
+    admin
+        .rename(&p, "one", &p, "two")
+        .expect("[sim-conformance] one file");
+    assert_eq!(
+        world.entries(parent),
+        before,
+        "[sim-conformance] both names remain"
+    );
+}
+
+/// The native `remove_dir` (P2-V1-R3B-I3-I1-R3): `unlinkat(at, name,
+/// AT_REMOVEDIR)` relative to an open directory, one empty directory only:
+/// a directory that is not empty, a regular file, a symbolic link and an
+/// absent name refuse, names with separators or dots never reach the
+/// kernel, and the entry removed is the one under the descriptor, wherever
+/// its directory has moved. Only the test's own entries beneath
+/// CARGO_TARGET_TMPDIR.
+#[test]
+fn n09_native_remove_dir_is_one_empty_directory() {
+    let mut fixture = Native::new();
+    let io = LinuxIo;
+    io.make_dir(&fixture.dir, "full", 0o700).expect("mkdir");
+    fixture.record("full", true);
+    let full = io.open_dir(&fixture.dir, "full").expect("open");
+    drop(io.create_exclusive(&full, "entry", 0o600).expect("create"));
+    assert_eq!(
+        io.remove_dir(&fixture.dir, "full")
+            .expect_err("[successor-cleanup-recursive] native: not empty")
+            .errno,
+        Errno::NotEmpty,
+        "[successor-cleanup-recursive] native: not empty"
+    );
+    assert!(
+        io.stat_at(&full, "entry").is_ok(),
+        "[successor-cleanup-recursive] native: nothing beneath it was removed"
+    );
+    io.unlink(&full, "entry").expect("unlink");
+    io.remove_dir(&fixture.dir, "full")
+        .expect("[successor-cleanup] native: an empty directory");
+    assert_eq!(
+        io.stat_at(&fixture.dir, "full").expect_err("gone").errno,
+        Errno::NoEnt,
+        "[successor-cleanup] native: removed"
+    );
+    fixture.file("file", b"x");
+    assert_eq!(
+        io.remove_dir(&fixture.dir, "file")
+            .expect_err("[successor-cleanup] native: a file")
+            .errno,
+        Errno::NotDir,
+        "[successor-cleanup] native: a file"
+    );
+    io.make_dir(&fixture.dir, "target", 0o700).expect("mkdir");
+    fixture.record("target", true);
+    LinuxIo::fixture_symlink(&fixture.dir, "link", "target").expect("symlink");
+    fixture.record("link", false);
+    assert_eq!(
+        io.remove_dir(&fixture.dir, "link")
+            .expect_err("[successor-cleanup] native: a symbolic link")
+            .errno,
+        Errno::NotDir,
+        "[successor-cleanup] native: a symbolic link"
+    );
+    assert!(
+        io.stat_at(&fixture.dir, "target").is_ok() && io.stat_at(&fixture.dir, "link").is_ok(),
+        "[successor-cleanup] native: the link and its target stay"
+    );
+    assert_eq!(
+        io.remove_dir(&fixture.dir, "absent")
+            .expect_err("[successor-cleanup] native: absent")
+            .errno,
+        Errno::NoEnt,
+        "[successor-cleanup] native: absent"
+    );
+    // The names that cannot reach a directory outside the fixture come
+    // first, so a mutated removal that passes names through fails on them.
+    for name in ["", "a/b", ".", "..", "../escape"] {
+        assert_eq!(
+            io.remove_dir(&fixture.dir, name)
+                .expect_err("[safe-open] native: a name")
+                .errno,
+            Errno::Inval,
+            "[safe-open] native: {name:?}"
+        );
+    }
+    io.make_dir(&fixture.dir, "before", 0o700).expect("mkdir");
+    fixture.record("before", true);
+    let moved = io.open_dir(&fixture.dir, "before").expect("open");
+    io.make_dir(&moved, "child", 0o700).expect("mkdir");
+    io.rename(&fixture.dir, "before", &fixture.dir, "after")
+        .expect("rename");
+    fixture.record("after", true);
+    io.remove_dir(&moved, "child")
+        .expect("[successor-cleanup] native: descriptor-relative");
+    assert_eq!(
+        io.stat_at(&moved, "child").expect_err("gone").errno,
+        Errno::NoEnt,
+        "[successor-cleanup] native: removed under the descriptor"
+    );
+}
+
+/// R302, R306 and R313 over the crash model (design section 15.2, row
+/// "predecessor"): every state an interrupted succession leaves (each crash
+/// point; F1; F2 under every ordered and per-directory schedule, pending
+/// data old and new) is the successor, with the predecessor's `PROVISION`
+/// kept, or the predecessor, which its recovery takes to the successor:
+/// R-LEFTOVER, R-SUCCESSOR where the successor's root exists, a fresh
+/// verification and the succession again, which skips step 2a exactly when
+/// a copy is kept, and then keeps that copy's inode.
+#[test]
+fn r3x1_every_interrupted_succession_recovers_to_the_successor() {
+    let ops = stage(Proc::Successor).procedure.len();
+    assert_eq!(ops, 29, "[step-parity] P-SUCCESSOR");
+    let mut tally: BTreeMap<String, usize> = BTreeMap::new();
+    for k in 0..=ops {
+        let mut staged = stage(Proc::Successor);
+        let selected = staged
+            .fixture
+            .world
+            .visible(ino_of(&staged.fixture, sim::PROVISION_PATH));
+        staged.procedure.run(k, &mut quiet()).expect("steps");
+        for (how, state) in crash_states(&staged.fixture, &staged.actor) {
+            let context = format!("P-SUCCESSOR point {k} {how}");
+            let path = match outcome(&state, Proc::Successor).as_str() {
+                "successor" => "successor".to_string(),
+                "predecessor" => {
+                    let kept = kept_copy_ino(&state);
+                    let recovered = recover_succession(&state, false);
+                    assert_eq!(
+                        recovered.repeat == ops - 6,
+                        kept.is_some(),
+                        "[succession-repeat] {context}: step 2a runs exactly when no copy is kept: {recovered:?}"
+                    );
+                    if let Some(kept) = kept {
+                        assert_eq!(
+                            kept_copy_ino(&state),
+                            Some(kept),
+                            "[succession-keep] {context}: the copy was recreated"
+                        );
+                    }
+                    assert_eq!(
+                        outcome(&state, Proc::Successor),
+                        "successor",
+                        "[succession-recovery] {context}"
+                    );
+                    format!(
+                        "predecessor: R-LEFTOVER {} step(s), R-SUCCESSOR {:?}, repeat {}",
+                        recovered.leftover, recovered.cleanup, recovered.repeat
+                    )
+                }
+                other => panic!("[admin-crash] {context}: {other}"),
+            };
+            let copy = kept_copy_ino(&state)
+                .unwrap_or_else(|| panic!("[succession-keep] {context}: no copy kept"));
+            assert_eq!(
+                state.world.visible(copy),
+                selected,
+                "[succession-keep] {context}: the copy is not the predecessor's PROVISION"
+            );
+            *tally.entry(path).or_default() += 1;
+        }
+    }
+    println!("R3 succession recovery over the crash model: {tally:#?}");
+    assert_eq!(
+        tally.values().sum::<usize>(),
+        400,
+        "[admin-crash] the states of design section 15.2's P-SUCCESSOR coverage"
+    );
+}
+
+/// R302 and R313 over the crash model: the repeat that skips step 2a (after
+/// F1 at operation 6), interrupted at each of its own 23 crash points (F1;
+/// F2 under every schedule, pending data old and new), leaves the successor
+/// or the predecessor, whose recovery repeats it again; the kept copy keeps
+/// its inode and bytes throughout.
+#[test]
+fn r3x2_every_interrupted_repeat_recovers_to_the_successor() {
+    let base = interrupted_succession(1, 6);
+    let selected = base.world.visible(ino_of(&base, sim::PROVISION_PATH));
+    let copy = kept_copy_ino(&base).expect("[succession-keep] kept by step 2a");
+    let layout = successor_layout(&base);
+    let repeat_steps = {
+        let fixture = view(&base, base.world.fork());
+        let s = session(&fixture, false);
+        verify(&s);
+        let steps = maint::successor(Rc::clone(&s), &layout, &[])
+            .expect("authorized")
+            .len();
+        end(s);
+        steps
+    };
+    assert_eq!(repeat_steps, 23, "[succession-repeat] step 2a skipped");
+    let mut tally: BTreeMap<String, usize> = BTreeMap::new();
+    for k in 0..=repeat_steps {
+        let fixture = view(&base, base.world.fork());
+        let s = session(&fixture, false);
+        verify(&s);
+        let mut repeat = maint::successor(Rc::clone(&s), &layout, &[]).expect("authorized");
+        repeat.run(k, &mut quiet()).expect("steps");
+        let actor = s.borrow().io().clone();
+        let states = crash_states(&fixture, &actor);
+        drop(repeat);
+        drop(s);
+        for (how, state) in states {
+            let context = format!("repeat point {k} {how}");
+            let path = match outcome(&state, Proc::Successor).as_str() {
+                "successor" => "successor".to_string(),
+                "predecessor" => {
+                    let recovered = recover_succession(&state, false);
+                    assert_eq!(
+                        recovered.repeat, repeat_steps,
+                        "[succession-repeat] {context}: {recovered:?}"
+                    );
+                    assert_eq!(
+                        outcome(&state, Proc::Successor),
+                        "successor",
+                        "[succession-recovery] {context}"
+                    );
+                    format!(
+                        "predecessor: R-LEFTOVER {} step(s), R-SUCCESSOR {:?}, repeat {}",
+                        recovered.leftover, recovered.cleanup, recovered.repeat
+                    )
+                }
+                other => panic!("[admin-crash] {context}: {other}"),
+            };
+            assert_eq!(
+                kept_copy_ino(&state),
+                Some(copy),
+                "[succession-keep] {context}: the copy's inode"
+            );
+            assert_eq!(
+                state.world.visible(copy),
+                selected,
+                "[succession-keep] {context}: the copy's bytes"
+            );
+            *tally.entry(path).or_default() += 1;
+        }
+    }
+    println!("R3 repeat recovery over the crash model: {tally:#?}");
+}
+
+/// R311: R-SUCCESSOR interrupted at each of its boundaries, for one pool
+/// file and for two (each crash point; F1; F2 under every schedule, pending
+/// data old and new), leaves the predecessor selected and a subset of the
+/// incomplete root, or none of it; R-SUCCESSOR applies again (one step, the
+/// parent's sync, exactly when the root is already gone), and the
+/// succession completes after it.
+#[test]
+fn r3x3_every_interrupted_cleanup_recovers() {
+    let mut tally: BTreeMap<String, usize> = BTreeMap::new();
+    for pool in [1u32, 2] {
+        let complete = 24 + 3 * (pool as usize - 1);
+        let base = interrupted_succession(pool, complete);
+        let layout = successor_layout(&base);
+        let steps = {
+            let fixture = view(&base, base.world.fork());
+            let s = session(&fixture, false);
+            let steps = maint::recover_incomplete_successor(Rc::clone(&s), &layout)
+                .expect("[succession-cleanup] removable")
+                .len();
+            end(s);
+            steps
+        };
+        assert_eq!(
+            steps,
+            10 + pool as usize,
+            "[succession-cleanup] its operations"
+        );
+        for j in 0..=steps {
+            let fixture = view(&base, base.world.fork());
+            let s = session(&fixture, false);
+            let mut cleanup =
+                maint::recover_incomplete_successor(Rc::clone(&s), &layout).expect("procedure");
+            cleanup.run(j, &mut quiet()).expect("steps");
+            let actor = s.borrow().io().clone();
+            let states = crash_states(&fixture, &actor);
+            drop(cleanup);
+            drop(s);
+            for (how, state) in states {
+                let context = format!("{pool} pool file(s), R-SUCCESSOR point {j} {how}");
+                assert_eq!(
+                    outcome(&state, Proc::Successor),
+                    "predecessor",
+                    "[admin-crash] {context}"
+                );
+                let present = successor_root_exists(&state);
+                let recovered = recover_succession(&state, true);
+                assert_eq!(
+                    recovered.cleanup == Some(1),
+                    !present,
+                    "[succession-cleanup] {context}: {recovered:?}"
+                );
+                assert_eq!(
+                    recovered.repeat,
+                    complete - 6 + 5,
+                    "[succession-repeat] {context}"
+                );
+                assert_eq!(
+                    outcome(&state, Proc::Successor),
+                    "successor",
+                    "[succession-recovery] {context}"
+                );
+                *tally
+                    .entry(format!(
+                        "{pool} pool file(s): root {}, R-SUCCESSOR again {:?}",
+                        if present { "present" } else { "gone" },
+                        recovered.cleanup
+                    ))
+                    .or_default() += 1;
+            }
+        }
+    }
+    println!("R3 cleanup recovery over the crash model: {tally:#?}");
+}
+
+/// The binding of the store's one active disposition.
+fn active_binding(fixture: &Fixture) -> [u8; 32] {
+    let found: Vec<[u8; 32]> = active_entries(fixture)
+        .keys()
+        .filter_map(|name| format::parse_disposition_name(name))
+        .collect();
+    assert_eq!(found.len(), 1, "one active disposition");
+    found[0]
+}
+
+/// Whether `binding`'s disposition is under both its active name and its
+/// revoked name at `time`, one inode.
+fn split_at(fixture: &Fixture, binding: &[u8; 32], time: &str) -> bool {
+    let active = active_entries(fixture)
+        .get(&format::disposition_name(binding))
+        .copied();
+    active.is_some()
+        && active
+            == revoked_entries(fixture)
+                .get(&format::revoked_name(binding, time))
+                .copied()
+}
+
+/// R-REVOKE in its own session, to its verify-after: its step count.
+fn complete_revocation(fixture: &Fixture, binding: [u8; 32], time: &str) -> usize {
+    let s = session(fixture, false);
+    let mut procedure = maint::resume_revocation(Rc::clone(&s), binding, time)
+        .unwrap_or_else(|why| panic!("[revocation-recovery] refused: {why}"));
+    let steps = procedure.len();
+    procedure
+        .run_all(&mut quiet())
+        .unwrap_or_else(|why| panic!("[revocation-recovery] {why}"));
+    drop(procedure);
+    end(s);
+    steps
+}
+
+/// R322 and R324 over the crash model, with design section 15.2, row
+/// "invalid, after an interrupted revocation": every state an interrupted
+/// revocation leaves (each crash point; F1; F2 under every schedule,
+/// pending data old and new) is "published", "blocks" or "invalid".
+/// "invalid" is the exact split, which R-REVOKE completes; R-REVOKE
+/// interrupted at each of its own boundaries leaves the split or the
+/// completed revocation, and R-REVOKE again (one sync, once completed)
+/// reaches "blocks", the revoked file kept alone. "blocks" with the
+/// revoked file is completed by its sync alone; "published" repeats the
+/// revocation.
+#[test]
+fn r3x4_every_interrupted_revocation_recovers() {
+    let time = "20261001T130000Z";
+    let ops = stage(Proc::Revoke).procedure.len();
+    assert_eq!(ops, 3, "[step-parity] P-REVOKE");
+    let mut tally: BTreeMap<String, usize> = BTreeMap::new();
+    for k in 0..=ops {
+        let mut staged = stage(Proc::Revoke);
+        let binding = active_binding(&staged.fixture);
+        staged.procedure.run(k, &mut quiet()).expect("steps");
+        for (how, state) in crash_states(&staged.fixture, &staged.actor) {
+            let context = format!("P-REVOKE point {k} {how}");
+            let revoked_kept =
+                revoked_entries(&state).contains_key(&format::revoked_name(&binding, time));
+            let path = match outcome(&state, Proc::Revoke).as_str() {
+                "invalid" => {
+                    assert!(
+                        split_at(&state, &binding, time),
+                        "[revocation-recovery] {context}: not the exact split"
+                    );
+                    let mut resumed: BTreeMap<String, usize> = BTreeMap::new();
+                    let steps = {
+                        let fixture = view(&state, state.world.fork());
+                        let s = session(&fixture, false);
+                        let steps = maint::resume_revocation(Rc::clone(&s), binding, time)
+                            .expect("[revocation-recovery] the exact split")
+                            .len();
+                        end(s);
+                        steps
+                    };
+                    assert_eq!(steps, 2, "[revocation-recovery] {context}");
+                    for j in 0..=steps {
+                        let fixture = view(&state, state.world.fork());
+                        let s = session(&fixture, false);
+                        let mut resume = maint::resume_revocation(Rc::clone(&s), binding, time)
+                            .expect("procedure");
+                        resume.run(j, &mut quiet()).expect("steps");
+                        let actor = s.borrow().io().clone();
+                        let states = crash_states(&fixture, &actor);
+                        drop(resume);
+                        drop(s);
+                        for (how, after) in states {
+                            let context = format!("{context}, R-REVOKE point {j} {how}");
+                            let found = outcome(&after, Proc::Revoke);
+                            let split = split_at(&after, &binding, time);
+                            let again = complete_revocation(&after, binding, time);
+                            assert_eq!(
+                                (found.as_str(), again),
+                                if split { ("invalid", 2) } else { ("blocks", 1) },
+                                "[revocation-recovery] {context}"
+                            );
+                            assert_eq!(
+                                outcome(&after, Proc::Revoke),
+                                "blocks",
+                                "[revocation-recovery] {context}"
+                            );
+                            *resumed
+                                .entry(format!("{found}, R-REVOKE {again}"))
+                                .or_default() += 1;
+                        }
+                    }
+                    assert_eq!(
+                        complete_revocation(&state, binding, time),
+                        2,
+                        "[revocation-recovery] {context}"
+                    );
+                    format!("invalid: R-REVOKE, and its crash points {resumed:?}")
+                }
+                "blocks" if revoked_kept => {
+                    let steps = complete_revocation(&state, binding, time);
+                    assert_eq!(steps, 1, "[revocation-recovery] {context}: the sync alone");
+                    "blocks: R-REVOKE 1 (the sync)".to_string()
+                }
+                "blocks" => {
+                    // The per-directory family's removal without the
+                    // addition: no file is left to complete.
+                    let s = session(&state, false);
+                    let refused = maint::resume_revocation(Rc::clone(&s), binding, time)
+                        .err()
+                        .expect("[revocation-recovery] nothing to complete");
+                    assert!(
+                        refused.contains("no revoked artifact"),
+                        "[revocation-recovery] {context}: {refused}"
+                    );
+                    end(s);
+                    "blocks: the revoked file lost (per-directory family)".to_string()
+                }
+                "published" => {
+                    let s = session(&state, false);
+                    maint::revoke(Rc::clone(&s), binding, time)
+                        .unwrap_or_else(|why| panic!("[revocation-recovery] {context}: {why}"))
+                        .run_all(&mut quiet())
+                        .unwrap_or_else(|why| panic!("[revocation-recovery] {context}: {why}"));
+                    end(s);
+                    "published: P-REVOKE again".to_string()
+                }
+                other => panic!("[admin-crash] {context}: {other}"),
+            };
+            assert_eq!(
+                outcome(&state, Proc::Revoke),
+                "blocks",
+                "[revocation-recovery] {context}"
+            );
+            *tally.entry(format!("point {k}: {path}")).or_default() += 1;
+        }
+    }
+    println!("R3 revocation recovery over the crash model: {tally:#?}");
+    assert_eq!(
+        tally.values().sum::<usize>(),
+        30,
+        "[admin-crash] the states of design section 15.2's P-REVOKE coverage"
+    );
+}
+
+/// Design section 15.2, row "unprovisioned, after provisioning began", over
+/// the crash model: every state an interrupted provisioning leaves (each
+/// crash point; F1; F2 under every schedule, pending data old and new) is
+/// "fresh" or "unprovisioned". Each "unprovisioned" one reaches "fresh" by
+/// R-REPUBLISH when a `<PROVISION_PATH>.tmp` was left (its root is then
+/// complete and synced), and otherwise by provisioning again at a new root,
+/// which provisioning's gate admits because the interrupted root's pool
+/// files are all zero. That root's removal is optional in the design ("may
+/// be removed") and stays the Owner's own step.
+#[test]
+fn r3x5_every_interrupted_provisioning_recovers() {
+    let ops = stage(Proc::Prov).procedure.len();
+    assert_eq!(ops, 23, "[step-parity] P-PROV");
+    let mut tally: BTreeMap<String, usize> = BTreeMap::new();
+    for k in 0..=ops {
+        let mut staged = stage(Proc::Prov);
+        staged.procedure.run(k, &mut quiet()).expect("steps");
+        for (how, state) in crash_states(&staged.fixture, &staged.actor) {
+            let context = format!("P-PROV point {k} {how}");
+            let path = match outcome(&state, Proc::Prov).as_str() {
+                "fresh" => "fresh".to_string(),
+                "unprovisioned" => {
+                    let qualification = state.qualification.clone().expect("qualified");
+                    let left = state
+                        .world
+                        .entries(ino_of(&state, PROVDIR))
+                        .contains_key(&state.path.tmp_name());
+                    if left {
+                        maint::republish(&state.root, &state.layout, &qualification)
+                            .unwrap_or_else(|why| panic!("[provision-recovery] {context}: {why}"))
+                            .run_all(&mut quiet())
+                            .unwrap_or_else(|why| panic!("[provision-recovery] {context}: {why}"));
+                        "unprovisioned: R-REPUBLISH".to_string()
+                    } else {
+                        let layout = layout_with(&state, [0x50; 16]);
+                        let (mut procedure, _) =
+                            maint::provision(&state.root, &layout, &qualification);
+                        procedure
+                            .run_all(&mut quiet())
+                            .unwrap_or_else(|why| panic!("[provision-recovery] {context}: {why}"));
+                        format!(
+                            "unprovisioned: P-PROV at a new root (the interrupted root {})",
+                            if state.world.lookup(&state.layout.state_root()).is_some() {
+                                "kept"
+                            } else {
+                                "absent"
+                            }
+                        )
+                    }
+                }
+                other => panic!("[admin-crash] {context}: {other}"),
+            };
+            assert_eq!(
+                outcome(&state, Proc::Prov),
+                "fresh",
+                "[provision-recovery] {context}"
+            );
+            *tally.entry(path).or_default() += 1;
+        }
+    }
+    println!("R3 provisioning recovery over the crash model: {tally:#?}");
+    assert_eq!(
+        tally.values().sum::<usize>(),
+        338,
+        "[admin-crash] the states of design section 15.2's P-PROV coverage"
+    );
+}
+
+/// Design section 15.2, row "unsupported, before re-qualification is
+/// visible", over the crash model: every state an interrupted
+/// re-qualification leaves is "unsupported" or "revision 2", and each
+/// "unsupported" one reaches "revision 2" by repeating it in a
+/// re-qualification session, after R-LEFTOVER removes its temporary.
+#[test]
+fn r3x6_every_interrupted_requalification_repeats() {
+    let ops = stage(Proc::Requalify).procedure.len();
+    assert_eq!(ops, 5, "[step-parity] P-REQUALIFY");
+    let mut tally: BTreeMap<String, usize> = BTreeMap::new();
+    for k in 0..=ops {
+        let mut staged = stage(Proc::Requalify);
+        staged.procedure.run(k, &mut quiet()).expect("steps");
+        for (how, state) in crash_states(&staged.fixture, &staged.actor) {
+            let context = format!("P-REQUALIFY point {k} {how}");
+            let path = match outcome(&state, Proc::Requalify).as_str() {
+                "revision 2" => "revision 2".to_string(),
+                "unsupported" => {
+                    let qualification = state.qualification.clone().expect("qualified");
+                    let s = session(&state, true);
+                    let mut leftover = maint::leftover(Rc::clone(&s)).expect("procedure");
+                    let removed = leftover.len();
+                    leftover
+                        .run_all(&mut quiet())
+                        .unwrap_or_else(|why| panic!("[requalify-recovery] {context}: {why}"));
+                    drop(leftover);
+                    maint::requalify(Rc::clone(&s), qualification)
+                        .unwrap_or_else(|why| panic!("[requalify-recovery] {context}: {why}"))
+                        .run_all(&mut quiet())
+                        .unwrap_or_else(|why| panic!("[requalify-recovery] {context}: {why}"));
+                    end(s);
+                    format!("unsupported: R-LEFTOVER {removed} step(s), P-REQUALIFY again")
+                }
+                other => panic!("[admin-crash] {context}: {other}"),
+            };
+            assert_eq!(
+                outcome(&state, Proc::Requalify),
+                "revision 2",
+                "[requalify-recovery] {context}"
+            );
+            *tally.entry(path).or_default() += 1;
+        }
+    }
+    println!("R3 re-qualification recovery over the crash model: {tally:#?}");
+    assert_eq!(
+        tally.values().sum::<usize>(),
+        52,
+        "[admin-crash] the states of design section 15.2's P-REQUALIFY coverage"
+    );
 }

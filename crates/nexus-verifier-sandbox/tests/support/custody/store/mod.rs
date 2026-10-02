@@ -17,7 +17,9 @@
 //!   and the bounded report.
 //! - **I/O** ([`io`]): the [`io::StoreIo`] trait the algorithms use, the
 //!   bounded write and sync retries, a controlled fault adapter, and the Linux
-//!   implementation (the only `unsafe` code of the store).
+//!   implementation (the only `unsafe` code of the store). (R3) Its one
+//!   directory removal is `unlinkat(AT_REMOVEDIR)` of one empty directory,
+//!   relative to an open directory: never a tree.
 //! - **Opening** ([`open`]): selection and post-lock revalidation, safe
 //!   opening, the mount, effective-profile, kernel and storage checks, the
 //!   opening-bound [`open::StorageAdmission`] (one constructor, no `Clone`,
@@ -63,8 +65,18 @@
 //!   and is complete only once the selected successor verifies. A
 //!   disposition restates only an incident the verification reported.
 //!   Provisioning and re-publication never replace a `PROVISION`.
+//!   (P2-V1-R3B-I3-I1-R3) The administrative recoveries of design section
+//!   15.2. A succession is repeated with step 2a skipped only when the
+//!   predecessor's `PROVISION` is kept exactly; any other copy refuses.
+//!   R-SUCCESSOR removes an interrupted succession's incomplete root only
+//!   when it is this store's, referenced by nothing, and made only of what
+//!   step 2b makes with every pool file zero, under locks it holds, by
+//!   identity and never recursively. R-REVOKE completes an interrupted
+//!   revocation. A normal revocation refuses at `revoked/`'s bound and never
+//!   replaces revoked evidence.
 //! - **Simulation** ([`sim`]): the bounded storage, error, persistence,
-//!   journal and host model the tests run everything against.
+//!   journal and host model the tests run everything against, including
+//!   (R3) `rmdir` of an empty directory as a pending half of its parent.
 //!
 //! What it is not, and what it does not claim:
 //! - **No real store is ever opened.** [`open::open_configured_store`]
@@ -89,11 +101,11 @@
 //!   check against that sample reports nothing. The store does not detect
 //!   such a collision and does not claim to; it is a storage fault (domain S),
 //!   not something every reported failure is assumed to be.
-//! - **A safe-API boundary only** (P2-V1-R3B-I3-I1-R1, R2). The owner, the
-//!   closure-to-seal transition, the opening's retained state, the
+//! - **A safe-API boundary only** (P2-V1-R3B-I3-I1-R1, R2, R3). The owner,
+//!   the closure-to-seal transition, the opening's retained state, the
 //!   validator's provenance, the exchange's containment and the session's
-//!   verification and succession authority rest on Rust visibility and
-//!   ownership in safe code. They
+//!   verification, succession and recovery authority rest on Rust
+//!   visibility and ownership in safe code. They
 //!   do not defend against `unsafe` code in the same process. The core's own
 //!   public types (`Closed`, `ValidatedDisposition`, `Custody::new`,
 //!   `DispositionValidator`) stay public: a caller may build and run a

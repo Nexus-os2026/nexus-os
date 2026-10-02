@@ -1,0 +1,22 @@
+
+running 1 test
+test n01_native_opening_is_descriptor_relative_and_no_follow ... FAILED
+
+failures:
+
+---- n01_native_opening_is_descriptor_relative_and_no_follow stdout ----
+
+thread 'n01_native_opening_is_descriptor_relative_and_no_follow' (51860) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:10527:9:
+[safe-open] native: "."
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    n01_native_opening_is_descriptor_relative_and_no_follow
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.26s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/cand4-target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

@@ -1,0 +1,37 @@
+| probe | category | boundary | expected error | guarded | self-check | ok |
+|---|---|---|---|---|---|---|
+| H-TYPE-ERROR | harness-check | - | error[E0308]: mismatched types | - | - | True |
+| POSITIVE-CONTROL | positive-control | - | (none) | - | - | True |
+| P-B1-CLOSURE-DATA | api-type-guard | closure to seal | error[E0616]: field `recorder` of struct `StoreOwner` is private | True | True | True |
+| P-B2-CUSTODY-SWAP | api-type-guard | closure to seal | error[E0616]: field `custody` of struct `StoreOwner` is private | True | True | True |
+| P-B2-HEADER-SWAP | api-type-guard | closure to seal | error[E0616]: field `header` of struct `StoreOwner` is private | True | True | True |
+| P-SEAL-AGAIN | api-type-guard | one-way seal | error[E0616]: field `recorder` of struct `ClosedStore` is private | True | True | True |
+| P-B3-DECISION-EDIT | api-type-guard | opening immutability | error[E0616]: field `decision` of struct `Opened` is private | True | True | True |
+| P-B3-SCAN-EDIT | api-type-guard | opening immutability | error[E0616]: field `scan` of struct `Opened` is private | True | True | True |
+| P-B3-CLAIM-CALL | api-type-guard | opening immutability | error[E0624]: method `claim` is private | True | True | True |
+| P-B4-IDENTITY-EDIT | api-type-guard | admission binding | error[E0616]: field `opening` of struct `Opened` is private; error[E0616]: field `selection` of struct `Opened` is private | True | True | True |
+| P-B4-OPENING-MINT | api-type-guard | admission binding | error[E0624]: associated function `fresh` is private | True | True | True |
+| P-B4-ADMISSION-FORGE | api-type-guard | admission binding | error[E0451]: fields `opening`, `provision_digest` and `observation` of struct `StorageAdmission` are private | True | True | True |
+| P-B5-VALIDATOR-FROM-COPY | api-type-guard | disposition provenance | error[E0624]: associated function `of` is private | True | True | True |
+| P-B6-EXCHANGE-TYPE | api-type-guard | exchange containment | error[E0603]: struct `Exchange` is private | True | True | True |
+| P-B6-WORKER-TYPE | api-type-guard | exchange containment | error[E0603]: struct `Worker` is private | True | True | True |
+| P-SESSION-VERIFIED | api-type-guard | session verification | error[E0616]: field `verified` of struct `Session` is private | True | True | True |
+| P-PROVISION-REWRITE | api-type-guard | session verification | error[E0603]: function `rewrite_provision` is private | True | True | True |
+| P-VERIFICATION-TRANSPLANT | api-type-guard | session verification | error[E0616]: field `verified` of struct `Session` is private | True | True | True |
+| P-VERIFICATION-FORGE | api-type-guard | session verification | error[E0603]: struct `Verification` is private | True | True | True |
+| P-TAKE-ASSESSMENT | api-type-guard | session verification | error[E0624]: method `take_assessment` is private | True | True | True |
+| P-R3-HOLDS-SELECTION | api-type-guard | session authority | error[E0624]: method `holds_selection` is private | True | True | True |
+| P-R3-KEPT-COPY | api-type-guard | administrative recovery | error[E0603]: function `kept_copy` is private | True | True | True |
+| P-R3-UNREFERENCED | api-type-guard | administrative recovery | error[E0603]: function `unreferenced` is private | True | True | True |
+| P-R3-INSPECT | api-type-guard | administrative recovery | error[E0603]: function `inspect_incomplete` is private | True | True | True |
+| P-R3-REMOVE-KNOWN | api-type-guard | administrative recovery | error[E0603]: function `remove_known` is private | True | True | True |
+| P-R3-REVOCATION-STATE | api-type-guard | administrative recovery | error[E0603]: function `interrupted_revocation` is private | True | True | True |
+| P-R3-REVOCATION-ADMISSIBLE | api-type-guard | administrative recovery | error[E0603]: function `revocation_admissible` is private | True | True | True |
+| P-CLOSE-TWICE | api-ownership-guard | one-way seal | error[E0382]: use of moved value: `owner` | True | True | True |
+
+- api-ownership-guard: 1/1 as required
+- api-type-guard: 25/25 as required
+- harness-check: 1/1 as required
+- positive-control: 1/1 as required
+scratch sources restored: True; probe file removed: True
+ALL 28 PROBE RESULTS AS REQUIRED

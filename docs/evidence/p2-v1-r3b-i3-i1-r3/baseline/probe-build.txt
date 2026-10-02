@@ -1,0 +1,3 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/base-scratch/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.98s
+  Executable tests/r3_base_probes.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r3/base-target/debug/deps/r3_base_probes-4c3e5a4b8d708659)
