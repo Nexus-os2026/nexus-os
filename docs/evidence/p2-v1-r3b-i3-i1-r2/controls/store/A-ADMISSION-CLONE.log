@@ -1,0 +1,31 @@
+
+running 1 test
+test o10_a_storage_admission_is_bound_to_its_opening ... FAILED
+
+failures:
+
+---- o10_a_storage_admission_is_bound_to_its_opening stdout ----
+
+thread 'o10_a_storage_admission_is_bound_to_its_opening' (3904790) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:3890:5:
+[storage-qualification] no Clone or Default
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    o10_a_storage_admission_is_bound_to_its_opening
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 110 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand/crates/nexus-verifier-sandbox)
+warning: trait `NotClone` is never used
+    --> crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:3864:11
+     |
+3864 |     trait NotClone {
+     |           ^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nexus-verifier-sandbox` (test "phase2_custody_store") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.94s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand-target-final/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

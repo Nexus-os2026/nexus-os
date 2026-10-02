@@ -11,7 +11,10 @@
 //! P2-V1-R3B-I3-I1-R1 (closure to seal through the owner that retains the
 //! custody, the opening's retained state, disposition provenance, the
 //! exchange's containment, the session's own verification, and the
-//! exclusion's life); and unprivileged native primitives beneath
+//! exclusion's life); the maintenance authority of P2-V1-R3B-I3-I1-R2 (the
+//! session's complete verification, succession's authorization, every
+//! procedure's gate and verify-after, and the procedures the maintenance
+//! audit repaired); and unprivileged native primitives beneath
 //! `CARGO_TARGET_TMPDIR`.
 //!
 //! The custody module is included here exactly as the core and codec
@@ -24,8 +27,9 @@
 //! `CARGO_TARGET_TMPDIR`; they inject no real I/O error or power loss.
 //!
 //! Every assertion that guards a requirement carries a bracketed marker; the
-//! negative controls of `docs/evidence/p2-v1-r3b-i3-i1/` and
-//! `docs/evidence/p2-v1-r3b-i3-i1-r1/` restore one wrong behaviour each and
+//! negative controls of `docs/evidence/p2-v1-r3b-i3-i1/`,
+//! `docs/evidence/p2-v1-r3b-i3-i1-r1/` and
+//! `docs/evidence/p2-v1-r3b-i3-i1-r2/` restore one wrong behaviour each and
 //! must fail the assertion carrying their marker.
 
 #![cfg(target_os = "linux")]
@@ -1596,7 +1600,7 @@ fn f09_the_validator_accepts_only_an_exact_restatement() {
     );
     drop(opened);
     let session = session(&fixture, false);
-    let mut procedure = maint::revoke(&session.borrow(), binding, "20261002T000000Z");
+    let mut procedure = maint::revoke(Rc::clone(&session), binding, "20261002T000000Z");
     procedure.run_all(&mut quiet()).expect("revoked");
     drop(procedure);
     end(session);
@@ -6114,22 +6118,53 @@ fn quiet() -> impl FnMut(Option<&'static str>) {
     |_| {}
 }
 
+/// A disposition file written straight into `dispositions/` as root, outside
+/// every procedure (an Owner's error, or a store under test).
+fn plant_disposition(fixture: &Fixture, disposition: &Disposition) {
+    let dir = ino_of(fixture, &state_path(fixture, "dispositions"));
+    let ino = fixture.world.fixture_entry(
+        dir,
+        &format::disposition_name(&disposition.binding),
+        custody::store::io::FileType::Regular,
+        (0, 0, 0o444),
+    );
+    fixture.world.install(
+        ino,
+        &render_disposition(disposition).expect("a disposition renders"),
+    );
+}
+
+/// The Owner's own words in a disposition: Owner input, never a fact.
+fn owner_words(
+    reason: DispositionReason,
+    statement: &str,
+    operator: &str,
+    at: &str,
+) -> maint::OwnerWords {
+    maint::OwnerWords {
+        reason,
+        statement: statement.into(),
+        operator: operator.into(),
+        at: at.into(),
+    }
+}
+
 /// Publish a disposition for the one current incident, in its own session.
 fn publish_only_incident(fixture: &Fixture) -> [u8; 32] {
     let session = session(fixture, false);
     let report = verify(&session);
-    let (binding, incident) = report.current.first().cloned().expect("one incident");
-    let disposition = maint::disposition_for(
-        &ROOT,
+    let (binding, _) = report.current.first().cloned().expect("one incident");
+    let mut procedure = maint::publish_disposition(
+        Rc::clone(&session),
         binding,
-        &incident,
-        DispositionReason::OwnerDestroyed,
-        "the owner process was destroyed",
-        "owner",
-        "2026-10-01T12:00:00Z",
-    );
-    let mut procedure = maint::publish_disposition(&session.borrow(), disposition)
-        .expect("[archive-binding] a disposition for the binding the store computed");
+        &owner_words(
+            DispositionReason::OwnerDestroyed,
+            "the owner process was destroyed",
+            "owner",
+            "2026-10-01T12:00:00Z",
+        ),
+    )
+    .expect("[archive-binding] a disposition for the binding the store computed");
     procedure.run_all(&mut quiet()).expect("published");
     drop(procedure);
     let after = verify(&session);
@@ -6181,18 +6216,18 @@ fn m01_sessions_verify_through_their_retained_lock() {
         "[session-verify] the standalone verifier is Busy, never success"
     );
     // Nested: a disposition published and verified again, in one lifetime.
-    let (binding, incident) = report.current[0].clone();
-    let disposition = maint::disposition_for(
-        &ROOT,
+    let (binding, _) = report.current[0].clone();
+    let mut procedure = maint::publish_disposition(
+        Rc::clone(&session),
         binding,
-        &incident,
-        DispositionReason::Other,
-        "x",
-        "owner",
-        "2026-10-01T12:00:00Z",
-    );
-    let mut procedure =
-        maint::publish_disposition(&session.borrow(), disposition).expect("procedure");
+        &owner_words(
+            DispositionReason::Other,
+            "x",
+            "owner",
+            "2026-10-01T12:00:00Z",
+        ),
+    )
+    .expect("procedure");
     procedure.run_all(&mut quiet()).expect("published");
     drop(procedure);
     let again = verify(&session);
@@ -6306,7 +6341,7 @@ fn m03_revocation_blocks_again() {
     let fixture = store_with_incident(2);
     let binding = publish_only_incident(&fixture);
     let session = session(&fixture, false);
-    let mut procedure = maint::revoke(&session.borrow(), binding, "20261001T130000Z");
+    let mut procedure = maint::revoke(Rc::clone(&session), binding, "20261001T130000Z");
     procedure.run_all(&mut quiet()).expect("revoked");
     drop(procedure);
     let report = verify(&session);
@@ -6344,7 +6379,7 @@ fn m04_archival_recycling_retirement_and_succession() {
     );
     assert!(maint::archival_allowed(&report, 0).is_some(), "archivable");
     verify(&session_a);
-    let mut procedure = maint::archive(&mut session_a.borrow_mut(), 0).expect("procedure");
+    let mut procedure = maint::archive(Rc::clone(&session_a), 0).expect("procedure");
     procedure.run_all(&mut quiet()).expect("archived");
     drop(procedure);
     let after = verify(&session_a);
@@ -6382,12 +6417,9 @@ fn m04_archival_recycling_retirement_and_succession() {
     successor_layout.state_name = format!("uid-{}-{}", sim::STORE_UID, hexs(&sim::SUCCESSOR_ID));
     let predecessor_root = fixture.store_ino(&[]);
     let session_b = session(&fixture, false);
-    let mut procedure = maint::successor(
-        Rc::clone(&session_b),
-        &successor_layout,
-        "predecessor fully dispositioned",
-    )
-    .expect("procedure");
+    verify(&session_b);
+    let mut procedure =
+        maint::successor(Rc::clone(&session_b), &successor_layout, &[]).expect("procedure");
     procedure.run_all(&mut quiet()).expect("succession");
     drop(procedure);
     assert_eq!(
@@ -6454,7 +6486,7 @@ fn m05_leftovers_and_requalification() {
         "[admin-crash] {refused:?}"
     );
     let session_a = session(&fixture, false);
-    let mut procedure = maint::leftover(&session_a.borrow()).expect("procedure");
+    let mut procedure = maint::leftover(Rc::clone(&session_a)).expect("procedure");
     assert_eq!(procedure.len(), 2);
     procedure.run_all(&mut quiet()).expect("removed");
     drop(procedure);
@@ -6760,33 +6792,44 @@ fn m08_procedures_perform_exactly_the_documented_steps() {
     let s = session(&fixture, false);
     let report = verify(&s);
     let (binding, incident) = report.current[0].clone();
-    let disposition = maint::disposition_for(
-        &ROOT,
-        binding,
-        &incident,
-        DispositionReason::Other,
-        "x",
-        "owner",
-        "2026-10-01T12:00:00Z",
-    );
+    let _ = incident;
     let trace = traced(
         &fixture,
-        maint::publish_disposition(&s.borrow(), disposition.clone()).expect("procedure"),
+        maint::publish_disposition(
+            Rc::clone(&s),
+            binding,
+            &owner_words(
+                DispositionReason::Other,
+                "x",
+                "owner",
+                "2026-10-01T12:00:00Z",
+            ),
+        )
+        .expect("procedure"),
     );
     check("P-DISP", &fixture, &trace, &[&state(&fixture)]);
     let trace = traced(
         &fixture,
-        maint::revoke(&s.borrow(), binding, "20261001T130000Z"),
+        maint::revoke(Rc::clone(&s), binding, "20261001T130000Z"),
     );
     check("P-REVOKE", &fixture, &trace, &[&state(&fixture)]);
-    let mut disposition_again = disposition;
-    disposition_again.at = "2026-10-01T14:00:00Z".into();
+    verify(&s);
     traced(
         &fixture,
-        maint::publish_disposition(&s.borrow(), disposition_again).expect("procedure"),
+        maint::publish_disposition(
+            Rc::clone(&s),
+            binding,
+            &owner_words(
+                DispositionReason::Other,
+                "x",
+                "owner",
+                "2026-10-01T14:00:00Z",
+            ),
+        )
+        .expect("procedure"),
     );
     verify(&s);
-    let procedure = maint::archive(&mut s.borrow_mut(), 0).expect("procedure");
+    let procedure = maint::archive(Rc::clone(&s), 0).expect("procedure");
     let trace = traced(&fixture, procedure);
     check("P-ARCH", &fixture, &trace, &[&state(&fixture)]);
     verify(&s);
@@ -6819,9 +6862,10 @@ fn m08_procedures_perform_exactly_the_documented_steps() {
     successor_layout.root_id = sim::SUCCESSOR_ID;
     successor_layout.state_name = format!("uid-{}-{}", sim::STORE_UID, hexs(&sim::SUCCESSOR_ID));
     let s = session(&fixture, false);
+    verify(&s);
     let trace = traced(
         &fixture,
-        maint::successor(Rc::clone(&s), &successor_layout, "statement").expect("procedure"),
+        maint::successor(Rc::clone(&s), &successor_layout, &[]).expect("procedure"),
     );
     check(
         "P-SUCCESSOR",
@@ -6840,7 +6884,7 @@ fn m08_procedures_perform_exactly_the_documented_steps() {
         (0, 0, 0o444),
     );
     let s = session(&fixture, false);
-    let trace = traced(&fixture, maint::leftover(&s.borrow()).expect("procedure"));
+    let trace = traced(&fixture, maint::leftover(Rc::clone(&s)).expect("procedure"));
     check("R-LEFTOVER", &fixture, &trace, &[&state(&fixture)]);
     end(s);
     let fixture = store_with_incident(1);
@@ -6935,18 +6979,19 @@ fn stage(proc: Proc) -> Staged {
         }
         Proc::Disp => with_session(store_with_incident(1), false, &|s| {
             let report = verify(s);
-            let (binding, incident) = report.current[0].clone();
-            let disposition = maint::disposition_for(
-                &ROOT,
-                binding,
-                &incident,
-                DispositionReason::Other,
-                "x",
-                "owner",
-                "2026-10-01T12:00:00Z",
-            );
+            let (binding, _) = report.current[0].clone();
             (
-                maint::publish_disposition(&s.borrow(), disposition).expect("procedure"),
+                maint::publish_disposition(
+                    Rc::clone(s),
+                    binding,
+                    &owner_words(
+                        DispositionReason::Other,
+                        "x",
+                        "owner",
+                        "2026-10-01T12:00:00Z",
+                    ),
+                )
+                .expect("procedure"),
                 None,
             )
         }),
@@ -6955,7 +7000,7 @@ fn stage(proc: Proc) -> Staged {
             let binding = publish_only_incident(&fixture);
             with_session(fixture, false, &|s| {
                 (
-                    maint::revoke(&s.borrow(), binding, "20261001T130000Z"),
+                    maint::revoke(Rc::clone(s), binding, "20261001T130000Z"),
                     None,
                 )
             })
@@ -6965,7 +7010,7 @@ fn stage(proc: Proc) -> Staged {
             publish_only_incident(&fixture);
             with_session(fixture, false, &|s| {
                 verify(s);
-                let procedure = maint::archive(&mut s.borrow_mut(), 0).expect("procedure");
+                let procedure = maint::archive(Rc::clone(s), 0).expect("procedure");
                 (procedure, None)
             })
         }
@@ -6974,7 +7019,7 @@ fn stage(proc: Proc) -> Staged {
             publish_only_incident(&fixture);
             let s = session(&fixture, false);
             verify(&s);
-            maint::archive(&mut s.borrow_mut(), 0)
+            maint::archive(Rc::clone(&s), 0)
                 .expect("procedure")
                 .run_all(&mut quiet())
                 .expect("archived");
@@ -7020,8 +7065,9 @@ fn stage(proc: Proc) -> Staged {
             let fixture = Fixture::provisioned(1, 16);
             let layout = successor_layout(&fixture);
             with_session(fixture, false, &|s| {
+                verify(s);
                 (
-                    maint::successor(Rc::clone(s), &layout, "statement").expect("procedure"),
+                    maint::successor(Rc::clone(s), &layout, &[]).expect("procedure"),
                     None,
                 )
             })
@@ -7158,7 +7204,7 @@ fn design_matrix() -> Vec<DesignRow> {
 /// resumes an interrupted recycling. Returns the final outcome.
 fn recover(fixture: &Fixture, proc: Proc, saved: Option<&SessionReport>) -> String {
     let s = session(fixture, false);
-    let leftovers = maint::leftover(&s.borrow()).expect("procedure");
+    let leftovers = maint::leftover(Rc::clone(&s)).expect("procedure");
     let mut leftovers = leftovers;
     leftovers.run_all(&mut quiet()).expect("leftovers removed");
     drop(leftovers);
@@ -7180,32 +7226,32 @@ fn recover(fixture: &Fixture, proc: Proc, saved: Option<&SessionReport>) -> Stri
         (Proc::Arch, Ok(report)) => {
             if !report.scan.level.pending_recycle.contains(&0) {
                 assert!(maint::archival_allowed(&report, 0).is_some(), "archivable");
-                maint::archive(&mut s.borrow_mut(), 0)
+                maint::archive(Rc::clone(&s), 0)
                     .expect("procedure")
                     .run_all(&mut quiet())
                     .expect("archived");
             }
         }
         (Proc::Disp, Ok(report)) => {
-            if let Some((binding, incident)) = report
+            if let Some((binding, _)) = report
                 .current
                 .iter()
                 .find(|(binding, _)| report.blocking.contains(binding))
                 .cloned()
             {
-                let disposition = maint::disposition_for(
-                    &ROOT,
+                maint::publish_disposition(
+                    Rc::clone(&s),
                     binding,
-                    &incident,
-                    DispositionReason::Other,
-                    "x",
-                    "owner",
-                    "2026-10-01T12:00:00Z",
-                );
-                maint::publish_disposition(&s.borrow(), disposition)
-                    .expect("procedure")
-                    .run_all(&mut quiet())
-                    .expect("published");
+                    &owner_words(
+                        DispositionReason::Other,
+                        "x",
+                        "owner",
+                        "2026-10-01T12:00:00Z",
+                    ),
+                )
+                .expect("procedure")
+                .run_all(&mut quiet())
+                .expect("published");
             }
         }
         (proc, report) => panic!("[admin-crash] {proc:?}: unrecoverable {:?}", report.err()),
@@ -7411,22 +7457,24 @@ fn stage_composed(proc: Proc) -> Staged {
             let fixture = Fixture::provisioned(2, 16);
             let layout = successor_layout(&fixture);
             with_session(fixture, &|s| {
-                maint::successor(Rc::clone(s), &layout, "statement").expect("procedure")
+                verify(s);
+                maint::successor(Rc::clone(s), &layout, &[]).expect("procedure")
             })
         }
         Proc::Disp => with_session(store_with_incident(2), &|s| {
             let report = verify(s);
-            let (binding, incident) = report.current[0].clone();
-            let disposition = maint::disposition_for(
-                &ROOT,
+            let (binding, _) = report.current[0].clone();
+            maint::publish_disposition(
+                Rc::clone(s),
                 binding,
-                &incident,
-                DispositionReason::Other,
-                "x",
-                "owner",
-                "2026-10-01T12:00:00Z",
-            );
-            maint::publish_disposition(&s.borrow(), disposition).expect("procedure")
+                &owner_words(
+                    DispositionReason::Other,
+                    "x",
+                    "owner",
+                    "2026-10-01T12:00:00Z",
+                ),
+            )
+            .expect("procedure")
         }),
         other => panic!("not staged for composition: {other:?}"),
     }
@@ -8189,20 +8237,24 @@ fn b04_a_truncated_report_hides_no_blocking_incident() {
     let current: Vec<([u8; 32], Incident)> = (42..68u32)
         .map(|index| incident_at(index, u64::from(index) + 1))
         .collect();
+    // Each publication takes the session's own fresh verification: over
+    // capacity (66 current incidents before the dispositions), it is still
+    // complete.
     let publish = |incidents: &[([u8; 32], Incident)], statement: &str| {
         let s = session(&fixture, false);
-        for (binding, incident) in incidents {
-            let disposition = maint::disposition_for(
-                &ROOT,
+        for (binding, _) in incidents {
+            let _ = s.borrow_mut().verify(&MANY);
+            let mut procedure = maint::publish_disposition(
+                Rc::clone(&s),
                 *binding,
-                incident,
-                DispositionReason::OwnerDestroyed,
-                statement,
-                "owner",
-                "2026-10-02T12:00:00Z",
-            );
-            let mut procedure =
-                maint::publish_disposition(&s.borrow(), disposition).expect("procedure");
+                &owner_words(
+                    DispositionReason::OwnerDestroyed,
+                    statement,
+                    "owner",
+                    "2026-10-02T12:00:00Z",
+                ),
+            )
+            .expect("procedure");
             procedure.run_all(&mut quiet()).expect("published");
         }
         end(s);
@@ -8390,18 +8442,17 @@ fn b06_a_disposition_takes_effect_only_through_its_opening() {
         "the same binding in another store"
     );
     blocked("another store's disposition");
-    // Published here, restating another recorded-unsettled count.
-    let s = session(&fixture, false);
+    // A root-owned file under this binding's name, restating another
+    // recorded-unsettled count: no procedure writes one (a disposition's
+    // facts come from the session's verification), so it is planted, as an
+    // Owner's error outside every procedure would leave it.
     let mut recount = fabricated.clone();
     recount.facts.recorded_unsettled += 1;
     recount.statement = "another count".into();
-    let mut procedure = maint::publish_disposition(&s.borrow(), recount).expect("procedure");
-    procedure.run_all(&mut quiet()).expect("published");
-    drop(procedure);
-    end(s);
-    blocked("a published restatement with another count");
+    plant_disposition(&fixture, &recount);
+    blocked("a planted restatement with another count");
     let s = session(&fixture, false);
-    let mut procedure = maint::revoke(&s.borrow(), binding, "20261002T010000Z");
+    let mut procedure = maint::revoke(Rc::clone(&s), binding, "20261002T010000Z");
     procedure.run_all(&mut quiet()).expect("revoked");
     drop(procedure);
     end(s);
@@ -8512,7 +8563,7 @@ fn b08_a_session_decides_only_from_its_own_current_verification() {
     let binding = publish_only_incident(&fixture);
     let s = session(&fixture, false);
     assert!(
-        maint::archive(&mut s.borrow_mut(), 0).is_err(),
+        maint::archive(Rc::clone(&s), 0).is_err(),
         "[session-verify] no verification, no archival"
     );
     assert!(
@@ -8525,7 +8576,7 @@ fn b08_a_session_decides_only_from_its_own_current_verification() {
     );
     let report = verify(&s);
     assert!(maint::archival_allowed(&report, 0).is_some());
-    let unused = maint::archive(&mut s.borrow_mut(), 0)
+    let unused = maint::archive(Rc::clone(&s), 0)
         .expect("[session-verify] the archival its verification allows");
     drop(unused);
     assert!(
@@ -8537,34 +8588,45 @@ fn b08_a_session_decides_only_from_its_own_current_verification() {
         maint::archival_allowed(&report, 0).is_some(),
         "this verification allows the archival"
     );
-    let mut revocation = maint::revoke(&s.borrow(), binding, "20261002T120000Z");
+    let mut revocation = maint::revoke(Rc::clone(&s), binding, "20261002T120000Z");
+    // The revocation's first step only (its rename): the verification lapses
+    // as that step starts, before any verify-after (P2-V1-R3B-I3-I1-R2: a
+    // completed procedure's verify-after also clears it).
+    revocation.run(1, &mut quiet()).expect("renamed");
+    assert!(
+        maint::archive(Rc::clone(&s), 0).is_err(),
+        "[session-verify] a verification older than the revocation authorizes nothing"
+    );
     revocation.run_all(&mut quiet()).expect("revoked");
     drop(revocation);
     assert!(
-        maint::archive(&mut s.borrow_mut(), 0).is_err(),
-        "[session-verify] a verification older than the revocation authorizes nothing"
+        maint::archive(Rc::clone(&s), 0).is_err(),
+        "[session-verify] nor once the revocation completed: a verify-after is no verify-before"
     );
     let report = verify(&s);
     assert!(maint::archival_allowed(&report, 0).is_none());
     assert!(
-        maint::archive(&mut s.borrow_mut(), 0).is_err(),
+        maint::archive(Rc::clone(&s), 0).is_err(),
         "[session-verify] no archival without its disposition"
     );
-    let (_, incident) = report.current[0].clone();
-    let disposition = maint::disposition_for(
-        &ROOT,
+    // The refused archival consumed that verification: publishing takes a
+    // fresh one.
+    verify(&s);
+    let mut procedure = maint::publish_disposition(
+        Rc::clone(&s),
         binding,
-        &incident,
-        DispositionReason::OwnerDestroyed,
-        "published again",
-        "owner",
-        "2026-10-02T13:00:00Z",
-    );
-    let mut procedure = maint::publish_disposition(&s.borrow(), disposition).expect("procedure");
+        &owner_words(
+            DispositionReason::OwnerDestroyed,
+            "published again",
+            "owner",
+            "2026-10-02T13:00:00Z",
+        ),
+    )
+    .expect("procedure");
     procedure.run_all(&mut quiet()).expect("published");
     drop(procedure);
     verify(&s);
-    let mut archival = maint::archive(&mut s.borrow_mut(), 0).expect("[session-verify] archival");
+    let mut archival = maint::archive(Rc::clone(&s), 0).expect("[session-verify] archival");
     archival.run_all(&mut quiet()).expect("archived");
     drop(archival);
     let after = verify(&s);
@@ -8627,6 +8689,1564 @@ fn b09_exclusion_outlasts_the_owner_while_its_io_is_in_flight() {
         Some(true),
         "the exclusion ends once the worker's thread has finished"
     );
+}
+
+// ---------------------------------------------------------------------------
+// V: maintenance authority (P2-V1-R3B-I3-I1-R2): the session's own complete
+// verification, succession's authorization, gate and verify-after, and the
+// procedures the maintenance audit repaired
+// ---------------------------------------------------------------------------
+
+/// An unsealed journal that recorded an action start: a current, unresolved
+/// incident in pool file `index`.
+fn unresolved_journal(fixture: &Fixture, index: u32, claim: u64, generation: [u8; 16]) {
+    let t1 = trace("T1");
+    let fields = header_fields(generation, claim, index, fixture.layout.c_pool, 16);
+    let image = journal_image(&fields, &frames_of(generation, &t1[..3]), None);
+    fixture
+        .world
+        .install(fixture.pool_ino(index).expect("pool"), &image);
+}
+
+/// A header and no record (AbandonedClaim): a claim, and no incident.
+fn claimed_only(fixture: &Fixture, index: u32, claim: u64, generation: [u8; 16]) {
+    let fields = header_fields(generation, claim, index, fixture.layout.c_pool, 16);
+    fixture.world.install(
+        fixture.pool_ino(index).expect("pool"),
+        &journal_image(&fields, &[], None),
+    );
+}
+
+/// An exact disposition for every current incident, each published from a
+/// fresh verification of its own, in one session.
+fn disposition_everything(fixture: &Fixture, config: &Config) -> usize {
+    let s = session(fixture, false);
+    let mut published = 0;
+    loop {
+        let _ = s.borrow_mut().verify(config);
+        let report = s
+            .borrow()
+            .assessment()
+            .and_then(|assessment| assessment.report)
+            .expect("a complete report");
+        let Some(binding) = report.blocking.first().copied() else {
+            break;
+        };
+        maint::publish_disposition(
+            Rc::clone(&s),
+            binding,
+            &owner_words(
+                DispositionReason::OwnerDestroyed,
+                "the owner process was destroyed",
+                "owner",
+                "2026-10-02T12:00:00Z",
+            ),
+        )
+        .expect("a disposition for a verified incident")
+        .run_all(&mut quiet())
+        .expect("published");
+        published += 1;
+    }
+    end(s);
+    published
+}
+
+/// A session on `fixture`, verified with `config`, and the succession it
+/// authorizes with `accepted`.
+fn succession(
+    fixture: &Fixture,
+    config: &Config,
+    accepted: &[String],
+) -> (SharedSession, Result<maint::Procedure<'static>, String>) {
+    let s = session(fixture, false);
+    let _ = s.borrow_mut().verify(config);
+    let built = maint::successor(Rc::clone(&s), &successor_layout(fixture), accepted);
+    (s, built)
+}
+
+fn provision_now(fixture: &Fixture) -> format::Provision {
+    let ino = fixture
+        .world
+        .lookup(sim::PROVISION_PATH)
+        .expect("PROVISION");
+    parse_provision(&fixture.world.visible(ino)).expect("PROVISION parses")
+}
+
+fn successor_root_exists(fixture: &Fixture) -> bool {
+    fixture
+        .world
+        .lookup(&format!(
+            "{ROOTS_DIR}/{}",
+            successor_layout(fixture).state_name
+        ))
+        .is_some()
+}
+
+/// S01, S03: a succession is refused, before any step, while one bound
+/// incident of the predecessor lacks an exact disposition; it is authorized
+/// once every one has one (design section 13.6). At the base, P-SUCCESSOR
+/// ran on an undispositioned predecessor and the next owner ran without its
+/// history (B-S1).
+#[test]
+fn v01_succession_needs_every_bound_incident_dispositioned() {
+    let fixture = Fixture::provisioned(3, 16);
+    unresolved_journal(&fixture, 0, 1, [0x51; 16]);
+    unresolved_journal(&fixture, 1, 2, [0x52; 16]);
+    let (s, built) = succession(&fixture, &SMALL, &[]);
+    let refused = built
+        .err()
+        .expect("[succession-dispositioned] two undispositioned incidents");
+    assert!(
+        refused.contains("2 current incident(s) without an exact disposition"),
+        "[succession-dispositioned] {refused}"
+    );
+    end(s);
+    assert!(
+        !successor_root_exists(&fixture) && provision_now(&fixture).revision == 1,
+        "[succession-dispositioned] nothing was written"
+    );
+    // One of the two dispositioned: still refused.
+    let s = session(&fixture, false);
+    let report = verify_with(&s, &SMALL);
+    let first = report.blocking[0];
+    maint::publish_disposition(
+        Rc::clone(&s),
+        first,
+        &owner_words(
+            DispositionReason::OwnerDestroyed,
+            "one",
+            "owner",
+            "2026-10-02T12:00:00Z",
+        ),
+    )
+    .expect("procedure")
+    .run_all(&mut quiet())
+    .expect("published");
+    end(s);
+    let (s, built) = succession(&fixture, &SMALL, &[]);
+    assert!(
+        built
+            .err()
+            .is_some_and(|why| why.contains("1 current incident(s) without an exact disposition")),
+        "[succession-dispositioned] one of two still undispositioned"
+    );
+    end(s);
+    // Both: authorized, and it completes.
+    assert_eq!(disposition_everything(&fixture, &SMALL), 1);
+    let (s, built) = succession(&fixture, &SMALL, &[]);
+    let mut procedure = built.expect("[succession-dispositioned] every incident dispositioned");
+    procedure.run_all(&mut quiet()).expect("succession");
+    assert!(procedure.is_complete());
+    drop(procedure);
+    end(s);
+    assert_eq!(provision_now(&fixture).root_id, sim::SUCCESSOR_ID);
+}
+
+/// A verification with any incident limit, its outcome ignored: the report
+/// of the session's retained assessment.
+fn verify_with(session: &SharedSession, config: &Config) -> SessionReport {
+    let _ = session.borrow_mut().verify(config);
+    session
+        .borrow()
+        .assessment()
+        .and_then(|assessment| assessment.report)
+        .expect("a complete report")
+}
+
+/// S02, S13: a dispositioned predecessor succeeds. Every step runs, the last
+/// one with its verify-after: the session re-selects the successor and
+/// verifies it in-session (design section 13.6 step 2d). The successor
+/// records the predecessor and a statement generated from the verified
+/// condition set (here none); the predecessor's root stays as evidence; the
+/// next owner runs on the successor.
+#[test]
+fn v02_succession_verifies_the_selected_successor_after_publication() {
+    let fixture = store_with_incident(2);
+    publish_only_incident(&fixture);
+    let (s, built) = succession(&fixture, &SMALL, &[]);
+    let mut procedure = built.expect("[succession-verified] authorized");
+    let steps = procedure.len();
+    procedure
+        .run(steps - 1, &mut quiet())
+        .expect("every step but the last");
+    assert!(
+        !procedure.is_complete(),
+        "[succession-verify-after] published, not yet verified"
+    );
+    procedure
+        .run_all(&mut quiet())
+        .expect("[succession-verify-after] the last step");
+    assert!(
+        procedure.is_complete(),
+        "[succession-verify-after] complete"
+    );
+    drop(procedure);
+    let events = s.borrow().events().to_vec();
+    let tail: Vec<&maint::SessionEvent> = events.iter().rev().take(2).collect();
+    assert!(
+        matches!(tail[0], maint::SessionEvent::VerifyAfter(Ok(())))
+            && matches!(tail[1], maint::SessionEvent::Reselect(2)),
+        "[succession-verify-after] re-selection, then verify-after: {events:?}"
+    );
+    let assessment = s.borrow().assessment().expect("the verify-after");
+    assert!(
+        assessment.root_id == sim::SUCCESSOR_ID
+            && assessment.complete
+            && assessment.conditions.is_empty(),
+        "[succession-verify-after] the successor verified: {assessment:?}"
+    );
+    end(s);
+    let selected = provision_now(&fixture);
+    assert_eq!(
+        selected.predecessor,
+        Some((
+            ROOT,
+            format!("{}: none", maint::PREDECESSOR_STATEMENT_PREFIX)
+        )),
+        "[succession-invalid-accepted] the generated statement"
+    );
+    let pool = fixture.pool_ino(0).expect("the predecessor's pool file 0");
+    assert_eq!(
+        classify_bytes(&fixture.world.visible(pool), ROOT, 16, 0).class,
+        FileClass::UnsealedAction,
+        "the predecessor's root is unchanged evidence"
+    );
+    let next = Run::claimed(&fixture, "next", SMALL);
+    assert_eq!(next.started.report().root_id, sim::SUCCESSOR_ID);
+}
+
+/// S04: a truncated report authorizes nothing. 66 incidents, 64 listed in
+/// detail: dispositions for exactly the listed current ones leave the two
+/// unlisted ones without one, and the succession is refused; with every
+/// one, it is authorized (design section 11.2).
+#[test]
+fn v03_succession_decides_over_the_complete_set_not_the_report() {
+    const MANY: Config = Config {
+        incident_limit: format::MAX_APPLIED,
+        ..SMALL
+    };
+    let (fixture, history, current) = truncated_store();
+    publish_disposition_set(&fixture, &MANY, &history);
+    let s = session(&fixture, false);
+    let report = verify_with(&s, &MANY);
+    assert!(report.scan.report.partial, "the report is partial");
+    let listed: BTreeSet<[u8; 32]> = report
+        .scan
+        .report
+        .detail
+        .iter()
+        .map(|(binding, _)| *binding)
+        .collect();
+    end(s);
+    let (listed_current, unlisted): (Vec<_>, Vec<_>) = current
+        .iter()
+        .cloned()
+        .partition(|(binding, _)| listed.contains(binding));
+    assert_eq!((listed_current.len(), unlisted.len()), (24, 2));
+    publish_disposition_set(&fixture, &MANY, &listed_current);
+    let (s, built) = succession(&fixture, &MANY, &[]);
+    assert!(
+        built
+            .err()
+            .is_some_and(|why| why.contains("2 current incident(s) without an exact disposition")),
+        "[succession-complete-set] the two unlisted incidents"
+    );
+    end(s);
+    publish_disposition_set(&fixture, &MANY, &unlisted);
+    let (s, built) = succession(&fixture, &MANY, &[]);
+    assert!(
+        built.is_ok(),
+        "[succession-complete-set] every incident dispositioned: {:?}",
+        built.err()
+    );
+    drop(built);
+    end(s);
+}
+
+/// Incidents by binding.
+type BoundIncidents = Vec<([u8; 32], Incident)>;
+
+/// The b04 store: 40 history-to-be incidents listed as applied by two later
+/// headers, and 26 current ones; the bounded report lists 64 of the 66.
+fn truncated_store() -> (Fixture, BoundIncidents, BoundIncidents) {
+    let fixture = Fixture::provisioned(69, 16);
+    let t1 = trace("T1");
+    let generation_of = |claim: u64| {
+        let mut generation = [0x40; 16];
+        generation[..8].copy_from_slice(&claim.to_be_bytes());
+        generation
+    };
+    let incident_at = |index: u32, claim: u64| {
+        let generation = generation_of(claim);
+        let fields = header_fields(generation, claim, index, 16, 16);
+        let image = journal_image(&fields, &frames_of(generation, &t1[..3]), None);
+        let report = classify_bytes(&image, ROOT, 16, index);
+        let facts = IncidentFacts {
+            kind: IncidentKind::Journal,
+            claim: Some(claim),
+            generation: Some(generation),
+            pool_index: None,
+            content: Some(report.content),
+            class: IncidentClass::Unresolved,
+            recorded_unsettled: report.recorded_unsettled.len() as u64,
+        };
+        let binding = facts.binding(&ROOT).expect("a journal binding");
+        fixture
+            .world
+            .install(fixture.pool_ino(index).expect("pool"), &image);
+        (
+            binding,
+            Incident {
+                facts,
+                outcome: PriorOutcome::Unresolved { outstanding: 1 },
+            },
+        )
+    };
+    let history: BoundIncidents = (0..40u32)
+        .map(|index| incident_at(index, u64::from(index) + 1))
+        .collect();
+    let mut by_binding = history.clone();
+    by_binding.sort_by_key(|(binding, _)| *binding);
+    for (index, applied) in [(40u32, &by_binding[..32]), (41, &by_binding[32..])] {
+        let claim = u64::from(index) + 1;
+        let mut fields = header_fields(generation_of(claim), claim, index, 16, 16);
+        fields.applied = applied
+            .iter()
+            .map(|(binding, _)| (*binding, DispositionReason::OwnerDestroyed))
+            .collect();
+        fixture.world.install(
+            fixture.pool_ino(index).expect("pool"),
+            &journal_image(&fields, &[], None),
+        );
+    }
+    let current: BoundIncidents = (42..68u32)
+        .map(|index| incident_at(index, u64::from(index) + 1))
+        .collect();
+    (fixture, history, current)
+}
+
+/// Publish exact dispositions for `incidents`, each from a fresh
+/// verification, in one session.
+fn publish_disposition_set(fixture: &Fixture, config: &Config, incidents: &[([u8; 32], Incident)]) {
+    let s = session(fixture, false);
+    for (binding, _) in incidents {
+        let _ = s.borrow_mut().verify(config);
+        maint::publish_disposition(
+            Rc::clone(&s),
+            *binding,
+            &owner_words(
+                DispositionReason::OwnerDestroyed,
+                "dispositioned",
+                "owner",
+                "2026-10-02T12:00:00Z",
+            ),
+        )
+        .expect("procedure")
+        .run_all(&mut quiet())
+        .expect("published");
+    }
+    end(s);
+}
+
+/// S05, S16: a verification authorizes one succession, and only while no
+/// step of the session's procedures has started since. A verification older
+/// than a revocation authorizes nothing (B-S4), and a second succession from
+/// one verification is refused.
+#[test]
+fn v04_a_stale_or_consumed_verification_authorizes_no_succession() {
+    let fixture = store_with_incident(2);
+    let binding = publish_only_incident(&fixture);
+    let s = session(&fixture, false);
+    let before = verify(&s);
+    assert!(before.blocking.is_empty(), "dispositioned when verified");
+    // The revocation's first step only (its rename): a step ran, and no
+    // verify-after has replaced anything.
+    let mut revocation = maint::revoke(Rc::clone(&s), binding, "20261002T130000Z");
+    revocation.run(1, &mut quiet()).expect("renamed");
+    drop(revocation);
+    let refused = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+        .err()
+        .expect("[succession-current] a verification older than the revocation");
+    assert!(
+        refused.contains("a procedure step ran since the session's latest verification"),
+        "[succession-current] {refused}"
+    );
+    end(s);
+    // Consumed: one verification, one succession.
+    publish_only_incident(&fixture);
+    let s = session(&fixture, false);
+    verify(&s);
+    let first = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[]);
+    assert!(first.is_ok(), "the first succession is authorized");
+    drop(first);
+    let second = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[]);
+    assert!(
+        second
+            .err()
+            .is_some_and(|why| why.contains("has not verified since its last procedure")),
+        "[succession-verified] the second use of one verification"
+    );
+    end(s);
+}
+
+/// S06: another session's or another store's verification authorizes
+/// nothing: a session that has not verified is refused, whatever another
+/// session found; and a procedure's verify-after is evidence, never a
+/// verify-before.
+#[test]
+fn v05_only_the_sessions_own_verify_before_authorizes() {
+    let fixture_a = Fixture::provisioned(1, 16);
+    let fixture_b = Fixture::provisioned(1, 16);
+    let a = session(&fixture_a, false);
+    verify(&a);
+    let b = session(&fixture_b, false);
+    assert!(
+        maint::successor(Rc::clone(&b), &successor_layout(&fixture_b), &[])
+            .err()
+            .is_some_and(|why| why.contains("has not verified")),
+        "[succession-verified] store B's session has not verified (store A's did)"
+    );
+    end(b);
+    end(a);
+    let a1 = session(&fixture_a, false);
+    verify(&a1);
+    end(a1);
+    let a2 = session(&fixture_a, false);
+    assert!(
+        maint::successor(Rc::clone(&a2), &successor_layout(&fixture_a), &[])
+            .err()
+            .is_some_and(|why| why.contains("has not verified")),
+        "[succession-verified] an ended session's verification is gone"
+    );
+    // A procedure's verify-after does not authorize the next procedure.
+    let _ = a2.borrow_mut().verify(&SMALL);
+    maint::leftover(Rc::clone(&a2))
+        .expect("procedure")
+        .run_all(&mut quiet())
+        .expect("nothing to remove, verified after");
+    assert!(
+        matches!(
+            a2.borrow().events().last(),
+            Some(maint::SessionEvent::VerifyAfter(Ok(())))
+        ),
+        "the verify-after ran"
+    );
+    assert!(
+        maint::successor(Rc::clone(&a2), &successor_layout(&fixture_a), &[])
+            .err()
+            .is_some_and(|why| why.contains("has not verified")),
+        "[succession-verified] a verify-after is not a verify-before"
+    );
+    end(a2);
+}
+
+/// S07: over capacity, a complete proof authorizes. (a) Four claim gaps and
+/// a Malformed pool file: five current incidents, over `incident_limit` 4,
+/// all enumerated. (b) Claim 10 alone: nine gaps, over their allowance, and
+/// still enumerated, since the store could hold dispositions for all of
+/// them. With an exact disposition for each, the verification still
+/// reports Capacity and is complete, and the succession is authorized and
+/// completes (design section 13.10).
+#[test]
+fn v06_over_capacity_a_complete_proof_authorizes_succession() {
+    // (a)
+    let fixture = Fixture::provisioned(3, 16);
+    claimed_only(&fixture, 0, 1, [0x61; 16]);
+    claimed_only(&fixture, 1, 6, [0x62; 16]);
+    fixture.world.install(
+        fixture.pool_ino(2).expect("pool"),
+        &vec![0xffu8; (fixture.layout.c_pool as usize + 2) * BLOCK],
+    );
+    assert_eq!(disposition_everything(&fixture, &SMALL), 5);
+    let s = session(&fixture, false);
+    let refused = s.borrow_mut().verify(&SMALL).expect_err("over capacity");
+    assert!(matches!(refused.refused, Refused::Capacity(_)));
+    let assessment = s.borrow().assessment().expect("assessed");
+    assert!(
+        assessment.complete
+            && assessment
+                .conditions
+                .iter()
+                .all(|condition| condition.class == classify::ConditionClass::Capacity),
+        "[succession-complete-set] complete, Capacity only: {:?}",
+        assessment.conditions
+    );
+    let mut procedure = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+        .expect("[succession-complete-set] Capacity with every incident dispositioned");
+    procedure.run_all(&mut quiet()).expect("succession");
+    drop(procedure);
+    end(s);
+    assert_eq!(provision_now(&fixture).root_id, sim::SUCCESSOR_ID);
+    // (b)
+    let fixture = Fixture::provisioned(2, 16);
+    claimed_only(&fixture, 0, 10, [0x63; 16]);
+    let s = session(&fixture, false);
+    let report = verify_with(&s, &SMALL);
+    assert_eq!(report.current.len(), 9, "the nine gaps, enumerated");
+    end(s);
+    assert_eq!(disposition_everything(&fixture, &SMALL), 9);
+    let (s, built) = succession(&fixture, &SMALL, &[]);
+    assert!(
+        built.is_ok(),
+        "[succession-complete-set] nine dispositioned gaps: {:?}",
+        built.err()
+    );
+    drop(built);
+    end(s);
+}
+
+/// S08: more claim gaps than the store could ever hold dispositions for are
+/// counted, never enumerated, and the succession is refused: Capacity is
+/// never permission (design sections 7.7 and 13.10).
+#[test]
+fn v07_capacity_without_a_complete_proof_refuses_succession() {
+    let fixture = Fixture::provisioned(2, 16);
+    claimed_only(&fixture, 0, 5000, [0x71; 16]);
+    let s = session(&fixture, false);
+    let refused = s.borrow_mut().verify(&SMALL).expect_err("over capacity");
+    assert_eq!(refused.refused, Refused::Capacity("4999 claim gaps".into()));
+    let assessment = s.borrow().assessment().expect("assessed");
+    let report = assessment.report.as_ref().expect("a report");
+    assert!(
+        !assessment.complete && report.scan.level.gaps_unenumerated == 4999,
+        "[succession-complete-set] counted, not enumerated"
+    );
+    assert!(report.current.is_empty(), "nothing enumerated");
+    let refused = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+        .err()
+        .expect("[succession-complete-set] no complete proof");
+    assert!(
+        refused.contains("4999 claim gaps: more than the store can hold dispositions for"),
+        "[succession-complete-set] {refused}"
+    );
+    end(s);
+    assert!(!successor_root_exists(&fixture));
+}
+
+/// A store with three store-level Invalid conditions at once, each
+/// independently detectable, and no incident: an unexpected entry in
+/// `journals/`, a disposition of another root, and two pool files of one
+/// generation.
+fn store_with_invalid_conditions() -> (Fixture, String) {
+    let fixture = Fixture::provisioned(3, 16);
+    let journals = ino_of(&fixture, &state_path(&fixture, "journals"));
+    fixture.world.fixture_entry(
+        journals,
+        "notes.txt",
+        custody::store::io::FileType::Regular,
+        (0, 0, 0o600),
+    );
+    let other_root = [0x77u8; 16];
+    let facts = maint::gap_facts(5);
+    let binding = facts.binding(&other_root).expect("a gap binding");
+    plant_disposition(
+        &fixture,
+        &Disposition {
+            root: other_root,
+            binding,
+            facts,
+            reason: DispositionReason::Other,
+            statement: "of another root".into(),
+            operator: "nobody".into(),
+            at: "2026-10-02T00:00:00Z".into(),
+        },
+    );
+    claimed_only(&fixture, 0, 1, [0x31; 16]);
+    claimed_only(&fixture, 1, 2, [0x31; 16]);
+    (fixture, format::disposition_name(&binding))
+}
+
+/// S09 to S12, and the collecting verification (design section 13.11): an
+/// in-session verification reports every store-level Invalid condition,
+/// canonically named, in a stable order and without duplicates, while an
+/// owner's opening still refuses at the first one (B-S6). The succession is
+/// refused when the Owner omits one, adds one or repeats one, and
+/// authorized for exactly the verified set in any order; the predecessor
+/// statement written is generated from the verified set.
+#[test]
+fn v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement() {
+    let (fixture, disposition) = store_with_invalid_conditions();
+    let opening = open_owner(
+        &fixture.store_process("owner"),
+        &fixture.path,
+        &SMALL,
+        &mut NoHooks,
+    )
+    .expect_err("[maintenance-verify] an owner's opening refuses an Invalid store");
+    assert_eq!(
+        opening.refused,
+        Refused::Invalid("unexpected entry journals/notes.txt".into()),
+        "[maintenance-verify] an owner's opening stops at the first condition"
+    );
+    let s = session(&fixture, false);
+    let refused = s.borrow_mut().verify(&SMALL).expect_err("Invalid");
+    assert_eq!(refused.refused, opening.refused, "the same first condition");
+    let assessment = s.borrow().assessment().expect("assessed");
+    let names: Vec<String> = assessment
+        .conditions
+        .iter()
+        .map(|condition| condition.name.clone())
+        .collect();
+    let expected = vec![
+        "unexpected journals/notes.txt".to_string(),
+        format!("disposition-root {disposition}"),
+        format!("duplicate-generation {}", hexs(&[0x31; 16])),
+    ];
+    assert_eq!(
+        names, expected,
+        "[maintenance-verify] every condition, in the order met"
+    );
+    assert!(
+        assessment.complete,
+        "[maintenance-verify] determinate conditions leave it complete"
+    );
+    let verified = assessment.invalid_conditions();
+    let mut sorted = expected.clone();
+    sorted.sort();
+    assert_eq!(verified, sorted, "canonical: sorted");
+    end(s);
+    let attempt = |accepted: &[String]| {
+        let (s, built) = succession(&fixture, &SMALL, accepted);
+        // An authorized procedure holds the session: drop it first.
+        let outcome = built.map(drop);
+        end(s);
+        outcome
+    };
+    // S09: one omitted.
+    assert!(
+        attempt(&verified[..2]).is_err(),
+        "[succession-invalid-accepted] one verified condition omitted"
+    );
+    // S10: one fabricated.
+    let mut extra = verified.clone();
+    extra.push("unexpected journals/invented".into());
+    assert!(
+        attempt(&extra).is_err(),
+        "[succession-invalid-accepted] a condition not verified"
+    );
+    // One repeated.
+    let mut repeated = verified.clone();
+    repeated.push(verified[0].clone());
+    assert!(
+        attempt(&repeated).is_err(),
+        "[succession-invalid-accepted] a condition twice"
+    );
+    // S11: exactly the verified set, in another order.
+    let mut reordered = verified.clone();
+    reordered.reverse();
+    let (s, built) = succession(&fixture, &SMALL, &reordered);
+    let mut procedure = built.expect("[succession-invalid-accepted] the exact set");
+    procedure.run_all(&mut quiet()).expect("succession");
+    drop(procedure);
+    end(s);
+    // S12: the statement names each one, generated from the verified set.
+    assert_eq!(
+        provision_now(&fixture).predecessor,
+        Some((
+            ROOT,
+            format!(
+                "{}: {}",
+                maint::PREDECESSOR_STATEMENT_PREFIX,
+                verified.join("; ")
+            )
+        )),
+        "[succession-invalid-accepted] the predecessor statement"
+    );
+}
+
+/// A predecessor statement holds at most 512 bytes: a verified set that
+/// does not fit refuses the succession, and is never truncated.
+#[test]
+fn v09_a_condition_set_that_does_not_fit_the_statement_refuses() {
+    let fixture = Fixture::provisioned(2, 16);
+    let journals = ino_of(&fixture, &state_path(&fixture, "journals"));
+    for k in 0..8 {
+        fixture.world.fixture_entry(
+            journals,
+            &format!("an-unexpected-entry-whose-name-is-rather-long-number-{k:02}"),
+            custody::store::io::FileType::Regular,
+            (0, 0, 0o600),
+        );
+    }
+    let s = session(&fixture, false);
+    let _ = s.borrow_mut().verify(&SMALL);
+    let verified = s
+        .borrow()
+        .assessment()
+        .expect("assessed")
+        .invalid_conditions();
+    assert_eq!(verified.len(), 8);
+    let refused = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &verified)
+        .err()
+        .expect("[succession-invalid-accepted] too long for a statement");
+    assert!(
+        refused.contains("a statement holds 512"),
+        "[succession-invalid-accepted] {refused}"
+    );
+    end(s);
+    assert!(
+        maint::predecessor_statement(&verified).is_err(),
+        "never truncated"
+    );
+}
+
+/// S14: when the successor does not verify after its publication, the
+/// procedure is not complete. Its last step fails in its verify-after, the
+/// selected successor stays as evidence (nothing is rolled back), the
+/// session keeps the failing assessment, and a later opening refuses
+/// (B-S3).
+#[test]
+fn v10_a_successor_that_does_not_verify_leaves_the_succession_incomplete() {
+    let fixture = Fixture::provisioned(2, 16);
+    let (s, built) = succession(&fixture, &SMALL, &[]);
+    let mut procedure = built.expect("authorized");
+    let steps = procedure.len();
+    procedure
+        .run(steps - 1, &mut quiet())
+        .expect("every step but the last");
+    let journals = fixture
+        .world
+        .lookup(&format!(
+            "{ROOTS_DIR}/{}/journals",
+            successor_layout(&fixture).state_name
+        ))
+        .expect("the successor's journals/");
+    fixture.world.fixture_entry(
+        journals,
+        ".tmp-00000",
+        custody::store::io::FileType::Regular,
+        (0, 0, 0o600),
+    );
+    let failed = procedure
+        .run_all(&mut quiet())
+        .expect_err("[succession-verify-after] the successor does not verify");
+    assert!(
+        failed.contains("verify-after") && failed.contains("leftover journals/.tmp-00000"),
+        "[succession-verify-after] {failed}"
+    );
+    assert!(
+        !procedure.is_complete() && procedure.steps_done() == steps - 1,
+        "[succession-verify-after] not complete"
+    );
+    drop(procedure);
+    let assessment = s.borrow().assessment().expect("the failing verify-after");
+    assert_eq!(assessment.root_id, sim::SUCCESSOR_ID);
+    end(s);
+    assert_eq!(
+        provision_now(&fixture).root_id,
+        sim::SUCCESSOR_ID,
+        "published: kept as evidence"
+    );
+    let refused = open_owner(
+        &fixture.store_process("owner"),
+        &fixture.path,
+        &SMALL,
+        &mut NoHooks,
+    )
+    .expect_err("[succession-verify-after] later openings refuse");
+    assert!(matches!(refused.refused, Refused::MaintenanceIncomplete(_)));
+}
+
+/// S15: what a caller holds is a copy. Clearing the incidents and the
+/// conditions of an assessment copy changes nothing the session retains:
+/// the succession is refused for the store's real state.
+#[test]
+fn v11_an_edited_assessment_copy_authorizes_nothing() {
+    let fixture = store_with_incident(2);
+    let s = session(&fixture, false);
+    let _ = s.borrow_mut().verify(&SMALL);
+    let mut copy = s.borrow().assessment().expect("assessed");
+    copy.conditions.clear();
+    if let Some(report) = copy.report.as_mut() {
+        report.blocking.clear();
+        report.current.clear();
+        report.scan.level.incidents.clear();
+    }
+    assert!(copy
+        .report
+        .as_ref()
+        .is_some_and(|report| report.blocking.is_empty()));
+    let refused = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+        .err()
+        .expect("[succession-dispositioned] the real state");
+    assert!(
+        refused.contains("1 current incident(s) without an exact disposition"),
+        "[succession-dispositioned] {refused}"
+    );
+    end(s);
+}
+
+/// S17: nothing is written before the gate. A succession authorized and
+/// then overtaken by a step of another procedure is refused by its gate,
+/// before its first operation: the trace holds no operation of it, and no
+/// predecessor temporary exists.
+#[test]
+fn v12_no_succession_operation_precedes_its_gate() {
+    let fixture = store_with_incident(2);
+    let binding = publish_only_incident(&fixture);
+    let s = session(&fixture, false);
+    verify(&s);
+    let mut procedure =
+        maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[]).expect("authorized");
+    let mut revocation = maint::revoke(Rc::clone(&s), binding, "20261002T140000Z");
+    revocation
+        .run(1, &mut quiet())
+        .expect("a step of another procedure");
+    drop(revocation);
+    fixture.world.trace_start();
+    let refused = procedure
+        .run_all(&mut quiet())
+        .expect_err("[succession-gate] overtaken");
+    let trace = fixture.world.trace_take();
+    assert!(
+        refused.contains("(gate)") && trace.is_empty() && procedure.steps_done() == 0,
+        "[succession-gate] refused before any operation: {refused}; {} operations",
+        trace.len()
+    );
+    drop(procedure);
+    end(s);
+    let provdir = ino_of(&fixture, PROVDIR);
+    assert!(
+        !fixture
+            .world
+            .entries(provdir)
+            .contains_key("uid-1001.provision.predecessor.tmp"),
+        "[succession-gate] no predecessor temporary"
+    );
+    // `PROVISION` changed after the authorization (a step outside any
+    // procedure, which is unsupported): refused before any operation too.
+    let fixture = Fixture::provisioned(1, 16);
+    let s = session(&fixture, false);
+    verify(&s);
+    let mut procedure =
+        maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[]).expect("authorized");
+    let mut changed = provision_now(&fixture);
+    changed.revision += 1;
+    let provision = fixture
+        .world
+        .lookup(sim::PROVISION_PATH)
+        .expect("PROVISION");
+    fixture.world.install(
+        provision,
+        &format::render_provision(&changed).expect("renders"),
+    );
+    fixture.world.trace_start();
+    let refused = procedure
+        .run_all(&mut quiet())
+        .expect_err("[succession-gate] PROVISION changed");
+    let trace = fixture.world.trace_take();
+    assert!(
+        refused.contains("(gate): PROVISION changed") && trace.is_empty(),
+        "[succession-gate] refused before any operation: {refused}; {} operations",
+        trace.len()
+    );
+    drop(procedure);
+    end(s);
+}
+
+/// S18: the session holds both stores' locks from the successor's adoption
+/// through publication, re-selection and verify-after: at every step
+/// boundary, the session is authorized over both, and another process's
+/// exclusive lock on either is refused. Both are free once the session
+/// ends.
+#[test]
+fn v13_both_locks_are_held_through_publication_and_verify_after() {
+    let fixture = Fixture::provisioned(1, 16);
+    let layout = successor_layout(&fixture);
+    let (s, built) = succession(&fixture, &SMALL, &[]);
+    let mut procedure = built.expect("authorized");
+    let labels = procedure.labels();
+    let adopt_at = labels
+        .iter()
+        .position(|label| *label == "13.6/2c")
+        .expect("the publication's first step");
+    let lockable = |state: &str| {
+        let io = fixture.store_process("competitor");
+        let mut components: Vec<String> = fixture.layout.parent.clone();
+        components.push(state.to_string());
+        let root = maint::dir_ref(&io, &components).expect("the root");
+        let lock = io.open_read(&root.dir, "LOCK").expect("LOCK");
+        io.flock(&lock, LockRequest::Exclusive).is_ok()
+    };
+    let predecessor = fixture.layout.state_name.clone();
+    procedure
+        .run(adopt_at + 1, &mut quiet())
+        .expect("through the adoption");
+    for step in adopt_at + 1..=labels.len() {
+        assert!(
+            s.borrow().authorized(&predecessor) && s.borrow().authorized(&layout.state_name),
+            "[succession-locks] step {step}: the session holds both"
+        );
+        assert!(
+            !lockable(&predecessor) && !lockable(&layout.state_name),
+            "[succession-locks] step {step}: both excluded"
+        );
+        if step < labels.len() {
+            procedure.run(1, &mut quiet()).expect("a step");
+        }
+    }
+    procedure.run_all(&mut quiet()).expect("complete");
+    assert!(procedure.is_complete());
+    drop(procedure);
+    assert!(
+        !lockable(&predecessor) && !lockable(&layout.state_name),
+        "[succession-locks] held until the session ends"
+    );
+    end(s);
+    assert!(
+        lockable(&predecessor) && lockable(&layout.state_name),
+        "both free after the session"
+    );
+}
+
+/// A pool file replaced under the store leaves the verification
+/// Indeterminate from there on: it is not complete, it names the condition
+/// it stopped at, and no succession is authorized from it.
+#[test]
+fn v14_an_indeterminate_verification_authorizes_no_succession() {
+    let fixture = Fixture::provisioned(2, 16);
+    let journals = ino_of(&fixture, &state_path(&fixture, "journals"));
+    fixture.world.fixture_remove(journals, "j00001.journal");
+    let replacement = fixture.world.fixture_entry(
+        journals,
+        "j00001.journal",
+        custody::store::io::FileType::Regular,
+        (sim::STORE_UID, sim::STORE_GID, 0o600),
+    );
+    fixture.world.install(
+        replacement,
+        &vec![0u8; (fixture.layout.c_pool as usize + 2) * BLOCK],
+    );
+    let s = session(&fixture, false);
+    let refused = s.borrow_mut().verify(&SMALL).expect_err("Lost");
+    assert_eq!(
+        refused.refused,
+        Refused::Lost("j00001.journal replaced".into())
+    );
+    let assessment = s.borrow().assessment().expect("assessed");
+    assert!(
+        !assessment.complete
+            && assessment.conditions.last().is_some_and(|condition| {
+                condition.class == classify::ConditionClass::Indeterminate
+                    && condition.name == "pool-replaced j00001.journal"
+            }),
+        "[maintenance-verify] Indeterminate: {:?}",
+        assessment.conditions
+    );
+    let refused = maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[])
+        .err()
+        .expect("[succession-complete-set] not complete");
+    assert!(
+        refused.contains("not complete") || refused.contains("could not be verified"),
+        "[succession-complete-set] {refused}"
+    );
+    end(s);
+}
+
+/// Disposition publication (design section 13.4 step 2): the incident and
+/// its binding are what the session's own verification reported. A binding
+/// no verification reported (a predictable claim gap that is not one) is
+/// refused; a published disposition restates the verified facts exactly,
+/// with the Owner's own words. At the base, any caller-built disposition
+/// was published.
+#[test]
+fn v15_a_disposition_restates_only_a_verified_incident() {
+    let fixture = store_with_incident(2);
+    let s = session(&fixture, false);
+    let report = verify(&s);
+    let gap = maint::gap_facts(7).binding(&ROOT).expect("a gap binding");
+    let refused = maint::publish_disposition(
+        Rc::clone(&s),
+        gap,
+        &owner_words(
+            DispositionReason::Other,
+            "in advance",
+            "owner",
+            "2026-10-02T12:00:00Z",
+        ),
+    )
+    .err()
+    .expect("[disposition-verified] no verification reported it");
+    assert!(
+        refused.contains("not an incident the session's latest verification reported"),
+        "[disposition-verified] {refused}"
+    );
+    let (binding, incident) = report.current[0].clone();
+    verify(&s);
+    let words = owner_words(
+        DispositionReason::HostRebooted,
+        "rebooted",
+        "an operator",
+        "2026-10-02T12:30:00Z",
+    );
+    maint::publish_disposition(Rc::clone(&s), binding, &words)
+        .expect("a verified incident")
+        .run_all(&mut quiet())
+        .expect("published");
+    end(s);
+    let file = fixture
+        .store_ino(&["dispositions", &format::disposition_name(&binding)])
+        .expect("published");
+    let published = parse_disposition(&fixture.world.visible(file)).expect("parses");
+    assert_eq!(
+        (
+            published.root,
+            published.binding,
+            published.facts,
+            published.reason,
+            published.statement,
+            published.operator,
+            published.at
+        ),
+        (
+            ROOT,
+            binding,
+            incident.facts,
+            words.reason,
+            words.statement,
+            words.operator,
+            words.at
+        ),
+        "[disposition-verified] the verified facts and the Owner's words"
+    );
+}
+
+/// An archived incident whose disposition was revoked leaves the store
+/// Invalid ("archive inconsistent") until the Owner publishes again (design
+/// section 13.4). The session reports the archive binding, and the new
+/// disposition's facts come from the archived bytes, read afresh; the store
+/// is consistent again.
+#[test]
+fn v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes() {
+    let fixture = store_with_incident(2);
+    let binding = publish_only_incident(&fixture);
+    let first = fixture
+        .store_ino(&["dispositions", &format::disposition_name(&binding)])
+        .expect("published");
+    let first = parse_disposition(&fixture.world.visible(first)).expect("parses");
+    let s = session(&fixture, false);
+    verify(&s);
+    maint::archive(Rc::clone(&s), 0)
+        .expect("procedure")
+        .run_all(&mut quiet())
+        .expect("archived");
+    maint::revoke(Rc::clone(&s), binding, "20261002T150000Z")
+        .run_all(&mut quiet())
+        .expect("revoked");
+    let refused = s
+        .borrow_mut()
+        .verify(&SMALL)
+        .expect_err("archive inconsistent");
+    assert!(matches!(&refused.refused, Refused::Invalid(why) if why.contains("inconsistent")));
+    let assessment = s.borrow().assessment().expect("assessed");
+    assert!(assessment.report.as_ref().is_some_and(|report| report
+        .scan
+        .level
+        .undispositioned_history
+        .contains(&binding)));
+    // No succession while archived history lacks its disposition, even with
+    // the Invalid condition accepted.
+    let refused = maint::successor(
+        Rc::clone(&s),
+        &successor_layout(&fixture),
+        &assessment.invalid_conditions(),
+    )
+    .err()
+    .expect("[succession-dispositioned] archived history without a disposition");
+    assert!(
+        refused.contains("1 archived incident(s) without a disposition"),
+        "[succession-dispositioned] {refused}"
+    );
+    let _ = s.borrow_mut().verify(&SMALL);
+    maint::publish_disposition(
+        Rc::clone(&s),
+        binding,
+        &owner_words(
+            DispositionReason::OwnerDestroyed,
+            "again",
+            "owner",
+            "2026-10-02T16:00:00Z",
+        ),
+    )
+    .expect("[disposition-verified] the archive binding the session reported")
+    .run_all(&mut quiet())
+    .expect("published");
+    let after = verify(&s);
+    assert!(
+        after.scan.level.history.contains(&binding),
+        "[disposition-verified] history again"
+    );
+    end(s);
+    let file = fixture
+        .store_ino(&["dispositions", &format::disposition_name(&binding)])
+        .expect("published");
+    let published = parse_disposition(&fixture.world.visible(file)).expect("parses");
+    assert_eq!(
+        (published.facts.recorded_unsettled, published.facts),
+        (1, first.facts),
+        "[disposition-verified] the archived bytes' facts, as first verified"
+    );
+}
+
+/// Provisioning never replaces a store and never provisions over a root
+/// that may hold history; re-publication is for the one root with history,
+/// after Unprovisioned (design section 13.2). Each refuses before any
+/// operation. At the base, both published over an existing `PROVISION`.
+#[test]
+fn v17_provisioning_and_republication_never_replace_a_store() {
+    let fixture = store_with_incident(2);
+    let qualification = fixture.qualification.clone().expect("qualified");
+    let mut other = fixture.layout.clone();
+    other.root_id = sim::SUCCESSOR_ID;
+    other.state_name = format!("uid-{}-{}", sim::STORE_UID, hexs(&sim::SUCCESSOR_ID));
+    let (mut procedure, _) = maint::provision(&fixture.root, &other, &qualification);
+    fixture.world.trace_start();
+    let refused = procedure
+        .run_all(&mut quiet())
+        .expect_err("[provision-unprovisioned] PROVISION exists");
+    assert!(
+        refused.contains("PROVISION exists") && fixture.world.trace_take().is_empty(),
+        "[provision-unprovisioned] {refused}"
+    );
+    drop(procedure);
+    assert!(
+        maint::republish(&fixture.root, &fixture.layout, &qualification)
+            .err()
+            .is_some_and(|why| why.contains("PROVISION exists")),
+        "[provision-unprovisioned] re-publication over a selected store"
+    );
+    let provdir = ino_of(&fixture, PROVDIR);
+    fixture.world.fixture_remove(provdir, "uid-1001.provision");
+    let (mut procedure, _) = maint::provision(&fixture.root, &other, &qualification);
+    let refused = procedure
+        .run_all(&mut quiet())
+        .expect_err("[provision-unprovisioned] a root with history");
+    assert!(
+        refused.contains("may hold history"),
+        "[provision-unprovisioned] {refused}"
+    );
+    drop(procedure);
+    // A second root that may hold history: re-publishing the first one would
+    // select it over the other's history.
+    let roots = ino_of(&fixture, ROOTS_DIR);
+    let owned = (sim::STORE_UID, sim::STORE_GID, 0o700);
+    let planted = fixture.world.fixture_entry(
+        roots,
+        &other.state_name,
+        custody::store::io::FileType::Directory,
+        owned,
+    );
+    let journals = fixture.world.fixture_entry(
+        planted,
+        "journals",
+        custody::store::io::FileType::Directory,
+        owned,
+    );
+    let file = fixture.world.fixture_entry(
+        journals,
+        "j00000.journal",
+        custody::store::io::FileType::Regular,
+        (sim::STORE_UID, sim::STORE_GID, 0o600),
+    );
+    fixture.world.install(file, &[1u8; BLOCK]);
+    assert!(
+        maint::republish(&fixture.root, &fixture.layout, &qualification)
+            .err()
+            .is_some_and(|why| why.contains("may hold history") && why.contains(&other.state_name)),
+        "[provision-unprovisioned] re-publication while another root may hold history"
+    );
+    fixture.world.fixture_remove(roots, &other.state_name);
+    let mut procedure =
+        maint::republish(&fixture.root, &fixture.layout, &qualification).expect("its own root");
+    procedure.run_all(&mut quiet()).expect("re-published");
+    drop(procedure);
+    assert_eq!(provision_now(&fixture).root_id, ROOT, "re-published");
+}
+
+/// Over capacity, archival is how dispositioned history leaves the current
+/// set (design section 13.10): five unresolved journals over
+/// `incident_limit` 4, all dispositioned, and one archived; the current set
+/// is then within the limit.
+#[test]
+fn v18_over_capacity_archival_lets_dispositioned_history_leave() {
+    let fixture = Fixture::provisioned(6, 16);
+    for index in 0..5u32 {
+        unresolved_journal(
+            &fixture,
+            index,
+            u64::from(index) + 1,
+            [0x81 + index as u8; 16],
+        );
+    }
+    assert_eq!(disposition_everything(&fixture, &SMALL), 5);
+    let s = session(&fixture, false);
+    let refused = s.borrow_mut().verify(&SMALL).expect_err("over capacity");
+    assert!(matches!(refused.refused, Refused::Capacity(_)));
+    let mut procedure =
+        maint::archive(Rc::clone(&s), 0).expect("[capacity-archival] archival over capacity");
+    procedure.run_all(&mut quiet()).expect("archived");
+    drop(procedure);
+    let after = verify(&s);
+    assert_eq!(
+        after.current.len(),
+        4,
+        "[capacity-archival] within the limit"
+    );
+    end(s);
+}
+
+/// Every session procedure ends in its verify-after, within its last step:
+/// before that step it is not complete, and its verify-after is in the
+/// session's events (design section 13.1 rule 6). With no leftover,
+/// R-LEFTOVER is one step that only verifies.
+#[test]
+fn v19_every_session_procedure_completes_with_its_verify_after() {
+    let fixture = store_with_incident(2);
+    let s = session(&fixture, false);
+    let report = verify(&s);
+    let binding = report.current[0].0;
+    let mut procedure = maint::publish_disposition(
+        Rc::clone(&s),
+        binding,
+        &owner_words(
+            DispositionReason::Other,
+            "x",
+            "owner",
+            "2026-10-02T12:00:00Z",
+        ),
+    )
+    .expect("procedure");
+    let steps = procedure.len();
+    procedure
+        .run(steps - 1, &mut quiet())
+        .expect("all but the last");
+    assert!(
+        !procedure.is_complete()
+            && !matches!(
+                s.borrow().events().last(),
+                Some(maint::SessionEvent::VerifyAfter(_))
+            ),
+        "[maintenance-verify] not complete before its verify-after"
+    );
+    procedure.run_all(&mut quiet()).expect("the last");
+    assert!(
+        procedure.is_complete()
+            && matches!(
+                s.borrow().events().last(),
+                Some(maint::SessionEvent::VerifyAfter(Ok(())))
+            ),
+        "[maintenance-verify] complete with its verify-after"
+    );
+    drop(procedure);
+    let mut recovery = maint::leftover(Rc::clone(&s)).expect("procedure");
+    assert_eq!(recovery.len(), 1, "one step that only verifies");
+    recovery.run_all(&mut quiet()).expect("verified");
+    assert!(matches!(
+        s.borrow().events().last(),
+        Some(maint::SessionEvent::VerifyAfter(Ok(())))
+    ));
+    drop(recovery);
+    end(s);
+}
+
+/// What a verification can examine, it establishes; what it cannot examine
+/// leaves it incomplete (design sections 6.6 and 13.11). A disposition or
+/// revoked entry that cannot be stat'ed is Indeterminate, and an owner's
+/// opening refuses exactly as before; a disposition of the wrong type is a
+/// determinate condition, and the scan goes on; `revoked/` over its bound is
+/// one determinate condition, none of its entries examined, which the Owner
+/// can accept.
+#[test]
+fn v20_what_cannot_be_examined_is_indeterminate() {
+    // A disposition entry with nothing behind it.
+    let fixture = Fixture::provisioned(2, 16);
+    let dispositions = ino_of(&fixture, &state_path(&fixture, "dispositions"));
+    let name = format::disposition_name(&[0x5a; 32]);
+    fixture
+        .world
+        .fixture_link(dispositions, &name, sim::Ino::MAX);
+    let expected = Refused::Invalid(format!("disposition {name} type: {name}: no such entry"));
+    let opening = open_owner(
+        &fixture.store_process("owner"),
+        &fixture.path,
+        &SMALL,
+        &mut NoHooks,
+    )
+    .expect_err("refused");
+    assert_eq!(opening.refused, expected, "the opening refuses as before");
+    let s = session(&fixture, false);
+    let _ = s.borrow_mut().verify(&SMALL);
+    let assessment = s.borrow().assessment().expect("assessed");
+    assert!(
+        !assessment.complete
+            && assessment.conditions.last().is_some_and(|condition| {
+                condition.class == classify::ConditionClass::Indeterminate
+                    && condition.name == format!("disposition-stat {name}")
+                    && condition.refused == expected
+            }),
+        "[maintenance-verify] a disposition that cannot be stat'ed: {:?}",
+        assessment.conditions
+    );
+    assert!(
+        maint::successor(Rc::clone(&s), &successor_layout(&fixture), &[]).is_err(),
+        "[succession-complete-set] not complete"
+    );
+    end(s);
+    // A revoked entry with nothing behind it.
+    let fixture = Fixture::provisioned(2, 16);
+    let revoked = ino_of(&fixture, &state_path(&fixture, "dispositions/revoked"));
+    let name = format::revoked_name(&[0x5b; 32], "20261002T120000Z");
+    fixture.world.fixture_link(revoked, &name, sim::Ino::MAX);
+    let s = session(&fixture, false);
+    let _ = s.borrow_mut().verify(&SMALL);
+    let assessment = s.borrow().assessment().expect("assessed");
+    assert!(
+        !assessment.complete
+            && assessment.conditions.last().is_some_and(|condition| {
+                condition.class == classify::ConditionClass::Indeterminate
+                    && condition.name == format!("revoked-stat {name}")
+            }),
+        "[maintenance-verify] a revoked entry that cannot be stat'ed: {:?}",
+        assessment.conditions
+    );
+    end(s);
+    // A disposition that is a directory: determinate, and the scan goes on
+    // to the pool level.
+    let fixture = Fixture::provisioned(3, 16);
+    let dispositions = ino_of(&fixture, &state_path(&fixture, "dispositions"));
+    let name = format::disposition_name(&[0x5c; 32]);
+    fixture.world.fixture_entry(
+        dispositions,
+        &name,
+        custody::store::io::FileType::Directory,
+        (0, 0, 0o755),
+    );
+    claimed_only(&fixture, 0, 1, [0x32; 16]);
+    claimed_only(&fixture, 1, 2, [0x32; 16]);
+    let s = session(&fixture, false);
+    let _ = s.borrow_mut().verify(&SMALL);
+    let assessment = s.borrow().assessment().expect("assessed");
+    let names: Vec<String> = assessment
+        .conditions
+        .iter()
+        .map(|condition| condition.name.clone())
+        .collect();
+    assert!(
+        assessment.complete
+            && names
+                == vec![
+                    format!("disposition-type {name}"),
+                    format!("duplicate-generation {}", hexs(&[0x32; 16])),
+                ],
+        "[maintenance-verify] a wrong type is determinate: {names:?}"
+    );
+    end(s);
+    // `revoked/` over its bound, with entries no check would pass: one
+    // condition; none of them is examined.
+    let fixture = Fixture::provisioned(1, 16);
+    let revoked = ino_of(&fixture, &state_path(&fixture, "dispositions/revoked"));
+    for k in 0..=format::REVOKED_ENTRY_LIMIT {
+        fixture.world.fixture_entry(
+            revoked,
+            &format!("entry-{k:05}"),
+            custody::store::io::FileType::Fifo,
+            (0, 0, 0o600),
+        );
+    }
+    let bound = "enumeration-bound dispositions/revoked".to_string();
+    let s = session(&fixture, false);
+    let refused = s.borrow_mut().verify(&SMALL).expect_err("Invalid");
+    assert_eq!(
+        refused.refused,
+        Refused::Invalid("enumeration bound: dispositions/revoked".into())
+    );
+    let assessment = s.borrow().assessment().expect("assessed");
+    assert!(
+        assessment.complete && assessment.invalid_conditions() == vec![bound.clone()],
+        "[maintenance-verify] one determinate condition: {:?}",
+        assessment.conditions
+    );
+    end(s);
+    let (s, built) = succession(&fixture, &SMALL, std::slice::from_ref(&bound));
+    let mut procedure = built.expect("[succession-invalid-accepted] the bound, accepted");
+    procedure.run_all(&mut quiet()).expect("succession");
+    drop(procedure);
+    end(s);
+    assert_eq!(
+        provision_now(&fixture).predecessor,
+        Some((
+            ROOT,
+            format!("{}: {bound}", maint::PREDECESSOR_STATEMENT_PREFIX)
+        ))
+    );
+}
+
+/// A procedure is not complete while a leftover temporary of an interrupted
+/// procedure remains (design section 13.1: recovery comes first). A
+/// revocation run over a leftover does its steps, nothing is rolled back,
+/// and its verify-after fails naming the leftover; R-LEFTOVER removes it and
+/// completes.
+#[test]
+fn v21_a_leftover_temporary_fails_the_verify_after() {
+    let fixture = store_with_incident(2);
+    let binding = publish_only_incident(&fixture);
+    let archive = ino_of(&fixture, &state_path(&fixture, "archive"));
+    fixture.world.fixture_entry(
+        archive,
+        ".tmp-left-over",
+        custody::store::io::FileType::Regular,
+        (0, 0, 0o600),
+    );
+    let s = session(&fixture, false);
+    let mut procedure = maint::revoke(Rc::clone(&s), binding, "20261002T170000Z");
+    let failed = procedure
+        .run_all(&mut quiet())
+        .expect_err("[maintenance-verify] a leftover remains");
+    assert!(
+        failed.contains("verify-after")
+            && failed.contains("leftover archive/.tmp-left-over")
+            && !procedure.is_complete()
+            && procedure.steps_done() == procedure.len() - 1,
+        "[maintenance-verify] {failed}"
+    );
+    drop(procedure);
+    let dispositions = ino_of(&fixture, &state_path(&fixture, "dispositions"));
+    assert!(
+        !fixture
+            .world
+            .entries(dispositions)
+            .contains_key(&format::disposition_name(&binding)),
+        "revoked: nothing is rolled back"
+    );
+    let mut recovery = maint::leftover(Rc::clone(&s)).expect("procedure");
+    recovery
+        .run_all(&mut quiet())
+        .expect("recovered and verified");
+    assert!(recovery.is_complete());
+    drop(recovery);
+    end(s);
+}
+
+/// A succession needs a recovered predecessor (a leftover temporary refuses:
+/// recovery first, design section 13.1) and a new root: neither the
+/// predecessor's root id nor the one it succeeded (design section 13.6).
+#[test]
+fn v22_a_successor_is_a_new_root_of_a_recovered_predecessor() {
+    let fixture = Fixture::provisioned(1, 16);
+    let dispositions = ino_of(&fixture, &state_path(&fixture, "dispositions"));
+    fixture.world.fixture_entry(
+        dispositions,
+        ".tmp-interrupted",
+        custody::store::io::FileType::Regular,
+        (0, 0, 0o600),
+    );
+    let (s, built) = succession(&fixture, &SMALL, &[]);
+    let refused = built
+        .err()
+        .expect("[succession-precondition] a leftover temporary");
+    assert!(
+        refused.contains("recover the interrupted procedure first")
+            && refused.contains("leftover dispositions/.tmp-interrupted"),
+        "[succession-precondition] {refused}"
+    );
+    end(s);
+    let s = session(&fixture, false);
+    maint::leftover(Rc::clone(&s))
+        .expect("procedure")
+        .run_all(&mut quiet())
+        .expect("recovered");
+    verify(&s);
+    let refused = maint::successor(Rc::clone(&s), &fixture.layout, &[])
+        .err()
+        .expect("[succession-precondition] the predecessor's own root id");
+    assert!(
+        refused.contains("needs a new root id"),
+        "[succession-precondition] {refused}"
+    );
+    end(s);
+    let (s, built) = succession(&fixture, &SMALL, &[]);
+    let mut procedure = built.expect("recovered: authorized");
+    procedure.run_all(&mut quiet()).expect("succession");
+    drop(procedure);
+    end(s);
+    // On the successor: back to the root it succeeded is refused.
+    let s = session(&fixture, false);
+    verify(&s);
+    let mut back = fixture.layout.clone();
+    back.state_name = format!("{}-again", fixture.layout.state_name);
+    let refused = maint::successor(Rc::clone(&s), &back, &[])
+        .err()
+        .expect("[succession-precondition] the predecessor's predecessor");
+    assert!(
+        refused.contains("needs a new root id"),
+        "[succession-precondition] {refused}"
+    );
+    end(s);
+}
+
+/// A name the verification records as unexpected or as a leftover is that
+/// one condition: it is never also read as an entry of its directory (design
+/// section 13.11). An unexpected archive name leaves the verification
+/// complete, and a leftover in `dispositions/` is not also a malformed
+/// disposition.
+#[test]
+fn v23_a_recorded_name_is_one_condition() {
+    let fixture = Fixture::provisioned(1, 16);
+    let archive = ino_of(&fixture, &state_path(&fixture, "archive"));
+    fixture.world.fixture_entry(
+        archive,
+        "notes.txt",
+        custody::store::io::FileType::Regular,
+        (0, 0, 0o444),
+    );
+    let dispositions = ino_of(&fixture, &state_path(&fixture, "dispositions"));
+    fixture.world.fixture_entry(
+        dispositions,
+        ".tmp-interrupted",
+        custody::store::io::FileType::Regular,
+        (0, 0, 0o600),
+    );
+    let s = session(&fixture, false);
+    let _ = s.borrow_mut().verify(&SMALL);
+    let assessment = s.borrow().assessment().expect("assessed");
+    let names: Vec<String> = assessment
+        .conditions
+        .iter()
+        .map(|condition| condition.name.clone())
+        .collect();
+    assert!(
+        assessment.complete
+            && names
+                == vec![
+                    "leftover dispositions/.tmp-interrupted".to_string(),
+                    "unexpected archive/notes.txt".to_string(),
+                ],
+        "[maintenance-verify] each name once: {names:?}"
+    );
+    end(s);
+}
+
+/// A procedure holds its session: the session cannot end while one of its
+/// procedures exists, so it cannot end between a procedure's mutation and
+/// that procedure's verify-after, and a procedure abandoned before its
+/// verify-after is never complete (design section 13.1 rules 2, 6 and 7).
+#[test]
+fn v24_a_session_outlives_its_procedures() {
+    let fixture = store_with_incident(2);
+    let binding = publish_only_incident(&fixture);
+    let s = session(&fixture, false);
+    let mut procedure = maint::revoke(Rc::clone(&s), binding, "20261002T180000Z");
+    procedure.run(1, &mut quiet()).expect("renamed");
+    let s = match Rc::try_unwrap(s) {
+        Ok(_) => panic!("[maintenance-verify] the session ended under its procedure"),
+        Err(shared) => shared,
+    };
+    assert!(
+        s.borrow().authorized(&fixture.layout.state_name) && !procedure.is_complete(),
+        "[maintenance-verify] mutated and still held, not complete"
+    );
+    drop(procedure);
+    end(s);
 }
 
 // ---------------------------------------------------------------------------

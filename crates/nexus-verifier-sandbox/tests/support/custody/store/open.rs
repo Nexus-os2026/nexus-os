@@ -22,8 +22,9 @@ use super::super::{
     Config, DispositionReason, Generation, IncidentBinding, PriorIncident, PriorOutcome,
 };
 use super::classify::{
-    self, bounded_report, decide, pool_level, ArchiveEntry, BoundedReport, Decision, FileClass,
-    FileClassifier, FileReport, Incident, PoolFacts, PoolLevel, PoolRefusal,
+    self, bounded_report, decide, entry_name, pool_level_with, ArchiveEntry, BoundedReport,
+    ConditionClass, Decision, FileClass, FileClassifier, FileReport, Findings, Incident, PoolFacts,
+    PoolLevel, PoolRefusal,
 };
 use super::disposition::StoreValidator;
 use super::format::{
@@ -344,6 +345,13 @@ fn check_entry<P: Platform>(
     let stat = io
         .stat_at(dir, name)
         .map_err(|error| io_refusal(error, name))?;
+    check_stat(name, stat, expect)
+}
+
+/// [`check_entry`]'s checks of an entry already stat'ed: its type, its
+/// ownership and mode, its link count and its inode. Each failure is a fact
+/// about the entry, never an I/O failure.
+fn check_stat(name: &str, stat: Stat, expect: Expect) -> Result<Stat, Refused> {
     if stat.file_type != expect.file_type {
         return Err(invalid(format!("{name} is a {:?}", stat.file_type)));
     }
@@ -1310,18 +1318,38 @@ fn accept_dispositions_name(name: &str) -> bool {
 }
 
 /// Check one directory's names: a leftover temporary refuses as
-/// MaintenanceIncomplete, any other unaccepted name as Invalid.
-fn check_names(names: &[String], accept: impl Fn(&str) -> bool, what: &str) -> Result<(), Refused> {
-    if let Some(name) = names
+/// MaintenanceIncomplete, any other unaccepted name as Invalid. An owner's
+/// opening meets the first leftover, else the first other name; collecting,
+/// every one is recorded (both kinds are determinate). Returns the accepted
+/// names, the only ones the scan examines further: a name recorded here is
+/// never also read as an entry of its directory.
+fn check_names(
+    names: Vec<String>,
+    accept: impl Fn(&str) -> bool,
+    what: &str,
+    findings: &mut Findings,
+) -> Result<Vec<String>, Refused> {
+    for name in names
         .iter()
-        .find(|name| name.starts_with(TMP_PREFIX) && !accept(name))
+        .filter(|name| name.starts_with(TMP_PREFIX) && !accept(name))
     {
-        return Err(Refused::MaintenanceIncomplete(format!("{what}/{name}")));
+        findings.meet(
+            ConditionClass::MaintenanceIncomplete,
+            format!("leftover {what}/{}", entry_name(name)),
+            Refused::MaintenanceIncomplete(format!("{what}/{name}")),
+        )?;
     }
-    if let Some(name) = names.iter().find(|name| !accept(name)) {
-        return Err(invalid(format!("unexpected entry {what}/{name}")));
+    for name in names
+        .iter()
+        .filter(|name| !name.starts_with(TMP_PREFIX) && !accept(name))
+    {
+        findings.meet(
+            ConditionClass::Invalid,
+            format!("unexpected {what}/{}", entry_name(name)),
+            invalid(format!("unexpected entry {what}/{name}")),
+        )?;
     }
-    Ok(())
+    Ok(names.into_iter().filter(|name| accept(name)).collect())
 }
 
 fn listing<P: Platform>(
@@ -1422,6 +1450,19 @@ pub(super) fn open_store_dirs<P: Platform>(
 pub(super) type HeldJournals<'a, P> = BTreeMap<u32, &'a <P as StoreIo>::File>;
 
 /// Steps 4 to 8 (design section 10.2), and the bounded report.
+///
+/// Every refusing check meets `findings` (P2-V1-R3B-I3-I1-R2). An owner's
+/// opening and the standalone verifier pass a first-only collector, so they
+/// stop at the first condition with the same refusal as before. An
+/// in-session verification collects: a determinate condition is recorded and
+/// the scan goes on; anything that leaves a pool file, an archive entry or a
+/// directory's names unread or untrusted is Indeterminate and stops it.
+/// Determinate here: an unexpected name; a leftover temporary; a disposition
+/// file that fails its type, size, grammar, name or root check (it is then no
+/// disposition); `dispositions/revoked/` over its bound, or a revoked entry
+/// that fails its type check (revoked files are evidence only); and the
+/// pool-level conditions of [`pool_level_with`]. An entry that cannot be
+/// listed, stat'ed, opened or read is Indeterminate, whatever its directory.
 pub(super) fn scan<P: Platform>(
     io: &P,
     provision: &Provision,
@@ -1429,55 +1470,92 @@ pub(super) fn scan<P: Platform>(
     mode: ScanMode,
     held: &HeldJournals<'_, P>,
     incident_limit: usize,
+    findings: &mut Findings,
 ) -> Result<ScanResult, Refused> {
     let pool = provision.pool();
-    let size = pool_file_size(provision.c_pool).ok_or_else(|| invalid("pool size"))?;
+    let size = pool_file_size(provision.c_pool)
+        .ok_or_else(|| findings.stop("pool-size".into(), invalid("pool size")))?;
     // Step 4: names only, each directory counted against its bound first.
-    let journal_names = listing(io, &dirs.journals, (pool as usize) * 2 + 16, "journals")?;
+    let journal_names = listing(io, &dirs.journals, (pool as usize) * 2 + 16, "journals")
+        .map_err(|refused| findings.stop("listing journals".into(), refused))?;
     let disposition_names = listing(
         io,
         &dirs.dispositions,
         DISPOSITIONS_ENTRY_LIMIT,
         "dispositions",
-    )?;
-    let revoked_names = listing(
-        io,
-        &dirs.revoked,
-        REVOKED_ENTRY_LIMIT,
-        "dispositions/revoked",
-    )?;
-    let archive_names = listing(io, &dirs.archive, format::ARCHIVE_ENTRY_LIMIT, "archive")?;
+    )
+    .map_err(|refused| findings.stop("listing dispositions".into(), refused))?;
+    // Revoked entries are evidence only, never read. Over its bound,
+    // `revoked/` is one determinate condition and none of its entries is
+    // examined (design section 6.6); a listing that fails is Indeterminate.
+    let revoked_names = match io.list_dir(&dirs.revoked, REVOKED_ENTRY_LIMIT) {
+        Ok(Listing::Names(names)) => names,
+        Ok(Listing::TooMany) => {
+            findings.meet(
+                ConditionClass::Invalid,
+                "enumeration-bound dispositions/revoked".into(),
+                invalid("enumeration bound: dispositions/revoked"),
+            )?;
+            Vec::new()
+        }
+        Err(error) => {
+            return Err(findings.stop(
+                "listing dispositions/revoked".into(),
+                io_refusal(error, "dispositions/revoked"),
+            ))
+        }
+    };
+    let archive_names = listing(io, &dirs.archive, format::ARCHIVE_ENTRY_LIMIT, "archive")
+        .map_err(|refused| findings.stop("listing archive".into(), refused))?;
+    // Pool files are read by the names `PROVISION` records, not by listing.
     check_names(
-        &journal_names,
+        journal_names,
         |name| accept_journals_name(name, pool),
         "journals",
+        findings,
     )?;
-    check_names(&disposition_names, accept_dispositions_name, "dispositions")?;
-    check_names(
-        &revoked_names,
+    let disposition_names = check_names(
+        disposition_names,
+        accept_dispositions_name,
+        "dispositions",
+        findings,
+    )?;
+    let revoked_names = check_names(
+        revoked_names,
         |name| format::parse_revoked_name(name).is_some(),
         "dispositions/revoked",
+        findings,
     )?;
-    check_names(
-        &archive_names,
+    let archive_names = check_names(
+        archive_names,
         |name| ArchiveName::parse(name).is_some(),
         "archive",
+        findings,
     )?;
     let mut pool_stats = Vec::with_capacity(pool as usize);
     for (index, inode) in provision.pool_inodes.iter().enumerate() {
         let name = pool_name(index as u32);
         let stat = match io.stat_at(&dirs.journals, &name) {
             Ok(stat) => stat,
-            Err(_) => return Err(lost(name)),
+            Err(_) => return Err(findings.stop(format!("pool-lost {name}"), lost(name))),
         };
         if stat.file_type != FileType::Regular {
-            return Err(invalid(format!("{name} is a {:?}", stat.file_type)));
+            return Err(findings.stop(
+                format!("pool-type {name}"),
+                invalid(format!("{name} is a {:?}", stat.file_type)),
+            ));
         }
         if (stat.uid, stat.gid, stat.mode, stat.nlink) != (provision.uid, provision.gid, 0o600, 1) {
-            return Err(invalid(format!("{name} ownership")));
+            return Err(findings.stop(
+                format!("pool-owner {name}"),
+                invalid(format!("{name} ownership")),
+            ));
         }
         if stat.ino != *inode {
-            return Err(lost(format!("{name} replaced")));
+            return Err(findings.stop(
+                format!("pool-replaced {name}"),
+                lost(format!("{name} replaced")),
+            ));
         }
         pool_stats.push(stat);
     }
@@ -1498,26 +1576,32 @@ pub(super) fn scan<P: Platform>(
         let file: &P::File = match still_held {
             Some(file) => file,
             None => {
-                opened = open_checked(io, &dirs.journals, &name, stat)?;
+                opened = open_checked(io, &dirs.journals, &name, stat)
+                    .map_err(|refused| findings.stop(format!("pool-open {name}"), refused))?;
                 let request = if mode == ScanMode::Session {
                     LockRequest::Exclusive
                 } else {
                     LockRequest::Shared
                 };
                 if io.flock(&opened, request).is_err() {
-                    return Err(Refused::Live(name));
+                    return Err(
+                        findings.stop(format!("pool-live {name}"), Refused::Live(name.clone()))
+                    );
                 }
                 &opened
             }
         };
         if mode == ScanMode::Owner && io.fdatasync(file).is_err() {
-            return Err(Refused::Unreliable(name));
+            return Err(findings.stop(
+                format!("pool-unreliable {name}"),
+                Refused::Unreliable(name.clone()),
+            ));
         }
-        let actual = io
-            .stat_file(file)
-            .map_err(|error| io_refusal(error, &name))?;
+        let actual = io.stat_file(file).map_err(|error| {
+            findings.stop(format!("pool-stat {name}"), io_refusal(error, &name))
+        })?;
         if actual.size != size {
-            return Err(invalid(format!("{name} size")));
+            return Err(findings.stop(format!("pool-size {name}"), invalid(format!("{name} size"))));
         }
         let mut classifier = FileClassifier::new(provision.root_id, provision.c_pool, index);
         let mut block = vec![0u8; BLOCK];
@@ -1527,15 +1611,22 @@ pub(super) fn scan<P: Platform>(
             while done < BLOCK {
                 let got = io
                     .pread(file, k * BLOCK_U64 + done as u64, &mut block[done..])
-                    .map_err(|error| io_refusal(error, &name))?;
+                    .map_err(|error| {
+                        findings.stop(format!("pool-read {name}"), io_refusal(error, &name))
+                    })?;
                 if got == 0 {
-                    return Err(invalid(format!("{name} size")));
+                    return Err(
+                        findings.stop(format!("pool-size {name}"), invalid(format!("{name} size")))
+                    );
                 }
                 done += got;
             }
-            classifier
-                .feed(&block)
-                .map_err(|why| invalid(format!("{name}: {why}")))?;
+            classifier.feed(&block).map_err(|why| {
+                findings.stop(
+                    format!("pool-classify {name}"),
+                    invalid(format!("{name}: {why}")),
+                )
+            })?;
         }
         let report = classifier.finish();
         if let Some(header) = &report.header {
@@ -1548,7 +1639,12 @@ pub(super) fn scan<P: Platform>(
     let mut sorted_archive = archive_names.clone();
     sorted_archive.sort();
     for name in &sorted_archive {
-        let parsed = ArchiveName::parse(name).ok_or_else(|| invalid(format!("archive {name}")))?;
+        let parsed = ArchiveName::parse(name).ok_or_else(|| {
+            findings.stop(
+                format!("archive-parse {}", entry_name(name)),
+                invalid(format!("archive {name}")),
+            )
+        })?;
         let stat = check_entry(
             io,
             &dirs.archive,
@@ -1561,19 +1657,29 @@ pub(super) fn scan<P: Platform>(
                 ino: None,
             },
         )
-        .map_err(|refused| match refused {
-            Refused::Lost(why) | Refused::Invalid(why) => {
-                invalid(format!("archive {name} type: {why}"))
-            }
-            other => other,
+        .map_err(|refused| {
+            let refused = match refused {
+                Refused::Lost(why) | Refused::Invalid(why) => {
+                    invalid(format!("archive {name} type: {why}"))
+                }
+                other => other,
+            };
+            findings.stop(format!("archive-type {}", entry_name(name)), refused)
         })?;
-        let file = open_checked(io, &dirs.archive, name, &stat)?;
+        let file = open_checked(io, &dirs.archive, name, &stat).map_err(|refused| {
+            findings.stop(format!("archive-open {}", entry_name(name)), refused)
+        })?;
         let mut blocks = vec![0u8; 2 * BLOCK];
         let mut done = 0;
         while done < blocks.len() {
             let got = io
                 .pread(&file, done as u64, &mut blocks[done..])
-                .map_err(|error| io_refusal(error, name))?;
+                .map_err(|error| {
+                    findings.stop(
+                        format!("archive-read {}", entry_name(name)),
+                        io_refusal(error, name),
+                    )
+                })?;
             if got == 0 {
                 break;
             }
@@ -1594,61 +1700,111 @@ pub(super) fn scan<P: Platform>(
         });
     }
     // Step 7: dispositions read and validated; revoked entries type-checked.
+    // Collecting, a file that fails a check is recorded and is no
+    // disposition; an I/O failure is Indeterminate.
     let mut dispositions = BTreeMap::new();
     let mut sorted_dispositions = disposition_names.clone();
     sorted_dispositions.sort();
+    let evidence = Expect {
+        file_type: FileType::Regular,
+        uid: 0,
+        gid: 0,
+        mode: 0o444,
+        ino: None,
+    };
     for name in sorted_dispositions.iter().filter(|name| *name != "revoked") {
-        let stat = check_entry(
-            io,
-            &dirs.dispositions,
-            name,
-            Expect {
-                file_type: FileType::Regular,
-                uid: 0,
-                gid: 0,
-                mode: 0o444,
-                ino: None,
-            },
-        )
-        .map_err(|refused| match refused {
+        let what = entry_name(name);
+        let type_refusal = |refused: Refused| match refused {
             Refused::Lost(why) | Refused::Invalid(why) => {
                 invalid(format!("disposition {name} type: {why}"))
             }
             other => other,
+        };
+        let seen = io.stat_at(&dirs.dispositions, name).map_err(|error| {
+            findings.stop(
+                format!("disposition-stat {what}"),
+                type_refusal(io_refusal(error, name)),
+            )
         })?;
-        let file = open_checked(io, &dirs.dispositions, name, &stat)?;
-        let data = read_bounded(io, &file, DISPOSITION_LIMIT)
-            .map_err(|error| io_refusal(error, name))?
-            .ok_or_else(|| invalid(format!("disposition {name} too large")))?;
-        let disposition = parse_disposition(&data)
-            .map_err(|error| invalid(format!("disposition {name}: {}", error.0)))?;
+        let stat = match check_stat(name, seen, evidence) {
+            Ok(stat) => stat,
+            Err(refused) => {
+                findings.meet(
+                    ConditionClass::Invalid,
+                    format!("disposition-type {what}"),
+                    type_refusal(refused),
+                )?;
+                continue;
+            }
+        };
+        let file = open_checked(io, &dirs.dispositions, name, &stat)
+            .map_err(|refused| findings.stop(format!("disposition-open {what}"), refused))?;
+        let data = match read_bounded(io, &file, DISPOSITION_LIMIT) {
+            Ok(Some(data)) => data,
+            Ok(None) => {
+                findings.meet(
+                    ConditionClass::Invalid,
+                    format!("disposition-size {what}"),
+                    invalid(format!("disposition {name} too large")),
+                )?;
+                continue;
+            }
+            Err(error) => {
+                return Err(
+                    findings.stop(format!("disposition-read {what}"), io_refusal(error, name))
+                )
+            }
+        };
+        let disposition = match parse_disposition(&data) {
+            Ok(disposition) => disposition,
+            Err(error) => {
+                findings.meet(
+                    ConditionClass::Invalid,
+                    format!("disposition-grammar {what}"),
+                    invalid(format!("disposition {name}: {}", error.0)),
+                )?;
+                continue;
+            }
+        };
         if *name != format::disposition_name(&disposition.binding) {
-            return Err(invalid(format!("disposition {name} name")));
+            findings.meet(
+                ConditionClass::Invalid,
+                format!("disposition-name {what}"),
+                invalid(format!("disposition {name} name")),
+            )?;
+            continue;
         }
         if disposition.root != provision.root_id {
-            return Err(invalid(format!("disposition {name} root")));
+            findings.meet(
+                ConditionClass::Invalid,
+                format!("disposition-root {what}"),
+                invalid(format!("disposition {name} root")),
+            )?;
+            continue;
         }
         dispositions.insert(disposition.binding, disposition);
     }
     for name in &revoked_names {
-        check_entry(
-            io,
-            &dirs.revoked,
-            name,
-            Expect {
-                file_type: FileType::Regular,
-                uid: 0,
-                gid: 0,
-                mode: 0o444,
-                ino: None,
-            },
-        )
-        .map_err(|refused| match refused {
+        let what = entry_name(name);
+        let type_refusal = |refused: Refused| match refused {
             Refused::Lost(why) | Refused::Invalid(why) => {
                 invalid(format!("revoked {name} type: {why}"))
             }
             other => other,
+        };
+        let seen = io.stat_at(&dirs.revoked, name).map_err(|error| {
+            findings.stop(
+                format!("revoked-stat {what}"),
+                type_refusal(io_refusal(error, name)),
+            )
         })?;
+        if let Err(refused) = check_stat(name, seen, evidence) {
+            findings.meet(
+                ConditionClass::Invalid,
+                format!("revoked-type {what}"),
+                type_refusal(refused),
+            )?;
+        }
     }
     // Step 8: pool-level checks over the complete set.
     let facts = PoolFacts {
@@ -1656,13 +1812,14 @@ pub(super) fn scan<P: Platform>(
         c_pool: provision.c_pool,
         retired_through: provision.retired_through,
     };
-    let level =
-        pool_level(facts, &files, &archive, &dispositions, incident_limit).map_err(|refusal| {
-            match refusal {
-                PoolRefusal::Invalid(why) => Refused::Invalid(why),
-                PoolRefusal::Capacity(why) => Refused::Capacity(why),
-            }
-        })?;
+    let level = pool_level_with(
+        facts,
+        &files,
+        &archive,
+        &dispositions,
+        incident_limit,
+        findings,
+    )?;
     let report = bounded_report(&level);
     Ok(ScanResult {
         files,
@@ -1847,6 +2004,7 @@ pub fn open_owner<P: Platform>(
         ScanMode::Owner,
         &BTreeMap::new(),
         config.incident_limit,
+        &mut Findings::first_only(),
     )
     .map_err(|refused| fail(refused, revision))?;
     let decision =
@@ -1917,6 +2075,7 @@ pub fn verify_standalone<P: Platform>(
         ScanMode::Verifier,
         &BTreeMap::new(),
         config.incident_limit,
+        &mut Findings::first_only(),
     )
     .map_err(|refused| fail(refused, revision))?;
     drop(lock);

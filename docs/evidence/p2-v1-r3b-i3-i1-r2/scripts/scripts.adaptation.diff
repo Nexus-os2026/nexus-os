@@ -1,0 +1,1157 @@
+--- p2-v1-r3b-i3-i1-r1/scripts/store_controls.py
++++ p2-v1-r3b-i3-i1-r2/scripts/store_controls.py
+@@ -1,15 +1,22 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R1 negative controls for the custody store.
++"""P2-V1-R3B-I3-I1-R2 negative controls for the custody store.
+
+-Adapted from docs/evidence/p2-v1-r3b-i3-i1/scripts/store_controls.py (which
+-stays unchanged); the adaptation diff is store_controls.adaptation.diff. The
+-90 I3-I1 controls keep their intentions: three anchors moved to the
+-equivalent defect point of the repaired sources (I-VALIDATOR-INEXACT,
+-I-SEAL-WHILE-LATCHED, A-WORKER-LOCK), and one control (A-ADMISSION-UNBOUND)
+-has no remaining behavioural call site and is listed in REMAPPED, with the
+-API/type guards that now carry its intention (api_probes.py); it is not run
+-and not counted here. The R1 boundaries add their own behavioural controls
+-(R1_BINDINGS, category authority-binding).
++Adapted from docs/evidence/p2-v1-r3b-i3-i1-r1/scripts/store_controls.py
++(which stays unchanged); the adaptation diff is
++store_controls.adaptation.diff. R1's 99 counted controls keep their ids,
++categories, intended tests, markers and intentions. Seven anchors moved to
++the equivalent defect point of the R2 sources, because the code they
++anchored now meets a findings collector or retains a bound verification
++(REANCHORED names each one and why). A-ADMISSION-UNBOUND stays in REMAPPED,
++as in R1. R2's maintenance authority adds its own behavioural controls
++(R2_MAINTENANCE, category maintenance-authority).
++
++R1's own history: adapted from docs/evidence/p2-v1-r3b-i3-i1/scripts/
++store_controls.py. Three I3-I1 anchors moved to the equivalent defect point
++of the R1 sources (I-VALIDATOR-INEXACT, I-SEAL-WHILE-LATCHED,
++A-WORKER-LOCK), and A-ADMISSION-UNBOUND has no remaining behavioural call
++site; its intention is carried by API/type guards (api_probes.py). The R1
++boundaries added R1_BINDINGS (category authority-binding).
+
+ Each counted control restores one wrong behaviour in the store's own test
+ infrastructure (support/custody/store/) and must:
+@@ -29,7 +36,8 @@
+ primitives that the N- controls exercise beneath CARGO_TARGET_TMPDIR),
+ simulator-source-conformance (the simulator's fidelity to the cited kernel
+ paths), and authority-api-surface (an authority the store must not have,
+-caught by a source or type guard rather than by behaviour). Design controls
++caught by a source or type guard rather than by behaviour),
++authority-binding (R1) and maintenance-authority (R2). Design controls
+ of the R5 Python model that no Rust mutation restores are listed in the
+ coverage matrix as historical Python-model controls; they are not counted
+ here.
+@@ -78,7 +86,7 @@
+     f"{TESTS}/phase2_custody_codec.rs",
+ ]
+ # The frozen candidate's sources (store_controls.py <checkout> --print-sources).
+-CANDIDATE_SOURCES = {}  # R1-CANDIDATE-SOURCES
++CANDIDATE_SOURCES = {}  # R2-CANDIDATE-SOURCES
+
+ SIM = f"{STORE}/sim.rs"
+ FMT = f"{STORE}/format.rs"
+@@ -506,7 +514,10 @@
+         "I-PRESERVATION-SKIPPED", "implementation-safety", ["NC02"],
+         "startup reports what it read without the evidence-preservation sync",
+         [(OPN, r'''        if mode == ScanMode::Owner && io.fdatasync(file).is_err() {
+-            return Err(Refused::Unreliable(name));
++            return Err(findings.stop(
++                format!("pool-unreliable {name}"),
++                Refused::Unreliable(name.clone()),
++            ));
+         }
+ ''', "")],
+         "o13_the_preservation_sync_makes_what_the_report_saw_durable", "[F1-F2-sync]",
+@@ -561,7 +572,10 @@
+         "I-PROVISION-INODE-IGNORED", "implementation-safety", ["NC12b"],
+         "a pool file whose inode PROVISION does not record is accepted",
+         [(OPN, r'''        if stat.ino != *inode {
+-            return Err(lost(format!("{name} replaced")));
++            return Err(findings.stop(
++                format!("pool-replaced {name}"),
++                lost(format!("{name} replaced")),
++            ));
+         }
+ ''', r'''        let _ = inode;
+ ''')],
+@@ -1107,14 +1121,14 @@
+         "in-session verification requests a new shared lock on the store lock (the R1 workflow)",
+         [(MNT, r'''        let OpenedRoot { dirs, .. } =
+             open_root(&self.io, &self.path, &self.selection, self.opening, pinning)
+-                .map_err(fail)?;
++                .map_err(|refused| findings.stop("open-root".into(), refused))?;
+ ''', r'''        let OpenedRoot { dirs, .. } =
+             open_root(&self.io, &self.path, &self.selection, self.opening, pinning)
+-                .map_err(fail)?;
++                .map_err(|refused| findings.stop("open-root".into(), refused))?;
+         let fresh = super::open::open_lock(&self.io, &dirs.root, &self.selection.provision)
+-            .map_err(fail)?;
++            .map_err(|refused| findings.stop("open-lock".into(), refused))?;
+         if self.io.flock(&fresh, LockRequest::Shared).is_err() {
+-            return Err(fail(Refused::Busy));
++            return Err(findings.stop("busy".into(), Refused::Busy));
+         }
+ ''')],
+         "m01_sessions_verify_through_their_retained_lock", "[session-verify]",
+@@ -1125,11 +1139,11 @@
+         [(MNT, r'''        let lock = self
+             .locks
+             .get(state)
+-            .ok_or_else(|| fail(Refused::NotAuthorized))?;
++            .ok_or_else(|| findings.stop("not-authorized".into(), Refused::NotAuthorized))?;
+ ''', r'''        let lock = self
+             .locks
+             .get(state)
+-            .ok_or_else(|| fail(Refused::NotAuthorized))?;
++            .ok_or_else(|| findings.stop("not-authorized".into(), Refused::NotAuthorized))?;
+         let _ = self.io.flock(lock, LockRequest::Shared);
+ ''')],
+         "m01_sessions_verify_through_their_retained_lock", "[session-verify]",
+@@ -1137,17 +1151,17 @@
+     control(
+         "I-SESSION-RELOCK", "implementation-safety", ["NC20c"],
+         "the session releases its lock around verification and takes it again",
+-        [(MNT, r'''        let store_dirs =
+-            open_store_dirs(&self.io, &dirs.root, &self.selection.provision).map_err(fail)?;
++        [(MNT, r'''        let store_dirs = open_store_dirs(&self.io, &dirs.root, &self.selection.provision)
++            .map_err(|refused| findings.stop("store-directories".into(), refused))?;
+         let held: BTreeMap<u32, &P::File> = self
+-''', r'''        let store_dirs =
+-            open_store_dirs(&self.io, &dirs.root, &self.selection.provision).map_err(fail)?;
++''', r'''        let store_dirs = open_store_dirs(&self.io, &dirs.root, &self.selection.provision)
++            .map_err(|refused| findings.stop("store-directories".into(), refused))?;
+         if let Some(old) = self.locks.remove(state) {
+             drop(old);
+             let relocked = super::open::open_lock(&self.io, &dirs.root, &self.selection.provision)
+-                .map_err(fail)?;
++                .map_err(|refused| findings.stop("open-lock".into(), refused))?;
+             if self.io.flock(&relocked, LockRequest::Exclusive).is_err() {
+-                return Err(fail(Refused::Busy));
++                return Err(findings.stop("busy".into(), Refused::Busy));
+             }
+             self.locks.insert(state.to_string(), relocked);
+         }
+@@ -1196,8 +1210,8 @@
+         if let Some(last) = LAST.with(|last| last.borrow().clone()) {
+             return Ok(last);
+         }
+-'''), (MNT, r'''        let outcome = self.verify_inner(config, &state);
+-''', r'''        let outcome = self.verify_inner(config, &state);
++'''), (MNT, r'''        let outcome = assessment.outcome();
++''', r'''        let outcome = assessment.outcome();
+         if let Ok(report) = &outcome {
+             LAST.with(|last| *last.borrow_mut() = Some(report.clone()));
+         }
+@@ -1537,8 +1551,10 @@
+     control(
+         "R1-VERIFICATION-REUSED", "authority-binding", [],
+         "(session) one session verification authorizes more than one procedure",
+-        [(MNT, r'''        match self.verified.take() {
+-''', r'''        match self.verified.clone() {
++        [(MNT, r'''            .verified
++            .take()
++''', r'''            .verified
++            .clone()
+ ''')],
+         "b08_a_session_decides_only_from_its_own_current_verification", "[session-verify]",
+         require=["one verification, one procedure"],
+@@ -1566,6 +1582,592 @@
+ ]
+
+ # ---------------------------------------------------------------------------
++# R2: maintenance authority (P2-V1-R3B-I3-I1-R2). Each restores one wrong
++# behaviour of the session's verification, succession's authorization, the
++# procedures' gate and verify-after, or a procedure the maintenance audit
++# repaired. The verification's binding to the session's own selection and
++# opening (NC-SUCC-FOREIGN) has no behavioural call site: a verification
++# cannot be moved between sessions or built outside the store, which the
++# API/type guards show (api_probes.py, reported apart).
++# ---------------------------------------------------------------------------
++
++SUCCESSION_BLOCKING = r'''    if !report.blocking.is_empty() {
++        return Err(format!(
++            "{} current incident(s) without an exact disposition",
++            report.blocking.len()
++        ));
++    }
++'''
++
++R2_MAINTENANCE = [
++    control(
++        "NC-SUCC-NO-VERIFY", "maintenance-authority", [],
++        "(F1) succession needs no verify-before: without one it verifies for itself",
++        [(MNT, r'''    let assessment = session.borrow_mut().take_assessment()?;
++    let verified = succession_conditions(&assessment)?;
++''', r'''    let assessment = {
++        let mut s = session.borrow_mut();
++        match s.take_assessment() {
++            Ok(assessment) => assessment,
++            Err(_) => {
++                let limit = s.incident_limit;
++                s.assess(limit)
++            }
++        }
++    };
++    let verified = succession_conditions(&assessment)?;
++''')],
++        "v05_only_the_sessions_own_verify_before_authorizes", "[succession-verified]",
++        require=["store B's session has not verified"],
++    ),
++    control(
++        "NC-SUCC-MISSING-DISPOSITION", "maintenance-authority", [],
++        "(B-S1) succession over a current incident without an exact disposition",
++        [(MNT, SUCCESSION_BLOCKING, r'''''')],
++        "v01_succession_needs_every_bound_incident_dispositioned", "[succession-dispositioned]",
++        require=["two undispositioned incidents"],
++    ),
++    control(
++        "NC-SUCC-REPORT-TRUNCATION", "maintenance-authority", [],
++        "(B-S2) succession counts only the incidents the bounded report lists in detail",
++        [(MNT, SUCCESSION_BLOCKING, r'''    let listed = report
++        .blocking
++        .iter()
++        .filter(|binding| {
++            report
++                .scan
++                .report
++                .detail
++                .iter()
++                .any(|(found, _)| found == *binding)
++        })
++        .count();
++    if listed > 0 {
++        return Err(format!(
++            "{} current incident(s) without an exact disposition",
++            listed
++        ));
++    }
++''')],
++        "v03_succession_decides_over_the_complete_set_not_the_report", "[succession-complete-set]",
++        require=["the two unlisted incidents"],
++    ),
++    control(
++        "NC-SUCC-STALE", "maintenance-authority", [],
++        "(B-S4) a verification older than a procedure step still authorizes",
++        [(MNT, r'''        if verification.epoch != self.mutations.get() {
++''', r'''        if verification.epoch > self.mutations.get() {
++''')],
++        "v04_a_stale_or_consumed_verification_authorizes_no_succession", "[succession-current]",
++        require=["older than the revocation"],
++    ),
++    control(
++        "NC-SUCC-REUSE-AUTH", "maintenance-authority", [],
++        "one verification authorizes a second succession (not consumed)",
++        [(MNT, r'''    fn take_assessment(&mut self) -> Result<Assessment, String> {
++        Ok(self.take_verification()?.assessment)
++    }
++''', r'''    fn take_assessment(&mut self) -> Result<Assessment, String> {
++        let kept = self.verified.clone();
++        let taken = self.take_verification()?.assessment;
++        self.verified = kept;
++        Ok(taken)
++    }
++''')],
++        "v04_a_stale_or_consumed_verification_authorizes_no_succession", "[succession-verified]",
++        require=["the second use of one verification"],
++    ),
++    control(
++        "NC-SUCC-OMIT-INVALID", "maintenance-authority", [],
++        "(F2) the Owner's acceptance may omit a verified store-level Invalid condition",
++        [(MNT, r'''    if acceptance != verified {
++''', r'''    if !acceptance.iter().all(|name| verified.contains(name)) {
++''')],
++        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
++        "[succession-invalid-accepted]",
++        require=["one verified condition omitted"],
++    ),
++    control(
++        "NC-SUCC-INVENT-INVALID", "maintenance-authority", [],
++        "(F2) the Owner's acceptance may name a condition the verification did not find",
++        [(MNT, r'''    if acceptance != verified {
++''', r'''    if !verified.iter().all(|name| acceptance.contains(name)) {
++''')],
++        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
++        "[succession-invalid-accepted]",
++        require=["a condition not verified"],
++    ),
++    control(
++        "NC-SUCC-REPEAT-INVALID", "maintenance-authority", [],
++        "(F2) a condition the Owner accepts twice counts once",
++        [(MNT, r'''    acceptance.sort();
++    if acceptance != verified {
++''', r'''    acceptance.sort();
++    acceptance.dedup();
++    if acceptance != verified {
++''')],
++        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
++        "[succession-invalid-accepted]",
++        require=["a condition twice"],
++    ),
++    control(
++        "NC-SUCC-STATEMENT-CALLER", "maintenance-authority", [],
++        "(F2) the predecessor statement is the Owner's list as given, not generated from the verified set",
++        [(MNT, r'''    let statement = predecessor_statement(&verified)?;
++''', r'''    let statement = predecessor_statement(accepted)?;
++''')],
++        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
++        "[succession-invalid-accepted]",
++        require=["the predecessor statement"],
++    ),
++    control(
++        "NC-SUCC-STATEMENT-TRUNCATED", "maintenance-authority", [],
++        "(F2) a statement over 512 bytes is truncated instead of refused",
++        [(MNT, r'''    if text.len() > 512 {
++        return Err(format!(
++            "the accepted conditions need {} bytes; a statement holds 512",
++            text.len()
++        ));
++    }
++    Ok(text)
++''', r'''    let mut text = text;
++    text.truncate(512);
++    Ok(text)
++''')],
++        "v09_a_condition_set_that_does_not_fit_the_statement_refuses",
++        "[succession-invalid-accepted]",
++        require=["too long for a statement"],
++    ),
++    control(
++        "NC-SUCC-CAPACITY-BYPASS", "maintenance-authority", [],
++        "(F3) more claim gaps than the store can hold dispositions for count as a complete proof",
++        [(MNT, r'''        let complete = report
++            .as_ref()
++            .is_some_and(|report| report.scan.level.gaps_unenumerated == 0)
++''', r'''        let complete = report.as_ref().is_some()
++'''), (MNT, r'''    if report.scan.level.gaps_unenumerated > 0 {
++''', r'''    if report.scan.level.gaps_unenumerated == u64::MAX {
++''')],
++        "v07_capacity_without_a_complete_proof_refuses_succession", "[succession-complete-set]",
++        require=["counted, not enumerated"],
++    ),
++    control(
++        "NC-SUCC-NO-POSTVERIFY", "maintenance-authority", [],
++        "(F4) succession has no verify-after",
++        [(MNT, r'''    proc.gate(gate);
++    proc.finish(move || {
++        let mut s = finish_session.borrow_mut();
++''', r'''    proc.gate(gate);
++    let _unused = (move || -> Result<(), String> {
++        let mut s = finish_session.borrow_mut();
++''')],
++        "v02_succession_verifies_the_selected_successor_after_publication",
++        "[succession-verify-after]",
++        require=["re-selection, then verify-after"],
++    ),
++    control(
++        "NC-SUCC-POSTVERIFY-IGNORED", "maintenance-authority", [],
++        "(B-S3) the successor's verify-after runs and what it finds is ignored",
++        [(MNT, r'''        let assessment = s.verify_after();
++        if !assessment.complete || !assessment.conditions.is_empty() {
++''', r'''        let assessment = s.verify_after();
++        if assessment.revision == u64::MAX {
++''')],
++        "v10_a_successor_that_does_not_verify_leaves_the_succession_incomplete",
++        "[succession-verify-after]",
++        require=["the successor does not verify"],
++    ),
++    control(
++        "NC-SUCC-VERIFY-OLD-ROOT", "maintenance-authority", [],
++        "the verify-after runs before the re-selection: it verifies the predecessor, not the successor",
++        [(MNT, r'''        publish.add(last.label, move || {
++            (last.action)()?;
++            session.borrow_mut().reselect()
++        });
++''', r'''        publish.add(last.label, move || {
++            (last.action)()?;
++            let _ = &session;
++            Ok(())
++        });
++'''), (MNT, r'''        let mut s = finish_session.borrow_mut();
++        let selected = s.selection().provision.clone();
++''', r'''        let mut s = finish_session.borrow_mut();
++        let early = s.verify_after();
++        s.reselect()?;
++        let selected = s.selection().provision.clone();
++'''), (MNT, r'''        let assessment = s.verify_after();
++        if !assessment.complete || !assessment.conditions.is_empty() {
++''', r'''        let assessment = early;
++        if !assessment.complete || !assessment.conditions.is_empty() {
++''')],
++        "v10_a_successor_that_does_not_verify_leaves_the_succession_incomplete",
++        "[succession-verify-after]",
++        require=["the successor does not verify"],
++    ),
++    control(
++        "NC-SUCC-NO-GATE", "maintenance-authority", [],
++        "(B-S4) succession has no gate: an authorization overtaken by another procedure's step still runs",
++        [(MNT, r'''    proc.gate(gate);
++    proc.finish(move || {
++''', r'''    let _: &dyn FnMut() -> Result<(), String> = &gate;
++    proc.finish(move || {
++''')],
++        "v12_no_succession_operation_precedes_its_gate", "[succession-gate]",
++        require=["overtaken"],
++    ),
++    control(
++        "NC-SUCC-MUTATE-BEFORE-GATE", "maintenance-authority", [],
++        "a procedure's gate is checked after its first operation, not before it",
++        [(MNT, r'''            if self.done == 0 {
++                if let Some(gate) = self.gate.as_mut() {
++                    gate().map_err(|why| format!("{} (gate): {why}", self.name))?;
++                }
++            }
++            let step = &mut self.steps[self.done];
++''', r'''            let step = &mut self.steps[self.done];
++'''), (MNT, r'''            let mut result = (step.action)();
++            if result.is_ok() && self.done + 1 == last {
++''', r'''            let mut result = (step.action)();
++            if result.is_ok() && self.done == 0 {
++                if let Some(gate) = self.gate.as_mut() {
++                    // Checked after the first operation, discounting that
++                    // operation's own step.
++                    if let Some(mutations) = &step.session {
++                        mutations.set(mutations.get() - 1);
++                    }
++                    result = gate().map_err(|why| format!("{} (gate): {why}", self.name));
++                    if let Some(mutations) = &step.session {
++                        mutations.set(mutations.get() + 1);
++                    }
++                }
++            }
++            if result.is_ok() && self.done + 1 == last {
++''')],
++        "v12_no_succession_operation_precedes_its_gate", "[succession-gate]",
++        require=["refused before any operation"],
++    ),
++    control(
++        "NC-SUCC-GATE-PROVISION", "maintenance-authority", [],
++        "succession's gate does not recheck PROVISION",
++        [(MNT, r'''            if now != old_provision {
++                return Err("PROVISION changed since the predecessor's verification".into());
++            }
++''', r'''            let _ = (&now, &old_provision);
++''')],
++        "v12_no_succession_operation_precedes_its_gate", "[succession-gate]",
++        require=["PROVISION changed"],
++    ),
++    control(
++        "NC-SUCC-UNDISPOSITIONED-HISTORY", "maintenance-authority", [],
++        "succession over archived history without its disposition",
++        [(MNT, r'''    if !report.scan.level.undispositioned_history.is_empty() {
++        return Err(format!(
++            "{} archived incident(s) without a disposition",
++            report.scan.level.undispositioned_history.len()
++        ));
++    }
++''', r'''''')],
++        "v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes",
++        "[succession-dispositioned]",
++        require=["archived history without a disposition"],
++    ),
++    control(
++        "NC-SUCC-LEFTOVER", "maintenance-authority", [],
++        "succession over a predecessor with a leftover temporary (no recovery first)",
++        [(MNT, r'''    if let Some(leftover) = assessment
++        .conditions
++        .iter()
++        .find(|condition| condition.class == ConditionClass::MaintenanceIncomplete)
++    {
++        return Err(format!(
++            "recover the interrupted procedure first: {}",
++            leftover.name
++        ));
++    }
++''', r'''''')],
++        "v22_a_successor_is_a_new_root_of_a_recovered_predecessor", "[succession-precondition]",
++        require=["a leftover temporary"],
++    ),
++    control(
++        "NC-SUCC-SAME-ROOT", "maintenance-authority", [],
++        "a successor may reuse the predecessor's root id",
++        [(MNT, r'''    if layout.root_id == old.root_id
++        || old
++            .predecessor
++            .as_ref()
++            .is_some_and(|(id, _)| *id == layout.root_id)
++    {
++        return Err("the successor needs a new root id".into());
++    }
++''', r'''''')],
++        "v22_a_successor_is_a_new_root_of_a_recovered_predecessor", "[succession-precondition]",
++        require=["the predecessor's own root id"],
++    ),
++    control(
++        "NC-SUCC-DUAL-LOCK", "maintenance-authority", [],
++        "(S18) adopting the successor's lock releases the predecessor's",
++        [(MNT, r'''        self.locks.insert(state.to_string(), lock);
++        self.events.push(SessionEvent::Adopt(state.to_string()));
++''', r'''        self.locks.clear();
++        self.locks.insert(state.to_string(), lock);
++        self.events.push(SessionEvent::Adopt(state.to_string()));
++''')],
++        "v13_both_locks_are_held_through_publication_and_verify_after", "[succession-locks]",
++        require=["the session holds both"],
++    ),
++    control(
++        "NC-SUCC-CAPACITY-REFUSED", "maintenance-authority", [],
++        "(S07) succession refuses every Capacity condition, even with a complete proof (design section 13.10's resolution lost)",
++        [(MNT, r'''    if !assessment.complete {
++        return Err(format!(
++            "the predecessor's verification is not complete: {}",
++            assessment.describe()
++        ));
++    }
++''', r'''    if !assessment.complete {
++        return Err(format!(
++            "the predecessor's verification is not complete: {}",
++            assessment.describe()
++        ));
++    }
++    if assessment
++        .conditions
++        .iter()
++        .any(|condition| condition.class == ConditionClass::Capacity)
++    {
++        return Err("the predecessor is over capacity".into());
++    }
++''')],
++        "v06_over_capacity_a_complete_proof_authorizes_succession", "[succession-complete-set]",
++        require=["Capacity with every incident dispositioned"],
++    ),
++    control(
++        "NC-VERIFY-FIRST-ONLY", "maintenance-authority", [],
++        "(F6) in-session verification stops at the first condition",
++        [(MNT, r'''        let mut findings = Findings::collecting();
++''', r'''        let mut findings = Findings::first_only();
++''')],
++        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
++        "[maintenance-verify]",
++        require=["every condition, in the order met"],
++    ),
++    control(
++        "NC-OWNER-COLLECTS", "maintenance-authority", [],
++        "an owner's opening collects past its first condition and proceeds",
++        [(OPN, r'''        ScanMode::Owner,
++        &BTreeMap::new(),
++        config.incident_limit,
++        &mut Findings::first_only(),
++''', r'''        ScanMode::Owner,
++        &BTreeMap::new(),
++        config.incident_limit,
++        &mut Findings::collecting(),
++''')],
++        "v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement",
++        "[maintenance-verify]",
++        require=["an owner's opening refuses an Invalid store"],
++    ),
++    control(
++        "NC-VERIFY-AFTER-AUTHORIZES", "maintenance-authority", [],
++        "a procedure's verify-after leaves a verification the next procedure consumes",
++        [(MNT, r'''        self.verified = None;
++        self.latest = Some(assessment.clone());
++        assessment
++''', r'''        self.verified = Some(Verification {
++            epoch: self.mutations.get(),
++            opening: self.opening,
++            root_id: self.selection.provision.root_id,
++            revision: self.selection.revision(),
++            digest: self.selection.digest,
++            state: self.selection.state_name.clone(),
++            assessment: assessment.clone(),
++        });
++        self.latest = Some(assessment.clone());
++        assessment
++''')],
++        "v05_only_the_sessions_own_verify_before_authorizes", "[succession-verified]",
++        require=["a verify-after is not a verify-before"],
++    ),
++    control(
++        "NC-GAP-UNBOUNDED", "maintenance-authority", [],
++        "claim gaps are enumerated without bound",
++        [(CLS, r'''        if gap_count > (format::DISPOSITIONS_ENTRY_LIMIT as u64).saturating_sub(1) {
++''', r'''        if gap_count == u64::MAX {
++''')],
++        "v07_capacity_without_a_complete_proof_refuses_succession", "[succession-complete-set]",
++        require=["counted, not enumerated"],
++    ),
++    control(
++        "NC-ENTRY-STAT-DETERMINATE", "maintenance-authority", [],
++        "a disposition entry that cannot be stat'ed is recorded as a determinate condition",
++        [(OPN, r'''        let seen = io.stat_at(&dirs.dispositions, name).map_err(|error| {
++            findings.stop(
++                format!("disposition-stat {what}"),
++                type_refusal(io_refusal(error, name)),
++            )
++        })?;
++''', r'''        let seen = match io.stat_at(&dirs.dispositions, name) {
++            Ok(seen) => seen,
++            Err(error) => {
++                findings.meet(
++                    ConditionClass::Invalid,
++                    format!("disposition-type {what}"),
++                    type_refusal(io_refusal(error, name)),
++                )?;
++                continue;
++            }
++        };
++''')],
++        "v20_what_cannot_be_examined_is_indeterminate", "[maintenance-verify]",
++        require=["a disposition that cannot be stat'ed"],
++    ),
++    control(
++        "NC-REVOKED-BOUND-INDETERMINATE", "maintenance-authority", [],
++        "dispositions/revoked over its bound stops the verification: no Owner can accept it",
++        [(OPN, r'''        Ok(Listing::TooMany) => {
++            findings.meet(
++                ConditionClass::Invalid,
++                "enumeration-bound dispositions/revoked".into(),
++                invalid("enumeration bound: dispositions/revoked"),
++            )?;
++            Vec::new()
++        }
++''', r'''        Ok(Listing::TooMany) => {
++            return Err(findings.stop(
++                "enumeration-bound dispositions/revoked".into(),
++                invalid("enumeration bound: dispositions/revoked"),
++            ))
++        }
++''')],
++        "v20_what_cannot_be_examined_is_indeterminate", "[maintenance-verify]",
++        require=["one determinate condition"],
++    ),
++    control(
++        "NC-NAMES-EXAMINED-TWICE", "maintenance-authority", [],
++        "a name recorded as unexpected or leftover is also examined as an entry of its directory",
++        [(OPN, r'''    Ok(names.into_iter().filter(|name| accept(name)).collect())
++''', r'''    Ok(names)
++''')],
++        "v23_a_recorded_name_is_one_condition", "[maintenance-verify]",
++        require=["each name once"],
++    ),
++    control(
++        "NC-DISP-UNREPORTED", "maintenance-authority", [],
++        "a disposition is published for a predictable binding (a claim gap's) no verification reported",
++        [(MNT, r'''        None => return Err("not an incident the session's latest verification reported".into()),
++''', r'''        None => {
++            let root_id = session.borrow().selection().provision.root_id;
++            (1..=4096u64)
++                .map(gap_facts)
++                .find(|facts| facts.binding(&root_id) == Some(binding))
++                .ok_or("not an incident the session's latest verification reported")?
++        }
++''')],
++        "v15_a_disposition_restates_only_a_verified_incident", "[disposition-verified]",
++        require=["no verification reported it"],
++    ),
++    control(
++        "NC-DISP-FACTS-NOT-VERIFIED", "maintenance-authority", [],
++        "a published disposition's facts are not the verified ones",
++        [(MNT, r'''        Some((_, incident)) => incident.facts.clone(),
++''', r'''        Some((_, incident)) => IncidentFacts {
++            recorded_unsettled: incident.facts.recorded_unsettled + 1,
++            ..incident.facts.clone()
++        },
++''')],
++        "v15_a_disposition_restates_only_a_verified_incident", "[disposition-verified]",
++        require=["the verified facts and the Owner's words"],
++    ),
++    control(
++        "NC-DISP-ARCHIVED-NAME-ONLY", "maintenance-authority", [],
++        "an archived journal's facts come from its name alone, not its archived bytes",
++        [(MNT, r'''                    recorded_unsettled: classified.recorded_unsettled.len() as u64,
++''', r'''                    recorded_unsettled: 0,
++''')],
++        "v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes",
++        "[disposition-verified]",
++        require=["the archived bytes' facts"],
++    ),
++    control(
++        "NC-ARCHIVE-CAPACITY", "maintenance-authority", [],
++        "archival is refused over capacity (design section 13.10's resolution lost)",
++        [(MNT, r'''    let report = session.take_complete(&[ConditionClass::Capacity])?;
++''', r'''    let report = session.take_complete(&[])?;
++''')],
++        "v18_over_capacity_archival_lets_dispositioned_history_leave", "[capacity-archival]",
++        require=["archival over capacity"],
++    ),
++    control(
++        "NC-LEFTOVER-AFTER-ACCEPTED", "maintenance-authority", [],
++        "a procedure's verify-after accepts a leftover temporary",
++        [(MNT, r'''        if let Some(leftover) = assessment
++            .conditions
++            .iter()
++            .find(|condition| condition.class == ConditionClass::MaintenanceIncomplete)
++        {
++            return Err(format!("a leftover temporary remains: {}", leftover.name));
++        }
++''', r'''''')],
++        "v21_a_leftover_temporary_fails_the_verify_after", "[maintenance-verify]",
++        require=["a leftover remains"],
++    ),
++    control(
++        "NC-DISP-NO-POSTVERIFY", "maintenance-authority", [],
++        "(F4) disposition publication has no verify-after",
++        [(MNT, r'''    proc.finish(verified_after(Rc::clone(&session)));
++    let io = Rc::new(io);
++''', r'''    let io = Rc::new(io);
++''')],
++        "v19_every_session_procedure_completes_with_its_verify_after", "[maintenance-verify]",
++        require=["complete with its verify-after"],
++    ),
++    control(
++        "NC-PROV-OVER-EXISTING", "maintenance-authority", [],
++        "provisioning replaces an existing PROVISION",
++        [(MNT, r'''    {
++        let (io, layout) = (Rc::clone(&io), Rc::clone(&layout));
++        proc.gate(move || unprovisioned(&*io, &layout, None));
++    }
++''', r'''''')],
++        "v17_provisioning_and_republication_never_replace_a_store", "[provision-unprovisioned]",
++        require=["PROVISION exists"],
++    ),
++    control(
++        "NC-REPUBLISH-OVER-EXISTING", "maintenance-authority", [],
++        "re-publication replaces an existing PROVISION",
++        [(MNT, r'''    unprovisioned(io, layout, Some(&layout.state_name))?;
++    let rc_io = Rc::new(io.clone());
++''', r'''    let rc_io = Rc::new(io.clone());
++'''), (MNT, r'''        proc.gate(move || unprovisioned(&*io, &layout, Some(&layout.state_name)));
++''', r'''        let _ = (io, layout);
++''')],
++        "v17_provisioning_and_republication_never_replace_a_store", "[provision-unprovisioned]",
++        require=["re-publication over a selected store"],
++    ),
++    control(
++        "NC-PROV-OVER-HISTORY", "maintenance-authority", [],
++        "provisioning over a parent where another root may hold history",
++        [(MNT, r'''    if !others.is_empty() {
++''', r'''    if others.len() > found.len() {
++''')],
++        "v17_provisioning_and_republication_never_replace_a_store", "[provision-unprovisioned]",
++        require=["a root with history"],
++    ),
++]
++
++# R1 controls whose anchor moved to the equivalent defect point of the R2
++# sources; the intention, test and marker are unchanged.
++REANCHORED = {
++    "I-PRESERVATION-SKIPPED": "the scan's preservation sync now meets the findings collector",
++    "I-PROVISION-INODE-IGNORED": "the scan's pool-inode check now meets the findings collector",
++    "I-SESSION-NEW-LOCK": "verify_inner's opening now stops the findings collector",
++    "I-SESSION-SHARED": "verify_inner's lock lookup now stops the findings collector",
++    "I-SESSION-RELOCK": "verify_inner's store directories now stop the findings collector",
++    "I-VERIFY-CACHED": "verify now derives its outcome from the retained assessment",
++    "R1-VERIFICATION-REUSED": "the verification is now a bound Verification, taken by take_verification",
++}
++
++# ---------------------------------------------------------------------------
+ # Remapped: I3-I1 controls whose defect point has no behavioural call site
+ # left. Not run and not counted; their intention is carried by the API/type
+ # guards named (api_probes.py), reported apart.
+@@ -1592,7 +2194,8 @@
+     ],
+ }
+
+-COUNTED = SIMULATOR + FORMATS + OPENING + RECORDER + MAINTENANCE + NATIVE + AUTHORITY + R1_BINDINGS
++COUNTED = (SIMULATOR + FORMATS + OPENING + RECORDER + MAINTENANCE + NATIVE + AUTHORITY
++           + R1_BINDINGS + R2_MAINTENANCE)
+
+ # ---------------------------------------------------------------------------
+ # The runner
+--- p2-v1-r3b-i3-i1-r1/scripts/api_probes.py
++++ p2-v1-r3b-i3-i1-r2/scripts/api_probes.py
+@@ -1,13 +1,22 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R1 compile-time API probes: the store's authority
++"""P2-V1-R3B-I3-I1-R2 compile-time API probes: the store's authority
+ boundary, checked from outside it.
+
++Adapted from docs/evidence/p2-v1-r3b-i3-i1-r1/scripts/api_probes.py (which
++stays unchanged); api_probes.adaptation.diff is the difference. R1's probes
++keep their ids and intentions: P-SESSION-VERIFIED reopens the R2 field
++(the session now retains a bound `Verification`), and the positive control
++uses the R2 procedure interface. R2 adds three guards of the session's
++retained verification: it cannot be moved between sessions
++(P-VERIFICATION-TRANSPLANT, the intention of NC-SUCC-FOREIGN), built
++outside the store (P-VERIFICATION-FORGE), or taken by a caller
++(P-TAKE-ASSESSMENT).
++
+ Each probe is a small test target, written into a scratch checkout as
+-crates/nexus-verifier-sandbox/tests/r1_api_probe.rs. It reaches the store
++crates/nexus-verifier-sandbox/tests/r2_api_probe.rs. It reaches the store
+ only as an external caller does, through `custody::store::...` paths, and
+-attempts one of the authority paths the R1 repair closes (the base's
+-counterexamples B1 to B6, restated against the repaired API). Each counted
+-probe must:
++attempts one of the authority paths the R1 and R2 repairs close. Each
++counted probe must:
+
+ - fail to build, with exactly its expected error lines (the distinct
+   `error[...]` header lines of the build, "could not compile" excluded):
+@@ -43,7 +52,7 @@
+
+ TESTS = "crates/nexus-verifier-sandbox/tests"
+ STORE = f"{TESTS}/support/custody/store"
+-PROBE = f"{TESTS}/r1_api_probe.rs"
++PROBE = f"{TESTS}/r2_api_probe.rs"
+ OWN = f"{STORE}/owner.rs"
+ EXC = f"{STORE}/exchange.rs"
+ OPN = f"{STORE}/open.rs"
+@@ -52,7 +61,7 @@
+ MNT = f"{STORE}/maintenance.rs"
+ SOURCES = [OWN, EXC, OPN, DSP, REC, MNT, f"{STORE}/faults.rs", f"{STORE}/mod.rs"]
+
+-HEADER = r'''//! P2-V1-R3B-I3-I1-R1 API probe: an external caller of the store.
++HEADER = r'''//! P2-V1-R3B-I3-I1-R2 API probe: an external caller of the store.
+ #![cfg(target_os = "linux")]
+ #![allow(unused, dead_code, unreachable_code, private_interfaces)]
+
+@@ -296,9 +305,10 @@
+         .expect("a session");
+     session.verified = None;''',
+         ["error[E0616]: field `verified` of struct `Session` is private"],
+-        [(MNT, "    verified: Option<(u64, Result<SessionReport, Refusal>)>,",
+-          "    pub verified: Option<(u64, Result<SessionReport, Refusal>)>,")],
+-        "a procedure decides from the session's own latest verification only",
++        [(MNT, "    verified: Option<Verification>,",
++          "    pub verified: Option<Verification>,"),
++         (MNT, "#[derive(Clone)]\nstruct Verification {", "#[derive(Clone)]\npub struct Verification {")],
++        "a procedure decides from the session's own latest verification only (R2: the field and its type are both private; the self-check reopens both)",
+     ),
+     probe(
+         "P-PROVISION-REWRITE", "api-type-guard", "session verification",
+@@ -314,6 +324,70 @@
+           "pub fn rewrite_provision<P: Platform + Clone + 'static>(")],
+         "section 13.3 uses the rewrite only inside recycling, retirement and re-qualification",
+     ),
++    probe(
++        "P-VERIFICATION-TRANSPLANT", "api-type-guard", "session verification",
++        "(R2, NC-SUCC-FOREIGN) a verification of one session or store authorizing another's succession",
++        "move one session's retained verification into another session",
++        r'''    let mut a = maint::begin(fixture.root_process("a"), &fixture.path, false).expect("A");
++    let mut b = maint::begin(fixture.root_process("b"), &fixture.path, false).expect("B");
++    let _ = a.verify(config);
++    b.verified = a.verified.take();''',
++        ["error[E0616]: field `verified` of struct `Session` is private"],
++        [(MNT, "    verified: Option<Verification>,",
++          "    pub verified: Option<Verification>,"),
++         (MNT, "#[derive(Clone)]\nstruct Verification {", "#[derive(Clone)]\npub struct Verification {")],
++        "a session's verification is private to it (the field and its type), bound to its opening, selection and mutation count, and taken only by its own procedures",
++    ),
++    probe(
++        "P-VERIFICATION-FORGE", "api-type-guard", "session verification",
++        "(R2) a caller-built verification standing in for the session's own",
++        "build a verification from a caller's assessment and an opening's identity",
++        r'''    let io = fixture.store_process("probe");
++    let opened = open_owner(&io, &fixture.path, config, &mut NoHooks).expect("opens");
++    let session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
++        .expect("a session");
++    let forged = maint::Verification {
++        epoch: 0,
++        opening: opened.opening(),
++        root_id: [0; 16],
++        revision: 1,
++        digest: [0; 32],
++        state: String::new(),
++        assessment: session.assessment().expect("assessed"),
++    };''',
++        ["error[E0603]: struct `Verification` is private"],
++        [(MNT, '''struct Verification {
++    epoch: u64,
++    opening: OpeningId,
++    root_id: [u8; 16],
++    revision: u64,
++    digest: [u8; 32],
++    state: String,
++    assessment: Assessment,
++}''', '''pub struct Verification {
++    pub epoch: u64,
++    pub opening: OpeningId,
++    pub root_id: [u8; 16],
++    pub revision: u64,
++    pub digest: [u8; 32],
++    pub state: String,
++    pub assessment: Assessment,
++}''')],
++        "the verification type is internal to the store; a caller holds only Assessment copies, which no procedure accepts",
++    ),
++    probe(
++        "P-TAKE-ASSESSMENT", "api-type-guard", "session verification",
++        "(R2) a caller consuming or reading the session's retained verify-before",
++        "take the session's retained verification from outside the store",
++        r'''    let mut session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
++        .expect("a session");
++    let _ = session.verify(config);
++    let taken = session.take_assessment();''',
++        ["error[E0624]: method `take_assessment` is private"],
++        [(MNT, "    fn take_assessment(&mut self) -> Result<Assessment, String> {",
++          "    pub fn take_assessment(&mut self) -> Result<Assessment, String> {")],
++        "only the store's procedures take the verification, once",
++    ),
+ ]
+
+ ONE_WAY = dict(
+@@ -360,11 +434,35 @@
+             let _ = owner.shutdown_decision();
+         }
+     }
+-    let mut session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
+-        .expect("a session");
+-    let _ = session.verify(config);
+-    let _ = maint::archive(&mut session, 0);
+-    session.end();'''
++    let session = Rc::new(RefCell::new(
++        maint::begin(fixture.root_process("probe"), &fixture.path, false).expect("a session"),
++    ));
++    let _ = session.borrow_mut().verify(config);
++    if let Some(assessment) = session.borrow().assessment() {
++        let _ = (
++            assessment.complete,
++            assessment.conditions.len(),
++            assessment.invalid_conditions(),
++            assessment.outcome(),
++        );
++    }
++    let _ = maint::archive(Rc::clone(&session), 0);
++    let _ = session.borrow_mut().verify(config);
++    let words = maint::OwnerWords {
++        reason: DispositionReason::Other,
++        statement: "probe".into(),
++        operator: "probe".into(),
++        at: "2026-10-02T00:00:00Z".into(),
++    };
++    let _ = maint::publish_disposition(Rc::clone(&session), [0; 32], &words);
++    let _ = maint::revoke(Rc::clone(&session), [0; 32], "20261002T000000Z");
++    let _ = maint::leftover(Rc::clone(&session));
++    let _ = session.borrow_mut().verify(config);
++    let _ = maint::successor(Rc::clone(&session), &fixture.layout, &[]);
++    let _ = maint::predecessor_statement(&[]);
++    if let Ok(session) = Rc::try_unwrap(session) {
++        session.into_inner().end();
++    }'''
+
+ HARNESS = dict(
+     id="H-TYPE-ERROR", category="harness-check", boundary="harness",
+@@ -391,9 +489,9 @@
+     (checkout / PROBE).write_text(HEADER + body + FOOTER)
+     env = dict(os.environ)
+     run = subprocess.run(
+-        ["cargo", "test", "--locked", "-p", "nexus-verifier-sandbox", "--test", "r1_api_probe", "--no-run"],
++        ["cargo", "test", "--locked", "-p", "nexus-verifier-sandbox", "--test", "r2_api_probe", "--no-run"],
+         cwd=checkout, env=env, capture_output=True, text=True)
+-    log.write_text(f"$ cargo test --locked -p nexus-verifier-sandbox --test r1_api_probe --no-run\n"
++    log.write_text(f"$ cargo test --locked -p nexus-verifier-sandbox --test r2_api_probe --no-run\n"
+                    f"exit {run.returncode}\n--- probe body ---\n{body}\n--- stderr ---\n{run.stderr}"
+                    f"--- stdout ---\n{run.stdout}")
+     return run.returncode, errors(run.stderr)
+--- p2-v1-r3b-i3-i1-r1/scripts/validate.sh
++++ p2-v1-r3b-i3-i1-r2/scripts/validate.sh
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env bash
+-# P2-V1-R3B-I3-I1-R1 validation: the mission's section 11 commands, in
++# P2-V1-R3B-I3-I1-R2 validation: the mission's section 17 commands, in
+ # order, each with its exit status and complete output; the toolchain; the
+ # identity of the checkout; and the SHA-256 of every source it validated.
+ # Usage: validate.sh <checkout> <output directory>
+--- p2-v1-r3b-i3-i1-r1/scripts/candidate_runs.sh
++++ p2-v1-r3b-i3-i1-r2/scripts/candidate_runs.sh
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env bash
+-# P2-V1-R3B-I3-I1-R1 candidate runs, serially and alone in one clean Git
++# P2-V1-R3B-I3-I1-R2 candidate runs, serially and alone in one clean Git
+ # checkout of the candidate (nothing else may build, test or edit there):
+ #   1. validate.sh (the section 11 commands);
+ #   2. store_controls.py (the counted store controls);
+@@ -14,7 +14,7 @@
+ out="$2"
+ mkdir -p "$out"
+ out="$(cd "$out" && pwd)"
+-scripts="$checkout/docs/evidence/p2-v1-r3b-i3-i1-r1/scripts"
++scripts="$checkout/docs/evidence/p2-v1-r3b-i3-i1-r2/scripts"
+ export PYTHONDONTWRITEBYTECODE=1
+ log="$out/runs.txt"
+ : > "$log"
+--- p2-v1-r3b-i3-i1-r1/scripts/checks.sh
++++ p2-v1-r3b-i3-i1-r2/scripts/checks.sh
+@@ -1,9 +1,10 @@
+ #!/usr/bin/env bash
+-# P2-V1-R3B-I3-I1-R1 repository checks, run in the repository itself (they
++# P2-V1-R3B-I3-I1-R2 repository checks, run in the repository itself (they
+ # read Git objects and history; they write nothing there): the R5 design
+ # model and reference self-check (bytecode writes disabled, the cited Linux
+ # v6.17 files verified by SHA-256), every historical evidence manifest
+-# against its own snapshot, and the R1 scope check against the base.
++# against its own snapshot (R1's evidence included), and the R2 scope check
++# against the base.
+ # Usage: checks.sh <repository> <output directory> <kernel directory>
+ set -u
+ repo="$1"
+@@ -29,6 +30,7 @@
+ run r5-reference-check python3 -B docs/evidence/p2-v1-r3b-i3-p-r5/reference_check.py --self-test --kernel "$kernel"
+ run historical-manifests python3 -B docs/evidence/p2-v1-r3b-i3-i1/scripts/manifests.py "$repo" \
+   docs/evidence/p2-v1-r3b-i3-p-r1 docs/evidence/p2-v1-r3b-i3-p-r2 docs/evidence/p2-v1-r3b-i3-p-r3 \
+-  docs/evidence/p2-v1-r3b-i3-p-r4 docs/evidence/p2-v1-r3b-i3-p-r5 docs/evidence/p2-v1-r3b-i3-i1
+-run scope python3 -B docs/evidence/p2-v1-r3b-i3-i1-r1/scripts/scope.py "$repo" 72ffc4fcc0141e2e5ae77a927481017ca711ab7c
++  docs/evidence/p2-v1-r3b-i3-p-r4 docs/evidence/p2-v1-r3b-i3-p-r5 docs/evidence/p2-v1-r3b-i3-i1 \
++  docs/evidence/p2-v1-r3b-i3-i1-r1
++run scope python3 -B docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/scope.py "$repo" ed7c7088247badf87b3b1d483ee57360f867e2f1
+ cat "$summary"
+--- p2-v1-r3b-i3-i1-r1/scripts/scope.py
++++ p2-v1-r3b-i3-i1-r2/scripts/scope.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R1 scope check.
++"""P2-V1-R3B-I3-I1-R2 scope check.
+
+ Every path changed relative to the base must lie in the mission's envelope,
+ and every protected file and tree must be unchanged from the base. Before
+@@ -13,14 +13,24 @@
+ import subprocess
+ import sys
+
++# The mission's section 4: maintenance.rs, classify.rs, the store test
++# target and the boundary document; open.rs and mod.rs narrowly; the R2
++# evidence directory.
+ ENVELOPE = [
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/*.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/classify.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/mod.rs",
+     "crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/mod.rs",
+     "docs/architecture/p2-custody-store-implementation-boundary.md",
+-    "docs/evidence/p2-v1-r3b-i3-i1-r1/*",
++    "docs/evidence/p2-v1-r3b-i3-i1-r2/*",
+ ]
+ PROTECTED = [
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/owner.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/recorder.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/disposition.rs",
++    "crates/nexus-verifier-sandbox/tests/support/custody/store/faults.rs",
+     "crates/nexus-verifier-sandbox/tests/support/custody/core.rs",
+     "crates/nexus-verifier-sandbox/tests/support/custody/model.rs",
+     "crates/nexus-verifier-sandbox/tests/support/custody/codec.rs",
+@@ -46,6 +56,7 @@
+     "crates/nexus-verifier-sandbox/src",
+     ".github",
+     "docs/evidence/p2-v1-r3b-i3-i1",
++    "docs/evidence/p2-v1-r3b-i3-i1-r1",
+     "docs/evidence/p2-v1-r3b-i3-p-r1",
+     "docs/evidence/p2-v1-r3b-i3-p-r2",
+     "docs/evidence/p2-v1-r3b-i3-p-r3",
+--- p2-v1-r3b-i3-i1-r1/scripts/control_mapping.py
++++ p2-v1-r3b-i3-i1-r2/scripts/control_mapping.py
+@@ -1,16 +1,17 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R1 old-to-new mapping of the store controls.
++"""P2-V1-R3B-I3-I1-R2 old-to-new mapping of the store controls (R1's
++mapping script, generalized to name the two lists it compares).
+
+-Loads the I3-I1 control list (docs/evidence/p2-v1-r3b-i3-i1/scripts/
+-store_controls.py, unchanged) and the R1 list (this directory's
+-store_controls.py) by path, and states for every I3-I1 control what became
+-of it in R1: unchanged (the same edits, test, marker and checks), adapted
+-(each changed field named), or remapped (not run as a behavioural control;
+-the API/type guards that carry its intention). Every R1 control that has no
+-I3-I1 counterpart is listed as added. With an as-run summary.json it also
+-gives each R1 control's result.
++Loads the R1 control list (docs/evidence/p2-v1-r3b-i3-i1-r1/scripts/
++store_controls.py, unchanged) and the R2 list (this directory's
++store_controls.py) by path, and states for every R1 control what became of
++it in R2: unchanged (the same edits, test, marker and checks), adapted (each
++changed field named; for a re-anchored control, why), or remapped (not run
++as a behavioural control; the API/type guards that carry its intention).
++Every R2 control that has no R1 counterpart is listed as added. With an
++as-run summary.json it also gives each R2 control's result.
+
+-Usage: control_mapping.py <I3-I1 store_controls.py> <R1 store_controls.py> <out dir> [summary.json]
++Usage: control_mapping.py <R1 store_controls.py> <R2 store_controls.py> <out dir> [summary.json]
+ """
+ import json
+ import pathlib
+@@ -39,6 +40,7 @@
+     new_by_id = {c["id"]: c for c in new["COUNTED"]}
+     remapped = {c["id"]: c for c in new.get("REMAPPED", [])}
+     remapped_to = new.get("REMAPPED_TO", {})
++    reanchored = new.get("REANCHORED", {})
+     rows = []
+     for c in old["COUNTED"]:
+         cid = c["id"]
+@@ -56,28 +58,30 @@
+             continue
+         changed = [f for f in FIELDS if n[f] != c[f]]
+         rows.append(dict(old=cid, new=cid, status="adapted" if changed else "unchanged",
+-                         changed=changed, guards=[], category=n["category"],
+-                         result=results.get(cid)))
++                         changed=changed, guards=[], why=reanchored.get(cid),
++                         category=n["category"], result=results.get(cid)))
+     old_ids = {c["id"] for c in old["COUNTED"]}
+     for c in new["COUNTED"]:
+         if c["id"] not in old_ids:
+-            rows.append(dict(old=None, new=c["id"], status="added (R1)", changed=[], guards=[],
++            rows.append(dict(old=None, new=c["id"], status="added (R2)", changed=[], guards=[],
+                              category=c["category"], result=results.get(c["id"])))
+     counts = {}
+     for r in rows:
+         counts[r["status"]] = counts.get(r["status"], 0) + 1
+     (out / "control_mapping.json").write_text(json.dumps(dict(rows=rows, counts=counts), indent=2) + "\n")
+     lines = [
+-        "# Store controls: I3-I1 to R1 mapping",
++        "# Store controls: R1 to R2 mapping",
+         "",
+-        f"I3-I1 controls: {len(old['COUNTED'])}. R1 counted controls: {len(new['COUNTED'])}. "
+-        f"Remapped (not run, carried by API/type guards): {len(remapped)}.",
++        f"R1 counted controls: {len(old['COUNTED'])}. R2 counted controls: {len(new['COUNTED'])}. "
++        f"Remapped (not run, carried by API/type guards, as in R1): {len(remapped)}.",
+         "",
+-        "| I3-I1 control | R1 control | status | changed fields | category | R1 result |",
++        "| R1 control | R2 control | status | changed fields | category | R2 result |",
+         "|---|---|---|---|---|---|",
+     ]
+     for r in rows:
+         detail = ", ".join(r["changed"]) or "-"
++        if r.get("why"):
++            detail += f" ({r['why']})"
+         if r["guards"]:
+             detail = "carried by: " + "; ".join(r["guards"])
+         result = "-" if r["result"] is None else ("as required" if r["result"] else "NOT AS REQUIRED")
+--- p2-v1-r3b-i3-i1-r1/scripts/matrices.py
++++ p2-v1-r3b-i3-i1-r2/scripts/matrices.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R1 control matrices, kept apart:
++"""P2-V1-R3B-I3-I1-R2 control matrices, kept apart:
+
+ - behavioural controls: the counted store controls (by category) and the
+   I2-R1 suite's counted controls and informational runs, from their as-run
+@@ -28,7 +28,7 @@
+     out = pathlib.Path(sys.argv[4])
+     out.mkdir(parents=True, exist_ok=True)
+
+-    lines = ["# Behavioural controls (P2-V1-R3B-I3-I1-R1)", ""]
++    lines = ["# Behavioural controls (P2-V1-R3B-I3-I1-R2)", ""]
+     s = store["summary"]
+     lines.append(f"Store controls: {s['counted']} counted; all as required: {s['all_required']}; "
+                  f"sources identical after the run: {s['identical']}; failures: {s['failures'] or 'none'}.")
+@@ -63,7 +63,7 @@
+                      f"{r.get('failed')} | {r.get('passed')} | {r.get('files_restored')} |")
+     (out / "behavioural-controls.md").write_text("\n".join(lines) + "\n")
+
+-    lines = ["# API/type guards (P2-V1-R3B-I3-I1-R1)", "",
++    lines = ["# API/type guards (P2-V1-R3B-I3-I1-R2)", "",
+              "Compile-time probes from outside the store boundary. Each guard must fail to build with "
+              "exactly its expected error and, once that one access is reopened in a scratch copy, build. "
+              "They prove the safe API surface only; they are not behavioural detections and are not added "
+--- p2-v1-r3b-i3-i1-r1/scripts/normalize.py
++++ p2-v1-r3b-i3-i1-r2/scripts/normalize.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1-R1 evidence normalization.
++"""P2-V1-R3B-I3-I1-R2 evidence normalization (R1's, unchanged in substance).
+
+ Copies a raw output file into the evidence directory with one documented
+ transformation, so that `git diff --check` accepts it without any

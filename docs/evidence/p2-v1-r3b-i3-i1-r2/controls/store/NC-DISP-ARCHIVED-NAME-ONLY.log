@@ -1,0 +1,24 @@
+
+running 1 test
+test v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes ... FAILED
+
+failures:
+
+---- v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes stdout ----
+
+thread 'v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes' (3921090) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:9784:5:
+assertion `left == right` failed: [disposition-verified] the archived bytes' facts, as first verified
+  left: (0, IncidentFacts { kind: Journal, claim: Some(1), generation: Some([11, 2, 229, 54, 161, 78, 214, 26, 176, 73, 184, 86, 173, 214, 63, 252]), pool_index: None, content: Some([203, 196, 238, 35, 219, 136, 104, 167, 131, 235, 72, 55, 165, 0, 172, 151, 101, 194, 125, 98, 123, 132, 142, 47, 165, 249, 242, 115, 154, 181, 203, 59]), class: Unresolved, recorded_unsettled: 0 })
+ right: (1, IncidentFacts { kind: Journal, claim: Some(1), generation: Some([11, 2, 229, 54, 161, 78, 214, 26, 176, 73, 184, 86, 173, 214, 63, 252]), pool_index: None, content: Some([203, 196, 238, 35, 219, 136, 104, 167, 131, 235, 72, 55, 165, 0, 172, 151, 101, 194, 125, 98, 123, 132, 142, 47, 165, 249, 242, 115, 154, 181, 203, 59]), class: Unresolved, recorded_unsettled: 1 })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 110 filtered out; finished in 0.05s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.76s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand-target-final/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

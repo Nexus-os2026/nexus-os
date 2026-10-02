@@ -27,6 +27,7 @@ use super::format::{
     ArchiveClass, ArchiveName, Disposition, Header, HeaderParse, IncidentClass, IncidentFacts,
     IncidentKind, PrefixFacts, RecordBlock, SealParse, BLOCK, REPORT_LIMIT,
 };
+use super::open::Refused;
 
 // ---------------------------------------------------------------------------
 // The record grammar (design section 11.4)
@@ -759,6 +760,127 @@ pub struct ArchiveEntry {
     pub size: u64,
 }
 
+// ---------------------------------------------------------------------------
+// Conditions and the findings of a verification (design section 13.11;
+// P2-V1-R3B-I3-I1-R2)
+// ---------------------------------------------------------------------------
+
+/// What a store-level condition means to maintenance (design sections 13.1,
+/// 13.6, 13.10 and 13.11).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ConditionClass {
+    /// A store-level Invalid condition. It has no binding: a successor's
+    /// Owner accepts it by its exact name (section 13.6).
+    Invalid,
+    /// A leftover temporary of an interrupted procedure: recovery comes
+    /// first (section 13.1). Never accepted.
+    MaintenanceIncomplete,
+    /// More current incidents than `incident_limit`, or more claim gaps than
+    /// their allowance (sections 7.7 and 13.10): a count, never permission.
+    Capacity,
+    /// What follows could not be read or trusted. The verification is not
+    /// complete, and nothing is decided from it.
+    Indeterminate,
+}
+
+/// One condition a verification found: its class; its exact, canonical
+/// name (printable ASCII, unique within one verification); and what an
+/// owner's opening refuses with when it is the first condition it meets.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Condition {
+    pub class: ConditionClass,
+    pub name: String,
+    pub refused: Refused,
+}
+
+/// How a scan meets a refusing condition (design section 13.11).
+///
+/// An owner's opening, its claim and the standalone verifier stop at the
+/// first condition, exactly as before: the same check, in the same order,
+/// with the same refusal. An in-session verification collects: it records
+/// every condition it can establish and goes on wherever going on is safe,
+/// and it stops at the first Indeterminate one, after which nothing it read
+/// is complete. A collector is internal to the store; its conditions reach a
+/// caller only as copies in a report.
+#[derive(Debug)]
+pub struct Findings {
+    collect: bool,
+    conditions: Vec<Condition>,
+}
+
+impl Findings {
+    /// An owner's opening or the standalone verifier: stop at the first.
+    pub(super) fn first_only() -> Findings {
+        Findings {
+            collect: false,
+            conditions: Vec::new(),
+        }
+    }
+
+    /// An in-session verification: every condition it can establish.
+    pub(super) fn collecting() -> Findings {
+        Findings {
+            collect: true,
+            conditions: Vec::new(),
+        }
+    }
+
+    /// Meet a condition: record it, and stop (with what an opening refuses)
+    /// unless collecting and the condition is determinate.
+    pub(super) fn meet(
+        &mut self,
+        class: ConditionClass,
+        name: String,
+        refused: Refused,
+    ) -> Result<(), Refused> {
+        let stop = !self.collect || class == ConditionClass::Indeterminate;
+        self.conditions.push(Condition {
+            class,
+            name,
+            refused: refused.clone(),
+        });
+        if stop {
+            Err(refused)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Meet an Indeterminate condition: it always stops.
+    pub(super) fn stop(&mut self, name: String, refused: Refused) -> Refused {
+        self.conditions.push(Condition {
+            class: ConditionClass::Indeterminate,
+            name,
+            refused: refused.clone(),
+        });
+        refused
+    }
+
+    /// The conditions met so far, in the order met.
+    pub(super) fn conditions(&self) -> &[Condition] {
+        &self.conditions
+    }
+
+    pub(super) fn into_conditions(self) -> Vec<Condition> {
+        self.conditions
+    }
+}
+
+/// A directory entry's name as a condition names it: itself when it is
+/// made of `[A-Za-z0-9._-]` only, otherwise `hex:` and its bytes in hex, so
+/// that every condition name is printable ASCII and unambiguous.
+pub fn entry_name(name: &str) -> String {
+    if !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+    {
+        name.to_string()
+    } else {
+        format!("hex:{}", format::hex(name.as_bytes()))
+    }
+}
+
 /// The store-level facts the pool-level checks need from `PROVISION`.
 #[derive(Debug, Clone, Copy)]
 pub struct PoolFacts {
@@ -777,6 +899,12 @@ pub struct PoolLevel {
     pub max_claim: u64,
     pub generations: BTreeSet<[u8; 16]>,
     pub applied: BTreeSet<[u8; 32]>,
+    /// (In-session verification only.) Claim gaps counted but not
+    /// enumerated: more than the store could ever hold dispositions for.
+    pub gaps_unenumerated: u64,
+    /// (In-session verification only.) The bindings of archive entries that
+    /// need a disposition and have none: never history.
+    pub undispositioned_history: BTreeSet<[u8; 32]>,
 }
 
 /// Why the pool-level checks refused the store.
@@ -792,7 +920,8 @@ pub fn disposition_matches(disposition: Option<&Disposition>, incident: &Inciden
 }
 
 /// The pool-level and archive checks (design section 11.3), the incidents
-/// and their split into current and history (section 13.5).
+/// and their split into current and history (section 13.5): an owner's
+/// opening, refused by the first condition.
 pub fn pool_level(
     facts: PoolFacts,
     files: &[FileReport],
@@ -800,7 +929,50 @@ pub fn pool_level(
     dispositions: &BTreeMap<[u8; 32], Disposition>,
     incident_limit: usize,
 ) -> Result<PoolLevel, PoolRefusal> {
-    let invalid = |why: String| Err(PoolRefusal::Invalid(why));
+    pool_level_with(
+        facts,
+        files,
+        archive,
+        dispositions,
+        incident_limit,
+        &mut Findings::first_only(),
+    )
+    .map_err(pool_refusal)
+}
+
+/// The pool-level checks meet only Invalid and Capacity conditions.
+fn pool_refusal(refused: Refused) -> PoolRefusal {
+    match refused {
+        Refused::Capacity(why) => PoolRefusal::Capacity(why),
+        Refused::Invalid(why) => PoolRefusal::Invalid(why),
+        other => PoolRefusal::Invalid(format!("{other:?}")),
+    }
+}
+
+/// [`pool_level`] through a findings collector. When collecting
+/// (P2-V1-R3B-I3-I1-R2), the determinate conditions are recorded and the
+/// checks go on:
+/// - a duplicate claim or generation (each one named);
+/// - a pool file whose claim is at or below `retired-through` (its incidents
+///   are still the store's);
+/// - an archive `u`, `m` or `p-` entry without a disposition (its binding is
+///   recorded as undispositioned history, never as history);
+/// - more claim gaps than their allowance: still enumerated while there are
+///   at most as many as the store could hold dispositions for (the range is
+///   then bounded by the valid headers plus that bound); beyond it they are
+///   counted only, and no complete set exists.
+///
+/// An archive entry whose header, size or seal does not check is
+/// Indeterminate: its claim cannot be counted.
+pub(super) fn pool_level_with(
+    facts: PoolFacts,
+    files: &[FileReport],
+    archive: &[ArchiveEntry],
+    dispositions: &BTreeMap<[u8; 32], Disposition>,
+    incident_limit: usize,
+    findings: &mut Findings,
+) -> Result<PoolLevel, Refused> {
+    let invalid = |why: String| Refused::Invalid(why);
     let root_id = facts.root_id;
     let retired = facts.retired_through;
     let mut level = PoolLevel::default();
@@ -827,10 +999,18 @@ pub fn pool_level(
                     {
                         header
                     }
-                    _ => return invalid(format!("archive {} header", entry.name)),
+                    _ => {
+                        return Err(findings.stop(
+                            format!("archive-header {}", entry.name),
+                            invalid(format!("archive {} header", entry.name)),
+                        ))
+                    }
                 };
                 if format::pool_file_size(header.c_pool) != Some(entry.size) {
-                    return invalid(format!("archive {} size", entry.name));
+                    return Err(findings.stop(
+                        format!("archive-size {}", entry.name),
+                        invalid(format!("archive {} size", entry.name)),
+                    ));
                 }
                 level
                     .applied
@@ -848,7 +1028,10 @@ pub fn pool_level(
                         || seal[24..32] != claim.to_be_bytes()
                         || seal[32..64] != header.digest
                     {
-                        return invalid(format!("archive {} seal", entry.name));
+                        return Err(findings.stop(
+                            format!("archive-seal {}", entry.name),
+                            invalid(format!("archive {} seal", entry.name)),
+                        ));
                     }
                 }
                 if matches!(class, ArchiveClass::Unresolved | ArchiveClass::Malformed) {
@@ -858,10 +1041,16 @@ pub fn pool_level(
                         IncidentClass::Malformed
                     };
                     let binding = bind_journal(&root_id, *claim, generation, content, class);
-                    if !dispositions.contains_key(&binding) {
-                        return invalid(format!("archive {} inconsistent", entry.name));
+                    if dispositions.contains_key(&binding) {
+                        level.history.insert(binding);
+                    } else {
+                        findings.meet(
+                            ConditionClass::Invalid,
+                            format!("archive-inconsistent {}", entry.name),
+                            invalid(format!("archive {} inconsistent", entry.name)),
+                        )?;
+                        level.undispositioned_history.insert(binding);
                     }
-                    level.history.insert(binding);
                 }
                 *claims.entry(*claim).or_default() += 1;
                 *generations.entry(*generation).or_default() += 1;
@@ -869,13 +1058,22 @@ pub fn pool_level(
             }
             ArchiveName::PoolFile { index, content } => {
                 if pool_size != Some(entry.size) {
-                    return invalid(format!("archive {} size", entry.name));
+                    return Err(findings.stop(
+                        format!("archive-size {}", entry.name),
+                        invalid(format!("archive {} size", entry.name)),
+                    ));
                 }
                 let binding = bind_pool(&root_id, *index, content);
-                if !dispositions.contains_key(&binding) {
-                    return invalid(format!("archive {} inconsistent", entry.name));
+                if dispositions.contains_key(&binding) {
+                    level.history.insert(binding);
+                } else {
+                    findings.meet(
+                        ConditionClass::Invalid,
+                        format!("archive-inconsistent {}", entry.name),
+                        invalid(format!("archive {} inconsistent", entry.name)),
+                    )?;
+                    level.undispositioned_history.insert(binding);
                 }
-                level.history.insert(binding);
                 archived_p.insert((*index, *content));
             }
         }
@@ -883,7 +1081,10 @@ pub fn pool_level(
     for report in files {
         let index = report.index;
         if report.class == FileClass::SizeInvalid {
-            return invalid(format!("pool {index} size"));
+            return Err(findings.stop(
+                format!("pool-size {index}"),
+                invalid(format!("pool {index} size")),
+            ));
         }
         let Some(header) = &report.header else {
             if report.class == FileClass::MalformedPoolFile {
@@ -913,7 +1114,13 @@ pub fn pool_level(
             .applied
             .extend(header.applied.iter().map(|(binding, _)| *binding));
         if header.claim <= retired {
-            return invalid(format!("pool {index} claim retired"));
+            // Collecting, the file's incidents are still the store's: a
+            // retired claim never hides history.
+            findings.meet(
+                ConditionClass::Invalid,
+                format!("pool-claim-retired {index}"),
+                invalid(format!("pool {index} claim retired")),
+            )?;
         }
         if archived_j.contains(&(header.claim, header.generation, report.content)) {
             level.pending_recycle.insert(index);
@@ -961,11 +1168,19 @@ pub fn pool_level(
             );
         }
     }
-    if let Some((claim, _)) = claims.iter().find(|(_, count)| **count > 1) {
-        return invalid(format!("duplicate claim {claim}"));
+    for (claim, _) in claims.iter().filter(|(_, count)| **count > 1) {
+        findings.meet(
+            ConditionClass::Invalid,
+            format!("duplicate-claim {claim}"),
+            invalid(format!("duplicate claim {claim}")),
+        )?;
     }
-    if generations.values().any(|count| *count > 1) {
-        return invalid("duplicate generation".into());
+    for (generation, _) in generations.iter().filter(|(_, count)| **count > 1) {
+        findings.meet(
+            ConditionClass::Invalid,
+            format!("duplicate-generation {}", format::hex(generation)),
+            invalid("duplicate generation".into()),
+        )?;
     }
     let top = claims
         .keys()
@@ -978,10 +1193,21 @@ pub fn pool_level(
     let live = claims.keys().filter(|claim| **claim > retired).count() as u64;
     let gap_count = (top - retired).saturating_sub(live);
     let allowance = (incident_limit as u64).saturating_add(level.applied.len() as u64);
+    let mut enumerate = gap_count > 0;
     if gap_count > allowance {
-        return Err(PoolRefusal::Capacity(format!("{gap_count} claim gaps")));
+        findings.meet(
+            ConditionClass::Capacity,
+            format!("capacity claim-gaps {gap_count} allowance {allowance}"),
+            Refused::Capacity(format!("{gap_count} claim gaps")),
+        )?;
+        // Collecting: enumerated only while every gap could still hold a
+        // disposition; beyond that no complete set exists.
+        if gap_count > (format::DISPOSITIONS_ENTRY_LIMIT as u64).saturating_sub(1) {
+            level.gaps_unenumerated = gap_count;
+            enumerate = false;
+        }
     }
-    if gap_count > 0 {
+    if enumerate {
         for claim in retired + 1..=top {
             if !claims.contains_key(&claim) {
                 level.incidents.insert(
@@ -1041,12 +1267,34 @@ pub fn decide(
     dispositions: &BTreeMap<[u8; 32], Disposition>,
     incident_limit: usize,
 ) -> Result<Decision, PoolRefusal> {
+    decide_with(
+        level,
+        dispositions,
+        incident_limit,
+        &mut Findings::first_only(),
+    )
+    .map_err(pool_refusal)
+}
+
+/// [`decide`] through a findings collector: collecting, more current
+/// incidents than the limit are recorded as Capacity and the decision is
+/// still made over the complete set (design section 13.10).
+pub(super) fn decide_with(
+    level: &PoolLevel,
+    dispositions: &BTreeMap<[u8; 32], Disposition>,
+    incident_limit: usize,
+    findings: &mut Findings,
+) -> Result<Decision, Refused> {
     let current = current_incidents(level);
     if current.len() > incident_limit {
-        return Err(PoolRefusal::Capacity(format!(
-            "{} current incidents",
-            current.len()
-        )));
+        findings.meet(
+            ConditionClass::Capacity,
+            format!(
+                "capacity current-incidents {} limit {incident_limit}",
+                current.len()
+            ),
+            Refused::Capacity(format!("{} current incidents", current.len())),
+        )?;
     }
     let mut decision = Decision {
         current: Vec::new(),

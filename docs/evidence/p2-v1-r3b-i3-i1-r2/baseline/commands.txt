@@ -1,0 +1,4 @@
+checkout: /home/nexus/.claude/jobs/4a4dc130/tmp/r2/base-scratch (git archive of ed7c7088247badf87b3b1d483ee57360f867e2f1 plus crates/nexus-verifier-sandbox/tests/r2_base_probes.rs)
+CARGO_TARGET_DIR: /home/nexus/.claude/jobs/4a4dc130/tmp/r1/target
+probe-build exit=0 started=2026-10-02T13:42:32Z :: cargo test --locked -p nexus-verifier-sandbox --test r2_base_probes --no-run
+probe-run exit=0 started=2026-10-02T13:42:44Z :: cargo test --locked -p nexus-verifier-sandbox --test r2_base_probes -- --nocapture --test-threads=1

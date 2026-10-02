@@ -1,0 +1,11 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r2_api_probe --no-run
+exit 0
+--- probe body ---
+    let mut session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
+        .expect("a session");
+    session.verified = None;
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.95s
+  Executable tests/r2_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand-target-final/debug/deps/r2_api_probe-69a9f6c2d1a96f67)
+--- stdout ---

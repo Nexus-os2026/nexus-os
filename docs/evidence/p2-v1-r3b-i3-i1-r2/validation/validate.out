@@ -1,0 +1,9 @@
+store-tests exit=0 started=2026-10-02T15:13:16Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_store
+codec-tests exit=0 started=2026-10-02T15:13:55Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_codec
+core-tests exit=0 started=2026-10-02T15:13:59Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_core
+clippy exit=0 started=2026-10-02T15:14:19Z :: cargo clippy --locked -p nexus-verifier-sandbox --test phase2_custody_store --test phase2_custody_codec --test phase2_custody_core -- -D warnings
+cleanup-observation exit=0 started=2026-10-02T15:14:30Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_cleanup_observation
+live-harness-build-only exit=0 started=2026-10-02T15:14:32Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_live_sandbox --no-run
+fmt-check exit=0 started=2026-10-02T15:14:33Z :: cargo fmt --all -- --check
+diff-check exit=0 started=2026-10-02T15:14:37Z :: git diff --check
+store-tests-nocapture exit=0 started=2026-10-02T15:14:37Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_store -- --nocapture --test-threads=1

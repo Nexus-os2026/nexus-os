@@ -1,0 +1,23 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r2_api_probe --no-run
+exit 101
+--- probe body ---
+    let mut a = owner(fixture, config);
+    let mut b = owner(fixture, config);
+    std::mem::swap(&mut a.custody, &mut b.custody);
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand/crates/nexus-verifier-sandbox)
+error[E0616]: field `custody` of struct `StoreOwner` is private
+  --> crates/nexus-verifier-sandbox/tests/r2_api_probe.rs:59:27
+   |
+59 |     std::mem::swap(&mut a.custody, &mut b.custody);
+   |                           ^^^^^^^ private field
+
+error[E0616]: field `custody` of struct `StoreOwner` is private
+  --> crates/nexus-verifier-sandbox/tests/r2_api_probe.rs:59:43
+   |
+59 |     std::mem::swap(&mut a.custody, &mut b.custody);
+   |                                           ^^^^^^^ private field
+
+For more information about this error, try `rustc --explain E0616`.
+error: could not compile `nexus-verifier-sandbox` (test "r2_api_probe") due to 2 previous errors
+--- stdout ---

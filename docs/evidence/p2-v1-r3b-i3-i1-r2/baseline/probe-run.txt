@@ -1,0 +1,43 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running tests/r2_base_probes.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/r2_base_probes-099e4b72eab19e36)
+
+running 9 tests
+test bs1_unverified_succession ... PROBE B-S1: the predecessor's unresolved, undispositioned incident d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193
+PROBE B-S1: session events before successor() (no verify): [Begin("uid-1001-101112131415161718191a1b1c1d1e1f")]
+PROBE B-S1: successor() without any verification: Ok, a procedure of 32 steps
+PROBE B-S1: run_all: Ok(())
+PROBE B-S1: session events after: [Begin("uid-1001-101112131415161718191a1b1c1d1e1f"), Adopt("uid-1001-202122232425262728292a2b2c2d2e2f"), Reselect(2)]
+PROBE B-S1: PROVISION now selects root 202122232425262728292a2b2c2d2e2f (revision 2), predecessor Some(("101112131415161718191a1b1c1d1e1f", "predecessor fully dispositioned"))
+PROBE B-S1: a fresh opening: root 202122232425262728292a2b2c2d2e2f, current 0, blocking 0, the predecessor's binding present: false
+PROBE B-S1: a fresh owner: STARTED (Ready): claim 1 in pool file 0 of root 202122232425262728292a2b2c2d2e2f
+PROBE B-S1: the predecessor's pool file 0, unchanged as evidence: class UnsealedAction, refused true
+ok
+test bs2_freeform_statement ... PROBE B-S2: the predecessor's in-session verification: Err(Refusal { refused: Invalid("disposition 731db0852f67488bc4bcae5f1ca8f2ee47ec483b7290d9c470fe3e9fad3ac07e.disposition root"), revision: Some(1) })
+PROBE B-S2: run_all: Ok(())
+PROBE B-S2: the successor's predecessor-statement: Some("predecessor fully dispositioned"); it names the condition on 731db0852f67488bc4bcae5f1ca8f2ee47ec483b7290d9c470fe3e9fad3ac07e.disposition: false
+ok
+test bs3_no_verify_after ... PROBE B-S3: the last step (publication and re-selection): Ok(()); steps done 32 of 32
+PROBE B-S3: session events: [Begin("uid-1001-101112131415161718191a1b1c1d1e1f"), Verify(Ok(())), Adopt("uid-1001-202122232425262728292a2b2c2d2e2f"), Reselect(2)]
+PROBE B-S3: re-selection at event Some(3); a verification after it: false
+PROBE B-S3: an in-session verification of the selected successor, run by the probe afterwards: Err(Refusal { refused: MaintenanceIncomplete("journals/.tmp-00000"), revision: Some(2) })
+ok
+test bs4_stale_verification ... PROBE B-S4: verify-before: current 1, blocking 0, dispositioned 1
+PROBE B-S4: after the revocation: dispositions/d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193.disposition present: false; revoked/: ["d63db0b8fec84e3963139ddc0020a9f08543e71a617c2f3e59e207e4e1af9193-20261002T130000Z.disposition"]
+PROBE B-S4: successor() after a mutation that followed the verification: Ok, 32 steps
+PROBE B-S4: run_all: Ok(())
+PROBE B-S4: a fresh owner after the succession: STARTED (Ready) on root 202122232425262728292a2b2c2d2e2f
+ok
+test bs5_capacity_report_loss ... PROBE B-S5a: in-session verification of 4 claim gaps and 1 Malformed pool file (incident_limit 4): Err(Refusal { refused: Capacity("5 current incidents"), revision: Some(1) })
+PROBE B-S5a: what the Err carries: Refusal { refused, revision } only; no file classes, no incident bindings or facts, no disposition status, no history
+PROBE B-S5b: in-session verification of claim 100 alone (99 gaps): Err(Refusal { refused: Capacity("99 claim gaps"), revision: Some(1) })
+ok
+test bs6_invalid_report_loss ... PROBE B-S6: in-session verification with both conditions: Err(Refusal { refused: Invalid("disposition 731db0852f67488bc4bcae5f1ca8f2ee47ec483b7290d9c470fe3e9fad3ac07e.disposition root"), revision: Some(1) })
+PROBE B-S6: the same store with the first condition removed: Err(Refusal { refused: Invalid("duplicate generation"), revision: Some(1) })
+ok
+test custody::core::commitment_boundary::r2a_cancellation_accepted_at_the_commitment_entry_fails_the_run ... 1. execution owner: acknowledge(last earlier record) -> try_finalize -> Shared::commit, boundary at Entry, met: Some(Entry); 2. control side: gate.try_lock() -> Free; 3. control side: cancel at the boundary -> Accepted(Closure { reason: Cancelled(Requested), at: Tick(10), after: 0 }); 4. control side: release; 5. execution owner: acknowledge -> Acknowledged (release missed: false); 6. control side: cancel after the commitment -> Late(Commitment { at: Tick(9) }); outcome: terminal record Some((5, Failed)), published Failed, failures [Cancelled], admission AdmissionView { admitted: 0, closure: Some(Closure { reason: Cancelled(Requested), at: Tick(10), after: 0 }), committed: Some(Commitment { at: Tick(9) }) }
+ok
+test custody::core::commitment_boundary::r2a_commit_boundary_installs_only_before_the_custody_is_shared ... ok
+test custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record ... 1. execution owner: acknowledge(last earlier record) -> try_finalize -> Shared::commit, boundary at Decided, met: Some(Decided); 2. control side: gate.try_lock() -> Held; 3. control side: cancel at the boundary -> not attempted (the gate was not free); 4. control side: release; 5. execution owner: acknowledge -> Acknowledged (release missed: false); 6. control side: cancel after the commitment -> Late(Commitment { at: Tick(9) }); outcome: terminal record Some((4, Passed)), published Passed, failures [], admission AdmissionView { admitted: 0, closure: None, committed: Some(Commitment { at: Tick(9) }) }
+ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s

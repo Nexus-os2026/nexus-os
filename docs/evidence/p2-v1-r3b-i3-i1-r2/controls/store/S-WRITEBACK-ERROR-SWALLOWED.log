@@ -1,0 +1,24 @@
+
+running 1 test
+test r01_acknowledged_implies_durable_under_write_and_sync_faults ... FAILED
+
+failures:
+
+---- r01_acknowledged_implies_durable_under_write_and_sync_faults stdout ----
+
+thread 'r01_acknowledged_implies_durable_under_write_and_sync_faults' (3882797) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:4453:5:
+assertion `left == right` failed: [ack-durable] a reported write error is never an acknowledgement
+  left: None
+ right: Some((Sync(2, Io), 1))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r01_acknowledged_implies_durable_under_write_and_sync_faults
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 110 filtered out; finished in 0.08s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.90s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/cand-target-final/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

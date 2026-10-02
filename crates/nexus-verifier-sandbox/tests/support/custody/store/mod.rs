@@ -52,6 +52,17 @@
 //!   verification consumes the session's own latest one, which lapses at the
 //!   session's next procedure step. The `PROVISION` rewrite is internal to
 //!   recycling, retirement and re-qualification.
+//!   (P2-V1-R3B-I3-I1-R2) The session's verification reports every
+//!   store-level condition it can establish, canonically named, and is
+//!   complete only when nothing was left unread; what the session retains is
+//!   bound to its opening and selection. Every session procedure passes a
+//!   gate before its first step and ends in its in-session verify-after.
+//!   Succession consumes a complete verification of the predecessor, needs
+//!   every incident dispositioned and the Owner's acceptance of exactly the
+//!   verified Invalid conditions, writes a statement generated from them,
+//!   and is complete only once the selected successor verifies. A
+//!   disposition restates only an incident the verification reported.
+//!   Provisioning and re-publication never replace a `PROVISION`.
 //! - **Simulation** ([`sim`]): the bounded storage, error, persistence,
 //!   journal and host model the tests run everything against.
 //!
@@ -78,10 +89,11 @@
 //!   check against that sample reports nothing. The store does not detect
 //!   such a collision and does not claim to; it is a storage fault (domain S),
 //!   not something every reported failure is assumed to be.
-//! - **A safe-API boundary only** (P2-V1-R3B-I3-I1-R1). The owner, the
+//! - **A safe-API boundary only** (P2-V1-R3B-I3-I1-R1, R2). The owner, the
 //!   closure-to-seal transition, the opening's retained state, the
 //!   validator's provenance, the exchange's containment and the session's
-//!   verification rest on Rust visibility and ownership in safe code. They
+//!   verification and succession authority rest on Rust visibility and
+//!   ownership in safe code. They
 //!   do not defend against `unsafe` code in the same process. The core's own
 //!   public types (`Closed`, `ValidatedDisposition`, `Custody::new`,
 //!   `DispositionValidator`) stay public: a caller may build and run a

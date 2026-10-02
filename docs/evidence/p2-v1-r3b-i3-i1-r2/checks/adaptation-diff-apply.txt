@@ -1,0 +1,22 @@
+$ patch -p0 -d <temporary> -i docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/scripts.adaptation.diff
+exit 0
+patching file p2-v1-r3b-i3-i1-r1/scripts/store_controls.py
+patching file p2-v1-r3b-i3-i1-r1/scripts/api_probes.py
+patching file p2-v1-r3b-i3-i1-r1/scripts/validate.sh
+patching file p2-v1-r3b-i3-i1-r1/scripts/candidate_runs.sh
+patching file p2-v1-r3b-i3-i1-r1/scripts/checks.sh
+patching file p2-v1-r3b-i3-i1-r1/scripts/scope.py
+patching file p2-v1-r3b-i3-i1-r1/scripts/control_mapping.py
+patching file p2-v1-r3b-i3-i1-r1/scripts/matrices.py
+patching file p2-v1-r3b-i3-i1-r1/scripts/normalize.py
+same docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/store_controls.py
+same docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/api_probes.py
+same docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/validate.sh
+same docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/candidate_runs.sh
+same docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/checks.sh
+same docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/scope.py
+same docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/control_mapping.py
+same docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/matrices.py
+same docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/normalize.py
+same docs/evidence/p2-v1-r3b-i3-i1-r2/scripts/compare_i2r1.py
+RESULT: PASS

@@ -1,4 +1,4 @@
-# P2 custody store: implementation boundary (P2-V1-R3B-I3-I1, R1)
+# P2 custody store: implementation boundary (P2-V1-R3B-I3-I1, R1, R2)
 
 This document records what the custody store implementation is, what it is
 not, and what stays open. It belongs to the candidate on
@@ -11,6 +11,12 @@ I3-I1 evidence is in `docs/evidence/p2-v1-r3b-i3-i1/`.
 P2-V1-R3B-I3-I1-R1 (repair base `72ffc4fcc0141e2e5ae77a927481017ca711ab7c`)
 corrects the store's authority and closure boundary (section 7). Its evidence
 is in `docs/evidence/p2-v1-r3b-i3-i1-r1/`.
+
+P2-V1-R3B-I3-I1-R2 (repair base `ed7c7088247badf87b3b1d483ee57360f867e2f1`)
+binds maintenance to the session's own complete verification: succession's
+authorization, every procedure's gate and verify-after, and the procedures
+its audit repaired (section 8). Its evidence is in
+`docs/evidence/p2-v1-r3b-i3-i1-r2/`.
 
 ## 1. Acceptance status
 
@@ -32,19 +38,19 @@ All paths are under `crates/nexus-verifier-sandbox/tests/`.
 | Path | Content |
 |---|---|
 | `support/custody/store/format.rs` | The container (4096-byte header, closure seal and one record block per record, around the unchanged version-1 frames); the `PROVISION` and disposition grammars; entry and archive names; content-addressed incident bindings; the storage identity record. Every byte is checked, with full consumption. |
-| `support/custody/store/classify.rs` | The record grammar G1 to G17 and GId; the streaming per-file classifier; the conservative refusal (every malformed file and every unsealed generation with an action start); pool-level and archive checks with arithmetic gap bounds; current and history incidents; the decision over the complete set; the bounded report (64 in detail, with a partial flag). |
+| `support/custody/store/classify.rs` | The record grammar G1 to G17 and GId; the streaming per-file classifier; the conservative refusal (every malformed file and every unsealed generation with an action start); pool-level and archive checks with arithmetic gap bounds; current and history incidents; the decision over the complete set; the bounded report (64 in detail, with a partial flag); (R2) the condition classes, the findings collector and the canonical entry names. |
 | `support/custody/store/io.rs` | The `StoreIo` trait; bounded write and sync retries (a failed sync is never retried into success); a controlled fault adapter; the Linux implementation (`openat2` with `RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS`, `RESOLVE_NO_MAGICLINKS` and `RESOLVE_NO_XDEV`, one component at a time). This is the store's only `unsafe` code. Each call has one wrapper, with a safety argument. |
-| `support/custody/store/open.rs` | Selection and post-lock revalidation by fresh walks; safe opening; the mount, effective-profile, journal-location, kernel and storage checks; the opening-bound `StorageAdmission`; durable activation (A1 to A5); the scan; the decision; the opening `Opened`, whose state is private (R1); the internal claim handoff; `StoreGuard` and `StartupReport`; the standalone verifier; the closed real entry (section 3). |
+| `support/custody/store/open.rs` | Selection and post-lock revalidation by fresh walks; safe opening; the mount, effective-profile, journal-location, kernel and storage checks; the opening-bound `StorageAdmission`; durable activation (A1 to A5); the scan; the decision; the opening `Opened`, whose state is private (R1); the internal claim handoff; `StoreGuard` and `StartupReport`; the standalone verifier; the closed real entry (section 3); (R2) the scan through a findings collector. |
 | `support/custody/store/exchange.rs` | The bounded, idempotent exchange with one fatal latch (first cause and P); `ExchangeSink`; the owner's apply step; failure delivery at a record the core really issued; the store admission gate around `Custody::admit`; the one-way seal request; `RecorderStatus` (a stall is never a failure). Internal to the store (R1), apart from its plain data types. |
 | `support/custody/store/recorder.rs` | The worker's steps W1 to W6, claim and seal, with explicit interleaving points; the drop guard that latches worker loss; the threaded runner, which keeps the owner's guard; the Linux-only native wiring check (R1). The worker is internal to the store (R1). |
 | `support/custody/store/owner.rs` | (R1) `StoreOwner`, the one value that retains the custody, recorder, claimed header and worker, and exclusion guard; `start_owner`, its only constructor; `StoreOwner::close`, the only path from a closure to a seal; `ClosedStore`. |
 | `support/custody/store/faults.rs` | (R1) The narrow fault and interleaving interface the tests use. Each operation only makes the recorder fail closed or interleaves its real steps. |
 | `support/custody/store/disposition.rs` | The pure exact-restatement comparison, and the `DispositionValidator` that exists only as a borrow of one opening's verified state (R1): only a root-owned disposition that restates exactly the incident the store computed. |
-| `support/custody/store/maintenance.rs` | The maintenance session (the store lock held for the session's life; verification through that retained authority; R1: the session's own latest verification, consumed once and lapsed by any later procedure step); the fixture qualification; every procedure of design section 13 as labelled, crash-injectable steps. |
+| `support/custody/store/maintenance.rs` | The maintenance session (the store lock held for the session's life; verification through that retained authority; R1: the session's own latest verification, consumed once and lapsed by any later procedure step; R2: that verification complete and bound, every procedure gated and verified after, succession authorized as section 8 states); the fixture qualification; every procedure of design section 13 as labelled, crash-injectable steps. |
 | `support/custody/store/sim.rs` | The simulated storage, error, persistence, journal, device and host model; the fixture host. |
 | `support/custody/store/mod.rs` | The module's documentation: what it is and is not. |
 | `support/custody/mod.rs` | Linux-only wiring of `store`, and one paragraph on the integration obligations the store addresses. |
-| `phase2_custody_store.rs` | The test target: 84 store tests (75 from I3-I1, adapted to the R1 interface, and 9 R1 regressions), plus the core's 3 commitment-boundary tests that every custody target compiles. |
+| `phase2_custody_store.rs` | The test target: 108 store tests (75 from I3-I1 and 9 R1 regressions, adapted to the R2 interface, and 24 R2 regressions `v01` to `v24`), plus the core's 3 commitment-boundary tests that every custody target compiles. |
 
 `core.rs`, `model.rs`, `codec.rs` and their tests are byte-identical to the
 baseline. So are the cleanup observer, the live harness, production `src/`,
@@ -361,7 +367,7 @@ R1 removes those items. It does not add a check beside them.
   - Provisioning and re-publication (design section 13.2) remain Owner acts
     without a session. The store does not itself refuse to re-publish over
     an existing `PROVISION`; that precondition rests on the Owner, as R5
-    states.
+    states. (R2 closes this: section 8.4.)
   - Successor provisioning (design section 13.6) does not check its
     precondition: that the predecessor's in-session verification shows every
     bound incident dispositioned, and that the statement names each
@@ -370,7 +376,193 @@ R1 removes those items. It does not add a check beside them.
     Capacity refusal, and section 13.10 names succession as a resolution of
     Capacity. A check therefore needs a design reading and a wider
     verification path; it is an open finding for the Architect, not
-    something R1 decides.
+    something R1 decides. (R2 closes this: section 8.)
   - G-AUTH, G-HOST, G-LIVE, G-NATIVE and G-PWR stay open. Nothing here
     authenticates storage, proves native cleanup or power-loss behaviour,
     or qualifies a host.
+
+## 8. Maintenance authority (P2-V1-R3B-I3-I1-R2)
+
+The Architect's findings on the R1 candidate, reproduced at `ed7c7088`
+through safe calls from outside the store (B-S1 to B-S6,
+`docs/evidence/p2-v1-r3b-i3-i1-r2/baseline/`):
+
+- F1: succession had no verify-before. P-SUCCESSOR ran on a predecessor with
+  an undispositioned incident, and the next owner started without that
+  history (B-S1). It also ran on a verification older than a revocation
+  (B-S4).
+- F2: a caller's free-text statement stood in for the Owner's acceptance of
+  the store-level Invalid conditions (B-S2).
+- F3: an Invalid or Capacity verification discarded its report. Only the
+  first condition survived (B-S5, B-S6).
+- F4: no procedure verified after. A successor that refused was left
+  selected, and the succession reported success (B-S3).
+- F5: the tests normalized the wrong contract: caller-built dispositions and
+  a free-text statement.
+- F6: the rest of the maintenance surface needed the same audit (section
+  8.4).
+
+### 8.1 The session's verification
+
+- **Every condition, once.** An in-session verification collects. It records
+  every condition it can establish and goes on wherever that is safe. Each
+  condition has a class and an exact name. Names are printable ASCII: an
+  entry's name is used as it is when made of `[A-Za-z0-9._-]`, otherwise as
+  `hex:` and its bytes. A name recorded as unexpected or leftover is never
+  also read as an entry of its directory.
+- **Classes.**
+  - **Invalid:** determinate, and accepted by a successor's Owner by name.
+  - **MaintenanceIncomplete:** a leftover temporary. Recovery comes first,
+    and it is never accepted.
+  - **Capacity:** a count, never permission.
+  - **Indeterminate:** something could not be read or trusted, so the
+    verification stops and is not complete. This covers an entry that
+    cannot be listed, stat'ed, opened or read, a replaced or live pool file,
+    an archive entry whose header, size or seal does not check, and a lost
+    selection or lock.
+- **Which conditions are determinate.**
+  - unexpected names and leftovers;
+  - a disposition file that fails its type, size, grammar, name or root
+    check (it is then no disposition);
+  - a revoked entry of the wrong type;
+  - `revoked/` over its bound: one condition, and none of its entries is
+    examined (revoked files are evidence only);
+  - duplicate claims and generations;
+  - a pool claim at or below `retired-through`;
+  - an archive `u`, `m` or `p-` entry without its disposition (its binding
+    is undispositioned history, never history);
+  - Capacity.
+- **Claim gaps.** Gaps are enumerated while there are at most as many as the
+  store could ever hold dispositions for (4096). Beyond that they are
+  counted only. No complete set then exists, and the verification is not
+  complete.
+- **Owner openings are unchanged.** An owner's opening and the standalone
+  verifier stop at the first condition, with the same refusal in the same
+  order. `Session::verify` still returns the report, or the first condition
+  as a refusal.
+- **What the session retains.** The latest verify-before, bound to:
+  - the session's mutation count;
+  - its opening;
+  - the root id, revision, digest and state name of the selection it was
+    made against.
+
+  It is taken once, and only while all of these still hold. A caller sees
+  `Assessment` copies: plain data that no procedure accepts. The type
+  `Verification` and the field that holds it are private (API/type guards).
+
+### 8.2 Gate and verify-after
+
+- **The gate.** Every session procedure has a gate, run before its first
+  step and before any operation. Its checks:
+  - no step of the session has started since the procedure was built;
+  - for succession, the session still holds the predecessor's lock, and
+    `PROVISION` is unchanged;
+  - for provisioning and re-publication, design section 13.2's
+    precondition (section 8.4).
+
+  A refused gate leaves no operation behind.
+- **The verify-after** (design section 13.1 rule 6). It is a fresh in-session
+  verification, run within the last step after its action. Each step is
+  still one operation of design section 15.3. The one exception is
+  R-LEFTOVER with nothing to remove: its single step performs no operation
+  and carries only the verify-after. A procedure is complete only once its
+  verify-after succeeded.
+- **What fails a verify-after.** For every procedure but succession: the
+  session lost its authority, or a leftover temporary remains. Anything
+  else it finds is evidence, kept as the session's latest assessment.
+  After R-LEFTOVER, an interrupted recycling still refuses as Lost until
+  R-RESUME (design section 13.8).
+- **A verify-after is never a verify-before.** It clears the session's
+  verification.
+
+### 8.3 Succession (P-SUCCESSOR)
+
+- **Verify-before.** Succession consumes the session's own current, complete
+  verification of the predecessor. It requires:
+  - every claim gap enumerated;
+  - no leftover temporary;
+  - every current incident with an exact disposition, over the complete
+    set and never the bounded report's detail;
+  - no archived incident without its disposition.
+
+  Over capacity, succession is authorized only on these terms (design
+  section 13.10).
+- **Owner acceptance.** The Owner names the store-level Invalid conditions it
+  accepts, in any order. Sorted, the list must equal the verified set
+  exactly: an omission, an addition or a repetition refuses.
+- **The statement.** It is generated from the verified set:
+  `store-level invalid conditions accepted: none`, or the canonical names
+  joined by `; `. It holds at most 512 bytes; a set that does not fit
+  refuses and is never truncated.
+- **A new root.** The successor's root id is neither the predecessor's nor
+  the predecessor's own predecessor's.
+- **Order.** The order is:
+  1. authorization;
+  2. the gate;
+  3. design section 15.3's 29 operations, unchanged;
+  4. the successor's lock adopted before its `PROVISION` is published;
+  5. re-selection;
+  6. the verify-after.
+
+  The session holds both locks from the adoption until it ends.
+- **The successor's verify-after.** The selection must be the successor, with
+  this predecessor, this statement and revision + 1. The successor must
+  verify in-session with no condition and no current incident.
+- **Failure.** Nothing is rolled back. A succession that fails its verify-after
+  is not complete. The published successor stays selected as evidence, and
+  later openings refuse it for what its verification found.
+
+### 8.4 The maintenance audit
+
+| Procedure | Verify-before | Gate | Verify-after | R2 change |
+|---|---|---|---|---|
+| P-PROV | None (no session) | No `PROVISION` at its path; no root under the parent that may hold history | None (no session) | It refused nothing before; it could replace a live store's `PROVISION` |
+| R-REPUBLISH | None (no session) | Checked at construction and as its gate: no `PROVISION`; no root that may hold history other than its own | None (no session) | It published over an existing `PROVISION` |
+| P-DISP | Complete; only Invalid or Capacity allowed. The binding is a verified current incident or an undispositioned archive entry | Unchanged since built | Generic | Its facts come from the verification (for an archived journal, from its bytes, checked against the content digest in its name). The Owner gives only reason, statement, operator and time. Before, it published any caller-built disposition, even for a binding no verification reported (a claim gap's is predictable) |
+| P-REVOKE | None: it takes nothing from a verification, and its only effect is that an incident blocks again | Unchanged since built | Generic | Gate and verify-after |
+| P-ARCH | Complete; only Capacity allowed | Unchanged since built | Generic | Archival over capacity is restored: design section 13.10 names it as a resolution, and R1 had refused it. Recycling and retirement keep R1's rule, since section 13.10 does not name them |
+| P-RECYCLE | Complete, with no condition (as in R1) | Unchanged since built | Generic | Gate and verify-after |
+| R-RESUME | Its first condition must be `Lost("<pool file> replaced")`; the saved report is Owner input (design section 13.8) | Unchanged since built | Generic | Gate and verify-after |
+| P-RETIRE | Complete, with no condition (as in R1) | Unchanged since built | Generic | Gate and verify-after |
+| P-REQUALIFY | None: the qualification is Owner-established input | Unchanged since built | Generic | Gate and verify-after |
+| P-SUCCESSOR | Section 8.3 | Section 8.2 | Strict (section 8.3) | Sections 8.1 to 8.3 |
+| R-LEFTOVER | None: the leftovers are what it lists itself | Unchanged since built | Generic: it fails if a leftover remains | Gate and verify-after; with nothing to remove, one step that only verifies |
+
+### 8.5 R2 verification and remaining limits
+
+- **Tests.** The store target has 111 tests:
+  - 108 store tests: 84 adapted to the R2 interface and 24 R2 regressions,
+    `v01` to `v24`;
+  - the core's 3.
+- **Behavioural controls (by category, never one figure).**
+  - simulator and source conformance: 12;
+  - implementation safety: 69;
+  - authority and API surface: 8;
+  - R1 authority binding: 10;
+  - R2 maintenance authority: 38.
+
+  Seven R1 anchors moved to their equivalent defect point. Each one's id,
+  test, marker and intention are unchanged.
+- **API/type guards (reported apart).**
+  - 18 compile-time probes, each self-checked by reopening its access. These
+    include three R2 guards of the session's verification: it cannot be
+    moved between sessions (the intention of NC-SUCC-FOREIGN), built
+    outside the store, or taken by a caller.
+  - 1 ownership guard;
+  - a positive control and a harness check.
+- **Limits.**
+  - This is a safe-API boundary only (section 7.5).
+  - The verification's binding to its selection and opening has no
+    behavioural call site: the session's own mutation count lapses it first.
+    It is defence in depth, and API/type guards show it.
+  - P-REVOKE checks no bound on `dispositions/revoked/`, and R5 specifies
+    none. A store pushed over it is Invalid, and succession can accept that
+    condition by name (test `v20`).
+  - Several roots that may hold history, and more claim gaps than the store
+    could hold dispositions for, leave nothing to authorize. Both are for
+    the Architect to dispose of.
+  - Provisioning and re-publication read their precondition afresh, at
+    construction and at their gate, with no lock: no session exists before
+    a store. A root process acting outside every procedure is unsupported
+    (design section 13.1).
+  - G-AUTH, G-HOST, G-LIVE, G-NATIVE and G-PWR stay open.
