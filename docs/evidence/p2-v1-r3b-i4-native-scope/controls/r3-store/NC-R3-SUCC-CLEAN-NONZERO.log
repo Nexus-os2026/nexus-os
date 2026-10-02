@@ -1,0 +1,22 @@
+
+running 1 test
+test r307_a_successor_pool_byte_that_is_not_zero_refuses ... FAILED
+
+failures:
+
+---- r307_a_successor_pool_byte_that_is_not_zero_refuses stdout ----
+
+thread 'r307_a_successor_pool_byte_that_is_not_zero_refuses' (613661) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:11405:32:
+[succession-cleanup] first byte: removable
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r307_a_successor_pool_byte_that_is_not_zero_refuses
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.99s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

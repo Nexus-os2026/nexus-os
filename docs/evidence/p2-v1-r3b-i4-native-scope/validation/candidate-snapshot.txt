@@ -1,0 +1,7 @@
+snapshot tree: d6539ad45d3eea96cf00a19a0b99ec3065a83054
+snapshot checkout: /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand
+snapshot HEAD: 68ebea1665af182424334d204a76cd756d1dddd0
+made at: 2026-10-02T21:24:45Z
+from worktree: /home/nexus/NEXUS/nexus-os-p2-v1-native-scope-ownership (HEAD 3805204f941d9694b2c0c36549d32a5f4e6c157c, branch review/p2-v1-native-scope-ownership)
+base: 3805204f941d9694b2c0c36549d32a5f4e6c157c
+worktree status entries: 35

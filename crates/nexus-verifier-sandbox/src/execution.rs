@@ -9,6 +9,16 @@
 //! confirmed. An unconfirmed cleanup keeps the scope and the helper as a
 //! retained boundary that can be retried.
 //!
+//! Scope creation is a remote operation whose effect is not known until it
+//! is observed (P2-V1-R3B-I4). The operation is owned, as a pending scope,
+//! from before its request is issued; it becomes the execution's scope only
+//! once every proof passed, and nothing reaches the helper before that. A
+//! pending scope that is never proven is settled by finalization like any
+//! other part of the boundary: its helper is killed but stays unreaped until
+//! the operation is confirmed gone, and an operation that cannot be
+//! confirmed gone is retained with the helper, retryable without the
+//! [`ScopeManager`] that issued it.
+//!
 //! Panic safety: everything an execution creates (the helper, its scope and
 //! the output threads) is owned in [`run`]'s own frame, never inside a
 //! closure that can panic. The launch and the wait run behind
@@ -42,7 +52,7 @@ pub use crate::fault::{Fault, FaultPoint, RUNNING_FAULT_AFTER};
 use crate::launcher::{Helper, HelperProgram, LaunchError, LaunchSpec, Outcome};
 use crate::policy::ResourcePolicy;
 use crate::protocol::{SetupStage, VerifierStatus};
-use crate::scope::{Scope, ScopeError, ScopeEvents, ScopeManager};
+use crate::scope::{ScopeBoundary, ScopeError, ScopeEvents, ScopeManager};
 
 /// Bound on confirming the scope is empty after `cgroup.kill`.
 pub const FINALIZE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -148,37 +158,39 @@ impl Cleanup {
     }
 }
 
-/// An execution whose cleanup is unconfirmed: its scope and, if not yet
-/// reaped, its helper. Retaining it is the only way to finish the cleanup:
-/// its owner keeps it until [`Self::retry`] succeeds.
+/// An execution whose cleanup is unconfirmed: its scope (proven, or a
+/// pending scope operation not confirmed gone) and, if not yet reaped, its
+/// helper. Retaining it is the only way to finish the cleanup: its owner
+/// keeps it until [`Self::retry`] succeeds. It needs nothing else: not the
+/// [`ScopeManager`] that started the execution.
 #[derive(Debug)]
 pub struct RetainedBoundary {
-    scope: Option<Scope>,
+    scope: ScopeBoundary,
     helper: Option<Helper>,
 }
 
 impl RetainedBoundary {
     /// End everything again with the finalizer's own steps and re-check.
-    /// `Ok(())` once the helper is reaped and the scope empty or removed;
-    /// otherwise, a panic while retrying included, the boundary is still
-    /// retained.
+    /// `Ok(())` once the helper is reaped and the scope empty or removed (a
+    /// pending scope: confirmed gone); otherwise, a panic while retrying
+    /// included, the boundary is still retained.
     pub fn retry(mut self) -> Result<(), Self> {
         let ended = catch_unwind(AssertUnwindSafe(|| {
-            end(self.scope.as_ref(), &mut self.helper)
+            end(&mut self.scope, &mut self.helper, None)
         }))
         .unwrap_or(false);
         if ended {
-            self.scope = None;
             Ok(())
         } else {
             Err(self)
         }
     }
 
-    /// Whether the scope is still retained (live panic controls).
+    /// Whether the scope, or a scope operation not confirmed gone, is still
+    /// retained (live panic controls).
     #[cfg(any(test, feature = "live-sandbox-harness"))]
     pub fn holds_scope(&self) -> bool {
-        self.scope.is_some()
+        self.scope.holds()
     }
 
     /// Whether the helper is still unreaped (live panic controls).
@@ -193,7 +205,7 @@ impl Drop for RetainedBoundary {
     /// end what it holds without waiting. Never a confirmation; owners keep
     /// a retained boundary until [`Self::retry`] succeeds.
     fn drop(&mut self) {
-        end_now(self.scope.as_ref(), &mut self.helper);
+        end_now(&self.scope, &mut self.helper);
     }
 }
 
@@ -336,11 +348,13 @@ pub fn run_with_fault(
 #[derive(Default)]
 struct Owned {
     helper: Option<Helper>,
-    scope: Option<Scope>,
+    /// Pending from before the scope's request is issued; proven only once
+    /// every proof passed.
+    scope: ScopeBoundary,
     stdout: Option<JoinHandle<StreamRecord>>,
     stderr: Option<JoinHandle<StreamRecord>>,
     /// The launch may have reached the helper: something untrusted may
-    /// have run. Only ever set once the scope exists.
+    /// have run. Only ever set once the scope is proven.
     launched: bool,
     /// When the helper reported the verifier running.
     started: Option<Instant>,
@@ -350,9 +364,10 @@ impl Owned {
     /// Hand whatever remains to a retained boundary; with nothing left, the
     /// cleanup is confirmed.
     fn retain(&mut self) -> Cleanup {
-        match (self.scope.take(), self.helper.take()) {
-            (None, None) => Cleanup::Confirmed,
-            (scope, helper) => Cleanup::Failed(RetainedBoundary { scope, helper }),
+        let scope = std::mem::take(&mut self.scope);
+        match (scope.holds(), self.helper.take()) {
+            (false, None) => Cleanup::Confirmed,
+            (_, helper) => Cleanup::Failed(RetainedBoundary { scope, helper }),
         }
     }
 }
@@ -361,7 +376,7 @@ impl Drop for Owned {
     /// Defense in depth only: [`execute`] never lets a live boundary reach
     /// this point (it is confirmed ended or moved into a retained boundary).
     fn drop(&mut self) {
-        end_now(self.scope.as_ref(), &mut self.helper);
+        end_now(&self.scope, &mut self.helper);
     }
 }
 
@@ -475,12 +490,22 @@ fn attempt(
     }
     fault::at(fault, FaultPoint::AfterSpawn);
 
-    // The helper waits for its launch; it is placed in its scope first.
-    match scopes.start_with_fault(helper, limits, fault) {
-        Ok(scope) => owned.scope = Some(scope),
+    // The helper waits for its launch; it is placed in its scope first. The
+    // scope operation is owned before its request can have any effect, and
+    // whatever it may have created stays owned whether it is proven, fails
+    // or panics.
+    match scopes.prepare(helper, limits) {
+        Ok(pending) => owned.scope = ScopeBoundary::Pending(pending),
         Err(error) => return not_run(NotRun::Scope(error)),
     }
+    if let Err(error) = owned.scope.establish(helper, fault) {
+        return not_run(NotRun::Scope(error));
+    }
     fault::at(fault, FaultPoint::AfterScope);
+    // Nothing reaches the helper unless its scope is proven.
+    if !owned.scope.is_proven() {
+        return not_run(NotRun::Scope(ScopeError::Mismatch("scope not proven")));
+    }
     if let Err(error) = helper.handshake() {
         return not_run(NotRun::Launch(error));
     }
@@ -538,14 +563,14 @@ fn finalize(owned: &mut Owned, fault: Option<Fault>) -> Finalized {
 fn finalize_steps(owned: &mut Owned, fault: Option<Fault>) -> Finalized {
     // After a final report the helper still holds the scope, so its
     // counters are read before anything in it is ended.
-    let events = owned.scope.as_ref().and_then(|scope| scope.events().ok());
-    if fault::at(fault, FaultPoint::Finalizing) || !end(owned.scope.as_ref(), &mut owned.helper) {
+    let events = owned.scope.proven().and_then(|scope| scope.events().ok());
+    if fault::at(fault, FaultPoint::Finalizing) || !end(&mut owned.scope, &mut owned.helper, fault)
+    {
         // Do not wait on output that a surviving process may still hold.
         return Finalized::without_output(owned.retain(), events);
     }
     // Nothing of this execution remains, so every writer of the output
     // pipes is gone.
-    owned.scope = None;
     let (stdout, stdout_lost) = join(owned.stdout.take());
     let (stderr, stderr_lost) = join(owned.stderr.take());
     Finalized {
@@ -557,16 +582,31 @@ fn finalize_steps(owned: &mut Owned, fault: Option<Fault>) -> Finalized {
     }
 }
 
-/// End everything an execution may have left, and confirm it: `cgroup.kill`
-/// on the scope, a kill of the helper (whose death-signal chain also ends
-/// its namespace init), a bounded reap of the helper, then a bounded wait
-/// for the scope to be empty or removed. A helper without a scope never
-/// received a launch, so reaping it ends everything it started. The helper
-/// is released once reaped; the scope stays with the caller. `true` only
-/// once nothing can remain.
-fn end(scope: Option<&Scope>, helper: &mut Option<Helper>) -> bool {
-    if let Some(scope) = scope {
-        let _ = scope.kill();
+/// End everything an execution may have left, and confirm it. A proven
+/// scope: `cgroup.kill` on it, a kill of the helper (whose death-signal
+/// chain also ends its namespace init), a bounded reap of the helper, then a
+/// bounded wait for the scope to be empty or removed. A pending scope
+/// operation: the helper is killed but stays unreaped while the operation
+/// is settled (its process id stays reserved and its kernel membership
+/// observable), and is reaped only once the operation is confirmed gone. A
+/// helper without a scope never received a launch, so reaping it ends
+/// everything it started. Whatever is confirmed ended is released; what is
+/// not stays with the caller. `true` only once nothing can remain.
+fn end(scope: &mut ScopeBoundary, helper: &mut Option<Helper>, fault: Option<Fault>) -> bool {
+    match scope {
+        ScopeBoundary::Proven(proven) => {
+            let _ = proven.kill();
+        }
+        ScopeBoundary::Pending(pending) => {
+            if let Some(child) = helper.as_mut() {
+                let _ = child.kill();
+            }
+            if !pending.reconcile(helper.as_ref(), fault) {
+                return false;
+            }
+            *scope = ScopeBoundary::None;
+        }
+        ScopeBoundary::None => {}
     }
     if let Some(child) = helper.as_mut() {
         let _ = child.kill();
@@ -575,21 +615,25 @@ fn end(scope: Option<&Scope>, helper: &mut Option<Helper>) -> bool {
         }
         *helper = None;
     }
-    match scope {
-        Some(scope) => scope.wait_empty(FINALIZE_TIMEOUT).unwrap_or(false),
-        None => true,
+    if let Some(proven) = scope.proven() {
+        if !proven.wait_empty(FINALIZE_TIMEOUT).unwrap_or(false) {
+            return false;
+        }
     }
+    *scope = ScopeBoundary::None;
+    true
 }
 
 /// Best effort and without waiting: end whatever may remain. Defense in
-/// depth only, never a confirmation.
-fn end_now(scope: Option<&Scope>, helper: &mut Option<Helper>) {
-    if let Some(scope) = scope {
-        let _ = scope.kill();
-    }
+/// depth only, never a confirmation. A helper bound to a scope operation
+/// not confirmed gone is killed but never reaped here.
+fn end_now(scope: &ScopeBoundary, helper: &mut Option<Helper>) {
+    scope.end_now();
     if let Some(helper) = helper.as_mut() {
         let _ = helper.kill();
-        let _ = helper.try_reap();
+        if !scope.unresolved() {
+            let _ = helper.try_reap();
+        }
     }
 }
 

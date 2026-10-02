@@ -1,0 +1,19 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+error[E0624]: method `prepare` is private
+   --> crates/nexus-verifier-sandbox/tests/i4_api_probe.rs:20:20
+    |
+ 20 |       let _ = scopes.prepare(helper, &ResourcePolicy::RUST_OFFLINE_V1);
+    |                      ^^^^^^^ private method
+    |
+   ::: crates/nexus-verifier-sandbox/src/scope.rs:164:5
+    |
+164 | /     pub(crate) fn prepare(
+165 | |         &self,
+166 | |         helper: &Helper,
+167 | |         limits: &ResourcePolicy,
+168 | |     ) -> Result<Box<PendingScope>, ScopeError> {
+    | |______________________________________________- private method defined here
+
+For more information about this error, try `rustc --explain E0624`.
+error: could not compile `nexus-verifier-sandbox` (test "i4_api_probe") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

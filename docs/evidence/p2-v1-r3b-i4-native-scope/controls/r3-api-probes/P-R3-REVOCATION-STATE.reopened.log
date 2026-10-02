@@ -1,0 +1,9 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 0
+--- probe body ---
+    let state = maint::interrupted_revocation(&fixture.root, &[], &[], &[0; 32], "x", &[0; 16]);
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.88s
+  Executable tests/r3_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-api/debug/deps/r3_api_probe-c22bd2e7894be692)
+--- stdout ---

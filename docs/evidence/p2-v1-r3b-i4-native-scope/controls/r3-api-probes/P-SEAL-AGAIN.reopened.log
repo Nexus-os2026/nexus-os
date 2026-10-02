@@ -1,0 +1,12 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 0
+--- probe body ---
+    let owner = owner(fixture, config);
+    if let Ok(closed) = owner.close(Tick(2)) {
+        let _ = closed.recorder.request_seal(closed.header(), 0, 0);
+    }
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.86s
+  Executable tests/r3_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-api/debug/deps/r3_api_probe-c22bd2e7894be692)
+--- stdout ---

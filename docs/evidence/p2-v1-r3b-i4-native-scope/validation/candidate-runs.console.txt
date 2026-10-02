@@ -1,0 +1,25 @@
+checkout: /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand
+HEAD: 68ebea1665af182424334d204a76cd756d1dddd0
+HEAD tree: d6539ad45d3eea96cf00a19a0b99ec3065a83054
+targets: /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets (each step's own, empty before it)
+before status entries: 0
+validation exit=0 started=2026-10-02T21:24:52Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/validation bash /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/validate.sh /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand /home/nexus/NEXUS/p2-v1-r3b-i4-work/candidate-runs/validation
+after validation status entries: 0
+scope-controls exit=0 started=2026-10-02T21:26:25Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/scope_controls.py /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand /home/nexus/NEXUS/p2-v1-r3b-i4-work/candidate-runs/controls/scope --target-dir /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/scope-controls
+after scope-controls status entries: 0
+api-guards exit=0 started=2026-10-02T21:27:21Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/api_guards.py /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand /home/nexus/NEXUS/p2-v1-r3b-i4-work/candidate-runs/controls/api-guards --target-dir /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/api-guards
+after api-guards status entries: 0
+source-guards exit=0 started=2026-10-02T21:28:03Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/source_guards.py /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand /home/nexus/NEXUS/p2-v1-r3b-i4-work/candidate-runs/controls/source-guards.json
+after source-guards status entries: 0
+r3-store-controls exit=0 started=2026-10-02T21:28:03Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store python3 /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/store_controls.py /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand /home/nexus/NEXUS/p2-v1-r3b-i4-work/candidate-runs/controls/r3-store
+after r3-store-controls status entries: 0
+i2r1-rerun exit=0 started=2026-10-02T21:36:04Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/i2r1 python3 /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/docs/evidence/p2-v1-r3b-i3-i1/scripts/i2r1_controls_rerun.py /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand /home/nexus/NEXUS/p2-v1-r3b-i4-work/candidate-runs/controls/i2r1-rerun
+after i2r1-rerun status entries: 0
+r3-api-probes exit=0 started=2026-10-02T21:37:04Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-api python3 /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/api_probes.py /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand /home/nexus/NEXUS/p2-v1-r3b-i4-work/candidate-runs/controls/r3-api-probes
+after r3-api-probes status entries: 0
+stability exit=0 started=2026-10-02T21:38:16Z :: bash /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/stability.sh /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/validation /home/nexus/NEXUS/p2-v1-r3b-i4-work/candidate-runs/stability 25
+after stability status entries: 0
+no-live exit=0 started=2026-10-02T21:39:05Z :: bash /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/no_live.sh /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/validation /home/nexus/NEXUS/p2-v1-r3b-i4-work/candidate-runs/no-live
+after no-live status entries: 0
+desktop-callers exit=0 started=2026-10-02T21:39:06Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/desktop bash -c cd '/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand' &&   cargo check --locked -p nexus-desktop-backend --lib --tests &&   cargo test --locked -p nexus-desktop-backend --lib phase2_tests::
+after desktop-callers status entries: 0

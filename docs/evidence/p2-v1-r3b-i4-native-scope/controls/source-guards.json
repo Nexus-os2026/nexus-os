@@ -1,0 +1,200 @@
+{
+  "production_files": [
+    "applicability.rs",
+    "execution.rs",
+    "fault.rs",
+    "hash.rs",
+    "helper.rs",
+    "landlock_rules.rs",
+    "launcher.rs",
+    "lib.rs",
+    "main.rs",
+    "policy.rs",
+    "profile.rs",
+    "profile_launch.rs",
+    "protocol.rs",
+    "scope.rs",
+    "scope/manager.rs",
+    "scope/native.rs",
+    "scope/pending.rs",
+    "seccomp.rs",
+    "seccomp_policy.rs",
+    "sys.rs",
+    "toolchain.rs",
+    "toolchain/contract.rs",
+    "workspace.rs"
+  ],
+  "guards": {
+    "SG-I4-BUS": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-DESTINATION": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-NO-SWEEP": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-NO-PID-SIGNAL": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-TEST-SEAMS": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-NO-SERIALIZE": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-NO-BACKGROUND": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-ONE-WAY": {
+      "ok": true,
+      "problems": []
+    },
+    "SG-I4-DESKTOP-REPLICA": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "all_guards_pass": true,
+  "self_tests": [
+    {
+      "guard": "SG-I4-BUS",
+      "file": "scope.rs",
+      "injected": "        let uid = unsafe { libc::getuid() };\n        let _ = std::env::var(\"DBUS_SESSION_BUS_ADDRESS\");\n        Self::co",
+      "reported": [
+        "std::env: {'scope.rs': 1}",
+        "env::var: {'scope.rs': 1}",
+        "DBUS_SESSION_BUS_ADDRESS: {'scope.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-BUS",
+      "file": "scope/manager.rs",
+      "injected": "!metadata.file_type().is_socket()",
+      "reported": [
+        "manager.rs: not exactly once: !metadata.file_type().is_socket() || metadata.uid() != uid"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-DESTINATION",
+      "file": "scope/manager.rs",
+      "injected": "const SYSTEMD: &str = \"org.example.other\";",
+      "reported": [
+        "constant: const SYSTEMD: &str = \"org.freedesktop.systemd1\";"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-DESTINATION",
+      "file": "scope/manager.rs",
+      "injected": "    fn stop_unit(&self, destination: &str, unit: &str) -> Remote<()>;",
+      "reported": [
+        "manager interface: ['fn get_unit(&self, unit: &str) -> Remote<Presence>;', 'fn oom_policy(&self, unit_path: &str) -> Remote<Option<String>>;', 'fn runtime_max_usec(&self, unit_path: &str) -> Remote<Option<u64>>;', \"fn start_scope(&self, request: &ScopeRequest<'_>) -> Started;\", 'fn stop_unit(&self, destination: &str, unit: &str) -> Remote<()>;']"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-NO-SWEEP",
+      "file": "scope/pending.rs",
+      "injected": "fn sweep() { let _ = \"ListUnitsByPatterns\"; }\nfn names_unit(",
+      "reported": [
+        "ListUnits: {'scope/pending.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-NO-SWEEP",
+      "file": "scope/pending.rs",
+      "injected": "const PATTERN: &str = \"nexus-verifier-*.scope\";\nfn names_unit(",
+      "reported": [
+        "nexus-verifier-*: {'scope/pending.rs': 1}",
+        "unit-name strings: {'scope/pending.rs': 1, 'scope.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-NO-PID-SIGNAL",
+      "file": "execution.rs",
+      "injected": "fn signal(pid: i32) { unsafe { libc::kill(pid, libc::SIGKILL) }; }\nfn end_now(",
+      "reported": [
+        "libc::kill: {'execution.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-TEST-SEAMS",
+      "file": "scope.rs",
+      "injected": "    pub(crate) fn with_controller(",
+      "reported": [
+        "with_controller is not test-only and crate-private"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-TEST-SEAMS",
+      "file": "scope.rs",
+      "injected": "pub(crate) mod tests;",
+      "reported": [
+        "the simulation module is not test-only"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-NO-SERIALIZE",
+      "file": "scope/pending.rs",
+      "injected": "#[derive(serde::Serialize)]\nstruct Saved;\n/// What tests observe about a pending scope operation.",
+      "reported": [
+        "scope/pending.rs"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-NO-BACKGROUND",
+      "file": "scope/pending.rs",
+      "injected": "fn background() { std::thread::spawn(|| {}); }\nfn names_unit(",
+      "reported": [
+        "scope: thread::spawn: {'scope/pending.rs': 1}"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-ONE-WAY",
+      "file": "scope/pending.rs",
+      "injected": "pub fn from_name(unit: &str) {}\nfn names_unit(",
+      "reported": [
+        "a public function takes a unit name"
+      ],
+      "detected": true
+    },
+    {
+      "guard": "SG-I4-DESKTOP-REPLICA",
+      "file": "execution.rs",
+      "injected": "    pub fn holds_scope(",
+      "reported": [
+        "holds_scope is not gated"
+      ],
+      "detected": true
+    }
+  ],
+  "all_self_tests_detected": true,
+  "guards_with_self_test": [
+    "SG-I4-BUS",
+    "SG-I4-DESKTOP-REPLICA",
+    "SG-I4-DESTINATION",
+    "SG-I4-NO-BACKGROUND",
+    "SG-I4-NO-PID-SIGNAL",
+    "SG-I4-NO-SERIALIZE",
+    "SG-I4-NO-SWEEP",
+    "SG-I4-ONE-WAY",
+    "SG-I4-TEST-SEAMS"
+  ]
+}

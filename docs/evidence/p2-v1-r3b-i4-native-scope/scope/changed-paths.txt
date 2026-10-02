@@ -1,0 +1,126 @@
+P2-V1-R3B-I4 changed paths before the commit (worktree status against the base), 2026-10-02T21:45:07Z
+$ git status --porcelain=v1 --untracked-files=all
+ M crates/nexus-verifier-sandbox/src/execution.rs
+ M crates/nexus-verifier-sandbox/src/execution/tests.rs
+ M crates/nexus-verifier-sandbox/src/fault.rs
+ M crates/nexus-verifier-sandbox/src/launcher.rs
+ M crates/nexus-verifier-sandbox/src/scope.rs
+ M docs/security/phase2-governed-verification.md
+?? crates/nexus-verifier-sandbox/src/scope/manager.rs
+?? crates/nexus-verifier-sandbox/src/scope/native.rs
+?? crates/nexus-verifier-sandbox/src/scope/pending.rs
+?? crates/nexus-verifier-sandbox/src/scope/tests.rs
+?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/module-self-review.md
+?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/ownership-transition-matrix.md
+?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/panic-fault-matrix.md
+?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/remote-operation-state-matrix.md
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/api_guards.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/assemble.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/candidate_runs.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/checks.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/citations.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/compare_reruns.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/compare_runs.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/coverage.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/custody_hashes.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/make_snapshot.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/no_live.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/normalize.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/post_commit.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/preflight.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/restoration.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/review_searches.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/scope.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/scope_controls.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/source_guards.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/stability.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/validate.sh
+
+$ python3 -B docs/evidence/p2-v1-r3b-i4-native-scope/scripts/scope.py . 3805204f941d9694b2c0c36549d32a5f4e6c157c
+mode: worktree status against the base (before the commit)
+base: 3805204f941d9694b2c0c36549d32a5f4e6c157c
+changed paths (35):
+  M  crates/nexus-verifier-sandbox/src/execution.rs
+  M  crates/nexus-verifier-sandbox/src/execution/tests.rs
+  M  crates/nexus-verifier-sandbox/src/fault.rs
+  M  crates/nexus-verifier-sandbox/src/launcher.rs
+  M  crates/nexus-verifier-sandbox/src/scope.rs
+  ?? crates/nexus-verifier-sandbox/src/scope/manager.rs
+  ?? crates/nexus-verifier-sandbox/src/scope/native.rs
+  ?? crates/nexus-verifier-sandbox/src/scope/pending.rs
+  ?? crates/nexus-verifier-sandbox/src/scope/tests.rs
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/module-self-review.md
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/ownership-transition-matrix.md
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/panic-fault-matrix.md
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/remote-operation-state-matrix.md
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/api_guards.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/assemble.sh
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/candidate_runs.sh
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/checks.sh
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/citations.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/compare_reruns.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/compare_runs.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/coverage.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/custody_hashes.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/make_snapshot.sh
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/no_live.sh
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/normalize.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/post_commit.sh
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/preflight.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/restoration.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/review_searches.sh
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/scope.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/scope_controls.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/source_guards.py
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/stability.sh
+  ?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/validate.sh
+  M  docs/security/phase2-governed-verification.md
+protected files (SHA-256 at the base, and now; absent at both is unchanged):
+  same a235a6007dbbf59449fb15b8c5fa10d42a970643023527385b51f6aaab0047eb crates/nexus-verifier-sandbox/src/helper.rs
+  same 32200d814f818dfc2ea095058d461508744393d05a449ca45ba874cdf2b5600b crates/nexus-verifier-sandbox/src/protocol.rs
+  same e93dbebbf65c2fa2ff4efb9d5c453cf113614c59fd1214bf3cc25b687d93a967 crates/nexus-verifier-sandbox/src/seccomp.rs
+  same 63a00e6d1321639403b2f6ceb374258dd634e4a9108472331ad83b218bf849db crates/nexus-verifier-sandbox/src/seccomp_policy.rs
+  same a616559c00ea63830fada621892913955024986db9211cc4cd011885314f924a crates/nexus-verifier-sandbox/src/landlock_rules.rs
+  same a7ef748b3480adbfc59bb9fe099652d3605fb54507f1111e08ea91b293d186d8 crates/nexus-verifier-sandbox/src/workspace.rs
+  same 68ca208026ab800e2f2b9599525bf6f313b226e1a9050643c248af531fd95867 crates/nexus-verifier-sandbox/src/toolchain.rs
+  same 941d4f61af103ff0bca584f8ab86404ba595af22c644481ad971159493e407f6 crates/nexus-verifier-sandbox/src/toolchain/contract.rs
+  same 40b34efa6cd6a812e055ed823f1d1a46f2e04dab168e67f37e4ffe27fb084ea3 crates/nexus-verifier-sandbox/src/policy.rs
+  same 2428529a1d6760392807fdd617a9516c5886b7492d1a3387fd2ac3ac5dc02dcc crates/nexus-verifier-sandbox/src/profile.rs
+  same 78218097c503b87aa57d9ab6a92e9a4b706b07528e39349cd67bf33aca54c0b9 crates/nexus-verifier-sandbox/src/profile_launch.rs
+  same 46e641f3aba1637afb044bd3a23f47a67850758e67ccf3a951fb0c5c481e535f crates/nexus-verifier-sandbox/src/applicability.rs
+  same 127ecd3ee7eea7c978d08281dd620f2a21b3e81e7632320366728803619cb9f5 crates/nexus-verifier-sandbox/src/hash.rs
+  same a79a8ffa928c375fd45a0eac6b4fee7270fac0947aaa1c5f828e592c919b084e crates/nexus-verifier-sandbox/src/sys.rs
+  same c6ef842ff2c8f59268f746fb80f7996a8e2bf3755fc3995c837c8af9607cda9f crates/nexus-verifier-sandbox/src/main.rs
+  same 1c95a293acd51440b57885e8ac3fec98d391cc53ef00eef9cfe16f5b8b185c81 crates/nexus-verifier-sandbox/Cargo.toml
+  same ab7831217f4b8e83f2e3dbb18cc745ad9ea8949249682c3be8b6f8ff7fb9edde crates/nexus-verifier-sandbox/build.rs
+  same 237389b518a148ade23eeebad7ff7c093c5b698ef60c20b0b9de32027a464082 Cargo.toml
+  same a50216382d813af53e272bd2c56e818adf59993481cc8f9aade25dfd67a53d69 Cargo.lock
+  same fc7f9811196c9d9db1864dd140fa4b7632cda9b7761ed8736256b463c835d298 rust-toolchain.toml
+  same 9a2996f84a92e4bd4dbea978a18775f768ca37a1399b0645d1c6db55b9eca02f AGENTS.md
+  same 4ee2d6b73f0dc9f51638f3cdfee315f6f6efd8f2be3e2279104264bbc7bdb46c CLAUDE.md
+  same (absent) .gitattributes
+  same f2f79558499ab67a5786fcd5a9eddca4043117d65df288aecca86b0720f1bae8 .gitignore
+  same bc75d0385a39dfe4c4e21ec6a06cee79a43dbc42df7c198910bf134ee2aebb2e docs/architecture/p2-custody-durable-recorder-design.md
+  same 14611fadf1f9756d521de017c7532994e289103a66bddfb450bb968c2603fc4e docs/architecture/p2-custody-store-implementation-boundary.md
+protected trees (no path under them changed):
+  unchanged crates/nexus-verifier-sandbox/tests
+  unchanged crates/nexus-verifier-sandbox/src/applicability
+  unchanged crates/nexus-verifier-sandbox/src/policy
+  unchanged crates/nexus-verifier-sandbox/src/profile
+  unchanged crates/nexus-verifier-sandbox/src/protocol
+  unchanged crates/nexus-verifier-sandbox/src/seccomp_policy
+  unchanged crates/nexus-verifier-sandbox/src/toolchain
+  unchanged crates/nexus-verifier-sandbox/src/workspace
+  unchanged .github
+  unchanged packaging
+  unchanged app
+  unchanged docs/evidence/p2-v1-r3b-i3-i1
+  unchanged docs/evidence/p2-v1-r3b-i3-i1-r1
+  unchanged docs/evidence/p2-v1-r3b-i3-i1-r2
+  unchanged docs/evidence/p2-v1-r3b-i3-i1-r3
+  unchanged docs/evidence/p2-v1-r3b-i3-p-r1
+  unchanged docs/evidence/p2-v1-r3b-i3-p-r2
+  unchanged docs/evidence/p2-v1-r3b-i3-p-r3
+  unchanged docs/evidence/p2-v1-r3b-i3-p-r4
+  unchanged docs/evidence/p2-v1-r3b-i3-p-r5
+RESULT: PASS

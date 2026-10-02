@@ -1,0 +1,22 @@
+
+running 1 test
+test execution::tests::i4_15_a_membership_mismatch_never_launches ... FAILED
+
+failures:
+
+---- execution::tests::i4_15_a_membership_mismatch_never_launches stdout ----
+
+thread 'execution::tests::i4_15_a_membership_mismatch_never_launches' (551285) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:790:5:
+a cgroup that does not list the helper was proven: Some(Launch(SetupFailed { stage: Protocol, errno: 0 }))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4_15_a_membership_mismatch_never_launches
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 89 filtered out; finished in 0.32s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.35s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

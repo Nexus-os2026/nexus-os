@@ -1,0 +1,24 @@
+
+running 1 test
+test execution::tests::i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained ... FAILED
+
+failures:
+
+---- execution::tests::i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained stdout ----
+
+thread 'execution::tests::i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained' (550757) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:696:5:
+assertion `left == right` failed: manager absence alone confirmed an operation whose helper is in a cgroup of its unit
+  left: SandboxUnavailable
+ right: CleanupFailed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 89 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.48s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

@@ -1,0 +1,35 @@
+ M crates/nexus-verifier-sandbox/src/execution.rs
+ M crates/nexus-verifier-sandbox/src/execution/tests.rs
+ M crates/nexus-verifier-sandbox/src/fault.rs
+ M crates/nexus-verifier-sandbox/src/launcher.rs
+ M crates/nexus-verifier-sandbox/src/scope.rs
+ M docs/security/phase2-governed-verification.md
+?? crates/nexus-verifier-sandbox/src/scope/manager.rs
+?? crates/nexus-verifier-sandbox/src/scope/native.rs
+?? crates/nexus-verifier-sandbox/src/scope/pending.rs
+?? crates/nexus-verifier-sandbox/src/scope/tests.rs
+?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/module-self-review.md
+?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/ownership-transition-matrix.md
+?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/panic-fault-matrix.md
+?? docs/evidence/p2-v1-r3b-i4-native-scope/matrices/remote-operation-state-matrix.md
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/api_guards.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/assemble.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/candidate_runs.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/checks.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/citations.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/compare_reruns.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/compare_runs.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/coverage.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/custody_hashes.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/make_snapshot.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/no_live.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/normalize.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/post_commit.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/preflight.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/restoration.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/review_searches.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/scope.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/scope_controls.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/source_guards.py
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/stability.sh
+?? docs/evidence/p2-v1-r3b-i4-native-scope/scripts/validate.sh

@@ -1,0 +1,22 @@
+
+running 1 test
+test f01_header_bytes_are_assigned_and_checked ... FAILED
+
+failures:
+
+---- f01_header_bytes_are_assigned_and_checked stdout ----
+
+thread 'f01_header_bytes_are_assigned_and_checked' (573221) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:829:9:
+[exact-bytes] reserved 60..64: a checksum-valid header breaking a rule is invalid
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    f01_header_bytes_are_assigned_and_checked
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.06s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.09s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

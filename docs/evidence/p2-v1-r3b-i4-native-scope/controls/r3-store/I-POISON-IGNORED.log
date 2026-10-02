@@ -1,0 +1,30 @@
+
+running 1 test
+test r04_worker_loss_vanishing_and_poisoning ... FAILED
+
+failures:
+
+---- r04_worker_loss_vanishing_and_poisoning stdout ----
+
+thread 'custody-recorder' (588928) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:4825:13:
+fixture: the worker panics at Take
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread '<unnamed>' (588930) panicked at crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs:304:13:
+fixture: a panic while the exchange mutex is held
+
+thread 'r04_worker_loss_vanishing_and_poisoning' (588927) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:4915:5:
+assertion `left == right` failed: [fatal-total] a poisoned mutex
+  left: None
+ right: Some((Poisoned, 1))
+
+
+failures:
+    r04_worker_loss_vanishing_and_poisoning
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.02s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.96s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

@@ -1,0 +1,420 @@
+{
+  "summary": {
+    "identical": true,
+    "status_restored": true,
+    "positive_control": true,
+    "guards": 19,
+    "guards_by_kind": {
+      "visibility": 13,
+      "trait-property": 6
+    },
+    "harness_check": true,
+    "all_required": true,
+    "failures": []
+  },
+  "positive": {
+    "id": "P-I4-POSITIVE-CONTROL",
+    "kind": "positive",
+    "exit": 0,
+    "errors": [],
+    "ok": true
+  },
+  "guards": [
+    {
+      "id": "P-I4-PENDING-NEW",
+      "kind": "visibility",
+      "attempt": "construct a pending scope operation outside the crate (from a unit name and a process id)",
+      "why": "only ScopeManager::prepare creates one, bound to the retained helper and the issuing connection",
+      "expected": [
+        "error[E0624]: associated function `new` is private"
+      ],
+      "errors": [
+        "error[E0624]: associated function `new` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs",
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-PENDING-STATE",
+      "kind": "visibility",
+      "attempt": "mark a pending operation settled, or never issued, from outside",
+      "why": "only settling (reconcile) confirms an operation gone",
+      "expected": [
+        "error[E0616]: field `issued` of struct `PendingScope` is private",
+        "error[E0616]: field `settled` of struct `PendingScope` is private"
+      ],
+      "errors": [
+        "error[E0616]: field `issued` of struct `PendingScope` is private",
+        "error[E0616]: field `settled` of struct `PendingScope` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-PENDING-CANDIDATE",
+      "kind": "visibility",
+      "attempt": "drop or replace a pending operation's retained candidate",
+      "why": "cleanup ownership of the candidate cannot be released from outside",
+      "expected": [
+        "error[E0616]: field `candidate` of struct `PendingScope` is private"
+      ],
+      "errors": [
+        "error[E0616]: field `candidate` of struct `PendingScope` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope/native.rs",
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-PENDING-UNIT",
+      "kind": "visibility",
+      "attempt": "rebind a pending operation to another unit name",
+      "why": "the unit name is the request's locator, fixed when the operation is prepared",
+      "expected": [
+        "error[E0616]: field `unit` of struct `PendingScope` is private"
+      ],
+      "errors": [
+        "error[E0616]: field `unit` of struct `PendingScope` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-PENDING-RECONCILE",
+      "kind": "visibility",
+      "attempt": "settle a pending operation with fault injection, or without its helper",
+      "why": "outside the crate only settle(&Helper) exists",
+      "expected": [
+        "error[E0624]: method `reconcile` is private"
+      ],
+      "errors": [
+        "error[E0624]: method `reconcile` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-SCOPE-FORGE",
+      "kind": "visibility",
+      "attempt": "build a proven scope from a unit name and a directory",
+      "why": "the only way to a Scope is a pending operation whose every proof passed",
+      "expected": [
+        "error[E0451]: fields `unit` and `dir` of struct `nexus_verifier_sandbox::scope::Scope` are private"
+      ],
+      "errors": [
+        "error[E0451]: fields `unit` and `dir` of struct `nexus_verifier_sandbox::scope::Scope` are private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs",
+        "crates/nexus-verifier-sandbox/src/scope/native.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-BOUNDARY-TYPE",
+      "kind": "visibility",
+      "attempt": "name the scope boundary (None/Pending/Proven) to promote or reset it",
+      "why": "the transitions are internal: establish (Pending -> Proven) and settling",
+      "expected": [
+        "error[E0603]: enum `ScopeBoundary` is private"
+      ],
+      "errors": [
+        "error[E0603]: enum `ScopeBoundary` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs",
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-RETAINED-SCOPE",
+      "kind": "visibility",
+      "attempt": "take or replace the retained boundary's scope operation",
+      "why": "a retained boundary is ended only by retry, or (defense in depth) its drop",
+      "expected": [
+        "error[E0616]: field `scope` of struct `RetainedBoundary` is private"
+      ],
+      "errors": [
+        "error[E0616]: field `scope` of struct `RetainedBoundary` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs",
+        "crates/nexus-verifier-sandbox/src/scope.rs",
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-MANAGER-MODULE",
+      "kind": "visibility",
+      "attempt": "provide a caller's manager transport (destination, interface, replies)",
+      "why": "the only manager in a normal build is the crate's own, to the fixed destination",
+      "expected": [
+        "error[E0603]: module `manager` is private"
+      ],
+      "errors": [
+        "error[E0603]: module `manager` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs",
+        "crates/nexus-verifier-sandbox/src/scope/manager.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-NATIVE-MODULE",
+      "kind": "visibility",
+      "attempt": "provide a caller's kernel view (membership, cgroup directories)",
+      "why": "membership and cgroups are observed only through /proc and the cgroup v2 hierarchy",
+      "expected": [
+        "error[E0603]: module `native` is private"
+      ],
+      "errors": [
+        "error[E0603]: module `native` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs",
+        "crates/nexus-verifier-sandbox/src/scope/native.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-WITH-CONTROLLER",
+      "kind": "visibility",
+      "attempt": "build a scope manager over a caller's controller in a normal build",
+      "why": "the deterministic simulation exists only in the crate's own unit tests",
+      "expected": [
+        "error[E0599]: no function or associated item named `with_controller` found for struct `ScopeManager` in the current scope"
+      ],
+      "errors": [
+        "error[E0599]: no function or associated item named `with_controller` found for struct `ScopeManager` in the current scope"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-PREPARE",
+      "kind": "visibility",
+      "attempt": "prepare an operation outside the execution's owner",
+      "why": "the execution stores the operation before establishing it; start() owns its own",
+      "expected": [
+        "error[E0624]: method `prepare` is private"
+      ],
+      "errors": [
+        "error[E0624]: method `prepare` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-HELPER-SERIAL",
+      "kind": "visibility",
+      "attempt": "read the helper's binding identity",
+      "why": "a binding, never an authority a caller presents",
+      "expected": [
+        "error[E0624]: method `serial` is private"
+      ],
+      "errors": [
+        "error[E0624]: method `serial` is private"
+      ],
+      "exact": true,
+      "reopen_files": [
+        "crates/nexus-verifier-sandbox/src/launcher.rs"
+      ],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-PENDING-CLONE",
+      "kind": "trait-property",
+      "attempt": "copy a pending operation (two owners of one possible effect)",
+      "why": "one owner per possible effect",
+      "expected": [
+        "error[E0277]: the trait bound `PendingScope: Clone` is not satisfied"
+      ],
+      "errors": [
+        "error[E0277]: the trait bound `PendingScope: Clone` is not satisfied"
+      ],
+      "exact": true,
+      "reopen_files": [],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-RETAINED-CLONE",
+      "kind": "trait-property",
+      "attempt": "copy a retained boundary",
+      "why": "one owner per unconfirmed boundary",
+      "expected": [
+        "error[E0277]: the trait bound `RetainedBoundary: Clone` is not satisfied"
+      ],
+      "errors": [
+        "error[E0277]: the trait bound `RetainedBoundary: Clone` is not satisfied"
+      ],
+      "exact": true,
+      "reopen_files": [],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-SCOPE-CLONE",
+      "kind": "trait-property",
+      "attempt": "copy a proven scope",
+      "why": "one retained descriptor per scope",
+      "expected": [
+        "error[E0277]: the trait bound `nexus_verifier_sandbox::scope::Scope: Clone` is not satisfied"
+      ],
+      "errors": [
+        "error[E0277]: the trait bound `nexus_verifier_sandbox::scope::Scope: Clone` is not satisfied"
+      ],
+      "exact": true,
+      "reopen_files": [],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-PENDING-SERIALIZE",
+      "kind": "trait-property",
+      "attempt": "serialize a pending operation (to reconstruct it after a restart)",
+      "why": "no serialized PendingScope; nothing is reconstructed across a restart",
+      "expected": [
+        "error[E0277]: the trait bound `PendingScope: serde::Serialize` is not satisfied"
+      ],
+      "errors": [
+        "error[E0277]: the trait bound `PendingScope: serde::Serialize` is not satisfied"
+      ],
+      "exact": true,
+      "reopen_files": [],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-PENDING-DESERIALIZE",
+      "kind": "trait-property",
+      "attempt": "deserialize a pending operation from a saved record",
+      "why": "no PendingScope from a saved unit string or record",
+      "expected": [
+        "error[E0277]: the trait bound `PendingScope: serde::de::DeserializeOwned` is not satisfied"
+      ],
+      "errors": [
+        "error[E0277]: the trait bound `PendingScope: serde::de::DeserializeOwned` is not satisfied"
+      ],
+      "exact": true,
+      "reopen_files": [],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-RETAINED-DESERIALIZE",
+      "kind": "trait-property",
+      "attempt": "deserialize a retained boundary from a saved record",
+      "why": "a retained boundary exists only in the backend process that created it",
+      "expected": [
+        "error[E0277]: the trait bound `RetainedBoundary: serde::de::DeserializeOwned` is not satisfied"
+      ],
+      "errors": [
+        "error[E0277]: the trait bound `RetainedBoundary: serde::de::DeserializeOwned` is not satisfied"
+      ],
+      "exact": true,
+      "reopen_files": [],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    },
+    {
+      "id": "P-I4-HARNESS-CHECK",
+      "kind": "harness",
+      "attempt": "a deliberate type error",
+      "why": "proves that the harness sees build errors",
+      "expected": [
+        "error[E0308]: mismatched types"
+      ],
+      "errors": [
+        "error[E0308]: mismatched types"
+      ],
+      "exact": true,
+      "reopen_files": [],
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "sources_restored": true,
+      "ok": true
+    }
+  ]
+}

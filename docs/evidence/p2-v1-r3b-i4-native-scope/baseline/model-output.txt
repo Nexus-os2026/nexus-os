@@ -1,0 +1,76 @@
+SOURCE-DERIVED MODEL of base 3805204f (scope.rs, execution.rs): not the production D-Bus implementation.
+Representable ownership in the base: Owned/RetainedBoundary = (Option<Scope>, Option<Helper>); no pending state.
+
+SCENARIO control: start delivered, placed, proof ok
+  remote: start effect CreatedPlaced, start reply Delivered, proof Ok, stop effect true, stop reply Delivered
+  base start result: Scope { descriptor: true }; StopUnit called: false; its result used: false
+  base ownership after finalization: scope Some("proven Scope"), helper retained false, cleanup confirmed true
+  actual remote state left (unknown to Nexus): none
+  cgroup observed through a retained descriptor: true
+  classification: (proceeds to launch)
+  verdict: representable
+
+SCENARIO start had no effect, reply lost
+  remote: start effect None, start reply Lost, proof Ok, stop effect true, stop reply Delivered
+  base start result: Bus("StartTransientUnit timed out"); StopUnit called: false; its result used: false
+  base ownership after finalization: scope None, helper retained false, cleanup confirmed true
+  actual remote state left (unknown to Nexus): none
+  cgroup observed through a retained descriptor: false
+  classification: NotRun::Scope + Cleanup::Confirmed => SandboxUnavailable
+  verdict: representable
+
+SCENARIO start took effect (placed), reply lost
+  remote: start effect CreatedPlaced, start reply Lost, proof Ok, stop effect true, stop reply Delivered
+  base start result: Bus("StartTransientUnit timed out"); StopUnit called: false; its result used: false
+  base ownership after finalization: scope None, helper retained false, cleanup confirmed true
+  actual remote state left (unknown to Nexus): a unit emptied only by the helper's reap: lingering or not is the manager's decision
+  cgroup observed through a retained descriptor: false
+  classification: NotRun::Scope + Cleanup::Confirmed => SandboxUnavailable
+  verdict: COUNTEREXAMPLE (b): a possible remote effect left without a retained owner and confirmed unobserved (unrepresentable in Option<Scope>)
+
+SCENARIO start took effect (not placed), reply lost
+  remote: start effect CreatedNotPlaced, start reply Lost, proof Ok, stop effect true, stop reply Delivered
+  base start result: Bus("StartTransientUnit timed out"); StopUnit called: false; its result used: false
+  base ownership after finalization: scope None, helper retained false, cleanup confirmed true
+  actual remote state left (unknown to Nexus): a unit the helper never entered (its manager does not stop an empty scope)
+  cgroup observed through a retained descriptor: false
+  classification: NotRun::Scope + Cleanup::Confirmed => SandboxUnavailable
+  verdict: COUNTEREXAMPLE (a): the remote effect survives; Nexus owns nothing and reports Cleanup::Confirmed
+
+SCENARIO not placed; stop took effect, reply lost
+  remote: start effect CreatedNotPlaced, start reply Delivered, proof Ok, stop effect true, stop reply Lost
+  base start result: NotPlaced; StopUnit called: true; its result used: false
+  base ownership after finalization: scope None, helper retained false, cleanup confirmed true
+  actual remote state left (unknown to Nexus): none
+  cgroup observed through a retained descriptor: false
+  classification: NotRun::Scope + Cleanup::Confirmed => SandboxUnavailable
+  verdict: COUNTEREXAMPLE (b): a possible remote effect left without a retained owner and confirmed unobserved (unrepresentable in Option<Scope>)
+
+SCENARIO not placed; stop had no effect, reply lost
+  remote: start effect CreatedNotPlaced, start reply Delivered, proof Ok, stop effect false, stop reply Lost
+  base start result: NotPlaced; StopUnit called: true; its result used: false
+  base ownership after finalization: scope None, helper retained false, cleanup confirmed true
+  actual remote state left (unknown to Nexus): a unit the helper never entered (its manager does not stop an empty scope)
+  cgroup observed through a retained descriptor: false
+  classification: NotRun::Scope + Cleanup::Confirmed => SandboxUnavailable
+  verdict: COUNTEREXAMPLE (a): the remote effect survives; Nexus owns nothing and reports Cleanup::Confirmed
+
+SCENARIO placed; property proof uncertain; stop took effect, reply lost
+  remote: start effect CreatedPlaced, start reply Delivered, proof Uncertain, stop effect true, stop reply Lost
+  base start result: Bus("Get timed out"); StopUnit called: true; its result used: false
+  base ownership after finalization: scope None, helper retained false, cleanup confirmed true
+  actual remote state left (unknown to Nexus): none
+  cgroup observed through a retained descriptor: false
+  classification: NotRun::Scope + Cleanup::Confirmed => SandboxUnavailable
+  verdict: COUNTEREXAMPLE (b): a possible remote effect left without a retained owner and confirmed unobserved (unrepresentable in Option<Scope>)
+
+SCENARIO placed; property proof uncertain; stop had no effect, reply lost
+  remote: start effect CreatedPlaced, start reply Delivered, proof Uncertain, stop effect false, stop reply Lost
+  base start result: Bus("Get timed out"); StopUnit called: true; its result used: false
+  base ownership after finalization: scope None, helper retained false, cleanup confirmed true
+  actual remote state left (unknown to Nexus): a unit emptied only by the helper's reap: lingering or not is the manager's decision
+  cgroup observed through a retained descriptor: false
+  classification: NotRun::Scope + Cleanup::Confirmed => SandboxUnavailable
+  verdict: COUNTEREXAMPLE (b): a possible remote effect left without a retained owner and confirmed unobserved (unrepresentable in Option<Scope>)
+
+counterexamples: 6 of 8

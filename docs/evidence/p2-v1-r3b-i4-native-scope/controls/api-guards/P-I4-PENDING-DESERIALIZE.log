@@ -1,0 +1,26 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+error[E0277]: the trait bound `PendingScope: serde::de::DeserializeOwned` is not satisfied
+  --> crates/nexus-verifier-sandbox/tests/i4_api_probe.rs:21:16
+   |
+21 |     restored::<PendingScope>();
+   |                ^^^^^^^^^^^^ the trait `for<'de> Deserialize<'de>` is not implemented for `PendingScope`
+   |
+   = help: the following other types implement trait `Deserialize<'de>`:
+             `&'a [u8]` implements `Deserialize<'de>`
+             `&'a std::path::Path` implements `Deserialize<'de>`
+             `&'a str` implements `Deserialize<'de>`
+             `()` implements `Deserialize<'de>`
+             `(T,)` implements `Deserialize<'de>`
+             `(T0, T1)` implements `Deserialize<'de>`
+             `(T0, T1, T2)` implements `Deserialize<'de>`
+             `(T0, T1, T2, T3)` implements `Deserialize<'de>`
+           and 179 others
+   = note: required for `PendingScope` to implement `DeserializeOwned`
+note: required by a bound in `restored`
+  --> crates/nexus-verifier-sandbox/tests/i4_api_probe.rs:20:20
+   |
+20 |     fn restored<T: serde::de::DeserializeOwned>() {}
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `restored`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `nexus-verifier-sandbox` (test "i4_api_probe") due to 1 previous error

@@ -1,0 +1,14 @@
+P2-V1-R3B-I4 baseline commands (base 3805204f941d9694b2c0c36549d32a5f4e6c157c, tree 43d4446e1a5b4f5d333798218c4538b3025679b4)
+
+A. Exact source-control-flow evidence, read from the base commit's Git objects (never a worktree):
+$ python3 -B extract_findings.py /home/nexus/NEXUS/nexus-os-p2-v1-native-scope-ownership 3805204f941d9694b2c0c36549d32a5f4e6c157c > source-findings.txt
+exit 0 (RESULT: every excerpt holds its needles)
+
+B. Source-derived executable model (standard library only; not the production D-Bus implementation; touches no systemd, D-Bus or cgroup):
+$ rustc --edition 2021 -O -o <scratch>/scope_ownership_model scope_ownership_model.rs > model-build.txt 2>&1
+exit 0 (no compiler output)
+$ <scratch>/scope_ownership_model > model-output.txt
+exit 0 (counterexamples: 6 of 8)
+
+No base production source was modified to produce this evidence. No real StartTransientUnit,
+StopUnit or timeout was exercised: the base has no injectable D-Bus transport.

@@ -1,0 +1,18 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+error[E0603]: module `native` is private
+  --> crates/nexus-verifier-sandbox/tests/i4_api_probe.rs:20:52
+   |
+20 |     fn view(_: &dyn nexus_verifier_sandbox::scope::native::Native) {}
+   |                                                    ^^^^^^  ------ trait `Native` is not publicly re-exported
+   |                                                    |
+   |                                                    private module
+   |
+note: the module `native` is defined here
+  --> crates/nexus-verifier-sandbox/src/scope.rs:51:1
+   |
+51 | mod native;
+   | ^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "i4_api_probe") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

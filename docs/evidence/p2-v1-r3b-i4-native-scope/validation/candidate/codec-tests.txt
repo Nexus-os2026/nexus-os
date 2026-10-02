@@ -1,0 +1,28 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.80s
+     Running tests/phase2_custody_codec.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/validation/debug/deps/phase2_custody_codec-9296cffc986e9dd6)
+
+running 21 tests
+test c00_format_constants_are_the_documented_ones ... ok
+test c02_request_golden_vectors_decode_encode_and_digest_exactly ... ok
+test c13_request_receipts_bind_the_full_payload ... ok
+test c12_core_refuses_acknowledgements_for_altered_bytes ... ok
+test c11_core_issued_records_encode_decode_and_check ... ok
+test custody::core::commitment_boundary::r2a_commit_boundary_installs_only_before_the_custody_is_shared ... ok
+test c10_frames_never_cross_domains ... ok
+test c17_core_retains_the_canonical_request_digest_in_its_receipts ... ok
+test custody::core::commitment_boundary::r2a_cancellation_accepted_at_the_commitment_entry_fails_the_run ... ok
+test custody::core::commitment_boundary::r2a_commitment_excludes_cancellation_between_its_decision_and_its_record ... ok
+test c03_vectors_cover_every_variant_tag_and_form ... ok
+test c04_decoding_takes_exactly_one_complete_frame ... ok
+test c06_invalid_tags_booleans_and_presence_bytes_are_refused ... ok
+test c01_record_golden_vectors_decode_encode_and_digest_exactly ... ok
+test c05_envelope_refusals_come_before_any_field ... ok
+test c15_decoding_is_plain_data_without_authority ... ok
+test c16_core_digest_paths_use_the_codec ... ok
+test c09_digests_bind_every_identity_instant_variant_and_field ... ok
+test c07_digest_and_payload_mutations_are_detected ... ok
+test c08_every_payload_byte_is_bound_canonically ... ok
+test c14_malformed_corpus_is_refused_or_canonical ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.84s

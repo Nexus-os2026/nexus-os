@@ -1,0 +1,24 @@
+
+running 1 test
+test r328_no_new_public_authority_bearing_interface ... FAILED
+
+failures:
+
+---- r328_no_new_public_authority_bearing_interface stdout ----
+
+thread 'r328_no_new_public_authority_bearing_interface' (616052) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:12705:5:
+assertion `left == right` failed: [successor-cleanup-recursive] the I/O trait's operations
+  left: ["root_dir", "open_dir", "stat_at", "stat_dir", "stat_file", "list_dir", "open_read", "open_write", "open_dir_for_sync", "flock", "pread", "pwrite", "fdatasync", "fsync", "touch", "random", "create_exclusive", "make_dir", "link", "rename", "unlink", "remove_dir", "remove_tree", "allocate", "set_owner"]
+ right: ["root_dir", "open_dir", "stat_at", "stat_dir", "stat_file", "list_dir", "open_read", "open_write", "open_dir_for_sync", "flock", "pread", "pwrite", "fdatasync", "fsync", "touch", "random", "create_exclusive", "make_dir", "link", "rename", "unlink", "remove_dir", "allocate", "set_owner"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r328_no_new_public_authority_bearing_interface
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.57s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

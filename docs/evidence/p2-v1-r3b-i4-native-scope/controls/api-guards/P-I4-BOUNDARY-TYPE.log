@@ -1,0 +1,16 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+error[E0603]: enum `ScopeBoundary` is private
+  --> crates/nexus-verifier-sandbox/tests/i4_api_probe.rs:20:62
+   |
+20 |     fn promote(boundary: &mut nexus_verifier_sandbox::scope::ScopeBoundary) {}
+   |                                                              ^^^^^^^^^^^^^ private enum
+   |
+note: the enum `ScopeBoundary` is defined here
+  --> crates/nexus-verifier-sandbox/src/scope.rs:59:16
+   |
+59 | pub(crate) use pending::ScopeBoundary;
+   |                ^^^^^^^^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "i4_api_probe") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

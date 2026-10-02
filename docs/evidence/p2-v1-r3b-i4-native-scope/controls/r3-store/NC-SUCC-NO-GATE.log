@@ -1,0 +1,22 @@
+
+running 1 test
+test v12_no_succession_operation_precedes_its_gate ... FAILED
+
+failures:
+
+---- v12_no_succession_operation_precedes_its_gate stdout ----
+
+thread 'v12_no_succession_operation_precedes_its_gate' (604032) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:9526:10:
+[succession-gate] overtaken: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v12_no_succession_operation_precedes_its_gate
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.03s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.03s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

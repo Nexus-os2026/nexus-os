@@ -109,7 +109,9 @@ desktop verification driver (long-lived thread; owns the execution)
   death signal follows the parent *thread*).
 - The driver places the helper in a new transient scope (§9) and proves the
   membership from the kernel's view of the retained, unreaped child before
-  sending the launch message.
+  sending the launch message. From before its request is issued, the
+  possible scope is owned as a pending scope operation until it is proven
+  or confirmed gone (P2-V1-R3B-I4, §9).
 - The helper validates the typed launch message (bounded sizes, at most 32
   descriptors each of the kind its role requires, compiled policy hash must
   match), `unshare`s the six namespaces in one call, reports, and waits
@@ -131,9 +133,9 @@ desktop verification driver (long-lived thread; owns the execution)
   chain (driver → helper → init) and the scope's runtime backstop cover
   crashes. `cgroup.kill` is the finalization backstop.
 - A panic never abandons a live execution (P2-R1, section 9): the helper,
-  the scope and the output threads are owned outside every closure that
-  can panic, and one finalizer runs whether the launch and the wait return
-  or panic.
+  the scope (pending or proven) and the output threads are owned outside
+  every closure that can panic, and one finalizer runs whether the launch
+  and the wait return or panic.
 
 ## 6. Landlock policy (roles → rights; host ABI ≥ 6, handled rights = all ABI 1–5 filesystem rights, TCP bind/connect, both ABI 6 scopes)
 
@@ -212,6 +214,64 @@ directory, and it carries exactly the limits above, `memory.oom.group 0`,
 the runtime backstop and `OOMPolicy=continue` (an out-of-memory kill ends
 only the chosen process; the manager never stops the scope for it).
 
+Uncertain remote operations (P2-V1-R3B-I4). StartTransientUnit and StopUnit
+are remote operations whose effect and reply are independent. A timeout, a
+broken transport, an unexpected error reply or a reply that does not decode
+is evidence of uncertainty, never of absence or of success. The only
+definite answers relied on are a delivered reply, systemd's `UnitExists`
+(StartTransientUnit refused the name before any effect: that unit is not
+this request's and is never stopped or claimed) and `NoSuchUnit` (GetUnit:
+no unit of the name is loaded).
+
+- Ownership. From before StartTransientUnit is issued, the operation is
+  owned as a pending scope, stored in the execution's owner (later its
+  retained boundary) before the request can have an effect. It is bound to
+  the retained helper (its PID as locator, and a backend-local identity
+  that is never reused), the backend-random unit name (a locator, never
+  authority), the expected limits, and the manager connection that issued
+  the request, which it shares, so it outlives the `ScopeManager`. A scope
+  is None, Pending or Proven; Pending becomes Proven only once every proof
+  passed, in place, and nothing (handshake or launch) reaches the helper
+  while it is Pending.
+- An uncertain start. The request ended without effect only if the manager
+  answers, on the issuing connection after the request (one connection's
+  calls are answered in order), that no unit of the name is loaded, and the
+  kernel then reports the helper outside any cgroup of that name. Otherwise
+  the unit is discovered through the helper's membership and proven exactly
+  like an accepted one, or settled.
+- The candidate. The cgroup the kernel reports the helper in is retained by
+  descriptor as soon as it is seen, before any later fallible check
+  (populated, `cgroup.procs`, limits, GetUnit, `RuntimeMaxUSec`,
+  `OOMPolicy`), so no failed or uncertain check can lose it. It grants
+  cleanup ownership only, never scope authority. A kernel that shows the
+  helper in a cgroup of the unit's name the manager does not have loaded is
+  a contradiction: nothing is proven.
+- Settling. The helper is killed but stays unreaped until the operation is
+  confirmed gone: its PID stays reserved (a still-queued start job cannot
+  attach a reused id) and its membership observable. Everything in the
+  candidate is ended with `cgroup.kill`. The operation is confirmed gone
+  only when (a) the retained candidate is empty or removed (the helper was
+  seen in it, so the start job has run), exactly as for a proven scope; or
+  (b) without a candidate, the manager answers on the issuing connection
+  that no unit of the name is loaded and the kernel then reports the
+  helper outside any cgroup of that name. Otherwise `StopUnit` is
+  attempted: its reply is never a confirmation, and a failed or timed-out
+  one never proves that nothing was stopped; after every attempt the state
+  is observed again, within a bound. A collided operation is confirmed once
+  the helper is outside any cgroup of that name.
+- What cannot be confirmed is `CleanupFailed`. The pending operation stays
+  in the `RetainedBoundary` with the unreaped helper, and a retry reconciles
+  it again on the issuing connection, without the `ScopeManager` that
+  started the execution; there is no detached or background cleanup. A
+  scope failure is reported with confirmed cleanup (`SandboxUnavailable`)
+  only when absence or cleanup was actually established. Dropping an
+  unresolved operation ends what its candidate holds, without waiting and
+  without the manager, and never reaps its helper: defense in depth, never
+  a confirmation.
+- Nothing is reconstructed across a backend restart: no unit is found by a
+  name pattern, rebuilt from a saved unit string, or trusted from a PID, a
+  cgroup path or a serialized record.
+
 After its final report the helper sends that report only once the PID
 namespace init is reaped (the kernel has then ended every process of the
 namespace) and keeps the scope in existence until the backend releases it,
@@ -233,8 +293,9 @@ cleanup is confirmed. No PID-only cleanup and no startup sweep by name.
 
 Panic safety (P2-R1). `execution::run` never unwinds. Everything an
 execution creates is stored, as it is created, in an owner held in `run`'s
-own frame: the helper (before its output threads start), its scope (before
-any launch message), the output threads. The spawn, placement, launch and
+own frame: the helper (before its output threads start), its scope
+operation (pending before its request is issued, proven before any launch
+message), the output threads. The spawn, placement, launch and
 wait run behind `catch_unwind`; whether they return or panic, the same
 finalizer then runs over whatever exists: read the counters, `cgroup.kill`,
 kill the helper, a bounded reap, a bounded wait for the scope to be empty or
@@ -242,8 +303,11 @@ removed. A helper without a scope never received a launch, so reaping it
 ends everything it started. A panic inside the finalizer, or any step it
 cannot confirm, moves the scope and the unreaped helper into a
 `RetainedBoundary`, which a retry ends with the same steps (a panic while
-retrying keeps it retained). A scope whose proof panics is stopped
-(`StopUnit`) before the panic continues. A panicked execution is never a
+retrying keeps it retained). A panic while the scope is pending (before or
+after its request, while proving it, while stopping or reconciling it)
+leaves the pending operation with the execution, and the finalizer settles
+it like any other part of the boundary (P2-V1-R3B-I4). A panicked execution
+is never a
 pass: before its launch could reach the helper it is a setup failure
 (nothing untrusted ran); after it, `SandboxFailed` (an unknown result); a
 panicked output thread loses its record, which is `SandboxFailed` too.
@@ -596,6 +660,23 @@ package):
 | no arbitrary helper path in production | `p2_g_06_production_cannot_construct_a_helper_from_an_arbitrary_path`; a normal build of the desktop cannot name `HelperProgram::at` (it does not exist without the harness feature) |
 | the Linux package | `p2_g_08_the_linux_package_installs_the_verifier_runtime`; `packaging/verifier-toolchain/test/inspect-deb.test.mjs`; `tests/phase2_package_layout.rs`; the release job's inspection |
 
+P2-V1-R3B-I4 controls (uncertain scope operations). They run on every
+host, over a deterministic simulation of the user manager and the kernel
+that exists only in test builds (`scope/tests.rs`); nothing in them
+contacts a bus or creates a cgroup. Behavioural source-mutation controls
+(`NC-I4-*`), each restored exactly, showed each mechanism is load-bearing
+(`docs/evidence/p2-v1-r3b-i4-native-scope/`).
+
+| Control | Test |
+|---|---|
+| a confirmed start; a start without effect, its reply lost; with effect, its reply lost (discovered and proven); a lost connection | `i4_01`–`i4_03` (`scope::tests`) |
+| a property or a manager query uncertain after the candidate is retained; mismatched limits, runtime backstop, out-of-memory policy, membership; a name never proves | `i4_04`, `i4_10`, `i4_12`–`i4_16` |
+| a unit the helper never entered; `StopUnit` failed, delivered with the scope still populated, timed out with the target gone or remaining | `i4_05`–`i4_09` |
+| the manager's absence with the helper in a cgroup of the unit's name; a name collision | `i4_11`, `i4_17` |
+| no launch message before the proof | `i4_18` (a stand-in helper that shows any launch reaching it) |
+| finalization of a proven and of a pending scope; `CleanupFailed`; retry, also without the `ScopeManager`; drop | `i4_19`–`i4_24` |
+| a panic after the start request, after the candidate is retained, while proving, while stopping or reconciling; ordering; classification | `i4_25`–`i4_30` |
+
 CI: a dedicated exact-SHA workflow on the self-hosted runner
 (`.github/workflows/ci-phase2-linux-sandbox.yml`) runs the live suite and
 fails if a layer is missing. Hosted CI runs the portable tests and asserts
@@ -625,7 +706,7 @@ the eight runtime files) and with path-based metadata mutation denied.
 | Spawn a process | `launcher::Helper::spawn` (the only `Command::new` in the sandbox crate) | only `execution::run`, only from the desktop's verification module after the owner's recorded native approval; the program is `HelperProgram::installed()` (root-owned, `/usr/bin`, beside the installed application; the arbitrary-path `HelperProgram::at` and the other live-harness seams exist only for the sandbox crate's own tests, through its `live-sandbox-harness` feature, which only its own dev-dependency enables); cleared environment, no arguments, `/` as working directory, no `pre_exec` |
 | Execute project code | the helper's verifier child (`execveat` of the verified `cargo` by descriptor) | every mandatory layer established and re-checked first; any failure reports a setup stage and executes nothing |
 | Namespaces | the helper (`unshare` once) | uid/gid identity maps written only for the backend's own unreaped child; identities verified by `readlink` of `/proc/self/ns/*` |
-| cgroup scope | `scope::ScopeManager` over the user manager's fixed D-Bus interface | bus from the real uid, owner-checked; backend-random unit names; limits verified from the cgroup files; `StopUnit` only for a scope this call created and could not prove; kill, counters and emptiness through the retained descriptor |
+| cgroup scope | `scope::ScopeManager` over the user manager's fixed D-Bus interface | bus from the real uid, owner-checked; backend-random unit names; limits verified from the cgroup files; the operation owned as a pending scope from before its request until proven or confirmed gone (P2-V1-R3B-I4); `StopUnit` only for a pending operation's own unit, never for a unit the manager reported already loaded, and never taken as confirmation; kill, counters and emptiness through the retained descriptor |
 | Workspace | `workspace::WorkspaceRoot`/`Workspace` under `/run/user/<uid>/nexus-verifier` | uid-derived, walked without symlinks, owner-only, exclusive creation, identity-bound removal |
 | Toolchain | `toolchain::VerifiedVerifierToolchain::installed()` | embedded manifest, root-owned installed tree, host runtime checks, re-verified before each launch |
 | Candidate copy | `CodingRun::materialize_verification_input` | the retained staging handle, the verified manifest, an empty backend-created directory |
@@ -656,3 +737,21 @@ build-output directories.
   refused); the boundary itself stays owned.
 - Timing: a verification's generation binds the toolchain verification it
   was prepared with; a re-verification from scratch is a new binding.
+- Uncertain scope operations (P2-V1-R3B-I4) are validated against a
+  deterministic simulation, not on a supported host: that systemd answers
+  one connection's calls in order (a GetUnit answered after
+  StartTransientUnit sees its effect), handles StartTransientUnit for the
+  user manager synchronously, names `UnitExists` and `NoSuchUnit` as
+  relied on, and that `/proc/<pid>/cgroup` of an unreaped, killed helper
+  still names its cgroup (with ` (deleted)` once it is removed) remain to be
+  exercised live (G-HOST, G-LIVE).
+- A pending operation whose manager connection broke cannot be confirmed
+  through that connection: unless its retained candidate empties, it stays
+  `CleanupFailed` for the life of the backend process. No other connection
+  is trusted to answer for it.
+- The helper of an unresolved operation whose retained boundary is dropped
+  (defense in depth only) stays an unreaped zombie until the backend process
+  exits: its PID stays reserved.
+- On a host whose `/proc/<pid>/cgroup` is not the single unified line
+  (cgroup v1 or hybrid, unsupported), an operation that cannot be proven
+  absent is `CleanupFailed`, never `SandboxUnavailable`.

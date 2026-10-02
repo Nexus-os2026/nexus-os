@@ -1,0 +1,16 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+error[E0616]: field `settled` of struct `PendingScope` is private
+  --> crates/nexus-verifier-sandbox/tests/i4_api_probe.rs:21:13
+   |
+21 |     pending.settled = true;
+   |             ^^^^^^^ private field
+
+error[E0616]: field `issued` of struct `PendingScope` is private
+  --> crates/nexus-verifier-sandbox/tests/i4_api_probe.rs:22:13
+   |
+22 |     pending.issued = false;
+   |             ^^^^^^ private field
+
+For more information about this error, try `rustc --explain E0616`.
+error: could not compile `nexus-verifier-sandbox` (test "i4_api_probe") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...

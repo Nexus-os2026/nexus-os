@@ -16,6 +16,7 @@ use std::io;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use crate::helper::enforced_policy_hash;
@@ -170,7 +171,15 @@ pub struct HelperOutput {
 pub struct Helper {
     child: Child,
     control: OwnedFd,
+    /// This value's identity within the backend process, never reused
+    /// (P2-V1-R3B-I4): what a pending scope operation is bound to. Unlike
+    /// the process id, it cannot come to name another child once this one
+    /// is reaped. It is no authority by itself.
+    serial: u64,
 }
+
+/// The next helper's [`Helper::serial`].
+static NEXT_SERIAL: AtomicU64 = AtomicU64::new(1);
 
 impl Helper {
     /// Spawn the helper. Its environment is empty, it has no arguments, its
@@ -190,7 +199,11 @@ impl Helper {
             .map_err(LaunchError::Spawn)?;
         // The Command and its copies of the child's ends are gone here, so
         // the output pipes reach end of file when the verifier tree exits.
-        let mut helper = Helper { child, control };
+        let mut helper = Helper {
+            child,
+            control,
+            serial: NEXT_SERIAL.fetch_add(1, Ordering::Relaxed),
+        };
         if let Err(error) = helper.set_receive_timeout(Some(SETUP_STEP_TIMEOUT)) {
             // The helper is never left running or unreaped.
             let _ = helper.child.kill();
@@ -210,6 +223,12 @@ impl Helper {
     /// unreaped child only.
     pub fn pid(&self) -> u32 {
         self.child.id()
+    }
+
+    /// This retained helper's identity within the backend process (see the
+    /// field): binds a pending scope operation to exactly this child.
+    pub(crate) fn serial(&self) -> u64 {
+        self.serial
     }
 
     fn set_receive_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
@@ -358,7 +377,9 @@ impl Helper {
     /// the control channel ends a helper's hold on its scope after its
     /// final report.
     pub fn reap(self) -> io::Result<std::process::ExitStatus> {
-        let Self { mut child, control } = self;
+        let Self {
+            mut child, control, ..
+        } = self;
         drop(control);
         child.wait()
     }

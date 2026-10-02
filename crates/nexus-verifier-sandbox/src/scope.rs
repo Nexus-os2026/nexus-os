@@ -20,28 +20,53 @@
 //! good. Removal is recognised only through the retained descriptor: the
 //! `cgroup.events` file every live cgroup has is gone and the directory lists
 //! nothing.
+//!
+//! **Uncertain remote operations (P2-V1-R3B-I4).** StartTransientUnit and
+//! StopUnit are remote calls whose effect and reply are independent: a
+//! timeout or a broken transport proves nothing about what the manager did,
+//! and a reply proves nothing about what is left. So from the moment a start
+//! request may have been dispatched, the possible scope is owned as a
+//! [`PendingScope`] until independent observation either proves it (then,
+//! and only then, it becomes a [`Scope`]) or confirms that nothing it may
+//! have created can still hold or receive a process. A pending scope is bound
+//! to the retained helper, the backend-generated unit name (a locator, never
+//! authority), the expected limits and the manager connection that issued
+//! the request; it retains the candidate cgroup by descriptor as soon as the
+//! kernel reports the helper in it, so no later failed proof can lose it. It
+//! is owned by the execution (and its retained boundary) and stays retryable
+//! after the [`ScopeManager`] that started it is gone. Nothing is
+//! reconstructed from a unit name, a process id or a path, and nothing
+//! sweeps units by name. The states and transitions are documented in
+//! `scope/pending.rs`.
 
-use std::ffi::CString;
 use std::io;
-use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::fault::{self, Fault, FaultPoint};
 use crate::launcher::Helper;
 use crate::policy::ResourcePolicy;
-use crate::sys;
 
-const SYSTEMD: &str = "org.freedesktop.systemd1";
-const SYSTEMD_PATH: &str = "/org/freedesktop/systemd1";
-const MANAGER: &str = "org.freedesktop.systemd1.Manager";
-const SCOPE_INTERFACE: &str = "org.freedesktop.systemd1.Scope";
-const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
-const CGROUP2_SUPER_MAGIC: i64 = 0x6367_7270;
-/// Bound on each D-Bus call.
-pub const BUS_CALL_TIMEOUT: Duration = Duration::from_secs(10);
+mod manager;
+mod native;
+mod pending;
+#[cfg(test)]
+pub(crate) mod tests;
+
+pub use manager::BUS_CALL_TIMEOUT;
+#[cfg(test)]
+pub(crate) use pending::PendingState;
+pub(crate) use pending::ScopeBoundary;
+pub use pending::{PendingScope, StartFailed};
+
+use manager::{Manager, ZbusManager};
+use native::{CgroupDir, Kernel, Native};
+
 /// Bound on waiting for systemd to move the helper into its scope.
 pub const PLACEMENT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Bound on confirming that what a pending scope may have created is gone,
+/// after each StopUnit attempt (P2-V1-R3B-I4).
+pub const SETTLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug)]
 pub enum ScopeError {
@@ -71,10 +96,38 @@ pub fn expected_limit_files(limits: &ResourcePolicy) -> [(&'static str, String);
     ]
 }
 
+/// The bounds a controller observes with.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Timing {
+    /// Waiting for the helper to appear in the new scope.
+    pub placement: Duration,
+    /// Confirming a pending scope gone after a StopUnit attempt.
+    pub settle: Duration,
+    /// Between two observations.
+    pub poll: Duration,
+}
+
+impl Timing {
+    pub(crate) const PRODUCTION: Self = Self {
+        placement: PLACEMENT_TIMEOUT,
+        settle: SETTLE_TIMEOUT,
+        poll: Duration::from_millis(5),
+    };
+}
+
+/// The manager connection and the kernel observations one [`ScopeManager`]
+/// works through, shared (reference-counted) with every pending scope it
+/// issued, so that a retained boundary can reconcile its operation on the
+/// very connection that issued it after the [`ScopeManager`] is dropped.
+pub(crate) struct Controller {
+    pub(crate) manager: Box<dyn Manager>,
+    pub(crate) native: Box<dyn Native>,
+    pub(crate) timing: Timing,
+}
+
 /// A connection to the systemd user manager of this process's real uid.
 pub struct ScopeManager {
-    runtime: tokio::runtime::Runtime,
-    connection: zbus::Connection,
+    controller: Arc<Controller>,
 }
 
 impl ScopeManager {
@@ -88,163 +141,80 @@ impl ScopeManager {
     /// Connect to the user manager bus socket at `path`, which must be a
     /// socket owned by this process's real uid.
     pub fn connect_at(path: &str) -> Result<Self, ScopeError> {
-        use std::os::unix::fs::{FileTypeExt, MetadataExt};
-        let metadata = std::fs::symlink_metadata(path).map_err(ScopeError::BusUnavailable)?;
-        // SAFETY: getuid has no preconditions.
-        let uid = unsafe { libc::getuid() };
-        if !metadata.file_type().is_socket() || metadata.uid() != uid {
-            return Err(ScopeError::BusUnavailable(io::Error::from_raw_os_error(
-                libc::EACCES,
-            )));
-        }
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_io()
-            .enable_time()
-            .build()
-            .map_err(ScopeError::Io)?;
-        let address = format!("unix:path={path}");
-        let connection = runtime
-            .block_on(async {
-                tokio::time::timeout(BUS_CALL_TIMEOUT, async {
-                    zbus::connection::Builder::address(address.as_str())?
-                        .build()
-                        .await
-                })
-                .await
-            })
-            .map_err(|_| ScopeError::Bus("connection timed out".into()))?
-            .map_err(|e| ScopeError::Bus(e.to_string()))?;
         Ok(Self {
-            runtime,
-            connection,
+            controller: Arc::new(Controller {
+                manager: Box::new(ZbusManager::connect_at(path)?),
+                native: Box::new(Kernel),
+                timing: Timing::PRODUCTION,
+            }),
         })
     }
 
-    fn call<B, R>(
+    /// A manager over a deterministic test controller: unit tests only.
+    #[cfg(test)]
+    pub(crate) fn with_controller(controller: Controller) -> Self {
+        Self {
+            controller: Arc::new(controller),
+        }
+    }
+
+    /// A new scope operation for `helper`, the backend's own unreaped child,
+    /// with `limits`: a fresh backend-generated unit name, nothing issued
+    /// yet. The caller owns it before any request can have an effect.
+    pub(crate) fn prepare(
         &self,
-        path: &str,
-        interface: &str,
-        method: &str,
-        body: &B,
-    ) -> Result<R, ScopeError>
-    where
-        B: serde::Serialize + zbus::zvariant::DynamicType,
-        R: for<'d> zbus::zvariant::DynamicDeserialize<'d>,
-    {
-        self.runtime.block_on(async {
-            let reply = tokio::time::timeout(
-                BUS_CALL_TIMEOUT,
-                self.connection
-                    .call_method(Some(SYSTEMD), path, Some(interface), method, body),
-            )
-            .await
-            .map_err(|_| ScopeError::Bus(format!("{method} timed out")))?
-            .map_err(|e| ScopeError::Bus(e.to_string()))?;
-            reply
-                .body()
-                .deserialize::<R>()
-                .map_err(|e| ScopeError::Bus(e.to_string()))
-        })
+        helper: &Helper,
+        limits: &ResourcePolicy,
+    ) -> Result<Box<PendingScope>, ScopeError> {
+        let unit = format!("nexus-verifier-{}.scope", random_hex()?);
+        Ok(Box::new(PendingScope::new(
+            Arc::clone(&self.controller),
+            unit,
+            helper,
+            limits,
+        )))
     }
 
     /// Create a scope holding exactly `helper`, the backend's own unreaped
     /// child, with `limits`, and prove it. The helper's process id is only
     /// the locator of that retained child.
-    pub fn start(&self, helper: &Helper, limits: &ResourcePolicy) -> Result<Scope, ScopeError> {
-        self.start_with_fault(helper, limits, None)
-    }
-
-    /// [`Self::start`], with the live panic controls' fault injection.
-    pub(crate) fn start_with_fault(
-        &self,
-        helper: &Helper,
-        limits: &ResourcePolicy,
-        fault: Option<Fault>,
-    ) -> Result<Scope, ScopeError> {
-        use zbus::zvariant::Value;
-        let helper_pid = helper.pid();
-        let unit = format!("nexus-verifier-{}.scope", random_hex()?);
-        let properties: Vec<(&str, Value<'_>)> = vec![
-            ("Description", Value::from("Nexus verifier execution")),
-            ("PIDs", Value::from(vec![helper_pid])),
-            ("MemoryAccounting", Value::from(true)),
-            ("MemoryMax", Value::from(limits.memory_max_bytes)),
-            ("MemorySwapMax", Value::from(limits.swap_max_bytes)),
-            ("TasksAccounting", Value::from(true)),
-            ("TasksMax", Value::from(limits.pids_max)),
-            ("CPUAccounting", Value::from(true)),
-            (
-                "CPUQuotaPerSecUSec",
-                Value::from(limits.cpu_quota_us_per_sec),
-            ),
-            (
-                "RuntimeMaxUSec",
-                Value::from(limits.runtime_backstop_secs * 1_000_000),
-            ),
-            ("KillSignal", Value::from(libc::SIGKILL)),
-            // The manager must not stop the scope when the kernel kills one
-            // process for memory: the backend classifies that itself.
-            ("OOMPolicy", Value::from("continue")),
-            ("CollectMode", Value::from("inactive-or-failed")),
-        ];
-        let aux: Vec<(&str, Vec<(&str, Value<'_>)>)> = Vec::new();
-        let _job: zbus::zvariant::OwnedObjectPath = self.call(
-            SYSTEMD_PATH,
-            MANAGER,
-            "StartTransientUnit",
-            &(unit.as_str(), "fail", properties, aux),
-        )?;
-        // The unit is this call's own creation: one that is not proven, a
-        // panic while proving it included, is stopped here (a helper that
-        // never entered it leaves it empty, and an empty scope is never
-        // stopped by its manager). The panic then continues to the
-        // execution, which still owns the helper.
-        let proven = catch_unwind(AssertUnwindSafe(|| {
-            self.prove(helper_pid, unit.clone(), limits, fault)
-        }));
-        if !matches!(proven, Ok(Ok(_))) {
-            let _: Result<zbus::zvariant::OwnedObjectPath, _> = self.call(
-                SYSTEMD_PATH,
-                MANAGER,
-                "StopUnit",
-                &(unit.as_str(), "replace"),
-            );
+    ///
+    /// When no scope is proven, whatever the attempt may have created is
+    /// settled first (a panic while proving included, as before): the
+    /// failure carries it, owned, unless it was confirmed gone
+    /// (P2-V1-R3B-I4).
+    pub fn start(&self, helper: &Helper, limits: &ResourcePolicy) -> Result<Scope, StartFailed> {
+        let pending = self.prepare(helper, limits).map_err(|error| StartFailed {
+            error,
+            unresolved: None,
+        })?;
+        let mut boundary = ScopeBoundary::Pending(pending);
+        let error = match catch_unwind(AssertUnwindSafe(|| boundary.establish(helper, None))) {
+            Ok(Ok(())) => None,
+            Ok(Err(error)) => Some(error),
+            Err(panic) => {
+                if let ScopeBoundary::Pending(pending) = &mut boundary {
+                    let _ = catch_unwind(AssertUnwindSafe(|| pending.settle(helper)));
+                }
+                resume_unwind(panic)
+            }
+        };
+        match boundary {
+            ScopeBoundary::Proven(scope) => Ok(scope),
+            boundary => {
+                let mut unresolved = boundary.into_pending();
+                if unresolved
+                    .as_mut()
+                    .is_some_and(|pending| pending.settle(helper))
+                {
+                    unresolved = None;
+                }
+                Err(StartFailed {
+                    error: error.unwrap_or(ScopeError::Mismatch("scope not proven")),
+                    unresolved,
+                })
+            }
         }
-        proven.unwrap_or_else(|panic| resume_unwind(panic))
-    }
-
-    fn prove(
-        &self,
-        helper_pid: u32,
-        unit: String,
-        limits: &ResourcePolicy,
-        fault: Option<Fault>,
-    ) -> Result<Scope, ScopeError> {
-        let path = wait_for_placement(helper_pid, &unit)?;
-        fault::at(fault, FaultPoint::ScopeProof);
-        let scope = Scope::open(&path, unit, helper_pid)?;
-        scope.verify_limits(limits)?;
-        let unit_path: zbus::zvariant::OwnedObjectPath =
-            self.call(SYSTEMD_PATH, MANAGER, "GetUnit", &(scope.unit.as_str(),))?;
-        let backstop: zbus::zvariant::OwnedValue = self.call(
-            unit_path.as_str(),
-            PROPERTIES,
-            "Get",
-            &(SCOPE_INTERFACE, "RuntimeMaxUSec"),
-        )?;
-        if u64::try_from(backstop).ok() != Some(limits.runtime_backstop_secs * 1_000_000) {
-            return Err(ScopeError::Mismatch("runtime backstop"));
-        }
-        let oom_policy: zbus::zvariant::OwnedValue = self.call(
-            unit_path.as_str(),
-            PROPERTIES,
-            "Get",
-            &(SCOPE_INTERFACE, "OOMPolicy"),
-        )?;
-        if String::try_from(oom_policy).ok().as_deref() != Some("continue") {
-            return Err(ScopeError::Mismatch("out-of-memory policy"));
-        }
-        Ok(scope)
     }
 }
 
@@ -256,25 +226,6 @@ fn random_hex() -> Result<String, ScopeError> {
         return Err(ScopeError::Io(io::Error::last_os_error()));
     }
     Ok(hex::encode(bytes))
-}
-
-/// Wait until the kernel reports the helper in a cgroup whose last component
-/// is `unit`, and return that cgroup's path (relative to the cgroup root).
-fn wait_for_placement(helper_pid: u32, unit: &str) -> Result<String, ScopeError> {
-    let start = Instant::now();
-    loop {
-        let text = std::fs::read_to_string(format!("/proc/{helper_pid}/cgroup"))
-            .map_err(ScopeError::Io)?;
-        if let Some(path) = text.trim_end().strip_prefix("0::") {
-            if path.rsplit('/').next() == Some(unit) && !path.contains("..") {
-                return Ok(path.to_string());
-            }
-        }
-        if start.elapsed() >= PLACEMENT_TIMEOUT {
-            return Err(ScopeError::NotPlaced);
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
 }
 
 /// Counters the kernel keeps for the scope.
@@ -298,90 +249,57 @@ pub enum Occupancy {
     Removed,
 }
 
-/// A verifier execution's cgroup, retained by descriptor.
+/// `cgroup.events`' `populated` field, through the retained descriptor.
+fn read_populated(dir: &dyn CgroupDir) -> io::Result<Occupancy> {
+    let events = dir.read("cgroup.events")?;
+    match events
+        .lines()
+        .find_map(|line| line.strip_prefix("populated "))
+        .map(str::trim)
+    {
+        Some("1") => Ok(Occupancy::Populated),
+        Some("0") => Ok(Occupancy::Empty),
+        _ => Err(io::Error::from_raw_os_error(libc::EINVAL)),
+    }
+}
+
+/// Whether any process remains in the retained cgroup. A retained cgroup is
+/// a non-root cgroup v2 directory (verified by its file system, and named
+/// for its unit), and every one has `cgroup.events`; that file goes only
+/// with the directory, whose listing must then be empty.
+fn occupancy(dir: &dyn CgroupDir) -> io::Result<Occupancy> {
+    match read_populated(dir) {
+        Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
+            if dir.listing_is_empty()? {
+                Ok(Occupancy::Removed)
+            } else {
+                Err(error)
+            }
+        }
+        other => other,
+    }
+}
+
+/// Every limit file holds exactly the expected text.
+fn verify_limits(dir: &dyn CgroupDir, limits: &ResourcePolicy) -> Result<(), ScopeError> {
+    for (file, expected) in expected_limit_files(limits) {
+        let actual = dir.read(file).map_err(ScopeError::Io)?;
+        if actual.trim_end() != expected {
+            return Err(ScopeError::Mismatch(file));
+        }
+    }
+    Ok(())
+}
+
+/// A verifier execution's cgroup, retained by descriptor: a proven scope.
+/// The only way to one is a [`PendingScope`] whose every proof passed.
 #[derive(Debug)]
 pub struct Scope {
     unit: String,
-    dir: OwnedFd,
+    dir: Box<dyn CgroupDir>,
 }
 
 impl Scope {
-    fn open(path: &str, unit: String, helper_pid: u32) -> Result<Self, ScopeError> {
-        let full = CString::new(format!("/sys/fs/cgroup{path}"))
-            .map_err(|_| ScopeError::Mismatch("cgroup path"))?;
-        // SAFETY: a NUL-terminated path; open returns a new descriptor.
-        let fd = unsafe {
-            libc::open(
-                full.as_ptr(),
-                libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_RDONLY | libc::O_CLOEXEC,
-            )
-        };
-        if fd < 0 {
-            return Err(ScopeError::Io(io::Error::last_os_error()));
-        }
-        // SAFETY: open succeeded, so fd is new and owned here.
-        let dir = unsafe { OwnedFd::from_raw_fd(fd) };
-        // SAFETY: statfs is plain data; fstatfs fills it.
-        let mut fs: libc::statfs = unsafe { std::mem::zeroed() };
-        // SAFETY: fstatfs writes one statfs structure.
-        if unsafe { libc::fstatfs(dir.as_raw_fd(), &mut fs) } != 0
-            || fs.f_type != CGROUP2_SUPER_MAGIC
-        {
-            return Err(ScopeError::Mismatch("not a cgroup v2 directory"));
-        }
-        let scope = Self { unit, dir };
-        // A live, non-root cgroup: its `cgroup.events` exists and reports
-        // the helper's presence. Only then can a later absence of that file
-        // mean removal.
-        if scope.read_populated().map_err(ScopeError::Io)? != Occupancy::Populated {
-            return Err(ScopeError::Mismatch("scope not populated"));
-        }
-        let procs = scope.read("cgroup.procs").map_err(ScopeError::Io)?;
-        if !procs
-            .lines()
-            .any(|line| line.trim() == helper_pid.to_string())
-        {
-            return Err(ScopeError::Mismatch("helper not in the scope"));
-        }
-        Ok(scope)
-    }
-
-    fn open_file(&self, name: &str, flags: libc::c_int) -> io::Result<std::fs::File> {
-        let name = CString::new(name).map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
-        // SAFETY: openat relative to the retained directory; a new
-        // descriptor is returned on success.
-        let fd = unsafe {
-            libc::openat(
-                self.dir.as_raw_fd(),
-                name.as_ptr(),
-                flags | libc::O_NOFOLLOW | libc::O_CLOEXEC,
-            )
-        };
-        if fd < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        // SAFETY: openat succeeded, so fd is new and owned here.
-        Ok(unsafe { std::fs::File::from_raw_fd(fd) })
-    }
-
-    fn read(&self, name: &str) -> io::Result<String> {
-        use std::io::Read;
-        let mut text = String::new();
-        self.open_file(name, libc::O_RDONLY)?
-            .read_to_string(&mut text)?;
-        Ok(text)
-    }
-
-    fn verify_limits(&self, limits: &ResourcePolicy) -> Result<(), ScopeError> {
-        for (file, expected) in expected_limit_files(limits) {
-            let actual = self.read(file).map_err(ScopeError::Io)?;
-            if actual.trim_end() != expected {
-                return Err(ScopeError::Mismatch(file));
-            }
-        }
-        Ok(())
-    }
-
     /// The backend-generated unit name (display and diagnostics only).
     pub fn unit(&self) -> &str {
         &self.unit
@@ -389,38 +307,12 @@ impl Scope {
 
     /// Kill every process in the scope (`cgroup.kill`).
     pub fn kill(&self) -> io::Result<()> {
-        use std::io::Write;
-        self.open_file("cgroup.kill", libc::O_WRONLY)?
-            .write_all(b"1")
-    }
-
-    fn read_populated(&self) -> io::Result<Occupancy> {
-        let events = self.read("cgroup.events")?;
-        match events
-            .lines()
-            .find_map(|line| line.strip_prefix("populated "))
-            .map(str::trim)
-        {
-            Some("1") => Ok(Occupancy::Populated),
-            Some("0") => Ok(Occupancy::Empty),
-            _ => Err(io::Error::from_raw_os_error(libc::EINVAL)),
-        }
+        self.dir.kill()
     }
 
     /// Whether any process remains in the scope.
     pub fn occupancy(&self) -> io::Result<Occupancy> {
-        match self.read_populated() {
-            Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
-                // `cgroup.events` existed when the scope was opened; it goes
-                // only with the directory, whose listing must then be empty.
-                if sys::directory_is_empty(self.dir.as_fd())? {
-                    Ok(Occupancy::Removed)
-                } else {
-                    Err(error)
-                }
-            }
-            other => other,
-        }
+        occupancy(self.dir.as_ref())
     }
 
     /// Wait up to `timeout` for the scope to be empty or removed.
@@ -441,7 +333,8 @@ impl Scope {
     /// helper holds the scope after its final report until they are read.
     pub fn events(&self) -> io::Result<ScopeEvents> {
         let counter = |file: &str, key: &str| -> io::Result<u64> {
-            self.read(file)?
+            self.dir
+                .read(file)?
                 .lines()
                 .find_map(|line| line.strip_prefix(key)?.trim().parse().ok())
                 .ok_or_else(|| io::Error::from_raw_os_error(libc::EINVAL))

@@ -1,0 +1,33 @@
+binary: /home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/validation/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137
+sha256: 4841223bee84faeea53bfb365be37d69316c2e95bf9c35913c73d9810e602f06
+default threads run 1: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 2: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 3: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 4: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 5: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 6: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 7: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 8: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 9: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 10: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 11: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 12: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 13: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 14: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 15: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 16: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 17: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 18: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 19: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 20: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 21: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 22: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 23: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 24: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+default threads run 25: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+one thread run 1: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.38s
+one thread run 2: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.39s
+one thread run 3: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.38s
+one thread run 4: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.31s
+one thread run 5: test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.32s
+default threads: 25 passed, 0 failed of 25; one thread: 5 passed, 0 failed of 5

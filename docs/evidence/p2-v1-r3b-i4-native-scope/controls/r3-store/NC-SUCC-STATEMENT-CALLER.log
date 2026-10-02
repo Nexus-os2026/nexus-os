@@ -1,0 +1,24 @@
+
+running 1 test
+test v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement ... FAILED
+
+failures:
+
+---- v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement stdout ----
+
+thread 'v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement' (602216) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:9369:5:
+assertion `left == right` failed: [succession-invalid-accepted] the predecessor statement
+  left: Some(([16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], "store-level invalid conditions accepted: unexpected journals/notes.txt; duplicate-generation 31313131313131313131313131313131; disposition-root 731db0852f67488bc4bcae5f1ca8f2ee47ec483b7290d9c470fe3e9fad3ac07e.disposition"))
+ right: Some(([16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], "store-level invalid conditions accepted: disposition-root 731db0852f67488bc4bcae5f1ca8f2ee47ec483b7290d9c470fe3e9fad3ac07e.disposition; duplicate-generation 31313131313131313131313131313131; unexpected journals/notes.txt"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v08_invalid_conditions_are_accepted_exactly_and_named_in_the_statement
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.04s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.12s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

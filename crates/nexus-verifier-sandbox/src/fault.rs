@@ -14,9 +14,26 @@ use std::time::Duration;
 pub enum FaultPoint {
     /// The helper exists and its output is being drained; no scope yet.
     AfterSpawn,
+    /// Scope creation (P2-V1-R3B-I4): the pending scope is owned and
+    /// StartTransientUnit is about to be issued.
+    BeforeScopeStart,
+    /// StartTransientUnit may have been dispatched: its reply (or its
+    /// absence) is in hand and not yet acted on.
+    AfterScopeStart,
     /// Inside scope creation: the new unit holds the helper but is not yet
     /// proven.
     ScopeProof,
+    /// The candidate cgroup's descriptor is retained; its limits and the
+    /// manager's properties are not yet proven.
+    ScopeCandidate,
+    /// During the manager-property proof (RuntimeMaxUSec, OOMPolicy).
+    ScopeProperties,
+    /// Settling a pending scope: StopUnit is about to be issued.
+    BeforeScopeStop,
+    /// StopUnit returned or failed; nothing is confirmed yet.
+    AfterScopeStop,
+    /// During the reconciliation that confirms a pending scope is gone.
+    ScopeReconcile,
     /// The proven scope holds the helper; no launch has been sent.
     AfterScope,
     /// The helper accepted the launch: the verifier is running.

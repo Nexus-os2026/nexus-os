@@ -1,0 +1,24 @@
+
+running 1 test
+test o01_the_real_store_entry_is_closed ... FAILED
+
+failures:
+
+---- o01_the_real_store_entry_is_closed stdout ----
+
+thread 'o01_the_real_store_entry_is_closed' (594161) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:3188:5:
+assertion `left == right` failed: [real-entry-closed] the entry's whole body is its refusal: it calls nothing
+  left: "    let _ = request.provision_path.len();\n    Err(IntegrationUnavailable::DeploymentNotAuthorized)"
+ right: "    let _ = request;\n    Err(IntegrationUnavailable::DeploymentNotAuthorized)"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    o01_the_real_store_entry_is_closed
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.02s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.98s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4/cand-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

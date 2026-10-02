@@ -1,0 +1,800 @@
+{
+  "requirements": [
+    {
+      "id": "I4-01",
+      "what": "Start confirmed, helper placed, every proof succeeds: Proven Scope",
+      "tests": [
+        {
+          "test": "scope::tests::i4_01_a_confirmed_start_with_every_proof_is_proven",
+          "result": "ok"
+        },
+        {
+          "test": "execution::tests::i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven",
+          "result": "ok"
+        },
+        {
+          "test": "execution::tests::i4_19_finalization_ends_a_proven_scope_as_before",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-LAUNCH-PENDING",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-02",
+      "what": "no effect, reply lost: absence proven, nothing retained",
+      "tests": [
+        {
+          "test": "scope::tests::i4_02_a_start_without_effect_whose_reply_is_lost_is_proven_absent",
+          "result": "ok"
+        },
+        {
+          "test": "execution::tests::i4_29_the_classification_of_settled_executions_is_unchanged",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-03",
+      "what": "effect, reply lost: discovered and proven, or retained",
+      "tests": [
+        {
+          "test": "scope::tests::i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven",
+          "result": "ok"
+        },
+        {
+          "test": "scope::tests::i4_03_a_start_whose_effect_cannot_be_confirmed_gone_is_returned_owned",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-START-TIMEOUT-ABSENT",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-04",
+      "what": "placed, property proof times out: no launch, candidate retained",
+      "tests": [
+        {
+          "test": "execution::tests::i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-PROPERTY-ERROR-DROPS",
+          "ok": true
+        },
+        {
+          "id": "NC-I4-X-NO-CANDIDATE-KILL",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-05",
+      "what": "unit created, helper never enters: cleanup confirmed before the failure",
+      "tests": [
+        {
+          "test": "execution::tests::i4_05_a_unit_the_helper_never_entered_is_confirmed_gone_before_the_failure",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-06",
+      "what": "same, StopUnit outcome uncertain: PendingScope retained",
+      "tests": [
+        {
+          "test": "execution::tests::i4_06_a_failed_stop_of_a_unit_the_helper_never_entered_retains_the_operation",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-STOP-ERR-NO-EFFECT",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-07",
+      "what": "StopUnit success, cgroup populated: not confirmed",
+      "tests": [
+        {
+          "test": "execution::tests::i4_07_a_delivered_stop_reply_with_the_scope_still_populated_confirms_nothing",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-STOP-OK-CONFIRMS",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-08",
+      "what": "StopUnit timeout, cgroup empty or removed: may confirm",
+      "tests": [
+        {
+          "test": "execution::tests::i4_08_a_timed_out_stop_whose_target_is_gone_may_confirm",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-09",
+      "what": "StopUnit timeout, target remains: retained",
+      "tests": [
+        {
+          "test": "execution::tests::i4_09_a_timed_out_stop_whose_target_remains_retains_the_operation",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-STOP-TIMEOUT-DROPS",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-10",
+      "what": "query uncertain after descriptor: descriptor retained",
+      "tests": [
+        {
+          "test": "execution::tests::i4_10_an_uncertain_query_after_the_candidate_keeps_its_descriptor",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-NO-EARLY-DIR",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-11",
+      "what": "manager absent, child in candidate: refuse/retain",
+      "tests": [
+        {
+          "test": "execution::tests::i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-MANAGER-ABSENCE-ONLY",
+          "ok": true
+        },
+        {
+          "id": "NC-I4-X-UNLOADED-PROVEN",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-12",
+      "what": "limits mismatch: never launch; retain/clean",
+      "tests": [
+        {
+          "test": "execution::tests::i4_12_mismatched_limits_never_launch",
+          "result": "ok"
+        },
+        {
+          "test": "scope::tests::i4_start_failed_settles_with_the_live_helper_and_reports_the_proof_failure",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-13",
+      "what": "RuntimeMaxUSec mismatch: never launch",
+      "tests": [
+        {
+          "test": "execution::tests::i4_13_a_runtime_backstop_mismatch_never_launches",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-14",
+      "what": "OOMPolicy mismatch: never launch",
+      "tests": [
+        {
+          "test": "execution::tests::i4_14_an_out_of_memory_policy_mismatch_never_launches",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-15",
+      "what": "helper identity/membership mismatch: never launch",
+      "tests": [
+        {
+          "test": "execution::tests::i4_15_a_membership_mismatch_never_launches",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-MEMBERSHIP-NAME-ONLY",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-16",
+      "what": "Pending never Proven by supplying the unit name",
+      "tests": [
+        {
+          "test": "execution::tests::i4_16_a_pending_operation_is_never_proven_by_its_unit_name",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-START-NAME-AUTH",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-17",
+      "what": "name collision fails closed; another unit never claimed",
+      "tests": [
+        {
+          "test": "execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-X-COLLISION-CLAIMED",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-18",
+      "what": "no launch message before complete scope proof",
+      "tests": [
+        {
+          "test": "execution::tests::i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-LAUNCH-PENDING",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-19",
+      "what": "finalization cleans a Proven scope as before",
+      "tests": [
+        {
+          "test": "execution::tests::i4_19_finalization_ends_a_proven_scope_as_before",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-20",
+      "what": "finalization handles Pending",
+      "tests": [
+        {
+          "test": "execution::tests::i4_20_finalization_settles_a_pending_operation",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-PENDING-NOT-RETAINED",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-21",
+      "what": "failed pending cleanup: CleanupFailed",
+      "tests": [
+        {
+          "test": "execution::tests::i4_21_an_unconfirmed_operation_is_a_cleanup_failure_never_an_unavailable_sandbox",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-START-LOST-OWNER",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-22",
+      "what": "retry resolves Pending",
+      "tests": [
+        {
+          "test": "execution::tests::i4_22_a_retry_resolves_a_pending_operation",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-23",
+      "what": "retry works after the ScopeManager is dropped",
+      "tests": [
+        {
+          "test": "execution::tests::i4_23_a_retained_boundary_is_retried_without_the_scope_manager",
+          "result": "ok"
+        },
+        {
+          "test": "scope::tests::i4_owners_are_self_contained_values",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-RETRY-NEEDS-MANAGER-BORROW",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-24",
+      "what": "drop of an unresolved pending: best effort, no confirmation",
+      "tests": [
+        {
+          "test": "execution::tests::i4_24_dropping_an_unresolved_operation_is_best_effort_and_confirms_nothing",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-X-DROP-REAPS",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-25",
+      "what": "panic after Start may have taken effect retains ownership",
+      "tests": [
+        {
+          "test": "execution::tests::i4_25_a_panic_after_the_start_request_keeps_its_owner",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-PANIC-OWNER-LOSS",
+          "ok": true
+        }
+      ],
+      "covered": true
+    },
+    {
+      "id": "I4-26",
+      "what": "panic after candidate descriptor acquisition retains it",
+      "tests": [
+        {
+          "test": "execution::tests::i4_26_a_panic_after_the_candidate_is_retained_keeps_it",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-27",
+      "what": "panic during StopUnit/reconciliation retains uncertainty",
+      "tests": [
+        {
+          "test": "execution::tests::i4_27_a_panic_while_stopping_or_reconciling_retains_the_operation",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-28",
+      "what": "helper-before-launch and scope-before-launch ordering remains",
+      "tests": [
+        {
+          "test": "execution::tests::i4_28_the_helper_and_the_proven_scope_precede_any_launch",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-29",
+      "what": "clean execution classification unchanged",
+      "tests": [
+        {
+          "test": "execution::tests::i4_29_the_classification_of_settled_executions_is_unchanged",
+          "result": "ok"
+        },
+        {
+          "test": "execution::tests::p2d_only_a_clean_passing_exit_is_passed",
+          "result": "ok"
+        },
+        {
+          "test": "execution::tests::p2d_a_lost_verifier_or_lost_counters_are_never_a_result",
+          "result": "ok"
+        },
+        {
+          "test": "execution::tests::p2d_limits_and_backend_endings_are_never_passed",
+          "result": "ok"
+        },
+        {
+          "test": "execution::tests::p2d_unconfirmed_cleanup_overrides_every_other_class",
+          "result": "ok"
+        },
+        {
+          "test": "execution::tests::p2d_setup_failures_distinguish_an_unavailable_host",
+          "result": "ok"
+        },
+        {
+          "test": "execution::tests::p2r1_an_interrupted_execution_is_never_passed",
+          "result": "ok"
+        }
+      ],
+      "controls": [],
+      "covered": true
+    },
+    {
+      "id": "I4-30",
+      "what": "no PID-only, unit-name-only or cgroup-path-only cleanup",
+      "tests": [
+        {
+          "test": "execution::tests::i4_30_the_helper_s_death_is_never_the_operation_s_cleanup",
+          "result": "ok"
+        },
+        {
+          "test": "execution::tests::i4_30_no_cgroup_of_the_unit_s_name_is_ever_taken_by_its_path",
+          "result": "ok"
+        },
+        {
+          "test": "scope::tests::i4_a_pending_operation_is_bound_to_its_own_helper",
+          "result": "ok"
+        }
+      ],
+      "controls": [
+        {
+          "id": "NC-I4-PID-CLEANUP",
+          "ok": true
+        },
+        {
+          "id": "NC-I4-STRING-SWEEP",
+          "ok": true
+        },
+        {
+          "id": "NC-I4-X-ANY-HELPER",
+          "ok": true
+        }
+      ],
+      "covered": true
+    }
+  ],
+  "completion": [
+    {
+      "standard": "a potentially effective StartTransientUnit request never escapes without retained ownership",
+      "requirements": {
+        "I4-03": true,
+        "I4-06": true,
+        "I4-21": true,
+        "I4-25": true
+      },
+      "controls": {
+        "NC-I4-START-LOST-OWNER": true,
+        "NC-I4-PANIC-OWNER-LOSS": true
+      },
+      "api_guards": {},
+      "source_guards": {
+        "SG-I4-ONE-WAY": true
+      },
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "Start uncertainty is reconciled",
+      "requirements": {
+        "I4-02": true,
+        "I4-03": true
+      },
+      "controls": {
+        "NC-I4-START-TIMEOUT-ABSENT": true
+      },
+      "api_guards": {},
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "Stop uncertainty is reconciled",
+      "requirements": {
+        "I4-06": true,
+        "I4-07": true,
+        "I4-08": true,
+        "I4-09": true
+      },
+      "controls": {
+        "NC-I4-STOP-OK-CONFIRMS": true,
+        "NC-I4-STOP-ERR-NO-EFFECT": true,
+        "NC-I4-STOP-TIMEOUT-DROPS": true
+      },
+      "api_guards": {},
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "helper-to-scope identity is proven natively",
+      "requirements": {
+        "I4-15": true,
+        "I4-16": true,
+        "I4-30": true
+      },
+      "controls": {
+        "NC-I4-MEMBERSHIP-NAME-ONLY": true,
+        "NC-I4-START-NAME-AUTH": true,
+        "NC-I4-X-ANY-HELPER": true
+      },
+      "api_guards": {
+        "P-I4-HELPER-SERIAL": true
+      },
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "candidate cgroup descriptor ownership survives later proof failures",
+      "requirements": {
+        "I4-04": true,
+        "I4-10": true,
+        "I4-26": true
+      },
+      "controls": {
+        "NC-I4-NO-EARLY-DIR": true,
+        "NC-I4-PROPERTY-ERROR-DROPS": true,
+        "NC-I4-X-NO-CANDIDATE-KILL": true
+      },
+      "api_guards": {
+        "P-I4-PENDING-CANDIDATE": true
+      },
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "no launch before full scope proof",
+      "requirements": {
+        "I4-18": true,
+        "I4-28": true
+      },
+      "controls": {
+        "NC-I4-LAUNCH-PENDING": true
+      },
+      "api_guards": {
+        "P-I4-BOUNDARY-TYPE": true,
+        "P-I4-SCOPE-FORGE": true
+      },
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "Pending state survives panic",
+      "requirements": {
+        "I4-25": true,
+        "I4-26": true,
+        "I4-27": true
+      },
+      "controls": {
+        "NC-I4-PANIC-OWNER-LOSS": true
+      },
+      "api_guards": {},
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "Pending state survives return to the caller as CleanupFailed",
+      "requirements": {
+        "I4-06": true,
+        "I4-20": true,
+        "I4-21": true
+      },
+      "controls": {
+        "NC-I4-PENDING-NOT-RETAINED": true,
+        "NC-I4-START-LOST-OWNER": true
+      },
+      "api_guards": {
+        "P-I4-RETAINED-SCOPE": true
+      },
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "RetainedBoundary retry cleans Pending state",
+      "requirements": {
+        "I4-22": true
+      },
+      "controls": {},
+      "api_guards": {},
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "retry remains possible after the original ScopeManager is dropped",
+      "requirements": {
+        "I4-23": true
+      },
+      "controls": {
+        "NC-I4-RETRY-NEEDS-MANAGER-BORROW": true
+      },
+      "api_guards": {},
+      "source_guards": {
+        "SG-I4-NO-BACKGROUND": true
+      },
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "RPC success is never cleanup proof",
+      "requirements": {
+        "I4-07": true
+      },
+      "controls": {
+        "NC-I4-STOP-OK-CONFIRMS": true
+      },
+      "api_guards": {},
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "RPC failure/timeout is never proof of no effect",
+      "requirements": {
+        "I4-03": true,
+        "I4-06": true,
+        "I4-09": true
+      },
+      "controls": {
+        "NC-I4-START-TIMEOUT-ABSENT": true,
+        "NC-I4-STOP-ERR-NO-EFFECT": true,
+        "NC-I4-STOP-TIMEOUT-DROPS": true
+      },
+      "api_guards": {},
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "unit name / PID / path strings remain locators only",
+      "requirements": {
+        "I4-11": true,
+        "I4-16": true,
+        "I4-17": true,
+        "I4-24": true,
+        "I4-30": true
+      },
+      "controls": {
+        "NC-I4-START-NAME-AUTH": true,
+        "NC-I4-MANAGER-ABSENCE-ONLY": true,
+        "NC-I4-PID-CLEANUP": true,
+        "NC-I4-STRING-SWEEP": true,
+        "NC-I4-X-COLLISION-CLAIMED": true,
+        "NC-I4-X-DROP-REAPS": true
+      },
+      "api_guards": {
+        "P-I4-PENDING-NEW": true,
+        "P-I4-PENDING-UNIT": true,
+        "P-I4-SCOPE-FORGE": true
+      },
+      "source_guards": {
+        "SG-I4-NO-PID-SIGNAL": true,
+        "SG-I4-ONE-WAY": true
+      },
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "no unit-name sweep",
+      "requirements": {
+        "I4-30": true
+      },
+      "controls": {
+        "NC-I4-STRING-SWEEP": true
+      },
+      "api_guards": {
+        "P-I4-PENDING-DESERIALIZE": true
+      },
+      "source_guards": {
+        "SG-I4-NO-SWEEP": true,
+        "SG-I4-NO-SERIALIZE": true
+      },
+      "traced": {},
+      "met": true
+    },
+    {
+      "standard": "no real host mutation in ordinary tests",
+      "requirements": {},
+      "controls": {},
+      "api_guards": {},
+      "source_guards": {
+        "SG-I4-TEST-SEAMS": true,
+        "SG-I4-BUS": true,
+        "SG-I4-DESTINATION": true
+      },
+      "traced": {
+        "no-live trace (validation/no-live/verdict.txt)": true
+      },
+      "met": true
+    },
+    {
+      "standard": "existing clean execution behaviour and cleanup semantics remain green",
+      "requirements": {
+        "I4-19": true,
+        "I4-28": true,
+        "I4-29": true
+      },
+      "controls": {},
+      "api_guards": {},
+      "source_guards": {},
+      "traced": {},
+      "met": true
+    }
+  ],
+  "missing_tests": [],
+  "unmapped_controls": []
+}
