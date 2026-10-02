@@ -169,6 +169,16 @@
 //!   unknown outcome that never completes and failed evidence leave the
 //!   custody unable to close. This core implements no disposition writer,
 //!   administrative bypass or forced destruction for them.
+//!
+//! The store ([`store`], Linux only; P2-V1-R3B-I3-I1) implements the
+//! durability and the journal-and-recovery obligations as test
+//! infrastructure: a write-ahead recorder that acknowledges a record only
+//! after its write and sync completed and were checked, and a refusal store
+//! that turns every earlier generation's evidence into prior incidents that
+//! block the next run. It runs against simulated storage and a fixture host
+//! only. Its real configured-store entry is permanently closed, so for any
+//! real store, host or device these obligations stay unmet, and nothing is
+//! qualified.
 
 // Shared fixture support: not every target that includes it uses every item.
 #![allow(dead_code)]
@@ -176,6 +186,8 @@
 pub mod codec;
 mod core;
 mod model;
+#[cfg(target_os = "linux")]
+pub mod store;
 
 pub use self::core::*;
 pub use self::model::*;

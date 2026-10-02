@@ -1,0 +1,2 @@
+    Checking nexus-verifier-sandbox v0.1.0 (<checkout>/crates/nexus-verifier-sandbox)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.82s

@@ -1,0 +1,36 @@
+docs/evidence/p2-v1-r3b-i3-p-r1: snapshot 34cb35d833ef9dd317708615211fee7d02d2eb78
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file differs (outside the evidence directory)
+  OK  docs/evidence/p2-v1-r3b-i3-p-r1/README.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r1/coverage.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r1/design_checks.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r1/reference_check.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r1/validation.txt: snapshot match, working file match
+docs/evidence/p2-v1-r3b-i3-p-r2: snapshot 8f8882521535db82a6ba08867c95518040a71cd2
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file differs (outside the evidence directory)
+  OK  docs/evidence/p2-v1-r3b-i3-p-r2/README.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r2/coverage.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r2/design_checks.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r2/reference_check.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r2/validation.txt: snapshot match, working file match
+docs/evidence/p2-v1-r3b-i3-p-r3: snapshot b0f8437636d0bc7d38818e75df71d1bf516cff8e
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file differs (outside the evidence directory)
+  OK  docs/evidence/p2-v1-r3b-i3-p-r3/README.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r3/coverage.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r3/design_checks.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r3/reference_check.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r3/validation.txt: snapshot match, working file match
+docs/evidence/p2-v1-r3b-i3-p-r4: snapshot 91d91e5052805f432586b5f1f9a0e2e14ca1af87
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file differs (outside the evidence directory)
+  OK  docs/evidence/p2-v1-r3b-i3-p-r4/README.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r4/coverage.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r4/design_checks.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r4/reference_check.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r4/validation.txt: snapshot match, working file match
+docs/evidence/p2-v1-r3b-i3-p-r5: snapshot 7689e599ed8fc89ec7720d13869ef58cab767ecb
+  OK  docs/architecture/p2-custody-durable-recorder-design.md: snapshot match, working file match (outside the evidence directory)
+  OK  docs/evidence/p2-v1-r3b-i3-p-r5/README.md: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r5/coverage.json: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r5/design_checks.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r5/reference_check.py: snapshot match, working file match
+  OK  docs/evidence/p2-v1-r3b-i3-p-r5/validation.txt: snapshot match, working file match
+RESULT: PASS

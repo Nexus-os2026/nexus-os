@@ -1,0 +1,24 @@
+
+running 1 test
+test f09_the_validator_accepts_only_an_exact_restatement ... FAILED
+
+failures:
+
+---- f09_the_validator_accepts_only_an_exact_restatement stdout ----
+
+thread 'f09_the_validator_accepts_only_an_exact_restatement' (3450214) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:1548:9:
+assertion `left == right` failed: [disposition-exact] another count
+  left: Some(ValidatedDisposition { binding: IncidentBinding([116, 226, 66, 134, 91, 251, 9, 150, 223, 181, 66, 24, 218, 187, 202, 88, 144, 3, 122, 206, 7, 120, 226, 100, 106, 238, 199, 170, 216, 248, 122, 251]), reason: OwnerDestroyed })
+ right: None
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    f09_the_validator_accepts_only_an_exact_restatement
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 77 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (<checkout>/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.57s
+     Running tests/phase2_custody_store.rs (target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

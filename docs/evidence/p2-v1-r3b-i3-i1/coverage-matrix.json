@@ -1,0 +1,2167 @@
+{
+  "design_controls": 67,
+  "design_with_rust_mutation": 66,
+  "design_with_api_surface_counterpart_only": [
+    "NC05a",
+    "NC05b",
+    "NC19",
+    "NC21b"
+  ],
+  "design_historical": 1,
+  "rust_controls_by_category": {
+    "authority-api-surface": 9,
+    "implementation-safety": 69,
+    "simulator-source-conformance": 12
+  },
+  "rust_controls_without_design_id": [
+    "A-ADMISSION-CLONE",
+    "A-ADMISSION-FORGED",
+    "A-ADMISSION-UNBOUND",
+    "A-ENTRY-CALLS",
+    "A-ENTRY-SWITCH",
+    "I-A2-IDENTITY",
+    "I-FRESH-ROOT",
+    "I-LATE-NOTE-MISSING",
+    "I-NO-DROP-GUARD",
+    "I-NONDETERMINISTIC-REPORT",
+    "I-POISON-IGNORED",
+    "I-SEAL-WHILE-LATCHED",
+    "I-TIMEOUT-STOPS",
+    "I-VALIDATOR-INEXACT",
+    "I-VANISHED-IGNORED",
+    "I-WORKER-IDENTITY",
+    "N-BLOCKING",
+    "N-DOT-NAME",
+    "N-FOLLOW",
+    "S-ERRSEQ-NO-WRAP",
+    "S-TEAR-SPANS"
+  ],
+  "design": [
+    {
+      "design": "NC01",
+      "check": "C01",
+      "restores": "process death makes kernel-visible bytes durable (first candidate)",
+      "python_assertion": "[F1-volatile] process death made a pending record durable",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "S-F1-DURABLE"
+      ],
+      "rust_tests": [
+        "s01_process_death_and_power_loss_keep_states_apart"
+      ],
+      "rust_markers": [
+        "[F1-volatile]"
+      ],
+      "rust_categories": [
+        "simulator-source-conformance"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC02",
+      "check": "C02",
+      "restores": "startup reports evidence preserved without syncing",
+      "python_assertion": "[F1-F2-sync] a report of preserved evidence did not survive F2",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-PRESERVATION-SKIPPED"
+      ],
+      "rust_tests": [
+        "o13_the_preservation_sync_makes_what_the_report_saw_durable"
+      ],
+      "rust_markers": [
+        "[F1-F2-sync]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC03",
+      "check": "C03",
+      "restores": "a new description's sync treated as certifying visible records",
+      "python_assertion": "[errseq-reopen] the report certified a record that is not durable",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "S-REOPEN-CERTIFIES"
+      ],
+      "rust_tests": [
+        "s02_writeback_errors_are_not_repaired_by_reopening"
+      ],
+      "rust_markers": [
+        "[errseq-reopen]"
+      ],
+      "rust_categories": [
+        "simulator-source-conformance"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC04",
+      "check": "C04",
+      "restores": "first-candidate geometry: 128-byte slots in shared pages, seal in block 0",
+      "python_assertion": "[tear-containment] writing record 2 altered durable data: ('garbage', 4096)",
+      "python_result": "CAUGHT",
+      "status": "historical-python-model",
+      "rust_controls": [],
+      "rust_tests": [],
+      "rust_markers": [],
+      "rust_categories": [],
+      "rust_ok": [],
+      "note": "The first candidate's geometry (128-byte slots sharing pages, the seal in block 0) has no Rust form: format.rs fixes one record per 4096-byte block and the seal in block 1, and a mutation restoring shared slots would be another container format. The Rust tests keep the assertions (s05 containment in the simulator, c01 a torn record never benign); S-TEAR-SPANS is the related simulator control and counts only for the simulator's containment, not for the geometry decision."
+    },
+    {
+      "design": "NC05a",
+      "check": "C05",
+      "restores": "the recorder thread owns the lock descriptions (first candidate)",
+      "python_assertion": "[lock-retained] the store lock was released by recorder failure",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "A-WORKER-LOCK"
+      ],
+      "rust_tests": [
+        "a01_the_authority_surface_is_fixed_in_the_source"
+      ],
+      "rust_markers": [
+        "[lock-retained]"
+      ],
+      "rust_categories": [
+        "authority-api-surface"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC05b",
+      "check": "C05",
+      "restores": "the store-lock description duplicated into the worker, which unlocks",
+      "python_assertion": "[lock-retained] the store lock was released by recorder failure",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "A-LOCK-UNLOCK"
+      ],
+      "rust_tests": [
+        "a01_the_authority_surface_is_fixed_in_the_source"
+      ],
+      "rust_markers": [
+        "[lock-retained]"
+      ],
+      "rust_categories": [
+        "authority-api-surface"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC06",
+      "check": "C06",
+      "restores": "startup syncs and reads journals before locking (first candidate)",
+      "python_assertion": "[busy-before-sync] journal touched before the lock: [('rival', 'open', 'j00000.journal'), ('rival', 'fdatasync', 'j00000.journal'), ('rival', 'pread', 'j00000.journal')]",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-SYNC-BEFORE-LOCK"
+      ],
+      "rust_tests": [
+        "o03_busy_before_any_sync_or_read"
+      ],
+      "rust_markers": [
+        "[busy-before-sync]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC07",
+      "check": "C07",
+      "restores": "bounded submission queue with re-acknowledgement (first candidate)",
+      "python_assertion": "[dup-bounded] the owner would block on submission",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-DUP-CONFLICT",
+        "I-DUP-RETAINED"
+      ],
+      "rust_tests": [
+        "r09_resubmission_is_idempotent_and_bounded"
+      ],
+      "rust_markers": [
+        "[dup-bounded]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true,
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC08",
+      "check": "C08",
+      "restores": "failure delivered as a message on a bounded event queue (first candidate)",
+      "python_assertion": "[fatal-latched] the core never learned of the failure at record 6",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-DELIVERY-DROPPED"
+      ],
+      "rust_tests": [
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record"
+      ],
+      "rust_markers": [
+        "[fatal-total]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC09",
+      "check": "C09",
+      "restores": "refuse only when recorded outstanding work exists",
+      "python_assertion": "[late-uncertain] F1: restart permitted with a late owner held",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-REFUSE-ONLY-RECORDED"
+      ],
+      "rust_tests": [
+        "k04_a_late_owner_without_an_acknowledged_record_still_blocks"
+      ],
+      "rust_markers": [
+        "[no-false-resolution]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC10a",
+      "check": "C10",
+      "restores": "header reserved bytes unchecked",
+      "python_assertion": "[exact-bytes] header reserved byte 60: valid",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-HEADER-RESERVED"
+      ],
+      "rust_tests": [
+        "f01_header_bytes_are_assigned_and_checked"
+      ],
+      "rust_markers": [
+        "[exact-bytes]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC10b",
+      "check": "C10",
+      "restores": "seal reserved bytes and tail unchecked (first candidate's unassigned bytes)",
+      "python_assertion": "[exact-bytes] seal byte 160 unchecked",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-SEAL-TAIL"
+      ],
+      "rust_tests": [
+        "f02_seal_bytes_are_assigned_and_checked"
+      ],
+      "rust_markers": [
+        "[exact-bytes]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC10c",
+      "check": "C10",
+      "restores": "record-block padding unchecked",
+      "python_assertion": "[exact-bytes] record byte 77 unchecked",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-RECORD-PADDING"
+      ],
+      "rust_tests": [
+        "f03_record_blocks_take_exactly_one_frame"
+      ],
+      "rust_markers": [
+        "[exact-bytes]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC10d",
+      "check": "C10",
+      "restores": "checksum-valid invalid header taken as an abandoned claim (first candidate)",
+      "python_assertion": "[exact-bytes] header reserved byte 60 classified AbandonedClaim",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-INVALID-HEADER-ABANDONED"
+      ],
+      "rust_tests": [
+        "f01_header_bytes_are_assigned_and_checked"
+      ],
+      "rust_markers": [
+        "[exact-bytes]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC10e",
+      "check": "C10",
+      "restores": "non-canonical decimals accepted in text",
+      "python_assertion": "[exact-bytes] disposition text accepted with leading zero",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-DECIMAL-LEADING-ZERO"
+      ],
+      "rust_tests": [
+        "f04_provision_grammar_is_exact"
+      ],
+      "rust_markers": [
+        "[exact-bytes]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC11a",
+      "check": "C11",
+      "restores": "binding includes the file location (first candidate)",
+      "python_assertion": "[archive-binding] the binding depends on the file location",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-BINDING-LOCATION"
+      ],
+      "rust_tests": [
+        "m04_archival_recycling_retirement_and_succession"
+      ],
+      "rust_markers": [
+        "[archive-binding]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC11b",
+      "check": "C11",
+      "restores": "binding ignores the content",
+      "python_assertion": "[archive-binding] the old disposition must be visible as stale",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-BINDING-NO-CONTENT"
+      ],
+      "rust_tests": [
+        "f07_bindings_are_content_addressed"
+      ],
+      "rust_markers": [
+        "[archive-binding]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC12a",
+      "check": "C12",
+      "restores": "temporary disposition names read as dispositions",
+      "python_assertion": "[admin-crash] a disposition took effect without its final name (F1 2)",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-TMP-DISPOSITION"
+      ],
+      "rust_tests": [
+        "m09_the_crash_matrix_is_the_documented_one"
+      ],
+      "rust_markers": [
+        "[admin-crash]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC12b",
+      "check": "C12",
+      "restores": "a PROVISION inode mismatch ignored",
+      "python_assertion": "[admin-crash] a replaced pool file was accepted (F1 after step 4)",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-PROVISION-INODE-IGNORED"
+      ],
+      "rust_tests": [
+        "o05_safe_open_refuses_before_opening"
+      ],
+      "rust_markers": [
+        "[safe-open]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC12c",
+      "check": "C12",
+      "restores": "retirement without preconditions hides pool claims",
+      "python_assertion": "[admin-crash] retirement hid an unresolved generation (Ready)",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-RETIRE-NO-PRECONDITIONS"
+      ],
+      "rust_tests": [
+        "m04_archival_recycling_retirement_and_succession"
+      ],
+      "rust_markers": [
+        "[admin-crash]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC13",
+      "check": "C13",
+      "restores": "grammar rule G16 (verdict iff closure) removed",
+      "python_assertion": "[grammar-conformance] mutation 'Failed verdict without a closure' gave None, expected G16",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-GRAMMAR-G16"
+      ],
+      "rust_tests": [
+        "g01_grammar_fixtures_prefixes_and_mutations"
+      ],
+      "rust_markers": [
+        "[grammar-conformance]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC14a",
+      "check": "C14",
+      "restores": "untrusted entries opened in blocking mode before the type check",
+      "python_assertion": "[safe-open] startup blocked opening a FIFO",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-OPEN-BEFORE-TYPE"
+      ],
+      "rust_tests": [
+        "o05_safe_open_refuses_before_opening"
+      ],
+      "rust_markers": [
+        "[safe-open]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC14b",
+      "check": "C14",
+      "restores": "ext4 decided by the shared magic alone (first candidate)",
+      "python_assertion": "[safe-open] ext3 with the shared magic: Ready",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-EXT4-MAGIC"
+      ],
+      "rust_tests": [
+        "o06_the_mount_is_identified_through_the_descriptor"
+      ],
+      "rust_markers": [
+        "[safe-open]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC15a",
+      "check": "C15",
+      "restores": "durable published before the sync",
+      "python_assertion": "[ack-durable] clean: record 1 acknowledged before it was durable",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-DURABLE-BEFORE-SYNC"
+      ],
+      "rust_tests": [
+        "r01_acknowledged_implies_durable_under_write_and_sync_faults"
+      ],
+      "rust_markers": [
+        "[ack-durable]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC15b",
+      "check": "C15",
+      "restores": "sync retried after EIO",
+      "python_assertion": "[ack-durable] sync EIO at record 1: record 1 acknowledged before it was durable",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-SYNC-RETRIED-AFTER-EIO"
+      ],
+      "rust_tests": [
+        "r01_acknowledged_implies_durable_under_write_and_sync_faults"
+      ],
+      "rust_markers": [
+        "[ack-durable]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC16",
+      "check": "C16",
+      "restores": "a visible RunEnded taken as resolution",
+      "python_assertion": "[no-false-resolution] T7 {'lazy': False} at native+i1 (F1): restart permitted with ['i1'] outstanding as UnsealedAction",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-VISIBLE-RUNENDED-RESOLVES"
+      ],
+      "rust_tests": [
+        "c01_classes_and_the_conservative_refusal"
+      ],
+      "rust_markers": [
+        "[no-false-resolution]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC17",
+      "check": "C17",
+      "restores": "claim counter unbounded",
+      "python_assertion": "[arith-bounds] claim after 2^63 gave Ready",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-CLAIM-UNBOUNDED"
+      ],
+      "rust_tests": [
+        "c04_the_claim_counter_never_wraps"
+      ],
+      "rust_markers": [
+        "[arith-bounds]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC18a",
+      "check": "C18",
+      "restores": "no store admission gate: admission continues after a fatal condition (R1)",
+      "python_assertion": "[fatal-total] A/D worker loss: admission after the fatal condition was not refused",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-NO-GATE"
+      ],
+      "rust_tests": [
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record"
+      ],
+      "rust_markers": [
+        "[admission-fence]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC18b",
+      "check": "C18",
+      "restores": "R1 failure targeting: the cause's own sequence, delivered only at that position",
+      "python_assertion": "[fatal-total] B conflict on an acknowledged record: failure delivered at None (None), expected 4",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-FAILURE-AT-CAUSE"
+      ],
+      "rust_tests": [
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record"
+      ],
+      "rust_markers": [
+        "[fatal-total]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC18c",
+      "check": "C18",
+      "restores": "a submission for an unissued future sequence accepted silently (R1)",
+      "python_assertion": "[fatal-total] C future: admission after the fatal condition was not refused",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-FUTURE-SILENT"
+      ],
+      "rust_tests": [
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record"
+      ],
+      "rust_markers": [
+        "[fatal-total]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC18d",
+      "check": "C19",
+      "restores": "publication after the fatal latch (R1)",
+      "python_assertion": "[admission-fence] publication after the latch (schedule [0, 0, 1, 0])",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-PUBLISH-AFTER-LATCH"
+      ],
+      "rust_tests": [
+        "r03_every_interleaving_of_gate_worker_apply_and_latch"
+      ],
+      "rust_markers": [
+        "[admission-fence]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC18e",
+      "check": "C18",
+      "restores": "an unexpected acknowledgement outcome ignored",
+      "python_assertion": "[fatal-total] unexpected ack: None",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-UNEXPECTED-ACK-IGNORED"
+      ],
+      "rust_tests": [
+        "r05_in_flight_appends_and_unexpected_acknowledgement_outcomes"
+      ],
+      "rust_markers": [
+        "[fatal-total]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC18f",
+      "check": "C18",
+      "restores": "record_failed for an unissued record counted as delivered",
+      "python_assertion": "[fatal-total] A/D worker loss: a failure was reported without a real record",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-FAIL-UNISSUED"
+      ],
+      "rust_tests": [
+        "r04_worker_loss_vanishing_and_poisoning"
+      ],
+      "rust_markers": [
+        "[fatal-total]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC19",
+      "check": "C19",
+      "restores": "a health check followed by an unprotected admission call",
+      "python_assertion": "[admission-fence] an admission linearized after the fatal latch (schedule [0, 1, 0, 0])",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "A-GATE-SPLIT"
+      ],
+      "rust_tests": [
+        "a01_the_authority_surface_is_fixed_in_the_source"
+      ],
+      "rust_markers": [
+        "[admission-fence]"
+      ],
+      "rust_categories": [
+        "authority-api-surface"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC20a",
+      "check": "C20",
+      "restores": "in-session verification requests a new shared lock (R1 workflow)",
+      "python_assertion": "[session-verify] in-session verification did not run (Busy)",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-SESSION-NEW-LOCK"
+      ],
+      "rust_tests": [
+        "m01_sessions_verify_through_their_retained_lock"
+      ],
+      "rust_markers": [
+        "[session-verify]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC20b",
+      "check": "C20",
+      "restores": "in-session verification converts the session's lock to shared",
+      "python_assertion": "[session-verify] a standalone verifier was not excluded during maintenance (Ready)",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-SESSION-SHARED"
+      ],
+      "rust_tests": [
+        "m01_sessions_verify_through_their_retained_lock"
+      ],
+      "rust_markers": [
+        "[session-verify]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC20c",
+      "check": "C20",
+      "restores": "the session releases its lock around verification",
+      "python_assertion": "[session-verify] an owner started while the session released its lock",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-SESSION-RELOCK"
+      ],
+      "rust_tests": [
+        "m01_sessions_verify_through_their_retained_lock"
+      ],
+      "rust_markers": [
+        "[session-verify]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC20d",
+      "check": "C20",
+      "restores": "a Busy verification taken as success",
+      "python_assertion": "[session-verify] in-session verification did not run (Ready)",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-BUSY-SUCCESS"
+      ],
+      "rust_tests": [
+        "m01_sessions_verify_through_their_retained_lock"
+      ],
+      "rust_markers": [
+        "[session-verify]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC20e",
+      "check": "C20",
+      "restores": "maintenance authority asserted by a flag instead of the retained lock",
+      "python_assertion": "[session-verify] verification without the retained lock was not refused",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-AUTHORITY-FLAG"
+      ],
+      "rust_tests": [
+        "m01_sessions_verify_through_their_retained_lock"
+      ],
+      "rust_markers": [
+        "[session-verify]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC20f",
+      "check": "C20",
+      "restores": "in-session verification skipped: an earlier report reused",
+      "python_assertion": "[session-verify] verify-after inside the same session: Ready",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-VERIFY-CACHED"
+      ],
+      "rust_tests": [
+        "m01_sessions_verify_through_their_retained_lock"
+      ],
+      "rust_markers": [
+        "[session-verify]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC21a",
+      "check": "C21",
+      "restores": "no post-lock revalidation of the PROVISION selection (R1)",
+      "python_assertion": "[provision-selection] a stale selection regained authority: Ready 10111213",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-NO-REVALIDATION"
+      ],
+      "rust_tests": [
+        "o04_a_replaced_selection_never_regains_authority"
+      ],
+      "rust_markers": [
+        "[provision-selection]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC21b",
+      "check": "C21",
+      "restores": "revalidation through the descriptor kept from selection",
+      "python_assertion": "[provision-selection] a stale selection regained authority: Ready 10111213",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "A-SELECTION-KEPT"
+      ],
+      "rust_tests": [
+        "a01_the_authority_surface_is_fixed_in_the_source"
+      ],
+      "rust_markers": [
+        "[provision-selection]"
+      ],
+      "rust_categories": [
+        "authority-api-surface"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC22a",
+      "check": "C22",
+      "restores": "directory entries durable only through fsync_dir (R1 model)",
+      "python_assertion": "[metadata-schedules] a link durable before the directory sync is not represented: {'F1': {'published'}, 'ordered': {'blocks'}, 'perdir': {'blocks'}}",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "S-SCHEDULES-GUARANTEED-ONLY"
+      ],
+      "rust_tests": [
+        "s04_metadata_schedules_and_split_renames"
+      ],
+      "rust_markers": [
+        "[metadata-schedules]"
+      ],
+      "rust_categories": [
+        "simulator-source-conformance"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC22b",
+      "check": "C22",
+      "restores": "no page reclaim while a descriptor is open (R1 model)",
+      "python_assertion": "[metadata-schedules] clean pages must be reclaimable while a descriptor is open",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "S-NO-RECLAIM-WHILE-OPEN"
+      ],
+      "rust_tests": [
+        "s03_page_reclaim_with_a_descriptor_open"
+      ],
+      "rust_markers": [
+        "[metadata-schedules]"
+      ],
+      "rust_categories": [
+        "simulator-source-conformance"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC23",
+      "check": "C23",
+      "restores": "an undocumented directory sync in recycling (a hidden model-only step)",
+      "python_assertion": "[step-parity] P-RECYCLE: modelled operations differ from the protocol: [('13.8/3', 'fsync_dir', 'provdir')]",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-HIDDEN-STEP"
+      ],
+      "rust_tests": [
+        "m08_procedures_perform_exactly_the_documented_steps"
+      ],
+      "rust_markers": [
+        "[step-parity]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC24a",
+      "check": "C24",
+      "restores": "enumeration bounds checked only after examining the entries",
+      "python_assertion": "[aggregate-bounds] dispositions: 4097 entries gave Invalid disposition 0000000000000000000000000000000000000000000000000000000000000000.disposition type",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-BOUND-AFTER-EXAMINE"
+      ],
+      "rust_tests": [
+        "m07_aggregate_bounds_refuse_before_any_entry_is_examined"
+      ],
+      "rust_markers": [
+        "[aggregate-bounds]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC24b",
+      "check": "C24",
+      "restores": "a startup authorized from the truncated report",
+      "python_assertion": "[aggregate-bounds] a startup decided from the truncated report: Ready partial=True",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-DECIDE-FROM-REPORT"
+      ],
+      "rust_tests": [
+        "c03_pool_level_checks_and_bounded_reports"
+      ],
+      "rust_markers": [
+        "[aggregate-bounds]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC24c",
+      "check": "C24",
+      "restores": "retirement preconditions evaluated on the truncated report",
+      "python_assertion": "[aggregate-bounds] retirement from a partial report hid an incident (Ready)",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-RETIRE-FROM-REPORT"
+      ],
+      "rust_tests": [
+        "m10_retirement_is_decided_from_the_complete_set"
+      ],
+      "rust_markers": [
+        "[aggregate-bounds]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-ACT-VISIBLE",
+      "check": "C25",
+      "restores": "a freshly revalidated, visible selection treated as activated",
+      "python_assertion": "[durable-activation] successor witness, F2 ('ordered', 21) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-NO-ACTIVATION"
+      ],
+      "rust_tests": [
+        "o02_activation_precedes_every_decision_and_the_claim"
+      ],
+      "rust_markers": [
+        "[durable-activation]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-ACT-ORDER",
+      "check": "C25",
+      "restores": "claim, acknowledgement and admission before the activation",
+      "python_assertion": "[durable-activation] successor witness, F2 ('ordered', 21) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-ACTIVATION-AFTER-SCAN"
+      ],
+      "rust_tests": [
+        "o02_activation_precedes_every_decision_and_the_claim"
+      ],
+      "rust_markers": [
+        "[durable-activation]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-ACT-ERROR",
+      "check": "C25",
+      "restores": "a failed or uncertain activation sync treated as success",
+      "python_assertion": "[durable-activation] EIO at the PROVISION directory, F2 ('ordered', 21) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-ACTIVATION-ERROR-IGNORED"
+      ],
+      "rust_tests": [
+        "o11_activation_refuses_on_failure_and_certifies_late_errors"
+      ],
+      "rust_markers": [
+        "[durable-activation]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-ACT-PROBE",
+      "check": "C25",
+      "restores": "no certification probe: a sync returning 0 after a silent commit failure trusted",
+      "python_assertion": "[durable-activation] silent journal abort, F2 ('ordered', 23) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-NO-PROBE"
+      ],
+      "rust_tests": [
+        "o11_activation_refuses_on_failure_and_certifies_late_errors"
+      ],
+      "rust_markers": [
+        "[activation-proof]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-ACT-REVALIDATE",
+      "check": "C25",
+      "restores": "the identity and selection revalidation around activation omitted",
+      "python_assertion": "[durable-activation] replacement during activation, F1: Ready on store-c with the acknowledged, unsealed generation of store-b outside the selected history",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-NO-A4"
+      ],
+      "rust_tests": [
+        "o11_activation_refuses_on_failure_and_certifies_late_errors"
+      ],
+      "rust_markers": [
+        "[provision-selection]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-ACT-COMPOSE",
+      "check": "C26",
+      "restores": "the R2 protocol: no activation, and a fresh root provisioned after Unprovisioned",
+      "python_assertion": "[composed-recovery] P-PROV prefix 25, first F1, second F2 ('ordered', 10) old: Ready on store-fresh with the acknowledged, unsealed generation of store-a outside the selected history",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-R2-PROTOCOL"
+      ],
+      "rust_tests": [
+        "x01_composed_recovery_keeps_every_acknowledged_generation"
+      ],
+      "rust_markers": [
+        "[composed-recovery]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-PROF-JOURNAL",
+      "check": "C27",
+      "restores": "an external journal accepted: the journal's location never checked",
+      "python_assertion": "[supported-profile] an external journal: the owner got Ready, not a refusal before the claim",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-EXTERNAL-JOURNAL"
+      ],
+      "rust_tests": [
+        "o07_the_effective_profile_is_read_not_inferred"
+      ],
+      "rust_markers": [
+        "[supported-profile]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-PROF-MODE",
+      "check": "C27",
+      "restores": "an excluded mode in the effective listing accepted (data=writeback, nobarrier, journal_async_commit, norecovery)",
+      "python_assertion": "[supported-profile] nobarrier, the superblock's default, absent from mountinfo and contradicting the attestation: the owner got Ready, not a refusal before the claim",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-EXCLUDED-MODE"
+      ],
+      "rust_tests": [
+        "o07_the_effective_profile_is_read_not_inferred"
+      ],
+      "rust_markers": [
+        "[supported-profile]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-ACT-UNQUALIFIED",
+      "check": "C27",
+      "restores": "an unqualified profile authorizes: the profile taken from the pinned mountinfo strings and the attestation, the kernel never compared (R3)",
+      "python_assertion": "[supported-profile] nobarrier, the superblock's default, absent from mountinfo and contradicting the attestation: the owner got Ready, not a refusal before the claim",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-KERNEL-PREFIX",
+        "I-PROFILE-FROM-PINNED"
+      ],
+      "rust_tests": [
+        "o07_the_effective_profile_is_read_not_inferred"
+      ],
+      "rust_markers": [
+        "[supported-profile]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true,
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-PROF-GUARD",
+      "check": "C27",
+      "restores": "the effective profile not checked again after the syncs (A4)",
+      "python_assertion": "[supported-profile] a profile changed during activation was certified (Ready)",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-NO-A4-PROFILE"
+      ],
+      "rust_tests": [
+        "o08_a_profile_changed_during_activation_refuses_at_a4"
+      ],
+      "rust_markers": [
+        "[supported-profile]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-PROOF-ORDER",
+      "check": "C28",
+      "restores": "the probe before the directory syncs",
+      "python_assertion": "[activation-proof] initial ('d1', 'd2'), gaps (None, None, 'bg-ok', None), abort in the probe's handle True, waits ok: certified with a dependency in a failed transaction ([0, 0, 0, 0])",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-PROBE-FIRST"
+      ],
+      "rust_tests": [
+        "o02_activation_precedes_every_decision_and_the_claim"
+      ],
+      "rust_markers": [
+        "[durable-activation]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-FSYNC-COMPLETED",
+      "check": "C29",
+      "restores": "R3's fsync model: every aborted, unnoticed journal reported as EIO, whatever the state of the inode's transaction",
+      "python_assertion": "[journal-conformance] fsync of a completed transaction after an abort returned EIO; jbd2_complete_transaction returns 0 untested (journal.c:800-805)",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "S-COMPLETED-TESTS-ABORT"
+      ],
+      "rust_tests": [
+        "j01_the_completed_transaction_return"
+      ],
+      "rust_markers": [
+        "[journal-conformance]"
+      ],
+      "rust_categories": [
+        "simulator-source-conformance"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-ERR-DETECTED",
+      "check": "C29",
+      "restores": "a discarded flush status treated as detected: an invented abort at an unchecked flush site",
+      "python_assertion": "[journal-conformance] checkpoint.c:338-339: a discarded flush status became an abort",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "S-INVENTED-ABORT"
+      ],
+      "rust_tests": [
+        "j02_discarded_flushes_lose_history_on_a_volatile_cache"
+      ],
+      "rust_markers": [
+        "[journal-conformance]"
+      ],
+      "rust_categories": [
+        "simulator-source-conformance"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-STORAGE-VOLATILE",
+      "check": "C30",
+      "restores": "a volatile-completion profile admitted as stable: queue/write_cache alone decides, so a write to it hides a volatile cache",
+      "python_assertion": "[storage-qualification] a volatile cache hidden by a write to queue/write_cache (write through, fua 1): the owner got Ready, not a refusal before the claim with no admission",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-WRITE-CACHE-ALONE"
+      ],
+      "rust_tests": [
+        "o09_storage_that_is_not_admitted_refuses_before_any_claim"
+      ],
+      "rust_markers": [
+        "[storage-qualification]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-STORAGE-CLAIM",
+      "check": "C30",
+      "restores": "an unverified storage claim or a stale qualification treated as authority: the identity PROVISION claims taken in place of the one observed, and any admission object accepted at the claim",
+      "python_assertion": "[storage-qualification] another controller (serial): the owner got Ready, not a refusal before the claim with no admission",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-IDENTITY-UNCHECKED"
+      ],
+      "rust_tests": [
+        "o09_storage_that_is_not_admitted_refuses_before_any_claim"
+      ],
+      "rust_markers": [
+        "[storage-qualification]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-STORAGE-COMPLETION",
+      "check": "C31",
+      "restores": "durability published before the operation completes: a home write still in flight counted as complete, so the tail passes it",
+      "python_assertion": "[stable-completion] admitted storage: a home write still in flight: a certified dependency lost at power loss on admitted storage",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "S-INFLIGHT-COMPLETE"
+      ],
+      "rust_tests": [
+        "j03_the_stable_completion_checkpoint"
+      ],
+      "rust_markers": [
+        "[stable-completion]"
+      ],
+      "rust_categories": [
+        "simulator-source-conformance"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-STORAGE-ERROR",
+      "check": "C31",
+      "restores": "a reported write error converted into success: the sync returns 0 for a write the device reported failed, and the record is acknowledged",
+      "python_assertion": "[stable-completion] record 1 acknowledged although the device reported the write of record 1 failed",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "S-HOME-ERROR-SUCCESS",
+        "S-WRITEBACK-ERROR-SWALLOWED"
+      ],
+      "rust_tests": [
+        "j03_the_stable_completion_checkpoint",
+        "r01_acknowledged_implies_durable_under_write_and_sync_faults"
+      ],
+      "rust_markers": [
+        "[ack-durable]",
+        "[stable-completion]"
+      ],
+      "rust_categories": [
+        "simulator-source-conformance"
+      ],
+      "rust_ok": [
+        true,
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-STORAGE-TAIL",
+      "check": "C31",
+      "restores": "required journal history discarded without durable home data or a retained log copy: the tail moves past a failed home write",
+      "python_assertion": "[stable-completion] admitted storage: a home write fails: a certified dependency lost at power loss on admitted storage",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "S-TAIL-WITHOUT-HOME"
+      ],
+      "rust_tests": [
+        "j03_the_stable_completion_checkpoint"
+      ],
+      "rust_markers": [
+        "[stable-completion]"
+      ],
+      "rust_categories": [
+        "simulator-source-conformance"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    },
+    {
+      "design": "NC-STORAGE-COMPOSED",
+      "check": "C32",
+      "restores": "the unsafe path restored: storage admitted on the Owner's attestation (A-S5, R4's domain), a volatile write-back cache included",
+      "python_assertion": "[storage-composed] P-SUCCESSOR prefix 31, a volatile write-back cache, a checkpoint; any flush sent fails, second F2 ('ordered', 35) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history",
+      "python_result": "CAUGHT",
+      "status": "rust-mutation",
+      "rust_controls": [
+        "I-ATTESTATION-ADMITS"
+      ],
+      "rust_tests": [
+        "x03_storage_events_composed"
+      ],
+      "rust_markers": [
+        "[storage-composed]"
+      ],
+      "rust_categories": [
+        "implementation-safety"
+      ],
+      "rust_ok": [
+        true
+      ],
+      "note": ""
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-1",
+      "title": "Acknowledged implies durable",
+      "tests": [
+        "r01_acknowledged_implies_durable_under_write_and_sync_faults",
+        "r03_every_interleaving_of_gate_worker_apply_and_latch",
+        "r10_a_replaced_journal_latches_before_publication",
+        "n05_native_writes_complete_through_a_controlled_adapter",
+        "n08_native_worker_write_and_sync_wiring"
+      ],
+      "markers": [
+        "[ack-durable]"
+      ],
+      "controls": [
+        "I-DURABLE-BEFORE-SYNC",
+        "I-SYNC-RETRIED-AFTER-EIO",
+        "I-WORKER-IDENTITY",
+        "S-WRITEBACK-ERROR-SWALLOWED"
+      ]
+    },
+    {
+      "id": "INV-2",
+      "title": "Write-ahead: every admitted action has a durable ActionStarted",
+      "tests": [
+        "r03_every_interleaving_of_gate_worker_apply_and_latch",
+        "k02_real_runs_record_the_source_derived_shapes",
+        "k03_adversarial_real_core_sequences_classify_and_refuse"
+      ],
+      "markers": [
+        "[admission-fence]",
+        "[ack-durable]",
+        "[grammar-conformance]"
+      ],
+      "controls": [
+        "I-PUBLISH-AFTER-LATCH"
+      ]
+    },
+    {
+      "id": "INV-3",
+      "title": "No false resolution",
+      "tests": [
+        "c01_classes_and_the_conservative_refusal",
+        "f02_seal_bytes_are_assigned_and_checked",
+        "k02_real_runs_record_the_source_derived_shapes",
+        "k03_adversarial_real_core_sequences_classify_and_refuse",
+        "k04_a_late_owner_without_an_acknowledged_record_still_blocks",
+        "r08_claim_and_seal_boundaries"
+      ],
+      "markers": [
+        "[no-false-resolution]",
+        "[late-uncertain]"
+      ],
+      "controls": [
+        "I-LATE-NOTE-MISSING",
+        "I-REFUSE-ONLY-RECORDED",
+        "I-VISIBLE-RUNENDED-RESOLVES"
+      ]
+    },
+    {
+      "id": "INV-4",
+      "title": "Nothing beyond P; failure delivered once at an issued record",
+      "tests": [
+        "r01_acknowledged_implies_durable_under_write_and_sync_faults",
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record",
+        "r03_every_interleaving_of_gate_worker_apply_and_latch",
+        "r04_worker_loss_vanishing_and_poisoning",
+        "r05_in_flight_appends_and_unexpected_acknowledgement_outcomes",
+        "r06_a_stall_is_reported_never_failed_and_nothing_waits_on_storage",
+        "r07_a_recorder_failure_keeps_owners_and_exclusion",
+        "r08_claim_and_seal_boundaries",
+        "r09_resubmission_is_idempotent_and_bounded"
+      ],
+      "markers": [
+        "[fatal-total]",
+        "[fatal-latched]",
+        "[dup-bounded]",
+        "[ack-durable]",
+        "[admission-fence]"
+      ],
+      "controls": [
+        "I-DELIVERY-DROPPED",
+        "I-DUP-CONFLICT",
+        "I-DUP-RETAINED",
+        "I-DURABLE-BEFORE-SYNC",
+        "I-FAIL-UNISSUED",
+        "I-FAILURE-AT-CAUSE",
+        "I-FUTURE-SILENT",
+        "I-NO-DROP-GUARD",
+        "I-NO-GATE",
+        "I-POISON-IGNORED",
+        "I-PUBLISH-AFTER-LATCH",
+        "I-SEAL-WHILE-LATCHED",
+        "I-SYNC-RETRIED-AFTER-EIO",
+        "I-TIMEOUT-STOPS",
+        "I-UNEXPECTED-ACK-IGNORED",
+        "I-VANISHED-IGNORED",
+        "S-WRITEBACK-ERROR-SWALLOWED"
+      ]
+    },
+    {
+      "id": "INV-5",
+      "title": "Totality and bounds",
+      "tests": [
+        "c03_pool_level_checks_and_bounded_reports",
+        "c04_the_claim_counter_never_wraps",
+        "m07_aggregate_bounds_refuse_before_any_entry_is_examined",
+        "f01_header_bytes_are_assigned_and_checked",
+        "f02_seal_bytes_are_assigned_and_checked",
+        "f03_record_blocks_take_exactly_one_frame"
+      ],
+      "markers": [
+        "[arith-bounds]",
+        "[aggregate-bounds]",
+        "[exact-bytes]"
+      ],
+      "controls": [
+        "I-BOUND-AFTER-EXAMINE",
+        "I-CLAIM-UNBOUNDED",
+        "I-DECIDE-FROM-REPORT",
+        "I-HEADER-RESERVED",
+        "I-INVALID-HEADER-ABANDONED",
+        "I-RECORD-PADDING",
+        "I-SEAL-TAIL"
+      ]
+    },
+    {
+      "id": "INV-6",
+      "title": "Determinism",
+      "tests": [
+        "c02_classification_is_deterministic"
+      ],
+      "markers": [
+        "[archive-binding]"
+      ],
+      "controls": [
+        "I-NONDETERMINISTIC-REPORT"
+      ]
+    },
+    {
+      "id": "INV-7",
+      "title": "Binding sensitivity",
+      "tests": [
+        "f07_bindings_are_content_addressed",
+        "m02_dispositions_apply_and_are_never_silently_stale",
+        "m04_archival_recycling_retirement_and_succession"
+      ],
+      "markers": [
+        "[archive-binding]"
+      ],
+      "controls": [
+        "I-BINDING-LOCATION",
+        "I-BINDING-NO-CONTENT"
+      ]
+    },
+    {
+      "id": "INV-8",
+      "title": "Disposition authority",
+      "tests": [
+        "f05_disposition_grammar_is_exact_and_bound",
+        "f09_the_validator_accepts_only_an_exact_restatement",
+        "m02_dispositions_apply_and_are_never_silently_stale",
+        "m03_revocation_blocks_again",
+        "m09_the_crash_matrix_is_the_documented_one"
+      ],
+      "markers": [
+        "[disposition-exact]",
+        "[admin-crash]"
+      ],
+      "controls": [
+        "I-TMP-DISPOSITION",
+        "I-VALIDATOR-INEXACT"
+      ]
+    },
+    {
+      "id": "INV-9",
+      "title": "Seal meaning",
+      "tests": [
+        "f02_seal_bytes_are_assigned_and_checked",
+        "k01_every_record_kind_through_the_store_classifies",
+        "r08_claim_and_seal_boundaries"
+      ],
+      "markers": [
+        "[exact-bytes]",
+        "[grammar-conformance]",
+        "[fatal-total]"
+      ],
+      "controls": [
+        "I-SEAL-TAIL",
+        "I-SEAL-WHILE-LATCHED"
+      ]
+    },
+    {
+      "id": "INV-10",
+      "title": "Exclusion",
+      "tests": [
+        "r07_a_recorder_failure_keeps_owners_and_exclusion",
+        "o03_busy_before_any_sync_or_read",
+        "m01_sessions_verify_through_their_retained_lock",
+        "n04_native_flock_descriptions_and_duplicates",
+        "a01_the_authority_surface_is_fixed_in_the_source"
+      ],
+      "markers": [
+        "[lock-retained]",
+        "[busy-before-sync]",
+        "[session-verify]"
+      ],
+      "controls": [
+        "A-LOCK-UNLOCK",
+        "A-WORKER-LOCK",
+        "I-AUTHORITY-FLAG",
+        "I-BUSY-SUCCESS",
+        "I-SESSION-NEW-LOCK",
+        "I-SESSION-RELOCK",
+        "I-SESSION-SHARED",
+        "I-SYNC-BEFORE-LOCK",
+        "I-VERIFY-CACHED"
+      ]
+    },
+    {
+      "id": "INV-11",
+      "title": "Report honesty",
+      "tests": [
+        "c01_classes_and_the_conservative_refusal",
+        "s02_writeback_errors_are_not_repaired_by_reopening",
+        "o13_the_preservation_sync_makes_what_the_report_saw_durable",
+        "j06_the_errseq_counter_limitation_is_documented_not_detected",
+        "k04_a_late_owner_without_an_acknowledged_record_still_blocks"
+      ],
+      "markers": [
+        "[late-uncertain]",
+        "[errseq-reopen]",
+        "[F1-F2-sync]",
+        "[errseq-limit]",
+        "[no-false-resolution]"
+      ],
+      "controls": [
+        "I-LATE-NOTE-MISSING",
+        "I-PRESERVATION-SKIPPED",
+        "I-REFUSE-ONLY-RECORDED",
+        "I-VISIBLE-RUNENDED-RESOLVES",
+        "S-ERRSEQ-NO-WRAP",
+        "S-REOPEN-CERTIFIES"
+      ]
+    },
+    {
+      "id": "INV-12",
+      "title": "Administrative atomicity",
+      "tests": [
+        "m02_dispositions_apply_and_are_never_silently_stale",
+        "m03_revocation_blocks_again",
+        "m04_archival_recycling_retirement_and_succession",
+        "m05_leftovers_and_requalification",
+        "m08_procedures_perform_exactly_the_documented_steps",
+        "m09_the_crash_matrix_is_the_documented_one",
+        "o05_safe_open_refuses_before_opening",
+        "s04_metadata_schedules_and_split_renames"
+      ],
+      "markers": [
+        "[admin-crash]",
+        "[archive-binding]",
+        "[metadata-schedules]",
+        "[safe-open]"
+      ],
+      "controls": [
+        "I-BINDING-LOCATION",
+        "I-OPEN-BEFORE-TYPE",
+        "I-PROVISION-INODE-IGNORED",
+        "I-RETIRE-NO-PRECONDITIONS",
+        "I-TMP-DISPOSITION",
+        "S-SCHEDULES-GUARANTEED-ONLY"
+      ]
+    },
+    {
+      "id": "INV-13",
+      "title": "Admission fence",
+      "tests": [
+        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record",
+        "r03_every_interleaving_of_gate_worker_apply_and_latch",
+        "r04_worker_loss_vanishing_and_poisoning",
+        "a01_the_authority_surface_is_fixed_in_the_source"
+      ],
+      "markers": [
+        "[admission-fence]"
+      ],
+      "controls": [
+        "A-GATE-SPLIT",
+        "I-NO-GATE",
+        "I-PUBLISH-AFTER-LATCH"
+      ]
+    },
+    {
+      "id": "INV-14",
+      "title": "Selection authority",
+      "tests": [
+        "o04_a_replaced_selection_never_regains_authority",
+        "o11_activation_refuses_on_failure_and_certifies_late_errors",
+        "m04_archival_recycling_retirement_and_succession",
+        "a01_the_authority_surface_is_fixed_in_the_source"
+      ],
+      "markers": [
+        "[provision-selection]"
+      ],
+      "controls": [
+        "A-SELECTION-KEPT",
+        "I-NO-A4",
+        "I-NO-REVALIDATION"
+      ]
+    },
+    {
+      "id": "INV-15",
+      "title": "Session authority",
+      "tests": [
+        "m01_sessions_verify_through_their_retained_lock",
+        "o03_busy_before_any_sync_or_read"
+      ],
+      "markers": [
+        "[session-verify]"
+      ],
+      "controls": [
+        "I-AUTHORITY-FLAG",
+        "I-BUSY-SUCCESS",
+        "I-SESSION-NEW-LOCK",
+        "I-SESSION-RELOCK",
+        "I-SESSION-SHARED",
+        "I-VERIFY-CACHED"
+      ]
+    },
+    {
+      "id": "INV-16",
+      "title": "Bounded aggregates",
+      "tests": [
+        "c03_pool_level_checks_and_bounded_reports",
+        "m07_aggregate_bounds_refuse_before_any_entry_is_examined",
+        "m10_retirement_is_decided_from_the_complete_set"
+      ],
+      "markers": [
+        "[aggregate-bounds]"
+      ],
+      "controls": [
+        "I-BOUND-AFTER-EXAMINE",
+        "I-DECIDE-FROM-REPORT",
+        "I-RETIRE-FROM-REPORT"
+      ]
+    },
+    {
+      "id": "INV-17",
+      "title": "Protocol parity",
+      "tests": [
+        "m08_procedures_perform_exactly_the_documented_steps",
+        "m09_the_crash_matrix_is_the_documented_one"
+      ],
+      "markers": [
+        "[step-parity]",
+        "[metadata-schedules]"
+      ],
+      "controls": [
+        "I-HIDDEN-STEP"
+      ]
+    },
+    {
+      "id": "INV-18",
+      "title": "Durable activation",
+      "tests": [
+        "o02_activation_precedes_every_decision_and_the_claim",
+        "o11_activation_refuses_on_failure_and_certifies_late_errors",
+        "j01_the_completed_transaction_return",
+        "j02_discarded_flushes_lose_history_on_a_volatile_cache",
+        "j03_the_stable_completion_checkpoint",
+        "j04_volatile_paths_keep_their_own_outcomes",
+        "j05_activation_windows_on_admitted_storage",
+        "j07_whole_model_checkpoint_agrees_with_the_transaction_model",
+        "n06_native_syncs_and_futimens_on_owned_files"
+      ],
+      "markers": [
+        "[durable-activation]",
+        "[activation-proof]",
+        "[journal-conformance]",
+        "[stable-completion]"
+      ],
+      "controls": [
+        "I-A2-IDENTITY",
+        "I-ACTIVATION-AFTER-SCAN",
+        "I-ACTIVATION-ERROR-IGNORED",
+        "I-NO-ACTIVATION",
+        "I-NO-PROBE",
+        "I-PROBE-FIRST",
+        "S-COMPLETED-TESTS-ABORT",
+        "S-HOME-ERROR-SUCCESS",
+        "S-INFLIGHT-COMPLETE",
+        "S-INVENTED-ABORT",
+        "S-TAIL-WITHOUT-HOME"
+      ]
+    },
+    {
+      "id": "INV-19",
+      "title": "History across recovery",
+      "tests": [
+        "x01_composed_recovery_keeps_every_acknowledged_generation",
+        "x02_a_dispositioned_generation_lets_the_next_owner_run",
+        "m06_an_unprovisioned_root_with_history_is_republished",
+        "m09_the_crash_matrix_is_the_documented_one"
+      ],
+      "markers": [
+        "[composed-recovery]"
+      ],
+      "controls": [
+        "I-FRESH-ROOT",
+        "I-R2-PROTOCOL"
+      ]
+    },
+    {
+      "id": "INV-20",
+      "title": "Supported profile",
+      "tests": [
+        "o06_the_mount_is_identified_through_the_descriptor",
+        "o07_the_effective_profile_is_read_not_inferred",
+        "o08_a_profile_changed_during_activation_refuses_at_a4"
+      ],
+      "markers": [
+        "[supported-profile]",
+        "[safe-open]"
+      ],
+      "controls": [
+        "I-EXCLUDED-MODE",
+        "I-EXT4-MAGIC",
+        "I-EXTERNAL-JOURNAL",
+        "I-KERNEL-PREFIX",
+        "I-NO-A4-PROFILE",
+        "I-PROFILE-FROM-PINNED"
+      ]
+    },
+    {
+      "id": "INV-21",
+      "title": "Storage admission",
+      "tests": [
+        "o09_storage_that_is_not_admitted_refuses_before_any_claim",
+        "o10_a_storage_admission_is_bound_to_its_opening",
+        "o12_a_loss_of_qualification_refuses_later_openings_and_keeps_history",
+        "x03_storage_events_composed",
+        "f08_storage_identity_record_is_exact"
+      ],
+      "markers": [
+        "[storage-qualification]",
+        "[storage-composed]"
+      ],
+      "controls": [
+        "A-ADMISSION-CLONE",
+        "A-ADMISSION-FORGED",
+        "A-ADMISSION-UNBOUND",
+        "I-ATTESTATION-ADMITS",
+        "I-IDENTITY-UNCHECKED",
+        "I-WRITE-CACHE-ALONE"
+      ]
+    },
+    {
+      "id": "REQ-ENTRY",
+      "title": "The real configured-store entry is closed before any I/O; no switch",
+      "tests": [
+        "o01_the_real_store_entry_is_closed"
+      ],
+      "markers": [
+        "[real-entry-closed]"
+      ],
+      "controls": [
+        "A-ENTRY-CALLS",
+        "A-ENTRY-SWITCH"
+      ]
+    },
+    {
+      "id": "REQ-NATIVE",
+      "title": "Native primitives beneath CARGO_TARGET_TMPDIR: safe open, links, FIFO, flock, write and sync wiring, identity",
+      "tests": [
+        "n01_native_opening_is_descriptor_relative_and_no_follow",
+        "n02_native_hard_links_are_visible",
+        "n03_native_fifo_opens_without_blocking",
+        "n04_native_flock_descriptions_and_duplicates",
+        "n05_native_writes_complete_through_a_controlled_adapter",
+        "n06_native_syncs_and_futimens_on_owned_files",
+        "n07_native_identity_and_one_filesystem",
+        "n08_native_worker_write_and_sync_wiring"
+      ],
+      "markers": [
+        "[safe-open]",
+        "[lock-retained]",
+        "[ack-durable]",
+        "[durable-activation]"
+      ],
+      "controls": [
+        "N-BLOCKING",
+        "N-DOT-NAME",
+        "N-FOLLOW"
+      ]
+    },
+    {
+      "id": "REQ-SIM",
+      "title": "The simulator's state model: F1 versus F2, errseq, reclaim, schedules, tears",
+      "tests": [
+        "s01_process_death_and_power_loss_keep_states_apart",
+        "s02_writeback_errors_are_not_repaired_by_reopening",
+        "s03_page_reclaim_with_a_descriptor_open",
+        "s04_metadata_schedules_and_split_renames",
+        "s05_tears_stay_within_their_block"
+      ],
+      "markers": [
+        "[F1-volatile]",
+        "[F1-F2-sync]",
+        "[errseq-reopen]",
+        "[metadata-schedules]",
+        "[tear-containment]"
+      ],
+      "controls": [
+        "S-F1-DURABLE",
+        "S-NO-RECLAIM-WHILE-OPEN",
+        "S-REOPEN-CERTIFIES",
+        "S-SCHEDULES-GUARANTEED-ONLY",
+        "S-TEAR-SPANS"
+      ]
+    }
+  ]
+}

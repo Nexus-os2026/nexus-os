@@ -1,0 +1,14 @@
+recorded (UTC): 2026-10-02T10:55:34Z
+command: git ls-remote github <the ten protected refs> refs/heads/review/p2-v1-custody-store-implementation
+8e2c46c00cd4071bbae41815d1d1cd0c4814655f	refs/heads/evidence/p2-v1-r3b-i2-r1
+e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1	refs/heads/evidence/phase0-closure
+c237937189b5977eaad01acad6a4c52bcce796cc	refs/heads/evidence/phase1-closure
+4d6763a8afe998bb5a54f0b9ecfd420cd4abfa8f	refs/heads/implement/phase2-governed-verification
+4b36f60694148b60029733bc7b3d26e5a215d460	refs/heads/main
+f727f5c39fab8d5c729a55eb28ad576d3d56ce47	refs/heads/rebuild/phase0-trust-boundary
+14270a9a38770ac84456c1f812042d2967edec42	refs/heads/rebuild/phase1-governed-coding
+4b36f60694148b60029733bc7b3d26e5a215d460	refs/heads/repair/p2-validation-workflow-bootstrap
+45898e05178a56efaadeb1f8f9ee7a0a521c72c9	refs/heads/review/p2-v1-cleanup-observers
+7689e599ed8fc89ec7720d13869ef58cab767ecb	refs/heads/review/p2-v1-custody-recorder-design
+exit=0
+(no line for refs/heads/review/p2-v1-custody-store-implementation: the candidate branch does not exist on the remote yet)

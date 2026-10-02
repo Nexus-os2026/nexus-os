@@ -1,0 +1,22 @@
+
+running 1 test
+test r06_detached_output_is_output_loss_never_a_clean_pass ... FAILED
+
+failures:
+
+---- r06_detached_output_is_output_loss_never_a_clean_pass stdout ----
+
+thread 'r06_detached_output_is_output_loss_never_a_clean_pass' (3439069) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs:1235:5:
+[output-lost] the operation's end: Ok(OutputLost), failures 0, case CaseOutcome { case: CaseId(1), passed: true, resolved: true, stopped: false }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r06_detached_output_is_output_loss_never_a_clean_pass
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (<checkout>/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.20s
+     Running tests/phase2_custody_core.rs (target/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`
