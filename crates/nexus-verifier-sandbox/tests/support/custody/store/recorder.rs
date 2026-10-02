@@ -1,5 +1,6 @@
-//! The recorder worker (design sections 9.4 and 9.7) and the owner's start
-//! through the real core (section 10.2 steps 9 and 10).
+//! The recorder worker (design sections 9.4 and 9.7). The owner's start
+//! through the real core and the owner that retains the custody are in
+//! [`super::owner`].
 //!
 //! The worker owns only the journal's I/O description (`O_RDWR`, on which no
 //! lock is ever taken; the lock descriptions stay in the owner's
@@ -20,22 +21,21 @@
 //! worker, the owner's apply step, the admission gate and a latch in any
 //! order without threads; the threaded runner calls the same steps. A
 //! worker that unwinds latches `WorkerLost` through its drop guard.
+//!
+//! The worker, its constructor and its runner are internal to the store
+//! (`pub(super)`): only [`super::owner::start_owner`] constructs one for a
+//! store, over the journal its own claim opened and the exchange of the same
+//! owner. No interface points an owner's worker at another file or exchange.
+//! The one other construction is [`native_wiring`] (Linux only): a check of
+//! the write and sync path on a native file of a test's own, on an exchange
+//! of its own that never leaves it. It is not a store and has no seal.
 
 use std::sync::Arc;
 
 use super::super::codec;
-use super::super::{
-    Config, Control, Custody, DispositionReason, Generation, IncidentBinding, PriorOutcome,
-    Resource, Tick,
-};
-use super::disposition::StoreValidator;
-use super::exchange::{Cause, ClaimState, Exchange, Recorder, SealState, WorkerExit, WorkerHandle};
-use super::format::{parse_header, Header, HeaderParse, BLOCK, BLOCK_U64};
+use super::exchange::{Cause, ClaimState, Exchange, SealState, WorkerExit, WorkerHandle};
+use super::format::{BLOCK, BLOCK_U64};
 use super::io::{sync_with_retries, write_fully, Stat, StoreIo, WriteFailure};
-use super::open::{
-    applied_reasons, open_owner, OpeningHooks, Platform, ProvisionPath, Refusal, Refused,
-    StartupReport, StoreGuard,
-};
 
 /// Where the worker is about to act (a test's interleaving point).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,8 +71,8 @@ enum Phase {
     Done(WorkerExit),
 }
 
-/// The recorder worker of one claimed journal.
-pub struct Worker<P: StoreIo> {
+/// The recorder worker of one claimed journal. Internal to the store.
+pub(super) struct Worker<P: StoreIo> {
     io: P,
     file: P::File,
     journals: Arc<P::Dir>,
@@ -83,7 +83,7 @@ pub struct Worker<P: StoreIo> {
 }
 
 impl<P: StoreIo> Worker<P> {
-    pub fn new(
+    pub(super) fn new(
         io: P,
         file: P::File,
         journals: Arc<P::Dir>,
@@ -103,7 +103,7 @@ impl<P: StoreIo> Worker<P> {
     }
 
     /// The point the next step acts at.
-    pub fn point(&self) -> WorkerPoint {
+    pub(super) fn point(&self) -> WorkerPoint {
         match &self.phase {
             Phase::Idle | Phase::Done(_) => WorkerPoint::Take,
             Phase::Claim(_) => WorkerPoint::ClaimIo,
@@ -147,7 +147,7 @@ impl<P: StoreIo> Worker<P> {
     }
 
     /// One step of the worker.
-    pub fn step(&mut self) -> Step {
+    pub(super) fn step(&mut self) -> Step {
         match std::mem::replace(&mut self.phase, Phase::Idle) {
             Phase::Done(exit) => {
                 self.phase = Phase::Done(exit);
@@ -303,7 +303,7 @@ impl<P: StoreIo> Worker<P> {
     }
 
     /// Run steps until the worker is idle or ends (single-threaded use).
-    pub fn run_until_idle(&mut self) -> Step {
+    pub(super) fn run_until_idle(&mut self) -> Step {
         loop {
             match self.step() {
                 Step::Progress => continue,
@@ -315,7 +315,8 @@ impl<P: StoreIo> Worker<P> {
 
 /// A test's view of the worker's thread: called before each step, outside
 /// the mutex. It may block (a deterministic handshake) or panic (worker
-/// loss); it decides nothing.
+/// loss); it decides nothing and can change no state. Installed only through
+/// [`super::faults::spawn_worker_with_hooks`].
 pub trait WorkerHooks: Send + Sync {
     fn reached(&self, point: WorkerPoint);
 }
@@ -334,16 +335,24 @@ impl Drop for LossGuard {
     }
 }
 
-/// Run the worker on its own thread.
-pub fn spawn_worker<P>(mut worker: Worker<P>, hooks: Option<Arc<dyn WorkerHooks>>) -> WorkerHandle
+/// Run the worker on its own thread. `keep` (the owner's exclusion guard) is
+/// held by the thread until the worker ends, so the store's exclusion lasts
+/// as long as any of its I/O may be in flight, whatever happens to the owner.
+pub(super) fn spawn_worker<P, K>(
+    mut worker: Worker<P>,
+    hooks: Option<Arc<dyn WorkerHooks>>,
+    keep: K,
+) -> WorkerHandle
 where
     P: StoreIo + 'static,
+    K: Send + 'static,
 {
     let exchange = Arc::clone(&worker.exchange);
     let fallback = Arc::clone(&worker.exchange);
     let join = std::thread::Builder::new()
         .name("custody-recorder".into())
         .spawn(move || {
+            let _keep = keep;
             let mut guard = LossGuard {
                 exchange: Arc::clone(&exchange),
                 armed: true,
@@ -380,125 +389,90 @@ where
     }
 }
 
-// ---------------------------------------------------------------------------
-// The owner's start (design section 10.2 steps 9 and 10, section 10.3)
-// ---------------------------------------------------------------------------
-
-/// An owner started through the real core and the store: the custody
-/// (NotStarted, every prior dispositioned), its control handle, the recorder
-/// (its claim requested), the guard that holds the store's and the journal's
-/// locks, the worker (to be run by a thread or stepped by a test), and the
-/// header the claim writes.
-pub struct OwnerStart<R: Resource, P: Platform> {
-    pub custody: Custody<R>,
-    pub control: Control,
-    pub recorder: Recorder,
-    pub guard: StoreGuard<P>,
-    pub worker: Worker<P>,
-    pub header: Header,
-    pub claim: u64,
-    pub index: u32,
-    pub generation: Generation,
-    pub report: StartupReport,
+/// A native file of a test's own, beneath its `CARGO_TARGET_TMPDIR`, for
+/// [`native_wiring`]: the I/O, the file's read-write description, its
+/// directory, its name there and its identity.
+#[cfg(target_os = "linux")]
+pub struct NativeJournal {
+    pub io: super::io::Faulty<super::io::linux::LinuxIo>,
+    pub file: super::io::linux::LinuxFile,
+    pub dir: Arc<super::io::linux::LinuxDir>,
+    pub name: String,
+    pub identity: Stat,
 }
 
-/// Why an owner did not start.
-#[derive(Debug)]
-pub enum StartRefused {
-    /// The opening or the claim refused.
-    Store(Refusal),
-    /// The core refused the configuration or the priors.
-    Core(super::super::Refusal),
-    /// After every disposition was applied, these incidents still block: the
-    /// NotStarted custody was closed.
-    PriorUnresolved(Vec<[u8; 32]>),
-}
-
-/// Open the store, then (design section 10.2 steps 9 and 10): draw the
-/// generation; `Custody::new` with every current incident as a prior; apply
-/// the dispositions through the store's validator; refuse if anything still
-/// blocks; then the claim handoff, with the header listing every current
-/// incident and its disposition's reason. No record exists before the claim,
-/// so a refusal leaves an untouched NotStarted custody that closes.
-pub fn start_owner<R: Resource, P: Platform + Clone + 'static>(
-    io: &P,
-    path: &ProvisionPath,
-    config: &Config,
-    now: Tick,
-    clock: Arc<dyn Fn() -> Tick + Send + Sync>,
-    hooks: &mut dyn OpeningHooks,
-) -> Result<OwnerStart<R, P>, StartRefused> {
-    let opened = open_owner(io, path, config, hooks).map_err(StartRefused::Store)?;
-    let generation = opened.draw_generation(io).map_err(StartRefused::Store)?;
-    let priors = opened.priors();
-    let current = opened.current();
-    let (mut custody, control) =
-        Custody::<R>::new(*config, generation, priors, now).map_err(StartRefused::Core)?;
-    let validator = StoreValidator::new(&opened.selection.provision.root_id, &opened.scan);
-    for (binding, _) in &current {
-        let _ = custody.apply_disposition(&IncidentBinding::new(*binding), &validator, now);
-    }
-    let blocking: Vec<[u8; 32]> = current
-        .iter()
-        .filter(|(binding, _)| {
-            custody.snapshot().prior.iter().any(|prior| {
-                prior.binding == IncidentBinding::new(*binding)
-                    && prior.outcome != PriorOutcome::Resolved
-                    && prior.disposition.is_none()
-            })
-        })
-        .map(|(binding, _)| *binding)
-        .collect();
-    if !blocking.is_empty() {
-        let _ = custody.close(now);
-        return Err(StartRefused::PriorUnresolved(blocking));
-    }
-    let report = opened.report();
-    let applied: Vec<([u8; 32], DispositionReason)> =
-        applied_reasons(&opened.decision, &opened.scan.dispositions);
-    let claim = match opened.claim(io, config, generation, &applied) {
-        Ok(claim) => claim,
-        Err(refusal) => {
-            let _ = custody.close(now);
-            return Err(StartRefused::Store(refusal));
-        }
-    };
-    let header = match parse_header(
-        &claim.header_block[..],
-        &claim.header.root_id,
-        Some(claim.header.c_pool),
-        Some(claim.index),
-    ) {
-        HeaderParse::Valid(header) => header,
-        _ => {
-            let _ = custody.close(now);
-            return Err(StartRefused::Store(Refusal {
-                refused: Refused::ClaimFailed("header".into()),
-                revision: Some(claim.selection.revision()),
-            }));
-        }
-    };
-    let exchange = Exchange::new(generation, config.record_capacity, clock);
-    let recorder = Recorder::new(Arc::clone(&exchange));
+/// The worker's write, sync and publication wiring on a native file (design
+/// section 16.5), through the Linux primitives.
+///
+/// It is not a store and confers nothing on one: there is no `PROVISION`,
+/// activation, lock, opening, claim decision or owner, and the file is no
+/// pool file. The exchange, recorder and worker it builds are its own and
+/// never leave it: `drive` reaches them only through the borrowed
+/// [`NativeWiring`]. That offers the claim request, a flush and an apply
+/// step of the caller's own custody, the worker's run until idle, and the
+/// claim state. It offers no seal, latch, exchange fault, state write or
+/// thread (planned I/O faults of `Faulty` act on the caller's own file).
+#[cfg(target_os = "linux")]
+pub fn native_wiring<T>(
+    journal: NativeJournal,
+    generation: super::super::Generation,
+    capacity: u32,
+    drive: impl FnOnce(&mut NativeWiring) -> T,
+) -> T {
+    let exchange = Exchange::new(generation, capacity, Arc::new(|| super::super::Tick(0)));
+    let recorder = super::exchange::Recorder::new(Arc::clone(&exchange));
     let worker = Worker::new(
-        io.clone(),
-        claim.io_file,
-        Arc::clone(claim.guard.journals()),
-        claim.journal_name,
-        claim.journal_stat,
+        journal.io,
+        journal.file,
+        journal.dir,
+        journal.name,
+        journal.identity,
         exchange,
     );
-    recorder.request_claim(claim.header_block);
-    Ok(OwnerStart {
-        custody,
-        control,
-        recorder,
-        guard: claim.guard,
-        worker,
-        header,
-        claim: claim.claim,
-        index: claim.index,
-        generation,
-        report,
-    })
+    drive(&mut NativeWiring { recorder, worker })
+}
+
+/// [`native_wiring`]'s exchange, recorder and worker, borrowed by its
+/// `drive` only.
+#[cfg(target_os = "linux")]
+pub struct NativeWiring {
+    recorder: super::exchange::Recorder,
+    worker: Worker<super::io::Faulty<super::io::linux::LinuxIo>>,
+}
+
+#[cfg(target_os = "linux")]
+impl NativeWiring {
+    /// Request the claim: the worker writes and syncs `header` first.
+    pub fn request_claim(&mut self, header: Box<[u8; BLOCK]>) {
+        self.recorder.request_claim(header);
+    }
+
+    pub fn claim_state(&self) -> ClaimState {
+        self.recorder.claim_state()
+    }
+
+    /// The caller's custody's records through the recorder's sink, then the
+    /// apply step.
+    pub fn flush<R: super::super::Resource>(
+        &mut self,
+        custody: &mut super::super::Custody<R>,
+        now: super::super::Tick,
+    ) -> Result<super::exchange::Applied, super::super::FlushError> {
+        self.recorder.flush(custody, now)
+    }
+
+    /// The apply step: acknowledgements of durable records to the caller's
+    /// custody.
+    pub fn apply<R: super::super::Resource>(
+        &mut self,
+        custody: &mut super::super::Custody<R>,
+        now: super::super::Tick,
+    ) -> super::exchange::Applied {
+        self.recorder.apply(custody, now)
+    }
+
+    /// Run the worker until it has nothing to do.
+    pub fn run_worker_until_idle(&mut self) -> Step {
+        self.worker.run_until_idle()
+    }
 }

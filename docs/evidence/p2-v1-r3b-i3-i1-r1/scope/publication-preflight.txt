@@ -1,0 +1,21 @@
+P2-V1-R3B-I3-I1-R1 publication preflight (before the commit), 2026-10-02T13:01:07Z
+
+Push target: refs/heads/review/p2-v1-custody-store-implementation on github
+
+Workflow push triggers at the base (.github is unchanged by this candidate):
+  .github/workflows/audit.yml: push trigger: branches: - main
+  .github/workflows/ci-fast-local.yml: push trigger: branches: - "implement/**" - "repair/**"
+  .github/workflows/ci-phase2-linux-sandbox.yml: push trigger: none
+  .github/workflows/ci-portability.yml: push trigger: none
+  .github/workflows/ci.yml: push trigger: branches: - main
+  .github/workflows/local-runner-smoke.yml: push trigger: branches: - rebuild/phase0-trust-boundary paths: - ".github/workflows/local-runner-smoke.yml"
+  .github/workflows/pages.yml: push trigger: branches: - main paths: - "website/**" - ".github/workflows/pages.yml"
+  .github/workflows/release.yml: push trigger: tags: - "v*"
+
+None of these push filters (main, implement/**, repair/**, rebuild/phase0-trust-boundary with a path filter, tags v*) matches review/p2-v1-custody-store-implementation.
+
+Local hooks: core.hooksPath=/home/nexus/NEXUS/nexus-os/.git/hooks
+  active (non-sample) hooks there: 0
+  worktree git dir hooks: 0
+
+Commit identity (repository config): Suresh Karicheti <nexaiceo@gmail.com>

@@ -24,14 +24,26 @@
 //! - the core is told of a failure only at its next unacknowledged record,
 //!   only once that record is issued, and once;
 //! - admission is refused at once from the latch on, without waiting for any
-//!   record (INV-13).
+//!   record (INV-13);
+//! - the seal is requested at most once, only from the actual closure of the
+//!   custody the owner retains (see [`super::owner`]): no caller supplies the
+//!   closure or the record count.
+//!
+//! Visibility (P2-V1-R3B-I3-I1-R1): the exchange, its state, its guard, its
+//! sink, the recorder and the worker handle are internal to the store
+//! (`pub(super)`). An external caller acts only through
+//! [`super::owner::StoreOwner`] and [`super::owner::ClosedStore`], and reads
+//! only copies ([`RecorderStatus`], [`Applied`], [`ClaimState`],
+//! [`SealState`]). The narrow, fail-closed fault operations the tests use are
+//! in [`super::faults`]. Nothing here defends against `unsafe` code in the
+//! same process.
 
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
 use super::super::{
-    AckOutcome, AdmitRefused, Closed, Custody, FlushError, Generation, OpTicket, RecordAck,
-    RecordId, RecordIntent, RecordSink, Reservation, Resource, Tick,
+    AckOutcome, AdmitRefused, Custody, FlushError, Generation, OpTicket, RecordAck, RecordId,
+    RecordIntent, RecordSink, Reservation, Resource, Tick,
 };
 use super::classify::Grammar;
 use super::format::{self, Header, PrefixFacts, BLOCK};
@@ -108,21 +120,23 @@ pub enum WorkerExit {
     Stopped,
 }
 
-/// The exchange's state, under its one mutex (design section 9.2).
+/// The exchange's state, under its one mutex (design section 9.2). Internal
+/// to the store: only the designated transitions here and in the worker
+/// change it.
 #[derive(Debug)]
-pub struct ExchangeState {
-    pub generation: Generation,
-    pub capacity: u64,
+pub(super) struct ExchangeState {
+    pub(super) generation: Generation,
+    pub(super) capacity: u64,
     slots: Vec<Option<RecordIntent>>,
-    pub submitted_through: u64,
-    pub claim: ClaimState,
-    pub seal: SealState,
-    pub durable_through: u64,
-    pub fatal: Option<(Cause, u64)>,
-    pub later_causes: u64,
-    pub pending: Option<(u64, Tick)>,
-    pub worker_exit: Option<WorkerExit>,
-    pub stop: bool,
+    pub(super) submitted_through: u64,
+    pub(super) claim: ClaimState,
+    pub(super) seal: SealState,
+    pub(super) durable_through: u64,
+    pub(super) fatal: Option<(Cause, u64)>,
+    pub(super) later_causes: u64,
+    pub(super) pending: Option<(u64, Tick)>,
+    pub(super) worker_exit: Option<WorkerExit>,
+    pub(super) stop: bool,
     poison_noted: bool,
 }
 
@@ -130,7 +144,7 @@ impl ExchangeState {
     /// Latching is one critical section: the first cause records itself and
     /// P = `durable_through`, and a requested claim or seal fails; any later
     /// cause is only counted. Never cleared.
-    pub fn latch(&mut self, cause: Cause) {
+    pub(super) fn latch(&mut self, cause: Cause) {
         if self.fatal.is_none() {
             self.fatal = Some((cause, self.durable_through));
             if matches!(self.claim, ClaimState::Requested(_)) {
@@ -153,7 +167,7 @@ impl ExchangeState {
     }
 
     /// The intent submitted for `seq`, if any.
-    pub fn slot(&self, seq: u64) -> Option<&RecordIntent> {
+    pub(super) fn slot(&self, seq: u64) -> Option<&RecordIntent> {
         if seq == 0 {
             return None;
         }
@@ -162,7 +176,8 @@ impl ExchangeState {
 }
 
 /// The exchange: its state, the worker's wake-up hint and the owner's.
-pub struct Exchange {
+/// Internal to the store.
+pub(super) struct Exchange {
     state: Mutex<ExchangeState>,
     work: Condvar,
     owner: Condvar,
@@ -171,16 +186,16 @@ pub struct Exchange {
 
 /// One acquisition of the exchange mutex. `poisoned` is true when the mutex
 /// was found poisoned (`Poisoned` is then latched): the state may be read
-/// only to report.
-pub struct Held<'a> {
-    pub state: MutexGuard<'a, ExchangeState>,
-    pub poisoned: bool,
+/// only to report. Internal to the store.
+pub(super) struct Held<'a> {
+    pub(super) state: MutexGuard<'a, ExchangeState>,
+    pub(super) poisoned: bool,
 }
 
 impl Exchange {
     /// The exchange of one claimed generation: `capacity` slots, allocated
     /// once and never grown.
-    pub fn new(
+    pub(super) fn new(
         generation: Generation,
         capacity: u32,
         clock: Arc<dyn Fn() -> Tick + Send + Sync>,
@@ -209,7 +224,7 @@ impl Exchange {
 
     /// Acquire the mutex, checking for poison: the first acquisition that
     /// finds it poisoned latches `Poisoned`.
-    pub fn acquire(&self) -> Held<'_> {
+    pub(super) fn acquire(&self) -> Held<'_> {
         match self.state.lock() {
             Ok(state) => Held {
                 state,
@@ -226,31 +241,31 @@ impl Exchange {
         }
     }
 
-    pub fn now(&self) -> Tick {
+    pub(super) fn now(&self) -> Tick {
         (self.clock)()
     }
 
     /// Latch `cause` in one critical section.
-    pub fn latch(&self, cause: Cause) {
+    pub(super) fn latch(&self, cause: Cause) {
         self.acquire().state.latch(cause);
         self.work.notify_all();
         self.owner.notify_all();
     }
 
     /// Wake the worker (a hint: a missed one is harmless).
-    pub fn wake_worker(&self) {
+    pub(super) fn wake_worker(&self) {
         self.work.notify_all();
     }
 
     /// Wake the owner (a hint).
-    pub fn wake_owner(&self) {
+    pub(super) fn wake_owner(&self) {
         self.owner.notify_all();
     }
 
     /// The worker waits for work: the mutex is released while it waits, and
     /// the wait is bounded so it rechecks the state; a timeout is never a
     /// result.
-    pub fn wait_for_work<'a>(&'a self, held: Held<'a>) -> Held<'a> {
+    pub(super) fn wait_for_work<'a>(&'a self, held: Held<'a>) -> Held<'a> {
         let Held { state, poisoned } = held;
         match self.work.wait_timeout(state, Duration::from_millis(20)) {
             Ok((state, _)) => Held { state, poisoned },
@@ -268,7 +283,7 @@ impl Exchange {
     /// The owner waits for a change of the claim or the seal state, bounded
     /// by `rounds` short waits. Used only before the claim (the owner holds
     /// no custody then) and at the end, after `close()`.
-    pub fn wait_owner<'a>(&'a self, held: Held<'a>) -> Held<'a> {
+    pub(super) fn wait_owner<'a>(&'a self, held: Held<'a>) -> Held<'a> {
         let Held { state, poisoned } = held;
         match self.owner.wait_timeout(state, Duration::from_millis(20)) {
             Ok((state, _)) => Held { state, poisoned },
@@ -283,9 +298,10 @@ impl Exchange {
         }
     }
 
-    /// Fixture only: poison the mutex, as a panic in a critical section
-    /// would. The store's code never panics while it holds the mutex.
-    pub fn fixture_poison(self: &Arc<Exchange>) {
+    /// Fault injection ([`super::faults::poison`] only): poison the mutex, as
+    /// a panic in a critical section would. The store's code never panics
+    /// while it holds the mutex. This can only make the recorder fail.
+    pub(super) fn poison(self: &Arc<Exchange>) {
         let exchange = Arc::clone(self);
         let _ = std::thread::spawn(move || {
             let _held = exchange.state.lock();
@@ -302,8 +318,10 @@ impl Exchange {
 /// The core's record sink: an idempotent, non-blocking insertion into the
 /// exchange, apart from one short critical section. It also keeps the
 /// owner's own copy of every stored intent, from which acknowledgements are
-/// built.
-pub struct ExchangeSink<'a> {
+/// built. Internal to the store: only the retained custody's own flush
+/// submits through it (and the fault interface, which can only submit what
+/// the sink refuses or already holds).
+pub(super) struct ExchangeSink<'a> {
     recorder: &'a mut Recorder,
 }
 
@@ -322,6 +340,22 @@ impl RecordSink for ExchangeSink<'_> {
             exchange.wake_worker();
         }
     }
+}
+
+/// Whether a submission of `intent` now would be stored as the next record
+/// (rather than refused, latched or recognized as a duplicate). The fault
+/// interface uses it to refuse injecting anything but an invalid,
+/// conflicting or duplicate submission.
+pub(super) fn stores_as_new(held: &Held<'_>, intent: &RecordIntent) -> bool {
+    let state = &held.state;
+    let seq = intent.id.seq();
+    !held.poisoned
+        && state.fatal.is_none()
+        && state.claim == ClaimState::Claimed
+        && intent.id.generation() == state.generation
+        && seq != 0
+        && seq <= state.capacity
+        && seq == state.submitted_through + 1
 }
 
 /// The conditions of design section 9.3, in order, under the mutex. Returns
@@ -432,29 +466,30 @@ impl RecorderStatus {
     }
 }
 
-/// A thread running a worker, and how the owner checks it.
-pub struct WorkerHandle {
+/// A thread running a worker, and how the owner checks it. Internal to the
+/// store.
+pub(super) struct WorkerHandle {
     join: Option<std::thread::JoinHandle<()>>,
 }
 
 impl WorkerHandle {
-    pub fn new(join: std::thread::JoinHandle<()>) -> WorkerHandle {
+    pub(super) fn new(join: std::thread::JoinHandle<()>) -> WorkerHandle {
         WorkerHandle { join: Some(join) }
     }
 
     /// No thread was started.
-    pub fn none() -> WorkerHandle {
+    pub(super) fn none() -> WorkerHandle {
         WorkerHandle { join: None }
     }
 
-    pub fn is_finished(&self) -> bool {
+    pub(super) fn is_finished(&self) -> bool {
         self.join
             .as_ref()
             .is_some_and(std::thread::JoinHandle::is_finished)
     }
 
     /// Join a finished thread (never called under any lock).
-    pub fn join(&mut self) {
+    pub(super) fn join(&mut self) {
         if let Some(join) = self.join.take() {
             let _ = join.join();
         }
@@ -472,12 +507,16 @@ pub enum SealWithheld {
     NotClaimed,
     /// The recorded prefix does not satisfy the grammar (never expected).
     Grammar,
+    /// A seal was already requested, published or failed: the transition is
+    /// one-way and happens once.
+    AlreadyRequested,
 }
 
 /// The owner's recorder handle: its retained intents, its applied position,
 /// failure delivery and the admission gate. It lives on the owner thread
-/// beside the custody.
-pub struct Recorder {
+/// beside the custody, inside [`super::owner::StoreOwner`]; it is internal to
+/// the store.
+pub(super) struct Recorder {
     exchange: Arc<Exchange>,
     retained: Vec<RecordIntent>,
     applied_through: u64,
@@ -487,7 +526,7 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    pub fn new(exchange: Arc<Exchange>) -> Recorder {
+    pub(super) fn new(exchange: Arc<Exchange>) -> Recorder {
         Recorder {
             exchange,
             retained: Vec::new(),
@@ -498,35 +537,35 @@ impl Recorder {
         }
     }
 
-    pub fn exchange(&self) -> &Arc<Exchange> {
+    pub(super) fn exchange(&self) -> &Arc<Exchange> {
         &self.exchange
     }
 
     /// The thread running the worker (the owner's join-handle check).
-    pub fn attach_worker(&mut self, handle: WorkerHandle) {
+    pub(super) fn attach_worker(&mut self, handle: WorkerHandle) {
         self.worker = Some(handle);
     }
 
-    pub fn sink(&mut self) -> ExchangeSink<'_> {
+    pub(super) fn sink(&mut self) -> ExchangeSink<'_> {
         ExchangeSink { recorder: self }
     }
 
     /// The owner's retained copies of the intents it submitted.
-    pub fn retained(&self) -> &[RecordIntent] {
+    pub(super) fn retained(&self) -> &[RecordIntent] {
         &self.retained
     }
 
-    pub fn applied_through(&self) -> u64 {
+    pub(super) fn applied_through(&self) -> u64 {
         self.applied_through
     }
 
-    pub fn delivery(&self) -> Delivery {
+    pub(super) fn delivery(&self) -> Delivery {
         self.delivery
     }
 
     /// Request the claim (design section 9.7), after activation. A cause
     /// latched before the request fails it at once.
-    pub fn request_claim(&self, header: Box<[u8; BLOCK]>) {
+    pub(super) fn request_claim(&self, header: Box<[u8; BLOCK]>) {
         {
             let mut held = self.exchange.acquire();
             if held.poisoned || held.state.fatal.is_some() {
@@ -538,18 +577,18 @@ impl Recorder {
         self.exchange.wake_worker();
     }
 
-    pub fn claim_state(&self) -> ClaimState {
+    pub(super) fn claim_state(&self) -> ClaimState {
         self.exchange.acquire().state.claim.clone()
     }
 
-    pub fn seal_state(&self) -> SealState {
+    pub(super) fn seal_state(&self) -> SealState {
         self.exchange.acquire().state.seal.clone()
     }
 
     /// The owner waits (bounded, `rounds` short waits) until the claim is no
     /// longer requested. Only before the claim, when the owner holds no
     /// custody and serves no request.
-    pub fn wait_claim(&self, rounds: u32) -> ClaimState {
+    pub(super) fn wait_claim(&self, rounds: u32) -> ClaimState {
         let mut held = self.exchange.acquire();
         for _ in 0..rounds {
             if !matches!(held.state.claim, ClaimState::Requested(_)) {
@@ -561,7 +600,7 @@ impl Recorder {
     }
 
     /// Wait (bounded) until the seal is no longer requested.
-    pub fn wait_seal(&self, rounds: u32) -> SealState {
+    pub(super) fn wait_seal(&self, rounds: u32) -> SealState {
         let mut held = self.exchange.acquire();
         for _ in 0..rounds {
             if !matches!(held.state.seal, SealState::Requested(_)) {
@@ -574,7 +613,7 @@ impl Recorder {
 
     /// Wait (bounded) until `durable_through` reaches `seq` or a cause is
     /// latched. The owner never needs this to stay responsive; tests use it.
-    pub fn wait_durable(&self, seq: u64, rounds: u32) -> u64 {
+    pub(super) fn wait_durable(&self, seq: u64, rounds: u32) -> u64 {
         let mut held = self.exchange.acquire();
         for _ in 0..rounds {
             if held.state.durable_through >= seq || held.state.fatal.is_some() {
@@ -586,7 +625,7 @@ impl Recorder {
     }
 
     /// `flush_records` through this recorder's sink, then the apply step.
-    pub fn flush<R: Resource>(
+    pub(super) fn flush<R: Resource>(
         &mut self,
         custody: &mut Custody<R>,
         now: Tick,
@@ -598,7 +637,7 @@ impl Recorder {
 
     /// The owner's apply step (design section 9.4), at a safe point; it
     /// never blocks. Then failure delivery while a cause is latched.
-    pub fn apply<R: Resource>(&mut self, custody: &mut Custody<R>, now: Tick) -> Applied {
+    pub(super) fn apply<R: Resource>(&mut self, custody: &mut Custody<R>, now: Tick) -> Applied {
         let vanished = {
             let finished = self.worker.as_ref().is_some_and(WorkerHandle::is_finished);
             finished && self.exchange.acquire().state.worker_exit.is_none()
@@ -682,7 +721,7 @@ impl Recorder {
     /// `Custody::admit` in one critical section of the exchange mutex, the
     /// mutex every latch takes. An admission completes before a latch, or
     /// starts after it and is refused, at once.
-    pub fn admit<R: Resource>(
+    pub(super) fn admit<R: Resource>(
         &mut self,
         custody: &mut Custody<R>,
         reservation: Reservation,
@@ -704,27 +743,32 @@ impl Recorder {
     }
 
     /// The recorder's status, copied (a short critical section).
-    pub fn status(&self) -> RecorderStatus {
+    pub(super) fn status(&self) -> RecorderStatus {
         status_of(&self.exchange)
     }
 
     /// The latched cause and P, if any.
-    pub fn latched(&self) -> Option<(Cause, u64)> {
+    pub(super) fn latched(&self) -> Option<(Cause, u64)> {
         self.exchange.acquire().state.fatal
     }
 
-    /// Request the seal (design section 9.7): only after `close()` returned
-    /// `Ok` (the [`Closed`] value is its proof), only with every record
-    /// durable and acknowledged, and only while nothing is latched; otherwise
+    /// Request the seal (design section 9.7). Called only by
+    /// [`super::owner::StoreOwner::close`], right after `close()` on the
+    /// custody that owner retains returned `Ok`, with that result's record
+    /// count; never with a caller's data. Only with every record durable and
+    /// acknowledged, only while nothing is latched, and only once: otherwise
     /// the seal is withheld.
-    pub fn request_seal<R>(
+    pub(super) fn request_seal(
         &self,
         header: &Header,
-        closed: &Closed<R>,
+        records: u64,
         closed_ms: u64,
     ) -> Result<(), SealWithheld> {
         let facts = {
             let held = self.exchange.acquire();
+            if held.state.seal != SealState::None {
+                return Err(SealWithheld::AlreadyRequested);
+            }
             if let Some((cause, _)) = held.state.fatal {
                 return Err(SealWithheld::Latched(cause));
             }
@@ -732,11 +776,8 @@ impl Recorder {
                 return Err(SealWithheld::NotClaimed);
             }
             let durable = held.state.durable_through;
-            if durable != closed.records || self.applied_through != closed.records {
-                return Err(SealWithheld::NotAllDurable {
-                    durable,
-                    records: closed.records,
-                });
+            if durable != records || self.applied_through != records {
+                return Err(SealWithheld::NotAllDurable { durable, records });
             }
             durable
         };
@@ -744,6 +785,9 @@ impl Recorder {
         let seal = format::encode_seal(&format::seal_for(header, &prefix, closed_ms));
         {
             let mut held = self.exchange.acquire();
+            if held.state.seal != SealState::None {
+                return Err(SealWithheld::AlreadyRequested);
+            }
             if let Some((cause, _)) = held.state.fatal {
                 return Err(SealWithheld::Latched(cause));
             }
@@ -755,13 +799,13 @@ impl Recorder {
 
     /// The process is ending: the worker stops at its next idle point (never
     /// in the middle of a write or a sync).
-    pub fn stop_worker(&mut self) {
+    pub(super) fn stop_worker(&mut self) {
         self.exchange.acquire().state.stop = true;
         self.exchange.wake_worker();
     }
 
     /// Join the worker's thread once it finished (never under a lock).
-    pub fn join_worker(&mut self) {
+    pub(super) fn join_worker(&mut self) {
         if let Some(handle) = self.worker.as_mut() {
             if handle.is_finished() {
                 handle.join();
@@ -770,8 +814,18 @@ impl Recorder {
     }
 }
 
+/// A recorder going away (its owner or closed store dropped, or the owner
+/// process ending) asks a threaded worker to stop at its next idle point:
+/// never in the middle of a write or a sync, and after any requested seal.
+/// The worker's thread holds the guard until then.
+impl Drop for Recorder {
+    fn drop(&mut self) {
+        self.stop_worker();
+    }
+}
+
 /// The status copy.
-pub fn status_of(exchange: &Exchange) -> RecorderStatus {
+pub(super) fn status_of(exchange: &Exchange) -> RecorderStatus {
     let held = exchange.acquire();
     let state = &held.state;
     RecorderStatus {

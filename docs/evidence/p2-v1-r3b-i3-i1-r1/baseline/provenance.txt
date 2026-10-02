@@ -1,0 +1,11 @@
+P2-V1-R3B-I3-I1-R1 baseline scratch provenance
+base commit: 72ffc4fcc0141e2e5ae77a927481017ca711ab7c (tree 6cc4a42f5650f35bdb8f3401517a66011b1fe791, sole parent 7689e599ed8fc89ec7720d13869ef58cab767ecb)
+scratch: `git archive 72ffc4fcc0141e2e5ae77a927481017ca711ab7c | tar -x` into an isolated directory outside the repository, then one added file
+base tree entries (git ls-tree -r): 2743
+scratch files: 2744 (symbolic links: 0)
+identical to the base blob (git hash-object): 2743
+differing from the base blob: 0 []
+missing from the scratch: 0 []
+added: 1 ['crates/nexus-verifier-sandbox/tests/r1_base_probes.rs']
+  crates/nexus-verifier-sandbox/tests/r1_base_probes.rs sha256 93021b49c459db24e57d15f6dbcd02a47a81fbeed3afb9c516518171d88ec2cb
+RESULT: the scratch is exactly the base tree plus the probe file

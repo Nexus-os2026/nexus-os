@@ -25,18 +25,33 @@
 //!   decision, the claim handoff, the owner's [`open::StoreGuard`] and
 //!   [`open::StartupReport`], and the standalone verifier.
 //! - **Recorder** ([`exchange`], [`recorder`]): the bounded, idempotent
-//!   exchange with one fatal latch (first cause and P), the
-//!   [`exchange::ExchangeSink`], the owner's apply step and failure delivery
-//!   at a record the core really issued, the store admission gate around
-//!   `Custody::admit`, [`exchange::RecorderStatus`], the worker's W1 to W6,
-//!   claim and seal, its drop guard, and the owner's start through the real
-//!   core ([`recorder::start_owner`]).
-//! - **Dispositions** ([`disposition`]): the validator that accepts only a
-//!   root-owned disposition restating exactly the incident computed.
+//!   exchange with one fatal latch (first cause and P), the owner's apply
+//!   step and failure delivery at a record the core really issued, the store
+//!   admission gate around `Custody::admit`, [`exchange::RecorderStatus`],
+//!   and the worker's W1 to W6, claim and seal, with its drop guard. All of
+//!   it is internal to the store. The one exception is
+//!   [`recorder::native_wiring`] (Linux only): a check of the write and sync
+//!   path on a test's own native file, on an exchange of its own that never
+//!   leaves it. It has no seal and confers nothing on a store.
+//! - **Owner** ([`owner`]): [`owner::StoreOwner`], the one value that
+//!   retains the custody, the recorder, the claimed journal's header and
+//!   worker, and the exclusion guard; [`owner::start_owner`], its only
+//!   constructor, through the real core; and [`owner::ClosedStore`]. Only
+//!   the actual closure of the retained custody requests the seal of its
+//!   own journal, once.
+//! - **Dispositions** ([`disposition`]): the exact-restatement comparison,
+//!   and the validator that exists only as a borrow of one opening's
+//!   verified state.
+//! - **Faults** ([`faults`]): the narrow fault and interleaving injection
+//!   the tests use. Each injection can only make the recorder fail closed or
+//!   interleave its real steps.
 //! - **Maintenance** ([`maintenance`]): the session type (the store lock held
 //!   for its whole life, verification through that retained authority), the
 //!   fixture qualification, and every retained procedure as labelled,
-//!   crash-injectable protocol steps.
+//!   crash-injectable protocol steps. A procedure that decides from a
+//!   verification consumes the session's own latest one, which lapses at the
+//!   session's next procedure step. The `PROVISION` rewrite is internal to
+//!   recycling, retirement and re-qualification.
 //! - **Simulation** ([`sim`]): the bounded storage, error, persistence,
 //!   journal and host model the tests run everything against.
 //!
@@ -63,6 +78,15 @@
 //!   check against that sample reports nothing. The store does not detect
 //!   such a collision and does not claim to; it is a storage fault (domain S),
 //!   not something every reported failure is assumed to be.
+//! - **A safe-API boundary only** (P2-V1-R3B-I3-I1-R1). The owner, the
+//!   closure-to-seal transition, the opening's retained state, the
+//!   validator's provenance, the exchange's containment and the session's
+//!   verification rest on Rust visibility and ownership in safe code. They
+//!   do not defend against `unsafe` code in the same process. The core's own
+//!   public types (`Closed`, `ValidatedDisposition`, `Custody::new`,
+//!   `DispositionValidator`) stay public: a caller may build and run a
+//!   custody of its own, and the store's guarantees concern only the custody
+//!   it retains.
 //! - **No authority against the store uid** (gate G-AUTH stays open), no
 //!   integration with an owner service, no live validation, no native
 //!   cleanup proof and no Phase Two completion.
@@ -70,9 +94,11 @@
 pub mod classify;
 pub mod disposition;
 pub mod exchange;
+pub mod faults;
 pub mod format;
 pub mod io;
 pub mod maintenance;
 pub mod open;
+pub mod owner;
 pub mod recorder;
 pub mod sim;

@@ -1,0 +1,24 @@
+
+running 1 test
+test o13_the_preservation_sync_makes_what_the_report_saw_durable ... FAILED
+
+failures:
+
+---- o13_the_preservation_sync_makes_what_the_report_saw_durable stdout ----
+
+thread 'o13_the_preservation_sync_makes_what_the_report_saw_durable' (3623448) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:4324:5:
+assertion `left == right` failed: [F1-F2-sync] the bytes the startup report saw did not survive a power loss
+  left: [30, 167, 153, 224, 37, 174, 163, 157, 38, 230, 163, 139, 215, 253, 92, 228, 248, 32, 143, 221, 239, 136, 178, 45, 154, 155, 234, 25, 214, 2, 82, 133]
+ right: [249, 136, 137, 58, 42, 200, 91, 197, 250, 158, 28, 117, 216, 214, 114, 109, 80, 53, 59, 116, 156, 139, 190, 21, 139, 197, 190, 188, 112, 114, 233, 246]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    o13_the_preservation_sync_makes_what_the_report_saw_durable
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.69s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

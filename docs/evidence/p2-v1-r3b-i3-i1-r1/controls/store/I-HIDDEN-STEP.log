@@ -1,0 +1,24 @@
+
+running 1 test
+test m08_procedures_perform_exactly_the_documented_steps ... FAILED
+
+failures:
+
+---- m08_procedures_perform_exactly_the_documented_steps stdout ----
+
+thread 'm08_procedures_perform_exactly_the_documented_steps' (3639068) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:6746:9:
+assertion `left == right` failed: [step-parity] P-RECYCLE
+  left: ["create `journals/tmp` (13.8/2)", "write `journals/tmp` (13.8/2)", "fsync `journals/tmp` (13.8/2)", "fsync_dir `journals` (13.8/3)", "rename `journals/pool` (13.8/3)", "fsync_dir `journals` (13.8/3)", "create `provdir/tmp` (13.3/2)", "write `provdir/tmp` (13.3/2)", "fsync `provdir/tmp` (13.3/2)", "rename `provdir/PROVISION` (13.3/3)", "fsync_dir `provdir` (13.3/3)"]
+ right: ["create `journals/tmp` (13.8/2)", "write `journals/tmp` (13.8/2)", "fsync `journals/tmp` (13.8/2)", "rename `journals/pool` (13.8/3)", "fsync_dir `journals` (13.8/3)", "create `provdir/tmp` (13.3/2)", "write `provdir/tmp` (13.3/2)", "fsync `provdir/tmp` (13.3/2)", "rename `provdir/PROVISION` (13.3/3)", "fsync_dir `provdir` (13.3/3)"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    m08_procedures_perform_exactly_the_documented_steps
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.02s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.01s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

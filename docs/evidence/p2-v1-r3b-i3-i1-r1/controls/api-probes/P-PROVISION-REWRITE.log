@@ -1,0 +1,31 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r1_api_probe --no-run
+exit 101
+--- probe body ---
+    let session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
+        .expect("a session");
+    let _ = maint::rewrite_provision(Rc::new(RefCell::new(session)), |provision| {
+        provision.retired_through = 9;
+    });
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+error[E0603]: function `rewrite_provision` is private
+    --> crates/nexus-verifier-sandbox/tests/r1_api_probe.rs:59:20
+     |
+  59 |     let _ = maint::rewrite_provision(Rc::new(RefCell::new(session)), |provision| {
+     |                    ^^^^^^^^^^^^^^^^^ private function
+     |
+note: the function `rewrite_provision` is defined here
+    --> crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs:1169:1
+     |
+1169 | / pub(super) fn rewrite_provision<P: Platform + Clone + 'static>(
+1170 | |     session: Rc<RefCell<Session<P>>>,
+1171 | |     change: impl Fn(&mut Provision) + 'static,
+1172 | | ) -> Procedure<'static> {
+...    |
+1191 | |     proc
+1192 | | }
+     | |_^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "r1_api_probe") due to 1 previous error
+--- stdout ---

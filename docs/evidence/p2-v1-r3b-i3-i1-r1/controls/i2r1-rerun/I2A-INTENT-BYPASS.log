@@ -1,0 +1,24 @@
+
+running 1 test
+test c12_core_refuses_acknowledgements_for_altered_bytes ... FAILED
+
+failures:
+
+---- c12_core_refuses_acknowledgements_for_altered_bytes stdout ----
+
+thread 'c12_core_refuses_acknowledgements_for_altered_bytes' (3647518) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs:1880:5:
+assertion `left == right` failed: [intent-digest] an intent with another digest was encoded
+  left: Ok([78, 88, 67, 68, 82, 1, 0, 38, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 5, 2, 0, 0, 0, 1, 1, 67, 61, 220, 8, 233, 207, 106, 68, 58, 172, 225, 95, 33, 231, 254, 97, 122, 28, 15, 211, 67, 25, 43, 3, 176, 250, 62, 215, 227, 70, 249, 75])
+ right: Err(IntentDigestMismatch)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c12_core_refuses_acknowledgements_for_altered_bytes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.97s
+     Running tests/phase2_custody_codec.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_codec-9296cffc986e9dd6)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_codec`

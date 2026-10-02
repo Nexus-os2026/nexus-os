@@ -25,6 +25,7 @@ use super::classify::{
     self, bounded_report, decide, pool_level, ArchiveEntry, BoundedReport, Decision, FileClass,
     FileClassifier, FileReport, Incident, PoolFacts, PoolLevel, PoolRefusal,
 };
+use super::disposition::StoreValidator;
 use super::format::{
     self, encode_header, hex, parse_disposition, parse_header, parse_provision, pool_file_size,
     pool_name, sha256, storage_identity, ArchiveName, Disposition, HeaderFields, HeaderParse,
@@ -166,7 +167,7 @@ pub struct OpeningId(u64);
 impl OpeningId {
     /// A new opening's serial. It names an opening; it grants nothing (an
     /// admission is bound to one, and only the storage check makes one).
-    pub fn fresh() -> OpeningId {
+    pub(super) fn fresh() -> OpeningId {
         OpeningId(OPENINGS.fetch_add(1, Ordering::SeqCst))
     }
 
@@ -219,7 +220,7 @@ impl StorageAdmission {
 
 /// The claim's test: an admission the storage check made for this opening
 /// and this selection.
-pub fn verify_admission(
+pub(super) fn verify_admission(
     admission: Option<&StorageAdmission>,
     opening: OpeningId,
     provision_digest: &[u8; 32],
@@ -431,7 +432,7 @@ fn components(path: &[String]) -> Vec<&str> {
 }
 
 /// Read `PROVISION` through a fresh walk and safe open: a candidate.
-pub fn select<P: Platform>(io: &P, path: &ProvisionPath) -> Result<Selection, Refused> {
+pub(super) fn select<P: Platform>(io: &P, path: &ProvisionPath) -> Result<Selection, Refused> {
     let (provdir, provdir_stat) = match walk(io, &components(&path.directory)) {
         Ok(found) => found,
         Err(Refused::Lost(_)) => return Err(Refused::Unprovisioned),
@@ -486,7 +487,7 @@ pub fn select<P: Platform>(io: &P, path: &ProvisionPath) -> Result<Selection, Re
 
 /// Post-lock revalidation by fresh lookups (design section 10.5 steps 1 to
 /// 4): never through a descriptor kept from the read.
-pub fn revalidate<P: Platform>(
+pub(super) fn revalidate<P: Platform>(
     io: &P,
     path: &ProvisionPath,
     selection: &Selection,
@@ -625,7 +626,7 @@ pub enum Pinning {
 /// pinned options, sizes and link protection, one filesystem, the effective
 /// options, the journal's location and the kernel. Returns the device's
 /// major and minor numbers and its name.
-pub fn check_mount<P: Platform>(
+pub(super) fn check_mount<P: Platform>(
     io: &P,
     provision: &Provision,
     root: &P::Dir,
@@ -847,7 +848,7 @@ pub fn parse_storage_link(link: &str) -> Option<(String, String, String, Option<
 
 /// Step 12: the storage observed afresh, its rules (constants of the code,
 /// relaxed by no field), and, pinned, the identity `PROVISION` records.
-pub fn check_storage<P: Platform>(
+pub(super) fn check_storage<P: Platform>(
     io: &P,
     provision: &Provision,
     device: (u32, u32),
@@ -912,7 +913,7 @@ pub fn check_storage<P: Platform>(
 
 /// The only constructor of a [`StorageAdmission`]: step 12 afresh, for this
 /// opening and this selection.
-pub fn admit_storage<P: Platform>(
+pub(super) fn admit_storage<P: Platform>(
     io: &P,
     selection: &Selection,
     device: (u32, u32),
@@ -933,22 +934,22 @@ pub fn admit_storage<P: Platform>(
 
 /// The directories an opening keeps: the state root, its parent and the
 /// `PROVISION` directory, each from a fresh walk.
-pub struct RootDirs<P: StoreIo> {
-    pub provdir: P::Dir,
-    pub parent: P::Dir,
-    pub root: P::Dir,
+pub(super) struct RootDirs<P: StoreIo> {
+    pub(super) provdir: P::Dir,
+    pub(super) parent: P::Dir,
+    pub(super) root: P::Dir,
 }
 
 /// What step 2 opened and admitted.
-pub struct OpenedRoot<P: StoreIo> {
-    pub dirs: RootDirs<P>,
-    pub admission: StorageAdmission,
-    pub device: (u32, u32),
+pub(super) struct OpenedRoot<P: StoreIo> {
+    pub(super) dirs: RootDirs<P>,
+    pub(super) admission: StorageAdmission,
+    pub(super) device: (u32, u32),
 }
 
 /// Step 2: the state root through its parent, the mount, profile and
 /// one-filesystem checks, then the storage and this opening's admission.
-pub fn open_root<P: Platform>(
+pub(super) fn open_root<P: Platform>(
     io: &P,
     path: &ProvisionPath,
     selection: &Selection,
@@ -1012,7 +1013,7 @@ fn check_lock_entry<P: Platform>(
 }
 
 /// The store lock's description: `LOCK` type-checked, then opened safely.
-pub fn open_lock<P: Platform>(
+pub(super) fn open_lock<P: Platform>(
     io: &P,
     root: &P::Dir,
     provision: &Provision,
@@ -1138,14 +1139,14 @@ fn resolve_activation<P: Platform>(
 /// What an activation acts on: the selection revalidated under the store
 /// lock held through `lock`, the opening's directories, and the admission
 /// the opening's step 2 made.
-pub struct Activation<'a, P: Platform> {
-    pub path: &'a ProvisionPath,
-    pub selection: &'a Selection,
-    pub dirs: &'a RootDirs<P>,
-    pub lock: &'a P::File,
-    pub opening: OpeningId,
-    pub observed: &'a StorageAdmission,
-    pub pinning: Pinning,
+pub(super) struct Activation<'a, P: Platform> {
+    pub(super) path: &'a ProvisionPath,
+    pub(super) selection: &'a Selection,
+    pub(super) dirs: &'a RootDirs<P>,
+    pub(super) lock: &'a P::File,
+    pub(super) opening: OpeningId,
+    pub(super) observed: &'a StorageAdmission,
+    pub(super) pinning: Pinning,
 }
 
 /// Durable activation (design section 10.6), under the store lock: A1 one
@@ -1154,7 +1155,7 @@ pub struct Activation<'a, P: Platform> {
 /// profile and the storage checked again, and this opening's admission made
 /// afresh with the identity the opening observed. Returns A4's admission; any
 /// failure refuses, and no timeout or retry turns a failure into activation.
-pub fn activate<P: Platform>(
+pub(super) fn activate<P: Platform>(
     io: &P,
     activation: &Activation<'_, P>,
     hooks: &mut dyn OpeningHooks,
@@ -1338,15 +1339,15 @@ fn listing<P: Platform>(
 
 /// The store directories the scan reads, opened by their names after their
 /// type checks.
-pub struct StoreDirs<P: StoreIo> {
-    pub journals: P::Dir,
-    pub dispositions: P::Dir,
-    pub revoked: P::Dir,
-    pub archive: P::Dir,
+pub(super) struct StoreDirs<P: StoreIo> {
+    pub(super) journals: P::Dir,
+    pub(super) dispositions: P::Dir,
+    pub(super) revoked: P::Dir,
+    pub(super) archive: P::Dir,
 }
 
 /// Step 4's checks of the root and its directories.
-pub fn open_store_dirs<P: Platform>(
+pub(super) fn open_store_dirs<P: Platform>(
     io: &P,
     root: &P::Dir,
     provision: &Provision,
@@ -1418,10 +1419,10 @@ pub fn open_store_dirs<P: Platform>(
 }
 
 /// Pool-file locks a maintenance session already holds, by index.
-pub type HeldJournals<'a, P> = BTreeMap<u32, &'a <P as StoreIo>::File>;
+pub(super) type HeldJournals<'a, P> = BTreeMap<u32, &'a <P as StoreIo>::File>;
 
 /// Steps 4 to 8 (design section 10.2), and the bounded report.
-pub fn scan<P: Platform>(
+pub(super) fn scan<P: Platform>(
     io: &P,
     provision: &Provision,
     dirs: &StoreDirs<P>,
@@ -1693,20 +1694,20 @@ pub struct StoreGuard<P: StoreIo> {
 }
 
 impl<P: StoreIo> StoreGuard<P> {
-    pub fn journals(&self) -> &Arc<P::Dir> {
+    pub(super) fn journals(&self) -> &Arc<P::Dir> {
         &self.journals
     }
 
-    pub fn root(&self) -> &P::Dir {
+    pub(super) fn root(&self) -> &P::Dir {
         &self.root
     }
 
     /// The store lock's description (for status and identity checks only).
-    pub fn store_lock(&self) -> &P::File {
+    pub(super) fn store_lock(&self) -> &P::File {
         &self.store_lock
     }
 
-    pub fn journal_lock(&self) -> Option<&P::File> {
+    pub(super) fn journal_lock(&self) -> Option<&P::File> {
         self.journal_lock.as_ref()
     }
 }
@@ -1727,12 +1728,21 @@ pub struct StartupReport {
 
 /// An owner's opened store: activated, scanned and decided, its store lock
 /// held. Not yet claimed.
+///
+/// Retained, ownership-bearing state (P2-V1-R3B-I3-I1-R1): the opening's
+/// identity, its revalidated selection, the guard with its store lock, the
+/// verified scan, the decision over the complete incident set and the
+/// storage admission are private. A caller reads them through borrows or
+/// copies; editing a copy changes nothing here. Only the store's own claim
+/// ([`Opened::claim`], internal) and validator ([`Opened::validator`]) use
+/// them, and each derives what it needs from this state, never from a
+/// caller's report, list or admission.
 pub struct Opened<P: Platform> {
-    pub opening: OpeningId,
-    pub selection: Selection,
-    pub guard: StoreGuard<P>,
-    pub scan: ScanResult,
-    pub decision: Decision,
+    opening: OpeningId,
+    selection: Selection,
+    guard: StoreGuard<P>,
+    scan: ScanResult,
+    decision: Decision,
     admission: StorageAdmission,
 }
 
@@ -1926,7 +1936,7 @@ pub fn verify_standalone<P: Platform>(
 }
 
 impl<P: Platform> Opened<P> {
-    /// The startup report.
+    /// The startup report (a copy).
     pub fn report(&self) -> StartupReport {
         StartupReport {
             revision: self.selection.revision(),
@@ -1939,9 +1949,46 @@ impl<P: Platform> Opened<P> {
         }
     }
 
+    /// The selection this opening revalidated (read-only).
+    pub fn selection(&self) -> &Selection {
+        &self.selection
+    }
+
+    /// The scan this opening verified (read-only).
+    pub fn scan(&self) -> &ScanResult {
+        &self.scan
+    }
+
+    /// The decision over the complete incident set (read-only).
+    pub fn decision(&self) -> &Decision {
+        &self.decision
+    }
+
+    /// This opening's identity (a copy: it names the opening, it grants
+    /// nothing).
+    pub fn opening(&self) -> OpeningId {
+        self.opening
+    }
+
+    /// This opening's storage admission (read-only: it is not `Clone`, and no
+    /// claim accepts an admission from a caller).
+    pub fn admission(&self) -> &StorageAdmission {
+        &self.admission
+    }
+
+    /// The validator over this opening's own verified dispositions: it lives
+    /// no longer than the opening, so no longer than the store lock it holds.
+    pub fn validator(&self) -> StoreValidator<'_> {
+        StoreValidator::of(
+            &self.selection.provision.root_id,
+            &self.scan.level.incidents,
+            &self.scan.dispositions,
+        )
+    }
+
     /// The current incidents, as the core's prior incidents, in binding
     /// order: every one of them, never a truncated list.
-    pub fn priors(&self) -> Vec<PriorIncident> {
+    pub(super) fn priors(&self) -> Vec<PriorIncident> {
         classify::current_incidents(&self.scan.level)
             .into_iter()
             .map(|(binding, incident)| PriorIncident {
@@ -1952,18 +1999,19 @@ impl<P: Platform> Opened<P> {
     }
 
     /// The current incidents with their facts.
-    pub fn current(&self) -> Vec<([u8; 32], Incident)> {
+    pub(super) fn current(&self) -> Vec<([u8; 32], Incident)> {
         classify::current_incidents(&self.scan.level)
     }
 
-    /// This opening's admission (A4's).
-    pub fn admission(&self) -> &StorageAdmission {
-        &self.admission
+    /// The bindings and reasons the claim's header lists: each dispositioned
+    /// current incident's, from this opening's verified dispositions.
+    pub(super) fn applied(&self) -> Vec<([u8; 32], DispositionReason)> {
+        applied_reasons(&self.decision, &self.scan.dispositions)
     }
 
     /// 16 bytes from `getrandom`, not all zero and not any generation in a
     /// scanned header; at most eight draws (design section 7.7).
-    pub fn draw_generation(&self, io: &P) -> Result<Generation, Refusal> {
+    pub(super) fn draw_generation(&self, io: &P) -> Result<Generation, Refusal> {
         for _ in 0..8 {
             let mut bytes = [0u8; 16];
             io.random(&mut bytes).map_err(|error| {
@@ -1980,15 +2028,17 @@ impl<P: Platform> Opened<P> {
         Refusal::new(refused, Some(self.selection.revision()))
     }
 
-    /// The claim handoff (design section 10.3) with this opening's own
-    /// admission.
-    pub fn claim(
+    /// The claim handoff (design section 10.3), internal to the store: with
+    /// this opening's own admission, its own decision, and the applied
+    /// dispositions derived from its own verified state. It consumes the
+    /// opening: one claim per opening.
+    pub(super) fn claim(
         self,
         io: &P,
         config: &Config,
         generation: Generation,
-        applied: &[([u8; 32], DispositionReason)],
     ) -> Result<Claim<P>, Refusal> {
+        let applied = self.applied();
         let Opened {
             opening,
             selection,
@@ -2004,55 +2054,23 @@ impl<P: Platform> Opened<P> {
             scan,
             decision,
         };
-        claim_with(io, parts, Some(&admission), config, generation, applied)
-    }
-
-    /// The claim handoff with an admission the caller supplies: it is
-    /// accepted only if it is this opening's, for this selection (design
-    /// section 10.8). For the tests of a stale or foreign admission.
-    pub fn claim_presenting(
-        self,
-        io: &P,
-        admission: Option<&StorageAdmission>,
-        config: &Config,
-        generation: Generation,
-        applied: &[([u8; 32], DispositionReason)],
-    ) -> Result<Claim<P>, Refusal> {
-        let Opened {
-            opening,
-            selection,
-            guard,
-            scan,
-            decision,
-            admission: own,
-        } = self;
-        drop(own);
-        let parts = ClaimParts {
-            opening,
-            selection,
-            guard,
-            scan,
-            decision,
-        };
-        claim_with(io, parts, admission, config, generation, applied)
+        claim_with(io, parts, &admission, config, generation, &applied)
     }
 }
 
 /// A claim ready for the recorder: the guard (with the journal lock), the
 /// worker's I/O description, and the header block the worker writes.
-pub struct Claim<P: Platform> {
-    pub guard: StoreGuard<P>,
-    pub io_file: P::File,
-    pub journal_name: String,
-    pub journal_stat: Stat,
-    pub index: u32,
-    pub claim: u64,
-    pub generation: Generation,
-    pub header: HeaderFields,
-    pub header_block: Box<[u8; BLOCK]>,
-    pub selection: Selection,
-    pub scan: ScanResult,
-    pub decision: Decision,
+/// Internal to the store: only [`super::owner::start_owner`] receives one.
+pub(super) struct Claim<P: Platform> {
+    pub(super) guard: StoreGuard<P>,
+    pub(super) io_file: P::File,
+    pub(super) journal_name: String,
+    pub(super) journal_stat: Stat,
+    pub(super) index: u32,
+    pub(super) claim: u64,
+    pub(super) header: HeaderFields,
+    pub(super) header_block: Box<[u8; BLOCK]>,
+    pub(super) selection: Selection,
 }
 
 /// An opened store's parts, without its own admission.
@@ -2067,7 +2085,7 @@ struct ClaimParts<P: Platform> {
 fn claim_with<P: Platform>(
     io: &P,
     parts: ClaimParts<P>,
-    admission: Option<&StorageAdmission>,
+    admission: &StorageAdmission,
     config: &Config,
     generation: Generation,
     applied: &[([u8; 32], DispositionReason)],
@@ -2081,7 +2099,7 @@ fn claim_with<P: Platform>(
     } = parts;
     let revision = Some(selection.revision());
     let fail = |refused: Refused| Refusal::new(refused, revision);
-    if !verify_admission(admission, opening, &selection.digest) {
+    if !verify_admission(Some(admission), opening, &selection.digest) {
         return Err(fail(unsupported("storage admission not verified")));
     }
     if !decision.blocking.is_empty() {
@@ -2178,6 +2196,7 @@ fn claim_with<P: Platform>(
     let header_block = encode_header(&header)
         .map_err(|error| fail(Refused::ClaimFailed(format!("header: {}", error.0))))?;
     guard.journal_lock = Some(lock);
+    drop((scan, decision));
     Ok(Claim {
         guard,
         io_file,
@@ -2185,17 +2204,14 @@ fn claim_with<P: Platform>(
         journal_stat: stat,
         index,
         claim,
-        generation,
         header,
         header_block,
         selection,
-        scan,
-        decision,
     })
 }
 
 /// The reasons the header records: each current incident's disposition's.
-pub fn applied_reasons(
+pub(super) fn applied_reasons(
     decision: &Decision,
     dispositions: &BTreeMap<[u8; 32], Disposition>,
 ) -> Vec<([u8; 32], DispositionReason)> {

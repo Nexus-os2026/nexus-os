@@ -1,0 +1,24 @@
+
+running 1 test
+test j06_the_errseq_counter_limitation_is_documented_not_detected ... FAILED
+
+failures:
+
+---- j06_the_errseq_counter_limitation_is_documented_not_detected stdout ----
+
+thread 'j06_the_errseq_counter_limitation_is_documented_not_detected' (3617252) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:2734:5:
+assertion `left == right` failed: [errseq-limit] after 2^19 seen errors the counter collides: no detection
+  left: 4095
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    j06_the_errseq_counter_limitation_is_documented_not_detected
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.93s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

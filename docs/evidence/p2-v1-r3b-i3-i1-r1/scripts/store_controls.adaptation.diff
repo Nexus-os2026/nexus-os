@@ -1,0 +1,321 @@
+--- i3-i1/scripts/store_controls.py
++++ i3-i1-r1/scripts/store_controls.py
+@@ -1,5 +1,15 @@
+ #!/usr/bin/env python3
+-"""P2-V1-R3B-I3-I1 negative controls for the custody store.
++"""P2-V1-R3B-I3-I1-R1 negative controls for the custody store.
++
++Adapted from docs/evidence/p2-v1-r3b-i3-i1/scripts/store_controls.py (which
++stays unchanged); the adaptation diff is store_controls.adaptation.diff. The
++90 I3-I1 controls keep their intentions: three anchors moved to the
++equivalent defect point of the repaired sources (I-VALIDATOR-INEXACT,
++I-SEAL-WHILE-LATCHED, A-WORKER-LOCK), and one control (A-ADMISSION-UNBOUND)
++has no remaining behavioural call site and is listed in REMAPPED, with the
++API/type guards that now carry its intention (api_probes.py); it is not run
++and not counted here. The R1 boundaries add their own behavioural controls
++(R1_BINDINGS, category authority-binding).
+
+ Each counted control restores one wrong behaviour in the store's own test
+ infrastructure (support/custody/store/) and must:
+@@ -50,11 +60,13 @@
+     f"{STORE}/classify.rs",
+     f"{STORE}/disposition.rs",
+     f"{STORE}/exchange.rs",
++    f"{STORE}/faults.rs",
+     f"{STORE}/format.rs",
+     f"{STORE}/io.rs",
+     f"{STORE}/maintenance.rs",
+     f"{STORE}/mod.rs",
+     f"{STORE}/open.rs",
++    f"{STORE}/owner.rs",
+     f"{STORE}/recorder.rs",
+     f"{STORE}/sim.rs",
+     f"{TESTS}/{TARGET}.rs",
+@@ -66,42 +78,7 @@
+     f"{TESTS}/phase2_custody_codec.rs",
+ ]
+ # The frozen candidate's sources (store_controls.py <checkout> --print-sources).
+-CANDIDATE_SOURCES = {
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/classify.rs":
+-        "8a3050c9db49cd6ae77c6f959da8e8c918b8a002ad35a10f24d2c75ad7b29bed",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/disposition.rs":
+-        "03e3a31e6d001e59962e271ef5a6a42ce8d9497c57a31cc324ef894a1089e38f",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs":
+-        "92c4206a7b128129c623c2b5da22054e1da0ec044eb1dd8838991f68f898af8f",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/format.rs":
+-        "a57423473091e40444c8d8ce3a5a715b3feeeb0ae0e2acd8b745a7646040ed88",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/io.rs":
+-        "0529b7eb237d47c6da5d78db4073a596b4157d3bebcf94106e82e0bf5437b2bd",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs":
+-        "6443fa95c81436a668e1be02bead29dcf0c64e34f4503a1db4eaf10f5a0426b0",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/mod.rs":
+-        "717970ed5cb41256c38cebeba3a0903ac7a8bac158b5e63970968ec35e7554e0",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/open.rs":
+-        "0eb401c8ce0f5b276ac6d1b4ab2afdd69210fa6947a88ea42393e8c4bbc8141f",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/recorder.rs":
+-        "4563635b43a21aef776491b686be3da8c78b8df6504f0a3e6cfa0454f0e54091",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/store/sim.rs":
+-        "af0651295910f988aa617711189967cff700565058858fd905b44ac659a71671",
+-    "crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs":
+-        "fb0eb606908130684bfdc674f49b905b34c78d2cb95d649d30375fb5ad12bcda",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/mod.rs":
+-        "ff6379ed837328a4404d2092ef6d2a0b660781d848b6ddc8818be6b2f6b440d1",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/core.rs":
+-        "a5dc3b33162547a7f518950684b8212892c2a4439acfe72c5dd995cdc77422a4",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/model.rs":
+-        "3b32071bc90b9bf1a974be60a39a87693108dbf0697ea75a72bee4e2a45d5709",
+-    "crates/nexus-verifier-sandbox/tests/support/custody/codec.rs":
+-        "83fd29a8eebdefea9178be4c4ed83609f24113ca8184f7061e61514b3112534c",
+-    "crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs":
+-        "801588711b04173136bebb2e9e36382cc65ed9e617f98ee4958faf162237fd16",
+-    "crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs":
+-        "2ceffcc19f274d2dd158d4a777dbcb034f8c7b85bfc9748625c5a1c74acf4500",
+-}
++CANDIDATE_SOURCES = {}  # R1-CANDIDATE-SOURCES
+
+ SIM = f"{STORE}/sim.rs"
+ FMT = f"{STORE}/format.rs"
+@@ -112,6 +89,8 @@
+ MNT = f"{STORE}/maintenance.rs"
+ IO = f"{STORE}/io.rs"
+ DSP = f"{STORE}/disposition.rs"
++OWN = f"{STORE}/owner.rs"
++FLT = f"{STORE}/faults.rs"
+
+
+ def control(cid, category, design, what, edits, test, marker, require=(), forbid=()):
+@@ -483,11 +462,11 @@
+     control(
+         "I-VALIDATOR-INEXACT", "implementation-safety", [],
+         "the disposition validator accepts a disposition that does not restate the incident's facts",
+-        [(DSP, r'''            && disposition.facts == incident.facts
+-''', r'''            && {
+-                let _ = incident;
+-                true
+-            }
++        [(DSP, r'''        && disposition.facts == incident.facts
++''', r'''        && {
++            let _ = incident;
++            true
++        }
+ ''')],
+         "f09_the_validator_accepts_only_an_exact_restatement", "[disposition-exact]",
+         require=["another count"],
+@@ -1102,23 +1081,19 @@
+     control(
+         "I-SEAL-WHILE-LATCHED", "implementation-safety", [],
+         "a seal is requested although a fatal cause is latched",
+-        [(EXC, r'''            let held = self.exchange.acquire();
+-            if let Some((cause, _)) = held.state.fatal {
++        [(EXC, r'''            if let Some((cause, _)) = held.state.fatal {
+                 return Err(SealWithheld::Latched(cause));
+             }
+             if held.state.claim != ClaimState::Claimed {
+-''', r'''            let held = self.exchange.acquire();
+-            if held.state.claim != ClaimState::Claimed {
+-'''), (EXC, r'''            let mut held = self.exchange.acquire();
+-            if let Some((cause, _)) = held.state.fatal {
++''', r'''            if held.state.claim != ClaimState::Claimed {
++'''), (EXC, r'''            if let Some((cause, _)) = held.state.fatal {
+                 return Err(SealWithheld::Latched(cause));
+             }
+             held.state.seal = SealState::Requested(seal);
+-''', r'''            let mut held = self.exchange.acquire();
+-            held.state.seal = SealState::Requested(seal);
++''', r'''            held.state.seal = SealState::Requested(seal);
+ ''')],
+         "r08_claim_and_seal_boundaries", "[fatal-total]",
+-        require=["the seal is withheld"],
++        require=["no seal for a failed claim", "Latched(ClaimWrite)"],
+     ),
+ ]
+
+@@ -1398,16 +1373,6 @@
+         require=["one constructor"],
+     ),
+     control(
+-        "A-ADMISSION-UNBOUND", "authority-api-surface", [],
+-        "the claim accepts an admission from another opening of the same selection",
+-        [(OPN, r'''        admission.opening == opening && admission.provision_digest == *provision_digest
+-''', r'''        let _ = opening;
+-        admission.provision_digest == *provision_digest
+-''')],
+-        "o10_a_storage_admission_is_bound_to_its_opening", "[storage-qualification]",
+-        require=["an earlier opening"],
+-    ),
+-    control(
+         "A-LOCK-UNLOCK", "authority-api-surface", ["NC05b"],
+         "the store's I/O trait gains a lock release (a duplicate's LOCK_UN releases the original's lock)",
+         [(IO, r'''    /// `LOCK_SH | LOCK_NB`.
+@@ -1434,9 +1399,9 @@
+     control(
+         "A-WORKER-LOCK", "authority-api-surface", ["NC05a"],
+         "the recorder worker holds a lock description (the first candidate's recorder thread)",
+-        [(REC, r'''pub struct Worker<P: StoreIo> {
++        [(REC, r'''pub(super) struct Worker<P: StoreIo> {
+     io: P,
+-''', r'''pub struct Worker<P: StoreIo> {
++''', r'''pub(super) struct Worker<P: StoreIo> {
+     io: P,
+     lock: Option<P::File>,
+ '''), (REC, r'''        Worker {
+@@ -1476,7 +1441,158 @@
+     ),
+ ]
+
+-COUNTED = SIMULATOR + FORMATS + OPENING + RECORDER + MAINTENANCE + NATIVE + AUTHORITY
++# ---------------------------------------------------------------------------
++# R1: behavioural controls of the authority bindings P2-V1-R3B-I3-I1-R1 added
++# (closure to seal, the opening's complete set, disposition provenance, the
++# exchange's containment, the session's verification, the exclusion's life)
++# ---------------------------------------------------------------------------
++
++R1_BINDINGS = [
++    control(
++        "R1-REFUSED-CLOSE-SEALS", "authority-binding", [],
++        "(B1) a refused closure still requests the seal, from the recorder's durable count",
++        [(OWN, r'''            Err(custody) => Err(Box::new(StoreOwner {
++                custody: *custody,
++''', r'''            Err(custody) => Err(Box::new(StoreOwner {
++                custody: {
++                    let durable = recorder.status().durable_through;
++                    let _ = recorder.request_seal(&header, durable, now.0);
++                    *custody
++                },
++''')],
++        "b01_a_refused_closure_requests_no_seal_and_keeps_its_owner", "[closure-seal]",
++        require=["no seal requested"],
++    ),
++    control(
++        "R1-START-FROM-REPORT", "authority-binding", [],
++        "(B3) the start decides over the incidents the bounded report lists, not the complete set",
++        [(OWN, r'''    let current = opened.current();
++''', r'''    let listed: Vec<[u8; 32]> = opened
++        .report()
++        .report
++        .detail
++        .iter()
++        .map(|(binding, _)| *binding)
++        .collect();
++    let current: Vec<([u8; 32], super::classify::Incident)> = opened
++        .current()
++        .into_iter()
++        .filter(|(binding, _)| listed.contains(binding))
++        .collect();
++''')],
++        "b04_a_truncated_report_hides_no_blocking_incident", "[complete-set]",
++    ),
++    control(
++        "R1-VALIDATOR-UNCHECKED", "authority-binding", [],
++        "(B5) the store's validator returns a validation for any disposition file, exact or not",
++        [(DSP, r'''        exact_restatement(&self.root_id, bytes, incident, disposition)
++            .then(|| ValidatedDisposition::new(*binding, disposition.reason))
++''', r'''        let _ = (incident, exact_restatement);
++        Some(ValidatedDisposition::new(*binding, disposition.reason))
++''')],
++        "b06_a_disposition_takes_effect_only_through_its_opening", "[disposition-provenance]",
++        require=["another count"],
++    ),
++    control(
++        "R1-APPLIED-REASON-INVENTED", "authority-binding", [],
++        "(B5) the claim's applied reasons are not the verified disposition files' reasons",
++        [(OPN, r'''                .map(|disposition| (*binding, disposition.reason))
++''', r'''                .map(|_| (*binding, DispositionReason::Other))
++''')],
++        "b06_a_disposition_takes_effect_only_through_its_opening", "[disposition-provenance]",
++        require=["the dispositioned store refused"],
++    ),
++    control(
++        "R1-FAULT-ACKS-UNDURABLE", "authority-binding", [],
++        "(B6) the fault interface acknowledges a record that is not durable",
++        [(FLT, r'''    if seq == 0 || seq > durable {
++''', r'''    if seq == 0 || durable == u64::MAX {
++''')],
++        "b07_status_copies_and_fault_operations_clear_and_manufacture_nothing",
++        "[exchange-contained]",
++        require=["no acknowledgement of a record that is not durable"],
++    ),
++    control(
++        "R1-FAULT-INJECTS-NEXT", "authority-binding", [],
++        "(B6) the fault interface submits a record the sink stores as the next one",
++        [(FLT, r'''        if stores_as_new(&held, intent) {
++''', r'''        if stores_as_new(&held, intent) && intent.id.seq() == 0 {
++''')],
++        "r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record",
++        "[exchange-contained]",
++        require=["the next valid record is not a fault"],
++    ),
++    control(
++        "R1-LATCH-REPLACED", "authority-binding", [],
++        "(B6) a later latch replaces the first cause (a latch is no longer monotonic)",
++        [(EXC, r'''    pub(super) fn latch(&mut self, cause: Cause) {
++        if self.fatal.is_none() {
++''', r'''    pub(super) fn latch(&mut self, cause: Cause) {
++        if self.fatal.is_none() || self.later_causes == 0 {
++''')],
++        "b07_status_copies_and_fault_operations_clear_and_manufacture_nothing",
++        "[exchange-contained]",
++        require=["the first cause stays"],
++    ),
++    control(
++        "R1-VERIFICATION-REUSED", "authority-binding", [],
++        "(session) one session verification authorizes more than one procedure",
++        [(MNT, r'''        match self.verified.take() {
++''', r'''        match self.verified.clone() {
++''')],
++        "b08_a_session_decides_only_from_its_own_current_verification", "[session-verify]",
++        require=["one verification, one procedure"],
++    ),
++    control(
++        "R1-VERIFICATION-NEVER-LAPSES", "authority-binding", [],
++        "(session) a procedure step does not lapse the session's earlier verification",
++        [(MNT, r'''            if let Some(mutations) = &step.session {
++                mutations.set(mutations.get() + 1);
++            }
++''', r'''            let _ = &step.session;
++''')],
++        "b08_a_session_decides_only_from_its_own_current_verification", "[session-verify]",
++        require=["older than the revocation"],
++    ),
++    control(
++        "R1-GUARD-NOT-KEPT", "authority-binding", [],
++        "(exclusion) the worker's thread does not keep the owner's guard: the exclusion ends with the owner, I/O in flight",
++        [(OWN, r'''        let handle = spawn_worker(*worker, hooks, Arc::clone(&self.guard));
++''', r'''        let handle = spawn_worker(*worker, hooks, ());
++''')],
++        "b09_exclusion_outlasts_the_owner_while_its_io_is_in_flight", "[closure-owner]",
++        require=["exclusion while I/O is in flight"],
++    ),
++]
++
++# ---------------------------------------------------------------------------
++# Remapped: I3-I1 controls whose defect point has no behavioural call site
++# left. Not run and not counted; their intention is carried by the API/type
++# guards named (api_probes.py), reported apart.
++# ---------------------------------------------------------------------------
++
++REMAPPED = [
++    control(
++        "A-ADMISSION-UNBOUND", "authority-api-surface", [],
++        "the claim accepts an admission from another opening of the same selection",
++        [(OPN, r'''        admission.opening == opening && admission.provision_digest == *provision_digest
++''', r'''        let _ = opening;
++        admission.provision_digest == *provision_digest
++''')],
++        "o10_a_storage_admission_is_bound_to_its_opening", "[storage-qualification]",
++        require=["an earlier opening"],
++    ),
++]
++REMAPPED_TO = {
++    "A-ADMISSION-UNBOUND": [
++        "P-B3-CLAIM-CALL (the claim is internal; it takes no caller admission)",
++        "P-B4-IDENTITY-EDIT (an opening's identity and selection cannot be rebound)",
++        "P-B4-OPENING-MINT (no opening identity is minted outside the store)",
++        "P-B4-ADMISSION-FORGE (no admission is built from parts)",
++    ],
++}
++
++COUNTED = SIMULATOR + FORMATS + OPENING + RECORDER + MAINTENANCE + NATIVE + AUTHORITY + R1_BINDINGS
+
+ # ---------------------------------------------------------------------------
+ # The runner

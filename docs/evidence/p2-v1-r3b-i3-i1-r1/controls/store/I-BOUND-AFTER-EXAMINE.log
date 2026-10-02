@@ -1,0 +1,24 @@
+
+running 1 test
+test m07_aggregate_bounds_refuse_before_any_entry_is_examined ... FAILED
+
+failures:
+
+---- m07_aggregate_bounds_refuse_before_any_entry_is_examined stdout ----
+
+thread 'm07_aggregate_bounds_refuse_before_any_entry_is_examined' (3630606) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:6578:9:
+assertion `left == right` failed: [aggregate-bounds] dispositions: an entry was examined
+  left: 4098
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    m07_aggregate_bounds_refuse_before_any_entry_is_examined
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.06s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.64s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

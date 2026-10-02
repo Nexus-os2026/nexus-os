@@ -1,0 +1,5 @@
+r5-design-checks exit=0 started=2026-10-02T12:52:24Z :: python3 -B docs/evidence/p2-v1-r3b-i3-p-r5/design_checks.py --json /home/nexus/NEXUS/p2-v1-r3b-i3-i1-r1-work/pre-commit/checks/design_checks.json
+r5-design-checks-compare exit=0 started=2026-10-02T12:55:24Z :: cmp /home/nexus/NEXUS/p2-v1-r3b-i3-i1-r1-work/pre-commit/checks/design_checks.json docs/evidence/p2-v1-r3b-i3-p-r5/coverage.json
+r5-reference-check exit=0 started=2026-10-02T12:55:24Z :: python3 -B docs/evidence/p2-v1-r3b-i3-p-r5/reference_check.py --self-test --kernel /home/nexus/NEXUS/p2-v1-r3b-i3-i1-r1-work/kernel
+historical-manifests exit=0 started=2026-10-02T12:56:10Z :: python3 -B docs/evidence/p2-v1-r3b-i3-i1/scripts/manifests.py /home/nexus/NEXUS/nexus-os-p2-v1-custody-store-implementation docs/evidence/p2-v1-r3b-i3-p-r1 docs/evidence/p2-v1-r3b-i3-p-r2 docs/evidence/p2-v1-r3b-i3-p-r3 docs/evidence/p2-v1-r3b-i3-p-r4 docs/evidence/p2-v1-r3b-i3-p-r5 docs/evidence/p2-v1-r3b-i3-i1
+scope exit=0 started=2026-10-02T12:56:11Z :: python3 -B docs/evidence/p2-v1-r3b-i3-i1-r1/scripts/scope.py /home/nexus/NEXUS/nexus-os-p2-v1-custody-store-implementation 72ffc4fcc0141e2e5ae77a927481017ca711ab7c

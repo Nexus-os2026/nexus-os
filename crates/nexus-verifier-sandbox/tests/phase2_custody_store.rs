@@ -7,8 +7,12 @@
 //! scan and the claim); the recorder (the exchange, the one fatal latch, the
 //! worker, failure delivery and the store admission gate) driven through the
 //! real custody core; maintenance sessions and every procedure's crash
-//! points and protocol steps; composed recovery; and unprivileged native
-//! primitives beneath `CARGO_TARGET_TMPDIR`.
+//! points and protocol steps; composed recovery; the authority bindings of
+//! P2-V1-R3B-I3-I1-R1 (closure to seal through the owner that retains the
+//! custody, the opening's retained state, disposition provenance, the
+//! exchange's containment, the session's own verification, and the
+//! exclusion's life); and unprivileged native primitives beneath
+//! `CARGO_TARGET_TMPDIR`.
 //!
 //! The custody module is included here exactly as the core and codec
 //! targets include it, never copied: every run uses the real `Custody`, its
@@ -20,8 +24,9 @@
 //! `CARGO_TARGET_TMPDIR`; they inject no real I/O error or power loss.
 //!
 //! Every assertion that guards a requirement carries a bracketed marker; the
-//! negative controls of `docs/evidence/p2-v1-r3b-i3-i1/` restore one wrong
-//! behaviour each and must fail the assertion carrying their marker.
+//! negative controls of `docs/evidence/p2-v1-r3b-i3-i1/` and
+//! `docs/evidence/p2-v1-r3b-i3-i1-r1/` restore one wrong behaviour each and
+//! must fail the assertion carrying their marker.
 
 #![cfg(target_os = "linux")]
 
@@ -37,6 +42,7 @@ use custody::store::classify::{self, classify_bytes, FileClass, Rule};
 use custody::store::exchange::{
     Cause, ClaimState, Delivery, GateRefused, Invalid, SealState, SealWithheld, WorkerExit,
 };
+use custody::store::faults;
 use custody::store::format::{
     self, encode_header, encode_seal, parse_disposition, parse_header, parse_provision,
     parse_record_block, parse_seal, render_disposition, render_provision, seal_for, sha256,
@@ -44,7 +50,8 @@ use custody::store::format::{
     IncidentFacts, IncidentKind, PrefixFacts, RecordBlock, SealParse, BLOCK,
 };
 use custody::store::open::{self, open_owner, verify_standalone, NoHooks, Refused};
-use custody::store::recorder::{start_owner, OwnerStart, StartRefused, Step};
+use custody::store::owner::{start_owner, StartRefused, StoreOwner};
+use custody::store::recorder::Step;
 use custody::store::sim::{self, Fixture, HostFixture, SimIo, SimWorld};
 use custody::*;
 use sha2::{Digest, Sha256};
@@ -1500,57 +1507,105 @@ fn f08_storage_identity_record_is_exact() {
     assert_eq!(format::storage_identity([&big, b"", b"", b""]), None);
 }
 
-/// The store's disposition validator (design section 13.4) accepts only a
-/// root-owned disposition that restates exactly the incident the store
-/// computed, under that incident's binding, and returns that file's reason:
-/// another count or another root is no disposition.
+/// Dispositions (design section 13.4; P2-V1-R3B-I3-I1-R1 provenance). The
+/// exact-restatement comparison is plain data: another count, root or
+/// binding is no restatement, and the comparison authorizes nothing. The
+/// authority-bearing validator exists only as a borrow of an opening's own
+/// verified state: with no published disposition it validates nothing,
+/// whatever an edited copy of the scan holds; a disposition the root session
+/// published through the store's file path validates, with that file's
+/// reason; a revoked one no longer does.
 #[test]
 fn f09_the_validator_accepts_only_an_exact_restatement() {
-    use custody::store::disposition::StoreValidator;
+    use custody::store::disposition::exact_restatement;
     let sample = sample_disposition(IncidentKind::Journal);
     let binding = sample.facts.binding(&ROOT).expect("a journal binding");
     let incident = Incident {
         facts: sample.facts.clone(),
         outcome: PriorOutcome::Unresolved { outstanding: 2 },
     };
-    let scan_with = |presented: Disposition| {
-        let mut level = classify::PoolLevel::default();
-        level.incidents.insert(binding, incident.clone());
-        let mut dispositions = BTreeMap::new();
-        dispositions.insert(binding, presented);
-        open::ScanResult {
-            files: Vec::new(),
-            archive: Vec::new(),
-            dispositions,
-            revoked: Vec::new(),
-            report: classify::bounded_report(&level),
-            level,
-            generations: BTreeSet::new(),
-            preservation_sync_returned_zero: false,
-        }
-    };
-    let key = IncidentBinding::new(binding);
     let exact = Disposition {
         root: ROOT,
         binding,
         ..sample
     };
-    assert_eq!(
-        StoreValidator::new(&ROOT, &scan_with(exact.clone())).validate(&key),
-        Some(ValidatedDisposition::new(key, exact.reason)),
-        "the exact restatement"
+    assert!(
+        exact_restatement(&ROOT, &binding, &incident, &exact),
+        "the exact restatement compares equal"
     );
     let mut recount = exact.clone();
     recount.facts.recorded_unsettled = 3;
     let mut other_root = exact.clone();
     other_root.root = [0x99; 16];
-    for (label, presented) in [("another count", recount), ("another root", other_root)] {
-        assert_eq!(
-            StoreValidator::new(&ROOT, &scan_with(presented)).validate(&key),
-            None,
+    let mut other_binding = exact.clone();
+    other_binding.binding = [0x5a; 32];
+    for (label, presented) in [
+        ("another count", recount),
+        ("another root", other_root),
+        ("another binding", other_binding),
+    ] {
+        assert!(
+            !exact_restatement(&ROOT, &binding, &incident, &presented),
             "[disposition-exact] {label}"
         );
     }
+    // The validator, only through an opening's own verified state.
+    let fixture = store_with_incident(2);
+    let io = fixture.store_process("reader");
+    let opened = open_owner(&io, &fixture.path, &SMALL, &mut NoHooks).expect("opens");
+    let (binding, incident) = classify::current_incidents(&opened.scan().level)
+        .into_iter()
+        .next()
+        .expect("one incident");
+    let key = IncidentBinding::new(binding);
+    assert_eq!(
+        opened.validator().validate(&key),
+        None,
+        "[disposition-exact] no published disposition, no validation"
+    );
+    let mut edited = opened.scan().clone();
+    edited.dispositions.insert(
+        binding,
+        maint::disposition_for(
+            &ROOT,
+            binding,
+            &incident,
+            DispositionReason::OwnerDestroyed,
+            "edited into a copy, never published",
+            "nobody",
+            "2026-10-02T00:00:00Z",
+        ),
+    );
+    assert_eq!(edited.dispositions.len(), 1);
+    assert_eq!(
+        opened.validator().validate(&key),
+        None,
+        "[disposition-exact] an edited copy of the scan is inert"
+    );
+    drop(opened);
+    let published = publish_only_incident(&fixture);
+    assert_eq!(published, binding);
+    let opened = open_owner(&io, &fixture.path, &SMALL, &mut NoHooks).expect("opens");
+    assert_eq!(
+        opened.validator().validate(&key),
+        Some(ValidatedDisposition::new(
+            key,
+            DispositionReason::OwnerDestroyed
+        )),
+        "[disposition-exact] the published disposition validates, with its reason"
+    );
+    drop(opened);
+    let session = session(&fixture, false);
+    let mut procedure = maint::revoke(&session.borrow(), binding, "20261002T000000Z");
+    procedure.run_all(&mut quiet()).expect("revoked");
+    drop(procedure);
+    end(session);
+    let opened = open_owner(&io, &fixture.path, &SMALL, &mut NoHooks).expect("opens");
+    assert_eq!(
+        opened.validator().validate(&key),
+        None,
+        "[disposition-exact] a revoked disposition no longer validates"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1931,9 +1986,9 @@ fn c03_pool_level_checks_and_bounded_reports() {
 fn c04_the_claim_counter_never_wraps() {
     let fixture = Fixture::provisioned(2, 16);
     let session = session(&fixture, false);
-    let mut procedure = maint::rewrite_provision(Rc::clone(&session), |provision| {
-        provision.retired_through = format::MAX_CLAIM - 1;
-    });
+    verify(&session);
+    let mut procedure = maint::retire(Rc::clone(&session), format::MAX_CLAIM - 1)
+        .expect("retirement allowed: no claim was ever made");
     procedure.run_all(&mut quiet()).expect("rewritten");
     drop(procedure);
     end(session);
@@ -2838,7 +2893,7 @@ use custody::store::sim::Interaction;
 /// One owner: its started store (custody, recorder, guard, worker), driven
 /// step by step on this thread.
 struct Run {
-    started: OwnerStart<Token, SimIo>,
+    started: StoreOwner<Token, SimIo>,
     owner: SimIo,
     now: u64,
     seq: u64,
@@ -2864,18 +2919,14 @@ impl Run {
             now: 10,
             seq: 0,
         };
-        run.started.worker.run_until_idle();
+        run.started.run_worker_until_idle();
         Ok(run)
     }
 
     fn claimed(fixture: &Fixture, name: &str, config: Config) -> Run {
         match Self::start(fixture, name, config) {
             Ok(run) => {
-                assert_eq!(
-                    run.started.recorder.claim_state(),
-                    ClaimState::Claimed,
-                    "the claim"
-                );
+                assert_eq!(run.started.claim_state(), ClaimState::Claimed, "the claim");
                 run
             }
             Err(refused) => panic!("start refused: {refused:?}"),
@@ -2892,13 +2943,13 @@ impl Run {
         let mut last = None;
         for _ in 0..64 {
             let now = self.tick();
-            let applied = match self.started.recorder.flush(&mut self.started.custody, now) {
+            let applied = match self.started.flush(now) {
                 Ok(applied) => applied,
                 Err(error) => panic!("flush: {error:?}"),
             };
-            self.started.worker.run_until_idle();
+            self.started.run_worker_until_idle();
             let now = self.tick();
-            let applied_again = self.started.recorder.apply(&mut self.started.custody, now);
+            let applied_again = self.started.apply(now);
             if last == Some(applied_again) && applied == applied_again {
                 return applied_again;
             }
@@ -2907,19 +2958,19 @@ impl Run {
         last.expect("pumped")
     }
 
-    fn custody(&mut self) -> &mut Custody<Token> {
-        &mut self.started.custody
+    fn owner(&mut self) -> &mut StoreOwner<Token, SimIo> {
+        &mut self.started
     }
 
     fn start_run(&mut self) {
         let now = self.tick();
-        self.custody().start_run(now).expect("the run starts");
+        self.owner().start_run(now).expect("the run starts");
         self.pump();
     }
 
     fn begin(&mut self, case: u32, expectation: Expectation) {
         let now = self.tick();
-        self.custody()
+        self.owner()
             .begin_case(CaseId(case), expectation, now)
             .expect("the case begins");
         self.pump();
@@ -2929,12 +2980,10 @@ impl Run {
     /// through the store gate.
     fn admit(&mut self, kind: SlotKind) -> Result<OpTicket, GateRefused> {
         let now = self.tick();
-        let reservation = self.custody().reserve(kind, now).expect("reserved");
+        let reservation = self.owner().reserve(kind, now).expect("reserved");
         self.pump();
         let now = self.tick();
-        self.started
-            .recorder
-            .admit(&mut self.started.custody, reservation, now)
+        self.started.admit(reservation, now)
     }
 
     fn complete(
@@ -2943,29 +2992,29 @@ impl Run {
         outcome: NativeOutcome<Token>,
     ) -> Result<Completion, Rejected<Token>> {
         let now = self.tick();
-        self.custody().complete(ticket, outcome, now)
+        self.owner().complete(ticket, outcome, now)
     }
 
     fn end_case(&mut self, clean: Clean) -> CaseOutcome {
         let now = self.tick();
         let mut clean = clean;
         let outcome = self
-            .custody()
+            .owner()
             .end_case(&mut clean, now)
             .expect("the case ends");
-        self.custody().take_released();
+        self.owner().take_released();
         self.pump();
         outcome
     }
 
     fn finish(&mut self) {
         let now = self.tick();
-        let _ = self.custody().finish_run(now);
+        let _ = self.owner().finish_run(now);
         self.pump();
     }
 
     fn snapshot(&self) -> Arc<Snapshot> {
-        self.started.custody.snapshot()
+        self.started.snapshot()
     }
 
     /// Submit a request through the control side and serve it, past any
@@ -2973,33 +3022,33 @@ impl Run {
     fn serve(&mut self, op: RequestOp, clean: Clean) -> RequestOutcome {
         self.seq += 1;
         let request = Request {
-            generation: self.started.custody.generation(),
+            generation: self.started.generation(),
             seq: self.seq,
             op,
         };
         self.started
-            .control
+            .control()
             .submit(request)
             .expect("the queue is empty");
         self.now += 10;
         let now = Tick(self.now);
         let mut clean = clean;
-        let (_, outcome) = self.started.custody.serve(&mut clean, now).expect("served");
-        self.custody().take_released();
+        let (_, outcome) = self.started.serve(&mut clean, now).expect("served");
+        self.owner().take_released();
         self.pump();
         outcome
     }
 
     /// The claimed pool file's visible and durable bytes.
     fn journal(&self, fixture: &Fixture) -> (Vec<u8>, Vec<u8>) {
-        let pool = fixture.pool_ino(self.started.index).expect("pool");
+        let pool = fixture.pool_ino(self.started.index()).expect("pool");
         (fixture.world.visible(pool), fixture.world.durable(pool))
     }
 
     /// The kinds the journal's valid prefix records.
     fn recorded(&self, fixture: &Fixture) -> Vec<RecordKind> {
         let (visible, _) = self.journal(fixture);
-        let report = classify_bytes(&visible, ROOT, fixture.layout.c_pool, self.started.index);
+        let report = classify_bytes(&visible, ROOT, fixture.layout.c_pool, self.started.index());
         report.records.iter().map(|record| record.kind).collect()
     }
 
@@ -3018,23 +3067,20 @@ impl Run {
         assert_eq!(self.snapshot().phase, RunPhase::Finalized);
     }
 
-    /// Close and seal.
+    /// Close the retained custody and, only on its success, the seal its
+    /// owner requests; the worker writes it.
     fn close_and_seal(self) -> Result<SealState, String> {
-        let Run {
-            mut started, now, ..
-        } = self;
-        let closed = match started.custody.close(Tick(now + 1)) {
+        let Run { started, now, .. } = self;
+        let mut closed = match started.close(Tick(now + 1)) {
             Ok(closed) => closed,
-            Err(custody) => {
-                return Err(format!("close refused: {:?}", custody.shutdown_decision()))
-            }
+            Err(owner) => return Err(format!("close refused: {:?}", owner.shutdown_decision())),
         };
-        started
-            .recorder
-            .request_seal(&started.header, &closed, 0)
+        closed
+            .seal_request()
+            .clone()
             .map_err(|withheld| format!("{withheld:?}"))?;
-        started.worker.run_until_idle();
-        Ok(started.recorder.seal_state())
+        closed.run_worker_until_idle();
+        Ok(closed.seal_state())
     }
 }
 
@@ -3106,6 +3152,8 @@ fn o01_the_real_store_entry_is_closed() {
         include_str!("support/custody/store/format.rs"),
         include_str!("support/custody/store/classify.rs"),
         include_str!("support/custody/store/disposition.rs"),
+        include_str!("support/custody/store/owner.rs"),
+        include_str!("support/custody/store/faults.rs"),
     ];
     for source in sources {
         for pattern in [
@@ -3219,7 +3267,7 @@ fn o02_activation_precedes_every_decision_and_the_claim() {
         "nothing written before the claim"
     );
     assert!(opened.report().activated && opened.report().preservation_sync_returned_zero);
-    assert!(opened.decision.blocking.is_empty());
+    assert!(opened.decision().blocking.is_empty());
 }
 
 /// A second owner while the first holds the store lock is Busy, before it
@@ -3253,7 +3301,8 @@ fn o03_busy_before_any_sync_or_read() {
 }
 
 /// A hook that rewrites `PROVISION` (a new revision, through a root
-/// session) at the given attempts, between an owner's read and its lock.
+/// session's retirement through claim 0, which every store allows) at the
+/// given attempts, between an owner's read and its lock.
 struct Rewriter<'a> {
     fixture: &'a Fixture,
     attempts: BTreeSet<u32>,
@@ -3268,12 +3317,9 @@ impl OpeningHooks for Rewriter<'_> {
         let session =
             custody::store::maintenance::begin(root, &self.fixture.path, false).expect("a session");
         let session = std::rc::Rc::new(std::cell::RefCell::new(session));
-        let mut procedure = custody::store::maintenance::rewrite_provision(
-            std::rc::Rc::clone(&session),
-            |provision| {
-                provision.operator = "rewriter".into();
-            },
-        );
+        session.borrow_mut().verify(&SMALL).expect("verified");
+        let mut procedure = custody::store::maintenance::retire(std::rc::Rc::clone(&session), 0)
+            .expect("a retirement through claim 0");
         procedure.run_all(&mut |_| {}).expect("the rewrite");
         drop(procedure);
         if let Ok(session) = std::rc::Rc::try_unwrap(session) {
@@ -3295,7 +3341,7 @@ fn o04_a_replaced_selection_never_regains_authority() {
     };
     let opened = open_owner(&owner, &fixture.path, &SMALL, &mut once).expect("re-selects");
     assert_eq!(
-        opened.selection.revision(),
+        opened.selection().revision(),
         2,
         "[provision-selection] the new revision"
     );
@@ -3851,7 +3897,8 @@ fn o10_a_storage_admission_is_bound_to_its_opening() {
     );
     let fixture = Fixture::provisioned(2, 16);
     // An earlier opening of the same store and selection, on a copy of the
-    // world: the same PROVISION digest, another opening.
+    // world (the same PROVISION digest), another store's opening, and this
+    // one's: each admission belongs to its own opening and selection.
     let earlier_world = fixture.world.fork();
     let earlier_owner = earlier_world.process("earlier", sim::STORE_UID, sim::STORE_GID);
     let earlier = open_owner(&earlier_owner, &fixture.path, &SMALL, &mut NoHooks).expect("opens");
@@ -3863,30 +3910,48 @@ fn o10_a_storage_admission_is_bound_to_its_opening() {
         &mut NoHooks,
     )
     .expect("opens");
-    let not_verified = Refused::Unsupported("storage admission not verified".into());
-    for (label, presented) in [
-        ("no admission", None),
-        ("an earlier opening's admission", Some(earlier.admission())),
-        ("another store's admission", Some(other.admission())),
+    let own = open_owner(
+        &fixture.store_process("own"),
+        &fixture.path,
+        &SMALL,
+        &mut NoHooks,
+    )
+    .expect("opens");
+    assert_eq!(own.selection().digest, earlier.selection().digest);
+    let openings: BTreeSet<u64> = [&own, &earlier, &other]
+        .iter()
+        .map(|opened| opened.opening().serial())
+        .collect();
+    assert_eq!(openings.len(), 3, "three openings, three identities");
+    for (label, opened) in [
+        ("this opening", &own),
+        ("an earlier opening", &earlier),
+        ("another store's opening", &other),
     ] {
-        let owner = fixture.store_process(label);
-        let opened = open_owner(&owner, &fixture.path, &SMALL, &mut NoHooks).expect("opens");
-        assert_eq!(opened.selection.digest, earlier.selection.digest);
-        let generation = opened.draw_generation(&owner).expect("generation");
-        let refused = opened
-            .claim_presenting(&owner, presented, &SMALL, generation, &[])
-            .err()
-            .unwrap_or_else(|| panic!("[storage-qualification] {label}: the claim was accepted"));
-        assert_eq!(
-            refused.refused, not_verified,
-            "[storage-qualification] {label}"
+        assert!(
+            opened.admission().opening() == opened.opening()
+                && opened.admission().provision_digest() == opened.selection().digest,
+            "[storage-qualification] {label}: the admission is bound to its own opening and selection"
         );
     }
-    let owner = fixture.store_process("own");
-    let opened = open_owner(&owner, &fixture.path, &SMALL, &mut NoHooks).expect("opens");
-    let generation = opened.draw_generation(&owner).expect("generation");
+    // An edited copy of what the opening reports changes nothing it holds.
+    let mut copy = own.selection().clone();
+    copy.digest = earlier.admission().provision_digest().map(|byte| !byte);
+    let mut report = own.report();
+    report.decision.blocking.push([0xee; 32]);
     assert!(
-        opened.claim(&owner, &SMALL, generation, &[]).is_ok(),
+        copy.digest != own.selection().digest
+            && !report.decision.blocking.is_empty()
+            && own.admission().provision_digest() == own.selection().digest
+            && own.decision().blocking.is_empty(),
+        "[storage-qualification] an edited copy rebinds nothing"
+    );
+    drop((own, earlier, other));
+    // The claim (only through the store's own start) uses its own admission.
+    let run = Run::claimed(&fixture, "claims", SMALL);
+    assert_eq!(
+        run.started.claim_state(),
+        ClaimState::Claimed,
         "its own admission"
     );
 }
@@ -4219,20 +4284,17 @@ fn o13_the_preservation_sync_makes_what_the_report_saw_durable() {
     fixture.world.plan_file_syncs([Some(Errno::Io)]);
     let now = first.tick();
     first
-        .custody()
+        .owner()
         .begin_case(CaseId(1), Expectation::Clean, now)
         .expect("the case begins");
     let now = first.tick();
-    let _ = first
-        .started
-        .recorder
-        .flush(&mut first.started.custody, now);
-    first.started.worker.run_until_idle();
+    let _ = first.started.flush(now);
+    first.started.run_worker_until_idle();
     assert_eq!(
-        first.started.recorder.latched(),
+        first.started.latched(),
         Some((Cause::Sync(2, Errno::Io), 1))
     );
-    let index = first.started.index;
+    let index = first.started.index();
     let pool = fixture.pool_ino(index).expect("pool");
     assert_ne!(
         fixture.world.visible(pool),
@@ -4242,10 +4304,10 @@ fn o13_the_preservation_sync_makes_what_the_report_saw_durable() {
     fixture.world.kill(&first.owner);
     drop(first);
     let next = Run::claimed(&fixture, "next", SMALL);
-    assert!(next.started.report.preservation_sync_returned_zero);
+    assert!(next.started.report().preservation_sync_returned_zero);
     let reported = next
         .started
-        .report
+        .report()
         .files
         .iter()
         .find(|file| file.index == index)
@@ -4275,13 +4337,13 @@ fn o13_the_preservation_sync_makes_what_the_report_saw_durable() {
 /// bytes when the core applies it (INV-1); nothing beyond P is ever
 /// acknowledged (INV-4).
 fn assert_acked_durable(run: &Run, fixture: &Fixture, label: &str) {
-    let pool = fixture.pool_ino(run.started.index).expect("pool");
+    let pool = fixture.pool_ino(run.started.index()).expect("pool");
     let durable = fixture.world.durable(pool);
     let acknowledged = run.snapshot().evidence.acknowledged;
     for seq in 1..=acknowledged {
         let at = ((seq + 1) as usize) * BLOCK;
         let block = &durable[at..at + BLOCK];
-        let intent = &run.started.recorder.retained()[(seq - 1) as usize];
+        let intent = &run.started.retained()[(seq - 1) as usize];
         let frame = codec::encode_record(intent).expect("frame");
         assert_eq!(
             &block[..frame.len()],
@@ -4289,7 +4351,7 @@ fn assert_acked_durable(run: &Run, fixture: &Fixture, label: &str) {
             "[ack-durable] {label}: record {seq} acknowledged before it was durable"
         );
     }
-    if let Some((_, p)) = run.started.recorder.latched() {
+    if let Some((_, p)) = run.started.latched() {
         assert!(
             acknowledged <= p,
             "[ack-durable] {label}: acknowledged {acknowledged} beyond P = {p}"
@@ -4325,20 +4387,16 @@ fn r01_acknowledged_implies_durable_under_write_and_sync_faults() {
             // The clean run's calls, each refused or not as the core decides
             // once recording has failed.
             let now = run.tick();
-            let _ = run.custody().start_run(now);
+            let _ = run.owner().start_run(now);
             run.pump();
             let now = run.tick();
-            let _ = run.custody().begin_case(CaseId(1), Expectation::Clean, now);
+            let _ = run.owner().begin_case(CaseId(1), Expectation::Clean, now);
             run.pump();
             let now = run.tick();
-            if let Ok(reservation) = run.custody().reserve(SlotKind::Process, now) {
+            if let Ok(reservation) = run.owner().reserve(SlotKind::Process, now) {
                 run.pump();
                 let now = run.tick();
-                if let Ok(ticket) =
-                    run.started
-                        .recorder
-                        .admit(&mut run.started.custody, reservation, now)
-                {
+                if let Ok(ticket) = run.started.admit(reservation, now) {
                     let _ = run.complete(&ticket, NativeOutcome::Created(Token(SlotKind::Process)));
                 }
             }
@@ -4350,7 +4408,7 @@ fn r01_acknowledged_implies_durable_under_write_and_sync_faults() {
                 "{} fails at record {failing}",
                 if write { "write" } else { "sync" }
             );
-            let latched = run.started.recorder.latched();
+            let latched = run.started.latched();
             let expected = if write {
                 Cause::Write(failing)
             } else {
@@ -4384,12 +4442,12 @@ fn r01_acknowledged_implies_durable_under_write_and_sync_faults() {
     // nothing at or after record 2 is acknowledged.
     let fixture = Fixture::provisioned(2, 16);
     let mut run = Run::claimed(&fixture, "owner", SMALL);
-    let pool = fixture.pool_ino(run.started.index).expect("pool");
+    let pool = fixture.pool_ino(run.started.index()).expect("pool");
     fixture.world.fail_writeback(pool, 3);
     run.start_run();
     run.begin(1, Expectation::Clean);
     assert_eq!(
-        run.started.recorder.latched(),
+        run.started.latched(),
         Some((Cause::Sync(2, Errno::Io), 1)),
         "[ack-durable] a reported write error is never an acknowledgement"
     );
@@ -4415,7 +4473,7 @@ fn r01_acknowledged_implies_durable_under_write_and_sync_faults() {
         .plan_writes(std::iter::repeat_n(sim::WritePlan::Zero, 4));
     run.begin(1, Expectation::Clean);
     assert_eq!(
-        run.started.recorder.latched(),
+        run.started.latched(),
         Some((Cause::Write(2), 1)),
         "[ack-durable] zero progress four times"
     );
@@ -4431,7 +4489,7 @@ fn r01_acknowledged_implies_durable_under_write_and_sync_faults() {
     ]);
     run.start_run();
     assert_eq!(
-        run.started.recorder.latched(),
+        run.started.latched(),
         Some((Cause::Sync(1, Errno::Io), 0)),
         "[ack-durable] EIO after three EINTRs is final; the next sync would have succeeded"
     );
@@ -4514,40 +4572,27 @@ fn r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record() 
         run.begin(1, Expectation::Clean);
         let now = run.tick();
         let reservation = run
-            .custody()
+            .owner()
             .reserve(SlotKind::Process, now)
             .expect("reserved");
         run.pump();
         assert_eq!(run.snapshot().evidence.acknowledged, 3);
-        let first = run.started.recorder.retained()[0].clone();
-        let generation = run.custody().generation();
+        let first = run.started.retained()[0].clone();
+        let generation = run.owner().generation();
         let bad = make(&first, generation);
-        {
-            use custody::RecordSink;
-            run.started.recorder.sink().submit(&bad);
-        }
+        faults::submit_invalid(&mut run.started, &bad).expect("an invalid submission");
         assert_eq!(
-            run.started.recorder.latched(),
+            run.started.latched(),
             Some((cause(0), 3)),
             "[fatal-total] {label}: cause and P"
         );
         let now = run.tick();
-        match run
-            .started
-            .recorder
-            .admit(&mut run.started.custody, reservation, now)
-        {
+        match run.started.admit(reservation, now) {
             Err(GateRefused::RecorderFatal { .. }) => {}
             other => panic!("[admission-fence] {label}: admitted after the latch: {other:?}"),
         }
         assert_eq!(
-            run.started
-                .custody
-                .control()
-                .status()
-                .control
-                .admission
-                .admitted,
+            run.started.control().status().control.admission.admitted,
             0,
             "[admission-fence] {label}: the core's admission ran"
         );
@@ -4580,18 +4625,51 @@ fn r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record() 
             "[fatal-total] {label}: one recording failure"
         );
     }
-    // Before the claim: an exchange not yet claimed.
-    let exchange = custody::store::exchange::Exchange::new(Generation::new([5; 16]), 16, clock());
-    let mut recorder = custody::store::exchange::Recorder::new(exchange);
-    let (mut custody, _control) =
-        Custody::<Token>::new(SMALL, Generation::new([5; 16]), Vec::new(), Tick(1))
-            .expect("custody");
-    custody.start_run(Tick(2)).expect("starts");
-    let _ = recorder.flush(&mut custody, Tick(3));
+    // Before the claim: the owner's claim is requested and not yet written,
+    // and the run's first record is submitted.
+    let fixture = Fixture::provisioned(2, 16);
+    let io = fixture.store_process("early");
+    let mut early =
+        start_owner::<Token, _>(&io, &fixture.path, &SMALL, Tick(1), clock(), &mut NoHooks)
+            .expect("started");
+    assert!(matches!(early.claim_state(), ClaimState::Requested(_)));
+    early.start_run(Tick(2)).expect("starts");
+    let _ = early.flush(Tick(3));
     assert_eq!(
-        recorder.latched(),
+        early.latched(),
         Some((Cause::InvalidSubmission(1, Invalid::BeforeClaim), 0)),
         "[fatal-total] before the claim"
+    );
+    // The fault interface injects nothing the sink would store.
+    let fixture = Fixture::provisioned(2, 16);
+    let mut run = Run::claimed(&fixture, "valid", SMALL);
+    let now = run.tick();
+    run.owner().start_run(now).expect("starts");
+    let mut sink = Vec::new();
+    {
+        struct Copy<'a>(&'a mut Vec<RecordIntent>);
+        impl custody::RecordSink for Copy<'_> {
+            fn submit(&mut self, intent: &RecordIntent) {
+                self.0.push(intent.clone());
+            }
+        }
+        let generation = run.started.generation();
+        let (mut twin, _) = Custody::<Token>::new(SMALL, generation, Vec::new(), Tick(1))
+            .expect("a twin custody of the same generation");
+        twin.start_run(now).expect("starts");
+        let _ = twin.flush_records(&mut Copy(&mut sink), now);
+    }
+    assert_eq!(
+        faults::submit_invalid(&mut run.started, &sink[0]),
+        Err(faults::NotAFault(
+            "the sink would store it as the next record"
+        )),
+        "[exchange-contained] the next valid record is not a fault"
+    );
+    assert_eq!(
+        run.started.status().submitted_through,
+        0,
+        "[exchange-contained] nothing was stored"
     );
 }
 
@@ -4652,40 +4730,36 @@ fn r03_every_interleaving_of_gate_worker_apply_and_latch() {
         run.begin(1, Expectation::Clean);
         let now = run.tick();
         let mut reservation = Some(
-            run.custody()
+            run.owner()
                 .reserve(SlotKind::Process, now)
                 .expect("reserved"),
         );
         let now = run.tick();
-        let _ = run.started.recorder.flush(&mut run.started.custody, now);
+        let _ = run.started.flush(now);
         let mut ticket = None;
         let mut latched_at = None;
         let mut published_after_latch = false;
         for (position, event) in order.iter().enumerate() {
             match event {
                 Ev::Take | Ev::Io => {
-                    run.started.worker.step();
+                    run.started.step_worker();
                 }
                 Ev::Publish => {
-                    let before = run.started.recorder.status().durable_through;
-                    run.started.worker.step();
-                    let after = run.started.recorder.status().durable_through;
+                    let before = run.started.status().durable_through;
+                    run.started.step_worker();
+                    let after = run.started.status().durable_through;
                     if latched_at.is_some() && after > before {
                         published_after_latch = true;
                     }
                 }
                 Ev::Apply => {
                     let now = run.tick();
-                    run.started.recorder.apply(&mut run.started.custody, now);
+                    run.started.apply(now);
                 }
                 Ev::Admit => {
                     let now = run.tick();
                     let taken = reservation.take().expect("one admission");
-                    match run
-                        .started
-                        .recorder
-                        .admit(&mut run.started.custody, taken, now)
-                    {
+                    match run.started.admit(taken, now) {
                         Ok(granted) => ticket = Some((granted, position)),
                         Err(GateRefused::RecorderFatal {
                             reservation: back, ..
@@ -4694,7 +4768,7 @@ fn r03_every_interleaving_of_gate_worker_apply_and_latch() {
                     }
                 }
                 Ev::Latch => {
-                    run.started.recorder.exchange().latch(Cause::Conflict(1));
+                    faults::latch(&run.started, Cause::Conflict(1));
                     latched_at = Some(position);
                 }
             }
@@ -4715,7 +4789,7 @@ fn r03_every_interleaving_of_gate_worker_apply_and_latch() {
                 "[admission-fence] {order:?}: admitted before the start record was acknowledged"
             );
         }
-        let (_, p) = run.started.recorder.latched().expect("latched");
+        let (_, p) = run.started.latched().expect("latched");
         assert!(
             run.snapshot().evidence.acknowledged <= p,
             "[ack-durable] {order:?}: acknowledged beyond P"
@@ -4756,7 +4830,7 @@ impl custody::store::recorder::WorkerHooks for Gate {
 /// until the core issues the next record; true acknowledgements stay.
 #[test]
 fn r04_worker_loss_vanishing_and_poisoning() {
-    use custody::store::recorder::{spawn_worker, WorkerPoint};
+    use custody::store::recorder::WorkerPoint;
     // A: the worker unwinds with three records acknowledged and none issued
     // since.
     let fixture = Fixture::provisioned(2, 16);
@@ -4765,69 +4839,62 @@ fn r04_worker_loss_vanishing_and_poisoning() {
     run.begin(1, Expectation::Clean);
     let now = run.tick();
     let reservation = run
-        .custody()
+        .owner()
         .reserve(SlotKind::Process, now)
         .expect("reserved");
     run.pump();
-    let OwnerStart {
-        custody: mut core,
-        mut recorder,
-        worker,
-        guard,
-        ..
-    } = run.started;
     let hook = Arc::new(Gate {
         point: WorkerPoint::Take,
         panic: true,
         reached: std::sync::Mutex::new(None),
         release: std::sync::Mutex::new(None),
     });
-    let handle = spawn_worker(worker, Some(hook));
-    recorder.attach_worker(handle);
-    assert_eq!(recorder.wait_durable(u64::MAX, 500), 3);
+    assert!(faults::spawn_worker_with_hooks(&mut run.started, hook));
+    assert_eq!(run.started.wait_durable(u64::MAX, 500), 3);
     assert_eq!(
-        recorder.latched(),
+        run.started.latched(),
         Some((Cause::WorkerLost, 3)),
         "[fatal-total] worker loss latched by its drop guard"
     );
-    match recorder.admit(&mut core, reservation, Tick(100)) {
+    let now = run.tick();
+    match run.started.admit(reservation, now) {
         Err(GateRefused::RecorderFatal { cause, .. }) => {
             assert_eq!(cause, Cause::WorkerLost);
         }
         other => panic!("[admission-fence] after worker loss: {other:?}"),
     }
+    let now = run.tick();
     assert_eq!(
-        recorder.apply(&mut core, Tick(101)).delivery,
+        run.started.apply(now).delivery,
         Delivery::Waiting,
         "[fatal-total] no record to fail yet"
     );
+    let now = run.tick();
     let mut clean = Clean::Confirm;
-    core.end_case(&mut clean, Tick(102)).expect("the case ends");
-    let applied = recorder.flush(&mut core, Tick(103)).expect("flush");
+    run.owner()
+        .end_case(&mut clean, now)
+        .expect("the case ends");
+    let now = run.tick();
+    let applied = run.started.flush(now).expect("flush");
     assert_eq!(
         applied.delivery,
         Delivery::Delivered { target: 4 },
         "[fatal-total] delivered at record 4"
     );
     assert_eq!(
-        core.snapshot().evidence.acknowledged,
+        run.snapshot().evidence.acknowledged,
         3,
         "[fatal-total] true acknowledgements stay"
     );
-    drop(guard);
+    drop(run);
     // A thread that ends without its exit recorded: vanished.
     let fixture = Fixture::provisioned(2, 16);
     let mut run = Run::claimed(&fixture, "owner", SMALL);
-    run.started
-        .recorder
-        .attach_worker(custody::store::exchange::WorkerHandle::new(
-            std::thread::spawn(|| {}),
-        ));
-    std::thread::sleep(std::time::Duration::from_millis(50));
+    assert!(faults::vanish_worker(&mut run.started), "the thread ended");
     let now = run.tick();
-    run.started.recorder.apply(&mut run.started.custody, now);
+    run.started.apply(now);
     assert_eq!(
-        run.started.recorder.latched().map(|(cause, _)| cause),
+        run.started.latched().map(|(cause, _)| cause),
         Some(Cause::WorkerVanished),
         "[fatal-total] a vanished worker"
     );
@@ -4835,10 +4902,10 @@ fn r04_worker_loss_vanishing_and_poisoning() {
     let fixture = Fixture::provisioned(2, 16);
     let mut run = Run::claimed(&fixture, "owner", SMALL);
     run.start_run();
-    run.started.recorder.exchange().fixture_poison();
+    faults::poison(&run.started);
     run.begin(1, Expectation::Clean);
     assert_eq!(
-        run.started.recorder.latched(),
+        run.started.latched(),
         Some((Cause::Poisoned, 1)),
         "[fatal-total] a poisoned mutex"
     );
@@ -4858,20 +4925,23 @@ fn r05_in_flight_appends_and_unexpected_acknowledgement_outcomes() {
     let mut run = Run::claimed(&fixture, "owner", SMALL);
     run.start_run();
     let now = run.tick();
-    run.custody()
+    run.owner()
         .begin_case(CaseId(1), Expectation::Clean, now)
         .expect("begins");
     let now = run.tick();
-    let _ = run.started.recorder.flush(&mut run.started.custody, now);
-    assert_eq!(run.started.worker.step(), Step::Progress, "W1");
-    assert_eq!(run.started.worker.step(), Step::Progress, "W2 to W5");
-    run.started.recorder.exchange().latch(Cause::Conflict(1));
+    let _ = run.started.flush(now);
+    assert_eq!(run.started.step_worker(), Some(Step::Progress), "W1");
+    assert_eq!(run.started.step_worker(), Some(Step::Progress), "W2 to W5");
+    faults::latch(&run.started, Cause::Conflict(1));
     assert!(
-        matches!(run.started.worker.step(), Step::Exit(WorkerExit::Latched)),
+        matches!(
+            run.started.step_worker(),
+            Some(Step::Exit(WorkerExit::Latched))
+        ),
         "W6 refuses"
     );
     assert_eq!(
-        run.started.recorder.status().durable_through,
+        run.started.status().durable_through,
         1,
         "[fatal-total] the record in flight was published"
     );
@@ -4885,25 +4955,25 @@ fn r05_in_flight_appends_and_unexpected_acknowledgement_outcomes() {
     let fixture = Fixture::provisioned(2, 16);
     let mut run = Run::claimed(&fixture, "owner", SMALL);
     let now = run.tick();
-    run.custody().start_run(now).expect("starts");
+    run.owner().start_run(now).expect("starts");
     let now = run.tick();
-    let _ = run.started.recorder.flush(&mut run.started.custody, now);
-    run.started.worker.run_until_idle();
-    let intent = run.started.recorder.retained()[0].clone();
+    let _ = run.started.flush(now);
+    run.started.run_worker_until_idle();
     let now = run.tick();
     assert_eq!(
-        run.custody().acknowledge(&RecordAck::of(&intent), now),
-        AckOutcome::Acknowledged
+        faults::acknowledge_durable_again(&mut run.started, 1, now),
+        Ok(AckOutcome::Acknowledged),
+        "record 1 is durable: an out-of-band acknowledgement is not a fault of durability"
     );
     let now = run.tick();
-    run.started.recorder.apply(&mut run.started.custody, now);
+    run.started.apply(now);
     assert_eq!(
-        run.started.recorder.latched(),
+        run.started.latched(),
         Some((Cause::UnexpectedAck(1, AckOutcome::Duplicate), 1)),
         "[fatal-total] an unexpected outcome latches"
     );
     let now = run.tick();
-    run.custody()
+    run.owner()
         .begin_case(CaseId(1), Expectation::Clean, now)
         .expect("begins");
     let applied = run.pump();
@@ -4914,225 +4984,35 @@ fn r05_in_flight_appends_and_unexpected_acknowledgement_outcomes() {
     );
 }
 
-/// The two ends `Blocking` holds one write with: it reports reaching the
-/// write on the first and waits on the second for its release.
-type Handoff = (
-    std::sync::mpsc::SyncSender<()>,
-    std::sync::mpsc::Receiver<()>,
-);
-
-/// A test I/O that blocks one `pwrite` until released: the worker is held
-/// inside I/O with no mutex held.
-#[derive(Clone)]
-struct Blocking {
-    inner: SimIo,
-    gate: Arc<std::sync::Mutex<Option<Handoff>>>,
-}
-
-impl StoreIo for Blocking {
-    type Dir = sim::SimDir;
-    type File = sim::SimFile;
-    fn root_dir(&self) -> Result<Self::Dir, custody::store::io::IoError> {
-        self.inner.root_dir()
-    }
-    fn open_dir(
-        &self,
-        at: &Self::Dir,
-        name: &str,
-    ) -> Result<Self::Dir, custody::store::io::IoError> {
-        self.inner.open_dir(at, name)
-    }
-    fn stat_at(
-        &self,
-        at: &Self::Dir,
-        name: &str,
-    ) -> Result<custody::store::io::Stat, custody::store::io::IoError> {
-        self.inner.stat_at(at, name)
-    }
-    fn stat_dir(
-        &self,
-        dir: &Self::Dir,
-    ) -> Result<custody::store::io::Stat, custody::store::io::IoError> {
-        self.inner.stat_dir(dir)
-    }
-    fn stat_file(
-        &self,
-        file: &Self::File,
-    ) -> Result<custody::store::io::Stat, custody::store::io::IoError> {
-        self.inner.stat_file(file)
-    }
-    fn list_dir(
-        &self,
-        dir: &Self::Dir,
-        limit: usize,
-    ) -> Result<custody::store::io::Listing, custody::store::io::IoError> {
-        self.inner.list_dir(dir, limit)
-    }
-    fn open_read(
-        &self,
-        at: &Self::Dir,
-        name: &str,
-    ) -> Result<Self::File, custody::store::io::IoError> {
-        self.inner.open_read(at, name)
-    }
-    fn open_write(
-        &self,
-        at: &Self::Dir,
-        name: &str,
-    ) -> Result<Self::File, custody::store::io::IoError> {
-        self.inner.open_write(at, name)
-    }
-    fn open_dir_for_sync(
-        &self,
-        at: &Self::Dir,
-        name: &str,
-    ) -> Result<Self::File, custody::store::io::IoError> {
-        self.inner.open_dir_for_sync(at, name)
-    }
-    fn flock(
-        &self,
-        file: &Self::File,
-        request: custody::store::io::LockRequest,
-    ) -> Result<(), custody::store::io::IoError> {
-        self.inner.flock(file, request)
-    }
-    fn pread(
-        &self,
-        file: &Self::File,
-        offset: u64,
-        buf: &mut [u8],
-    ) -> Result<usize, custody::store::io::IoError> {
-        self.inner.pread(file, offset, buf)
-    }
-    fn pwrite(
-        &self,
-        file: &Self::File,
-        offset: u64,
-        buf: &[u8],
-    ) -> Result<usize, custody::store::io::IoError> {
-        let gate = self.gate.lock().ok().and_then(|mut slot| slot.take());
-        if let Some((reached, release)) = gate {
-            let _ = reached.send(());
-            let _ = release.recv_timeout(std::time::Duration::from_secs(30));
-        }
-        self.inner.pwrite(file, offset, buf)
-    }
-    fn fdatasync(&self, file: &Self::File) -> Result<(), custody::store::io::IoError> {
-        self.inner.fdatasync(file)
-    }
-    fn fsync(&self, file: &Self::File) -> Result<(), custody::store::io::IoError> {
-        self.inner.fsync(file)
-    }
-    fn touch(&self, file: &Self::File) -> Result<(), custody::store::io::IoError> {
-        self.inner.touch(file)
-    }
-    fn random(&self, buf: &mut [u8]) -> Result<(), custody::store::io::IoError> {
-        self.inner.random(buf)
-    }
-    fn create_exclusive(
-        &self,
-        at: &Self::Dir,
-        name: &str,
-        mode: u32,
-    ) -> Result<Self::File, custody::store::io::IoError> {
-        self.inner.create_exclusive(at, name, mode)
-    }
-    fn make_dir(
-        &self,
-        at: &Self::Dir,
-        name: &str,
-        mode: u32,
-    ) -> Result<(), custody::store::io::IoError> {
-        self.inner.make_dir(at, name, mode)
-    }
-    fn link(
-        &self,
-        from: &Self::Dir,
-        from_name: &str,
-        to: &Self::Dir,
-        to_name: &str,
-    ) -> Result<(), custody::store::io::IoError> {
-        self.inner.link(from, from_name, to, to_name)
-    }
-    fn rename(
-        &self,
-        from: &Self::Dir,
-        from_name: &str,
-        to: &Self::Dir,
-        to_name: &str,
-    ) -> Result<(), custody::store::io::IoError> {
-        self.inner.rename(from, from_name, to, to_name)
-    }
-    fn unlink(&self, at: &Self::Dir, name: &str) -> Result<(), custody::store::io::IoError> {
-        self.inner.unlink(at, name)
-    }
-    fn allocate(&self, file: &Self::File, len: u64) -> Result<(), custody::store::io::IoError> {
-        self.inner.allocate(file, len)
-    }
-    fn set_owner(
-        &self,
-        file: &Self::File,
-        uid: u32,
-        gid: u32,
-    ) -> Result<(), custody::store::io::IoError> {
-        self.inner.set_owner(file, uid, gid)
-    }
-}
-
 /// While storage blocks, the owner and the control side stay responsive: no
 /// mutex is held across I/O; a stall is reported, never failed and never
 /// acknowledged, and a timeout changes nothing; the late completion is
 /// acknowledged late (design sections 9.6 and 14.1).
 #[test]
 fn r06_a_stall_is_reported_never_failed_and_nothing_waits_on_storage() {
-    use custody::store::recorder::{spawn_worker, Worker};
+    use custody::store::recorder::WorkerPoint;
     let fixture = Fixture::provisioned(2, 16);
     let mut run = Run::claimed(&fixture, "owner", SMALL);
-    let OwnerStart {
-        custody: mut core,
-        recorder: mut rec,
-        guard,
-        worker,
-        header,
-        ..
-    } = {
-        // Swap the stepped worker for a threaded one on a blocking I/O.
-        let started = run.started;
-        run.started = Run::claimed(&Fixture::provisioned(1, 16), "spare", SMALL).started;
-        started
-    };
-    drop(worker);
-    let _ = header;
     let (reached_tx, reached_rx) = std::sync::mpsc::sync_channel(1);
     let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
-    let blocking = Blocking {
-        inner: run.owner.clone(),
-        gate: Arc::new(std::sync::Mutex::new(None)),
-    };
-    // A fresh worker on the claimed journal: its own I/O description.
-    let journals = Arc::clone(guard.journals());
-    let name = format::pool_name(0);
-    let file = blocking
-        .open_write(&journals, &name)
-        .expect("I/O description");
-    let identity = blocking.stat_file(&file).expect("identity");
-    let worker = Worker::new(
-        blocking.clone(),
-        file,
-        journals,
-        name,
-        identity,
-        Arc::clone(rec.exchange()),
-    );
-    core.start_run(Tick(50)).expect("starts");
-    *blocking.gate.lock().expect("gate") = Some((reached_tx, release_rx));
-    rec.attach_worker(spawn_worker(worker, None));
-    let _ = rec.flush(&mut core, Tick(51));
+    // The owner's own worker, on its own thread, held at its first record's
+    // I/O (W2 to W5) until released: it holds no mutex there.
+    let hook = Arc::new(Gate {
+        point: WorkerPoint::Io(1),
+        panic: false,
+        reached: std::sync::Mutex::new(Some(reached_tx)),
+        release: std::sync::Mutex::new(Some(release_rx)),
+    });
+    assert!(faults::spawn_worker_with_hooks(&mut run.started, hook));
+    let now = run.tick();
+    run.owner().start_run(now).expect("starts");
+    let now = run.tick();
+    let _ = run.started.flush(now);
     reached_rx
         .recv_timeout(std::time::Duration::from_secs(30))
-        .expect("the worker is inside pwrite");
-    // The worker is inside I/O. Everything else completes now.
-    let status = rec.status();
+        .expect("the worker is at the record's I/O");
+    // The worker is held. Everything else completes now.
+    let status = run.started.status();
     assert!(
         status.stalled() && status.pending.map(|(seq, _)| seq) == Some(1),
         "[fatal-latched] a stall is reported: {status:?}"
@@ -5141,40 +5021,46 @@ fn r06_a_stall_is_reported_never_failed_and_nothing_waits_on_storage() {
         status.fatal.is_none(),
         "[fatal-latched] a stall is not a failure"
     );
-    let control = core.control();
+    let control = run.started.control();
     let _ = control.status();
-    assert_eq!(rec.wait_durable(1, 3), 0, "a bounded wait times out");
+    assert_eq!(
+        run.started.wait_durable(1, 3),
+        0,
+        "a bounded wait times out"
+    );
     assert!(
-        rec.latched().is_none(),
+        run.started.latched().is_none(),
         "[fatal-latched] a timeout is never a failure"
     );
-    let applied = rec.apply(&mut core, Tick(52));
+    let now = run.tick();
+    let applied = run.started.apply(now);
     assert_eq!(
         (applied.applied_through, applied.fatal),
         (0, None),
         "[fatal-latched] a timeout is never an acknowledgement"
     );
+    let now = run.tick();
     assert_eq!(
-        core.begin_case(CaseId(1), Expectation::Clean, Tick(53)),
+        run.owner().begin_case(CaseId(1), Expectation::Clean, now),
         Err(Refusal::EvidencePending),
         "admission waits for the acknowledgement"
     );
     release_tx.send(()).expect("release");
-    assert_eq!(rec.wait_durable(1, 500), 1, "the late completion");
-    let applied = rec.apply(&mut core, Tick(54));
+    assert_eq!(run.started.wait_durable(1, 500), 1, "the late completion");
+    let now = run.tick();
+    let applied = run.started.apply(now);
     assert_eq!(
         applied.applied_through, 1,
         "[fatal-latched] acknowledged late"
     );
-    rec.stop_worker();
+    run.started.stop_worker();
     for _ in 0..500 {
-        if rec.status().worker_exit.is_some() {
+        if run.started.status().worker_exit.is_some() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
-    rec.join_worker();
-    drop(guard);
+    run.started.join_worker();
 }
 
 /// A recorder failure changes neither native custody nor exclusion: owners
@@ -5191,10 +5077,10 @@ fn r07_a_recorder_failure_keeps_owners_and_exclusion() {
         run.complete(&ticket, NativeOutcome::Created(Token(SlotKind::Process))),
         Ok(Completion::Deposited(_))
     ));
-    run.started.recorder.exchange().latch(Cause::WorkerLost);
+    faults::latch(&run.started, Cause::WorkerLost);
     assert_eq!(
-        run.started.worker.run_until_idle(),
-        Step::Exit(WorkerExit::Latched),
+        run.started.run_worker_until_idle(),
+        Some(Step::Exit(WorkerExit::Latched)),
         "the worker stops writing at the latch"
     );
     assert_eq!(
@@ -5217,13 +5103,30 @@ fn r07_a_recorder_failure_keeps_owners_and_exclusion() {
         "[fatal-total] the failure was delivered"
     );
     let Run { started, .. } = run;
-    match started.custody.close(Tick(1_000)) {
+    // The actual close refuses: the same owner returns, with its custody,
+    // its failure and its locks; nothing is sealed.
+    let owner = match started.close(Tick(1_000)) {
         Ok(_) => panic!("[evidence-close] closed with failed evidence"),
-        Err(custody) => assert!(matches!(
-            custody.shutdown_decision(),
-            ShutdownDecision::Refused(_)
-        )),
-    }
+        Err(owner) => owner,
+    };
+    assert!(
+        matches!(owner.shutdown_decision(), ShutdownDecision::Refused(_))
+            && owner.snapshot().evidence.failed.is_some(),
+        "[evidence-close] the refused owner keeps its failure"
+    );
+    assert_eq!(
+        refused_store(
+            Run::start(&fixture, "after", SMALL),
+            "[lock-retained] exclusion stays after a refused close"
+        ),
+        Refused::Busy,
+        "[lock-retained] exclusion stays after a refused close"
+    );
+    assert_eq!(
+        owner.seal_state(),
+        SealState::None,
+        "[evidence-close] no seal"
+    );
 }
 
 /// The claim and the seal (design sections 9.7 and 9.9): a claim whose write
@@ -5240,41 +5143,53 @@ fn r08_claim_and_seal_boundaries() {
         start_owner::<Token, _>(&owner, &fixture.path, &SMALL, Tick(1), clock(), &mut Quiet)
             .expect("started");
     fixture.world.plan_writes([sim::WritePlan::Fail(Errno::Io)]);
-    started.worker.run_until_idle();
+    started.run_worker_until_idle();
     assert_eq!(
-        started.recorder.claim_state(),
+        started.claim_state(),
         ClaimState::Failed,
         "[fatal-total] the claim failed"
     );
-    assert_eq!(started.recorder.latched(), Some((Cause::ClaimWrite, 0)));
-    assert!(
-        started.custody.close(Tick(2)).is_ok(),
-        "the untouched NotStarted custody closes"
+    assert_eq!(started.latched(), Some((Cause::ClaimWrite, 0)));
+    let closed = started.close(Tick(2));
+    assert!(closed.is_ok(), "the untouched NotStarted custody closes");
+    assert_eq!(
+        closed.ok().map(|closed| closed.seal_request().clone()),
+        Some(Err(SealWithheld::Latched(Cause::ClaimWrite))),
+        "[fatal-total] no seal for a failed claim"
     );
     // A latch withholds the seal.
     let fixture = Fixture::provisioned(2, 16);
     let mut run = Run::claimed(&fixture, "owner", SMALL);
     run.clean_pass();
-    run.started.recorder.exchange().latch(Cause::WorkerLost);
+    faults::latch(&run.started, Cause::WorkerLost);
     let Run {
         started,
         now,
         owner,
         ..
     } = run;
-    let closed = started
-        .custody
-        .close(Tick(now + 1))
-        .expect("closes: nothing held or pending");
+    let mut closed = match started.close(Tick(now + 1)) {
+        Ok(closed) => closed,
+        Err(owner) => panic!(
+            "closes: nothing held or pending: {:?}",
+            owner.shutdown_decision()
+        ),
+    };
     assert_eq!(
-        started.recorder.request_seal(&started.header, &closed, 0),
-        Err(SealWithheld::Latched(Cause::WorkerLost)),
+        closed.seal_request(),
+        &Err(SealWithheld::Latched(Cause::WorkerLost)),
         "[fatal-total] the seal is withheld"
+    );
+    closed.run_worker_until_idle();
+    assert_eq!(
+        closed.seal_state(),
+        SealState::None,
+        "[fatal-total] no seal requested, none written"
     );
     // The owner exits; a restart refuses the unsealed generation that
     // recorded an action start (a disclosed false positive).
     fixture.world.kill(&owner);
-    drop(started.guard);
+    drop(closed);
     match Run::start(&fixture, "next", SMALL) {
         Err(StartRefused::PriorUnresolved(blocking)) => assert_eq!(
             blocking.len(),
@@ -5287,7 +5202,7 @@ fn r08_claim_and_seal_boundaries() {
     let fixture = Fixture::provisioned(2, 16);
     let mut run = Run::claimed(&fixture, "owner", SMALL);
     run.clean_pass();
-    let pool = fixture.pool_ino(run.started.index).expect("pool");
+    let pool = fixture.pool_ino(run.started.index()).expect("pool");
     fixture.world.plan_file_syncs([Some(Errno::Io)]);
     let state = run.close_and_seal().expect("requested");
     assert_eq!(state, SealState::Failed, "[fatal-total] a failed seal sync");
@@ -5310,49 +5225,27 @@ fn r08_claim_and_seal_boundaries() {
 /// submissions change nothing and grow nothing (design section 9.3).
 #[test]
 fn r09_resubmission_is_idempotent_and_bounded() {
-    struct Panicking<'a, S: custody::RecordSink> {
-        inner: &'a mut S,
-        armed: bool,
-    }
-    impl<S: custody::RecordSink> custody::RecordSink for Panicking<'_, S> {
-        fn submit(&mut self, intent: &RecordIntent) {
-            self.inner.submit(intent);
-            if self.armed {
-                self.armed = false;
-                panic!("fixture: the sink panics after storing");
-            }
-        }
-    }
     let fixture = Fixture::provisioned(2, 16);
     let mut run = Run::claimed(&fixture, "owner", SMALL);
     let now = run.tick();
-    run.custody().start_run(now).expect("starts");
-    {
-        let started = &mut run.started;
-        let mut sink = started.recorder.sink();
-        let mut panicking = Panicking {
-            inner: &mut sink,
-            armed: true,
-        };
-        assert_eq!(
-            started
-                .custody
-                .flush_records(&mut panicking, Tick(run.now + 1)),
-            Err(FlushError::SinkPanicked { sent: 0 })
-        );
-    }
-    run.now += 1;
+    run.owner().start_run(now).expect("starts");
+    faults::panic_next_submission(&mut run.started);
+    let now = run.tick();
     assert_eq!(
-        run.started.recorder.status().submitted_through,
+        run.started.flush(now).err(),
+        Some(FlushError::SinkPanicked { sent: 0 })
+    );
+    assert_eq!(
+        run.started.status().submitted_through,
         1,
         "stored before the panic"
     );
     for _ in 0..50 {
         let now = run.tick();
-        let _ = run.started.recorder.flush(&mut run.started.custody, now);
+        let _ = run.started.flush(now);
     }
     assert!(
-        run.started.recorder.latched().is_none(),
+        run.started.latched().is_none(),
         "[dup-bounded] a duplicate is not a conflict"
     );
     // The panic was a failure of the run (RecorderFault): the core issued
@@ -5361,12 +5254,12 @@ fn r09_resubmission_is_idempotent_and_bounded() {
     let issued = run.snapshot().evidence.issued;
     assert_eq!(issued, 2, "the closure record");
     assert_eq!(
-        run.started.recorder.status().submitted_through,
+        run.started.status().submitted_through,
         issued,
         "[dup-bounded] nothing grew beyond what was issued"
     );
     assert_eq!(
-        run.started.recorder.retained().len() as u64,
+        run.started.retained().len() as u64,
         issued,
         "[dup-bounded] one retained copy each"
     );
@@ -5395,7 +5288,7 @@ fn r10_a_replaced_journal_latches_before_publication() {
     let fixture = Fixture::provisioned(2, 16);
     let mut run = Run::claimed(&fixture, "owner", SMALL);
     let journals = ino_of(&fixture, &state_path(&fixture, "journals"));
-    let name = format::pool_name(run.started.index);
+    let name = format::pool_name(run.started.index());
     fixture.world.fixture_remove(journals, &name);
     let replacement = fixture.world.fixture_entry(
         journals,
@@ -5406,7 +5299,7 @@ fn r10_a_replaced_journal_latches_before_publication() {
     fixture.world.install(replacement, &vec![0u8; 18 * BLOCK]);
     run.start_run();
     assert_eq!(
-        run.started.recorder.latched(),
+        run.started.latched(),
         Some((Cause::Identity(1), 0)),
         "[ack-durable] a replaced journal latches before publication"
     );
@@ -5548,11 +5441,11 @@ fn k01_every_record_kind_through_the_store_classifies() {
     }
     let (visible, durable) = run.journal(&fixture);
     assert_eq!(visible, durable, "every acknowledged block is durable");
-    assert_prefixes_not_malformed(&visible, run.started.index, 64, "every kind");
-    let report = classify_bytes(&visible, ROOT, 64, run.started.index);
+    assert_prefixes_not_malformed(&visible, run.started.index(), 64, "every kind");
+    let report = classify_bytes(&visible, ROOT, 64, run.started.index());
     assert_eq!(report.class, FileClass::UnsealedAction);
     assert!(report.recorded_unsettled.is_empty());
-    let index = run.started.index;
+    let index = run.started.index();
     assert_eq!(run.close_and_seal().expect("sealed"), SealState::Sealed);
     let pool = fixture.pool_ino(index).expect("pool");
     assert_eq!(
@@ -5578,7 +5471,7 @@ fn k02_real_runs_record_the_source_derived_shapes() {
     let now = run.tick();
     assert!(
         matches!(
-            run.started.control.cancel(CancelReason::Requested, now),
+            run.started.control().cancel(CancelReason::Requested, now),
             CancelReceipt::Late(_)
         ),
         "[grammar-conformance] a cancellation after the commitment is late"
@@ -5610,7 +5503,7 @@ fn k02_real_runs_record_the_source_derived_shapes() {
     let ticket = run.admit(SlotKind::Process).expect("admitted");
     let now = run.tick();
     assert!(matches!(
-        run.started.control.cancel(CancelReason::Requested, now),
+        run.started.control().cancel(CancelReason::Requested, now),
         CancelReceipt::Accepted(_)
     ));
     assert!(matches!(
@@ -5641,17 +5534,15 @@ fn k02_real_runs_record_the_source_derived_shapes() {
     run.begin(1, Expectation::Clean);
     let now = run.tick();
     let reservation = run
-        .custody()
+        .owner()
         .reserve(SlotKind::Process, now)
         .expect("reserved");
     run.pump();
     let now = run.tick();
-    run.started.control.cancel(CancelReason::Requested, now);
+    run.started.control().cancel(CancelReason::Requested, now);
     let now = run.tick();
     assert!(matches!(
-        run.started
-            .recorder
-            .admit(&mut run.started.custody, reservation, now),
+        run.started.admit(reservation, now),
         Err(GateRefused::Core(_))
     ));
     run.end_case(Clean::Confirm);
@@ -5707,7 +5598,7 @@ fn k02_real_runs_record_the_source_derived_shapes() {
         Ok(Completion::AuthorityLost)
     ));
     run.end_case(Clean::Confirm);
-    let report = classify_bytes(&run.journal(&fixture).0, ROOT, 64, run.started.index);
+    let report = classify_bytes(&run.journal(&fixture).0, ROOT, 64, run.started.index());
     assert_eq!(report.class, FileClass::UnsealedAction);
     assert!(
         report.refused && report.recorded_unsettled == vec![classify::Unsettled::Action(1)],
@@ -5719,11 +5610,11 @@ fn k02_real_runs_record_the_source_derived_shapes() {
     let fixture = Fixture::provisioned(2, 64);
     let mut run = Run::claimed(&fixture, "requests", WIDE);
     run.start_run();
-    let generation = run.started.custody.generation();
+    let generation = run.started.generation();
     let before = run.recorded(&fixture).len();
     let send = |run: &mut Run, generation: Generation, seq: u64, op: RequestOp| {
         run.started
-            .control
+            .control()
             .submit(Request {
                 generation,
                 seq,
@@ -5732,7 +5623,7 @@ fn k02_real_runs_record_the_source_derived_shapes() {
             .expect("queued");
         let now = run.tick();
         let mut clean = Clean::Confirm;
-        let (_, outcome) = run.started.custody.serve(&mut clean, now).expect("served");
+        let (_, outcome) = run.started.serve(&mut clean, now).expect("served");
         run.pump();
         outcome
     };
@@ -5779,7 +5670,7 @@ fn k02_real_runs_record_the_source_derived_shapes() {
         "[grammar-conformance] a stale sequence number, its receipt gone"
     );
     assert_eq!(
-        run.started.control.status().control.admission.closure,
+        run.started.control().status().control.admission.closure,
         None,
         "[grammar-conformance] no refused shutdown closed admission"
     );
@@ -5875,20 +5766,14 @@ impl Adversary {
                     } else {
                         Expectation::Clean
                     };
-                    let _ = run
-                        .custody()
-                        .begin_case(CaseId(self.case), expectation, now);
+                    let _ = run.owner().begin_case(CaseId(self.case), expectation, now);
                     run.pump();
                 }
                 let now = run.tick();
-                if let Ok(reservation) = run.custody().reserve(SlotKind::Process, now) {
+                if let Ok(reservation) = run.owner().reserve(SlotKind::Process, now) {
                     run.pump();
                     let now = run.tick();
-                    if let Ok(ticket) =
-                        run.started
-                            .recorder
-                            .admit(&mut run.started.custody, reservation, now)
-                    {
+                    if let Ok(ticket) = run.started.admit(reservation, now) {
                         self.tickets.push(ticket);
                     }
                 }
@@ -5906,7 +5791,7 @@ impl Adversary {
                 if let Some(ticket) = ticket {
                     let now = run.tick();
                     if let Err(rejected) =
-                        run.custody()
+                        run.owner()
                             .complete(ticket, outcome(SlotKind::Process), now)
                     {
                         let _ = rejected.into_owner();
@@ -5916,7 +5801,7 @@ impl Adversary {
             A::Timeout => {
                 if let Some(ticket) = self.tickets.last() {
                     let now = run.tick();
-                    let _ = run.custody().complete(ticket, NativeOutcome::Unknown, now);
+                    let _ = run.owner().complete(ticket, NativeOutcome::Unknown, now);
                 }
             }
             A::EndOk | A::EndFail | A::EndDetached => {
@@ -5931,35 +5816,35 @@ impl Adversary {
             }
             A::Cancel => {
                 let now = run.tick();
-                run.started.control.cancel(CancelReason::Requested, now);
+                run.started.control().cancel(CancelReason::Requested, now);
                 let now = run.tick();
-                let _ = run.custody().observe_control(now);
+                let _ = run.owner().observe_control(now);
             }
             A::Assert => {
                 let now = run.tick();
-                let _ = run.custody().record_assertion_failure("adversary", now);
+                let _ = run.owner().record_assertion_failure("adversary", now);
             }
             A::Retry => {
                 let epoch = run.snapshot().recovery.epoch;
-                if run.started.control.status().control.queued {
+                if run.started.control().status().control.queued {
                     return;
                 }
                 let _ = run.serve(RequestOp::Retry { epoch }, Clean::Confirm);
             }
             A::Shutdown => {
-                if !run.started.control.status().control.queued {
+                if !run.started.control().status().control.queued {
                     let _ = run.serve(RequestOp::Shutdown, Clean::Confirm);
                 }
             }
             A::Finish => {
                 let now = run.tick();
-                let _ = run.custody().finish_run(now);
+                let _ = run.owner().finish_run(now);
             }
             A::Latch => {
-                run.started.recorder.exchange().latch(Cause::WorkerLost);
+                faults::latch(&run.started, Cause::WorkerLost);
             }
         }
-        run.custody().take_released();
+        run.owner().take_released();
         run.pump();
     }
 }
@@ -6039,7 +5924,7 @@ fn k03_adversarial_real_core_sequences_classify_and_refuse() {
             let run = &adversary.run;
             let (visible, durable) = run.journal(&fixture);
             let label = format!("{:?} after {}", sequence, step + 1);
-            let index = run.started.index;
+            let index = run.started.index();
             for (name, image) in [("visible", &visible), ("durable", &durable)] {
                 let report = classify_once(image, index);
                 assert!(
@@ -6109,12 +5994,9 @@ fn k04_a_late_owner_without_an_acknowledged_record_still_blocks() {
         ));
         if let Some(steps) = steps {
             let now = run.tick();
-            run.started
-                .recorder
-                .flush(&mut run.started.custody, now)
-                .expect("flushed");
+            run.started.flush(now).expect("flushed");
             for _ in 0..steps {
-                assert_eq!(run.started.worker.step(), Step::Progress, "{label}");
+                assert_eq!(run.started.step_worker(), Some(Step::Progress), "{label}");
             }
         }
         assert_eq!(
@@ -6122,7 +6004,7 @@ fn k04_a_late_owner_without_an_acknowledged_record_still_blocks() {
             acknowledged,
             "{label}: the incident's record is not acknowledged"
         );
-        let index = run.started.index;
+        let index = run.started.index();
         fixture.world.kill(&run.owner);
         drop(run);
         fixture
@@ -6321,7 +6203,7 @@ fn m01_sessions_verify_through_their_retained_lock() {
     assert!(
         session
             .borrow()
-            .events
+            .events()
             .iter()
             .filter(|event| matches!(event, maint::SessionEvent::Verify(_)))
             .count()
@@ -6358,7 +6240,7 @@ fn m02_dispositions_apply_and_are_never_silently_stale() {
     let binding = publish_only_incident(&fixture);
     let mut run = Run::claimed(&fixture, "next", SMALL);
     assert_eq!(
-        run.started.header.applied,
+        run.started.header().applied,
         vec![(binding, DispositionReason::OwnerDestroyed)],
         "[admin-crash] the header lists the applied binding"
     );
@@ -6370,7 +6252,7 @@ fn m02_dispositions_apply_and_are_never_silently_stale() {
         ),
         "[admin-crash] RunStarted counts it"
     );
-    let index = run.started.index;
+    let index = run.started.index();
     let finished = {
         run.begin(1, Expectation::Clean);
         let ticket = run.admit(SlotKind::Process).expect("admitted");
@@ -6393,7 +6275,7 @@ fn m02_dispositions_apply_and_are_never_silently_stale() {
     )
     .expect("opens");
     assert!(
-        opened.scan.level.history.contains(&binding),
+        opened.scan().level.history.contains(&binding),
         "[admin-crash] applied and dispositioned: history"
     );
     drop(opened);
@@ -6410,11 +6292,11 @@ fn m02_dispositions_apply_and_are_never_silently_stale() {
     )
     .expect("opens");
     assert_eq!(
-        opened.decision.blocking.len(),
+        opened.decision().blocking.len(),
         1,
         "[archive-binding] a changed binding is never silently honoured"
     );
-    assert!(!opened.decision.blocking.contains(&binding));
+    assert!(!opened.decision().blocking.contains(&binding));
 }
 
 /// Revocation (design section 13.4): the incident blocks again; revoked
@@ -6453,11 +6335,16 @@ fn m04_archival_recycling_retirement_and_succession() {
     let session_a = session(&fixture, false);
     let report = verify(&session_a);
     assert!(
-        maint::retire(Rc::clone(&session_a), 1, &report).is_none(),
+        maint::retire(Rc::clone(&session_a), 1).is_none(),
         "[admin-crash] retirement without its preconditions: claim 1 is still in the pool"
     );
-    let name = maint::archival_allowed(&report, 0).expect("archivable");
-    let mut procedure = maint::archive(&mut session_a.borrow_mut(), 0, &name).expect("procedure");
+    assert!(
+        !maint::retirement_allowed(&report, 1),
+        "the same preconditions, over the same verification"
+    );
+    assert!(maint::archival_allowed(&report, 0).is_some(), "archivable");
+    verify(&session_a);
+    let mut procedure = maint::archive(&mut session_a.borrow_mut(), 0).expect("procedure");
     procedure.run_all(&mut quiet()).expect("archived");
     drop(procedure);
     let after = verify(&session_a);
@@ -6469,7 +6356,7 @@ fn m04_archival_recycling_retirement_and_succession() {
         after.scan.level.history.contains(&binding),
         "[archive-binding] the archive keeps the binding"
     );
-    let mut procedure = maint::recycle(Rc::clone(&session_a), 0, &after).expect("procedure");
+    let mut procedure = maint::recycle(Rc::clone(&session_a), 0).expect("procedure");
     procedure.run_all(&mut quiet()).expect("recycled");
     drop(procedure);
     let recycled = verify(&session_a);
@@ -6479,8 +6366,7 @@ fn m04_archival_recycling_retirement_and_succession() {
         "[admin-crash] recycled"
     );
     assert_eq!(recycled.revision, 2);
-    let mut procedure =
-        maint::retire(Rc::clone(&session_a), 1, &recycled).expect("retirement allowed");
+    let mut procedure = maint::retire(Rc::clone(&session_a), 1).expect("retirement allowed");
     procedure.run_all(&mut quiet()).expect("retired");
     drop(procedure);
     let retired = verify(&session_a);
@@ -6517,13 +6403,13 @@ fn m04_archival_recycling_retirement_and_succession() {
     )
     .expect("opens the successor");
     assert_eq!(
-        opened.selection.provision.root_id,
+        opened.selection().provision.root_id,
         sim::SUCCESSOR_ID,
         "[provision-selection] the successor is selected"
     );
     assert_eq!(
         opened
-            .selection
+            .selection()
             .provision
             .predecessor
             .as_ref()
@@ -6612,7 +6498,7 @@ fn m05_leftovers_and_requalification() {
         &mut NoHooks,
     )
     .expect("re-qualified");
-    assert_eq!(opened.selection.revision(), 2);
+    assert_eq!(opened.selection().revision(), 2);
 }
 
 /// After Unprovisioned, a root that may hold history is re-published, never
@@ -6899,22 +6785,18 @@ fn m08_procedures_perform_exactly_the_documented_steps() {
         &fixture,
         maint::publish_disposition(&s.borrow(), disposition_again).expect("procedure"),
     );
-    let report = verify(&s);
-    let name = maint::archival_allowed(&report, 0).expect("archivable");
-    let procedure = maint::archive(&mut s.borrow_mut(), 0, &name).expect("procedure");
+    verify(&s);
+    let procedure = maint::archive(&mut s.borrow_mut(), 0).expect("procedure");
     let trace = traced(&fixture, procedure);
     check("P-ARCH", &fixture, &trace, &[&state(&fixture)]);
-    let report = verify(&s);
+    verify(&s);
     let trace = traced(
         &fixture,
-        maint::recycle(Rc::clone(&s), 0, &report).expect("procedure"),
+        maint::recycle(Rc::clone(&s), 0).expect("procedure"),
     );
     check("P-RECYCLE", &fixture, &trace, &[&state(&fixture)]);
-    let report = verify(&s);
-    let trace = traced(
-        &fixture,
-        maint::retire(Rc::clone(&s), 1, &report).expect("allowed"),
-    );
+    verify(&s);
+    let trace = traced(&fixture, maint::retire(Rc::clone(&s), 1).expect("allowed"));
     check("P-RETIRE", &fixture, &trace, &[&state(&fixture)]);
     end(s);
     // P-REQUALIFY.
@@ -7082,9 +6964,8 @@ fn stage(proc: Proc) -> Staged {
             let fixture = store_with_incident(1);
             publish_only_incident(&fixture);
             with_session(fixture, false, &|s| {
-                let report = verify(s);
-                let name = maint::archival_allowed(&report, 0).expect("archivable");
-                let procedure = maint::archive(&mut s.borrow_mut(), 0, &name).expect("procedure");
+                verify(s);
+                let procedure = maint::archive(&mut s.borrow_mut(), 0).expect("procedure");
                 (procedure, None)
             })
         }
@@ -7092,35 +6973,33 @@ fn stage(proc: Proc) -> Staged {
             let fixture = store_with_incident(1);
             publish_only_incident(&fixture);
             let s = session(&fixture, false);
-            let report = verify(&s);
-            let name = maint::archival_allowed(&report, 0).expect("archivable");
-            maint::archive(&mut s.borrow_mut(), 0, &name)
+            verify(&s);
+            maint::archive(&mut s.borrow_mut(), 0)
                 .expect("procedure")
                 .run_all(&mut quiet())
                 .expect("archived");
             end(s);
             if proc == Proc::Recycle {
                 return with_session(fixture, false, &|s| {
+                    // The interrupted session's report, kept for the
+                    // resumption (the session's own copy is consumed).
                     let report = verify(s);
                     (
-                        maint::recycle(Rc::clone(s), 0, &report).expect("procedure"),
+                        maint::recycle(Rc::clone(s), 0).expect("procedure"),
                         Some(report),
                     )
                 });
             }
             let s = session(&fixture, false);
-            let report = verify(&s);
-            maint::recycle(Rc::clone(&s), 0, &report)
+            verify(&s);
+            maint::recycle(Rc::clone(&s), 0)
                 .expect("procedure")
                 .run_all(&mut quiet())
                 .expect("recycled");
             end(s);
             with_session(fixture, false, &|s| {
-                let report = verify(s);
-                (
-                    maint::retire(Rc::clone(s), 1, &report).expect("allowed"),
-                    None,
-                )
+                verify(s);
+                (maint::retire(Rc::clone(s), 1).expect("allowed"), None)
             })
         }
         Proc::Requalify => {
@@ -7175,9 +7054,9 @@ fn outcome(fixture: &Fixture, proc: Proc) -> String {
         },
         Ok(opened) => match proc {
             Proc::Prov => {
-                let fresh = opened.decision.current.is_empty()
+                let fresh = opened.decision().current.is_empty()
                     && opened
-                        .scan
+                        .scan()
                         .files
                         .iter()
                         .all(|file| file.class == FileClass::Unused);
@@ -7188,31 +7067,31 @@ fn outcome(fixture: &Fixture, proc: Proc) -> String {
                 }
             }
             Proc::Disp | Proc::Revoke => {
-                if !opened.decision.blocking.is_empty() {
+                if !opened.decision().blocking.is_empty() {
                     "blocks".into()
-                } else if !opened.decision.dispositioned.is_empty() {
+                } else if !opened.decision().dispositioned.is_empty() {
                     "published".into()
                 } else {
                     "neither".into()
                 }
             }
             Proc::Arch | Proc::Recycle => {
-                if opened.scan.files[0].class == FileClass::Unused {
+                if opened.scan().files[0].class == FileClass::Unused {
                     "recycled".into()
-                } else if opened.scan.level.pending_recycle.contains(&0)
-                    && !opened.scan.archive.is_empty()
+                } else if opened.scan().level.pending_recycle.contains(&0)
+                    && !opened.scan().archive.is_empty()
                 {
                     "archived".into()
-                } else if !opened.decision.dispositioned.is_empty() {
+                } else if !opened.decision().dispositioned.is_empty() {
                     "published".into()
                 } else {
                     "neither".into()
                 }
             }
-            Proc::Retire => format!("bound {}", opened.selection.provision.retired_through),
-            Proc::Requalify => format!("revision {}", opened.selection.revision()),
+            Proc::Retire => format!("bound {}", opened.selection().provision.retired_through),
+            Proc::Requalify => format!("revision {}", opened.selection().revision()),
             Proc::Successor => {
-                if opened.selection.provision.root_id == ROOT {
+                if opened.selection().provision.root_id == ROOT {
                     "predecessor".into()
                 } else {
                     "successor".into()
@@ -7285,15 +7164,14 @@ fn recover(fixture: &Fixture, proc: Proc, saved: Option<&SessionReport>) -> Stri
     drop(leftovers);
     let report = s.borrow_mut().verify(&SMALL);
     match (proc, report) {
-        (Proc::Recycle, Err(refusal)) => {
+        (Proc::Recycle, Err(_)) => {
             let saved = saved.expect("the interrupted session's report");
-            let mut resume =
-                maint::resume_recycle(Rc::clone(&s), 0, &refusal, saved).expect("resumable");
+            let mut resume = maint::resume_recycle(Rc::clone(&s), 0, saved).expect("resumable");
             resume.run_all(&mut quiet()).expect("resumed");
         }
         (Proc::Recycle, Ok(report)) => {
             if report.scan.level.pending_recycle.contains(&0) {
-                maint::recycle(Rc::clone(&s), 0, &report)
+                maint::recycle(Rc::clone(&s), 0)
                     .expect("procedure")
                     .run_all(&mut quiet())
                     .expect("recycled");
@@ -7301,8 +7179,8 @@ fn recover(fixture: &Fixture, proc: Proc, saved: Option<&SessionReport>) -> Stri
         }
         (Proc::Arch, Ok(report)) => {
             if !report.scan.level.pending_recycle.contains(&0) {
-                let name = maint::archival_allowed(&report, 0).expect("archivable");
-                maint::archive(&mut s.borrow_mut(), 0, &name)
+                assert!(maint::archival_allowed(&report, 0).is_some(), "archivable");
+                maint::archive(&mut s.borrow_mut(), 0)
                     .expect("procedure")
                     .run_all(&mut quiet())
                     .expect("archived");
@@ -7435,17 +7313,12 @@ fn m09_the_crash_matrix_is_the_documented_one() {
                         // R-RESUME's steps (design section 15.3).
                         let probe = view(&state, state.world.fork());
                         let s = session(&probe, false);
-                        let refusal = s
-                            .borrow_mut()
+                        s.borrow_mut()
                             .verify(&SMALL)
                             .expect_err("[admin-crash] the interrupted recycling refuses");
-                        let resume = maint::resume_recycle(
-                            Rc::clone(&s),
-                            0,
-                            &refusal,
-                            saved.as_ref().expect("saved"),
-                        )
-                        .expect("[step-parity] R-RESUME applies");
+                        let resume =
+                            maint::resume_recycle(Rc::clone(&s), 0, saved.as_ref().expect("saved"))
+                                .expect("[step-parity] R-RESUME applies");
                         let trace = traced(&probe, resume);
                         let labelled = label_trace(&probe, &trace, &[&probe.layout.state_name]);
                         assert_eq!(
@@ -7569,7 +7442,7 @@ fn dependent_work(fixture: &Fixture) -> Result<(Generation, u32, SimIo), Refused
         Err(StartRefused::PriorUnresolved(_)) => return Err(Refused::PriorUnresolved(Vec::new())),
         Err(StartRefused::Core(refusal)) => panic!("core refused: {refusal:?}"),
     };
-    if run.started.recorder.claim_state() != ClaimState::Claimed {
+    if run.started.claim_state() != ClaimState::Claimed {
         return Err(Refused::ClaimFailed("claim".into()));
     }
     run.start_run();
@@ -7582,8 +7455,8 @@ fn dependent_work(fixture: &Fixture) -> Result<(Generation, u32, SimIo), Refused
         run.snapshot().evidence.acknowledged >= 3,
         "the start record is acknowledged"
     );
-    let generation = run.custody().generation();
-    let index = run.started.index;
+    let generation = run.owner().generation();
+    let index = run.started.index();
     let owner = run.owner.clone();
     std::mem::forget(run);
     Ok((generation, index, owner))
@@ -7597,14 +7470,14 @@ fn dependent_work(fixture: &Fixture) -> Result<(Generation, u32, SimIo), Refused
 fn oracle(state: &Fixture, generation: Generation, label: &str) -> &'static str {
     let in_decision = |opened: &open::Opened<SimIo>| {
         opened
-            .scan
+            .scan()
             .level
             .incidents
             .values()
             .any(|incident| incident.facts.generation == Some(generation.bytes()))
-            && opened.decision.blocking.iter().any(|binding| {
+            && opened.decision().blocking.iter().any(|binding| {
                 opened
-                    .scan
+                    .scan()
                     .level
                     .incidents
                     .get(binding)
@@ -7788,7 +7661,8 @@ fn x02_a_dispositioned_generation_lets_the_next_owner_run() {
         )
         .expect("opens");
         assert!(
-            opened.decision.blocking.is_empty() && opened.decision.dispositioned == vec![binding],
+            opened.decision().blocking.is_empty()
+                && opened.decision().dispositioned == vec![binding],
             "[composed-recovery] {crash}: the positive path"
         );
     }
@@ -7957,6 +7831,805 @@ fn x03_storage_events_composed() {
 }
 
 // ---------------------------------------------------------------------------
+// B: authority bindings (P2-V1-R3B-I3-I1-R1): closure to seal, the opening's
+// retained state, disposition provenance, the exchange's containment and the
+// maintenance session's verification
+// ---------------------------------------------------------------------------
+
+use custody::store::owner::ClosedStore;
+
+impl Run {
+    /// Close the custody the owner retains. On refusal the same owner comes
+    /// back, in the same run.
+    fn close(self) -> Result<(ClosedStore<Token, SimIo>, SimIo), Box<Run>> {
+        let Run {
+            started,
+            owner,
+            now,
+            seq,
+        } = self;
+        match started.close(Tick(now + 1)) {
+            Ok(closed) => Ok((closed, owner)),
+            Err(started) => Err(Box::new(Run {
+                started: *started,
+                owner,
+                now: now + 1,
+                seq,
+            })),
+        }
+    }
+
+    /// A passed, finalized run with one admitted action, then that action's
+    /// owner delivered late, after the terminal record (T8): the custody
+    /// holds it and cannot close.
+    fn finalized_with_late_owner(&mut self) {
+        self.start_run();
+        self.begin(1, Expectation::Clean);
+        let ticket = self.admit(SlotKind::Process).expect("admitted");
+        assert!(matches!(
+            self.complete(&ticket, NativeOutcome::Created(Token(SlotKind::Process))),
+            Ok(Completion::Deposited(_))
+        ));
+        assert!(self.end_case(Clean::Confirm).passed);
+        self.finish();
+        assert_eq!(self.snapshot().phase, RunPhase::Finalized);
+        assert!(matches!(
+            self.complete(&ticket, NativeOutcome::Created(Token(SlotKind::Process))),
+            Ok(Completion::Late { .. })
+        ));
+    }
+}
+
+/// B1: a passed, finalized run is delivered a late owner after its terminal
+/// record. In each of the three T8 windows the custody the owner retains
+/// refuses closure, and still refuses once every record is durable and
+/// acknowledged. Each time the same owner comes back, with that custody, the
+/// late owner and the store lock, and no seal is requested or written; the
+/// next owner is refused. (At the base, fabricated closure data carrying the
+/// durable count sealed this journal and the next owner ran.)
+#[test]
+fn b01_a_refused_closure_requests_no_seal_and_keeps_its_owner() {
+    for (label, steps) in [
+        ("never submitted", None),
+        ("taken, not written", Some(1)),
+        ("durable, not published", Some(2)),
+    ] {
+        let fixture = Fixture::provisioned(2, 64);
+        let mut run = Run::claimed(&fixture, "b01", WIDE);
+        run.finalized_with_late_owner();
+        if let Some(steps) = steps {
+            let now = run.tick();
+            run.started.flush(now).expect("flushed");
+            for _ in 0..steps {
+                assert_eq!(run.started.step_worker(), Some(Step::Progress), "{label}");
+            }
+        }
+        let facts = |run: &Run| {
+            let snapshot = run.snapshot();
+            (
+                run.started.index(),
+                run.started.generation(),
+                run.started.claim(),
+                snapshot.entries.len(),
+                snapshot.evidence.issued,
+                snapshot.evidence.acknowledged,
+                run.started.status(),
+            )
+        };
+        let before = facts(&run);
+        let mut run = match run.close() {
+            Ok(_) => panic!("[closure-seal] {label}: the custody closed with a late owner held"),
+            Err(run) => run,
+        };
+        assert_eq!(
+            facts(&run),
+            before,
+            "[closure-owner] {label}: the same owner, custody, late owner and recorder"
+        );
+        assert_eq!(
+            run.started.seal_state(),
+            SealState::None,
+            "[closure-seal] {label}: no seal requested"
+        );
+        assert_eq!(
+            refused_store(
+                Run::start(&fixture, "b01-other", WIDE),
+                "[closure-owner] exclusion stays"
+            ),
+            Refused::Busy,
+            "[closure-owner] {label}: the store stays excluded"
+        );
+        // Every record durable and acknowledged: still no closure, no seal.
+        run.pump();
+        let snapshot = run.snapshot();
+        assert_eq!(
+            (
+                run.started.status().durable_through,
+                snapshot.evidence.acknowledged
+            ),
+            (snapshot.evidence.issued, snapshot.evidence.issued),
+            "{label}: every record durable and acknowledged"
+        );
+        let mut run = match run.close() {
+            Ok(_) => panic!("[closure-seal] {label}: all-durable state closed the custody"),
+            Err(run) => run,
+        };
+        run.started.run_worker_until_idle();
+        assert_eq!(
+            run.started.seal_state(),
+            SealState::None,
+            "[closure-seal] {label}: no seal from all-durable state"
+        );
+        let index = run.started.index();
+        fixture.world.kill(&run.owner);
+        drop(run);
+        let pool = fixture.pool_ino(index).expect("pool");
+        assert_eq!(
+            classify_bytes(&fixture.world.visible(pool), ROOT, 64, index).class,
+            FileClass::UnsealedAction,
+            "[closure-seal] {label}: the journal stays unsealed"
+        );
+        match Run::start(&fixture, "b01-next", WIDE) {
+            Err(StartRefused::PriorUnresolved(blocking)) => assert_eq!(
+                blocking.len(),
+                1,
+                "[closure-seal] {label}: the generation blocks"
+            ),
+            Err(other) => panic!("[closure-seal] {label}: {other:?}"),
+            Ok(_) => panic!("[closure-seal] {label}: the next owner ran"),
+        }
+    }
+}
+
+/// B2: two stores whose owners drew the same generation (the simulator's
+/// fixtures are deterministic) and hold the same number of durable records.
+/// One custody closes: the seal of its own journal is requested once and
+/// written. The other custody holds a late owner and still cannot close: its
+/// journal stays unsealed and blocks the next owner of its store, while the
+/// sealed store runs its next owner. Equal counts and an equal generation
+/// bind nothing. (At the base, the other custody's genuine closure sealed
+/// this journal.)
+#[test]
+fn b02_a_closure_seals_only_its_own_journal() {
+    let fixture_a = Fixture::provisioned(2, 64);
+    let mut a = Run::claimed(&fixture_a, "b02-a", WIDE);
+    a.finalized_with_late_owner();
+    let a_durable = a.started.status().durable_through;
+    let fixture_b = Fixture::provisioned(2, 64);
+    let mut b = Run::claimed(&fixture_b, "b02-b", WIDE);
+    b.clean_pass();
+    assert_eq!(
+        a.started.generation(),
+        b.started.generation(),
+        "the fixtures draw one generation"
+    );
+    let (mut closed_b, owner_b) = match b.close() {
+        Ok(closed) => closed,
+        Err(b) => panic!("B closes: {:?}", b.started.shutdown_decision()),
+    };
+    assert_eq!(
+        closed_b.closed().records,
+        a_durable,
+        "the B2 shape: B's closure counts as many records as A holds durable"
+    );
+    assert_eq!(
+        closed_b.seal_request(),
+        &Ok(()),
+        "[closure-seal] B's own seal is requested"
+    );
+    closed_b.run_worker_until_idle();
+    assert_eq!(
+        closed_b.seal_state(),
+        SealState::Sealed,
+        "[closure-seal] B's seal is written"
+    );
+    let pool_b = fixture_b.pool_ino(closed_b.index()).expect("pool");
+    assert_eq!(
+        classify_bytes(&fixture_b.world.visible(pool_b), ROOT, 64, closed_b.index()).class,
+        FileClass::Sealed,
+        "[closure-seal] B's journal is sealed"
+    );
+    assert_eq!(
+        a.started.seal_state(),
+        SealState::None,
+        "[closure-seal] no seal for A"
+    );
+    let index_a = a.started.index();
+    let pool_a = fixture_a.pool_ino(index_a).expect("pool");
+    assert_eq!(
+        classify_bytes(&fixture_a.world.visible(pool_a), ROOT, 64, index_a).class,
+        FileClass::UnsealedAction,
+        "[closure-seal] A's journal stays unsealed"
+    );
+    let a = match a.close() {
+        Ok(_) => panic!("[closure-seal] A closed with its late owner held"),
+        Err(a) => a,
+    };
+    assert_eq!(a.started.seal_state(), SealState::None, "[closure-seal] A");
+    fixture_a.world.kill(&a.owner);
+    drop(a);
+    match Run::start(&fixture_a, "b02-a-next", WIDE) {
+        Err(StartRefused::PriorUnresolved(blocking)) => {
+            assert_eq!(blocking.len(), 1, "[closure-seal] A's generation blocks")
+        }
+        Err(other) => panic!("[closure-seal] A: {other:?}"),
+        Ok(_) => panic!("[closure-seal] A's next owner ran"),
+    }
+    fixture_b.world.kill(&owner_b);
+    drop(closed_b);
+    let next_b = Run::claimed(&fixture_b, "b02-b-next", WIDE);
+    assert_eq!(next_b.started.claim(), 2, "B's next owner runs");
+}
+
+/// B3: the opening's report, decision, scan and selection reach a caller
+/// only as borrows or copies. Clearing the copies' blocking and current
+/// incidents, files and incident set, and changing the selection's digest
+/// and retirement, changes nothing in the opening, and the store's own start
+/// still refuses the unresolved incident. (At the base, clearing the
+/// returned decision let the claim proceed.)
+#[test]
+fn b03_an_edited_opening_report_changes_no_decision() {
+    let fixture = store_with_incident(2);
+    let io = fixture.store_process("reader");
+    let opened = open_owner(&io, &fixture.path, &SMALL, &mut NoHooks).expect("opens");
+    let mut report = opened.report();
+    let mut decision = opened.decision().clone();
+    let mut scan = opened.scan().clone();
+    let mut selection = opened.selection().clone();
+    report.decision.blocking.clear();
+    report.decision.current.clear();
+    report.report.detail.clear();
+    report.files.clear();
+    decision.blocking.clear();
+    decision.current.clear();
+    scan.level.incidents.clear();
+    scan.files.clear();
+    selection.digest = [0; 32];
+    selection.provision.retired_through = format::MAX_CLAIM - 1;
+    assert!(
+        report.decision.blocking.is_empty()
+            && decision.blocking.is_empty()
+            && scan.level.incidents.is_empty()
+            && selection.provision.retired_through > 1,
+        "the copies are edited"
+    );
+    assert_eq!(
+        (
+            opened.decision().blocking.len(),
+            opened.decision().current.len(),
+            opened.scan().level.incidents.len(),
+            opened.report().decision.blocking.len(),
+            opened.selection().provision.retired_through,
+        ),
+        (1, 1, 1, 1, 0),
+        "[opening-immutable] the opening's own state"
+    );
+    assert_ne!(
+        opened.selection().digest,
+        selection.digest,
+        "[opening-immutable] the opening's selection"
+    );
+    drop(opened);
+    match Run::start(&fixture, "after-edits", SMALL) {
+        Err(StartRefused::PriorUnresolved(blocking)) => assert_eq!(
+            blocking.len(),
+            1,
+            "[opening-immutable] the unresolved incident blocks"
+        ),
+        Err(other) => panic!("[opening-immutable] {other:?}"),
+        Ok(_) => panic!("[opening-immutable] the owner started over an unresolved incident"),
+    }
+}
+
+/// The complete set (design sections 10.2, 11.2 and 13.5): a store with 66
+/// incidents, more than the 64 its report lists in detail. Forty are
+/// history (dispositioned, and listed as applied by two later headers); 26
+/// are current, at most `MAX_APPLIED`, as every opening requires. The report
+/// lists the history and the 24 earliest current incidents. Dispositions for
+/// exactly those 24 leave the two unlisted ones blocking: the start derives
+/// from the opening's complete verified set, never from a report.
+#[test]
+fn b04_a_truncated_report_hides_no_blocking_incident() {
+    const MANY: Config = Config {
+        incident_limit: format::MAX_APPLIED,
+        ..SMALL
+    };
+    let fixture = Fixture::provisioned(69, 16);
+    let t1 = trace("T1");
+    let generation_of = |claim: u64| {
+        let mut generation = [0x40; 16];
+        generation[..8].copy_from_slice(&claim.to_be_bytes());
+        generation
+    };
+    // An unsealed journal that recorded an action start: an incident.
+    let incident_at = |index: u32, claim: u64| {
+        let generation = generation_of(claim);
+        let fields = header_fields(generation, claim, index, 16, 16);
+        let image = journal_image(&fields, &frames_of(generation, &t1[..3]), None);
+        let report = classify_bytes(&image, ROOT, 16, index);
+        assert_eq!(report.class, FileClass::UnsealedAction);
+        let facts = IncidentFacts {
+            kind: IncidentKind::Journal,
+            claim: Some(claim),
+            generation: Some(generation),
+            pool_index: None,
+            content: Some(report.content),
+            class: IncidentClass::Unresolved,
+            recorded_unsettled: report.recorded_unsettled.len() as u64,
+        };
+        let binding = facts.binding(&ROOT).expect("a journal binding");
+        let incident = Incident {
+            facts,
+            outcome: PriorOutcome::Unresolved { outstanding: 1 },
+        };
+        fixture
+            .world
+            .install(fixture.pool_ino(index).expect("pool"), &image);
+        (binding, incident)
+    };
+    let history: Vec<([u8; 32], Incident)> = (0..40u32)
+        .map(|index| incident_at(index, u64::from(index) + 1))
+        .collect();
+    // Claims 41 and 42 list the history as applied (32 and 8 bindings, each
+    // list in binding order).
+    let mut by_binding = history.clone();
+    by_binding.sort_by_key(|(binding, _)| *binding);
+    for (index, applied) in [(40u32, &by_binding[..32]), (41, &by_binding[32..])] {
+        let claim = u64::from(index) + 1;
+        let mut fields = header_fields(generation_of(claim), claim, index, 16, 16);
+        fields.applied = applied
+            .iter()
+            .map(|(binding, _)| (*binding, DispositionReason::OwnerDestroyed))
+            .collect();
+        fixture.world.install(
+            fixture.pool_ino(index).expect("pool"),
+            &journal_image(&fields, &[], None),
+        );
+    }
+    let current: Vec<([u8; 32], Incident)> = (42..68u32)
+        .map(|index| incident_at(index, u64::from(index) + 1))
+        .collect();
+    let publish = |incidents: &[([u8; 32], Incident)], statement: &str| {
+        let s = session(&fixture, false);
+        for (binding, incident) in incidents {
+            let disposition = maint::disposition_for(
+                &ROOT,
+                *binding,
+                incident,
+                DispositionReason::OwnerDestroyed,
+                statement,
+                "owner",
+                "2026-10-02T12:00:00Z",
+            );
+            let mut procedure =
+                maint::publish_disposition(&s.borrow(), disposition).expect("procedure");
+            procedure.run_all(&mut quiet()).expect("published");
+        }
+        end(s);
+    };
+    publish(&history, "applied by a later claim");
+    let io = fixture.store_process("reader");
+    let opened = open_owner(&io, &fixture.path, &MANY, &mut NoHooks).expect("opens");
+    let report = opened.report();
+    assert_eq!(
+        (
+            report.report.partial,
+            report.report.detail.len(),
+            report.report.total,
+            report.report.current,
+            opened.scan().level.history.len(),
+        ),
+        (true, format::REPORT_LIMIT, 66, 26, 40),
+        "the report lists 64 of 66 incidents; 26 are current"
+    );
+    assert_eq!(
+        opened.decision().blocking.len(),
+        26,
+        "[complete-set] the decision is over every current incident"
+    );
+    let listed: BTreeSet<[u8; 32]> = report
+        .report
+        .detail
+        .iter()
+        .map(|(binding, _)| *binding)
+        .collect();
+    let (listed_current, unlisted): (Vec<_>, Vec<_>) = current
+        .iter()
+        .cloned()
+        .partition(|(binding, _)| listed.contains(binding));
+    assert_eq!(
+        (listed_current.len(), unlisted.len()),
+        (24, 2),
+        "the report omits the two latest claims"
+    );
+    drop(opened);
+    publish(&listed_current, "listed in the report");
+    let unlisted: BTreeSet<[u8; 32]> = unlisted.iter().map(|(binding, _)| *binding).collect();
+    match Run::start(&fixture, "after-the-listed", MANY) {
+        Err(StartRefused::PriorUnresolved(blocking)) => assert_eq!(
+            blocking.into_iter().collect::<BTreeSet<_>>(),
+            unlisted,
+            "[complete-set] the unlisted incidents still block"
+        ),
+        Err(other) => panic!("[complete-set] {other:?}"),
+        Ok(_) => panic!("[complete-set] the owner started over two unlisted incidents"),
+    }
+}
+
+/// B4: a storage admission belongs to the opening the storage check made it
+/// for. Another opening's identity, digest and admission reach a caller only
+/// as copies or borrows, and nothing accepts them: each opening keeps its
+/// own identity, selection and admission, and each store's owner claims
+/// with its own. (At the base, an opening's identity and digest could be
+/// overwritten and another opening's admission presented to its claim.)
+#[test]
+fn b05_another_openings_admission_rebinds_nothing() {
+    let fixture_a = Fixture::provisioned(2, 16);
+    let fixture_b = Fixture::provisioned(2, 16);
+    let opened_a = open_owner(
+        &fixture_a.store_process("a"),
+        &fixture_a.path,
+        &SMALL,
+        &mut NoHooks,
+    )
+    .expect("A opens");
+    let opened_b = open_owner(
+        &fixture_b.store_process("b"),
+        &fixture_b.path,
+        &SMALL,
+        &mut NoHooks,
+    )
+    .expect("B opens");
+    let (own, digest) = (opened_a.opening(), opened_a.selection().digest);
+    assert_eq!(
+        digest,
+        opened_b.admission().provision_digest(),
+        "the B4 shape: one PROVISION digest"
+    );
+    assert_ne!(own, opened_b.admission().opening(), "two openings");
+    let mut selection = opened_a.selection().clone();
+    selection.digest = [0x5a; 32];
+    let foreign = opened_b.admission().opening();
+    assert!(selection.digest != digest && foreign != own);
+    assert_eq!(
+        (
+            opened_a.opening(),
+            opened_a.admission().opening(),
+            opened_a.selection().digest,
+            opened_a.admission().provision_digest(),
+        ),
+        (own, own, digest, digest),
+        "[admission-bound] A's identity, selection and admission are A's"
+    );
+    assert_eq!(
+        opened_b.admission().opening(),
+        opened_b.opening(),
+        "[admission-bound] B's admission is B's"
+    );
+    drop((opened_a, opened_b));
+    for (label, fixture) in [("A", &fixture_a), ("B", &fixture_b)] {
+        let run = Run::claimed(fixture, "owner", SMALL);
+        assert_eq!(
+            run.started.claim(),
+            1,
+            "[admission-bound] {label} claims with its own admission"
+        );
+    }
+}
+
+/// B5: a disposition takes effect only through the validator of an
+/// opening's own verified state, read under its store lock. A fabricated
+/// disposition that restates the incident exactly but was never published
+/// validates nothing, here or in a custody of the caller's own; neither does
+/// the exact disposition another store published for the same binding, nor
+/// one published here whose restatement differs in a field. Only the exact
+/// disposition published in this store lets the next owner run, and its
+/// header lists that file's reason. (At the base, a validator built from an
+/// edited scan copy validated the fabricated disposition.)
+#[test]
+fn b06_a_disposition_takes_effect_only_through_its_opening() {
+    use custody::store::disposition::exact_restatement;
+    let fixture = store_with_incident(2);
+    let io = fixture.store_process("reader");
+    let opened = open_owner(&io, &fixture.path, &SMALL, &mut NoHooks).expect("opens");
+    let (binding, incident) = classify::current_incidents(&opened.scan().level)
+        .into_iter()
+        .next()
+        .expect("one incident");
+    let key = IncidentBinding::new(binding);
+    let fabricated = maint::disposition_for(
+        &ROOT,
+        binding,
+        &incident,
+        DispositionReason::OwnerDestroyed,
+        "fabricated, never published",
+        "nobody",
+        "2026-10-02T00:00:00Z",
+    );
+    assert!(
+        exact_restatement(&ROOT, &binding, &incident, &fabricated),
+        "the fabricated data restates the incident exactly"
+    );
+    assert_eq!(
+        opened.validator().validate(&key),
+        None,
+        "[disposition-provenance] fabricated data validates nothing"
+    );
+    let prior = PriorIncident {
+        binding: key,
+        outcome: open::outcome_of(&incident),
+    };
+    let (mut custody, _control) =
+        Custody::<Token>::new(SMALL, Generation::new([0x7b; 16]), vec![prior], Tick(1))
+            .expect("a custody of the caller's own");
+    assert!(
+        custody
+            .apply_disposition(&key, &opened.validator(), Tick(2))
+            .is_err(),
+        "[disposition-provenance] the opening's validator refuses the fabricated disposition"
+    );
+    assert_eq!(
+        custody.start_run(Tick(3)).err(),
+        Some(Refusal::PriorUnresolved),
+        "the caller's custody stays blocked"
+    );
+    drop(opened);
+    let blocked = |label: &str| match Run::start(&fixture, "next", SMALL) {
+        Err(StartRefused::PriorUnresolved(blocking)) => {
+            assert_eq!(blocking, vec![binding], "[disposition-provenance] {label}")
+        }
+        Err(other) => panic!("[disposition-provenance] {label}: {other:?}"),
+        Ok(_) => panic!("[disposition-provenance] {label}: the owner started"),
+    };
+    blocked("fabricated");
+    // Another store, with the same binding, publishes the exact disposition.
+    let other = store_with_incident(2);
+    assert_eq!(
+        publish_only_incident(&other),
+        binding,
+        "the same binding in another store"
+    );
+    blocked("another store's disposition");
+    // Published here, restating another recorded-unsettled count.
+    let s = session(&fixture, false);
+    let mut recount = fabricated.clone();
+    recount.facts.recorded_unsettled += 1;
+    recount.statement = "another count".into();
+    let mut procedure = maint::publish_disposition(&s.borrow(), recount).expect("procedure");
+    procedure.run_all(&mut quiet()).expect("published");
+    drop(procedure);
+    end(s);
+    blocked("a published restatement with another count");
+    let s = session(&fixture, false);
+    let mut procedure = maint::revoke(&s.borrow(), binding, "20261002T010000Z");
+    procedure.run_all(&mut quiet()).expect("revoked");
+    drop(procedure);
+    end(s);
+    // The exact disposition, published here.
+    assert_eq!(publish_only_incident(&fixture), binding);
+    let run = match Run::start(&fixture, "dispositioned", SMALL) {
+        Ok(run) => run,
+        Err(refused) => {
+            panic!("[disposition-provenance] the dispositioned store refused: {refused:?}")
+        }
+    };
+    assert_eq!(
+        run.started.header().applied,
+        vec![(binding, DispositionReason::OwnerDestroyed)],
+        "[disposition-provenance] the header lists the published file's reason"
+    );
+}
+
+/// B6: the exchange's state is reachable only through the owner's own
+/// transitions. A status copy with its latch cleared clears nothing: the
+/// gate still refuses, a second latch keeps the first cause, and nothing is
+/// published after the latch. The narrow fault operations refuse to
+/// manufacture: no acknowledgement of a record that is not durable. Copies
+/// of the claim and seal states control nothing. (At the base, the latch,
+/// `durable_through`, the claim state and the seal state were writable
+/// through `Recorder::exchange()`.)
+#[test]
+fn b07_status_copies_and_fault_operations_clear_and_manufacture_nothing() {
+    let fixture = Fixture::provisioned(2, 16);
+    let mut run = Run::claimed(&fixture, "b07", SMALL);
+    run.start_run();
+    run.begin(1, Expectation::Clean);
+    let now = run.tick();
+    let reservation = run
+        .owner()
+        .reserve(SlotKind::Process, now)
+        .expect("reserved");
+    let now = run.tick();
+    run.started.flush(now).expect("flushed");
+    let status = run.started.status();
+    assert!(
+        status.submitted_through > status.durable_through,
+        "a record submitted, not durable: {status:?}"
+    );
+    let acknowledged = run.snapshot().evidence.acknowledged;
+    assert_eq!(
+        faults::acknowledge_durable_again(&mut run.started, status.durable_through + 1, now),
+        Err(faults::NotAFault("the record is not durable")),
+        "[exchange-contained] no acknowledgement of a record that is not durable"
+    );
+    assert_eq!(
+        run.snapshot().evidence.acknowledged,
+        acknowledged,
+        "[exchange-contained] nothing acknowledged"
+    );
+    faults::latch(&run.started, Cause::WorkerLost);
+    let mut copy = run.started.status();
+    copy.fatal = None;
+    copy.durable_through = copy.submitted_through;
+    copy.claimed = false;
+    copy.sealed = true;
+    assert!(copy.fatal.is_none() && copy.sealed, "the copy is edited");
+    assert_eq!(
+        run.started.latched().map(|(cause, _)| cause),
+        Some(Cause::WorkerLost),
+        "[exchange-contained] the latch stays"
+    );
+    let now = run.tick();
+    assert!(
+        matches!(
+            run.started.admit(reservation, now),
+            Err(GateRefused::RecorderFatal {
+                cause: Cause::WorkerLost,
+                ..
+            })
+        ),
+        "[exchange-contained] the gate refuses"
+    );
+    faults::latch(&run.started, Cause::ClaimWrite);
+    let after = run.started.status();
+    assert_eq!(
+        (after.fatal.map(|(cause, _)| cause), after.later_causes),
+        (Some(Cause::WorkerLost), 1),
+        "[exchange-contained] the first cause stays; a later one is counted"
+    );
+    assert_eq!(
+        (run.started.claim_state(), run.started.seal_state()),
+        (ClaimState::Claimed, SealState::None),
+        "[exchange-contained] claim and seal states are the recorder's"
+    );
+    run.started.run_worker_until_idle();
+    assert_eq!(
+        run.started.status().durable_through,
+        status.durable_through,
+        "[exchange-contained] nothing is published after the latch"
+    );
+}
+
+/// A maintenance session decides only from its own latest verification:
+/// nothing before one, one procedure per verification, and nothing once a
+/// step of its procedures started after it. A disposition revoked after a
+/// verification withdraws the archival that verification allowed. (At the
+/// base, archival, recycling, retirement and the recycling's resumption took
+/// a caller's name, report or refusal.)
+#[test]
+fn b08_a_session_decides_only_from_its_own_current_verification() {
+    let fixture = store_with_incident(2);
+    let binding = publish_only_incident(&fixture);
+    let s = session(&fixture, false);
+    assert!(
+        maint::archive(&mut s.borrow_mut(), 0).is_err(),
+        "[session-verify] no verification, no archival"
+    );
+    assert!(
+        maint::recycle(Rc::clone(&s), 0).is_err(),
+        "[session-verify] no verification, no recycling"
+    );
+    assert!(
+        maint::retire(Rc::clone(&s), 0).is_none(),
+        "[session-verify] no verification, no retirement"
+    );
+    let report = verify(&s);
+    assert!(maint::archival_allowed(&report, 0).is_some());
+    let unused = maint::archive(&mut s.borrow_mut(), 0)
+        .expect("[session-verify] the archival its verification allows");
+    drop(unused);
+    assert!(
+        maint::retire(Rc::clone(&s), 0).is_none(),
+        "[session-verify] one verification, one procedure"
+    );
+    let report = verify(&s);
+    assert!(
+        maint::archival_allowed(&report, 0).is_some(),
+        "this verification allows the archival"
+    );
+    let mut revocation = maint::revoke(&s.borrow(), binding, "20261002T120000Z");
+    revocation.run_all(&mut quiet()).expect("revoked");
+    drop(revocation);
+    assert!(
+        maint::archive(&mut s.borrow_mut(), 0).is_err(),
+        "[session-verify] a verification older than the revocation authorizes nothing"
+    );
+    let report = verify(&s);
+    assert!(maint::archival_allowed(&report, 0).is_none());
+    assert!(
+        maint::archive(&mut s.borrow_mut(), 0).is_err(),
+        "[session-verify] no archival without its disposition"
+    );
+    let (_, incident) = report.current[0].clone();
+    let disposition = maint::disposition_for(
+        &ROOT,
+        binding,
+        &incident,
+        DispositionReason::OwnerDestroyed,
+        "published again",
+        "owner",
+        "2026-10-02T13:00:00Z",
+    );
+    let mut procedure = maint::publish_disposition(&s.borrow(), disposition).expect("procedure");
+    procedure.run_all(&mut quiet()).expect("published");
+    drop(procedure);
+    verify(&s);
+    let mut archival = maint::archive(&mut s.borrow_mut(), 0).expect("[session-verify] archival");
+    archival.run_all(&mut quiet()).expect("archived");
+    drop(archival);
+    let after = verify(&s);
+    assert!(
+        after.scan.level.pending_recycle.contains(&0),
+        "archived, pending recycling"
+    );
+    end(s);
+}
+
+/// The exclusion outlives the owner while its I/O may be in flight: an owner
+/// dropped while its worker's thread is held at a record's write leaves the
+/// store lock held (another owner is Busy) until that thread has finished,
+/// and only then released.
+#[test]
+fn b09_exclusion_outlasts_the_owner_while_its_io_is_in_flight() {
+    use custody::store::recorder::WorkerPoint;
+    let fixture = Fixture::provisioned(2, 16);
+    let mut run = Run::claimed(&fixture, "b09", SMALL);
+    let (reached_tx, reached_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    let hook = Arc::new(Gate {
+        point: WorkerPoint::Io(1),
+        panic: false,
+        reached: std::sync::Mutex::new(Some(reached_tx)),
+        release: std::sync::Mutex::new(Some(release_rx)),
+    });
+    assert!(faults::spawn_worker_with_hooks(&mut run.started, hook));
+    let now = run.tick();
+    run.owner().start_run(now).expect("starts");
+    let now = run.tick();
+    let _ = run.started.flush(now);
+    reached_rx
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("the worker is at the record's I/O");
+    drop(run);
+    assert_eq!(
+        refused_store(
+            Run::start(&fixture, "while-in-flight", SMALL),
+            "[closure-owner] exclusion while I/O is in flight"
+        ),
+        Refused::Busy,
+        "[closure-owner] the owner is gone, its I/O is not: the store stays excluded"
+    );
+    release_tx.send(()).expect("release");
+    let mut started = None;
+    for _ in 0..5_000 {
+        match Run::start(&fixture, "after", SMALL) {
+            Err(StartRefused::Store(refusal)) if refusal.refused == Refused::Busy => {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            other => {
+                started = Some(other.is_ok());
+                break;
+            }
+        }
+    }
+    assert_eq!(
+        started,
+        Some(true),
+        "the exclusion ends once the worker's thread has finished"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // A: the authority surface, pinned in the source
 // ---------------------------------------------------------------------------
 
@@ -8043,12 +8716,12 @@ fn a01_the_authority_surface_is_fixed_in_the_source() {
     assert_eq!(
         names(source_members(&source_item(
             RECORDER_SOURCE,
-            "pub struct Worker<P: StoreIo> {"
+            "pub(super) struct Worker<P: StoreIo> {"
         ))),
         ["io", "file", "journals", "name", "identity", "exchange", "phase"],
         "[lock-retained] the worker holds a lock description"
     );
-    let gate = source_item(EXCHANGE_SOURCE, "pub fn admit<R: Resource>(");
+    let gate = source_item(EXCHANGE_SOURCE, "pub(super) fn admit<R: Resource>(");
     let at = |needle: &str| {
         gate.find(needle)
             .unwrap_or_else(|| panic!("[admission-fence] the gate lacks {needle}"))
@@ -8075,7 +8748,7 @@ fn a01_the_authority_surface_is_fixed_in_the_source() {
             && !kind.contains("Fd")),
         "[provision-selection] a selection keeps an open description: {selection:?}"
     );
-    let revalidation = source_item(OPEN_SOURCE, "pub fn revalidate<P: Platform>(");
+    let revalidation = source_item(OPEN_SOURCE, "pub(super) fn revalidate<P: Platform>(");
     assert!(
         revalidation.contains("walk(io, &components(&path.directory))")
             && revalidation.contains("walk(io, &components(&selection.parent))"),
@@ -8441,8 +9114,7 @@ fn n07_native_identity_and_one_filesystem() {
 /// I/O path on a zero-filled file of the test's own.
 #[test]
 fn n08_native_worker_write_and_sync_wiring() {
-    use custody::store::exchange::{Exchange, Recorder};
-    use custody::store::recorder::Worker;
+    use custody::store::recorder::{native_wiring, NativeJournal};
     let mut fixture = Native::new();
     let generation = Generation::new([0x7a; 16]);
     let file = fixture.file("j00000.journal", &vec![0u8; 18 * BLOCK]);
@@ -8453,43 +9125,42 @@ fn n08_native_worker_write_and_sync_wiring() {
         .expect("I/O description");
     let identity = faulty.stat_file(&io_file).expect("identity");
     let journals = Arc::new(LinuxIo.open_dir(&fixture.base, &fixture.name).expect("dir"));
-    let exchange = Exchange::new(generation, 16, clock());
-    let mut recorder = Recorder::new(Arc::clone(&exchange));
-    let mut worker = Worker::new(
-        faulty,
-        io_file,
-        journals,
-        "j00000.journal".into(),
+    let journal = NativeJournal {
+        io: faulty,
+        file: io_file,
+        dir: journals,
+        name: "j00000.journal".into(),
         identity,
-        exchange,
-    );
+    };
     let header = header_fields(generation.bytes(), 1, 0, 16, 16);
-    recorder.request_claim(encode_header(&header).expect("header"));
-    worker.run_until_idle();
-    assert_eq!(
-        recorder.claim_state(),
-        ClaimState::Claimed,
-        "[ack-durable] native: the claim"
-    );
-    let (mut custody, _control) =
-        Custody::<Token>::new(SMALL, generation, Vec::new(), Tick(1)).expect("custody");
-    custody.start_run(Tick(2)).expect("starts");
-    custody
-        .begin_case(CaseId(1), Expectation::Clean, Tick(3))
-        .ok();
-    recorder.flush(&mut custody, Tick(4)).expect("flush");
-    worker.run_until_idle();
-    recorder.apply(&mut custody, Tick(5));
-    custody
-        .begin_case(CaseId(1), Expectation::Clean, Tick(6))
-        .expect("begins");
-    recorder.flush(&mut custody, Tick(7)).expect("flush");
-    worker.run_until_idle();
-    let applied = recorder.apply(&mut custody, Tick(8));
-    assert_eq!(
-        applied.applied_through, 2,
-        "[ack-durable] native: published after the sync"
-    );
+    native_wiring(journal, generation, 16, |wiring| {
+        wiring.request_claim(encode_header(&header).expect("header"));
+        wiring.run_worker_until_idle();
+        assert_eq!(
+            wiring.claim_state(),
+            ClaimState::Claimed,
+            "[ack-durable] native: the claim"
+        );
+        let (mut custody, _control) =
+            Custody::<Token>::new(SMALL, generation, Vec::new(), Tick(1)).expect("custody");
+        custody.start_run(Tick(2)).expect("starts");
+        custody
+            .begin_case(CaseId(1), Expectation::Clean, Tick(3))
+            .ok();
+        wiring.flush(&mut custody, Tick(4)).expect("flush");
+        wiring.run_worker_until_idle();
+        wiring.apply(&mut custody, Tick(5));
+        custody
+            .begin_case(CaseId(1), Expectation::Clean, Tick(6))
+            .expect("begins");
+        wiring.flush(&mut custody, Tick(7)).expect("flush");
+        wiring.run_worker_until_idle();
+        let applied = wiring.apply(&mut custody, Tick(8));
+        assert_eq!(
+            applied.applied_through, 2,
+            "[ack-durable] native: published after the sync"
+        );
+    });
     let bytes = std::fs::read(fixture.path("j00000.journal")).expect("read back");
     let report = classify_bytes(&bytes, ROOT, 16, 0);
     assert_eq!(

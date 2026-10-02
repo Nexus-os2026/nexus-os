@@ -12,7 +12,7 @@
 //! lifetime: it never unlocks, converts or duplicates it, and verifies
 //! through that retained description, never through a new lock request.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
@@ -163,6 +163,8 @@ fn placeholder_provision() -> Provision {
 pub struct ProcStep<'a> {
     pub label: &'static str,
     action: Box<dyn FnMut() -> Result<(), String> + 'a>,
+    /// The mutation count of the session the step acts in, if any.
+    session: Option<Rc<Cell<u64>>>,
 }
 
 /// A procedure: its steps, in order. Running stops at the first failure,
@@ -172,6 +174,7 @@ pub struct Procedure<'a> {
     pub name: &'static str,
     steps: Vec<ProcStep<'a>>,
     done: usize,
+    session: Option<Rc<Cell<u64>>>,
 }
 
 impl<'a> Procedure<'a> {
@@ -180,6 +183,7 @@ impl<'a> Procedure<'a> {
             name,
             steps: Vec::new(),
             done: 0,
+            session: None,
         }
     }
 
@@ -187,7 +191,18 @@ impl<'a> Procedure<'a> {
         self.steps.push(ProcStep {
             label,
             action: Box::new(action),
+            session: self.session.clone(),
         });
+    }
+
+    /// Every step, present and later added, acts inside the session whose
+    /// mutation count this is: starting any of them lapses that session's
+    /// latest verification ([`Session::take_report`]).
+    fn within(&mut self, mutations: Rc<Cell<u64>>) {
+        for step in &mut self.steps {
+            step.session = Some(Rc::clone(&mutations));
+        }
+        self.session = Some(mutations);
     }
 
     fn extend(&mut self, other: Procedure<'a>) {
@@ -216,6 +231,10 @@ impl<'a> Procedure<'a> {
         while self.done < end {
             let step = &mut self.steps[self.done];
             on_step(Some(step.label));
+            // A step that starts may change the store even if it fails.
+            if let Some(mutations) = &step.session {
+                mutations.set(mutations.get() + 1);
+            }
             let result = (step.action)();
             on_step(None);
             result.map_err(|why| format!("{} (step {}): {why}", step.label, self.done + 1))?;
@@ -777,6 +796,15 @@ pub enum SessionEvent {
 /// One maintenance session: one root process, the store lock of each state
 /// root it holds (`LOCK_EX`, retained for its whole life), the pool-file
 /// locks it took, and its revalidated, activated selection.
+///
+/// Retained, ownership-bearing state (P2-V1-R3B-I3-I1-R1): every field is
+/// private. The session also retains its own latest verification. The
+/// procedures that decide from a verification (archival, recycling,
+/// retirement, the recycling's resumption) consume that one, never a
+/// report a caller supplies. One verification authorizes at most one such
+/// procedure. It also lapses as soon as any step of any procedure of this
+/// session starts, so a decision never rests on a verification older than
+/// the session's last procedure step.
 pub struct Session<P: Platform> {
     io: P,
     path: ProvisionPath,
@@ -787,7 +815,11 @@ pub struct Session<P: Platform> {
     opening: OpeningId,
     admission: Option<StorageAdmission>,
     active: bool,
-    pub events: Vec<SessionEvent>,
+    /// Steps started by this session's procedures.
+    mutations: Rc<Cell<u64>>,
+    /// The latest verification, with the mutation count it saw.
+    verified: Option<(u64, Result<SessionReport, Refusal>)>,
+    events: Vec<SessionEvent>,
 }
 
 /// An in-session verification's report (design section 13.11).
@@ -864,6 +896,8 @@ impl<P: Platform> Session<P> {
                 opening,
                 admission: Some(admission),
                 active: true,
+                mutations: Rc::new(Cell::new(0)),
+                verified: None,
                 events: vec![SessionEvent::Begin(state)],
             });
         }
@@ -885,7 +919,12 @@ impl<P: Platform> Session<P> {
         &self.path
     }
 
-    pub fn admission(&self) -> Option<&StorageAdmission> {
+    /// What the session did, in order (read-only).
+    pub fn events(&self) -> &[SessionEvent] {
+        &self.events
+    }
+
+    pub(super) fn admission(&self) -> Option<&StorageAdmission> {
         self.admission.as_ref()
     }
 
@@ -921,6 +960,7 @@ impl<P: Platform> Session<P> {
         if !self.authorized(&state) {
             self.events
                 .push(SessionEvent::Verify(Err(Refused::NotAuthorized)));
+            self.verified = Some((self.mutations.get(), Err(fail(Refused::NotAuthorized))));
             return Err(fail(Refused::NotAuthorized));
         }
         let outcome = self.verify_inner(config, &state);
@@ -930,7 +970,37 @@ impl<P: Platform> Session<P> {
                 .map(|_| ())
                 .map_err(|refusal| refusal.refused.clone()),
         ));
+        self.verified = Some((self.mutations.get(), outcome.clone()));
         outcome
+    }
+
+    /// The session's own latest verification, taken: one verification
+    /// authorizes at most one procedure, and none once a step of this
+    /// session's procedures started after it.
+    fn take_verified(&mut self) -> Result<Result<SessionReport, Refusal>, String> {
+        match self.verified.take() {
+            Some((seen, outcome)) if seen == self.mutations.get() => Ok(outcome),
+            Some(_) => Err("a procedure step ran since the session's latest verification".into()),
+            None => Err("the session has not verified since its last procedure".into()),
+        }
+    }
+
+    /// The session's own latest verification, if it succeeded, taken.
+    pub(super) fn take_report(&mut self) -> Result<SessionReport, String> {
+        self.take_verified()?.map_err(|refusal| {
+            format!(
+                "the session's latest verification refused: {:?}",
+                refusal.refused
+            )
+        })
+    }
+
+    /// The session's own latest verification, if it refused, taken.
+    pub(super) fn take_refusal(&mut self) -> Result<Refusal, String> {
+        match self.take_verified()? {
+            Err(refusal) => Ok(refusal),
+            Ok(_) => Err("the session's latest verification did not refuse".into()),
+        }
     }
 
     fn verify_inner(&mut self, config: &Config, state: &str) -> Result<SessionReport, Refusal> {
@@ -989,7 +1059,7 @@ impl<P: Platform> Session<P> {
     /// After the session itself published `PROVISION`: read it by a fresh
     /// lookup and adopt it, under the session's own lock (design section
     /// 13.3 step 4).
-    pub fn reselect(&mut self) -> Result<(), String> {
+    pub(super) fn reselect(&mut self) -> Result<(), String> {
         let selection = select(&self.io, &self.path).map_err(|refused| format!("{refused:?}"))?;
         if !self.locks.contains_key(&selection.state_name) {
             return Err("the session does not hold the selected store".into());
@@ -1001,7 +1071,7 @@ impl<P: Platform> Session<P> {
     }
 
     /// Take and keep `LOCK_EX | LOCK_NB` on a pool file (Busy refuses).
-    pub fn hold_journal(&mut self, index: u32) -> Result<(), String> {
+    pub(super) fn hold_journal(&mut self, index: u32) -> Result<(), String> {
         let state = self.selection.state_name.clone();
         if self.journal_locks.contains_key(&(state.clone(), index)) {
             return Ok(());
@@ -1023,13 +1093,13 @@ impl<P: Platform> Session<P> {
     }
 
     /// A held pool-file description, to read through.
-    pub fn journal(&self, index: u32) -> Option<&P::File> {
+    pub(super) fn journal(&self, index: u32) -> Option<&P::File> {
         self.journal_locks
             .get(&(self.selection.state_name.clone(), index))
     }
 
     /// Take the store lock of a state root this session just created.
-    pub fn adopt(&mut self, parent: &[String], state: &str) -> Result<(), String> {
+    pub(super) fn adopt(&mut self, parent: &[String], state: &str) -> Result<(), String> {
         let mut root_path = parent.to_vec();
         root_path.push(state.to_string());
         let root = dir_ref(&self.io, &root_path)?;
@@ -1051,7 +1121,7 @@ impl<P: Platform> Session<P> {
     }
 
     /// The store's directories, reached afresh.
-    pub fn store_dir(&self, names: &[&str]) -> Result<DirRef<P>, String> {
+    pub(super) fn store_dir(&self, names: &[&str]) -> Result<DirRef<P>, String> {
         let mut path = self.selection.parent.clone();
         path.push(self.selection.state_name.clone());
         path.extend(names.iter().map(|name| name.to_string()));
@@ -1059,7 +1129,7 @@ impl<P: Platform> Session<P> {
     }
 
     /// The `PROVISION` bytes now at its path (a fresh read).
-    pub fn provision_bytes(&self) -> Result<Vec<u8>, String> {
+    pub(super) fn provision_bytes(&self) -> Result<Vec<u8>, String> {
         let provdir = dir_ref(&self.io, &self.path.directory)?;
         let file = self
             .io
@@ -1091,7 +1161,12 @@ fn read_whole<P: StoreIo>(io: &P, file: &P::File, limit: usize) -> Result<Vec<u8
 /// The `PROVISION` rewrite (design section 13.3): revision + 1, written,
 /// synced, renamed into place, the directory synced, then re-selection under
 /// the session's own lock.
-pub fn rewrite_provision<P: Platform + Clone + 'static>(
+///
+/// Internal to the store: section 13.3 uses it only inside recycling,
+/// retirement and re-qualification, after their own preconditions. A public
+/// rewrite of any field would skip those preconditions (a retirement without
+/// its verification, pinned values changed outside re-qualification mode).
+pub(super) fn rewrite_provision<P: Platform + Clone + 'static>(
     session: Rc<RefCell<Session<P>>>,
     change: impl Fn(&mut Provision) + 'static,
 ) -> Procedure<'static> {
@@ -1105,6 +1180,7 @@ pub fn rewrite_provision<P: Platform + Clone + 'static>(
         render_provision(&next).map_err(|error| error.0.to_string())
     });
     let mut proc = publish_provision_steps(io, path, make, ("13.3/2", "13.3/3"), None);
+    proc.within(Rc::clone(&session.borrow().mutations));
     proc.name = "PROVISION rewrite";
     if let Some(mut last) = proc.steps.pop() {
         proc.add(last.label, move || {
@@ -1134,6 +1210,7 @@ pub fn publish_disposition<P: Platform + Clone + 'static>(
     let final_name = format::disposition_name(&disposition.binding);
     let file: Rc<RefCell<Option<P::File>>> = Rc::new(RefCell::new(None));
     let mut proc = Procedure::new("P-DISP");
+    proc.within(Rc::clone(&session.mutations));
     let io = Rc::new(io);
     {
         let (io, path, tmp, file) = (
@@ -1225,6 +1302,7 @@ pub fn revoke<P: Platform + Clone + 'static>(
     let name = format::disposition_name(&binding);
     let revoked_name = format::revoked_name(&binding, compact_time);
     let mut proc = Procedure::new("P-REVOKE");
+    proc.within(Rc::clone(&session.mutations));
     {
         let (io, from, to) = (
             Rc::clone(&io),
@@ -1343,12 +1421,17 @@ pub fn archival_allowed(report: &SessionReport, index: u32) -> Option<ArchiveNam
 /// P-ARCH (design section 13.7): the pool file read through the session's own
 /// journal lock, copied to a new root-owned temporary, synced, re-read and
 /// compared, linked to its final name, the temporary unlinked, `archive/`
-/// synced. The pool file is unchanged.
+/// synced. The pool file is unchanged. The archive name and its
+/// preconditions come from the session's own latest verification
+/// ([`archival_allowed`] over it), never from the caller.
 pub fn archive<P: Platform + Clone + 'static>(
     session: &mut Session<P>,
     index: u32,
-    name: &ArchiveName,
 ) -> Result<Procedure<'static>, String> {
+    let report = session.take_report()?;
+    let name = archival_allowed(&report, index)
+        .ok_or("the session's verification does not allow archiving this pool file")?;
+    let name = &name;
     session.hold_journal(index)?;
     let io = Rc::new(session.io().clone());
     let content = {
@@ -1374,6 +1457,7 @@ pub fn archive<P: Platform + Clone + 'static>(
     let file: Rc<RefCell<Option<P::File>>> = Rc::new(RefCell::new(None));
     let content = Rc::new(content);
     let mut proc = Procedure::new("P-ARCH");
+    proc.within(Rc::clone(&session.mutations));
     {
         let (io, path, tmp, file) = (
             Rc::clone(&io),
@@ -1439,8 +1523,8 @@ pub fn archive<P: Platform + Clone + 'static>(
 pub fn recycle<P: Platform + Clone + 'static>(
     session: Rc<RefCell<Session<P>>>,
     index: u32,
-    report: &SessionReport,
 ) -> Result<Procedure<'static>, String> {
+    let report = session.borrow_mut().take_report()?;
     let file_class = report
         .scan
         .files
@@ -1468,6 +1552,7 @@ pub fn recycle<P: Platform + Clone + 'static>(
     let file: Rc<RefCell<Option<P::File>>> = Rc::new(RefCell::new(None));
     let new_ino: Rc<RefCell<u64>> = Rc::new(RefCell::new(0));
     let mut proc = Procedure::new("P-RECYCLE");
+    proc.within(Rc::clone(&session.borrow().mutations));
     {
         let (io, path, tmp, file, new_ino) = (
             Rc::clone(&io),
@@ -1528,12 +1613,18 @@ pub fn recycle<P: Platform + Clone + 'static>(
 /// pool file owned by the store uid with one link, and the interrupted
 /// session's saved report showed the old file archived and pending recycling,
 /// or an abandoned claim.
+///
+/// The refusal is the session's own latest verification's, never a
+/// caller's. The saved report is the interrupted session's, which no
+/// running process retains: it is candidate input the Owner supplies (R5
+/// section 13.8). The store checks it only against the session's own
+/// refusal and its own reads of the file at the pool name.
 pub fn resume_recycle<P: Platform + Clone + 'static>(
     session: Rc<RefCell<Session<P>>>,
     index: u32,
-    refusal: &Refusal,
     saved: &SessionReport,
 ) -> Result<Procedure<'static>, String> {
+    let refusal = session.borrow_mut().take_refusal()?;
     let name = pool_name(index);
     if refusal.refused != Refused::Lost(format!("{name} replaced")) {
         return Err("not the resumable refusal".into());
@@ -1607,13 +1698,14 @@ pub fn retirement_allowed(report: &SessionReport, through: u64) -> bool {
 }
 
 /// P-RETIRE (design section 13.9): the `PROVISION` rewrite with
-/// `retired-through = through`, only when the preconditions hold.
+/// `retired-through = through`, only when the preconditions hold over the
+/// session's own latest verification.
 pub fn retire<P: Platform + Clone + 'static>(
     session: Rc<RefCell<Session<P>>>,
     through: u64,
-    report: &SessionReport,
 ) -> Option<Procedure<'static>> {
-    if !retirement_allowed(report, through) {
+    let report = session.borrow_mut().take_report().ok()?;
+    if !retirement_allowed(&report, through) {
         return None;
     }
     let mut proc = rewrite_provision(session, move |provision: &mut Provision| {
@@ -1683,6 +1775,7 @@ pub fn successor<P: Platform + Clone + 'static>(
         }
     };
     let io = Rc::new(session.borrow().io().clone());
+    let mutations = Rc::clone(&session.borrow().mutations);
     let path = Rc::new(path);
     let layout = Rc::new(layout.clone());
     let mut proc = Procedure::new("P-SUCCESSOR");
@@ -1776,6 +1869,7 @@ pub fn successor<P: Platform + Clone + 'static>(
         });
     }
     proc.extend(publish);
+    proc.within(mutations);
     Ok(proc)
 }
 
@@ -1787,6 +1881,7 @@ pub fn leftover<P: Platform + Clone + 'static>(
 ) -> Result<Procedure<'static>, String> {
     let io = Rc::new(session.io().clone());
     let mut proc = Procedure::new("R-LEFTOVER");
+    proc.within(Rc::clone(&session.mutations));
     let mut state_root = session.selection().parent.clone();
     state_root.push(session.selection().state_name.clone());
     let mut dirs: Vec<(Vec<String>, bool)> = Vec::new();

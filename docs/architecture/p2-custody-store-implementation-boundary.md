@@ -1,4 +1,4 @@
-# P2 custody store: implementation boundary (P2-V1-R3B-I3-I1)
+# P2 custody store: implementation boundary (P2-V1-R3B-I3-I1, R1)
 
 This document records what the custody store implementation is, what it is
 not, and what stays open. It belongs to the candidate on
@@ -6,7 +6,11 @@ not, and what stays open. It belongs to the candidate on
 `7689e599ed8fc89ec7720d13869ef58cab767ecb` (custody and codec source baseline
 `45898e05178a56efaadeb1f8f9ee7a0a521c72c9`). The design is
 `docs/architecture/p2-custody-durable-recorder-design.md` (revision R5). The
-evidence is in `docs/evidence/p2-v1-r3b-i3-i1/`.
+I3-I1 evidence is in `docs/evidence/p2-v1-r3b-i3-i1/`.
+
+P2-V1-R3B-I3-I1-R1 (repair base `72ffc4fcc0141e2e5ae77a927481017ca711ab7c`)
+corrects the store's authority and closure boundary (section 7). Its evidence
+is in `docs/evidence/p2-v1-r3b-i3-i1-r1/`.
 
 ## 1. Acceptance status
 
@@ -30,15 +34,17 @@ All paths are under `crates/nexus-verifier-sandbox/tests/`.
 | `support/custody/store/format.rs` | The container (4096-byte header, closure seal and one record block per record, around the unchanged version-1 frames); the `PROVISION` and disposition grammars; entry and archive names; content-addressed incident bindings; the storage identity record. Every byte is checked, with full consumption. |
 | `support/custody/store/classify.rs` | The record grammar G1 to G17 and GId; the streaming per-file classifier; the conservative refusal (every malformed file and every unsealed generation with an action start); pool-level and archive checks with arithmetic gap bounds; current and history incidents; the decision over the complete set; the bounded report (64 in detail, with a partial flag). |
 | `support/custody/store/io.rs` | The `StoreIo` trait; bounded write and sync retries (a failed sync is never retried into success); a controlled fault adapter; the Linux implementation (`openat2` with `RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS`, `RESOLVE_NO_MAGICLINKS` and `RESOLVE_NO_XDEV`, one component at a time). This is the store's only `unsafe` code. Each call has one wrapper, with a safety argument. |
-| `support/custody/store/open.rs` | Selection and post-lock revalidation by fresh walks; safe opening; the mount, effective-profile, journal-location, kernel and storage checks; the opening-bound `StorageAdmission`; durable activation (A1 to A5); the scan; the decision; the claim handoff; `StoreGuard` and `StartupReport`; the standalone verifier; the closed real entry (section 3). |
-| `support/custody/store/exchange.rs` | The bounded, idempotent exchange with one fatal latch (first cause and P); `ExchangeSink`; the owner's apply step; failure delivery at a record the core really issued; the store admission gate around `Custody::admit`; `RecorderStatus` (a stall is never a failure). |
-| `support/custody/store/recorder.rs` | The worker's steps W1 to W6, claim and seal, with explicit interleaving points; the drop guard that latches worker loss; the threaded runner used by the tests; the owner's start through the real core (`start_owner`). |
-| `support/custody/store/disposition.rs` | The `DispositionValidator`: only a root-owned disposition that restates exactly the incident the store computed. |
-| `support/custody/store/maintenance.rs` | The maintenance session (the store lock held for the session's life; verification through that retained authority); the fixture qualification; every procedure of design section 13 as labelled, crash-injectable steps. |
+| `support/custody/store/open.rs` | Selection and post-lock revalidation by fresh walks; safe opening; the mount, effective-profile, journal-location, kernel and storage checks; the opening-bound `StorageAdmission`; durable activation (A1 to A5); the scan; the decision; the opening `Opened`, whose state is private (R1); the internal claim handoff; `StoreGuard` and `StartupReport`; the standalone verifier; the closed real entry (section 3). |
+| `support/custody/store/exchange.rs` | The bounded, idempotent exchange with one fatal latch (first cause and P); `ExchangeSink`; the owner's apply step; failure delivery at a record the core really issued; the store admission gate around `Custody::admit`; the one-way seal request; `RecorderStatus` (a stall is never a failure). Internal to the store (R1), apart from its plain data types. |
+| `support/custody/store/recorder.rs` | The worker's steps W1 to W6, claim and seal, with explicit interleaving points; the drop guard that latches worker loss; the threaded runner, which keeps the owner's guard; the Linux-only native wiring check (R1). The worker is internal to the store (R1). |
+| `support/custody/store/owner.rs` | (R1) `StoreOwner`, the one value that retains the custody, recorder, claimed header and worker, and exclusion guard; `start_owner`, its only constructor; `StoreOwner::close`, the only path from a closure to a seal; `ClosedStore`. |
+| `support/custody/store/faults.rs` | (R1) The narrow fault and interleaving interface the tests use. Each operation only makes the recorder fail closed or interleaves its real steps. |
+| `support/custody/store/disposition.rs` | The pure exact-restatement comparison, and the `DispositionValidator` that exists only as a borrow of one opening's verified state (R1): only a root-owned disposition that restates exactly the incident the store computed. |
+| `support/custody/store/maintenance.rs` | The maintenance session (the store lock held for the session's life; verification through that retained authority; R1: the session's own latest verification, consumed once and lapsed by any later procedure step); the fixture qualification; every procedure of design section 13 as labelled, crash-injectable steps. |
 | `support/custody/store/sim.rs` | The simulated storage, error, persistence, journal, device and host model; the fixture host. |
 | `support/custody/store/mod.rs` | The module's documentation: what it is and is not. |
 | `support/custody/mod.rs` | Linux-only wiring of `store`, and one paragraph on the integration obligations the store addresses. |
-| `phase2_custody_store.rs` | The test target: 75 store tests, plus the core's 3 commitment-boundary tests that every custody target compiles. |
+| `phase2_custody_store.rs` | The test target: 84 store tests (75 from I3-I1, adapted to the R1 interface, and 9 R1 regressions), plus the core's 3 commitment-boundary tests that every custody target compiles. |
 
 `core.rs`, `model.rs`, `codec.rs` and their tests are byte-identical to the
 baseline. So are the cleanup observer, the live harness, production `src/`,
@@ -96,7 +102,10 @@ pub fn open_configured_store(
   root-provisioned store.
 - **Native primitives.** `LinuxIo` implements `StoreIo` only. Tests `n01` to
   `n08` exercise it, unprivileged, on files the test creates beneath
-  `CARGO_TARGET_TMPDIR`. Each fixture records the identity of every entry
+  `CARGO_TARGET_TMPDIR`. Test `n08` reaches the worker's write and sync path
+  only through `recorder::native_wiring` (R1): a check on the test's own
+  file, on an exchange of its own that never leaves it, with no seal and no
+  store. Each fixture records the identity of every entry
   it creates and removes only those, bounded, when it ends. They test:
   - descriptor-relative, no-follow opening;
   - link counts;
@@ -183,7 +192,9 @@ The following are not implemented:
 
 ## 6. Verification, in brief
 
-- **Tests.** The store target has 78 tests: 75 store tests and the core's 3
+This section records I3-I1's verification. R1's is in section 7.5.
+
+- **Tests.** The store target had 78 tests: 75 store tests and the core's 3
   commitment-boundary tests. The custody core (47) and codec (21) suites
   and the cleanup observation regression (36) are unchanged and pass. The
   live harness was built, never run.
@@ -201,3 +212,165 @@ The following are not implemented:
   geometry, is a historical Python-model control: it has no Rust form.
 - **Where the evidence is.** The results, commands and hashes are in
   `docs/evidence/p2-v1-r3b-i3-i1/`.
+
+## 7. Authority and closure boundary (P2-V1-R3B-I3-I1-R1)
+
+The Architect's six counterexamples (B1 to B6) reproduced at the repair base
+through ordinary safe-Rust calls from outside the store. Each used a public
+item that let caller data stand in for retained state:
+
+- B1: a fabricated `Closed` sealed a journal whose custody refused closure;
+- B2: another custody's closure sealed this journal;
+- B3: an edited decision let the claim proceed over an unresolved incident;
+- B4: an opening's identity and digest were rebound, and another opening's
+  admission was presented;
+- B5: a validator built from an edited scan copy validated a fabricated
+  disposition;
+- B6: the exchange's latch, `durable_through`, claim and seal states were
+  writable.
+
+R1 removes those items. It does not add a check beside them.
+
+### 7.1 What each kind of state is
+
+- **Candidate input and decoded data** (category A): bytes on disk, parsed
+  records, `PROVISION`, disposition files, and the saved report that
+  `resume_recycle` takes from the Owner (design section 13.8).
+- **Read-only snapshots** (category B): `StartupReport`, `Decision`,
+  `ScanResult`, `Selection` and `SessionReport` copies, `RecorderStatus`,
+  `Snapshot`, `ClaimState` and `SealState`, and a `Closed` value. They
+  control nothing: editing one changes no retained state.
+- **Retained, ownership-bearing state** (category C): `StoreOwner`'s
+  custody, recorder, worker, guard and claimed header; `ClosedStore`'s
+  recorder, worker and guard; `Opened`'s identity, selection, guard, scan,
+  decision and admission; `Session`'s locks, selection, admission and latest
+  verification. Every field is private to the store.
+- **Internal transitions** (category D): the opening's claim, the start's
+  disposition application, the closure-to-seal transition, the recorder's
+  steps and the procedures' decisions. Each reads only category C.
+
+### 7.2 The ownership graph
+
+- **One constructor.** `start_owner` is the only way to obtain a
+  `StoreOwner`. It opens the store, builds the custody with every current
+  incident as a prior, and applies dispositions only through that opening's
+  own validator. It refuses if anything still blocks, and cross-checks the
+  dispositions the custody accepted against the ones the opening derived.
+  It then claims through the opening's own claim, which consumes the opening
+  and derives its applied bindings and reasons internally. Last, it builds
+  the exchange, recorder and worker over that claim.
+- **Nothing is handed out.** The custody, recorder, claimed header and
+  journal, worker and guard are fields of that one value. None is handed
+  out, replaced or borrowed mutably: there is no `&mut Custody`. Custody
+  operations are forwarded one by one. `Custody::admit` is reachable only
+  through the store's admission gate. `apply_disposition`, `flush_records`,
+  `acknowledge`, `record_failed` and `close` are not forwarded.
+- **The guard.** It is shared, as `Arc<StoreGuard>`, only with the worker's
+  thread. That thread keeps it until the worker ends.
+
+### 7.3 Closure to sealing
+
+- **Closure authorizes the seal.** `StoreOwner::close(self, now)` consumes
+  the owner and calls the core's own `close` on the custody it retains.
+- **On refusal.** The same owner comes back, with that custody, every owner
+  it holds, the recorder, the worker and the guard. The store stays excluded
+  (Busy).
+- **On success, and only then.** The seal of the owner's own claimed
+  journal is requested once, with that closure's record count and the
+  retained header.
+- **No caller data.** No caller supplies closure data, a record count, a
+  header or a journal. A grammar acceptance, an all-durable state, a
+  plausible terminal record or a status snapshot authorizes nothing (test
+  `b01`).
+- **One-way.** `ClosedStore` has no close and no seal request, and the
+  recorder refuses a second request (`SealWithheld::AlreadyRequested`).
+- **Earlier failure stays.** A latch withholds the seal even after a
+  successful closure (test `r08`).
+- **Exclusion while unresolved.** The exclusion is held while the custody is
+  unresolved, and while worker I/O may be in flight, even after the owner is
+  dropped (test `b09`).
+- **No I/O under the exchange mutex.** Control and status take the exchange
+  mutex only for copies. No I/O, wait or join is done under it.
+
+### 7.4 Opening, dispositions, exchange and sessions
+
+- **Opening.** `Opened`'s fields are private. A caller reads borrows or
+  copies (`report`, `selection`, `scan`, `decision`, `opening`,
+  `admission`, `validator`). Edits to copies change nothing (test `b03`).
+  The claim and its admission check are internal: no admission, identity or
+  digest is accepted from a caller (test `b05`, API probes).
+- **Complete set.** The start derives from the complete verified incident
+  set, never from the bounded report (test `b04`).
+- **Disposition provenance.**
+  - `exact_restatement` is a pure comparison that authorizes nothing.
+  - `StoreValidator<'a>` exists only as a borrow of one opening's verified
+    state. That state was read under the opening's store lock, after its
+    activation, for its revalidated selection and root. The validator
+    cannot outlive the opening or the lock, and no constructor takes a
+    `ScanResult`.
+  - Stale or foreign data is never consulted: the validator reads only its
+    opening's state and checks root and binding (test `b06`).
+  - This is API provenance only. It does not resolve G-AUTH.
+- **Exchange.**
+  - The exchange, its state and guard, the sink, the recorder, the worker
+    and its handle are internal to the store. Callers read copies.
+  - The narrow fault interface (`faults`) can only latch (monotonically),
+    poison, interleave or stop the real worker, inject a submission the sink
+    refuses, latches on or already holds, panic the next sink, or
+    re-acknowledge a record that is already durable and not yet applied.
+  - It offers no constructor, no state write, no unlatch, no closure, seal
+    or disposition, and no way to point a worker at another file (test
+    `b07`).
+  - `recorder::native_wiring` is the one other construction of a worker:
+    Linux only, on the test's own native file and an exchange of its own,
+    with no seal.
+- **Maintenance sessions.**
+  - A procedure that decides from a verification (archival, recycling,
+    retirement, the recycling's resumption) consumes the session's own
+    latest verification, never a caller's report, name or refusal.
+  - One verification authorizes one procedure. It lapses as soon as any
+    step of the session's procedures starts (test `b08`).
+  - The `PROVISION` rewrite is internal to recycling, retirement and
+    re-qualification (design section 13.3).
+
+### 7.5 R1 verification and remaining limits
+
+- **Tests.** The store target has 87 tests: 84 store tests (75 adapted, 9 R1
+  regressions `b01` to `b09`) and the core's 3.
+- **Behavioural controls (99, by category, never one figure).**
+  - simulator and source conformance: 12;
+  - implementation safety: 69;
+  - authority and API surface: 8;
+  - R1 authority binding: 10.
+
+  Three I3-I1 anchors moved to their equivalent defect points.
+  `A-ADMISSION-UNBOUND` has no behavioural call site left; its intention is
+  carried by API/type guards.
+- **API/type guards (reported apart).**
+  - 15 compile-time probes from outside the boundary, each failing for its
+    intended privacy reason and each self-checked by reopening that access;
+  - 1 ownership guard (close consumes the owner);
+  - a positive control and a harness check.
+- **Limits.**
+  - This is a safe-API boundary within one crate's safe code. It does not
+    defend against `unsafe` code in the same process.
+  - The core's own public types (`Closed`, `ValidatedDisposition`,
+    `Custody::new`, `DispositionValidator`) stay public. A caller may run a
+    custody of its own; the store's guarantees concern only the custody it
+    retains.
+  - Provisioning and re-publication (design section 13.2) remain Owner acts
+    without a session. The store does not itself refuse to re-publish over
+    an existing `PROVISION`; that precondition rests on the Owner, as R5
+    states.
+  - Successor provisioning (design section 13.6) does not check its
+    precondition: that the predecessor's in-session verification shows every
+    bound incident dispositioned, and that the statement names each
+    store-level Invalid condition. I3-I1 never checked it either. The
+    session's verification yields no report beside a store-level Invalid or
+    Capacity refusal, and section 13.10 names succession as a resolution of
+    Capacity. A check therefore needs a design reading and a wider
+    verification path; it is an open finding for the Architect, not
+    something R1 decides.
+  - G-AUTH, G-HOST, G-LIVE, G-NATIVE and G-PWR stay open. Nothing here
+    authenticates storage, proves native cleanup or power-loss behaviour,
+    or qualifies a host.

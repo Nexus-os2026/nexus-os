@@ -1,0 +1,24 @@
+
+running 1 test
+test h14_capacity_reservation_prevents_unrecordable_admission ... FAILED
+
+failures:
+
+---- h14_capacity_reservation_prevents_unrecordable_admission stdout ----
+
+thread 'h14_capacity_reservation_prevents_unrecordable_admission' (3649212) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs:3798:5:
+assertion `left == right` failed: [capacity-reserved] an action was reserved without room for all its records
+  left: None
+ right: Some(EvidenceCapacity)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    h14_capacity_reservation_prevents_unrecordable_admission
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/snap-a6ef7af6c3187dbe108b8405a132e2e8eb9e0df1/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.15s
+     Running tests/phase2_custody_core.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/target/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`
