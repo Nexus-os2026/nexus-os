@@ -1,12 +1,12 @@
-# P2 custody: durable recorder and refusal store — design (revision R1)
+# P2 custody: durable recorder and refusal store — design (revision R2)
 
 | | |
 |---|---|
-| Missions | P2-V1-R3B-I3-P (first candidate, `b23ae1ac`), revised by P2-V1-R3B-I3-P-R1. A module of Phase Two, not Phase Three. |
+| Missions | P2-V1-R3B-I3-P (first candidate, `b23ae1ac`), revised by P2-V1-R3B-I3-P-R1 (`34cb35d8`) and P2-V1-R3B-I3-P-R2. A module of Phase Two, not Phase Three. |
 | Status | **Design candidate for independent Architect review.** Not implemented, not provisioned, not qualified on any host, not live-validated, and not approved by being published. |
-| Design base | `b23ae1ac040732c8332e8a45cc80b10734ca0b36` (tree `5330c01e…`, parent `45898e05…`). It is not accepted for implementation. |
+| Design base | `34cb35d833ef9dd317708615211fee7d02d2eb78` (tree `86050b42…`, parent `b23ae1ac…`), the R1 candidate. It is not accepted for implementation. |
 | Source baseline | `45898e05178a56efaadeb1f8f9ee7a0a521c72c9`. Every `file:line` reference below is to this commit. |
-| Validation | `docs/evidence/p2-v1-r3b-i3-p-r1/` holds a standard-library Python **design model**, its checks, its model-level negative controls and a reference check. It validates this specification's protocols against the model's own semantics. It is not the store, an owner service, or a substitute for the later Rust tests (§16). |
+| Validation | `docs/evidence/p2-v1-r3b-i3-p-r2/` holds the R2 standard-library Python **design model**, its checks, its model-level negative controls, a re-run of the Architect's counterexamples on the unchanged R1 model, and a reference check. The R1 evidence in `docs/evidence/p2-v1-r3b-i3-p-r1/` is kept unchanged. The model validates this specification's protocols against the model's own semantics. It is not the store, an owner service, or a substitute for the later Rust tests (§16). |
 | Authorizes | Nothing beyond this document. Implementation, provisioning, qualification, service integration and live validation each need a separate Architect authorization (§18). |
 
 Source labels:
@@ -53,14 +53,17 @@ The module meets two of the core's unmet integration obligations: durability, an
 | 3 | The crash model keeps separate: process-local state, kernel-visible bytes, durable bytes, pending writeback, writeback-error observation, and directory entries. Process death makes nothing durable. A sync on a newly opened descriptor certifies nothing about earlier writebacks. | §4 |
 | 4 | Physical containment is an explicit assumption [A]: a failed write of one aligned 4096-byte block alters no other block. The Owner attests it and it is qualified empirically later. The store refuses where the verifiable prerequisites do not hold. | §5 |
 | 5 | Lock-bearing descriptors (the store lock and the claimed journal's lock) belong to the owner process's `StoreGuard`, beside `Custody`. The recorder thread has its own lock-free I/O descriptor. A recorder panic, disconnect or worker-side unlock cannot release exclusion. | §8 |
-| 6 | Submission and delivery use a bounded, idempotent, state-based **exchange**, not message queues. Failure and recorder loss are latched flags that never need queue capacity. Four positions are kept separate: last durable, last delivered, last applied, and first not established durable. | §9 |
+| 6 | Submission and delivery use a bounded, idempotent, state-based **exchange**, not message queues. Every fatal condition (I/O failure, recorder loss, an invalid or conflicting submission, an unexpected acknowledgement outcome, a poisoned mutex) is one latch that records its first cause and the durable position P at that instant. After it nothing is published, admitted or acknowledged beyond P. The core is told only at a record it really issued. | §9 |
+| 6a | The integration calls `Custody::admit` only through the **store admission gate**: one critical section of the exchange mutex covers the health check and the call. A fatal latch therefore stops new admission at once, without waiting for a record. | §9.8 |
 | 7 | Startup takes every lock non-blocking **before** syncing or reading any journal. It type-checks entries before opening them, opens with non-blocking, no-follow flags, and changes no application state. Its one persistence effect is an evidence-preservation sync, which is disclosed. | §10 |
 | 8 | Refusal stays conservative [D-3]. An unsealed generation that recorded any action start is refused, whatever its recorded-unsettled count. The restart report keeps separate the recorded unsettled entries, evidence completeness, whether native work was possible, and the refusal. It never invents an incident identity. | §11 |
 | 9 | Every container and text byte is assigned and validated, with full consumption and checked arithmetic. The NXCD version-1 record frame stays byte-identical [D-9]. | §7 |
 | 10 | Only ext4 is supported initially [D-6]. It is identified from the retained descriptor's mount ID in `mountinfo`, never from the shared `0xef53` magic alone. XFS is deferred. | §6.4 |
-| 11 | Maintenance is offline, root-performed, under the store lock, and either fully specified or unsupported [D-7]. Journal bindings are content-addressed, so archival keeps them. Any byte change creates a new binding, explicitly. | §12.3, §13 |
+| 11 | Maintenance is offline, root-performed, and either fully specified or unsupported [D-7]. Every procedure runs inside one **maintenance session** that holds the store lock exclusively for its whole lifetime and verifies through that retained authority, never through a new lock request. Journal bindings are content-addressed, so archival keeps them. Any byte change creates a new binding, explicitly. | §12.3, §13 |
+| 11a | A `PROVISION` read is only a candidate until the reader holds the store lock and has **revalidated** it by fresh lookups: the same `PROVISION` inode and bytes, the same state root, and the locked `LOCK` inode. A failed revalidation re-selects, at most three times. A successor is published only while its maintenance session holds both stores' locks. | §10.5, §13.6 |
+| 11b | Crash outcomes of administrative procedures are computed under explicit metadata-persistence schedules: entries may become durable before any directory sync. Every model operation is a written protocol step, and the crash matrix is recomputed. | §4.8, §15 |
 | 12 | Store A0 is limited crash evidence, **not** tamper-resistant admission authority [D-4]. Production or runner use stays behind the unresolved gate **G-AUTH**. | §3.3, §18 |
-| 13 | No change to `core.rs`, `model.rs` or `codec.rs` is required. | §2.3 |
+| 13 | No change to `core.rs`, `model.rs` or `codec.rs` is required. One narrow core API (API-5) is proposed for a later mission; the design does not depend on it. | §2.3 |
 
 ### 0.3 Changes from the first candidate
 
@@ -76,6 +79,18 @@ The module meets two of the core's unmet integration obligations: durability, an
 | R8, filesystem | Magic `0xef53` taken as ext4; XFS included | Mount-ID identification; ext4 only; allocation facts kept distinct | §6.4, §6.5 |
 | R9, administration | A binding that included the pool location; maintenance underspecified | Content-addressed binding; every retained procedure specified with its crash points | §12.3, §13 |
 | R10, reconciliation | — | The whole document reconciled | all |
+
+### 0.4 Changes in R2
+
+Each finding was first reproduced on the unchanged R1 model (§19.3).
+
+| Finding | R1 | R2 | Section |
+|---|---|---|---|
+| F1, fatal failure and admission | Failure, loss and conflict were three latches. They reached the core only through `record_failed` at one exact position, so a loss with no record pending, a conflict on an acknowledged record and an invalid submission were never delivered, and admission continued meanwhile. | One fatal latch with its first cause and P. Publication stops at the latch. The store admission gate refuses admission at once. The failure is delivered at the core's next unacknowledged record once it exists. Eight concerns are kept apart, and INV-4 is restated. API-5 is proposed, not required. | §9, §12.1, §2.3 |
+| F2, maintenance verification | Procedures ran under `flock -n LOCK` and called the standalone verifier, which takes a shared lock and so reports Busy inside every procedure | A maintenance session holds the exclusive lock for its lifetime and verifies through it. The standalone verifier stays a separate, outside-maintenance contract. | §13.1, §13.11 |
+| F3, `PROVISION` selection | A startup could read `PROVISION` A, pause, and lock A's store after a successor B was published, while another startup locked B | Post-lock revalidation by fresh lookups, a `revision` field, bounded re-selection, and successor publication while the session holds both locks | §10.5, §13.6 |
+| F4, administrative persistence | Entries became durable only through a directory sync; the model synced the state root at `LOCK` creation without the text saying so; clean pages could not be reclaimed while a descriptor was open | Ordered and per-directory metadata schedules; the hidden step written down and every step checked for parity; page reclaim separate from inode eviction; the crash matrix recomputed | §4, §4.8, §13, §15 |
+| Section 8, whole module | Every disposition and revoked entry was read with no aggregate bound; reports were unbounded | Entry counts checked before any entry is examined; a bounded report that says when it is partial; authorization only from the complete set | §6.6, §7.7, §11.2 |
 
 ---
 
@@ -102,7 +117,7 @@ The module is the recorder, refusal store and disposition reader for the live ha
 
 ### 1.3 Governance and base
 
-- **Governance read.** `AGENTS.md` and `CLAUDE.md` were read at `45898e05`. They are byte-identical at the design base `b23ae1ac`, verified by blob id. No descendant `AGENTS.md` or `CLAUDE.md` exists.
+- **Governance read.** `AGENTS.md` and `CLAUDE.md` were read at `45898e05`. They are byte-identical at `b23ae1ac` and at the R2 design base `34cb35d8`, verified by blob id. No descendant `AGENTS.md` or `CLAUDE.md` exists.
 - **Rules applied:**
   - fail closed, with no `$HOME`, cwd or temporary fallback;
   - explicit authority, and no recreation of trusted roots;
@@ -191,10 +206,13 @@ None of this is host qualification, and none of it selects a state root.
 | `RecordAck` | `model.rs:466-479` | Built by the owner from its retained intent once `durable_through` covers it (§9.4) |
 | `RecordSink::submit`, which returns nothing | `core.rs:89-95` | An idempotent, non-blocking insertion into the exchange (§9.3) |
 | `flush_records`: unsent records in order; a sink panic is contained, recorded as a failure, and the record stays unsent | `core.rs:2958-2991` | Re-submission after a panic is idempotent (§9.3) |
-| `acknowledge` → `Ledger::acknowledge`: in order and exact | `core.rs:2996-3010`, `core.rs:1042-1069` | Applied exactly once per sequence. Any outcome other than `Acknowledged` is an integration fault (§9.4). |
-| `record_failed` → `Ledger::fail`: the next unacknowledged record only; `LedgerFailed` afterwards | `core.rs:3016-3031`, `core.rs:1072-1090` | Applied once, for the first record not established durable, after every earlier acknowledgement (§9.5) |
+| `acknowledge` → `Ledger::acknowledge`: in order and exact; `NotIssued`, `Duplicate`, `Conflict`, `LedgerFailed`, `OutOfOrder` and `Foreign` otherwise | `core.rs:2996-3010`, `core.rs:1042-1069` | Applied exactly once per sequence, never beyond P. Any outcome other than `Acknowledged` latches the fatal cause `UnexpectedAck` and stops application (§9.4). |
+| `record_failed` → `Ledger::fail`: only the next unacknowledged record, and only an issued one; `NotIssued`, `Conflict`, `OutOfOrder`, `Foreign` otherwise, and `LedgerFailed` afterwards | `core.rs:3016-3031`, `core.rs:1072-1090` | Called once, for the core's next unacknowledged record, and only once that record has been issued. Nothing is reported while no such record exists (§9.5). |
+| A failure recorded by any entry point closes admission with `ClosureReason::Failed`; `Control::cancel` closes only with `ClosureReason::Cancelled`, and an actual failure is never recorded as a cancellation | `core.rs:3046-3069`, `core.rs:554-556`, `model.rs:377-384` | `Control::cancel` is never used to report a recorder failure. The store admission gate refuses admission instead (§9.8); API-5 is the narrow future alternative (§2.3). |
+| The core's `lock()` helper recovers a poisoned mutex | `core.rs:367-371` | The exchange does not: a poisoned exchange mutex is a fatal cause (§9.5) |
 | Capacity: general and control reserve, all-or-nothing reservations; a control reserve of at least 2 | `core.rs:967-968`, `core.rs:980-989`, `core.rs:1004-1011`, `core.rs:1298-1304` | Every issuable record has a pre-written zero block (§6.6) |
-| Admission needs an acknowledged start record. Case begin and the commitment need everything acknowledged. | `core.rs:1658-1675`, `core.rs:1542-1544`, `core.rs:2663-2669` | Write-ahead (INV-2) |
+| Admission needs an acknowledged start record. Case begin and the commitment need everything acknowledged. | `core.rs:1658-1675`, `core.rs:1542-1544`, `core.rs:2663-2669` | Write-ahead (INV-2). `Custody::admit` is called only through the store admission gate (§9.8). |
+| `Custody::admit` decides in its own gate critical section and performs no I/O, callback or wait: clock check, closure observation, reservation and acknowledgement checks, the gate, then the snapshot | `core.rs:1626-1697`, `core.rs:3033-3039`, `core.rs:3072-3077` | This is what lets the store hold the exchange mutex across the call (§8.2 rule 4) |
 | Terminal record; finality; published verdict | `core.rs:2678-2686`, `core.rs:2690-2697`, `core.rs:2710-2718` | — |
 | Closure refusal; `close`; no closure record kind in version 1 | `core.rs:2872-2924`, `core.rs:2929-2954`, `model.rs:395-449` | A closure seal outside the frames (§7.3, §9.7) |
 | Requests: sequencing, in-memory receipts, another generation's request `Foreign` | `core.rs:2722-2785`, `core.rs:2745-2747` | Not persisted: a restart is a new generation |
@@ -215,6 +233,17 @@ The design needs no change to `core.rs`, `model.rs` or `codec.rs`. Candidates fo
 | API-2 | Constructing a custody with already-dispositioned priors, or a larger `incident_limit` | Explicit refusal plus Owner archival (§13.10) |
 | API-3 | `RecordSink::submit` returning a result | The exchange latches, and the owner reports `record_failed` (§9.5) |
 | API-4 | The next unacknowledged `RecordId` in `EvidenceView` | The owner keeps its own copies of submitted intents (§9.4) |
+| API-5 | A control-side failure closure: `Control::recorder_failed(now)`, closing the core's gate with `ClosureReason::Failed(FailureClass::RecorderFault)` exactly as an owner-side failure does (`core.rs:448-465`, `core.rs:3046-3069`), never as a cancellation | The store admission gate refuses every admission after the latch (§9.8), and the core learns of the failure at its next issued record (§9.5). The gap that remains: until such a record exists, the core's own state and a terminal commitment made in that window do not show the failure. Such a commitment is never final or published (§9.9). |
+
+**API-5, rationale and validation obligations.** Not implemented and not approved.
+- **Why.** It closes the core's own gate at the instant the store latches, whether or not a record exists. The closure linearizes in the gate's critical section against admission and against the terminal commitment (`core.rs:1665-1675`, `core.rs:473-482`), so a run whose recorder failed before its commitment always commits `Failed`.
+- **Shape.** It reuses the existing `FailureClass::RecorderFault`, whose documentation would widen from "the adapter panicked while a record was submitted" (`model.rs:310-311`) to "the recorder could not continue". The NXCD version-1 bytes stay unchanged, since the class already has a code. It changes no acknowledgement, never retracts one, and is accepted once; a later call returns the first closure, as `Shared::close` does.
+- **Validation obligations** for the mission that would make it:
+  - a core test that it closes admission before an admission and before a commitment, and is late after the commitment;
+  - a test that the closure is recorded as `Failed(RecorderFault)`, never `Cancelled`;
+  - a test that a later `record_failed` at a real record is still applied;
+  - negative controls: the closure recorded as a cancellation; a closure after the commitment changing the verdict;
+  - the existing `core-tests` unchanged and passing.
 
 ---
 
@@ -257,7 +286,7 @@ Every invariant (§12.1) names the domains in which it holds.
 | Pending writeback | Dirty pages whose **K** has not yet reached **D** | Still pending: written back later, or failing later | Lost |
 | Error sequence **E** | The inode mapping's writeback-error sequence: a counter and a "seen" flag (errseq) [U] | Unchanged while the inode stays cached | Lost. Also lost when the inode is evicted, since it is in-memory state. |
 | Error cursor | Per open file description: the error sequence sampled at open and advanced when an error is reported through it [U] | Destroyed with the description | Lost |
-| Directory entries **K_dir** / **D_dir** | Visible names, and durable names (after an `fsync` of the directory) [U] | Unchanged | **K_dir** becomes **D_dir** |
+| Directory entries | Visible names **K_dir**; a log of metadata operations not yet guaranteed durable; the guaranteed durable names (§4.8) | Unchanged; the log is still pending | The names of one **permitted schedule** (§4.8): at least everything a completed directory `fsync` guaranteed, at most everything visible |
 | Advisory locks | Attached to open file descriptions [U] | Released when the last duplicate closes, which process death causes | Gone |
 
 ### 4.2 Events
@@ -269,9 +298,11 @@ Every invariant (§12.1) names the domains in which it holds.
 | Background writeback, failure | **E** records an unseen error, and the page is clean but **D** is unchanged. **K** may keep the new bytes until the page is evicted. |
 | `fdatasync(d)` | Writes back every pending page of the file and flushes the device. Returns EIO if **E** has advanced past *d*'s cursor (an error recorded after *d* was opened, or after the last error reported through *d*), then advances the cursor and marks the error seen. Otherwise returns 0. |
 | Open | The new description's cursor is sampled: before the newest error if no description has seen it yet (the new description will report it), otherwise at it (the new description never reports it) [U] |
-| Eviction | Clean pages may be dropped, so **K** reverts to **D**. Evicting the inode drops **E**. |
-| F1 | Process-local state is lost. Descriptors close and their locks are released. **K**, **D**, pending writeback and **E** are unchanged. |
-| F2 | **K** becomes **D**. Pending writeback, **E** and all cursors are lost. **K_dir** becomes **D_dir**. A block being written may end old, new or indeterminate, but only within its containment unit (§5). |
+| Page reclaim | Any **clean** page may be dropped at any time, **including while descriptors on the file are open**, so that page's **K** reverts to **D**. A page whose writeback failed is clean, so reclaim can remove bytes that only **K** held. An open descriptor keeps the inode, not its clean pages. |
+| Inode eviction | Only when no descriptor is open and nothing else holds the inode. It drops **E** and every page. |
+| Metadata operation | `create`, `link`, `unlink` and `rename` change **K_dir** at once and append to the pending metadata log (§4.8). A directory `fsync` that returns 0 guarantees its operations, and under A-M1 every earlier one. |
+| F1 | Process-local state is lost. Descriptors close and their locks are released. **K**, **D**, pending writeback, **E** and the pending metadata log are unchanged. |
+| F2 | **K** becomes **D**. Pending writeback, **E** and all cursors are lost. The directory entries become those of one permitted schedule (§4.8); pending file data whose sync had not returned ends old or new. A block being written may end old, new or indeterminate, but only within its containment unit (§5). |
 
 ### 4.3 What a sync certifies
 
@@ -284,7 +315,7 @@ Neither this design nor any report it specifies may present a sync on a newly op
 
 ### 4.4 What startup may infer from the bytes it reads
 
-- **A visible valid record (domain H).** The recorder wrote it and the core issued it. It is a true statement of what the core issued at that instant. It may not be durable: it may exist only in **K**, and a later F2 or eviction may remove it.
+- **A visible valid record (domain H).** The recorder wrote it and the core issued it. It is a true statement of what the core issued at that instant. It may not be durable: it may exist only in **K**, and a later F2, page reclaim or inode eviction may remove it.
 - **A missing record proves nothing.** It may never have been issued, may have been lost by F2, may have failed writeback, or may never have been written.
 - **A visible valid seal (domain H).** `close()` returned `Ok` at that time. The seal may not be durable.
 - **A visible valid header with no records (domain H).** Under write-ahead, no action of that generation was admitted (INV-2).
@@ -302,9 +333,11 @@ Startup cannot know:
 ### 4.6 Consequences
 
 - **Decisions use the visible bytes.** The refusal decision reads **K** and never needs durability. In domain H visible records are true, and missing records are handled conservatively by the refusal rule (§11.2).
-- **Less evidence never hides admitted work.** F2 or eviction may later remove visible-only bytes. Re-classification then sees less, and the class may change: a torn visible block, for example, can become a shorter valid prefix. But an action whose start record never became durable was never admitted (INV-2), so no later view hides admitted native work [M: C16].
+- **Less evidence never hides admitted work.** F2, page reclaim or inode eviction may later remove visible-only bytes. Re-classification then sees less, and the class may change: a torn visible block, for example, can become a shorter valid prefix. But an action whose start record never became durable was never admitted (INV-2), so no later view hides admitted native work [M: C16].
 - **Evidence-preservation sync.** Startup syncs each prior journal after locking it (§10.2 step 5).
-  - This **changes persistence state**: pending visible bytes become durable.
+  - This **changes persistence state**: every page still dirty at the call becomes durable.
+  - It does **not** make durable a page whose earlier writeback failed. That page is clean, so the sync does not write it, and the error was already reported to another description, so the sync returns 0 (§4.3). Such bytes stay visible-only until reclaim or F2 removes them.
+  - The report therefore says "preservation sync returned 0", never "evidence durable" or "evidence preserved".
   - It changes no application state and certifies no history.
   - An error from it refuses the store as "evidence unreliable" [M: C02, C03].
 - **Failed evidence is not cleanup.** A record that is visible but failed is still only a statement of what the core issued. Native cleanup success is established only by the core's own facts at the time. A stored `ActionSettled` is a past statement (§14.2).
@@ -316,9 +349,36 @@ Startup cannot know:
 | The writer `pwrite`s record *n*, then F1 | **D** is unchanged and **K** shows *n*. Process death made nothing durable [C01]. |
 | F1, restart, F2 before any sync | *n* is lost [C02] |
 | F1, restart, a startup sync that returns 0, then F2 | *n* is kept [C02] |
-| *n*'s writeback fails, the writer's sync reports EIO, then F1 and restart | A new description's sync returns 0, yet **D** lacks *n* while **K** shows it. After eviction **K** loses *n* too. The report must not claim *n* is durable [C03]. |
+| *n*'s writeback fails, the writer's sync reports EIO, then F1 and restart | A new description's sync returns 0, yet **D** lacks *n* while **K** shows it. After inode eviction **K** loses *n* too. The report must not claim *n* is durable [C03]. |
+| *n*'s writeback fails while the writer's descriptor stays open; the page is reclaimed | **K** loses *n* although the descriptor is open. The inode and **E** stay. The generation is still refused (unsealed) [C22]. |
 | The writer dies before observing *n*'s writeback failure; restart | The error is unseen, so the new description's sync returns EIO and startup refuses [C03] |
 | Short write, zero-progress write, EINTR | A block counts as written only once all 4096 bytes are written. A bounded number of zero-progress results or EINTR poisons the journal [C15]. |
+
+### 4.8 Directory metadata: what may be durable before a directory sync
+
+R1 treated a directory entry as durable only after an `fsync` of its directory, and as absent after F2 otherwise. That is "not guaranteed durable", restated wrongly as "guaranteed absent". On ext4, a `link`, `unlink` or `rename` can reach the journal at any later commit, before any explicit directory sync. R2 keeps five states apart:
+
+| State | Meaning |
+|---|---|
+| Visible | In **K_dir**: what a lookup returns now |
+| Possibly durable | In the outcome of at least one permitted schedule below |
+| Guaranteed durable | Covered by a directory `fsync` that returned 0 (and, under A-M1, every earlier metadata operation) |
+| Sync-certified | Reported durable by a sync the procedure itself issued and checked. For file data, only the writer's own sync certifies (§4.3). |
+| Startup-observable | What an opening after F1 or F2 can see: the visible state after F1, one permitted schedule after F2 |
+
+**Pending metadata log.** Every `mkdir`, `create`, `link`, `unlink` and `rename` is one operation. A rename has two halves: the source name removed and the target name added.
+
+**A-M1 [A], ordered metadata.** On the supported ext4 profile (§6.4, §13.2: a journal present, no `fast_commit` feature, `data=writeback` excluded), the jbd2 journal commits metadata operations in transactions, in issue order, each transaction atomically. A power loss therefore leaves a namespace equal to the visible namespace after some **prefix** of the operation log, and that prefix contains every guaranteed operation. A rename is never split. This is an assumption of the profile, attested with A-S1 to A-S4 and qualified later (D-10); software cannot prove it.
+
+| Schedule family | Outcomes after F2 | Status |
+|---|---|---|
+| **Ordered** | Every prefix of the log from the last guaranteed operation to the last operation issued | A superset of ext4 outcomes under A-M1: ext4 commits whole transactions, which are prefixes too |
+| **Per-directory** | Each directory independently keeps a prefix of its own operations and rename halves, at least up to its own last completed `fsync`. A rename can therefore be split, within one directory or, for a rename between two directories, with either half persisting without the other. | A deliberate **over-approximation**, not ext4 behaviour. It shows which conclusions do not depend on A-M1. |
+| Guaranteed only | Exactly the guaranteed operations | R1's model. Not a permitted schedule of ext4: it omits outcomes that occur. |
+
+**Data.** A file synced before it is published is durable before its name can be. Pending data whose sync had not returned ends old or new, and the model runs both.
+
+**Result** [M: C12, C22]. Under both families, no crash point accepts a partial file, honours a temporary entry, loses an incident silently or retires unresolved history. The only outcome the per-directory over-approximation adds is a revocation interrupted between its two directory syncs leaving both names (Invalid, a refusal, §13.4); under A-M1 a rename is atomic and that outcome does not occur. Every crash outcome, per family, is in §15.2.
 
 ---
 
@@ -330,6 +390,7 @@ Startup cannot know:
 - **A-S2, containment.** A failed or interrupted write of one aligned 4096-byte block, issued by the filesystem for one page, can leave only that block indeterminate. It never alters any other block's durable content.
 - **A-S3, no silent loss.** After a successful flush the device neither loses nor misdirects writes. This is the boundary of domain S.
 - **A-S4, read stability.** Reading durable data returns those bytes or an error.
+- **A-M1, ordered metadata** (§4.8). Metadata operations become durable in issue order, in atomic transactions. The safety results of §15.2 also hold under the per-directory over-approximation, which does not assume it; A-M1 only removes one extra refusal.
 
 ### 5.2 How alignment and the layout relate to the assumptions
 
@@ -350,7 +411,8 @@ Startup cannot know:
 |---|---|
 | ext4 through the descriptor's mount; mount options; filesystem block size 4096; page size 4096 | Verified at every opening (§6.4) |
 | Device logical and physical block sizes (sysfs, for the mount's major:minor); pool extents written, not shared, not delayed (FIEMAP); `fallocate` support | Verified at provisioning as part of the Owner's qualification, then pinned in `PROVISION` (§13.2). Not re-read at runtime. |
-| A-S1 to A-S4 | Assumed. The Owner attests them in `PROVISION` (`storage-attestation`). They can be qualified empirically only (D-10), never proven. |
+| A-S1 to A-S4, A-M1 | Assumed. The Owner attests them in `PROVISION` (`storage-attestation`). They can be qualified empirically only (D-10), never proven. |
+| The ext4 journal is present and the `fast_commit` feature absent | Established by the Owner at qualification, as root, from the superblock features (§13.2). Not re-read at runtime. |
 
 ### 5.4 When the assumptions cannot be established
 
@@ -366,7 +428,7 @@ Startup cannot know:
 
 | Actor | Identity | May write | Authority |
 |---|---|---|---|
-| **Owner** | root | `PROVISION`; root-owned directories; creation and replacement of pool files; dispositions; the archive | Provisioning, disposition, revocation, archival, recycling, retirement and succession. Each is an explicit root-owned artifact made through a §13 procedure. |
+| **Owner** | root | `PROVISION`; root-owned directories; creation and replacement of pool files; dispositions; the archive | Provisioning, disposition, revocation, archival, recycling, retirement and succession. Each is an explicit root-owned artifact made through a §13 procedure, inside a maintenance session (§13.1). |
 | **Custody owner process** | store uid | Through its recorder, the bytes of the one pool file it claimed. Locks on `LOCK` and that file. | None. It produces evidence; the core decides. |
 | **Read-only verifier** | store uid or root | Nothing | None |
 | **Other store-uid processes**, including job code | store uid | Whatever that uid can write (domain A) | None recognized |
@@ -375,6 +437,7 @@ Startup cannot know:
 
 ```
 <PROVISION_PATH>               root:root 0444  identity, parameters, attestation (text, §7.5)
+<PROVISION_PATH>.predecessor-<old root id>  root:root 0444  kept by a successor (§13.6)
 <STATE_ROOT>/                  root:root 0755
   LOCK                         uid:gid   0600  store lock (flock); never written
   journals/                    root:root 0755  names fixed by root
@@ -450,9 +513,11 @@ XFS and every other filesystem are outside the initial profile.
 | N, pool files | Target 256; allowed 1 to 1024 |
 | Pool file | (C_pool + 2) × 4096: 2,105,344 bytes at C_pool = 512, at most 16,785,408 bytes |
 | Pool total | N × file: 538,968,064 bytes at the targets, at most 17,188,257,792 bytes |
-| Archive entries | At most 4096 are scanned; more refuses |
-| Startup read volume | Every pool file in full, plus blocks 0 and 1 of each archive entry: 538,968,064 + 33,554,432 bytes at the targets and limits |
-| Scan memory | One 4096-byte block buffer, a SHA-256 state, and per-journal grammar state proportional to `capacity`. One bounded summary per file. |
+| Directory entries (R2) | `archive/`: at most 4096. `dispositions/`: at most 4097, the disposition files plus `revoked`. `dispositions/revoked/`: at most 4096. Each count is taken from the names alone, **before any entry is type-checked, opened or read**; more refuses as Invalid ("enumeration bound"). A per-file size limit is not an aggregate limit, so both exist. |
+| Startup read volume | Every pool file in full, plus blocks 0 and 1 of each archive entry, plus at most 4097 bytes of each disposition: 538,968,064 + 33,554,432 + 16,781,312 bytes at the targets and limits. Revoked entries are type-checked, never read. |
+| Scan memory | One 4096-byte block buffer, a SHA-256 state, and per-journal grammar state proportional to `capacity`. One bounded summary per file, and one parsed record per disposition (at most 4096). |
+| Incidents held while scanning | At most N pool-file and journal incidents, one history binding per `u`, `m` or `p-` archive entry, and the enumerated claim gaps, which §7.7 bounds before enumerating. Authorization (§10.2 step 8, §13.9) always uses this complete set. |
+| Report detail (R2) | At most 64 incidents listed in full, in a fixed order (§11.2), with exact totals of all incidents and of current ones and an explicit **partial** flag when more exist (§11.2). The detail limit never truncates the set used for any decision. |
 | Exchange memory | `capacity` slots, each holding one fixed-size `RecordIntent` (`model.rs:457`) [S]. Allocated once at the claim and never grown. |
 | Header | 124 + 33 × n bytes, with n ≤ 32: at most 1180 |
 | `PROVISION` | At most 65,536 bytes |
@@ -596,11 +661,13 @@ predecessor=<none | 32 hex>
 predecessor-statement=<none | statement>
 operator=<operator>
 created=<timestamp>
+revision=<dec, 1 or more>
 digest=<64 hex: SHA-256 of every preceding byte>
 ```
 
 - `predecessor-statement` is `none` if and only if `predecessor` is `none`.
 - The digest is integrity only. Authority comes from root ownership at a root-controlled path.
+- `revision` (R2) is 1 at provisioning and one more than the replaced `PROVISION`'s at every rewrite and at succession. It is the maintenance epoch: every publication has different bytes, and reports name the revision they read (§10.5).
 
 A disposition is stored in `dispositions/<binding>.disposition`:
 
@@ -643,6 +710,8 @@ Entry names:
 
 Any other name in a store directory refuses. That includes a leftover `.tmp-` entry from an interrupted procedure, which refuses as **MaintenanceIncomplete** (§13.1).
 
+In the directory of `<PROVISION_PATH>`, which may hold other files, these names belong to the store: `<PROVISION_PATH>` itself; each kept predecessor `<PROVISION_PATH>.predecessor-<old root id>` (§13.6); and the temporaries `<PROVISION_PATH>.tmp` and `<PROVISION_PATH>.predecessor.tmp`. An opening reads only `<PROVISION_PATH>`. A leftover temporary is never read, but the next rewrite's exclusive create fails with EEXIST until the Owner removes it in a session (§13.1).
+
 ### 7.6 Archive entries
 
 | Form | Content | Validated at startup (§11.3) |
@@ -659,7 +728,7 @@ Before any allocation, seek or read, the reader checks:
 - the header's n ≤ 32 before 33 × n is used;
 - L is between 33 and 83 before 8 + L + 32 is used;
 - the size of `PROVISION` and of each disposition is within its bound, read with a limit of bound + 1 so that oversize is detected;
-- the archive holds at most 4096 entries;
+- the archive holds at most 4096 entries, `dispositions/` at most 4097 and `dispositions/revoked/` at most 4096, counted from the names before any entry is examined (§6.6) [M: C24];
 - claim gaps are counted arithmetically, as (highest claim − `retired-through`) minus the claims present. They are enumerated only when that count is at most `incident_limit` plus the number of bindings listed in valid headers, which is the most that can be history. A larger count refuses as **Capacity** without enumerating;
 - the current incident count is at most `incident_limit` before `Custody::new`, and `incident_limit` is at most 32.
 
@@ -675,16 +744,16 @@ Claims:
 
 | Object | Kind | Retained by | Released | Notes |
 |---|---|---|---|---|
-| Store lock description on `LOCK` | Long-lived advisory exclusion: `LOCK_EX`, taken non-blocking | `StoreGuard`, in the owner's main frame beside `Custody` | Only at process exit. No `LOCK_UN` call exists. | Opened `O_RDONLY | O_NONBLOCK | O_NOCTTY | O_NOFOLLOW | O_CLOEXEC` |
+| Store lock description on `LOCK` | Long-lived advisory exclusion: `LOCK_EX`, taken non-blocking | `StoreGuard`, in the owner's main frame beside `Custody` | Only at process exit. No `LOCK_UN` call exists. | Opened `O_RDONLY \| O_NONBLOCK \| O_NOCTTY \| O_NOFOLLOW \| O_CLOEXEC` |
 | Journal lock description on the claimed pool file | Long-lived advisory exclusion: `LOCK_EX`, non-blocking | `StoreGuard` | Only at process exit | A **separate** open, never shared with the recorder |
 | Journal I/O description (`O_RDWR`) | Data descriptor; holds **no** lock | Recorder worker | When the worker exits or unwinds | The worker never calls `flock`. A `LOCK_UN` on this description, through a bug, releases nothing, because no lock is attached to it. |
-| Root and journals directory descriptors (`O_PATH | O_DIRECTORY`) | — | `StoreGuard` | Process exit | Used for `*at` calls and the identity recheck after each record |
+| Root and journals directory descriptors (`O_PATH \| O_DIRECTORY`) | — | `StoreGuard` | Process exit | Used for `*at` calls and the identity recheck after each record |
 | Scan descriptors, one per pool file | Short advisory lock: `LOCK_SH`, non-blocking | Startup scanner | Closed once that file is classified (§10.2) | — |
 | Archive directory and entries, `PROVISION`, dispositions directories and files, `mountinfo` | Read-only | Scanner, disposition reader, mount check | Closed when startup ends | — |
-| Exchange (§9.2) | **Short mutex**, held only for a copy | `Arc`, shared by owner and worker | Process exit | Never held across I/O, a callback or a wait |
+| Exchange (§9.2) | **Short mutex**, held for a copy or an assignment, and by the admission gate across one `Custody::admit` call (§9.8) | `Arc`, shared by owner and worker | Process exit | Never held across I/O, a callback or a wait |
 | Recorder status (§14.1) | Short mutex | `Arc` | Process exit | Copy only |
-| Failure latches | Inside the exchange; set once, never cleared | `Arc` | — | Set by the worker, by its drop guard, or by the owner |
-| Worker join handle | — | Owner | Process exit | `is_finished()` without a latched normal exit latches recorder loss |
+| Fatal latch (R2) | Inside the exchange: the first cause and P, later causes counted; set once, never cleared | `Arc` | — | Set by the worker, its drop guard, the sink, the owner's apply step, or the first acquisition that finds the mutex poisoned (§9.5) |
+| Worker join handle | — | Owner | Process exit | `is_finished()` without a latched normal exit latches `WorkerVanished` (§9.2) |
 | `Custody` and native owners | — | Owner's main frame | `close()` returning `Ok`, or destruction of the process | Never dropped while it holds anything (`mod.rs:139-143`) [S] |
 
 ### 8.2 Rules
@@ -693,57 +762,91 @@ Claims:
 2. **Release only at process exit.** `StoreGuard` releases its locks only when the process exits. Closing a lock-bearing descriptor earlier is a defect.
 3. **Close-on-exec.** Every descriptor is `O_CLOEXEC`. A child between `fork` and `execve` shares the descriptions, which only keeps the locks held longer. The descriptors close at `execve`.
 4. **No storage under a mutex.** No status, control or exchange mutex is held across `pwrite`, `fdatasync`, `fstat`, an open, a read, a callback or a wait. The core's own control-side locks follow the same rule (`core.rs:431-442`) [S].
+   - **The one call under the exchange mutex** is `Custody::admit`, in the admission gate (§9.8). It performs no I/O, callback or wait (§2.2).
+   - **Lock order:** the exchange mutex, then the core's internal locks. No thread requests the exchange mutex while it holds a core lock. The worker takes only the exchange mutex; the owner thread calls the core only outside the exchange mutex, except through the gate; the control thread copies the core's state and the recorder status in separate steps.
 5. **Advisory scope.** The locks exclude cooperating owners and maintenance (§13.1), not domain-A processes.
+6. **Poisoning (R2).** A panic while the exchange mutex is held poisons it. Unlike the core's `lock()` helper (`core.rs:367-371`), the store never treats a poisoned exchange as usable: every acquisition checks, and the first that finds it poisoned latches the fatal cause `Poisoned` (§9.5). The state read afterwards serves only to report.
 
 ### 8.3 Behaviour by case [M: C05]
 
 | Case | Locks | Custody | Notes |
 |---|---|---|---|
 | Normal closure | Held until exit | `close()` returns `Ok`; the seal is written; the process exits | Released by exit |
-| Recorder panic or worker disconnect | Held by `StoreGuard` | Kept. The owner latches recorder loss and reports `record_failed` (§9.5). Closure is refused for good (`core.rs:3012-3015`) [S]. | The process stays until administrative destruction, and the store is Busy for everyone else |
+| Recorder panic or worker disconnect | Held by `StoreGuard` | Kept. Loss is latched by the drop guard, or by the owner's join-handle check. Admission is refused at once (§9.8). The failure is reported at the core's next unacknowledged record once one is issued (§9.5); from then on closure is refused for good (`core.rs:3012-3015`) [S]. With every issued record acknowledged and nothing held, `close()` may still return `Ok`, but the seal is withheld (§9.9). | The process stays until administrative destruction or exit, and the store is Busy for everyone else meanwhile |
 | Failed startup, before the claim | Held during the scan | NotStarted and untouched; it closes | Released by exit |
-| Failed claim | Held | NotStarted and untouched (no record was issued, §10.2); it closes | The file stays an abandoned claim or a header-only journal (§11.1). Released by exit. |
-| Failed append | Held | Kept; fail-stop; closure refused | As for recorder panic |
-| Failed seal | Held until exit | Already closed; nothing native | The seal may stay kernel-visible, and is then still true: `close()` returned `Ok`. Once eviction or power loss removes it, the generation is unsealed, and a startup refuses it if it recorded an action start [M: C05]. |
+| Failed claim, including recorder loss during the claim | Held | NotStarted and untouched (no record was issued, §10.2). The latch turns `Requested` into `Failed` [M: C18]; it closes. | The file stays an abandoned claim or a header-only journal (§11.1). Released by exit. |
+| Failed append | Held | Kept. The failure is latched; admission refused at once; reported at the next unacknowledged record (§9.5) | As for recorder panic |
+| Failed seal | Held until exit | Already closed; nothing native | The seal may stay kernel-visible, and is then still true: `close()` returned `Ok`. Once page reclaim, inode eviction or power loss removes it, the generation is unsealed, and a startup refuses it if it recorded an action start [M: C05]. |
 | I/O blocked in the kernel | Held | Kept; the owner stays responsive (§14.1) | A process cannot finish exiting while a thread is in uninterruptible I/O, so the locks stay held until that I/O ends |
+
+### 8.4 Maintenance session objects (R2)
+
+A maintenance session (§13.1) is one root process. It is a specified future interface; no executable exists or is authorized here.
+
+| Object | Kind | Retained by | Released | Notes |
+|---|---|---|---|---|
+| Store lock description, per state root the session holds | `LOCK_EX`, non-blocking, opened safely (§10.1) | The session object | Only at the session's end. Never converted to `LOCK_SH`, never unlocked early, never duplicated into another process. | Its existence, on the inode the `LOCK` entry currently names, is the session's authority (INV-15) |
+| Journal lock descriptions | `LOCK_EX`, non-blocking, on each pool file the procedure reads or replaces | The session object | At the session's end | In-session verification reads those files through them |
+| Selection (§10.5) | The revalidated `PROVISION` selection | The session object | Replaced only by re-selection under the session's own lock, after the session itself published `PROVISION` | — |
+| Verification scan descriptors | `LOCK_EX`, non-blocking, on pool files the session does not already hold | The in-session scan | Closed once that file is classified | Busy means a domain-A process holds it: Live |
 
 ---
 
-## 9. Recorder protocol (R5, D-5)
+## 9. Recorder protocol (R5, D-5; R2: total fatal-failure and admission contract)
 
 ### 9.1 Roles
 
-- **The owner thread** owns `Custody`. It calls `flush_records` (`core.rs:2958-2991`) with the exchange-backed sink, and applies durability to the core at safe points.
+- **The owner thread** owns `Custody`. It calls `flush_records` (`core.rs:2958-2991`) with the exchange-backed sink, applies durability to the core at safe points, and admits actions only through the store admission gate (§9.8).
 - **The worker** owns only the journal I/O description and its own position.
 
 ### 9.2 The exchange
 
 ```
-Exchange {                                   // one Mutex, held only for copies
+Exchange {                                   // one Mutex: copies, assignments, and the admission gate
   generation, capacity,                      // fixed at the claim
   slots: [Option<RecordIntent>; capacity],   // index = sequence − 1, allocated once
-  claim: ClaimState,                         // Requested(header) | Claimed | Failed(class)
-  seal:  SealState,                          // None | Requested(seal) | Sealed | Failed(class)
-  durable_through: u64,                      // set only by the worker, after W4 and W5
-  failed: Option<(u64, FailureClass)>,       // first sequence not established durable; latched
-  lost: bool,                                // recorder loss; latched
-  conflict: Option<(u64, Conflict)>,         // an invalid submission; latched
+  submitted_through: u64,                    // slots 1 ..= submitted_through are filled, contiguously
+  claim: ClaimState,                         // None | Requested(header) | Claimed | Failed
+  seal:  SealState,                          // None | Requested(seal) | Sealed | Failed
+  durable_through: u64,                      // set only by W6, and only while nothing is latched
+  fatal: Option<(Cause, u64)>,               // the first fatal cause, and P = durable_through then
+  later_causes: u64,                         // causes after the first, counted only
   pending: Option<(u64, Tick)>,              // the record in flight, for status only
 }
 ```
 
 The exchange holds **no message queue**, so nothing in it can fill up, overflow or be dropped.
 
+**The fatal latch.** R1 kept three latches (`failed`, `lost`, `conflict`) and delivered each only at one exact position. R2 has one latch for every fatal cause:
+
+| Cause | Latched by | When |
+|---|---|---|
+| `ClaimWrite`, `ClaimSync` | Worker | The claim's write, sync or identity recheck failed (§9.7) |
+| `Encode(n)`, `Write(n)`, `Sync(n, error)`, `Identity(n)` | Worker | W2, W3, W4 or W5 failed for record *n* (§9.4) |
+| `SealWrite`, `SealSync` | Worker | The seal's write or sync failed (§9.7) |
+| `WorkerLost` | The worker's drop guard | The worker unwinds |
+| `WorkerVanished` | Owner | The join handle has finished without a latched normal exit |
+| `InvalidSubmission(n, why)` | Sink | Before `Claimed`; another generation; sequence 0 or beyond capacity; a future sequence (§9.3) |
+| `Conflict(n)` | Sink | A submission for an already submitted sequence with a different digest, acknowledged or not |
+| `UnexpectedAck(n, outcome)` | Owner's apply step | `acknowledge` returned anything but `Acknowledged` (§9.4) |
+| `Poisoned` | The first acquisition that finds the mutex poisoned | A panic while the mutex was held (§8.2 rule 6) |
+
+Latching is one critical section. If nothing is latched, it records the cause and **P = `durable_through`** at that instant, and a `Requested` claim or seal becomes `Failed`. Otherwise it only counts the cause. The latch is never cleared.
+
 ### 9.3 Submission: `RecordSink::submit`
 
-Submission is non-blocking apart from the short copy, and idempotent:
+Submission is non-blocking apart from the short critical section, idempotent and contiguous. The conditions are checked in this order:
 
 | Condition | Effect |
 |---|---|
-| Before `Claimed`; sequence 0; beyond capacity; another generation | Latch `conflict`, which is fatal |
-| Slot empty | Store the intent |
-| Slot holds the same digest | **No effect.** This is a duplicate, such as a re-submission after a sink panic (`core.rs:2974-2985`) [S]. |
-| Slot holds a different digest | Latch `conflict` |
+| A cause is latched, or the mutex is poisoned (then `Poisoned` is latched first) | No effect. The record stays issued and never becomes durable; §9.5 reports the failure. |
+| Claim not `Claimed` | Latch `InvalidSubmission` (before the claim) |
+| Another generation | Latch `InvalidSubmission` (foreign) |
+| Sequence 0, or beyond capacity | Latch `InvalidSubmission` (out of range) |
+| Sequence ≤ `submitted_through`, same digest | **No effect.** This is a duplicate, such as a re-submission after a sink panic (`core.rs:2974-2985`) [S]. |
+| Sequence ≤ `submitted_through`, different digest | Latch `Conflict(n)`. This includes a conflict on an acknowledged record, whose acknowledgement stays true. |
+| Sequence = `submitted_through` + 1 | Store the intent; `submitted_through` advances |
+| Sequence > `submitted_through` + 1 | Latch `InvalidSubmission` (future). The core submits in order (`core.rs:2958-2991`) [S], so a gap is an integration defect. It is never stored silently. |
 
 After storing, the sink wakes the worker with a condition-variable hint. A missed hint is harmless, because the worker also rechecks the slots on each loop. Two cases need no special handling:
 - **A panic after the store, before `submit` returns.** The core keeps the record unsent and records a failure. Its next flush resubmits the same intent, which is a no-op.
@@ -755,58 +858,52 @@ The worker's loop works on `next = durable_through + 1`:
 
 | Step | Action |
 |---|---|
-| W1 | If `slots[next]` is present and nothing is latched, copy it and set `pending` |
+| W1 | Under the mutex: if nothing is latched and `slots[next]` is present, copy it and set `pending` |
 | W2 | `codec::encode_record` must succeed (it refuses a digest mismatch, `codec.rs:230-236`) [S] and give 73 to 123 bytes |
 | W3 | `pwrite` the 4096-byte block (frame, then zeros) at offset 4096 × (next + 1). Loop on short counts. A zero-progress result or EINTR is retried at most 3 times, then poisons. |
 | W4 | `fdatasync` on the I/O description. EINTR is retried at most 3 times; any other result is final. |
 | W5 | Identity recheck: `fstat` of the I/O description shows `st_nlink == 1` and an unchanged size, and `fstatat(journals_fd, name, AT_SYMLINK_NOFOLLOW)` shows the same inode |
-| W6 | Under the mutex: set `durable_through = next`, clear `pending`, wake the owner |
+| W6 | Under the mutex: **only if nothing is latched and the mutex is not poisoned**, set `durable_through = next`, clear `pending` and wake the owner. Otherwise publish nothing and stop: the block may be durable, but it is never acknowledged. |
 
-Any failure in W2 to W5 latches `failed = (next, class)` and stops all writing.
+A failure in W2 to W5 latches its cause and stops all writing. The W6 check and the assignment share one critical section with every latch, so each publication either precedes the latch, and P includes it, or never happens. A latch that arrives while the worker is anywhere between W1 and W6 therefore stops that record's publication [M: C18, C19].
 
 The owner's apply step runs at safe points and never blocks:
-1. Copy `durable_through`, `failed`, `lost` and `conflict`. The copied `durable_through` is the delivered position.
-2. For each sequence from `applied_through + 1` up to the delivered position, call `acknowledge(RecordAck { id, digest })`, built from the owner's own retained intent. The result must be `Acknowledged`; then `applied_through` advances.
-3. Any other outcome latches an owner-side integration fault and stops flushing.
+1. If the join handle has finished without a latched normal exit, latch `WorkerVanished`.
+2. Under the mutex, copy `durable_through` and `fatal`. After a latch the copied position is at most P, because no publication follows a latch. The copied `durable_through` is the delivered position.
+3. For each sequence from `applied_through + 1` up to the delivered position, call `acknowledge(RecordAck { id, digest })`, built from the owner's own retained intent. On `Acknowledged`, `applied_through` advances. Any other outcome (`NotIssued`, `Duplicate`, `Conflict`, `LedgerFailed`, `OutOfOrder`, `Foreign`, or `ClockRegression`) latches `UnexpectedAck(n, outcome)` and stops application for good. It is never retried and never counted as delivered.
+4. If a cause is latched, run failure delivery (§9.5).
 
-The protocol keeps four positions apart:
+The owner applies after every `flush_records` call, at every safe point, and on each wake-up hint.
+
+The protocol keeps five positions apart:
 
 | Position | Holder | Meaning |
 |---|---|---|
-| Last durably written | Worker: `durable_through` | Set after W5 |
+| Last durably written | Worker: `durable_through` | Set at W6; never beyond P |
 | Last delivered | Owner: its latest copy of `durable_through` | A read of state; it cannot be lost or duplicated |
-| Last applied by the core | Owner: `applied_through`, equal to `EvidenceView.acknowledged` (`model.rs:837-845`) [S] | — |
-| First not established durable | `failed.0`; after recorder loss, `durable_through + 1` | — |
+| Last applied by the core | Owner: `applied_through`, equal to `EvidenceView.acknowledged` (`model.rs:837-845`) [S] | At most P after a latch |
+| P | The latch | `durable_through` when the first cause latched. No sequence beyond P is ever published or acknowledged (INV-4). |
+| First not established durable | The core's next unacknowledged record, `applied_through + 1` | Where the failure is delivered (§9.5) |
 
-Order of application does not imply that the core has applied earlier records. The owner always applies every acknowledgement up to the delivered position first (§9.5).
+**Duplicates.** A duplicate submission is a no-op. Each sequence is acknowledged to the core exactly once, from state. Re-acknowledgement does not exist. An `acknowledge` result of `Duplicate` would mean an owner defect, and latches `UnexpectedAck` [M: C07, C18].
 
-**Duplicates.** A duplicate submission is a no-op. Each sequence is acknowledged to the core exactly once, from state. Re-acknowledgement does not exist. An `acknowledge` result of `Duplicate` would mean an owner defect, and is treated as an integration fault [M: C07].
+### 9.5 Failure delivery
 
-### 9.5 Failure delivery and poisoning
+Failure delivery runs at the end of every apply step while a cause is latched and no failure has been reported:
+1. If the core's ledger has already failed, nothing more is reported.
+2. Let the **target** be the core's next unacknowledged record: `EvidenceView.acknowledged + 1`. If the core has not issued it yet, report nothing now. No record exists that could truthfully be failed, and `Ledger::fail` would return `NotIssued` (`core.rs:1072-1090`) [S]. Delivery runs again at the next apply step.
+3. Otherwise call `record_failed(id_target)` once and expect `FailureRecorded`. The core fail-stops: it closes admission with `ClosureReason::Failed(RecordFailed)`, accepts no later acknowledgement, issues no terminal record after it and never closes (`core.rs:3012-3031`, `core.rs:3046-3069`) [S]. Any other outcome is recorded as an integration fault, never retried, and never counted as delivery.
 
-When `failed = (f, class)`:
-1. The owner first applies every acknowledgement up to `durable_through`, which equals f − 1.
-2. It then calls `record_failed(id_f)` (`core.rs:3016-3031`) [S] and expects `FailureRecorded`.
-3. The core fail-stops: every later acknowledgement is `LedgerFailed`, and closure is refused for good (`core.rs:1072-1090`, `core.rs:3012-3015`) [S].
+What this keeps, whatever the cause:
+- **True acknowledgements stay.** Everything published before the latch is applied, including after a conflict on an acknowledged record. Nothing is retracted.
+- **No record is invented.** The target is a record the core really issued. `NotIssued`, `Conflict`, `Foreign` and `OutOfOrder` never count as success.
+- **The failure lands at the first record not established durable.** For a conflict at record 6 with P = 3, the target is record 4: records 4 to 6 were never published.
 
-**Recorder loss** (`lost`) is latched in either of two ways:
-- by the worker's drop guard, while it unwinds;
-- by the owner, when the join handle has finished without a latched normal exit.
-
-The owner then treats `durable_through + 1` as the first record not established durable:
-- **if that record has been submitted,** the owner reports it once `applied_through` equals `durable_through`;
-- **otherwise,** the owner reports it as soon as the core issues it, and flushes nothing further.
-
-`conflict` is handled like `failed`, at the conflicting sequence.
-
-These signals are latched state:
-- they never wait for queue space;
-- they cannot be lost in delivery;
-- they are never cleared.
-
-**No undelivered signal is ever treated as delivered, and no failure is treated as durable** [M: C08].
+**Until the target exists** the core's own state does not show the failure. Admission is nevertheless refused at once, by the store gate (§9.8), and the owner's status shows the latched cause (§14.1). API-5 would close that gap (§2.3).
 
 A failed sync is never retried, and nothing is acknowledged after one. errseq reports an error once per description, so a retry can return 0 for data that was lost ([U]; corroborated by PostgreSQL `data_sync_retry`) [M: C15]. The record may or may not be durable; startup treats whatever is visible as evidence (§4.4).
+
+**No undelivered signal is ever treated as delivered, and no failure is treated as durable** [M: C08, C18].
 
 ### 9.6 Stall semantics [D-5]
 
@@ -814,8 +911,9 @@ A failed sync is never retried, and nothing is acknowledged after one. errseq re
 |---|---|
 | Admission while a record is pending | Refused by the core. A start record must be acknowledged, and a new case or the terminal commitment needs everything acknowledged (`core.rs:1658-1675`, `core.rs:1542-1544`, `core.rs:2663-2669`) [S]. |
 | Failure on stall | **None.** A stall is neither a failure nor latched as one. Status shows "record *n* pending since *t*" (§14.1). |
-| Late completion: the stalled write and sync succeed | `durable_through` advances and the acknowledgement is applied late; progress resumes |
-| Late completion: they fail | Latched as a failure; then §9.5 |
+| A stall versus a fatal cause (R2) | A stall has a pending record, nothing latched, and may resume. A fatal cause is latched, refuses admission at once (§9.8) and never resumes. No fatal cause is reported or treated as a stall, and no stall as a failure. |
+| Late completion: the stalled write and sync succeed | `durable_through` advances, if nothing has latched meanwhile, and the acknowledgement is applied late; progress resumes |
+| Late completion: they fail | Latched; then §9.5 |
 | Recorder loss | Latched; then §9.5 |
 | Timeouts | Never become an acknowledgement or a failure. Timing out a waiting thread does not cancel a kernel operation. |
 | Operator action | Administrative destruction of the process only. That is authority loss, and refusal follows (§11.2). |
@@ -826,16 +924,66 @@ A failed sync is never retried, and nothing is acknowledged after one. errseq re
 1. Write the header block (§7.2).
 2. `fdatasync`.
 3. Recheck identity (W5).
-4. Publish `Claimed`, or latch `Failed`.
+4. Under the mutex: publish `Claimed` if nothing is latched. A failure latches `ClaimWrite` or `ClaimSync`, and a latch for any other cause, including recorder loss during the claim, turns `Requested` into `Failed` [M: C18].
 
 `start_run` is called only after `Claimed`.
 
-**Seal.** Requested after `close()` returns `Ok`:
+**Seal.** Requested only after `close()` returns `Ok`, and only while nothing is latched:
 1. Write the seal block (§7.3), with records equal to `durable_through`.
 2. `fdatasync`.
-3. Publish `Sealed` or `Failed`.
+3. Under the mutex: publish `Sealed` if nothing is latched, otherwise `Failed`.
 
-Nothing native is held by then, so the owner exits either way.
+A cause latched before the request **withholds the seal**. Nothing native is held by then, so the owner exits either way, and a restart sees an unsealed generation (§9.9).
+
+### 9.8 The store admission gate (R2)
+
+The integration calls `Custody::admit` only through the gate:
+
+```
+fn admit(gate, custody, reservation, now) -> Result<OpTicket, GateRefused> {
+    let exchange = gate.exchange.lock();       // poisoned: latch Poisoned, then refuse
+    if exchange.fatal.is_some() {
+        return Err(RecorderFatal);             // at once, without waiting for any record
+    }
+    custody.admit(reservation, now)            // still under the same guard
+}
+```
+
+- **Linearization.** The health check and the admission are one critical section of the exchange mutex, the mutex every latch takes. An admission therefore completes before the latch, or starts after it and is refused. **A check followed by an unprotected admission call is not sufficient**: a latch between the two would admit after a fatal condition [M: C19, NC19].
+- **Why holding the mutex is safe.** `Custody::admit` performs no I/O, callback or wait (§2.2), and the lock order of §8.2 rule 4 holds.
+- **In flight versus new.** An action admitted before the latch is in flight. It runs to its end, its owner is held, and cleanup proceeds; its later records are issued but never acknowledged. Every admission requested after the latch is refused with `RecorderFatal`.
+- **The reservation.** A refused reservation stays `Reserved` in the core. The owner ends the case: `end_case` settles the reservation as `NotAdmitted`, runs cleanup and issues `CaseEnded` (`core.rs:2157-2212`, `core.rs:1700-1704`) [S]. Those issued records give failure delivery its target (§9.5) [M: C18].
+- **No native start without a ticket.** The integration starts a native operation only with the `OpTicket` that the gate returned.
+- **Owner policy after a latch.** The owner refuses admissions, ends an open case, runs cleanup, keeps every owner held, keeps serving status and late owners, and calls `close()` only when the core permits it. It calls nothing that begins work (`start_run`, `begin_case`). It does not call `finish_run`: a commitment then would be decided before the core learns of the failure (§9.9).
+- **Without native ownership.** Publishing the failure never requires dropping the last owner. A failure with nothing held is still latched, refuses admission, withholds the seal, and makes restart refuse the generation if it recorded an action start [M: C18].
+
+### 9.9 Eight concerns kept apart (R2)
+
+| # | Concern | Holder | Rule |
+|---|---|---|---|
+| 1 | Recorder health | The exchange's fatal latch | Set once, with its first cause and P; never cleared; later causes counted |
+| 2 | Admission permission | The store admission gate, then the core's gate | Refused at once from the latch on (§9.8) |
+| 3 | Durability publication | W6 | Only while nothing is latched, so never beyond P |
+| 4 | Acknowledgement delivery and application | The owner's apply step | Exactly once per sequence, up to P. An unexpected outcome latches and stops. |
+| 5 | Evidence failure at a real record | Failure delivery (§9.5) | Only at the core's next unacknowledged record, only once that record is issued, and only once |
+| 6 | Committed core outcome | The core (`core.rs:2662-2687`) [S] | Never rewritten. A commitment whose terminal record was published before the latch becomes final, and its verdict is true. Any other commitment is never acknowledged, so the run is never final and the published verdict is never `Passed` (`core.rs:2710-2718`) [S]. |
+| 7 | Owner and store outcome; seal eligibility | The owner | The store outcome is `RecorderFatal` from the latch on. A seal is written only after `close()` returned `Ok` with nothing latched; otherwise it is withheld. |
+| 8 | Retained native custody and exclusion | `Custody` and `StoreGuard` | No fatal cause changes them: owners stay held, cleanup runs, and the locks stay until process exit (§8) |
+
+### 9.10 The F1 cases
+
+Each was reproduced on the R1 model first (§19.3).
+
+| Case | R1 | R2 [M: C18, C19] |
+|---|---|---|
+| A: worker loss with three records acknowledged and none issued since | Never delivered, since record 4 did not exist; admission still permitted | `WorkerLost` with P = 3. Admission is refused at once. The failure is delivered at record 4 once ending the case issues it. |
+| B: a conflicting duplicate of acknowledged record 1 | Latched and never delivered. R1's INV-4 ("nothing at or after 1 acknowledged") contradicted three applied acknowledgements. | `Conflict(1)` with P = 3. Acknowledgements 1 to 3 stay. The failure lands at record 4. |
+| C: sequence zero, out of range, foreign or future; a conflict beyond the next unapplied record | Latched and never delivered; the future sequence was stored silently; admission still permitted | `InvalidSubmission` or `Conflict`. The failure lands at the core's next unacknowledged record. |
+| D: loss between a durable reservation and its admission | Admission permitted | The gate refuses `RecorderFatal`. `end_case` settles the reservation `NotAdmitted`, and the failure lands at record 4. |
+| E: an append in flight when another cause latches | The record in flight was published and acknowledged after the latch | W6 refuses. P stays, and the record in flight is the one failed. |
+| F: loss during the claim or the seal; a failure with no native ownership left | Claim and seal stayed `None`: neither failed nor completed | `Requested` becomes `Failed`. With nothing held, `close()` may return `Ok`, the seal is withheld, and restart refuses an unsealed generation with an action start. |
+| An unexpected acknowledgement outcome | An unspecified integration fault | `UnexpectedAck`. Application stops, and the failure lands at that record. |
+| A poisoned mutex; the worker unwinding | Not specified | `Poisoned`; `WorkerLost` (or `WorkerVanished` if no drop guard ran) |
 
 ---
 
@@ -862,11 +1010,11 @@ For each entry, before it is opened:
 | Step | Action | Refuses with |
 |---|---|---|
 | 0 | Configuration: `record_capacity` ≤ C_pool, `incident_limit` ≤ 32 | Unsupported |
-| 1 | Parse `PROVISION` (§7.5), opened safely and read with a limit | Unprovisioned, Invalid |
-| 2 | Open `<STATE_ROOT>`; identify ext4 through the mount (§6.4); check block size, page size, the link sysctls and the ancestors | Lost, Unsupported |
-| 3 | Open `LOCK` safely and take `flock(LOCK_EX | LOCK_NB)` | **Busy**, before any journal content is touched [M: C06] |
+| 1 | Select `PROVISION` (§10.5): open it safely, read it with a limit and parse it (§7.5). The result is only a candidate selection. | Unprovisioned, Invalid |
+| 2 | Open the candidate's `<STATE_ROOT>`; identify ext4 through the mount (§6.4); check block size, page size, the link sysctls and the ancestors | Lost, Unsupported |
+| 3 | Open `LOCK` safely and take `flock(LOCK_EX \| LOCK_NB)`. Then revalidate the selection (§10.5). On a mismatch, close every descriptor of this attempt, which releases the lock, and return to step 1, at most three selections in all. | **Busy**, before any journal content is touched [M: C06]; **SelectionChanged** after three failed revalidations [M: C21] |
 | 4 | Enumerate the store directories, entry names only. Every name must be accepted (§7.5); each entry is type-checked as in §10.1 step 1. | Invalid, MaintenanceIncomplete, Lost |
-| 5 | For each pool file, in index order: <ul><li>open it safely;</li><li>take `flock(LOCK_SH | LOCK_NB)`; failure means **Live**, and the file is neither synced nor read;</li><li>`fdatasync` to preserve evidence; EIO refuses as **Unreliable**;</li><li>read the file and classify it (§11.1);</li><li>close it, which releases the shared lock.</li></ul> | Live, Unreliable |
+| 5 | For each pool file, in index order: <ul><li>open it safely;</li><li>take `flock(LOCK_SH \| LOCK_NB)`; failure means **Live**, and the file is neither synced nor read;</li><li>`fdatasync` to preserve evidence; EIO refuses as **Unreliable**;</li><li>read the file and classify it (§11.1);</li><li>close it, which releases the shared lock.</li></ul> | Live, Unreliable |
 | 6 | Archive: safely open each entry and read blocks 0 and 1 (§11.3) | Invalid |
 | 7 | Dispositions: read and validate every file (§13.4) | Invalid |
 | 8 | Pool-level checks (§11.3); then split the incidents into history and current (§13.5). More current incidents than `incident_limit` refuse (§13.10). | Invalid, Capacity |
@@ -875,7 +1023,8 @@ For each entry, before it is opened:
 
 - **No record before the claim.** Until the claim is published, the owner serves no control request and calls no core method that could issue a record. A refused or failed claim therefore leaves an untouched NotStarted custody. Its `close()` is permitted, since nothing was issued (`core.rs:2881-2924`) [S], and the process exits.
 - **No writes before step 10.** Startup writes no store byte before then.
-- **Disclosed persistence effect.** The step 5 sync makes pending visible bytes durable (§4.6).
+- **Disclosed persistence effect.** The step 5 sync makes the pages still dirty durable, and nothing more (§4.6).
+- **Every refusal is reported with the selection's revision** (§10.5), so a report names the `PROVISION` it was made against.
 
 ### 10.3 Scan-to-claim handoff
 
@@ -892,6 +1041,29 @@ For each entry, before it is opened:
 |---|---|
 | Root directory, journals directory, store lock description, journal lock description (all in `StoreGuard`) | Scan descriptors; archive directory and entries; dispositions directories and files; `PROVISION`; `mountinfo` |
 | The worker's I/O description (until the worker ends) | |
+
+### 10.5 `PROVISION` selection and revalidation (R2)
+
+**The selection.** A selection is a tuple: the `PROVISION` inode and device; the SHA-256 of the complete bytes read; the `revision` and root id they carry; and the state-root and `LOCK` inodes they record. Reading `PROVISION` yields a **candidate**. A selection becomes **authoritative** only for a process that holds the store lock on that selection's `LOCK` and has then revalidated it. A path, a cached configuration, an old descriptor, a PID, or a revision number on its own confers nothing.
+
+**Revalidation**, after the lock is held [M: C21]:
+1. A fresh `fstatat` of `<PROVISION_PATH>`, reached by the component walk of §10.1, shows the selected inode. This is never checked through the descriptor kept from the read: that descriptor still names the original inode after a replacement [NC21b].
+2. A fresh safe open and read gives the selected SHA-256.
+3. A fresh lookup of `<STATE_ROOT>` shows the selected root inode.
+4. The `LOCK` entry in that root names the selected `LOCK` inode, and `fstat` of the locked description shows the same inode.
+
+On any mismatch the process closes every descriptor of the attempt, which releases the lock, and selects again. After three selections it refuses as **SelectionChanged**. It never waits and never retries without bound.
+
+**Why this suffices among cooperating processes.** `PROVISION` names one state root at any instant. A rewrite or a succession happens only inside a maintenance session that holds the selected root's lock (§13), and every publication changes the bytes, because `revision` increases. Hence:
+- a reader that selected before a rewrite and locked after it fails step 1 or 2 and re-selects;
+- a session cannot begin while an owner holds the lock, so nothing is rewritten under a live owner;
+- the session locks a successor's root before publishing its `PROVISION` (§13.6). No owner can start on the successor until the session ends, and after the publication no process can revalidate the predecessor.
+
+Two cooperating owners therefore never both hold an authoritative selection, whether of the same root or of a predecessor and its successor [M: C21].
+
+**Stale readers and open descriptors.** A process that holds an old `PROVISION` descriptor, an old root descriptor or an unlinked pool inode gains nothing, because authority comes only from a revalidated selection. Domain A is outside this argument: the locks are advisory (§8.2 rule 5), gate G-AUTH stays open, and nothing here protects against root or kernel compromise.
+
+**Where it applies.** Ordinary opening (§10.2), the standalone verifier (§13.11), the beginning of every maintenance session (§13.1), and a session's re-selection after its own publication (§13.3). The model exercises ordinary opening, re-qualification, recycling, retirement, successor publication and the bounded retry [M: C21].
 
 ---
 
@@ -946,6 +1118,8 @@ An unsealed generation where native work is possible carries two uncertainty not
 - "an owner surfacing after `close()` is outside custody (§14.4)".
 
 [M: C09, C16]
+
+**Bounded report (R2).** A report lists at most 64 incidents in full: those without a claim first, then in claim order, then by pool index and binding. It always carries the exact total of incidents, the number that are current, and a **partial** flag, set whenever detail was omitted. Every decision uses the complete incident set, never the listed detail: the refusal, the priors passed to `Custody::new`, the applied list of the claim header, the Capacity refusal, and the preconditions of every §13 procedure. A partial report is never presented as complete, and a truncated set never authorizes execution or retirement [M: C24].
 
 ### 11.3 Pool-level and archive checks
 
@@ -1052,7 +1226,7 @@ The model checks the following [M: C13]:
 | INV-1 | **Acknowledged implies durable.** Every acknowledgement the core applied names a block that was durable when `durable_through` was published. | H | C15 |
 | INV-2 | **Write-ahead.** Every action the core admitted has a durable `ActionStarted`: admission needs the acknowledgement (`core.rs:1658-1664`) [S], and INV-1 holds. | H | C15, C16 |
 | INV-3 | **No false resolution.** Suppose that at a crash point the custody held, had open or had lost any native owner or operation, or had been delivered a late owner (recorded or not). Then restart refuses. | H | C09, C16 |
-| INV-4 | **No acknowledgement after an error or loss.** After a latched failure, recorder loss or conflict at sequence *f*, no sequence ≥ *f* is acknowledged. | H, M (recorder behaviour) | C08, C15 |
+| INV-4 | **Nothing beyond P (R2).** Let P be `durable_through` when the first fatal cause latched: an I/O failure, recorder loss or vanishing, an invalid or conflicting submission, an unexpected acknowledgement outcome, or a poisoned mutex. No sequence beyond P is ever published or acknowledged. Acknowledgements up to P are applied and never retracted, whatever the cause, including a conflict on an already acknowledged record. The core is told of the failure only at its next unacknowledged record, only once that record is issued, and once. | H, M (recorder behaviour) | C08, C15, C18, C19 |
 | INV-5 | **Totality and bounds.** Classification terminates with bounded memory and reads (§6.6, §7.7). | H, M, S | C10, C17 |
 | INV-6 | **Determinism.** Equal bytes give equal classes, reports and bindings. | all | C11 |
 | INV-7 | **Binding sensitivity.** Any byte change in a journal changes its binding, which explicitly makes a disposition stale. | all, assuming SHA-256 collision resistance [A] | C11 |
@@ -1060,7 +1234,12 @@ The model checks the following [M: C13]:
 | INV-9 | **Seal meaning.** A valid seal means `close()` returned `Ok`. | **H only.** In domain A an unkeyed seal proves nothing. | C16 |
 | INV-10 | **Exclusion.** While an owner is alive, no cooperating owner or maintenance procedure acquires the store lock. Recorder failure does not change this. | H | C05, C06 |
 | INV-11 | **Report honesty.** Recorded-unsettled sets are exact for the prefix. No identity is invented. Completeness is claimed only when sealed. Durability is never claimed from a new description's sync. | H, M | C03, C09 |
-| INV-12 | **Administrative atomicity.** No partial disposition, `PROVISION` or archive entry is accepted. Retirement cannot exclude unresolved, undispositioned history. A changed binding is never silently honoured. | H, with the Owner following §13 | C11, C12 |
+| INV-12 | **Administrative atomicity.** No partial disposition, `PROVISION` or archive entry is accepted, under every permitted metadata schedule (§4.8). Retirement cannot exclude unresolved, undispositioned history. A changed binding is never silently honoured. | H, with the Owner following §13 | C11, C12, C22 |
+| INV-13 | **Admission fence (R2).** Every admission that returned `Admitted` linearized before the fatal latch; from the latch on, every admission is refused without calling the core's admission. No native operation starts without an admission. | H | C18, C19 |
+| INV-14 | **Selection authority (R2).** An owner, a verifier or a maintenance session acts on a `PROVISION` selection only after revalidating it under the store lock (§10.5). Two cooperating owners never both hold an authoritative selection. | H | C21 |
+| INV-15 | **Session authority (R2).** Maintenance verification and mutation run only under the session's retained exclusive lock descriptions, never through a new lock request, a conversion, a release, or an asserted identity. Competitors stay excluded for the whole session. | H, with the Owner following §13 | C20 |
+| INV-16 | **Bounded aggregates (R2).** Every directory is counted against its bound before any entry is examined. Reports beyond their detail bound say they are partial. Every decision uses the complete set. | H, M, S | C17, C24 |
+| INV-17 | **Protocol parity (R2).** Every durability operation the model performs is a written protocol step, in the written order, and the crash matrix of §15.2 is the one the model computes. | Model | C22, C23 |
 
 **Why INV-3 holds.**
 - Any native owner arises from an admitted action, so its `ActionStarted` is durable (INV-2) and therefore visible at every later startup in domain H.
@@ -1097,22 +1276,27 @@ The model checks the following [M: C13]:
 
 ---
 
-## 13. Administrative procedures (D-7, D-8, R9)
+## 13. Administrative procedures (D-7, D-8, R9; R2: maintenance sessions)
 
 ### 13.1 Common rules
 
-Every procedure is **offline and performed by root**:
+Every procedure is **offline and performed by root**, inside one **maintenance session** (R2). The session is a specified future interface, a maintenance mode of the owner binary for a later mission. Nothing here authorizes a provisioning executable or a privileged service.
 
-1. **Store lock.** Hold the store lock exclusively and non-blocking for the whole procedure, as in `flock -n <STATE_ROOT>/LOCK <procedure>`; never use `-o` (`flock(1)`) [U]. If the lock is busy, abort. **Root is not exempt.** A step performed without the lock is outside the procedure and unsupported, and the verifier cannot detect it.
-2. **Journal locks.** Take `LOCK_EX | LOCK_NB` on every pool file the procedure reads or replaces.
-3. **Verify before.** Run the read-only verifier (§13.11) and confirm the procedure's preconditions.
-4. **Persistence order.**
-   - Write each new file under a `.tmp-` name in its target directory and `fsync` it.
+1. **Begin.** The session selects `PROVISION` (§10.5), opens `LOCK` safely, and takes `LOCK_EX | LOCK_NB` on a description it retains. Busy aborts the session. It then revalidates the selection (§10.5). **Root is not exempt**: a step performed outside a session is outside the procedure and unsupported, and the verifier cannot detect it.
+2. **Retain.** The session keeps that description, and every journal lock description it takes, until it ends. It never calls `LOCK_UN`, never converts a lock to `LOCK_SH`, never closes a lock description early, and never passes one to another process. R1's `flock -n <STATE_ROOT>/LOCK <procedure>` wrapper is replaced, because it could not verify: the standalone verifier takes a shared lock and is Busy inside every procedure [M: C20, NC20a].
+3. **Journal locks.** It takes `LOCK_EX | LOCK_NB` on every pool file the procedure reads or replaces, and keeps it. Busy aborts.
+4. **Verify before**, in-session (§13.11), and confirm the procedure's preconditions from the complete report (§11.2).
+5. **Persistence order.**
+   - Write each new file under its temporary name in its target directory, created exclusively (`O_CREAT | O_EXCL | O_NOFOLLOW`), and `fsync` it.
    - Publish it with `link` (no-replace: EEXIST aborts) or `rename` (atomic replacement).
    - `fsync` each changed directory after publication (`fsync(2)`, `link(2)`, `rename(2)`) [U].
-5. **Verify after.** Run the verifier again.
+   - Every operation is listed, in order, in §15.3. No other durability operation is performed [M: C23].
+6. **Verify after**, in-session.
+7. **End.** Close the session's descriptors, which releases its locks.
 
-**Leftover temporary files.** A `.tmp-` entry left in a store directory by an interrupted procedure refuses opening as **MaintenanceIncomplete** (§7.5). The Owner removes it, or completes the procedure, under the lock. Opening never reads, uses or removes it.
+**Nested procedures.** A procedure that includes another (recycling and retirement include the §13.3 rewrite; succession includes §13.2 steps 2 to 4) runs it in the same session, within the same lock lifetime. Verify-before, every step, any re-selection and verify-after share one session. No competitor can enter between them [M: C20].
+
+**Leftover temporary entries.** A `.tmp-` entry left in a store directory by an interrupted procedure refuses opening as **MaintenanceIncomplete** (§7.5). Opening never reads, uses or removes it. A leftover `<PROVISION_PATH>.tmp` or `<PROVISION_PATH>.predecessor.tmp` is never read and makes the next exclusive create fail. **Recovery** is a session that unlinks each leftover temporary entry, `fsync`s each directory changed, verifies, and then completes or repeats the interrupted procedure (§15.2) [M: C12].
 
 **Existing descriptors.** Ownership changes never use `chown` or `chmod` on a file the store uid may hold open, because neither revokes an existing descriptor. Procedures copy into new root-owned inodes (archival) or replace names (recycling).
 
@@ -1121,7 +1305,7 @@ Every procedure is **offline and performed by root**:
 - recycling a Malformed pool file that has not been dispositioned and archived;
 - automatic archival, recycling or retirement.
 
-Each procedure's crash points are listed in §15.2 [M: C12].
+Each procedure's crash points are listed in §15.2 and its operations in §15.3 [M: C12, C22, C23].
 
 ### 13.2 Initial provisioning (manual; no executable) [D-8]
 
@@ -1131,35 +1315,39 @@ Each procedure's crash points are listed in §15.2 [M: C12].
    - block size 4096 and page size 4096;
    - sysfs logical and physical block sizes for the mount's major:minor, each dividing 4096;
    - `write_cache` recorded;
-   - the A-S1 to A-S4 attestation for the device.
+   - the filesystem has a journal and no `fast_commit` feature (A-M1, §4.8);
+   - the A-S1 to A-S4 and A-M1 attestation for the device.
 2. **Create directories.** Create `<STATE_ROOT>`, `journals/`, `dispositions/`, `dispositions/revoked/` and `archive/`, each `root:root 0755`. `fsync` each, and its parent.
-3. **Create the lock.** Create `LOCK` as `uid:gid 0600`, empty, and `fsync` it.
+3. **Create the lock.** Create `LOCK` as `uid:gid 0600`, empty, and `fsync` it. Then `fsync <STATE_ROOT>`, which now holds the new entry (R2: the R1 model performed this sync without the text saying so).
 4. **Create the pool.** For each pool file, created under its final name in the still-unpublished root:
    - `fallocate` mode 0 for (C_pool + 2) × 4096 bytes; EOPNOTSUPP or ENOSPC aborts;
    - write zeros over the whole file and `fsync` it;
    - check with FIEMAP (`FIEMAP_FLAG_SYNC`) that every extent is written and unshared (§6.5).
 
    Then `fsync journals/`.
-5. **Publish `PROVISION`.** Write it to a temporary name in its directory and `fsync` it. Then `rename` it into place and `fsync` the directory.
-6. **Check.** Run the verifier as the store uid. It must report a fresh, openable store.
+5. **Publish `PROVISION`**, with `revision=1`. Write it to `<PROVISION_PATH>.tmp` and `fsync` it. Then `rename` it to `<PROVISION_PATH>` and `fsync` the directory.
+6. **Check.** Run the standalone verifier as the store uid. It must report a fresh, openable store.
 
-`PROVISION` is published **last**: until its rename is durable, the store is Unprovisioned.
+Provisioning runs before any store exists, so it has no session; nothing can select the store before step 5. `PROVISION` is published **last**. Until its rename is visible, every opening reports Unprovisioned. Between the rename and the directory sync, an opening after F1 sees the fresh store, and after F2 either outcome. After the sync the store is fresh (§15.2).
 
 ### 13.3 Rewriting `PROVISION`
 
-Used by recycling, retirement and re-qualification:
-1. Take the store lock.
-2. Write the complete new content to a temporary file, and `fsync` it.
-3. `rename` it over `PROVISION`, and `fsync` the directory.
-4. Verify.
+Used by recycling, retirement and re-qualification, always inside the procedure's session:
+1. The session holds the store lock (§13.1).
+2. Write the complete new content, with `revision` one more than the current one, to `<PROVISION_PATH>.tmp`, and `fsync` it.
+3. `rename` it over `<PROVISION_PATH>`, and `fsync` the directory.
+4. **Re-select** under the session's own lock: read `<PROVISION_PATH>` by a fresh lookup and adopt it as the session's selection. The `LOCK` inode is unchanged, so the session's authority continues.
+5. Verify.
 
 `retired-through` and `predecessor` are the only fields that record retirement or succession. Both are root-owned.
+
+**Re-qualification.** When the mount options no longer match `PROVISION`, every opening refuses as Unsupported (§6.4). After re-qualifying the host (§13.2 step 1), the Owner rewrites `PROVISION` with the new option strings. Its session is begun in **re-qualification mode**: identical to §13.1 except that the option comparison of §6.4 step 5 is not applied to the stale strings being replaced; every other check, the lock and the revalidation still apply [M: C12, C21].
 
 ### 13.4 Disposition publication, reading and revocation
 
 **Publication:**
-1. Take the store lock.
-2. The verifier reports the incident and its binding.
+1. Begin a session.
+2. The in-session verification reports the incident and its binding.
 3. Write `dispositions/.tmp-<binding>` with exactly the §7.5 content, as `root:root 0444`, and `fsync` it.
 4. `link` it to `<binding>.disposition`. EEXIST aborts: the existing disposition must be revoked first.
 5. `unlink` the temporary file.
@@ -1176,12 +1364,12 @@ Used by recycling, retirement and re-qualification:
 Any failure refuses as **Invalid**. The validator given to `apply_disposition` returns a `ValidatedDisposition` only for a binding that has such a file whose fields equal the incident the store computed, including `recorded-unsettled` [M: C12].
 
 **Revocation:**
-1. Take the store lock.
+1. Begin a session.
 2. `rename` `<binding>.disposition` to `revoked/<binding>-<YYYYMMDDTHHMMSSZ>.disposition`.
 3. `fsync revoked/`, then `dispositions/`.
 4. Verify.
 
-After revocation, the incident blocks again (§13.5). If a crash leaves the file under both names, its link count is 2 and opening refuses as **Invalid**. That can happen where a rename across directories is not made durable atomically. The Owner completes the revocation by unlinking the `dispositions/` name and syncing that directory [M: C12]. For a `u`, `m` or `p-` archive entry, the store refuses as **Invalid** ("archive inconsistent") until the Owner publishes a disposition again; un-archiving is unsupported. Revoked files stay in `revoked/` as evidence.
+After revocation, the incident blocks again (§13.5). Under A-M1 the rename is atomic, so a crash leaves the disposition under exactly one name. Under the per-directory over-approximation (§4.8) a crash between the two syncs can leave both names; the link count is then 2, and opening refuses as **Invalid**. The Owner completes the revocation by unlinking the `dispositions/` name and syncing that directory [M: C12, C22]. For a `u`, `m` or `p-` archive entry, the store refuses as **Invalid** ("archive inconsistent") until the Owner publishes a disposition again; un-archiving is unsupported. Revoked files stay in `revoked/` as evidence.
 
 ### 13.5 History: applied or archived
 
@@ -1199,29 +1387,32 @@ A current incident becomes **history** in either of two ways. It is then no long
 
 A successor store replaces a store that cannot continue: for example a store that is Invalid, or a pool full of files that cannot be recycled.
 
-**Precondition.** The predecessor's verifier report shows that every bound incident (§12.3) has a valid disposition. The `predecessor-statement` names each store-level Invalid condition the report shows. Those conditions have no binding; the statement is the Owner's explicit, recorded acceptance of them.
+**Precondition.** The predecessor's in-session verification shows that every bound incident (§12.3) has a valid disposition. The `predecessor-statement` names each store-level Invalid condition the report shows. Those conditions have no binding; the statement is the Owner's explicit, recorded acceptance of them.
 
-**Steps:**
-1. Take the predecessor's store lock and keep it for the whole procedure. Save the verifier report.
-2. Provision the successor (§13.2):
-   - at a **new** `<STATE_ROOT>`, with a new root id;
-   - `predecessor` set to the old root id, and `predecessor-statement` filled in;
-   - before step 5 of §13.2, keep the old `PROVISION` as `<PROVISION_PATH>.predecessor-<old root id>` (written to a temporary name, `fsync`ed, `link`ed, and the directory `fsync`ed).
-3. The predecessor's state root is left unchanged, as evidence.
+**Steps** (R2: one session holds both stores' locks from before the successor can be selected):
+1. Begin a session on the predecessor and keep it for the whole procedure. Save the in-session report.
+2. Inside that session:
+   - **2a. Keep the predecessor's `PROVISION`.** Write a copy to `<PROVISION_PATH>.predecessor.tmp`, `fsync` it, `link` it to `<PROVISION_PATH>.predecessor-<old root id>`, `unlink` the temporary, and `fsync` the directory.
+   - **2b. Create the successor's store** at a **new** `<STATE_ROOT>`, with a new root id: §13.2 steps 2 to 4.
+   - **2c. Take the successor's lock, then publish.** Open the successor's `LOCK` safely and take `LOCK_EX | LOCK_NB` on a description the session retains. Only then write the successor `PROVISION` (`predecessor` set to the old root id, `predecessor-statement` filled in, `revision` one more than the predecessor's) to `<PROVISION_PATH>.tmp`, `fsync` it, `rename` it over `<PROVISION_PATH>`, and `fsync` the directory.
+   - **2d. Re-select** the successor under the session's lock on it (§13.3 step 4), and verify it in-session.
+3. End the session. The predecessor's state root is left unchanged, as evidence.
+
+**Predecessor retirement.** From the rename on, no process can revalidate the predecessor, because `PROVISION` no longer names it (§10.5). A startup that read the predecessor's `PROVISION` before the rename and locks after it fails revalidation and re-selects the successor, which is Busy until the session ends. No cooperating process ever treats both stores as current [M: C21].
 
 The successor never scans the predecessor. No unresolved incident is dropped silently: each needs its own disposition first, and each unbound condition is named in the statement.
 
 ### 13.7 Archival
 
-**Preconditions,** verified:
+**Preconditions,** verified in-session:
 - a pool file with a valid header that is Sealed (class `s`), unsealed without an action start (`n`), or unsealed with an action start (`u`) or Malformed (journal) (`m`) with a valid disposition; or
 - a Malformed (pool-file) file with a valid disposition (the `p-` form).
 
 AbandonedClaim files are not archived; they are recycled directly (§13.8).
 
 **Steps:**
-1. Take the store lock and the file's `LOCK_EX | LOCK_NB`.
-2. Read the file and compute its content SHA-256, and its binding where it has one.
+1. Begin a session and take the file's `LOCK_EX | LOCK_NB`.
+2. Read the file through that description and compute its content SHA-256, and its binding where it has one.
 3. Create `archive/.tmp-<name>` as `root:root 0444` (`O_CREAT | O_EXCL | O_NOFOLLOW`). Write the bytes and `fsync`. Re-read the copy and compare the digest.
 4. `link` it to its final name (§7.5).
 5. `unlink` the temporary file, then `fsync archive/`.
@@ -1233,27 +1424,36 @@ AbandonedClaim files are not archived; they are recycled directly (§13.8).
 
 ### 13.8 Recycling
 
-**Preconditions:** the pool file is archived and pending recycling (§11.3), or it is an AbandonedClaim.
+**Preconditions:** the pool file is archived and pending recycling (§11.3), or it is an AbandonedClaim. Both are read from the in-session report, which the Owner saves.
 
 **Steps:**
-1. Take the store lock and the journal lock.
+1. Begin a session and take the journal lock.
 2. Create `journals/.tmp-<index>` as `uid:gid 0600`. `fallocate` it, zero-fill it, `fsync` it, and check it with FIEMAP.
 3. `rename` it over `journals/j<index>.journal`, then `fsync journals/`.
-4. Rewrite `PROVISION` with the new inode (§13.3).
+4. Rewrite `PROVISION` with the new inode (§13.3), in the same session.
 5. Verify.
 
 **Evidence lost.** An archived file loses nothing, because the archive holds the bytes. An AbandonedClaim loses a header that never became valid; in domain H no record was ever written to it.
 
 **Old descriptors.** A store-uid process may still hold a descriptor on the old, now unlinked inode. That is harmless: the inode is no longer in the pool.
 
+**Resumption after a crash between step 3 and the end of step 4** (R2). Opening then refuses as **Lost**: the pool name holds an inode that `PROVISION` does not record. The Owner resumes in a new session:
+1. remove leftover temporaries (§13.1);
+2. the in-session verification must refuse with exactly that cause, for that index;
+3. the file now at the pool name, read through the session's journal lock, must be `uid:gid 0600`, have link count 1 and the pool-file size, and be all zero;
+4. the saved report of the interrupted session must show the old file archived and pending recycling, or AbandonedClaim;
+5. then rewrite `PROVISION` with the inode now at the pool name (§13.3) and verify.
+
+Anything else is not a resumption, and the store stays refused [M: C12].
+
 ### 13.9 Retirement
 
-**Preconditions,** for a new `retired-through` of K:
+**Preconditions,** for a new `retired-through` of K, evaluated over the **complete** incident set of the in-session report, never its listed detail (§11.2):
 - every claim at or below K is either archived as history (`j-`, §13.5) or a claim gap that is history (applied, with a valid disposition);
 - no pool file holds a claim at or below K.
 
 **Steps:**
-1. Take the store lock.
+1. Begin a session.
 2. Rewrite `PROVISION` with `retired-through=K` (§13.3).
 3. Verify.
 
@@ -1262,11 +1462,11 @@ AbandonedClaim files are not archived; they are recycled directly (§13.8).
 - claim gaps at or below K are no longer computed;
 - a revocation of their dispositions no longer re-opens them.
 
-**Retirement can never exclude unresolved, undispositioned history.** The preconditions are verified, and a pool claim at or below K refuses as Invalid [M: C12].
+**Retirement can never exclude unresolved, undispositioned history.** The preconditions are verified over the complete set, and a pool claim at or below K refuses as Invalid [M: C12, C24].
 
 ### 13.10 Incident-limit exhaustion
 
-If the current incidents exceed `incident_limit`, startup **refuses**. It reports the count and every incident. It never truncates the list, and never relabels an incident as resolved.
+If the current incidents exceed `incident_limit`, startup **refuses** as Capacity. It reports the exact count, and the incidents in detail up to the report bound, saying when the list is partial (§11.2). It never relabels an incident as resolved, and never decides from a truncated set.
 
 The only resolutions are acts of the Owner:
 
@@ -1276,20 +1476,30 @@ The only resolutions are acts of the Owner:
 | Provision a successor (§13.6) | — |
 | A future API or limit change (API-2, a gate) | — |
 
-### 13.11 Read-only verifier contract [D-8]
+### 13.11 Verification: standalone verifier and in-session verification [D-8]
 
-The verifier is a future mode of the owner binary, implemented in the later mission.
+Both are future modes of the owner binary, implemented in the later mission. They run the same checks and differ only in their authority.
 
-- **Locking.** It takes `LOCK_SH | LOCK_NB` on the store lock; if an owner is live, it reports Busy. It writes nothing and syncs nothing, so it reports the kernel-visible state, not the durable state (§4.3).
-- **Checks.** It performs:
-  - §10.1;
-  - §10.2 steps 0–2 and 4–8, without the evidence-preservation sync;
-  - all of §11.
+**The standalone verifier**, outside maintenance:
+- **Locking.** It selects and revalidates `PROVISION` (§10.5) and takes `LOCK_SH | LOCK_NB` on a new description of the store lock. If an owner or a maintenance session holds the lock, it reports **Busy**. Busy is never success: it has its own exit status and report, and nothing is verified [M: C20, NC20d].
+- **It writes nothing and syncs nothing**, so it reports the kernel-visible state, not the durable state (§4.3).
 
-  It reports every condition it finds rather than stopping at the first.
-- **Report.** The store state; each file's class and report (§11.2); the current incidents and their bindings, with disposition status; history; stale and orphan dispositions; pool usage; leftover temporary entries; the `PROVISION` facts.
-- **Exit status.** 0 only if the store opens and no current incident blocks.
-- **Durability of its inputs.** `PROVISION` and dispositions become durable only through the order in §13: write, `fsync`, publish, `fsync` the directory. The verifier reports what it reads and never asserts durability.
+**In-session verification**, inside a maintenance session:
+- **Authority.** The session object itself: the retained `LOCK_EX` description on the inode that the selected root's `LOCK` entry currently names, checked by `fstat` of that description against a fresh `fstatat`, followed by revalidation of the session's selection (§10.5). Not a path, string, PID, descriptor number or caller assertion. A session object without that retained lock is refused as NotAuthorized [M: C20, NC20e].
+- **Locking.** No lock request on the store lock at all: no new shared lock (Busy, NC20a), no conversion of the session's exclusive lock (NC20b), and no release around the verification (NC20c). Pool files the session already locked are read through its own descriptions; others are opened and locked `LOCK_EX | LOCK_NB` for the scan, and Busy means Live.
+- **Never skipped.** Every verification scans afresh; an earlier report is never reused for verify-after [M: C20, NC20f].
+- **No race with mutation.** Verification and the procedure's steps run sequentially in the session's one process, and competitors stay excluded throughout [M: C20].
+
+**Checks**, in both:
+- §10.1;
+- §10.2 steps 0–2 and 4–8, without the evidence-preservation sync;
+- all of §11.
+
+Each reports every condition it finds rather than stopping at the first.
+
+- **Report.** The store state; the selection's revision; each file's class and report (§11.2); the current incidents and their bindings, with disposition status, bounded and marked partial as §11.2 requires; history; stale and orphan dispositions; pool usage; leftover temporary entries; the `PROVISION` facts.
+- **Exit status.** 0 only if the store opens and no current incident blocks. Busy, a partial report and every refusal are non-zero.
+- **Durability of its inputs.** `PROVISION` and dispositions are guaranteed durable only once the order in §13 completes: write, `fsync`, publish, `fsync` the directory. Before that they may or may not be durable (§4.8). Neither mode reports what it reads as durable.
 
 ---
 
@@ -1298,12 +1508,12 @@ The verifier is a future mode of the owner binary, implemented in the later miss
 ### 14.1 Responsiveness
 
 - **The owner never waits on storage during a run.** `submit` is a short copy, and applying durability is a non-blocking read of the exchange.
-- **The control thread** serves status, cancellation and the lease through `Control` (`core.rs:522-548`, `core.rs:616-623`) [S]. It adds a copy of the recorder status: what is pending and since when, `durable_through`, and the latches. No path waits on storage or holds a mutex across it.
+- **The control thread** serves status, cancellation and the lease through `Control` (`core.rs:522-548`, `core.rs:616-623`) [S]. It adds a copy of the recorder status: what is pending and since when, `durable_through`, and the fatal cause with P, distinguishing a stall from a fatal condition (§9.6). No path waits on storage or holds a mutex across it.
 - **Under blocked storage:**
   - in-flight native operations complete;
   - cleanup runs;
   - owners stay held;
-  - admission waits for acknowledgements (§9.6);
+  - admission waits for acknowledgements (§9.6), or, once a fatal cause is latched, is refused at once (§9.8);
   - `close()` refuses with `EvidencePending`;
   - the process does not exit.
 
@@ -1316,7 +1526,7 @@ The verifier is a future mode of the owner binary, implemented in the later miss
 
 ### 14.3 Failure retention
 
-- Latches are never cleared, and a poisoned journal stays poisoned.
+- The fatal latch is never cleared, and a poisoned journal or exchange stays poisoned.
 - The core keeps `RecordFailed`, `EvidenceFailed{record, at}` and the closure refusal (`core.rs:2914-2916`) [S].
 - The core's in-memory failure log (`core.rs:1105-1137`) [S] is not durable beyond what version-1 records carry (API-1).
 - No runtime path alters or removes a durable record. Nothing offers a force-close, drops an owner or clears a failure.
@@ -1349,33 +1559,134 @@ Notation:
 | Writer sync fails (latched); process alive | — | — | — | Store Busy | Refused |
 | … then the process is destroyed | *n* may be visible though it failed; a new description's sync returns 0 (§4.3) | *n* absent | Absent | Unsealed | Refused if AS |
 | Recorder panic | Locks held by `StoreGuard` | — | — | Busy while the process lives | Refused |
+| Any fatal cause latched (R2); process alive | — | — | — | Busy while the process lives; admission refused at once (§9.8) | Refused |
+| A cause latched while record *n* is between W1 and W6 (R2) | *n* may be visible; it is never acknowledged | *n* absent, present, or torn (Malformed) | Absent unless the startup sync made it durable | The prefix with or without *n* | Refused if AS, or if torn |
+| A cause latched with nothing held; `close()` returned `Ok`; seal withheld (R2); process exited | No seal | No seal | No seal | Unsealed | Refused if AS (a disclosed false positive) |
 | `RunEnded` applied, not closed | Prefix with `RunEnded` | Same | Same | Unsealed; verdict reported | Refused if AS |
 | `close()` succeeded, seal not written | No seal | No seal | No seal | Unsealed | Refused if AS (a disclosed false positive) |
 | Seal written, not synced | Seal visible; made durable by the startup sync if that succeeds | Absent, unreadable or present | Absent unless synced | Sealed or unsealed | Permitted, or refused if AS |
-| Seal write failed (EIO); process exited | Seal visible, and true in domain H | Absent | Absent | Sealed until eviction, then unsealed | Permitted; refused if AS once the seal is gone (a disclosed false positive) |
+| Seal write failed (EIO); process exited | Seal visible, and true in domain H | Absent | Absent | Sealed until page reclaim or inode eviction removes it, then unsealed | Permitted; refused if AS once the seal is gone (a disclosed false positive) |
 | Seal durable | Sealed | Sealed | Sealed | Sealed | Permitted |
 | Late owner delivered after `RunEnded`; `IncidentOpened` not durable | Possibly visible | Absent | Absent | Unsealed, AS, recorded unsettled 0, native work possible | **Refused** [M: C09] |
 
-### 15.2 Administrative
+### 15.2 Administrative (R2: recomputed)
 
-| Procedure | Crash point | Outcome at the next opening | Evidence retained | Recovery |
+R1's table was written from the guaranteed-only model of §4.8 and so understated what F2 can leave. R2's table is **computed by the model** and checked against this text in both directions [M: C22; reference check].
+
+- **Crash point *k*** means after operation *k* of the procedure in §15.3; 0 is before the first.
+- **After F1**: the session's process dies; the next opening reads the visible state.
+- **After F2, ordered**: power loss under every ordered schedule of §4.8 (A-M1), with pending data old and new.
+- **Added by the per-directory over-approximation**: outcomes that only the per-directory family produces. It does not describe ext4.
+- Each procedure runs on a store with one pool file. Provisioning is also checked with three pool files for operation parity (§15.3).
+- An outcome describes what the next opening reads: the visible state after F1, one schedule's state after F2. None claims durability. "fresh", "published" and the other non-refusing outcomes mean that the opening's checks pass on what it reads; until the procedure's last directory sync completes, a later F2 can still change them.
+
+| Procedure | Crash points | After F1 | After F2, ordered (A-M1) | Added by the per-directory over-approximation |
 |---|---|---|---|---|
-| Provisioning | Before `PROVISION`'s rename is durable | Unprovisioned: refused | None yet | The Owner may delete the incomplete root, which holds no history, and restart |
-| Provisioning | After it | Fresh | — | — |
-| `PROVISION` rewrite | Before the rename | The old `PROVISION` stays in force; a temporary file in its directory is never read | Old `PROVISION` | Owner completes or removes |
-| `PROVISION` rewrite | After the rename, before the directory sync | Old or new `PROVISION` after F2 | Either complete version | The verifier decides; the Owner repeats if needed |
-| Disposition | Before the temporary entry is unlinked | After F1: MaintenanceIncomplete. After F2: nothing published; the incident still blocks. | The incident | Owner |
-| Disposition | After the unlink, before the directory sync | After F1: published. After F2: nothing published; the incident still blocks. | The incident; the disposition if it survives | The Owner re-checks |
-| Disposition | After the directory sync | Published | The incident and its disposition | — |
-| Revocation | Before the directory syncs | Effective; after F2 either not effective, or Invalid (both names, link count 2) | The disposition under one or both names | The verifier shows which; the Owner completes |
-| Archival | Before the directory sync | After F1: MaintenanceIncomplete while the temporary entry exists, archived once it is unlinked. After F2: nothing archived. | Pool file unchanged | Owner |
-| Archival | After the directory sync | Archived, pending recycling | Pool file and copy | — |
-| Recycling | Before the rename is durable | After F1: MaintenanceIncomplete (temporary entry), or Lost (inode mismatch) once renamed. After F2: unchanged, pending recycling. | Archive copy, or the AbandonedClaim bytes | Owner |
-| Recycling | After the directory sync, before the `PROVISION` rewrite is durable | Inode mismatch: refused as Lost | Archive copy | The Owner completes the rewrite |
-| Retirement | Before or after the rename | Old or new K; the preconditions were verified | Archive | — |
-| Successor | Before the new `PROVISION` is durable | The predecessor stays in force | Everything | Owner |
+| P-PROV | 0–21 | unprovisioned | unprovisioned | — |
+| P-PROV | 22 | fresh | fresh, unprovisioned | — |
+| P-PROV | 23 | fresh | fresh | — |
+| P-DISP | 0 | blocks | blocks | — |
+| P-DISP | 1–4 | maintenance | blocks, maintenance | — |
+| P-DISP | 5 | published | blocks, maintenance, published | — |
+| P-DISP | 6 | published | published | — |
+| P-REVOKE | 0 | published | published | — |
+| P-REVOKE | 1 | blocks | blocks, published | invalid |
+| P-REVOKE | 2 | blocks | blocks | invalid |
+| P-REVOKE | 3 | blocks | blocks | — |
+| P-ARCH | 0 | published | published | — |
+| P-ARCH | 1–4 | maintenance | maintenance, published | — |
+| P-ARCH | 5 | archived | archived, maintenance, published | — |
+| P-ARCH | 6 | archived | archived | — |
+| P-RECYCLE | 0 | archived | archived | — |
+| P-RECYCLE | 1–3 | maintenance | archived, maintenance | — |
+| P-RECYCLE | 4 | lost | archived, lost, maintenance | — |
+| P-RECYCLE | 5–8 | lost | lost | — |
+| P-RECYCLE | 9 | recycled | lost, recycled | — |
+| P-RECYCLE | 10 | recycled | recycled | — |
+| P-RETIRE | 0–3 | bound 0 | bound 0 | — |
+| P-RETIRE | 4 | bound 1 | bound 0, bound 1 | — |
+| P-RETIRE | 5 | bound 1 | bound 1 | — |
+| P-REQUALIFY | 0–3 | unsupported | unsupported | — |
+| P-REQUALIFY | 4 | revision 2 | revision 2, unsupported | — |
+| P-REQUALIFY | 5 | revision 2 | revision 2 | — |
+| P-SUCCESSOR | 0–27 | predecessor | predecessor | — |
+| P-SUCCESSOR | 28 | successor | predecessor, successor | — |
+| P-SUCCESSOR | 29 | successor | successor | — |
 
-No crash point installs a partial file, honours a temporary entry, or retires undispositioned history [M: C12].
+| Outcome | What the next opening reports |
+|---|---|
+| unprovisioned | Unprovisioned: no `PROVISION` |
+| fresh | A fresh store: it opens, with no incident |
+| blocks | The incident blocks: no disposition is in force for it |
+| published | The disposition is in force: the incident is dispositioned |
+| maintenance | MaintenanceIncomplete: a leftover temporary entry refuses |
+| archived | The journal is archived history, pending recycling |
+| lost | Lost: the pool name holds an inode that `PROVISION` does not record |
+| recycled | The pool file is a fresh, Unused file recorded in `PROVISION` |
+| invalid | Invalid: a revoked disposition under both names (link count 2) |
+| bound *K* | `retired-through=K` is in force |
+| revision *R* | `PROVISION` revision *R* is in force |
+| unsupported | Unsupported: the mount options differ from `PROVISION` |
+| predecessor, successor | The store `PROVISION` selects. The other is never selected. |
+
+**Safety, at every crash point and under both families** [M: C12]:
+- no partial file is accepted and no temporary entry is honoured;
+- no incident is lost silently: each still blocks, is dispositioned by its complete final file, or is history;
+- recycling never accepts a replaced pool file before `PROVISION` records it;
+- retirement never hides an unresolved, undispositioned generation, and a retirement whose preconditions fail is refused;
+- succession never changes the predecessor's journals, and the successor is never in force without the predecessor's `PROVISION` kept.
+
+**Recovery** from each refusing outcome, without force:
+
+| Outcome | Recovery |
+|---|---|
+| unprovisioned, after provisioning began | The Owner removes the incomplete root, which holds no history, and any `<PROVISION_PATH>.tmp`, and provisions again |
+| maintenance | A session removes the leftover temporaries (§13.1), then completes or repeats the procedure. Modelled for dispositions, archival and recycling: each recovered state is one the procedure allows [M: C12]. |
+| lost, during recycling | Resumption (§13.8) [M: C12] |
+| invalid, after an interrupted revocation (over-approximation only) | The Owner unlinks the `dispositions/` name and syncs `dispositions/` (§13.4) |
+| unsupported, before re-qualification is visible | Repeat the re-qualification (§13.3) |
+| predecessor, before the successor's `PROVISION` is visible | The predecessor stays in force. In a session on it, the Owner removes the leftover temporaries and the incomplete successor root, and repeats §13.6. Step 2a is skipped if `<PROVISION_PATH>.predecessor-<old root id>` already holds exactly the current `PROVISION`'s bytes; any other existing copy aborts the repeat. |
+
+**Coverage.** Every crash point of every procedure, after F1, and after F2 under every schedule of both families with pending data old and new:
+
+| Procedure | Operations | Crash points | Ordered schedules | Per-directory schedules | Outcomes checked | Recoveries checked |
+|---|---|---|---|---|---|---|
+| P-PROV | 23 | 24 | 54 | 103 | 338 | — |
+| P-DISP | 6 | 7 | 15 | 15 | 67 | 32 |
+| P-REVOKE | 3 | 4 | 5 | 8 | 30 | — |
+| P-ARCH | 6 | 7 | 15 | 15 | 67 | 32 |
+| P-RECYCLE | 10 | 11 | 21 | 23 | 99 | 66 |
+| P-RETIRE | 5 | 6 | 11 | 12 | 52 | — |
+| P-REQUALIFY | 5 | 6 | 11 | 12 | 52 | — |
+| P-SUCCESSOR | 29 | 30 | 68 | 117 | 400 | — |
+
+A retirement whose preconditions fail is also checked to be refused.
+
+**Representative schedules.**
+- **A disposition crashed after the unlink, before `fsync dispositions/` (P-DISP, point 5).** The pending log is: create `.tmp-<binding>`, link `<binding>.disposition`, unlink `.tmp-<binding>`. The four ordered prefixes give blocks, maintenance, maintenance and published. R1 allowed only "nothing published".
+- **A revocation crashed after the rename (P-REVOKE, point 1).** Ordered: the rename persisted or not, giving blocks or published. Per-directory: the removal from `dispositions/` and the addition to `revoked/` persist independently, and the addition alone gives invalid.
+- **A recycling crashed after the rename, before `fsync journals/` (P-RECYCLE, point 4).** Ordered prefixes give archived, maintenance and lost; the per-directory family adds a split rename, which leaves the old file in place and gives archived again.
+
+### 15.3 Operations: protocol and model parity (R2)
+
+Every durability operation of every procedure, in order. The model performs exactly these operations, with these step labels, and no others; each crash point of §15.2 follows one of them [M: C23]. R1's model synced the state root when it created `LOCK` without the text saying so. That step is now §13.2 step 3, and the parity check finds no other hidden operation.
+
+Object names: `parent` is the directory holding `<STATE_ROOT>`, and `parent/root` is `<STATE_ROOT>`; `root/LOCK`, `root/journals` and so on are its entries; `provdir` is the directory of `<PROVISION_PATH>`; `provdir/PROVISION` is `<PROVISION_PATH>`; `provdir/tmp` is `<PROVISION_PATH>.tmp`, or `<PROVISION_PATH>.predecessor.tmp` in step 13.6/2a; `provdir/predecessor` is `<PROVISION_PATH>.predecessor-<old root id>`; `journals/pool` is `j<index>.journal`, and `journals/tmp` is `.tmp-<index>`; `dispositions/tmp` and `dispositions/final` are `.tmp-<binding>` and `<binding>.disposition`; `revoked/entry` is `<binding>-<timestamp>.disposition`; `archive/tmp` and `archive/final` are `.tmp-<name>` and the final name. A `create` of a pool file includes its `fallocate`; `write` writes the whole content; `fsync` syncs that file; `fsync_dir` syncs a directory.
+
+For P-PROV and P-SUCCESSOR the pool operations (`create`, `write` and `fsync` of `journals/pool`) repeat for each pool file, in index order, before the one `fsync_dir` of `journals`. R-LEFTOVER and R-RESUME are the recoveries of §13.1 and §13.8, shown for a leftover disposition temporary and for a recycling interrupted after its rename.
+
+| Procedure | Operations | In order (label = section/step) |
+|---|---|---|
+| P-PROV | 23 | 1 mkdir `parent/root` (13.2/2); 2 mkdir `root/journals` (13.2/2); 3 mkdir `root/dispositions` (13.2/2); 4 mkdir `root/archive` (13.2/2); 5 mkdir `dispositions/revoked` (13.2/2); 6 fsync_dir `revoked` (13.2/2); 7 fsync_dir `dispositions` (13.2/2); 8 fsync_dir `journals` (13.2/2); 9 fsync_dir `archive` (13.2/2); 10 fsync_dir `root` (13.2/2); 11 fsync_dir `parent` (13.2/2); 12 create `root/LOCK` (13.2/3); 13 fsync `root/LOCK` (13.2/3); 14 fsync_dir `root` (13.2/3); 15 create `journals/pool` (13.2/4); 16 write `journals/pool` (13.2/4); 17 fsync `journals/pool` (13.2/4); 18 fsync_dir `journals` (13.2/4); 19 create `provdir/tmp` (13.2/5); 20 write `provdir/tmp` (13.2/5); 21 fsync `provdir/tmp` (13.2/5); 22 rename `provdir/PROVISION` (13.2/5); 23 fsync_dir `provdir` (13.2/5) |
+| P-DISP | 6 | 1 create `dispositions/tmp` (13.4/3); 2 write `dispositions/tmp` (13.4/3); 3 fsync `dispositions/tmp` (13.4/3); 4 link `dispositions/final` (13.4/4); 5 unlink `dispositions/tmp` (13.4/5); 6 fsync_dir `dispositions` (13.4/6) |
+| P-REVOKE | 3 | 1 rename `revoked/entry` (13.4-revoke/2); 2 fsync_dir `revoked` (13.4-revoke/3); 3 fsync_dir `dispositions` (13.4-revoke/3) |
+| P-ARCH | 6 | 1 create `archive/tmp` (13.7/3); 2 write `archive/tmp` (13.7/3); 3 fsync `archive/tmp` (13.7/3); 4 link `archive/final` (13.7/4); 5 unlink `archive/tmp` (13.7/5); 6 fsync_dir `archive` (13.7/5) |
+| P-RECYCLE | 10 | 1 create `journals/tmp` (13.8/2); 2 write `journals/tmp` (13.8/2); 3 fsync `journals/tmp` (13.8/2); 4 rename `journals/pool` (13.8/3); 5 fsync_dir `journals` (13.8/3); 6 create `provdir/tmp` (13.3/2); 7 write `provdir/tmp` (13.3/2); 8 fsync `provdir/tmp` (13.3/2); 9 rename `provdir/PROVISION` (13.3/3); 10 fsync_dir `provdir` (13.3/3) |
+| P-RETIRE | 5 | 1 create `provdir/tmp` (13.3/2); 2 write `provdir/tmp` (13.3/2); 3 fsync `provdir/tmp` (13.3/2); 4 rename `provdir/PROVISION` (13.3/3); 5 fsync_dir `provdir` (13.3/3) |
+| P-REQUALIFY | 5 | 1 create `provdir/tmp` (13.3/2); 2 write `provdir/tmp` (13.3/2); 3 fsync `provdir/tmp` (13.3/2); 4 rename `provdir/PROVISION` (13.3/3); 5 fsync_dir `provdir` (13.3/3) |
+| P-SUCCESSOR | 29 | 1 create `provdir/tmp` (13.6/2a); 2 write `provdir/tmp` (13.6/2a); 3 fsync `provdir/tmp` (13.6/2a); 4 link `provdir/predecessor` (13.6/2a); 5 unlink `provdir/tmp` (13.6/2a); 6 fsync_dir `provdir` (13.6/2a); 7 mkdir `parent/root` (13.6/2b); 8 mkdir `root/journals` (13.6/2b); 9 mkdir `root/dispositions` (13.6/2b); 10 mkdir `root/archive` (13.6/2b); 11 mkdir `dispositions/revoked` (13.6/2b); 12 fsync_dir `revoked` (13.6/2b); 13 fsync_dir `dispositions` (13.6/2b); 14 fsync_dir `journals` (13.6/2b); 15 fsync_dir `archive` (13.6/2b); 16 fsync_dir `root` (13.6/2b); 17 fsync_dir `parent` (13.6/2b); 18 create `root/LOCK` (13.6/2b); 19 fsync `root/LOCK` (13.6/2b); 20 fsync_dir `root` (13.6/2b); 21 create `journals/pool` (13.6/2b); 22 write `journals/pool` (13.6/2b); 23 fsync `journals/pool` (13.6/2b); 24 fsync_dir `journals` (13.6/2b); 25 create `provdir/tmp` (13.6/2c); 26 write `provdir/tmp` (13.6/2c); 27 fsync `provdir/tmp` (13.6/2c); 28 rename `provdir/PROVISION` (13.6/2c); 29 fsync_dir `provdir` (13.6/2c) |
+| R-LEFTOVER | 2 | 1 unlink `dispositions/tmp` (13.1/recover); 2 fsync_dir `dispositions` (13.1/recover) |
+| R-RESUME | 5 | 1 create `provdir/tmp` (13.3/2); 2 write `provdir/tmp` (13.3/2); 3 fsync `provdir/tmp` (13.3/2); 4 rename `provdir/PROVISION` (13.3/3); 5 fsync_dir `provdir` (13.3/3) |
 
 ---
 
@@ -1383,15 +1694,18 @@ No crash point installs a partial file, honours a temporary entry, or retires un
 
 ### 16.1 Design model (this mission) [M]
 
-`docs/evidence/p2-v1-r3b-i3-p-r1/design_checks.py` uses only the Python standard library, with in-memory byte images and simulated state. It opens no store, calls no native operation, performs no privileged I/O and causes no real crash. It implements:
-- the §4 state model: **K**, **D**, pending writeback, errseq with per-description cursors, eviction, F1, F2, and directory entries;
+`docs/evidence/p2-v1-r3b-i3-p-r2/design_checks.py` uses only the Python standard library, with in-memory byte images and simulated state. It opens no store, calls no native operation, performs no privileged I/O and causes no real crash. R2 carries the R1 model forward and implements:
+- the §4 state model: **K**, **D**, pending writeback, errseq with per-description cursors, page reclaim separate from inode eviction, F1, F2, and the §4.8 metadata log with its ordered and per-directory schedules;
 - the §5 containment profile, plus an unsupported profile for contrast;
 - the §6–§7 formats, with a version-1 encoder and decoder that reproduce all 50 golden record vectors of `codec-tests` (`RECORD_VECTORS`, `codec-tests:121`) [S];
-- the §8 lock model, with open-file-description semantics;
-- the §9 exchange and worker, against a ledger model of `core.rs:1042-1090`;
-- the §10 startup order, with an interaction log;
+- the §8 lock model, with open-file-description semantics, and the §8.4 session objects;
+- the §9 exchange, worker, owner apply step, failure delivery and store admission gate, against a ledger model of `core.rs:1042-1090` and a source-derived model of the core paths they depend on (start, case begin and end, reservation, admission, settlement, commitment, fail-stop and close);
+- the §10 startup order, with an interaction log, and the §10.5 selection and revalidation;
 - the §11 classifier and grammar, and the §12 bindings;
-- the §13 procedures, with crash injection.
+- the §13 procedures inside maintenance sessions, with crash injection and recovery;
+- an enumerator of interleavings over the model's atomic steps, where one step stands for one critical section.
+
+It first re-runs every Architect counterexample on the **unchanged R1 model**, loaded by path and checked against its published SHA-256, and requires each to reproduce (§19.3).
 
 | Check | Marker | Requirement |
 |---|---|---|
@@ -1407,48 +1721,55 @@ No crash point installs a partial file, honours a temporary entry, or retires un
 | C09 | `[late-uncertain]` | A non-durable late incident yields uncertainty and refusal |
 | C10 | `[exact-bytes]` | Exact header, seal and record-block consumption |
 | C11 | `[archive-binding]` | Archival keeps bindings; byte changes change them explicitly |
-| C12 | `[admin-crash]` | No administrative crash point installs partial state or retires unresolved history |
+| C12 | `[admin-crash]` | No administrative crash point, under either schedule family, installs partial state, loses an incident or retires unresolved history; every refusing outcome of dispositions, archival and recycling recovers |
 | C13 | `[grammar-conformance]` | Fixtures, prefixes and mutations against §11.4 |
 | C14 | `[safe-open]` | Special files, ext4 identity, mount ambiguity |
 | C15 | `[ack-durable]` | INV-1 and INV-4 under write and sync faults |
 | C16 | `[no-false-resolution]` | INV-3 at every crash point of every fixture |
 | C17 | `[arith-bounds]` | Claim exhaustion and numeric bounds |
+| C18 | `[fatal-total]` | Every fatal cause: worker loss with no record; loss between reservation and admission; a conflict on an acknowledged record; zero, out-of-range, foreign and future submissions; a conflict beyond the next record; an append in flight; an unexpected acknowledgement outcome; a poisoned mutex; loss before the claim, after the commitment and during the seal; failure with no native ownership left. Admission is refused at once, true acknowledgements stay, and the failure lands only at an issued record. |
+| C19 | `[admission-fence]` | Every interleaving of an admission with a latch, and of the worker's publication with a latch: nothing is admitted or published after the latch |
+| C20 | `[session-verify]` | Verification inside a session: no lock request, competitors excluded throughout, nested procedures in one lock lifetime, authority only from the retained lock |
+| C21 | `[provision-selection]` | A `PROVISION` replaced between read and lock never regains authority: succession, retirement, re-qualification and recycling; bounded re-selection |
+| C22 | `[metadata-schedules]` | Entries durable before a directory sync, a split rename only in the over-approximation, page reclaim with open descriptors, and the computed crash matrix equal to §15.2 |
+| C23 | `[step-parity]` | Every modelled durability operation is a §15.3 operation, in order, one crash point each, for every procedure and both recoveries |
+| C24 | `[aggregate-bounds]` | Directory counts refused before any entry is examined; a partial report says so; neither a startup nor a retirement decides from a truncated set |
 
-**Negative controls.** There are 27 (NC01–NC17, with lettered variants), listed in the script and in `coverage.json`. They are in-memory mutants that restore an incorrect behaviour, such as the earlier candidate's. Each must fail its check's assertion carrying the check's marker. A syntax, import or fixture error never counts as a caught control. The output reports four things separately:
-- baseline passes;
-- intended negative-control failures;
-- tool failures;
-- assumptions the model cannot establish.
+**Negative controls.** There are 48: R1's 27 (NC01–NC17, with lettered variants), unchanged in identity and intent, and 21 new ones (NC18a–f, NC19, NC20a–f, NC21a–b, NC22a–b, NC23, NC24a–c). They are listed with their targets in the script and in `coverage.json`. Each is an in-memory mutant that restores an incorrect behaviour, usually R1's, and must fail its target check's assertion carrying that check's marker. A syntax, import or fixture error never counts as a caught control. The output reports separately the R1 reproductions, baseline passes, intended negative-control failures, the restored baseline, tool failures, the assertions that changed from R1 (with the requirement each keeps), and the assumptions the model cannot establish.
 
 **Model simplifications,** each disclosed:
 - directory descriptors and component-by-component `O_PATH` walks are not modelled; directories are addressed by reference;
-- mutex discipline (no mutex across I/O) is a property for code review; the model's exchange performs no I/O by construction;
-- a rename is modelled per directory rather than as an atomic cross-directory operation. This is more conservative than ext4's journal.
-- the core is represented by the source-derived fixtures and a model of `Ledger::acknowledge` and `Ledger::fail`; the real core is not executed;
-- the model's verifier stops at the first refusal, whereas the §13.11 contract requires a full report.
+- mutex discipline (no mutex across I/O, lock order) is a property for code review. The model's exchange performs no I/O by construction, and each critical section is one atomic step;
+- the per-directory schedules are an over-approximation, not ext4 behaviour; the ordered schedules rest on A-M1;
+- the core is represented by the source-derived fixtures, a model of `Ledger::acknowledge` and `Ledger::fail`, and a source-derived model of the paths the fatal protocol depends on; the real core is not executed;
+- the model's verifier stops at the first refusal, whereas the §13.11 contract requires a full report;
+- the maintenance session is modelled as an object holding its lock descriptions; no executable exists.
 
-`reference_check.py` verifies two things against `45898e05`: every `file:line` reference in this document, and the golden-vector literals in the model.
+`reference_check.py` verifies against `45898e05` every `file:line` reference in this document and the golden-vector literals in the model. It also checks that the §15.2 crash matrix and the §15.3 operation table say exactly what the model computes and performs.
 
 **The model validates this specification's internal consistency and protocols. It does not execute, test or prove the Rust code, the kernel, ext4 or any device.**
 
 ### 16.2 Rust verification (later implementation mission)
 
 - **Simulated storage.** A `StoreIo` that implements the §4 state model:
-  - errseq, with per-description cursors sampled at open, and eviction;
+  - errseq, with per-description cursors sampled at open; page reclaim with descriptors open; inode eviction;
   - F1, F2, and F1→F2;
   - tears within the 4096-byte unit;
   - short writes, zero-progress writes and EINTR;
-  - directory entries.
+  - directory entries with the §4.8 metadata log, and F2 under both schedule families.
 - **Crash-point enumeration** over the real core with stand-ins, covering:
   - the T1–T15 scenarios, and recording failure at every record;
   - duplicate submission after a sink panic;
   - priors with dispositions;
   - pool exhaustion, abandoned claims and claim gaps;
-  - stalls, recorder panic and conflicts.
+  - stalls, recorder panic and conflicts;
+  - every fatal cause of §9.2 at every point of the claim, append and seal, including the F1 cases of §9.10.
+- **Interleavings (R2).** A deterministic schedule harness built from explicit step hooks in the store's own code, with no new dependency, that runs the admission gate, the worker's W1–W6, the owner's apply step and the latch in every order, and asserts INV-4 and INV-13 in each.
+- **Maintenance sessions (R2).** The session type against simulated storage only: in-session verification without any lock request, nested procedures, the competitor exclusion, `PROVISION` replacement between read and lock, and the §15.2 matrix recomputed from the Rust procedures.
 
 ### 16.3 Invariants for the Rust tests
 
-The Rust tests must hold INV-1 to INV-12 in their domains (§12.1), plus **I9, conformance**: every journal that the real deterministic core runs produce must classify as non-Malformed. Those runs include `Run::every_kind` in `codec-tests` and the h18 adversarial sequences (`core-tests:5237`) [S].
+The Rust tests must hold INV-1 to INV-17 in their domains (§12.1), plus **I9, conformance**: every journal that the real deterministic core runs produce must classify as non-Malformed. Those runs include `Run::every_kind` in `codec-tests` and the h18 adversarial sequences (`core-tests:5237`) [S].
 
 ### 16.4 Negative controls for the Rust tests
 
@@ -1466,6 +1787,9 @@ Each must compile and then fail its intended assertion, with its marker:
   - retirement without its preconditions.
 - **Filesystem:** ext4 decided by magic only; open without the type check.
 - **Arithmetic:** claim wraparound.
+- **Fatal protocol (R2):** admission without the store gate; a health check followed by an unprotected admission call; publication after the latch; failure targeted at the cause's own sequence; a future submission stored; an unexpected acknowledgement outcome ignored; `record_failed` for an unissued record counted as delivered.
+- **Maintenance (R2):** in-session verification through a new shared lock; a lock converted or released around verification; Busy taken as success; authority from a flag; a verification skipped by reusing an earlier report; no post-lock revalidation; revalidation through the descriptor kept from the read; an undocumented durability step.
+- **Persistence and bounds (R2):** entries durable only through a directory sync; no page reclaim with descriptors open; bounds checked after the entries are examined; a startup decision or retirement preconditions taken from a truncated report.
 
 ### 16.5 Fixtures
 
@@ -1487,12 +1811,13 @@ Root-owned fixtures, host qualification and power-loss rigs are not authorized.
 | `support/custody/store/mod.rs` | API (`StoreGuard`, `StartupReport`, `Recorder`, `ExchangeSink`, `RecorderStatus`), claims and non-claims |
 | `support/custody/store/format.rs` | Header, seal and record blocks; `PROVISION`, disposition and entry-name grammars; bindings |
 | `support/custody/store/classify.rs` | The pure classifier and grammar (§11) |
-| `support/custody/store/open.rs` | Safe open, mount identification, startup order (§10) |
+| `support/custody/store/open.rs` | Safe open, mount identification, `PROVISION` selection and revalidation, startup order (§10) |
 | `support/custody/store/io.rs` | The `StoreIo` trait and its Linux implementation: `openat2` through `SYS_openat2` and `open_how`; `statx`; `fstatat`; `fstatvfs`; `flock`; `pwrite`; `fdatasync`; `getrandom` |
-| `support/custody/store/exchange.rs` | The exchange, the sink and the owner's apply step (§9) |
+| `support/custody/store/exchange.rs` | The exchange and its fatal latch, the sink, the owner's apply step and failure delivery, and the store admission gate (§9) |
 | `support/custody/store/recorder.rs` | The worker: claim, append, seal, poison |
 | `support/custody/store/disposition.rs` | The `DispositionValidator` |
-| `support/custody/store/sim.rs` | Simulated storage (§16.2) |
+| `support/custody/store/sim.rs` | Simulated storage (§16.2), including the §4.8 metadata log and schedules |
+| `support/custody/store/maintenance.rs` | The maintenance session type and in-session verification (§13.1, §13.11), exercised against simulated storage only. No executable, binary target or privileged entry point. |
 | `support/custody/mod.rs` | `pub mod store;` and the integration-obligation documentation |
 | `phase2_custody_store.rs` | A new test target |
 
@@ -1504,6 +1829,8 @@ Root-owned fixtures, host qualification and power-loss rigs are not authorized.
 **Dependencies.** None new: `libc` 0.2.183 (Linux), `sha2` 0.10.9 and `hex` 0.4.3 are already locked.
 
 **Unsafe code.** A small, reviewed FFI surface in `io.rs`, with each call wrapped once.
+
+**Not in this envelope.** API-5 (§2.3) needs its own approval and its own validation. A maintenance or provisioning executable needs a separate Architect authorization (G-HOST).
 
 **Validation for that mission:**
 - targeted `cargo test --locked -p nexus-verifier-sandbox` for the custody targets;
@@ -1527,6 +1854,8 @@ Root-owned fixtures, host qualification and power-loss rigs are not authorized.
 | **G-LIVE** | Integration of the owner process and service, and live validation |
 | **G-PWR** | Empirical power-loss qualification, if it is ever required (D-10) |
 
+API-5 (§2.3) is not a gate of this design: nothing here depends on it. It needs its own approval if it is ever wanted.
+
 ### 18.2 Non-goals
 
 This design does not:
@@ -1537,8 +1866,9 @@ This design does not:
 - resist domain-A tampering, or introduce any anchor or privileged component;
 - support XFS or any other filesystem;
 - perform automatic maintenance;
-- offer a force-close;
-- migrate any format.
+- offer a force-close, drop an owner, or clear a failure;
+- migrate any format;
+- build or authorize a maintenance or provisioning executable, a privileged helper or service, an account, a cloud service, a TPM dependency or a database.
 
 ### 18.3 Non-claims
 
@@ -1546,6 +1876,8 @@ This design does not:
 - **Nothing ran against the Rust code.** The Python model and the reference check ran only on in-memory byte images and Git objects.
 - **No qualification or proof.** There is no tamper resistance against the store uid, no power-loss proof, no filesystem or device qualification, no authentication, and no proof of native cleanup.
 - **No completion.** There is no journal-completeness claim beyond §11, no live acceptance, no integration, and no Phase Two completion.
+- **No interface exists.** The admission gate, the fatal latch, the maintenance session and its in-session verification, the selection protocol and API-5 are specifications only.
+- **A-M1 and A-S1 to A-S4 are assumptions.** The per-directory over-approximation shows which conclusions do not depend on A-M1; nothing shows that a device honours them.
 - **No approval.** Publication is not approval.
 
 ---
@@ -1587,3 +1919,41 @@ Each item found below was resolved at the first repair; none needed a second.
 | Three cited source ranges ended inside a block | Reference check | Narrowed to whole items (`core.rs:1289-1297`, `core.rs:1744-1752`, `core.rs:2663-2669`) |
 | Crash rows did not separate F1 from F2 outcomes for dispositions, archival and recycling | Model (C12) | Rows split by crash point and fault (§15.2) |
 | A crash between the two directory syncs of a revocation can leave both names | Model (C12) | Refuses as Invalid (link count 2) until the Owner completes the revocation (§13.4) |
+
+### 19.3 R2: findings F1–F4 and section 8
+
+Each counterexample was first re-run on the **unchanged R1 model** (`docs/evidence/p2-v1-r3b-i3-p-r1/design_checks.py`, loaded by path and checked against its SHA-256), and each reproduced. The R2 model repeats these runs every time it is executed.
+
+| Id | Finding | Observed on the R1 model | Resolution | Model |
+|---|---|---|---|---|
+| R1-A | F1 | Worker loss with three records acknowledged and none issued: nothing delivered; admission of the acknowledged start still permitted | §9.2, §9.5, §9.8 | C18 |
+| R1-B | F1 | A conflict on acknowledged record 1 latched and was never delivered; R1's INV-4 contradicted three applied acknowledgements | §9.3, §9.5, INV-4 | C18 |
+| R1-C | F1 | Zero, out-of-range and foreign submissions latched and were never delivered; a future sequence was stored silently; a conflict at record 6 with three applied left records 4–6 pending for ever | §9.3, §9.5 | C18 |
+| R1-D | F1 | Loss between a durable reservation and its admission: admission permitted | §9.8 | C18, C19 |
+| R1-E | F1 | A record in flight when a conflict latched was published (1 → 2) and acknowledged | §9.4 W6 | C18, C19 |
+| R1-F | F1 | Loss during the claim and during the seal left both states `None`, neither failed nor completed | §9.2, §9.7 | C18 |
+| R1-F2 | F2 | The verifier inside maintenance was Busy; the modelled procedures took no store lock | §13.1, §13.11 | C20 |
+| R1-F3 | F3 | A startup that read `PROVISION` A before a succession and locked afterwards became Ready on A, while a fresh startup became Ready on B | §10.5, §13.6 | C21 |
+| R1-F4a | F4 | After a disposition's link and unlink, before the directory sync, F2 had a single outcome: absent | §4.8, §15.2 | C12, C22 |
+| R1-F4b | F4 | The model synced the state root when creating `LOCK`, which the text did not say; pool files were durable at creation without a sync | §13.2 step 3, §15.3 | C23 |
+| R1-F4c | F4 | Clean pages could not be reclaimed while the writer's descriptor was open | §4.2 | C22 |
+| R1-S8 | Section 8 | 5000 orphan dispositions were all read, and 5000 revoked entries all examined: no aggregate bound | §6.6, §7.7, §11.2 | C24 |
+
+**R2 review.** The revision, the model runs, a second full review against the source and the extra interleavings found the items below. Each was resolved at the first repair; none needed a second.
+
+| Found | By | Resolution |
+|---|---|---|
+| `Control::cancel` would record a recorder failure as a cancellation, which the core forbids (`model.rs:377-384`) | Review | The store admission gate (§9.8); API-5 proposed, not required (§2.3) |
+| With no record issued after the latch, `record_failed` at P + 1 would return `NotIssued` | Review | Deliver only at an issued record; the gate covers admission meanwhile (§9.5) |
+| `finish_run` after a latch, with nothing pending, would commit before the core learns of the failure | Review | Owner policy (§9.8); such a commitment is never final or published (§9.9); API-5 would close it |
+| §8.3 said closure is refused for good after recorder loss; with nothing pending and nothing held, `close()` can succeed | Review | Corrected; the seal is withheld (§8.3, §9.7) |
+| A re-qualification session could not begin, because the stale options refused every opening | Model (C12, C21) | Re-qualification mode (§13.3) |
+| A successor could be selected before the session held its lock | Review | The session takes the successor's lock before publishing (§13.6 step 2c) |
+| A recycling interrupted after its rename refused as Lost, with no specified way out | Review | Resumption (§13.8), modelled for every crash point and schedule [C12] |
+| Leftover `PROVISION` temporaries had no defined names, so recovery could not identify them in a shared directory | Model (C12) | Fixed names (§7.5); leftover removal (§13.1) |
+| The startup preservation sync was said to make visible bytes durable; a page whose writeback failed is clean and is not rewritten | Review | §4.6, §10.2 wording |
+| The verifier contract said its inputs become durable only through the §13 order | Review | "Guaranteed durable only once the order completes" (§13.11) |
+| A three-party interleaving (worker, apply, latch) expected a failure report when no record had been issued yet | Model (C19, new assertion) | The protocol was right; the new assertion was corrected to §9.5 step 2 before publication |
+| The port of C12 to sessions and schedules had dropped three R1 assertions (recycling and retirement history, the retirement bound) and narrowed two others | Comparison of every R1 assertion with the R2 model | Restored unchanged before publication. The remaining differences are listed, with the requirement each keeps, in the evidence README and the model's output. |
+| One control (truncated report) exercised only the startup decision, never the retirement path | Review of the controls | Split into NC24b (startup) and NC24c (retirement); each fails its own assertion |
+| Tables in §8.1 and §10.2 held unescaped `\|` inside code spans, which splits a table cell in GitHub Markdown | Table lint | Escaped |
