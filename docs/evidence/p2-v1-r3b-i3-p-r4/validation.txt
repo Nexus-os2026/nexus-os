@@ -1,0 +1,775 @@
+P2-V1-R3B-I3-P-R4 design validation record
+
+recorded (UTC): 2026-10-02T04:31:57Z
+host: the development host, Linux 6.17.0-35-generic; Python 3.12.3
+working tree: branch review/p2-v1-custody-recorder-design, HEAD b0f8437636d0bc7d38818e75df71d1bf516cff8e (the design base),
+  with the candidate's changes uncommitted; the candidate commit did not exist when this was recorded
+working directory: the repository root; all paths below are relative to it
+output normalization: none for outputs; in echoed command lines, paths outside the repository are <scratch>
+
+tested files (SHA-256):
+dece64f4a5a241f50f1c2b53a350bde05c8bdade717e362e2870afee107117ac  docs/architecture/p2-custody-durable-recorder-design.md
+f25d2a79fe1192befae21203017eb8b22d6495778c7aab88697836f2812af9ce  docs/evidence/p2-v1-r3b-i3-p-r4/design_checks.py
+80dca4bada07208ed7094070cb52efb8fc6c5f6baea7cd12bc75b2ba3e468142  docs/evidence/p2-v1-r3b-i3-p-r4/reference_check.py
+
+R1, R2 and R3 evidence, unchanged (SHA-256 of the working files; each equals the committed blob at the design base):
+402b660400c16a03c77e46b8fd144b18f290d7686d967f0dc86509abcc425b75  docs/evidence/p2-v1-r3b-i3-p-r1/README.md
+be09bdaf4efa87bc27edadf5bc6f9fa232a55befae888a732e604c88abbfb3f3  docs/evidence/p2-v1-r3b-i3-p-r1/SHA256SUMS
+ae6d6f66cbf6264b9bfabbb42621d80a56be4d73f05aca5dc2f4d473a26a5b4d  docs/evidence/p2-v1-r3b-i3-p-r1/coverage.json
+17f606f2111aee1753b20874b2b16f15041abf4bae84178600ea83fb01705ac1  docs/evidence/p2-v1-r3b-i3-p-r1/design_checks.py
+1855b343265040ed0920e7dc5851cded41ab037fca3c14db02c389bec8238996  docs/evidence/p2-v1-r3b-i3-p-r1/reference_check.py
+92a0c886c65f8d648fa0921bb6e86fc2239b7c59bec64040b343578041c9b6be  docs/evidence/p2-v1-r3b-i3-p-r1/validation.txt
+98e2fc75b9cb76549c3e13046efc5285c4671f571ff72c0992b9ea196d68a97f  docs/evidence/p2-v1-r3b-i3-p-r2/README.md
+cebd0aa47a726a829d31ff06691f2ad48e0d1477a169f26eecbc2fe1ea40dba4  docs/evidence/p2-v1-r3b-i3-p-r2/SHA256SUMS
+22b9833d3a5f774c03effc5c4f046d06bbdebd065fa5a3fddf05f7037c8de1ea  docs/evidence/p2-v1-r3b-i3-p-r2/coverage.json
+53b8dbb5da194d62da35178dd06c2c8f38dc0fb6c39076552fb74cb1a54934bc  docs/evidence/p2-v1-r3b-i3-p-r2/design_checks.py
+c81cf46338b4f70cfce24e9bbb449fc2b6cf2647d2a2ebb3d290b6383ae910d4  docs/evidence/p2-v1-r3b-i3-p-r2/reference_check.py
+858a5e54d2624b3e2cad0ebd9b97b48c2d03d83c217dbf9f94f7c812c82714c6  docs/evidence/p2-v1-r3b-i3-p-r2/validation.txt
+427038924826d1dd20495bb2e4baca80d2d82339800e9d870bdcefbc4cb34f1a  docs/evidence/p2-v1-r3b-i3-p-r3/README.md
+a93052aeb406f47dd92bd700bb83b212236848c90c1d8a454c564b779ce4e3c0  docs/evidence/p2-v1-r3b-i3-p-r3/SHA256SUMS
+182a96ef944d3e61860ae92b5d635b60ea77b48a2d969e5b3a4f4224f6ca267d  docs/evidence/p2-v1-r3b-i3-p-r3/coverage.json
+31afe335be8faaeb7a02d31ce5463ea9f7a256f5d49e6af40ebfbfbbbbd8b678  docs/evidence/p2-v1-r3b-i3-p-r3/design_checks.py
+26dfab7541b17b3dd8a99a41b55ddfedef1e75db9273383486b6451e926d2842  docs/evidence/p2-v1-r3b-i3-p-r3/reference_check.py
+c93810fc0ee90c85757233e82dbfd36ac6b195f3db879b071abe591b49e7ba0b  docs/evidence/p2-v1-r3b-i3-p-r3/validation.txt
+
+== 1. R3 baseline, reproduced before any R4 change (recorded at the start of the mission) ==
+
+recorded (UTC): 2026-10-02T03:15:36Z, HEAD b0f8437636d0bc7d38818e75df71d1bf516cff8e
+inputs (SHA-256):
+182a96ef944d3e61860ae92b5d635b60ea77b48a2d969e5b3a4f4224f6ca267d  docs/evidence/p2-v1-r3b-i3-p-r3/coverage.json
+31afe335be8faaeb7a02d31ce5463ea9f7a256f5d49e6af40ebfbfbbbbd8b678  docs/evidence/p2-v1-r3b-i3-p-r3/design_checks.py
+427038924826d1dd20495bb2e4baca80d2d82339800e9d870bdcefbc4cb34f1a  docs/evidence/p2-v1-r3b-i3-p-r3/README.md
+26dfab7541b17b3dd8a99a41b55ddfedef1e75db9273383486b6451e926d2842  docs/evidence/p2-v1-r3b-i3-p-r3/reference_check.py
+a93052aeb406f47dd92bd700bb83b212236848c90c1d8a454c564b779ce4e3c0  docs/evidence/p2-v1-r3b-i3-p-r3/SHA256SUMS
+c93810fc0ee90c85757233e82dbfd36ac6b195f3db879b071abe591b49e7ba0b  docs/evidence/p2-v1-r3b-i3-p-r3/validation.txt
+a0dfa5b691d9232c860a131d81d40d3df8f22866169c8af2effffc94d09983f6  docs/architecture/p2-custody-durable-recorder-design.md
+$ (cd docs/evidence/p2-v1-r3b-i3-p-r3 && sha256sum -c SHA256SUMS)
+../../architecture/p2-custody-durable-recorder-design.md: OK
+README.md: OK
+coverage.json: OK
+design_checks.py: OK
+reference_check.py: OK
+validation.txt: OK
+$ python3 -B docs/evidence/p2-v1-r3b-i3-p-r3/design_checks.py --json <scratch>/r3-coverage.json
+exit status: 0
+output identical to the output recorded in docs/evidence/p2-v1-r3b-i3-p-r3/validation.txt: True
+coverage byte-identical to the committed docs/evidence/p2-v1-r3b-i3-p-r3/coverage.json: True
+last lines:
+summary: R1 counterexamples 16/16 reproduced; R2 composed counterexample 3/3 reproduced; baseline 27/27 pass; negative controls 54/54 caught; restored 27/27 pass; tool failures 0
+RESULT: PASS
+$ python3 -B docs/evidence/p2-v1-r3b-i3-p-r3/reference_check.py --self-test --kernel <scratch>/kernel   (the twelve R3 kernel files, unchanged copies)
+exit status: 0
+output identical to the output recorded in docs/evidence/p2-v1-r3b-i3-p-r3/validation.txt: True
+
+== 2. Historical manifests, each checked against its own committed snapshot ==
+
+$ git archive 34cb35d833ef9dd317708615211fee7d02d2eb78 docs | tar -x -C <scratch>/snapshot-R1; (cd docs/evidence/p2-v1-r3b-i3-p-r1 && sha256sum -c SHA256SUMS)
+../../architecture/p2-custody-durable-recorder-design.md: OK
+README.md: OK
+coverage.json: OK
+design_checks.py: OK
+reference_check.py: OK
+validation.txt: OK
+exit status: 0
+$ git archive 8f8882521535db82a6ba08867c95518040a71cd2 docs | tar -x -C <scratch>/snapshot-R2; (cd docs/evidence/p2-v1-r3b-i3-p-r2 && sha256sum -c SHA256SUMS)
+../../architecture/p2-custody-durable-recorder-design.md: OK
+README.md: OK
+coverage.json: OK
+design_checks.py: OK
+reference_check.py: OK
+validation.txt: OK
+exit status: 0
+$ git archive b0f8437636d0bc7d38818e75df71d1bf516cff8e docs | tar -x -C <scratch>/snapshot-R3; (cd docs/evidence/p2-v1-r3b-i3-p-r3 && sha256sum -c SHA256SUMS)
+../../architecture/p2-custody-durable-recorder-design.md: OK
+README.md: OK
+coverage.json: OK
+design_checks.py: OK
+reference_check.py: OK
+validation.txt: OK
+exit status: 0
+$ (cd docs/evidence/p2-v1-r3b-i3-p-r1 && sha256sum -c SHA256SUMS)   (in the working tree, with the R4 document)
+../../architecture/p2-custody-durable-recorder-design.md: FAILED
+README.md: OK
+coverage.json: OK
+design_checks.py: OK
+reference_check.py: OK
+validation.txt: OK
+sha256sum: WARNING: 1 computed checksum did NOT match
+exit status: 1
+$ (cd docs/evidence/p2-v1-r3b-i3-p-r2 && sha256sum -c SHA256SUMS)   (in the working tree, with the R4 document)
+../../architecture/p2-custody-durable-recorder-design.md: FAILED
+README.md: OK
+coverage.json: OK
+design_checks.py: OK
+reference_check.py: OK
+validation.txt: OK
+sha256sum: WARNING: 1 computed checksum did NOT match
+exit status: 1
+$ (cd docs/evidence/p2-v1-r3b-i3-p-r3 && sha256sum -c SHA256SUMS)   (in the working tree, with the R4 document)
+../../architecture/p2-custody-durable-recorder-design.md: FAILED
+README.md: OK
+coverage.json: OK
+design_checks.py: OK
+reference_check.py: OK
+validation.txt: OK
+sha256sum: WARNING: 1 computed checksum did NOT match
+exit status: 1
+  (Expected: only the shared document's line differs, because this mission revised that document;
+  no historical manifest is rewritten. Each verifies against its own snapshot above.)
+
+== 3. R4 design model ==
+
+$ python3 -B docs/evidence/p2-v1-r3b-i3-p-r4/design_checks.py --json docs/evidence/p2-v1-r3b-i3-p-r4/coverage.json
+P2-V1-R3B-I3-P-R4 design model
+source baseline: 45898e05178a56efaadeb1f8f9ee7a0a521c72c9
+
+== R1 counterexamples, re-run on the unchanged R1 model ==
+R1-A (F1) REPRODUCED: loss with 3 acknowledged and none issued: ledger.failed=None, admission of the acknowledged start still permitted=True
+R1-B (F1) REPRODUCED: conflict on acknowledged sequence 1: latched (1, 'different digest'), failure never delivered; R1 INV-4 (no sequence >= 1 acknowledged) contradicts 3 applied acknowledgements
+R1-C zero (F1) REPRODUCED: latched (0, 'invalid submission'); never delivered; admission still permitted
+R1-C out of range (F1) REPRODUCED: latched (17, 'invalid submission'); never delivered; admission still permitted
+R1-C foreign (F1) REPRODUCED: latched (4, 'invalid submission'); never delivered; admission still permitted
+R1-C future (F1) REPRODUCED: a submission for unissued sequence 7 stored silently
+R1-C beyond (F1) REPRODUCED: conflict at 6 with 3 applied: records 4-6 pending forever, failure never delivered (ledger.failed=None)
+R1-D (F1) REPRODUCED: ActionStarted acknowledged, reservation unadmitted, loss observed: admission permitted
+R1-E (F1) REPRODUCED: append in flight when a conflict latched: durable 1 -> 2, acknowledged 2
+R1-F (F1) REPRODUCED: loss during the claim leaves claim state 'None'; during the seal, seal state 'None': neither failed nor completed
+R1-F2 (F2) REPRODUCED: verifier inside maintenance: Busy; R1 model procedures took a store lock: False
+R1-F3 (F3) REPRODUCED: stale startup Ready on 10111213, fresh startup Ready on 20212223: two owners
+R1-F4a (F4) REPRODUCED: after the link and the unlink, before the directory sync, F2 has one outcome (absent): a link already committed is not representable
+R1-F4b (F4) REPRODUCED: make_lock synced ['store-a'] (not in the R1 text); pool files durable at creation without a sync step
+R1-F4c (F4) REPRODUCED: clean pages cannot be reclaimed while the writer's descriptor is open
+R1-S8 (8) REPRODUCED: 5000 orphan dispositions all read (5000); 5000 revoked entries all examined (5000); no aggregate bound
+
+== R2 composed counterexample, re-run on the unchanged R2 model ==
+R2-W-ASIS (composed (analysis)) REPRODUCED: unchanged R2 model as is: startup Ready on store-b, but the claim Failed ((('ClaimSync',), 0)): its Worker rechecks identity (W5) through World.state = 'store-a', the first root. Design W5 and section 8.1 use the opened root's retained journals descriptor, so this is an unmodelled transition, not a design guard
+R2-W (composed) REPRODUCED: pending before the second crash: [(21, 'PROVISION.tmp', True), (22, 'PROVISION.tmp', False), (22, 'PROVISION', True)]; startup Ready on store-b; acknowledged 3, admission Admitted; B journal UnsealedAction; after F2 a fresh startup was Ready on store-a with B's generation outside the decision in 10 of 14 outcomes {"('ordered', 'PriorUnresolved', 'store-b', True)": 2, "('ordered', 'Ready', 'store-a', False)": 4, "('perdir', 'PriorUnresolved', 'store-b', True)": 2, "('perdir', 'Ready', 'store-a', False)": 6}
+R2-P (composed) REPRODUCED: after F2 a fresh startup is Unprovisioned in 10 of 14 outcomes (fail closed), yet the unpublished root's journal is UnsealedAction: R2 section 15.2's recovery premise ('the incomplete root holds no history') is false; following it with the R2 provisioning helper gives Ready on store-c with no incident
+
+== R4 findings, re-run on the unchanged R3 model ==
+R3-F4 (F4) REPRODUCED: R3's probe state is ['probe_pending']: no running/completed distinction. After the probe's transaction completed and a later commit aborted the journal, R3's fsync_file returns EIO; jbd2_complete_transaction returns 0 for a completed tid without testing the abort flag (journal.c:800-805), as the R4 model does (0). R3's touch() has no abort landing between ext4's and jbd2's handle tests either
+R3-F4-REACH (F4 (scope)) REPRODUCED: over R3's 27 checks (27 pass), R3's fsync_file ran 3484 times and took the inaccurate aborted-journal branch 0 times: no R3 check result depended on it
+R3-PROFILE (section 5 (profile)) REPRODUCED: R3's host model observes only ['bsize', 'frsize', 'lines', 'magic', 'mnt_id', 'page', 'protected', 'st_dev']: its opening decides the profile from the pinned mountinfo strings ('rw,relatime', 'rw,errors=remount-ro'), which omit the superblock's defaults (super.c:2949-2951), and has no journal location or kernel identity (R3: Ready with a claim). On the same mountinfo the R4 opening refuses an effective nobarrier (Unsupported: effective profile) and an external journal (Unsupported: journal not internal)
+
+== baseline checks ==
+C00 [golden-codec] PASS: 50 golden vectors reproduced and decoded
+C01 [F1-volatile] PASS: after F1: K shows the record, D does not, locks released
+C02 [F1-F2-sync] PASS: without a sync the record is lost; after the startup sync it survives F2
+C03 [errseq-reopen] PASS: new-description sync 0 is not a certificate; an unseen error refuses
+C04 [tear-containment] PASS: containment holds for records and seal; tear classes ['AbandonedClaim', 'MalformedJournal', 'UnsealedAction', 'UnsealedNoAction', 'Unused']
+C05 [lock-retained] PASS: locks outlive recorder failure; 3 descriptors survive the claim; after exit/eviction: closed Ready/Ready, seal failed Ready/PriorUnresolved, claim failed Ready/Ready
+C06 [busy-before-sync] PASS: Busy before any journal operation; a held journal lock refuses as Live untouched
+C07 [dup-bounded] PASS: 6 records x 201 submissions: one acknowledgement each, no growth
+C08 [fatal-latched] PASS: failure and loss (drop guard or join handle) reach the core after a stall; no ack at or beyond
+C09 [late-uncertain] PASS: 18 restart images refused, no identity invented
+C10 [exact-bytes] PASS: every byte of header, seal and record block checked; 21 checksum-valid header variants and 17 non-canonical texts refused
+C11 [archive-binding] PASS: binding preserved across archival; a changed byte made the disposition stale
+C12 [admin-crash] PASS: outcomes checked: P-ARCH 67, P-ARCH recovered 32, P-DISP 67, P-DISP recovered 32, P-PROV 338, P-RECYCLE 99, P-RECYCLE recovered 66, P-REQUALIFY 52, P-RETIRE 52, P-RETIRE refused 1, P-REVOKE 30, P-SUCCESSOR 400
+C13 [grammar-conformance] PASS: 13 fixtures, 110 prefixes accepted; 32 mutations rejected by their rules
+C14 [safe-open] PASS: FIFO and symlink refused unopened; 8 mount cases refused
+C15 [ack-durable] PASS: 12 fault scenarios: every acknowledgement durable; none at or after a failure
+C16 [no-false-resolution] PASS: 26078 restart images over 13 fixtures; refusals without native work: 11132 (disclosed)
+C17 [arith-bounds] PASS: claim exhaustion, configuration, size, PROVISION, incident and gap bounds refused
+C18 [fatal-total] PASS: 15 fatal scenarios: admission refused at once, acknowledgements kept, failures only at issued records
+C19 [admission-fence] PASS: 27 interleavings: no admission or publication after the latch
+C20 [session-verify] PASS: verification inside the session: no lock request, competitors excluded, nested rewrite covered
+C21 [provision-selection] PASS: post-lock revalidation: succession, retire, requalify, recycle, bounded
+C22 [metadata-schedules] PASS: 8 procedures: computed crash matrix equals section 15.2; link durable before sync, reclaim with open descriptors represented
+C23 [step-parity] PASS: 11 procedures and recoveries: operations, order and crash points match section 13
+C24 [aggregate-bounds] PASS: bounded: dispositions, revoked, archive, partial report, retirement uses the complete set
+C25 [durable-activation] PASS: activation before every claim: successor witness: 3 second crashes; provisioning witness: 3 second crashes; EIO at the PROVISION directory; EINTR four times; silent journal abort; emergency read-only; established store; completed succession; EINTR twice retried; read-only superblock; identity; F1 during activation; F2 during activation; verifier read-only; session activation; PROVISION directory; state root a mount point; stale reader and competing owner; replacement during activation
+C26 [composed-recovery] PASS: 101 administrative prefixes, 1135 first crashes, 566 runs with dependent work, 1860 second crashes: every acknowledged, unsealed generation discoverable or explicitly refused
+C27 [supported-profile] PASS: the qualified profile activated and claimed; 13 unsupported, unknown, contradictory or unqualified profiles refused before any claim by owners, the verifier and sessions; a profile changed during activation refused at A4; qualification refuses fast_commit, an external journal and no journal; the store uid cannot observe the superblock features, which the Owner keeps (section 13.2); a kernel update refused until re-qualification, which never accepts an unsupported profile
+C28 [activation-proof] PASS: 50 initial journal states, 259200 activation runs: 51820 certified, 207380 refused; 32460 certified after a late abort; 310920 later continuations and power losses kept every certified dependency; 4 windows through the whole model
+C29 [journal-conformance] PASS: fsync: completed 0, running EIO, emergency EROFS; 54024 runs with the abort before the probe's test returned EROFS; 32460 reached the completed branch with the journal aborted and returned 0, each abort after the probe's test; the commit.c:775-778 and 883-886 flushes never ran; checkpoint.c:338-339, commit.c:775-778 and commit.c:883-886: a failed flush is discarded, the journal does not abort, and a committed operation is lost at power loss; necessity of A-S5: activation certified with every result 0, then a failed checkpoint flush; the dependency is lost at power loss and no process sees an error; a failed commit record aborts and its waiting sync returns EIO; the next handle forces emergency read-only; an abort never moves the tail
+
+== crash matrix (section 15.2): crash points, after F1 | after F2 ordered | added by the per-directory over-approximation ==
+P-ARCH 0: published | published | -
+P-ARCH 1-4: maintenance | maintenance, published | -
+P-ARCH 5: archived | archived, maintenance, published | -
+P-ARCH 6: archived | archived | -
+P-DISP 0: blocks | blocks | -
+P-DISP 1-4: maintenance | blocks, maintenance | -
+P-DISP 5: published | blocks, maintenance, published | -
+P-DISP 6: published | published | -
+P-PROV 0-21: unprovisioned | unprovisioned | -
+P-PROV 22: fresh | fresh, unprovisioned | -
+P-PROV 23: fresh | fresh | -
+P-RECYCLE 0: archived | archived | -
+P-RECYCLE 1-3: maintenance | archived, maintenance | -
+P-RECYCLE 4: lost | archived, lost, maintenance | -
+P-RECYCLE 5-8: lost | lost | -
+P-RECYCLE 9: recycled | lost, recycled | -
+P-RECYCLE 10: recycled | recycled | -
+P-REQUALIFY 0-3: unsupported | unsupported | -
+P-REQUALIFY 4: revision 2 | revision 2, unsupported | -
+P-REQUALIFY 5: revision 2 | revision 2 | -
+P-RETIRE 0-3: bound 0 | bound 0 | -
+P-RETIRE 4: bound 1 | bound 0, bound 1 | -
+P-RETIRE 5: bound 1 | bound 1 | -
+P-REVOKE 0: published | published | -
+P-REVOKE 1: blocks | blocks, published | invalid
+P-REVOKE 2: blocks | blocks | invalid
+P-REVOKE 3: blocks | blocks | -
+P-SUCCESSOR 0-27: predecessor | predecessor | -
+P-SUCCESSOR 28: successor | predecessor, successor | -
+P-SUCCESSOR 29: successor | successor | -
+
+== composed recovery (section 15.4): dimensions and outcomes ==
+after the second crash: PriorUnresolved: 1860
+chained administration: claim 1 still decided: 15
+chained administration: crashes: 21
+chained administration: retired with the archive copy: 6
+dispositioned generation: Ready: 3
+first crashes: 1135
+prefixes: 101
+refused before dependent work: Invalid: 4
+refused before dependent work: Lost: 45
+refused before dependent work: MaintenanceIncomplete: 83
+refused before dependent work: PriorUnresolved: 38
+refused before dependent work: Unprovisioned: 359
+refused before dependent work: Unsupported: 40
+runs with dependent work: 566
+runs with dependent work: P-ARCH: 31
+runs with dependent work: P-DISP: 8
+runs with dependent work: P-PROV: 8
+runs with dependent work: P-RECYCLE: 29
+runs with dependent work: P-REQUALIFY: 8
+runs with dependent work: P-RETIRE: 48
+runs with dependent work: P-REVOKE: 7
+runs with dependent work: P-SUCCESSOR: 427
+second crashes: 1860
+unpublished root recovered: 1
+representative traces (the last operation before each procedure's final sync, first crash F1):
+  P-ARCH prefix 5, first F1, second F1: PriorUnresolved on store-a, generation in the decision
+  P-ARCH prefix 5, first F1, second F2 ('ordered', 18) old: PriorUnresolved on store-a, generation in the decision
+  P-ARCH prefix 5, first F1, second F2 ('ordered', 18) new: PriorUnresolved on store-a, generation in the decision
+  P-DISP prefix 5, first F1, second F1: PriorUnresolved on store-a, generation in the decision
+  P-DISP prefix 5, first F1, second F2 ('ordered', 15) old: PriorUnresolved on store-a, generation in the decision
+  P-DISP prefix 5, first F1, second F2 ('ordered', 15) new: PriorUnresolved on store-a, generation in the decision
+  P-PROV prefix 25, first F1, second F1: PriorUnresolved on store-a, generation in the decision
+  P-PROV prefix 25, first F1, second F2 ('ordered', 12) old: PriorUnresolved on store-a, generation in the decision
+  P-PROV prefix 25, first F1, second F2 ('ordered', 12) new: PriorUnresolved on store-a, generation in the decision
+  P-RECYCLE prefix 9, first F1, second F1: PriorUnresolved on store-a, generation in the decision
+  P-RECYCLE prefix 9, first F1, second F2 ('ordered', 22) old: PriorUnresolved on store-a, generation in the decision
+  P-RECYCLE prefix 9, first F1, second F2 ('ordered', 22) new: PriorUnresolved on store-a, generation in the decision
+  P-REQUALIFY prefix 4, first F1, second F1: PriorUnresolved on store-a, generation in the decision
+  P-REQUALIFY prefix 4, first F1, second F2 ('ordered', 14) old: PriorUnresolved on store-a, generation in the decision
+  P-REQUALIFY prefix 4, first F1, second F2 ('ordered', 14) new: PriorUnresolved on store-a, generation in the decision
+  P-RETIRE prefix 4, first F1, second F1: PriorUnresolved on store-a, generation in the decision
+  P-RETIRE prefix 4, first F1, second F2 ('ordered', 24) old: PriorUnresolved on store-a, generation in the decision
+  P-RETIRE prefix 4, first F1, second F2 ('ordered', 24) new: PriorUnresolved on store-a, generation in the decision
+  P-SUCCESSOR prefix 31, first F1, second F1: PriorUnresolved on store-b, generation in the decision
+  P-SUCCESSOR prefix 31, first F1, second F2 ('ordered', 35) old: PriorUnresolved on store-b, generation in the decision
+  P-SUCCESSOR prefix 31, first F1, second F2 ('ordered', 35) new: PriorUnresolved on store-b, generation in the decision
+
+== activation proof (section 10.7): journal transaction windows ==
+certified: 51820
+certified through the completed branch with the journal aborted: 32460
+certified, the journal aborted by then: 32460
+continuations, then power loss: 310920
+initial states: 50
+refused: 207380
+refused, the dependencies committed (a conservative refusal): 48404
+runs: 259200
+whole model: a commit failed while the probe's transaction ran: Unreliable, 3 second crashes: 1
+whole model: an abort between the probe's two handle tests: Ready, 3 second crashes: 1
+whole model: the probe's own commit failed in the background: Ready, 3 second crashes: 1
+whole model: the probe's transaction committed, then a later commit failed: Ready, 3 second crashes: 1
+window: an abort before the probe's handle test: refused: 54024
+window: an abort inside the probe's handle start: certified: 27050
+window: an abort inside the probe's handle start: refused: 5410
+window: an error after the directory syncs returned: certified: 32460
+window: an error after the directory syncs returned: refused: 26084
+window: emergency read-only at a sync or the probe: refused: 77722
+window: the probe's transaction committing at its fsync: certified: 4650
+window: the probe's transaction committing at its fsync: refused: 760
+window: the probe's transaction completed before its fsync: certified: 37870
+window: the probe's transaction running at its fsync: certified: 9300
+window: the probe's transaction running at its fsync: refused: 6930
+
+== negative controls (in-memory mutants) ==
+NC01 -> C01 CAUGHT: process death makes kernel-visible bytes durable (first candidate)
+    assertion: [F1-volatile] process death made a pending record durable
+NC02 -> C02 CAUGHT: startup reports evidence preserved without syncing
+    assertion: [F1-F2-sync] a report of preserved evidence did not survive F2
+NC03 -> C03 CAUGHT: a new description's sync treated as certifying visible records
+    assertion: [errseq-reopen] the report certified a record that is not durable
+NC04 -> C04 CAUGHT: first-candidate geometry: 128-byte slots in shared pages, seal in block 0
+    assertion: [tear-containment] writing record 2 altered durable data: ('garbage', 4096)
+NC05a -> C05 CAUGHT: the recorder thread owns the lock descriptions (first candidate)
+    assertion: [lock-retained] the store lock was released by recorder failure
+NC05b -> C05 CAUGHT: the store-lock description duplicated into the worker, which unlocks
+    assertion: [lock-retained] the store lock was released by recorder failure
+NC06 -> C06 CAUGHT: startup syncs and reads journals before locking (first candidate)
+    assertion: [busy-before-sync] journal touched before the lock: [('rival', 'open', 'j00000.journal'), ('rival', 'fdatasync', 'j00000.journal'), ('rival', 'pread', 'j00000.journal')]
+NC07 -> C07 CAUGHT: bounded submission queue with re-acknowledgement (first candidate)
+    assertion: [dup-bounded] the owner would block on submission
+NC08 -> C08 CAUGHT: failure delivered as a message on a bounded event queue (first candidate)
+    assertion: [fatal-latched] the core never learned of the failure at record 6
+NC09 -> C09 CAUGHT: refuse only when recorded outstanding work exists
+    assertion: [late-uncertain] F1: restart permitted with a late owner held
+NC10a -> C10 CAUGHT: header reserved bytes unchecked
+    assertion: [exact-bytes] header reserved byte 60: valid
+NC10b -> C10 CAUGHT: seal reserved bytes and tail unchecked (first candidate's unassigned bytes)
+    assertion: [exact-bytes] seal byte 160 unchecked
+NC10c -> C10 CAUGHT: record-block padding unchecked
+    assertion: [exact-bytes] record byte 77 unchecked
+NC10d -> C10 CAUGHT: checksum-valid invalid header taken as an abandoned claim (first candidate)
+    assertion: [exact-bytes] header reserved byte 60 classified AbandonedClaim
+NC10e -> C10 CAUGHT: non-canonical decimals accepted in text
+    assertion: [exact-bytes] disposition text accepted with leading zero
+NC11a -> C11 CAUGHT: binding includes the file location (first candidate)
+    assertion: [archive-binding] the binding depends on the file location
+NC11b -> C11 CAUGHT: binding ignores the content
+    assertion: [archive-binding] the old disposition must be visible as stale
+NC12a -> C12 CAUGHT: temporary disposition names read as dispositions
+    assertion: [admin-crash] a disposition took effect without its final name (F1 2)
+NC12b -> C12 CAUGHT: a PROVISION inode mismatch ignored
+    assertion: [admin-crash] a replaced pool file was accepted (F1 after step 4)
+NC12c -> C12 CAUGHT: retirement without preconditions hides pool claims
+    assertion: [admin-crash] retirement hid an unresolved generation (Ready)
+NC13 -> C13 CAUGHT: grammar rule G16 (verdict iff closure) removed
+    assertion: [grammar-conformance] mutation 'Failed verdict without a closure' gave None, expected G16
+NC14a -> C14 CAUGHT: untrusted entries opened in blocking mode before the type check
+    assertion: [safe-open] startup blocked opening a FIFO
+NC14b -> C14 CAUGHT: ext4 decided by the shared magic alone (first candidate)
+    assertion: [safe-open] ext3 with the shared magic: Ready
+NC15a -> C15 CAUGHT: durable published before the sync
+    assertion: [ack-durable] clean: record 1 acknowledged before it was durable
+NC15b -> C15 CAUGHT: sync retried after EIO
+    assertion: [ack-durable] sync EIO at record 1: record 1 acknowledged before it was durable
+NC16 -> C16 CAUGHT: a visible RunEnded taken as resolution
+    assertion: [no-false-resolution] T7 {'lazy': False} at native+i1 (F1): restart permitted with ['i1'] outstanding as UnsealedAction
+NC17 -> C17 CAUGHT: claim counter unbounded
+    assertion: [arith-bounds] claim after 2^63 gave Ready
+NC18a -> C18 CAUGHT: no store admission gate: admission continues after a fatal condition (R1)
+    assertion: [fatal-total] A/D worker loss: admission after the fatal condition was not refused
+NC18b -> C18 CAUGHT: R1 failure targeting: the cause's own sequence, delivered only at that position
+    assertion: [fatal-total] B conflict on an acknowledged record: failure delivered at None (None), expected 4
+NC18c -> C18 CAUGHT: a submission for an unissued future sequence accepted silently (R1)
+    assertion: [fatal-total] C future: admission after the fatal condition was not refused
+NC18d -> C19 CAUGHT: publication after the fatal latch (R1)
+    assertion: [admission-fence] publication after the latch (schedule [0, 0, 1, 0])
+NC18e -> C18 CAUGHT: an unexpected acknowledgement outcome ignored
+    assertion: [fatal-total] unexpected ack: None
+NC18f -> C18 CAUGHT: record_failed for an unissued record counted as delivered
+    assertion: [fatal-total] A/D worker loss: a failure was reported without a real record
+NC19 -> C19 CAUGHT: a health check followed by an unprotected admission call
+    assertion: [admission-fence] an admission linearized after the fatal latch (schedule [0, 1, 0, 0])
+NC20a -> C20 CAUGHT: in-session verification requests a new shared lock (R1 workflow)
+    assertion: [session-verify] in-session verification did not run (Busy)
+NC20b -> C20 CAUGHT: in-session verification converts the session's lock to shared
+    assertion: [session-verify] a standalone verifier was not excluded during maintenance (Ready)
+NC20c -> C20 CAUGHT: the session releases its lock around verification
+    assertion: [session-verify] an owner started while the session released its lock
+NC20d -> C20 CAUGHT: a Busy verification taken as success
+    assertion: [session-verify] in-session verification did not run (Ready)
+NC20e -> C20 CAUGHT: maintenance authority asserted by a flag instead of the retained lock
+    assertion: [session-verify] verification without the retained lock was not refused
+NC20f -> C20 CAUGHT: in-session verification skipped: an earlier report reused
+    assertion: [session-verify] verify-after inside the same session: Ready
+NC21a -> C21 CAUGHT: no post-lock revalidation of the PROVISION selection (R1)
+    assertion: [provision-selection] a stale selection regained authority: Ready 10111213
+NC21b -> C21 CAUGHT: revalidation through the descriptor kept from selection
+    assertion: [provision-selection] a stale selection regained authority: Ready 10111213
+NC22a -> C22 CAUGHT: directory entries durable only through fsync_dir (R1 model)
+    assertion: [metadata-schedules] a link durable before the directory sync is not represented: {'F1': {'published'}, 'ordered': {'blocks'}, 'perdir': {'blocks'}}
+NC22b -> C22 CAUGHT: no page reclaim while a descriptor is open (R1 model)
+    assertion: [metadata-schedules] clean pages must be reclaimable while a descriptor is open
+NC23 -> C23 CAUGHT: an undocumented directory sync in recycling (a hidden model-only step)
+    assertion: [step-parity] P-RECYCLE: modelled operations differ from the protocol: [('13.8/3', 'fsync_dir', 'provdir')]
+NC24a -> C24 CAUGHT: enumeration bounds checked only after examining the entries
+    assertion: [aggregate-bounds] dispositions: 4097 entries gave Invalid disposition 0000000000000000000000000000000000000000000000000000000000000000.disposition type
+NC24b -> C24 CAUGHT: a startup authorized from the truncated report
+    assertion: [aggregate-bounds] a startup decided from the truncated report: Ready partial=True
+NC24c -> C24 CAUGHT: retirement preconditions evaluated on the truncated report
+    assertion: [aggregate-bounds] retirement from a partial report hid an incident (Ready)
+NC-ACT-VISIBLE -> C25 CAUGHT: a freshly revalidated, visible selection treated as activated
+    assertion: [durable-activation] successor witness, F2 ('ordered', 21) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history
+NC-ACT-ORDER -> C25 CAUGHT: claim, acknowledgement and admission before the activation
+    assertion: [durable-activation] successor witness, F2 ('ordered', 21) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history
+NC-ACT-ERROR -> C25 CAUGHT: a failed or uncertain activation sync treated as success
+    assertion: [durable-activation] EIO at the PROVISION directory, F2 ('ordered', 21) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history
+NC-ACT-PROBE -> C25 CAUGHT: no certification probe: a sync returning 0 after a silent commit failure trusted
+    assertion: [durable-activation] silent journal abort, F2 ('ordered', 23) old: Ready on store-a with the acknowledged, unsealed generation of store-b outside the selected history
+NC-ACT-REVALIDATE -> C25 CAUGHT: the identity and selection revalidation around activation omitted
+    assertion: [durable-activation] replacement during activation, F1: Ready on store-c with the acknowledged, unsealed generation of store-b outside the selected history
+NC-ACT-COMPOSE -> C26 CAUGHT: the R2 protocol: no activation, and a fresh root provisioned after Unprovisioned
+    assertion: [composed-recovery] P-PROV prefix 25, first F1, second F2 ('ordered', 10) old: Ready on store-fresh with the acknowledged, unsealed generation of store-a outside the selected history
+    under the same mutant, the earlier snapshot checks: C12=PASS, C20=PASS, C21=PASS, C22=PASS
+NC-PROF-JOURNAL -> C27 CAUGHT: an external journal accepted: the journal's location never checked
+    assertion: [supported-profile] an external journal: the owner got Ready, not a refusal before the claim
+NC-PROF-MODE -> C27 CAUGHT: an excluded mode in the effective listing accepted (data=writeback, nobarrier, journal_async_commit, norecovery)
+    assertion: [supported-profile] nobarrier, the superblock's default, absent from mountinfo and contradicting the attestation: the owner got Ready, not a refusal before the claim
+NC-ACT-UNQUALIFIED -> C27 CAUGHT: an unqualified profile authorizes: the profile taken from the pinned mountinfo strings and the attestation, the kernel never compared (R3)
+    assertion: [supported-profile] nobarrier, the superblock's default, absent from mountinfo and contradicting the attestation: the owner got Ready, not a refusal before the claim
+NC-PROF-GUARD -> C27 CAUGHT: the effective profile not checked again after the syncs (A4)
+    assertion: [supported-profile] a profile changed during activation was certified (Ready)
+NC-PROOF-ORDER -> C28 CAUGHT: the probe before the directory syncs
+    assertion: [activation-proof] initial ('d1', 'd2'), gaps (None, None, 'bg-ok', None), abort in the probe's handle True, waits ok: certified with a dependency in a failed transaction ([0, 0, 0, 0])
+NC-FSYNC-COMPLETED -> C29 CAUGHT: R3's fsync model: every aborted, unnoticed journal reported as EIO, whatever the state of the inode's transaction
+    assertion: [journal-conformance] fsync of a completed transaction after an abort returned EIO; jbd2_complete_transaction returns 0 untested (journal.c:800-805)
+NC-ERR-DETECTED -> C29 CAUGHT: a discarded flush status treated as detected: an invented abort at an unchecked flush site
+    assertion: [journal-conformance] checkpoint.c:338-339: a discarded flush status became an abort
+
+== restored baseline ==
+C00=PASS C01=PASS C02=PASS C03=PASS C04=PASS C05=PASS C06=PASS C07=PASS C08=PASS C09=PASS C10=PASS C11=PASS C12=PASS C13=PASS C14=PASS C15=PASS C16=PASS C17=PASS C18=PASS C19=PASS C20=PASS C21=PASS C22=PASS C23=PASS C24=PASS C25=PASS C26=PASS C27=PASS C28=PASS C29=PASS
+
+== tool failures ==
+none
+
+== assertion and model changes (requirement preserved) ==
+- C05: recorder loss is read from the exchange's latched fatal cause (WorkerLost) instead of R1's separate 'lost' flag; the requirement (loss is latched while locks stay held) is unchanged.
+- C08: R1 asserted that, without the drop guard, an apply step saw no signal until a separate join-handle call. R2 makes the join-handle check part of every apply step, so the first apply latches WorkerVanished and delivers the failure: the requirement is preserved and the timing strengthened.
+- C11 and C12: procedures run inside a maintenance session (R1's modelled procedures held no lock). C12 now runs under ordered and per-directory persistence schedules instead of fsync_dir-only durability; its safety assertions are unchanged; re-qualification and a valid retirement series were added.
+- C15: the INV-4 assertion 'acknowledged before the failed sequence' became 'acknowledged no further than P, the durable position at the latch', which covers every fatal cause.
+- C03 and C05: R1's evict (pages and inode, only with no open descriptor) became evict_inode in the same scenarios; page reclaim with open descriptors is now separate (C22).
+- C10: the PROVISION grammar has a revision field; two non-canonical variants were added.
+- C03: the writer's EIO is read from the exchange's latched fatal cause (Sync) instead of R1's 'failed' field; the requirement (the writer observes EIO; a new description's sync certifies nothing) is unchanged.
+- C09 and C16: every restart image set now also includes page reclaim while descriptors are open (F1+page-reclaim), so their counts grew (C09 17 to 18 images, C16 25787 to 26078 images); every R1 assertion is applied to every image.
+- C12: its summary counts outcomes (one per crash point after F1, and one per schedule and data choice after F2) instead of R1's crash points, and adds recovery counts.
+- R3, owner startups and maintenance sessions activate before they read the store (design section 10.6). Every retained control's assertion and every retained check's detail line is identical to the R2 output, except C23's, which now also checks the R3 re-publication recovery (11 procedures and recoveries instead of 10).
+- R3 model correction: the Worker's identity recheck (W5) resolved the journals directory through the world's first root; it now uses the root the owner opened, as design W5 and section 8.1 specify. Without it no owner could run on a successor root.
+- R3 model correction: flock ownership was keyed by Python object identity, so a lock held when a world was cloned could never be released in the clone (a spurious Busy after F1). It is keyed by a serial of the open file description. No retained check cloned a world with a lock held.
+- R4 model correction (F4): fsync_file returned EIO for every aborted, unnoticed journal. It now follows jbd2_complete_transaction: a running transaction is waited for and the abort flag tested; a completed one returns 0 untested. R3 assumed the probe's fsync always waited for the probe's transaction. No R3 check took the old branch (R3-F4-REACH), the safety requirement is unchanged (no claim on a selection whose dependencies are not durable), and the refusals it gave are now derived from the probe's handle start (C28, C29).
+- R4: touch() models an abort landing between ext4's and jbd2's handle tests, and activation's hook sees the two probe windows; no retained check uses either.
+- R4: every opening checks the effective profile (design section 6.4, steps 9-11) and PROVISION has a kernel field. The model's host is the qualified profile, so every retained check's result, every retained control's assertion and every retained detail line is identical to R3's output.
+
+== assumptions not established by the model ==
+- A-S1 flush honesty, A-S2 4096-byte containment, A-S3 no silent loss, A-S4 read stability (design section 5): assumed by the model, never established by it.
+- A-M1: on the supported ext4 profile, metadata operations become durable atomically and in issue order. The 'ordered' schedules use it and are themselves a superset of ext4 outcomes; the 'per-directory' schedules are a conservative over-approximation, not ext4 behaviour.
+- Kernel semantics as documented: errseq sampling at open and reporting per open file description; flock per open file description; fifo(7) non-blocking open; clean-page reclaim regardless of open descriptors. Modelled, not tested.
+- ext4 overwrite of written, unshared extents needs no allocation (qualification, D-6).
+- SHA-256 collision resistance (bindings, digests).
+- Domain A (store-uid rewriting) is outside the model's guarantees: gate G-AUTH stays open.
+- CoreSim and the fixtures T1-T15 are derived by reading the source; they are not the Rust core. Conformance of the real core's journals (I9) and of the implementation's mutex linearization are left to the implementation mission.
+- Interleavings are enumerated over the model's atomic steps; a step stands for one critical section of the design.
+- The maintenance session is a specified future interface; no executable exists or is authorized.
+- A-M2 (design section 5.1, corrected in R4): on the supported ext4 profile, as read from the Linux v6.17 sources, a directory fsync waits for the running or committing transaction and then tests the abort flag, and returns 0 untested when there is neither; a regular file's fsync waits for its inode's transaction only while it runs or commits, and otherwise returns 0 untested after its own checked cache flush; an abort lasts until the journal is closed; the next handle start turns it into emergency read-only, which every fsync returns first; a timestamp update by the file's owner starts a handle. Read from the sources, not tested; the runtime kernel must be qualified (G-HOST).
+- A-S5 (new in R4): the device completes every cache flush the kernel issues; a failed flush is a storage fault outside domain H. v6.17 discards the status of the flush before the log tail moves (checkpoint.c:338-339); C29 shows that such a failure can lose a certified dependency with no error reported to any process. Assumed, not established.
+- The supported profile's superblock facts (a journal at inode 8, no external journal device, no fast_commit feature) are read by root at qualification; the store uid cannot read them at runtime, and the Owner keeps them by re-qualifying after any change (design section 13.2).
+- The effective option listing, the jbd2 entry names and the kernel identity of the model's host are fixtures in the form Linux v6.17 prints them, not host observations.
+- JournalSim is the smallest state of the cited jbd2 and ext4 branches, not a kernel: one journal, commits one at a time in order, background commits and aborts at chosen points, every flush honoured unless a scenario fails it. Its enumeration is bounded (initial states of at most four events, one background event before each activation step) and is not an exhaustive proof.
+- One filesystem: the profile requires the PROVISION directory, the state root's parent and the state root on one filesystem, verified by st_dev. The model has one journal per world; the per-directory family over-approximates independent directories, and so independent filesystems.
+- Composed scenarios are bounded: one pool file claimed, one generation of dependent work, every procedure prefix, a first crash F1 or F2 under every schedule, and a second crash F1 or F2 under every schedule. They are not an exhaustive proof.
+- The Python model is not the Rust implementation; no Cargo command or Rust test ran.
+- A-S2 is load-bearing: with a 16 KiB failure unit, losing a durable ActionStarted block while the next block stays zero yields a valid shorter prefix (UnsealedAction -> UnsealedNoAction). Outside every guarantee; attested by the Owner, qualified empirically.
+
+summary: R1 counterexamples 16/16 reproduced; R2 composed counterexample 3/3 reproduced; R4 findings on the R3 model 3/3 reproduced; baseline 30/30 pass; negative controls 61/61 caught; restored 30/30 pass; tool failures 0
+RESULT: PASS
+exit status: 0
+
+== 4. R4 reference check ==
+
+$ python3 -B docs/evidence/p2-v1-r3b-i3-p-r4/reference_check.py --self-test --kernel <scratch>/kernel
+baseline 45898e05178a56efaadeb1f8f9ee7a0a521c72c9 tree cd197e047cb5a57e458b2af5d32f9c5406371301: OK
+references in the document: 115; checked against 45898e05178a: 115
+golden record vectors: model 50, baseline RECORD_VECTORS 50
+crash matrix rows: document 30, model 30
+operation rows: document 11, model 11
+coverage rows: document 8, model 8; outcomes 1105
+checks: document 30, model 30; negative controls: model 61
+activation operations: document 10, model 10
+composed dimensions: document 6, model 6
+kernel citations in the document: 121; expectations 121
+enumeration counts: document 7, model 7
+profile options: required 2, excluded 9; model 2, 9
+PROVISION keys: document 29, model 29
+kernel citations against the files: 121 citations in 21 files, SHA-256 verified, all match
+self-test: moved reference reported True; altered golden digest reported True; crash-matrix cell reported True; operation reported True; coverage count reported True; check marker reported True; activation operation reported True; composed count reported True; kernel citation moved reported True; enumeration count reported True; excluded option dropped reported True; PROVISION key reported True; kernel expectation altered reported True
+RESULT: PASS
+exit status: 0
+
+== 5. Primary-source record ==
+
+Linux v6.17 files in <scratch>/kernel (raw.githubusercontent.com/torvalds/linux/v6.17/<path>, '/' written '_'):
+  R4's nine new files were fetched 2026-10-02T03:30:04Z; the others are R3's copies, re-hashed equal to R3's record.
+  21 are cited by the design and checked by the reference check. Not cited: fs/attr.c, fs/namei.c and
+  fs/open.c (read for R3), fs/ext4/namei.c and include/linux/blkdev.h (fetched for R4, not needed).
+  2809b4d1b174ddb392cf1358d9173e1b272b6151646749cf5f95d98e532055fb  block_blk-core.c
+  6b26d0c13ab486a85afb543c6dd16506a5d03e9b9092f342df6fa4b105550714  block_blk-flush.c
+  ae23e8ec62ae06fac5a14226a1bdaa4d1b7276aaeefd1c25a1ce1d98739bbbf2  Documentation_filesystems_ext4_journal.rst
+  dc5b170d570869098ea7c261331551d36e09466d95ed9c21fbd1299b528c83d9  fs_attr.c
+  1ecea2c74781410b847be3e131818bbcf591da7bde0ee78e7df152dcc754aa67  fs_buffer.c
+  ff09ac7308e85079b8f17d91834c2c83bff0d3c6b890c4401528c4b672fbfe4b  fs_ext4_ext4.h
+  bec1989a8e255e6b62c87f78a12c18e0a07854c71a8b391a34c1233b1ac66d2e  fs_ext4_ext4_jbd2.c
+  91482cf3a796ed01c705c3131bba9533a14769ac21df9ca766a9a0eb85e87c4c  fs_ext4_ext4_jbd2.h
+  a09183712b8b8ab83123a68e4b3b6b91802b3daf33b66dab277527b1893ac892  fs_ext4_fast_commit.c
+  86fd5dc8e49491377f4f09e1f99b39dce0842083269ac28de44a71a08d12adaf  fs_ext4_fsync.c
+  97a8325d4aa77171e57250cf3547e53b42c8d9f609a2318f0c89e70a3f43561a  fs_ext4_inode.c
+  9f8d5fcbb7ca3105f514244ed0a90d8539b95a9afe3771cc2c55424e1fedd864  fs_ext4_namei.c
+  3aa53b5ef5983ced5161a590c358bec779257dfce46e96459f41314e77e21a9b  fs_ext4_super.c
+  6bf675eded83565fa48e50240284ff92cdc5ecfa98ba7a2c2cc86beaf18b1260  fs_ext4_sysfs.c
+  9ed872cd85e6c54792e79241d31ad6781b88addaa05ab26626ad46f70da2ec28  fs_fs-writeback.c
+  e984f455acd823c46947d59fdde6883449b7c7200ee7c6a05b8e87161ad2d388  fs_jbd2_checkpoint.c
+  736c3ef6d9795d5677b00b79b7b3092a054b4e77893456d47705b51d361a11da  fs_jbd2_commit.c
+  dd5ee45c815c753a0eac6014371b3788cd7fca54f95a219e08446703b5226857  fs_jbd2_journal.c
+  ccb2b0572719fc07ea851cb91c3c89440bc0fd296b3a5a94f11f69d64f72cd45  fs_jbd2_recovery.c
+  ffbe13a83744de683daa35bea1b72d08693163b65c3efa76feb216888004205d  fs_jbd2_transaction.c
+  a812c54a4cdf887c4fdf40dc56c4aa319434fe297c253320707835647e88adc2  fs_namei.c
+  8461bf31e9119c56e864dd6d96a54bcbe1c2e9e188d880b55e43053d87683575  fs_open.c
+  4154c9dee43416c05a91a2845ac55e335f0ee65da7df33232bd2e515077af654  fs_sync.c
+  bf4ddd2748076206d32d55eb8981c2a39c8eeec9f0237510409f2d4c42864ff1  fs_utimes.c
+  984c6db19eabc6ac9f2dc99e76659f7f03887bb7732d7ca68da8e1d50d65ee55  include_linux_blkdev.h
+  b695252b8160cbb195ea0aea39e20f84e56d3f1e707e4b783fde64e0808c5408  include_linux_jbd2.h
+byte-for-byte comparison with git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/<path>?h=v6.17:
+  fs/jbd2/checkpoint.c: identical
+  fs/jbd2/commit.c: identical
+  include/linux/jbd2.h: identical
+
+Source traces for the R4 findings (Linux v6.17; file:line at the tag; files fetched from
+raw.githubusercontent.com/torvalds/linux/v6.17/<path>, SHA-256 in the kernel file list; checkpoint.c,
+commit.c and include/linux/jbd2.h were also compared byte for byte with
+git.kernel.org/.../torvalds/linux.git/plain/<path>?h=v6.17 and are identical)
+
+F1  commit.c discards two flush statuses.
+  Sites:
+    commit.c:775-778   if ((t_need_data_flush || update_tail) && j_fs_dev != j_dev && JBD2_BARRIER)
+                         blkdev_issue_flush(journal->j_fs_dev);            return value discarded
+    commit.c:883-886   if (async_commit feature && JBD2_BARRIER) blkdev_issue_flush(journal->j_dev);
+                                                                            return value discarded
+  Guards and reachability:
+    - 775-778 needs j_fs_dev != j_dev. An internal journal is created by jbd2_journal_init_inode with
+      j_dev = j_fs_dev = sb->s_bdev (journal.c:1684); only jbd2_journal_init_dev (journal.c:1641-1657),
+      the external journal, gives two devices. ext4 chooses by s_journal_inum versus s_journal_dev
+      (super.c:5998-6020; both set refuses, 6006-6010).
+    - 883-886 needs the jbd2 async-commit feature, which ext4 sets only when mounted with
+      journal_async_commit (super.c:4078-4082) and clears otherwise (4083-4092). v6.17 refuses to mount
+      journal_async_commit with data=ordered (super.c:4963-4968).
+  What each flush protects:
+    - external journal: ordered data and checkpointed home blocks on the filesystem device must be
+      durable before the commit record and before the commit-time tail update (899-900). The commit
+      record's own PREFLUSH|FUA (152-154) goes to the journal device only. fsync relies on it when
+      jbd2_trans_will_send_data_barrier returns 1 (journal.c:633-636, the external-journal branch).
+    - async commit: the commit record is submitted early without PREFLUSH|FUA (781-786, 152-154);
+      the final flush is what makes the log and the record durable.
+  Discarded, not caught elsewhere: neither status reaches an abort, the errseq of a mapping, or a
+    waiter (jbd2_log_wait_commit, journal.c:652-692, tests only the abort flag).
+  Verdict: confirmed as discarded returns; unreachable on the R4 profile (internal journal; data=ordered,
+    which excludes async commit at v6.17). Not a data-loss claim for the profile.
+
+F2  checkpoint.c discards the flush issued before the log tail moves.
+  Site:
+    checkpoint.c:318-342  jbd2_cleanup_journal_tail: abort -> -EIO (323-324); nothing to clean -> 1
+      (326-327); if JBD2_BARRIER: blkdev_issue_flush(journal->j_fs_dev) (338-339), status discarded;
+      then __jbd2_update_log_tail (341).
+    Its own comment (330-336, 310-315): the flush makes home blocks written by checkpointing durable
+      "before we drop the transactions from the journal"; "we must not update the super block if
+      checkpointing may have failed".
+  Path after the flush:
+    journal.c:1056-1091 __jbd2_update_log_tail -> jbd2_journal_update_sb_log_tail(.., REQ_FUA) (1069)
+    journal.c:1852-1885: abort -> -EIO (1859-1860); jbd2_check_fs_dev_write_error -> abort, -EIO
+      (1861-1864); s_sequence/s_start set (1871-1872); jbd2_write_superblock (1874), whose write error
+      aborts (1827-1837). journal.c:1084-1086: j_tail and j_tail_sequence advance.
+    recovery.c:611: replay starts at the superblock's s_start, so dropped transactions are never
+      replayed.
+  Callers (all reachable on the profile):
+    transaction.c:272-279  add_transaction_credits -> __jbd2_log_wait_for_space when log space is low,
+      at an ordinary handle start by any process
+    checkpoint.c:49-124    __jbd2_log_wait_for_space -> jbd2_log_do_checkpoint (91) or
+      jbd2_cleanup_journal_tail (92)
+    checkpoint.c:154-298   jbd2_log_do_checkpoint -> jbd2_cleanup_journal_tail (169, 295)
+    journal.c:2402-2470    jbd2_journal_flush -> jbd2_log_do_checkpoint (2431), jbd2_cleanup_journal_tail
+      (2442); ext4 callers super.c:6259, 6400, inode.c:6599
+    journal.c:2116-2193    jbd2_journal_destroy (unmount) -> jbd2_log_do_checkpoint (2134)
+  Independently caught, and not:
+    - a failed home write: end_buffer_write_sync -> mark_buffer_write_io_error -> mapping_set_error on
+      the block device mapping (buffer.c:165-176, 1214-1222), sampled at journal load
+      (jbd2.h:1690-1699) and checked before every tail update (jbd2.h:1701-1707, journal.c:1861-1864)
+      and at destroy (journal.c:2159-2161): CAUGHT, the journal aborts and the tail does not move.
+    - a failed flush: blkdev_issue_flush returns the bio status and records it nowhere
+      (blk-flush.c:468-474): NOT CAUGHT. The superblock write is REQ_FUA only; where the device
+      emulates FUA by a flush, a persistent flush failure fails that write and aborts (caught); with
+      native FUA, or a transient failure, nothing observes it.
+    - contrast: the commit-time tail update (commit.c:753-765, 899-900) is computed before the commit
+      record, whose PREFLUSH|FUA is checked (874-881, 888-889); after an abort the tail does not move
+      (journal.c:1859-1860). Recovery's own flush is checked (recovery.c:339-343).
+  End-to-end, on the profile: loss needs (a) the device to fail that flush, (b) the tail update to
+    succeed, and (c) power loss before any later successful flush covers the home blocks, with the
+    device not retaining them. Then committed metadata of the dropped transactions is in neither the
+    journal nor durable at home, and reverts. That metadata can include an activated selection's
+    dependencies (the PROVISION entry, the store's directory entries), long after activation.
+  The store cannot observe (a). No process receives an error.
+  Verdict: confirmed and reachable on the narrowed profile; a real threat to required history only
+    when the device fails a flush; closure needs an assumption (no flush failure in domain H) or a
+    device without a volatile write cache (blk-core.c:809-819 completes a flush without sending it).
+
+F3  jbd2_complete_transaction returns 0 without testing the abort flag.
+  Site: journal.c:787-808. Running tid: request commit, wait (792-799, 806-807); committing tid: wait
+    (800-802 false branch, 806-807); otherwise need_to_wait = 0 and return 0 (800-805). Only
+    jbd2_log_wait_commit tests the abort flag (689-690), after its wait loop (678-686).
+  Caller on the profile: ext4_sync_file (fsync.c:129-177) -> ext4_fsync_journal (97-116): a regular
+    file -> ext4_fc_commit (115) -> without fast commits jbd2_complete_transaction (fast_commit.c:
+    1207-1208). The tid is i_sync_tid for fsync (fsync.c:102).
+    A directory takes ext4_force_commit (fsync.c:108-109) -> __jbd2_journal_force_commit
+    (journal.c:499-527), whose "Nothing to commit" branch (513-517) also returns 0 untested.
+  When the completed branch occurs: kjournald2 commits a running transaction on its timer
+    (journal.c:197-204, 241-245) or another task forces it; ext4_iget sets i_sync_tid to the running or
+    committing tid when the inode is loaded (inode.c:5400-5416); ext4_update_inode_fsync_trans skips the
+    update for an aborted handle (ext4_jbd2.h:354-365), leaving an older tid.
+  Guards that do not depend on the branch:
+    - fsync.c:135-137: ext4_sync_file returns the emergency state first (EIO shutdown, EROFS emergency
+      read-only; ext4.h:2267-2274).
+    - the probe's handle: futimens -> vfs_utimes (utimes.c:20-66) -> ext4_setattr (inode.c:5845;
+      emergency first, 5854-5856) -> setattr_copy, mark_inode_dirty (6052-6056) -> __mark_inode_dirty
+      (fs-writeback.c:2495-2526) -> ext4_dirty_inode (inode.c:6531-6540): ext4_journal_start, error
+      swallowed -> __ext4_journal_start_sb (ext4_jbd2.c:93-117) -> ext4_journal_check_start
+      (65-91): an aborted journal -> ext4_abort (86-88; ext4.h:3197-3198) -> ext4_handle_error with
+      force_ro (super.c:680-733): EXT4_FLAGS_EMERGENCY_RO (732), or panic with errors=panic (717-720).
+  Windows the branch can hide (the probe passes although the journal has aborted):
+    (a) the abort is set after ext4_journal_check_start (ext4_jbd2.c:86) and before start_this_handle
+        (transaction.c:366-371): start_this_handle returns -EROFS without ext4_abort; nothing sets
+        emergency; i_sync_tid keeps an older, completed tid; fsync returns 0 from 800-805 after its own
+        flush (fsync.c:111-113, 166-170; journal.c:611-613 makes a committed tid need it).
+    (b) the abort is set after the handle started, and the probe's transaction completes before the
+        fsync examines it: 0 from 800-805.
+    (c) the handle is aborted: i_sync_tid is not updated; as (a).
+  Ordering argument (why none of these can hide a lost dependency): every abort site of a commit
+    (commit.c:548, 614, 642, 785, 866, 878, 889) precedes that commit's completion (1104-1105, under
+    j_state_lock, as is the flag at journal.c:2565-2589). An A2 sync that waits tests the flag after the
+    dependency's transaction completed (journal.c:678-690); an A2 sync that finds nothing to commit
+    returns only after every transaction completed. So an abort caused by a dependency's transaction is
+    set before the last A2 sync returns, hence before the probe's ext4_journal_check_start, which then
+    sets emergency read-only, which the probe's fsync returns at fsync.c:135. Windows (a)-(c) concern
+    an abort set after that check: a later transaction, whose failure cannot uncommit the dependencies
+    (recovery replays committed transactions from s_start, recovery.c:611).
+  Verdict: confirmed as a source fact; narrowed: R3's A-M2 bullet ("an fsync of that file then waits
+    for that handle's transaction") and section 10.6 A3 ("the journal had not aborted by the time of
+    the probe") overstate. The certificate comes from the A2 syncs' own abort tests and the probe's
+    handle-start test, observed through the emergency check; the completed branch can hide only an
+    abort set after that test (an error after the dependencies were established).
+
+F4  R3's model fsync_file returns EIO for every aborted, unnoticed journal.
+  R3 design_checks.py (SHA-256 31afe335...): SimFS.fsync_file returns "EROFS" for emergency, 0 for a
+    read-only superblock, "EIO" if journal_aborted, else 0. Source: EIO only if the inode's
+    transaction is still running or committing when examined (journal.c:792-807, 689-690); 0 when it
+    has completed (800-805). R3's touch() models the check_start detection but not window (a) or (c).
+  Verdict: confirmed model inaccuracy. Whether any R3 conclusion depended on it is measured on the
+    unchanged R3 model (R3-F4 reproduction in the R4 model).
+
+Other discarded errors met on the traced paths (not findings of the mission; recorded for the review):
+  - commit.c:738-744: ordered-data wait errors are printed and set to 0. The error stays in the file's
+    mapping (filemap_fdatawait_range_keep_errors, commit.c:197-199, 244-246) and is reported through
+    errseq to that file's descriptors. Independently caught for the store: every published file's
+    content is synced by the procedure's own descriptor before publication (section 13.1 rule 5), and
+    the recorder syncs its own descriptor. In v6.17 the data_err=abort option is parsed and shown
+    (super.c:1858, 2348-2351, 3004-3005) but nothing on this path consults it.
+  - commit.c:582-600, 1014-1018: on an aborted journal, buffers are un-journaled (jbddirty cleared), so
+    an uncommitted transaction's metadata is not written home by jbd2.
+
+Profile observations (for the establishment table):
+  - mountinfo field 11 is _ext4_show_options(nodefs = 0): an option equal to the per-superblock default
+    is omitted (super.c:2949-2951; data= only if it differs, 2985-2993). The per-superblock default is
+    taken after the superblock's default mount options and stored mount-option string are applied
+    (super.c:4330-4386, 5298-5303). So "nobarrier" or "data=writeback" can be in effect and absent.
+  - /proc/fs/ext4/<s_id>/options is _ext4_show_options(nodefs = 1) (super.c:3049-3058), world-readable
+    (sysfs.c:579-583): every table option is printed in its effective form, "barrier" or "nobarrier"
+    (super.c:1859-1860, 2933-2958), exactly one data= mode while a journal is loaded (2985-2993),
+    "journal_async_commit" iff set (1854-1856), "norecovery" iff noload is set (token2str,
+    super.c:2903-2911 with 1726-1727, 1857), "emergency_ro" and "shutdown" when in those states
+    (3034-3038). Fast commits have no option string (enabled from the superblock feature, super.c:
+    4349-4350, or the debug-only option, 1893-1896).
+  - noload/norecovery runs without a journal at all (super.c:5415-5444: s_journal = NULL, data flags and
+    fast commit cleared).
+  - JBD2_BARRIER follows the barrier option at every mount and remount (super.c:5768-5788).
+  - jbd2 names an internal journal "<bdev>-<inode>" and an external one "<journal bdev>"
+    (journal.c:1691-1693, 1651-1653) under /proc/fs/jbd2/<name>/info, world-readable (1222-1229).
+  - ext4 registers /sys/fs/ext4/<s_id> and /proc/fs/ext4/<s_id> by sb->s_id (sysfs.c:571-583).
+  - blk-core.c:809-819: on a device without a write-back cache the block layer strips PREFLUSH|FUA and
+    completes an empty flush at once.
+
+Linux man-pages 6.7 (Ubuntu manpages 6.7-2), local, added for R4: uname(2) (struct utsname:
+  release, version), readlink(2).
+libc 0.2.183 (the locked version, Cargo.lock) declares, for Linux: readlinkat (src/unix/mod.rs:2270,
+  the branch for every target but nto and l4re) and uname (src/unix/linux_like/mod.rs:2003; struct
+  utsname at :216); R3 recorded fsync, fdatasync, futimens and utimensat.
+
+== 6. Development record (before the runs above; none of it counted as a pass or a caught control) ==
+
+The R4 model was carried forward from the R3 model; every item below was found before the final runs
+in sections 4 and 5, and each was resolved at the first repair. No failure needed a second targeted
+repair.
+
+R3 baseline, before any R4 change:
+- The unchanged R3 model and reference check were run first (section 1). Their output was
+  byte-identical to the output recorded in docs/evidence/p2-v1-r3b-i3-p-r3/validation.txt, and the
+  coverage file to the committed coverage.json.
+
+Primary sources:
+- The complete v6.17 paths of F1-F4 were read: fsync.c, fast_commit.c, journal.c, commit.c (in full),
+  checkpoint.c (in full), transaction.c, recovery.c, ext4_jbd2.c, ext4_jbd2.h, inode.c, super.c,
+  sysfs.c, fs-writeback.c, utimes.c, buffer.c, blk-flush.c, blk-core.c, jbd2.h. checkpoint.c,
+  commit.c and jbd2.h were compared byte for byte with git.kernel.org's v6.17 tree.
+- Found by that reading, beyond F1-F4: the writer's first sync after its inode is loaded can also take
+  the completed-transaction return (design section 4.3 states it; the first record's sync flushes the
+  device before any acknowledgement); ordered-data wait errors are discarded by the commit and stay in
+  the file's errseq; v6.17's data_err=abort is not consulted on that path; mountinfo's per-superblock
+  options omit defaults, which the superblock's default mount options and stored option string set.
+
+Prototype (scratch, not evidence):
+- A standalone transaction-model prototype enumerated 405000 activation runs over 162 initial states
+  (6.7 s): the R3 protocol had no violation; the probe before the syncs, and no probe, each lost
+  certified dependencies; R3's fsync model certified fewer runs (23280 of 405000 against 59680) and
+  violated nothing. A "start" background event was added so that the probe's transaction can be
+  committing at its fsync; the bound was set to initial states of at most four events (50 states,
+  259200 runs).
+
+Model, first runs:
+- The retained checks were run after the SimFS, profile and PROVISION changes and before any new
+  check: output identical to the R3 baseline.
+- C28's first version held every enumerated run in memory; the enumeration now yields one run at a
+  time.
+- C29's discarded-flush cases were first written per profile with ad hoc set-up (the external-journal
+  case flushed its home blocks through a checkpoint before failing the commit's flush); they now use
+  one event list per profile through the enumeration's event function.
+- NC-ACT-UNQUALIFIED was first caught by the external-journal case, which any check of the journal's
+  location catches; the profile cases now begin with the hidden-default nobarrier case and the kernel
+  case, so the control fails on a claimed-string case.
+- The refusal assertion of C28 was first written against a helper that inspected the initial event
+  sequence; it is now "a refusal only with the journal aborted", which needs no helper.
+- C28's statistics were extended to count every timing window of design section 10.7.
+
+Reference check, first runs:
+- Three kernel citation ranges ended on a brace at another indentation than their first line
+  (blk-core.c:809-819, fsync.c:165-170 starting at a label, journal.c:792-799); corrected to
+  blk-core.c:809-820, fsync.c:166-170 and journal.c:792-798 before the checker was run on them.
+- A cited line of libc's own src/unix/mod.rs, written in file:line form, matched the checker's
+  pattern for the custody mod.rs; rephrased.
+
+== 7. Scope, hygiene and refs, before the commit ==
+
+$ git status --short --untracked-files=all
+ M docs/architecture/p2-custody-durable-recorder-design.md
+?? docs/evidence/p2-v1-r3b-i3-p-r4/README.md
+?? docs/evidence/p2-v1-r3b-i3-p-r4/coverage.json
+?? docs/evidence/p2-v1-r3b-i3-p-r4/design_checks.py
+?? docs/evidence/p2-v1-r3b-i3-p-r4/reference_check.py
+?? docs/evidence/p2-v1-r3b-i3-p-r4/validation.txt
+exit status: 0
+$ git diff --stat b0f8437636d0bc7d38818e75df71d1bf516cff8e
+ .../p2-custody-durable-recorder-design.md          | 425 +++++++++++++++++----
+ 1 file changed, 358 insertions(+), 67 deletions(-)
+exit status: 0
+$ git diff --check b0f8437636d0bc7d38818e75df71d1bf516cff8e
+exit status: 0
+$ git diff --quiet b0f8437636d0bc7d38818e75df71d1bf516cff8e -- . :(exclude)docs/architecture/p2-custody-durable-recorder-design.md
+exit status: 0  (0: no tracked file other than the design document differs from the design base)
+whitespace in the changed and new files (trailing space, CR, missing or extra final newline): none
+untracked files outside docs/evidence/p2-v1-r3b-i3-p-r4/: none
+files in docs/evidence/p2-v1-r3b-i3-p-r4/: ['README.md', 'coverage.json', 'design_checks.py', 'reference_check.py', 'validation.txt'] (SHA256SUMS is written after this record)
+protected ref main: local 4b36f60694148b60029733bc7b3d26e5a215d460, github 4b36f60694148b60029733bc7b3d26e5a215d460: unchanged
+protected ref repair/p2-validation-workflow-bootstrap: local 4b36f60694148b60029733bc7b3d26e5a215d460, github 4b36f60694148b60029733bc7b3d26e5a215d460: unchanged
+protected ref implement/phase2-governed-verification: local 4d6763a8afe998bb5a54f0b9ecfd420cd4abfa8f, github 4d6763a8afe998bb5a54f0b9ecfd420cd4abfa8f: unchanged
+protected ref rebuild/phase0-trust-boundary: local f727f5c39fab8d5c729a55eb28ad576d3d56ce47, github f727f5c39fab8d5c729a55eb28ad576d3d56ce47: unchanged
+protected ref evidence/phase0-closure: local e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1, github e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1: unchanged
+protected ref rebuild/phase1-governed-coding: local 14270a9a38770ac84456c1f812042d2967edec42, github 14270a9a38770ac84456c1f812042d2967edec42: unchanged
+protected ref evidence/phase1-closure: local c237937189b5977eaad01acad6a4c52bcce796cc, github c237937189b5977eaad01acad6a4c52bcce796cc: unchanged
+protected ref review/p2-v1-cleanup-observers: local 45898e05178a56efaadeb1f8f9ee7a0a521c72c9, github 45898e05178a56efaadeb1f8f9ee7a0a521c72c9: unchanged
+protected ref evidence/p2-v1-r3b-i2-r1: local 8e2c46c00cd4071bbae41815d1d1cd0c4814655f, github 8e2c46c00cd4071bbae41815d1d1cd0c4814655f: unchanged
+review/p2-v1-custody-recorder-design: local b0f8437636d0bc7d38818e75df71d1bf516cff8e, github b0f8437636d0bc7d38818e75df71d1bf516cff8e
+workflow push triggers (.github/workflows at the design base, unchanged since 8f888252): main; implement/**; repair/**;
+  rebuild/phase0-trust-boundary (path filter); tags v*. None matches review/p2-v1-custody-recorder-design;
+  no workflow has a pull_request trigger.
+
+RESULT: PASS

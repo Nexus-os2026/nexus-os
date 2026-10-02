@@ -1,12 +1,12 @@
-# P2 custody: durable recorder and refusal store — design (revision R3)
+# P2 custody: durable recorder and refusal store — design (revision R4)
 
 | | |
 |---|---|
-| Missions | P2-V1-R3B-I3-P (first candidate, `b23ae1ac`), revised by P2-V1-R3B-I3-P-R1 (`34cb35d8`), P2-V1-R3B-I3-P-R2 (`8f888252`) and P2-V1-R3B-I3-P-R3. A module of Phase Two, not Phase Three. |
+| Missions | P2-V1-R3B-I3-P (first candidate, `b23ae1ac`), revised by P2-V1-R3B-I3-P-R1 (`34cb35d8`), P2-V1-R3B-I3-P-R2 (`8f888252`), P2-V1-R3B-I3-P-R3 (`b0f84376`) and P2-V1-R3B-I3-P-R4. A module of Phase Two, not Phase Three. |
 | Status | **Design candidate for independent Architect review.** Not implemented, not provisioned, not qualified on any host, not live-validated, and not approved by being published. |
-| Design base | `8f8882521535db82a6ba08867c95518040a71cd2` (tree `62930337…`, parent `34cb35d8…`), the R2 candidate. It is not accepted for implementation. |
-| Source baseline | `45898e05178a56efaadeb1f8f9ee7a0a521c72c9`. Every `file:line` reference below is to this commit. |
-| Validation | `docs/evidence/p2-v1-r3b-i3-p-r3/` holds the R3 standard-library Python **design model**, its checks, its model-level negative controls, re-runs of the Architect's counterexamples on the unchanged R1 and R2 models, and a reference check. The R1 and R2 evidence in `docs/evidence/p2-v1-r3b-i3-p-r1/` and `docs/evidence/p2-v1-r3b-i3-p-r2/` is kept unchanged. The model validates this specification's protocols against the model's own semantics. It is not the store, an owner service, or a substitute for the later Rust tests (§16). |
+| Design base | `b0f8437636d0bc7d38818e75df71d1bf516cff8e` (tree `08a0e04f…`, parent `8f888252…`), the R3 candidate. It is not accepted for implementation. |
+| Source baseline | `45898e05178a56efaadeb1f8f9ee7a0a521c72c9`. Every `file:line` reference to a Rust file below is to this commit; every reference to a Linux file is to the v6.17 tag (§1.4). |
+| Validation | `docs/evidence/p2-v1-r3b-i3-p-r4/` holds the R4 standard-library Python **design model**, its checks, its model-level negative controls, re-runs of the Architect's counterexamples on the unchanged R1 and R2 models and of the R4 findings on the unchanged R3 model, and a reference check. The R1, R2 and R3 evidence in `docs/evidence/p2-v1-r3b-i3-p-r1/`, `-r2/` and `-r3/` is kept unchanged. The model validates this specification's protocols against the model's own semantics. It is not the store, an owner service, a kernel, or a substitute for the later Rust tests (§16). |
 | Authorizes | Nothing beyond this document. Implementation, provisioning, qualification, service integration and live validation each need a separate Architect authorization (§18). |
 
 Source labels:
@@ -58,11 +58,11 @@ The module meets two of the core's unmet integration obligations: durability, an
 | 7 | Startup takes every lock non-blocking **before** syncing or reading any journal. It type-checks entries before opening them, opens with non-blocking, no-follow flags, and changes no application state. Its persistence effects are disclosed: the evidence-preservation sync, and (R3) the activation's directory syncs and the timestamp probe on `LOCK`. | §10 |
 | 8 | Refusal stays conservative [D-3]. An unsealed generation that recorded any action start is refused, whatever its recorded-unsettled count. The restart report keeps separate the recorded unsettled entries, evidence completeness, whether native work was possible, and the refusal. It never invents an incident identity. | §11 |
 | 9 | Every container and text byte is assigned and validated, with full consumption and checked arithmetic. The NXCD version-1 record frame stays byte-identical [D-9]. | §7 |
-| 10 | Only ext4 is supported initially [D-6]. It is identified from the retained descriptor's mount ID in `mountinfo`, never from the shared `0xef53` magic alone. XFS is deferred. | §6.4 |
+| 10 | Only ext4 is supported initially [D-6]. It is identified from the retained descriptor's mount ID in `mountinfo`, never from the shared `0xef53` magic alone. XFS is deferred. **R4 narrows the profile**: an internal journal, `data=ordered`, barriers, no fast or asynchronous commits, normal journal loading, and the kernel the Owner qualified. Each is read where the kernel shows its effective state, never inferred from a string absent from `mountinfo`; what the store uid cannot read is a qualification fact the Owner keeps. | §5.3, §6.4, §13.2 |
 | 11 | Maintenance is offline, root-performed, and either fully specified or unsupported [D-7]. Every procedure runs inside one **maintenance session** that holds the store lock exclusively for its whole lifetime and verifies through that retained authority, never through a new lock request. Journal bindings are content-addressed, so archival keeps them. Any byte change creates a new binding, explicitly. | §12.3, §13 |
 | 11a | A `PROVISION` read is only a candidate until the reader holds the store lock and has **revalidated** it by fresh lookups: the same `PROVISION` inode and bytes, the same state root, and the locked `LOCK` inode. A failed revalidation re-selects, at most three times. A successor is published only while its maintenance session holds both stores' locks. | §10.5, §13.6 |
 | 11b | Crash outcomes of administrative procedures are computed under explicit metadata-persistence schedules: entries may become durable before any directory sync. Every model operation is a written protocol step, and the crash matrix is recomputed. | §4.8, §15 |
-| 11c | **Durable activation (R3).** No owner claims a journal, and no maintenance session decides, on a selection that is merely visible. Under the store lock, each first syncs every directory its selection and decision depend on. It then certifies with a probe on its own `LOCK` that no earlier journal commit failed silently, and revalidates. Recovery never provisions a fresh root over a root that may hold history. | §10.6, §13.2, §13.12 |
+| 11c | **Durable activation (R3; its proof restated in R4).** No owner claims a journal, and no maintenance session decides, on a selection that is merely visible. Under the store lock, each first syncs every directory its selection and decision depend on, then probes its own `LOCK`, and revalidates. Recovery never provisions a fresh root over a root that may hold history. R4 states exactly what this establishes: every transaction holding a dependency has committed, shown by the syncs' own abort tests and by the probe's handle start. It does not show that every earlier filesystem transaction succeeded (§10.7). | §10.6, §10.7, §13.2, §13.12 |
 | 12 | Store A0 is limited crash evidence, **not** tamper-resistant admission authority [D-4]. Production or runner use stays behind the unresolved gate **G-AUTH**. | §3.3, §18 |
 | 13 | No change to `core.rs`, `model.rs` or `codec.rs` is required. One narrow core API (API-5) is proposed for a later mission; the design does not depend on it. | §2.3 |
 
@@ -105,6 +105,18 @@ The Architect's composed counterexample was first reproduced on the unchanged R2
 | Dependency audit | Each procedure's crash points were checked in isolation | Every procedure is audited and composed with dependent work and a second crash | §13.12, §15.4 |
 | Profile | `<PROVISION_PATH>` and `<STATE_ROOT>` could lie on different filesystems | One filesystem, verified at every opening, so that the qualified profile and the probe cover the `PROVISION` directory | §6.2, §6.4 |
 
+### 0.6 Changes in R4
+
+The Architect's findings F1–F4 were traced through the complete Linux v6.17 paths (§1.4). The R4 findings were first re-run on the unchanged R3 model (§19.5).
+
+| Finding | R3 | R4 | Section |
+|---|---|---|---|
+| F1, two discarded flushes in `commit.c` | R3 cited the commit path's I/O errors as aborting the journal | Confirmed: the external journal's filesystem-device flush and the asynchronous commit's final flush discard their status. Neither is reachable on the narrowed profile: the journal is internal, and v6.17 refuses to mount `journal_async_commit` with `data=ordered`. | §5.1, §6.4 |
+| F2, the checkpoint's discarded flush | Not considered | Confirmed and reachable: before the log tail moves, the flush status is discarded. If the device fails that flush, committed metadata, an activated selection's included, can be lost at a later power loss, and no process sees an error. No layer reliably catches it. Failed home writes are caught. A persistent failure fails the superblock's write where FUA is emulated by a flush. A transient failure, or native FUA, passes. **A-S5 (new)**: the device does not fail cache flushes. | §5.1, §10.7, §12.2 |
+| F3, the completed-transaction return | "An `fsync` of that file then waits for that handle's transaction" | Confirmed. A regular file's `fsync` waits only for a running or committing transaction; for a completed one it returns 0 without testing the abort flag. The narrower conclusion is that the activation certificate rests on two things: each sync's own abort test, and the probe's handle-start test, which the probe's `fsync` reports as the emergency state. An abort the completed branch can hide comes after that test and cannot uncommit a dependency. | §5.1, §10.6, §10.7 |
+| F4, R3's model | `fsync_file` returned EIO for every aborted, unnoticed journal | Corrected. No R3 check took that branch, so no R3 result changes. | §16.1 |
+| Profile establishment | Pinned `mountinfo` strings; excluded options recognised only by their presence | The effective option listing, the journal's jbd2 name and the kernel identity are read at every opening and again after activation's syncs. Unknown, contradictory or unqualified information refuses. `PROVISION` gains the `kernel` field. | §5.3, §6.4, §7.5, §13.2 |
+
 ---
 
 ## 1. Scope, base and sources
@@ -130,7 +142,7 @@ The module is the recorder, refusal store and disposition reader for the live ha
 
 ### 1.3 Governance and base
 
-- **Governance read.** `AGENTS.md` and `CLAUDE.md` were read at `45898e05`. They are byte-identical at `b23ae1ac`, `34cb35d8` and the R3 design base `8f888252`, verified by blob id. No descendant `AGENTS.md` or `CLAUDE.md` exists.
+- **Governance read.** `AGENTS.md` and `CLAUDE.md` were read at `45898e05`. They are byte-identical at `b23ae1ac`, `34cb35d8`, `8f888252` and the R4 design base `b0f84376`, verified by blob id. No descendant `AGENTS.md` or `CLAUDE.md` exists.
 - **Rules applied:**
   - fail closed, with no `$HOME`, cwd or temporary fallback;
   - explicit authority, and no recreation of trusted roots;
@@ -172,6 +184,8 @@ The module is the recorder, refusal store and disposition reader for the live ha
 | `fsync(2)`, again (R3) | Linux needs no write access: a read-only descriptor can be synced. EINTR is a documented error. |
 | `open(2)` `O_PATH` (R3) | Operations other than those listed fail with EBADF, and `fsync` is not listed. `O_RDONLY` needs read permission on the object. |
 | `utimensat(2)` (R3) | Setting both timestamps to the current time (`times` NULL) is permitted to the file's owner |
+| `uname(2)` (R4) | `struct utsname` fields `release` and `version`: the running kernel's identity, compared with the qualified one (§6.4 step 11) |
+| `readlink(2)` (R4) | Reads a symbolic link's target; used for `/sys/dev/block/<major>:<minor>` (§6.4 step 9) |
 
 **Linux kernel documentation and source** [U]:
 - **errseq** (`https://docs.kernel.org/core-api/errseq.html`), on `errseq_sample`: "If the error has been "seen", new callers will not see an old error. If there is an unseen error in eseq, the caller of this function will see it the next time it checks for an error."
@@ -183,16 +197,50 @@ The module is the recorder, refusal store and disposition reader for the live ha
   - `physical_block_size` is "the smallest unit a physical storage device can write atomically";
   - `write_cache` reports the cache mode.
 
-- **Linux v6.17 sources read for R3** (`raw.githubusercontent.com/torvalds/linux/v6.17/…`; the file hashes are in the R3 evidence):
-  - `fs/ext4/fsync.c`: `ext4_sync_file` (lines 129–177) fails at once in an emergency state (135), returns without committing anything when the superblock is read-only (143), and otherwise calls `ext4_fsync_journal` (97–116), which forces a full journal commit for a directory (109);
-  - `fs/jbd2/journal.c`: `__jbd2_journal_force_commit` (499 on) returns 0 with "Nothing to commit" (514) without testing for an aborted journal; `jbd2_log_wait_commit` (652) returns EIO for an aborted journal (690) only after waiting for a transaction; `jbd2_journal_abort` (2549) "cannot be undone without closing and reopening the journal" (2515–2516);
-  - `fs/jbd2/commit.c`: commit I/O errors abort the journal (548, 614, 642, 785, 866, 878, 889);
-  - `fs/ext4/ext4_jbd2.c`: `ext4_journal_check_start` (65) handles a journal that "has aborted behind our backs (eg. EIO in the commit thread)" by `ext4_abort` (82–87);
-  - `fs/ext4/ext4.h` and `fs/ext4/super.c`: `ext4_abort` forces read-only (3197); `ext4_handle_error` sets `EXT4_FLAGS_EMERGENCY_RO` (732), not `SB_RDONLY` (727); `ext4_emergency_state` returns EIO or EROFS (2267–2274);
-  - `fs/utimes.c` `vfs_utimes` (20–66), `fs/ext4/inode.c` `ext4_setattr` (5845) and `ext4_dirty_inode` (6531), `fs/fs-writeback.c` `__mark_inode_dirty` (2495–2526): an owner's timestamp update starts a journal handle;
-  - `fs/ext4/fast_commit.c` `ext4_fc_commit` (1197–1208): without fast commits, an fsync waits for the inode's own transaction;
-  - `fs/sync.c` `do_fsync` (205–213): an `O_PATH` descriptor is rejected;
-  - `Documentation/filesystems/ext4/journal.rst` (31–40): fast commits log minimal per-inode deltas outside the full-commit order.
+- **Linux v6.17 sources** (`raw.githubusercontent.com/torvalds/linux/v6.17/…`; `checkpoint.c`, `commit.c` and `jbd2.h` were also compared byte for byte with `git.kernel.org`'s v6.17 tree; every file's SHA-256 is in the R4 evidence). Read in full along the paths below for R4; R3 read the first twelve files for single branches. Citations use short names: `journal.c`, `commit.c`, `checkpoint.c`, `recovery.c` and `transaction.c` are in `fs/jbd2/`; `fsync.c`, `super.c`, `inode.c`, `ext4_jbd2.c`, `ext4_jbd2.h`, `ext4.h`, `fast_commit.c` and `sysfs.c` in `fs/ext4/`; `fs-writeback.c`, `utimes.c`, `sync.c` and `buffer.c` in `fs/`; `blk-flush.c` and `blk-core.c` in `block/`; `jbd2.h` is `include/linux/jbd2.h` and `journal.rst` is `Documentation/filesystems/ext4/journal.rst`.
+  - **Syncs.** `ext4_sync_file` (`fsync.c:129-177`):
+    - returns an emergency state first (`fsync.c:135-137`);
+    - returns having committed nothing when the superblock is read-only (`fsync.c:143-144`);
+    - otherwise writes and waits for the file's pages, calls `ext4_fsync_journal` (`fsync.c:97-116`), and issues its own cache flush when needed, checking the status (`fsync.c:166-170`).
+
+    `ext4_fsync_journal` handles the two cases:
+    - a directory forces a full commit (`fsync.c:108-109`), through `__jbd2_journal_force_commit` (`journal.c:499-527`), which waits for the running transaction, else the committing one, and with neither returns "Nothing to commit" without testing the abort flag (`journal.c:513-517`);
+    - a regular file asks whether its transaction will send the barrier (`fsync.c:111-113`, `journal.c:603-645`; a committed one needs ext4's own flush, `journal.c:611-613`), then calls `ext4_fc_commit` (`fsync.c:115`). Without fast commits that is `jbd2_complete_transaction` (`fast_commit.c:1207-1208`, `journal.c:787-808`): it commits and waits for a running transaction (`journal.c:792-798`), waits for a committing one, and returns 0 for any other without testing the abort flag (`journal.c:800-805`).
+
+    `jbd2_log_wait_commit` (`journal.c:652-692`) tests the flag only after its wait loop (`journal.c:678-686`, `journal.c:689-690`). `kjournald2` commits a running transaction on its timer (`journal.c:197-204`, `journal.c:241-245`), so a transaction can complete before an `fsync` examines it. An inode's sync tids are set at load to the running or committing transaction (`inode.c:5400-5416`), and updated only by a handle that has not aborted (`ext4_jbd2.h:354-365`).
+  - **Aborts.**
+    - `jbd2_journal_abort` (`journal.c:2549-2597`) sets the flag under the state lock (`journal.c:2565-2589`). It "cannot be undone without closing and reopening the journal" (`journal.c:2515-2516`).
+    - Every abort site of `jbd2_journal_commit_transaction` (`commit.c:548`, `commit.c:614`, `commit.c:642`, `commit.c:785`, `commit.c:866`, `commit.c:878`, `commit.c:889`) precedes the transaction's completion (`commit.c:1102-1105`).
+    - On an aborted journal no commit record is written (`commit.c:126-127`), and buffers are un-journaled rather than written home (`commit.c:582-600`, `commit.c:1014-1018`).
+    - `ext4_journal_check_start` (`ext4_jbd2.c:65-91`) returns an emergency state first (`ext4_jbd2.c:72-74`). It turns a journal "aborted behind our backs (eg. EIO in the commit thread)" into `ext4_abort` (`ext4_jbd2.c:81-89`), called from `__ext4_journal_start_sb` (`ext4_jbd2.c:93-117`).
+    - `start_this_handle` (`transaction.c:312`) refuses an aborted journal with EROFS and sets nothing (`transaction.c:366-371`).
+    - `ext4_abort` forces read-only (`ext4.h:3197-3198`). `ext4_handle_error` (`super.c:680-733`) sets `EXT4_FLAGS_EMERGENCY_RO` (`super.c:732`), not `SB_RDONLY` (`super.c:727`), or panics under `errors=panic` (`super.c:717-720`). `ext4_emergency_state` returns EIO or EROFS (`ext4.h:2267-2274`).
+  - **The probe.** An owner's timestamp update starts a journal handle:
+    - `vfs_utimes` (`utimes.c:20-66`) calls `ext4_setattr` (`inode.c:5845`), which returns an emergency state first (`inode.c:5854-5856`) and then marks the inode dirty (`inode.c:6052-6056`);
+    - `__mark_inode_dirty` (`fs-writeback.c:2495-2526`) calls `ext4_dirty_inode` (`inode.c:6531-6540`), which starts a handle and swallows its error.
+  - **Flushes and the log tail.**
+    - The commit record goes out with PREFLUSH and FUA unless commits are asynchronous (`commit.c:114-159`, `commit.c:152-154`). Its completion is checked (`commit.c:165-178`, `commit.c:874-881`, `commit.c:888-889`).
+    - Two flushes discard their status: the external journal's filesystem-device flush (`commit.c:775-778`), and the asynchronous commit's final flush (`commit.c:781-786`, `commit.c:883-886`).
+    - Ordered-data wait errors are printed and discarded (`commit.c:738-744`); they stay in the file's errseq (`commit.c:240-247`).
+    - At commit, the tail moves only after the commit record's checked flush (`commit.c:746-765`, `commit.c:899-900`).
+    - At a checkpoint, `jbd2_cleanup_journal_tail` (`checkpoint.c:318-342`) discards the status of its flush (`checkpoint.c:338-339`). It then calls `__jbd2_update_log_tail` (`journal.c:1056-1091`) and `jbd2_journal_update_sb_log_tail` (`journal.c:1852-1885`), which:
+      - tests the abort flag (`journal.c:1859-1860`);
+      - tests for a failed home write (`journal.c:1861-1864`, `jbd2.h:1701-1707`), recorded through `buffer.c:165-176` and `buffer.c:1214-1222`;
+      - writes the superblock with FUA (`journal.c:1069`); a write error aborts (`journal.c:1827-1837`).
+    - That path is reached at an ordinary handle start when log space runs low (`transaction.c:272-279`, `checkpoint.c:49-124`, `checkpoint.c:154-298`), and by `jbd2_journal_flush` (`journal.c:2402-2470`) and `jbd2_journal_destroy` (`journal.c:2116-2193`).
+    - Recovery replays from the superblock's tail (`recovery.c:282-345`, `recovery.c:611`), with its own flush checked (`recovery.c:339-343`).
+    - `blkdev_issue_flush` returns the flush's status and records it nowhere (`blk-flush.c:468-474`). On a device without a write-back cache the block layer completes a flush without sending it (`blk-core.c:809-820`).
+  - **The profile.**
+    - An internal journal is opened by `jbd2_journal_init_inode` (`journal.c:1667-1697`) on the filesystem's own device (`journal.c:1684`) and named "<device>-<inode>" (`journal.c:1691-1693`). An external one is opened by `jbd2_journal_init_dev` (`journal.c:1641-1657`) and named after its own device (`journal.c:1651-1653`). `/proc/fs/jbd2/<name>/info` is world-readable (`journal.c:1222-1229`).
+    - `ext4_load_journal` (`super.c:5984`) chooses by the superblock's journal inode and journal device (`super.c:5998-6020`) and refuses both at once (`super.c:6006-6010`).
+    - `noload`, printed `norecovery`, runs with no journal at all (`super.c:5415-5444`).
+    - `journal_async_commit` with `data=ordered` refuses to mount (`super.c:4963-4968`). The jbd2 async-commit feature follows that option alone (`super.c:4058-4095`).
+    - `JBD2_BARRIER` follows `barrier` at every mount and remount (`super.c:5768-5788`).
+    - The per-superblock defaults come from the superblock's default mount options and stored option string (`super.c:4330-4386`, `super.c:5298-5303`). Fast commits come from the superblock feature (`super.c:4349-4350`) or the debug-only `fc_debug_force` (`super.c:1893-1896`).
+    - `_ext4_show_options` (`super.c:2918-3042`) skips an option equal to the per-superblock default unless asked for every option (`super.c:2949-2951`, the data mode `super.c:2985-2993`). It names `noload` by its first name (`super.c:2903-2911`, `super.c:1726-1727`), and shows `emergency_ro` and `shutdown` (`super.c:3034-3038`). The table entries are `super.c:1854-1860`.
+    - `/proc/fs/ext4/<device>/options` prints every option in its effective form (`super.c:3049-3058`) and is world-readable (`sysfs.c:571-583`).
+  - `do_fsync` (`sync.c:205-213`): an `O_PATH` descriptor is rejected.
+  - `journal.rst:31-40`: fast commits log minimal per-inode deltas outside the full-commit order.
 
 **PostgreSQL** `data_sync_retry` (`https://www.postgresql.org/docs/current/runtime-config-error-handling.html`) is corroboration only: "the second attempt may be reported as successful, when in fact the data has been lost."
 
@@ -219,7 +267,7 @@ None of this is host qualification, and none of it selects a state root.
 | **D-3** | Refusal is conservative. An unsealed generation that could have admitted native work is refused. A recorded-unsettled count of zero is never proof (§11). |
 | **D-4** | A0 is specified only as limited crash evidence, never as tamper-resistant admission authority. Gate **G-AUTH** stays open for production or runner use. No A1–A5 helper, account, capability, TPM or cloud dependency is introduced. The earlier requirement that data the store uid writes must not lift a refusal is **kept as an open requirement**, not dropped (§3.3). |
 | **D-5** | A stall is reported, never acknowledged and never failed by timeout. Admission, failure and late completion are defined exactly. Recorder loss and I/O failure are latched (§9.6). |
-| **D-6** | Initial support is ext4 only. It is identified through the descriptor's mount, with the supported options pinned at provisioning. XFS is deferred. Ambiguity refuses (§6.4). Nothing is qualified now. |
+| **D-6** | Initial support is ext4 only. It is identified through the descriptor's mount, with the supported options pinned at provisioning. XFS is deferred. Ambiguity refuses (§6.4). Nothing is qualified now. R4 narrows the profile to an internal journal, `data=ordered`, barriers, no fast or asynchronous commits and normal journal loading, each read in its effective state (§6.4). |
 | **D-7** | Maintenance is offline and root-authorized, and nothing is automatic. Each retained procedure is fully specified; anything else is unsupported (§13). |
 | **D-8** | No provisioning executable. A manual procedure and a read-only verifier contract are specified, including how `PROVISION` itself is made durable (§13.2, §13.11). |
 | **D-9** | The NXCD version-1 frame stays byte-identical. The container, header and seal are new. No store has been deployed, so no migration is required. |
@@ -282,9 +330,9 @@ Every invariant (§12.1) names the domains in which it holds.
 
 | Domain | Meaning |
 |---|---|
-| **H**, honest reachable execution | The owner and recorder follow this protocol, and the core behaves as its tests establish. Storage meets the supported profile (§5). The faults are process termination (F1) and machine or power loss (F2), in any order and number, including F1, then restart, then F2. |
+| **H**, honest reachable execution | The owner and recorder follow this protocol, and the core behaves as its tests establish. Storage meets the supported profile (§5). The faults are process termination (F1) and machine or power loss (F2), in any order and number, including F1, then restart, then F2. An error a system call of the store returns (EIO, EROFS, ENOSPC, EINTR) is handled fail-closed in this domain as in every other. R4: a cache flush that the device fails is not part of H (A-S5, §5.1), because the kernel discards one such status. |
 | **M**, malformed bytes | Arbitrary content in any store file. Required: totality, bounded resources, determinism, and refusal of anything structurally invalid. **Not** required: semantic truth. Arbitrary bytes can form a well-formed but misleading journal. |
-| **S**, storage faults (F3) | Bit flips, torn writes outside the containment unit, misdirected or lost writes, and a device that lies about flushing. Required: refusal of every detectable fault. Undetectable faults are outside every guarantee. |
+| **S**, storage faults (F3) | Bit flips, torn writes outside the containment unit, misdirected or lost writes, a device that lies about flushing, and (R4) a cache flush that the device fails. Required: refusal of every detectable fault. Undetectable faults are outside every guarantee; §12.2 names the one R4 found. |
 | **A**, adversarial rewriting (F4) | Any process with the store uid's write authority, including CI job code running as that uid. It can rewrite every uid-owned byte consistently, because nothing is keyed. It cannot forge root-owned files, given the account assumptions below. |
 
 ### 3.2 Account assumptions [A]
@@ -335,9 +383,9 @@ Every invariant (§12.1) names the domains in which it holds.
 
 | Who syncs | In domain H, `fdatasync` returning 0 certifies | It does not certify |
 |---|---|---|
-| **The writer**: the recorder's I/O description, opened at the claim before any of its writes and kept open | Every page the writer dirtied before the call reached **D**, and the device was flushed (A-S1). A writeback failure of those pages, before or during the call, is reported to this still-open description [U, vfs]. | — |
+| **The writer**: the recorder's I/O description, opened at the claim before any of its writes and kept open | Every page the writer dirtied before the call reached **D**, and the device was flushed (A-S1). A writeback failure of those pages, before or during the call, is reported to this still-open description [U, vfs]. R4, on the supported profile, how the flush happens: a record block is a pure overwrite of a written, preallocated extent (§6.5), so the inode's datasync transaction has completed and ext4 issues and checks its own cache flush (`fsync.c:111-113`, `fsync.c:166-170`). The exception is an inode loaded while a transaction ran (`inode.c:5400-5416`). The first sync after that load waits for that transaction instead. If the transaction completes between ext4's two tests, the sync returns 0 without the flush and without the abort test (`journal.c:800-805`). The startup's preservation sync is normally that first sync. If the inode was reloaded, it is the claim's header sync, and the first record's sync flushes the device again before any acknowledgement (§9.7). | — |
 | **A newly opened description**: startup, the verifier, any other process | Only that the pages pending at the time of the call were written successfully | That earlier writebacks succeeded. An error already reported through another description, now closed, is never reported to it ("new callers will not see an old error" [U, errseq]). An error held by an evicted inode is gone. Pages whose writeback failed are clean; they may still show new bytes in **K** while **D** lacks them. |
-| **A newly opened description of a directory** (R3): activation | On the supported profile, that the directory's entries visible at the call are durable, **provided no earlier journal commit failed silently**. The certification probe establishes that (§10.6, A-M2). | On its own, anything about an earlier commit: with nothing pending it returns 0 having committed nothing. |
+| **A newly opened description of a directory** (R3; R4 precise): activation | On the supported profile, when the sync waited for a running or committing transaction: that the operations issued before the call are in transactions that committed without an abort by the time of its abort test (`journal.c:499-527`, `journal.c:689-690`). Committed means the commit record went out with a cache flush and forced unit access, and its completion was checked (`commit.c:152-154`, `commit.c:888-889`). | When it waited for nothing: anything. It returns 0 having committed and tested nothing (`journal.c:513-517`), and an earlier commit may have failed silently; the probe's handle start detects that (§10.6, §10.7). In no case: that those transactions stay durable through a later checkpoint whose flush the device fails (A-S5). |
 
 Neither this design nor any report it specifies may present a sync on a newly opened description as evidence that no earlier writeback failed [M: C03].
 
@@ -390,13 +438,13 @@ R1 treated a directory entry as durable only after an `fsync` of its directory, 
 |---|---|
 | Visible | In **K_dir**: what a lookup returns now |
 | Possibly durable | In the outcome of at least one permitted schedule below |
-| Guaranteed durable | Covered by a directory `fsync` that returned 0 (and, under A-M1, every earlier metadata operation) |
+| Guaranteed durable | Covered by a directory `fsync` that returned 0 (and, under A-M1, every earlier metadata operation). R4: a sync that waited for no transaction certifies nothing about an earlier commit that failed silently (§4.3). No later decision depends on such an operation before an activation, which detects that failure (§10.7). |
 | Sync-certified | Reported durable by a sync the procedure itself issued and checked. For file data, only the writer's own sync certifies (§4.3). |
 | Startup-observable | What an opening after F1 or F2 can see: the visible state after F1, one permitted schedule after F2 |
 
 **Pending metadata log.** Every `mkdir`, `create`, `link`, `unlink` and `rename` is one operation. A rename has two halves: the source name removed and the target name added.
 
-**A-M1 [A], ordered metadata.** On the supported ext4 profile (§6.4, §13.2: a journal present, no `fast_commit` feature, `data=writeback` excluded), the jbd2 journal commits metadata operations in transactions, in issue order, each transaction atomically. A power loss therefore leaves a namespace equal to the visible namespace after some **prefix** of the operation log, and that prefix contains every guaranteed operation. A rename is never split. This is an assumption of the profile, attested with A-S1 to A-S4 and qualified later (D-10); software cannot prove it.
+**A-M1 [A], ordered metadata.** On the supported ext4 profile (§6.4, §13.2: an internal journal, `data=ordered`, barriers, no fast or asynchronous commits, normal journal loading), the jbd2 journal commits metadata operations in transactions, in issue order, each transaction atomically. A power loss therefore leaves a namespace equal to the visible namespace after some **prefix** of the operation log, and that prefix contains every guaranteed operation. A rename is never split. This is an assumption of the profile, attested with A-S1 to A-S4 and qualified later (D-10); software cannot prove it.
 
 | Schedule family | Outcomes after F2 | Status |
 |---|---|---|
@@ -424,15 +472,34 @@ Activation, by owners and by sessions, removes both dependences.
 - **A-S2, containment.** A failed or interrupted write of one aligned 4096-byte block, issued by the filesystem for one page, can leave only that block indeterminate. It never alters any other block's durable content.
 - **A-S3, no silent loss.** After a successful flush the device neither loses nor misdirects writes. This is the boundary of domain S.
 - **A-S4, read stability.** Reading durable data returns those bytes or an error.
-- **A-M1, ordered metadata** (§4.8). Metadata operations become durable in issue order, in atomic transactions. The safety results of §15.2 also hold under the per-directory over-approximation, which does not assume it; A-M1 only removes one extra refusal.
-- **A-M2, the journal behaviour activation relies on (R3).** On the supported profile, as the Linux v6.17 sources of §1.4 show:
-  - a directory `fsync` forces a full journal commit, and fails if the journal aborts while it waits;
-  - it returns 0 having committed nothing when no transaction is pending, even if an earlier commit already failed and aborted the journal, and when the superblock is read-only;
-  - a journal abort lasts until the next mount;
-  - the next journal handle detects it and makes the filesystem emergency read-only, after which every `fsync` fails;
-  - a timestamp update by a file's owner starts a journal handle, and an `fsync` of that file then waits for that handle's transaction.
+- **A-S5, flush success (R4, new).** The device completes every cache flush the kernel issues to it. A flush the device fails is a storage fault outside domain H (§3.1).
+  - **Why it is needed.** At a checkpoint, v6.17 jbd2 discards the status of the flush it issues before moving the log tail (`checkpoint.c:338-339`).
+    - Suppose that flush fails while the superblock update succeeds.
+    - Transactions then leave the log, but their home blocks may not be durable.
+    - A power loss before a later successful flush can revert committed metadata, an activated selection's dependencies included, and no process receives an error.
+  - **Every other flush on the profile's paths is checked:**
+    - the commit record's flush (`commit.c:152-154`, `commit.c:888-889`);
+    - `fsync`'s own flush (`fsync.c:166-170`);
+    - recovery's flush (`recovery.c:339-343`).
 
-  These are read from the sources, not tested. The runtime kernel's behaviour must be qualified with the host (G-HOST).
+    A failed home write is caught before the tail moves (`journal.c:1861-1864`).
+  - **Why it is the minimum.** The store cannot observe the event (§10.7), and nothing within this design's means removes it without a kernel change. A device without a write-back cache meets A-S5 by construction: the block layer sends it no flush (`blk-core.c:809-820`), and A-S1 covers what the device reports about its cache.
+  - **Status.** It is new: R1 to R3 did not state it, and R3's A-M2 implied that every journal I/O failure aborts the journal [M: C29 shows a failed checkpoint flush losing a certified dependency].
+- **A-M1, ordered metadata** (§4.8). Metadata operations become durable in issue order, in atomic transactions. The safety results of §15.2 also hold under the per-directory over-approximation, which does not assume it; A-M1 only removes one extra refusal.
+- **A-M2, the journal behaviour activation relies on (R3; corrected in R4).** On the supported profile, as the Linux v6.17 sources of §1.4 show:
+  - **A directory `fsync`** waits for the running transaction, else the committing one, then returns EIO if the journal has aborted (`journal.c:499-527`, `journal.c:689-690`).
+    - With neither, it returns 0 having committed and tested nothing (`journal.c:513-517`).
+    - On a read-only superblock it returns 0 having committed nothing (`fsync.c:143-144`).
+  - **A regular file's `fsync`** waits for its inode's sync transaction only while that transaction runs or commits, then tests the abort flag. For a completed transaction it returns 0 without that test, after ext4's own cache flush, whose status it checks (`fsync.c:111-115`, `journal.c:787-808`, `fsync.c:166-170`).
+  - **Every `fsync`** returns an emergency state first (`fsync.c:135-137`).
+  - **A journal abort** is permanent until the journal is closed (`journal.c:2515-2516`). A failing commit sets it before that transaction completes (`commit.c:1102-1105`).
+  - **A handle start** turns an aborted journal into emergency read-only (`ext4_jbd2.c:81-89`, `super.c:732`). The exception is an abort landing after ext4's test and before jbd2's (`transaction.c:366-371`): that sets nothing.
+  - **A timestamp update** by a file's owner starts a journal handle and joins the running transaction (`inode.c:6052-6056`, `inode.c:6531-6540`).
+  - **A committed transaction's record** went out with a cache flush and forced unit access, and both were checked (`commit.c:152-154`, `commit.c:888-889`). The tail then moves at commit only after that flush (`commit.c:899-900`). At a checkpoint it moves after a flush whose status is discarded (`checkpoint.c:338-339`), hence A-S5.
+
+  **The correction (F3).** R3 said that an `fsync` of the probed file "then waits for that handle's transaction". That holds only while the transaction runs or commits, and §10.7 restates what the probe establishes.
+
+  These are read from the sources, not tested. The running kernel's build must be qualified (G-HOST).
 
 ### 5.2 How alignment and the layout relate to the assumptions
 
@@ -452,14 +519,18 @@ Activation, by owners and by sessions, removes both dependences.
 | Property | Status |
 |---|---|
 | ext4 through the descriptor's mount; mount options; filesystem block size 4096; page size 4096 | Verified at every opening (§6.4) |
+| The effective mode (R4): `data=ordered`, barriers, no asynchronous commits, normal journal loading, neither emergency read-only nor shut down | Read at every opening, and again after activation's syncs, from the listing that prints every option in its effective form (§6.4 steps 9 and 10) |
+| An internal journal (R4) | Read at every opening from the journal's jbd2 name (§6.4 step 10). Its superblock facts are established at qualification (below). |
+| The kernel (R4) | Its behaviour (A-M2) is qualified by the Owner for the exact build, from the build's sources (G-HOST). Its identity is pinned in `PROVISION` and compared at every opening (§6.4 step 11). A matching identity binds the running kernel to that qualification. It is not itself qualification. |
 | Device logical and physical block sizes (sysfs, for the mount's major:minor); pool extents written, not shared, not delayed (FIEMAP); `fallocate` support | Verified at provisioning as part of the Owner's qualification, then pinned in `PROVISION` (§13.2). Not re-read at runtime. |
-| A-S1 to A-S4, A-M1 | Assumed. The Owner attests them in `PROVISION` (`storage-attestation`). They can be qualified empirically only (D-10), never proven. |
-| The ext4 journal is present and the `fast_commit` feature absent | Established by the Owner at qualification, as root, from the superblock features (§13.2). Not re-read at runtime. |
+| A-S1 to A-S5, A-M1 | Assumed. The Owner attests them in `PROVISION` (`storage-attestation`). They can be qualified empirically only (D-10), never proven. An attestation states them; it makes nothing true. |
+| The ext4 journal at inode 8 with no external journal device; no `fast_commit` feature | Established by the Owner at qualification, as root, from the superblock (§13.2). The store uid cannot read the superblock, so these are not re-read at runtime. The Owner re-qualifies after any change, and a change made outside that is unsupported, like any root action outside a procedure (§13.1). |
 
 ### 5.4 When the assumptions cannot be established
 
 - **A verifiable property does not match.** Opening refuses as **Unsupported**.
-- **The Owner cannot attest A-S1 to A-S4 for the device.** The store must not be provisioned there; it stays Unprovisioned, and every run is refused.
+- **The effective profile cannot be read, is contradictory, or the kernel is not the qualified one (R4).** Opening refuses as **Unsupported** until the Owner re-qualifies (§13.3). Unknown information is never read as the supported value.
+- **The Owner cannot attest A-S1 to A-S5 for the device.** The store must not be provisioned there; it stays Unprovisioned, and every run is refused.
 - **A torn block in domain H** (non-zero and invalid) is never read as benign. The journal is Malformed and refused (§11.1). A torn unacknowledged write and corruption cannot be told apart.
 
 ---
@@ -515,9 +586,31 @@ All offsets are in bytes, with B = 4096.
 - **File size.** (C_pool + 2) × 4096.
 - **Write-once rule.** No block that holds data is rewritten during its generation. Provisioning's zero-fill comes before the claim.
 
-### 6.4 Filesystem profile: ext4 only [D-6]
+### 6.4 Filesystem profile: ext4 only [D-6]; narrowed in R4
 
 `statfs` magic `0xef53` is shared by ext2, ext3 and ext4 [U]. It is never used to identify ext4.
+
+**The supported profile (R4).** Each property, why the design needs it, and how it is established. "Runtime" means observed at every opening and again after activation's syncs (§10.6 A4); "qualification" means a root-controlled fact the Owner establishes and keeps (§13.2).
+
+| Property | Needed because (Linux v6.17, §1.4) | Established by | Refuses |
+|---|---|---|---|
+| ext4, through the mount | Only ext4's behaviour was read | Runtime, bound to the root descriptor: steps 1–4 | Another type, or an ambiguous record |
+| One filesystem | The probe and the qualified profile must cover the `PROVISION` directory | Runtime: step 8 | Different `st_dev` |
+| An internal journal | An external journal flushes the filesystem device with the status discarded (`commit.c:775-778`), and `fsync` relies on that flush (`journal.c:633-636`) | Qualification: the superblock's journal is inode 8, with no journal device. Runtime: step 10. | No `<name>-8` jbd2 entry |
+| `data=ordered` | A-M1. v6.17 refuses it together with asynchronous commits (`super.c:4963-4968`). | Runtime: step 9 | Another mode, or none |
+| Barriers | The commit record's flush and forced unit access (`commit.c:152-154`); `fsync`'s own flush (`fsync.c:111-113`) | Runtime: step 9. The flag follows every remount (`super.c:5768-5788`). | `nobarrier`, or no `barrier` |
+| No asynchronous commits | The asynchronous commit's final flush discards its status (`commit.c:883-886`) | Runtime: step 9. Also excluded by `data=ordered` at v6.17. | `journal_async_commit` |
+| No fast commits | A file's `fsync` would take the fast-commit path, which §10.7 does not cover. Fast commits also log outside the full-commit order (A-M1, `journal.rst:31-40`). | Qualification: the superblock lacks the feature, the only enabler with the debug option (`super.c:4349-4350`, `super.c:1893-1896`). Runtime: step 9 refuses `fc_debug_force`. **The store uid cannot observe the feature itself**; the Owner keeps it (§13.2). | At qualification |
+| Normal journal loading and recovery | `noload` runs with no journal at all (`super.c:5415-5444`) | Runtime: steps 9 and 10 | `norecovery`, or no jbd2 entry |
+| Neither emergency read-only nor shut down | Every sync then fails | Runtime: step 9 (`super.c:3034-3038`), and the system calls themselves | Listed |
+| The qualified kernel | A-M2 and §10.7 are claims about v6.17's code | Qualification of the exact build (G-HOST). Runtime: step 11 binds the running kernel to it. | Another identity |
+| A-S1 to A-S5, A-M1 | §5.1 | Assumptions, attested by the Owner | Not provisioned |
+
+**Kept apart.**
+- **Filesystem identity versus journal location.** Filesystem identity (steps 1–4 and 8) is not the journal device's identity (step 10).
+- **An absent string versus an effective state.** The absence of a string in `mountinfo` is not an effective state (step 6 versus step 9).
+- **A version string versus qualification.** A kernel version string is not behavioural qualification (step 11).
+- **An attestation versus a mechanism.** An attestation records what the Owner asserts; it makes nothing true.
 
 Identification is bound to the retained root descriptor:
 
@@ -527,8 +620,25 @@ Identification is bound to the retained root descriptor:
 4. Field 9 (filesystem type) must be exactly `ext4`.
 5. Field 6 (per-mount options) and field 11 (per-superblock options) must equal `mount-options` and `super-options` in `PROVISION`, byte for byte. Changed options refuse until the Owner re-qualifies (§13.3).
 6. The pinned option strings must not contain `ro`, `nobarrier`, `barrier=0` or `data=writeback`. This is a provisioning rule, re-checked at every opening.
+   - **R4: it is not sufficient.** Field 11 omits any option equal to the superblock's default (`super.c:2949-2951`, `super.c:2985-2993`). The superblock's default mount options and its stored option string can make `nobarrier` or `data=writeback` that default (`super.c:4330-4386`, `super.c:5298-5303`).
+   - The absence of a string there proves nothing; step 9 reads the effective state.
 7. `fstatvfs(root_fd)` must report `f_bsize` and `f_frsize` of 4096, and `sysconf(_SC_PAGESIZE)` must be 4096.
 8. **One filesystem (R3).** `fstat` must show the same `st_dev` for the `PROVISION` directory (reached by the component walk of §10.1), the state root's parent and the root descriptor. Otherwise the opening refuses as Unsupported. Activation checks this again after its syncs (§10.6).
+9. **The effective options (R4).**
+   - **Resolve the device name.** Resolve the root descriptor's `st_dev` to the device's name: the last component of `readlink("/sys/dev/block/<major>:<minor>")`.
+   - **Read the listing.** Read `/proc/fs/ext4/<name>/options` with a bound of 4096 bytes. It lists every option of ext4's table in its effective form, one per line, defaults included (`super.c:3049-3058`), and is world-readable (`sysfs.c:571-583`).
+   - **What the listing must hold:**
+     - its first line is `rw`;
+     - it contains `data=ordered` and `barrier`;
+     - it contains none of `nobarrier`, `data=journal`, `data=writeback`, `journal_async_commit`, `norecovery`, `noload`, `fc_debug_force`, `emergency_ro` or `shutdown`;
+     - every one of those options that field 11 shows is also in it. Otherwise the two describe different superblocks, and the opening refuses as contradictory.
+   - **What refuses as Unsupported:** an unresolvable name, an unreadable or oversized listing, or any mismatch.
+10. **The journal's location (R4).** `/proc/fs/jbd2/<name>-8` must exist. jbd2 names an internal journal "<device>-<inode>" and an external one after its own device (`journal.c:1691-1693`, `journal.c:1651-1653`), so its absence means an external journal or none, and refuses. Inode 8 is the qualified journal inode (§13.2).
+11. **The kernel (R4).** `uname(2)`'s `release` and `version`, joined by one space, must equal `kernel` in `PROVISION` (§7.5).
+    - Another kernel refuses until the Owner qualifies it and re-qualifies the store (§13.3).
+    - A match only binds the running kernel to the build the Owner qualified. The qualification is the Owner's review of that build's sources against §5.1 (G-HOST), never the string.
+
+Steps 9 to 11 run at every opening of an owner, the verifier or a session, and again at activation's A4 [M: C27]. Re-qualification mode (§13.3) skips step 11's comparison, because the pinned identity is being replaced. It never skips the rules of steps 9 and 10.
 
 XFS and every other filesystem are outside the initial profile.
 
@@ -562,6 +672,7 @@ XFS and every other filesystem are outside the initial profile.
 | Scan memory | One 4096-byte block buffer, a SHA-256 state, and per-journal grammar state proportional to `capacity`. One bounded summary per file, and one parsed record per disposition (at most 4096). |
 | Incidents held while scanning | At most N pool-file and journal incidents, one history binding per `u`, `m` or `p-` archive entry, and the enumerated claim gaps, which §7.7 bounds before enumerating. Authorization (§10.2 step 8, §13.9) always uses this complete set. |
 | Activation (R3) | Seven directory syncs, one sync of `PROVISION` and one probe per owner startup or session beginning, each sync retried at most 3 times on EINTR (§10.6) |
+| Profile reads (R4) | Per opening and again at A4: one `readlink` of the device's sysfs entry, one option listing of at most 4096 bytes, one jbd2 entry looked up, one `uname` (§6.4 steps 9–11) |
 | Report detail (R2) | At most 64 incidents listed in full, in a fixed order (§11.2), with exact totals of all incidents and of current ones and an explicit **partial** flag when more exist (§11.2). The detail limit never truncates the set used for any decision. |
 | Exchange memory | `capacity` slots, each holding one fixed-size `RecordIntent` (`model.rs:457`) [S]. Allocated once at the claim and never grown. |
 | Header | 124 + 33 × n bytes, with n ≤ 32: at most 1180 |
@@ -696,6 +807,7 @@ fs-block-size=4096
 page-size=4096
 device-logical-block-size=<dec, divides 4096>
 device-physical-block-size=<dec, divides 4096>
+kernel=<statement: uname(2) release, one space, version, as qualified (R4)>
 storage-attestation=<statement>
 pool=<N, 1..1024>
 pool-capacity=<C_pool, 1..4096>
@@ -713,6 +825,7 @@ digest=<64 hex: SHA-256 of every preceding byte>
 - `predecessor-statement` is `none` if and only if `predecessor` is `none`.
 - The digest is integrity only. Authority comes from root ownership at a root-controlled path.
 - `revision` (R2) is 1 at provisioning and one more than the replaced `PROVISION`'s at every rewrite and at succession. It is the maintenance epoch: every publication has different bytes, and reports name the revision they read (§10.5).
+- `kernel` (R4) is the identity of the kernel build the Owner qualified (§13.2). Every opening compares it with the running kernel (§6.4 step 11), and a re-qualification after a kernel update rewrites it (§13.3).
 
 A disposition is stored in `dispositions/<binding>.disposition`:
 
@@ -795,7 +908,7 @@ Claims:
 | Root and journals directory descriptors (`O_PATH \| O_DIRECTORY`) | — | `StoreGuard` | Process exit | Used for `*at` calls and the identity recheck after each record |
 | Scan descriptors, one per pool file | Short advisory lock: `LOCK_SH`, non-blocking | Startup scanner | Closed once that file is classified (§10.2) | — |
 | Activation descriptors (R3): one `O_RDONLY \| O_DIRECTORY` per synced directory, one `O_RDONLY` on `PROVISION` | No lock | The activation (§10.6) | Closed as soon as each is synced | The store-lock description, already held, carries the probe |
-| Archive directory and entries, `PROVISION`, dispositions directories and files, `mountinfo` | Read-only | Scanner, disposition reader, mount check | Closed when startup ends | — |
+| Archive directory and entries, `PROVISION`, dispositions directories and files, `mountinfo`; (R4) the option listing, the jbd2 entry and the sysfs link of §6.4 steps 9–10 | Read-only | Scanner, disposition reader, mount and profile check | Closed when startup ends | — |
 | Exchange (§9.2) | **Short mutex**, held for a copy or an assignment, and by the admission gate across one `Custody::admit` call (§9.8) | `Arc`, shared by owner and worker | Process exit | Never held across I/O, a callback or a wait |
 | Recorder status (§14.1) | Short mutex | `Arc` | Process exit | Copy only |
 | Fatal latch (R2) | Inside the exchange: the first cause and P, later causes counted; set once, never cleared | `Arc` | — | Set by the worker, its drop guard, the sink, the owner's apply step, or the first acquisition that finds the mutex poisoned (§9.5) |
@@ -1057,9 +1170,9 @@ For each entry, before it is opened:
 |---|---|---|
 | 0 | Configuration: `record_capacity` ≤ C_pool, `incident_limit` ≤ 32 | Unsupported |
 | 1 | Select `PROVISION` (§10.5): open it safely, read it with a limit and parse it (§7.5). The result is only a candidate selection. | Unprovisioned, Invalid |
-| 2 | Open the candidate's `<STATE_ROOT>`; identify ext4 through the mount (§6.4); check block size, page size, the link sysctls and the ancestors | Lost, Unsupported |
+| 2 | Open the candidate's `<STATE_ROOT>`; identify ext4 through the mount (§6.4); check block size, page size, the link sysctls and the ancestors; (R4) read the effective profile, the journal's location and the kernel (§6.4 steps 9–11) | Lost, Unsupported |
 | 3 | Open `LOCK` safely and take `flock(LOCK_EX \| LOCK_NB)`. Then revalidate the selection (§10.5). On a mismatch, close every descriptor of this attempt, which releases the lock, and return to step 1, at most three selections in all. | **Busy**, before any journal content is touched [M: C06]; **SelectionChanged** after three failed revalidations [M: C21] |
-| 3a | **Activate** the selection (§10.6, R3): one filesystem, every dependency directory synced, the certification probe, revalidation | Unsupported, Invalid, Lost, Unreliable, SelectionChanged [M: C25] |
+| 3a | **Activate** the selection (§10.6, R3; §10.7, R4): one filesystem, every dependency directory synced, the probe, revalidation with the profile checked again | Unsupported, Invalid, Lost, Unreliable, SelectionChanged [M: C25, C27, C28] |
 | 4 | Enumerate the store directories, entry names only. Every name must be accepted (§7.5); each entry is type-checked as in §10.1 step 1. | Invalid, MaintenanceIncomplete, Lost |
 | 5 | For each pool file, in index order: <ul><li>open it safely;</li><li>take `flock(LOCK_SH \| LOCK_NB)`; failure means **Live**, and the file is neither synced nor read;</li><li>`fdatasync` to preserve evidence; EIO refuses as **Unreliable**;</li><li>read the file and classify it (§11.1);</li><li>close it, which releases the shared lock.</li></ul> | Live, Unreliable |
 | 6 | Archive: safely open each entry and read blocks 0 and 1 (§11.3) | Invalid |
@@ -1086,7 +1199,7 @@ For each entry, before it is opened:
 
 | Kept for the life of the process | Closed by the end of startup |
 |---|---|
-| Root directory, journals directory, store lock description, journal lock description (all in `StoreGuard`) | Scan descriptors; activation descriptors; archive directory and entries; dispositions directories and files; `PROVISION`; `mountinfo` |
+| Root directory, journals directory, store lock description, journal lock description (all in `StoreGuard`) | Scan descriptors; activation descriptors; archive directory and entries; dispositions directories and files; `PROVISION`; `mountinfo`; (R4) the profile files |
 | The worker's I/O description (until the worker ends) | |
 
 ### 10.5 `PROVISION` selection and revalidation (R2)
@@ -1112,7 +1225,7 @@ Two cooperating owners therefore never both hold an authoritative selection, whe
 
 **Where it applies.** Ordinary opening (§10.2), the standalone verifier (§13.11), the beginning of every maintenance session (§13.1), and a session's re-selection after its own publication (§13.3). The model exercises ordinary opening, re-qualification, recycling, retirement, successor publication and the bounded retry [M: C21].
 
-### 10.6 Durable activation (R3)
+### 10.6 Durable activation (R3; what it establishes is restated in R4)
 
 **Why.** A selection that is only visible is not enough to depend on. Suppose a session dies after renaming `PROVISION` B over A but before syncing the directory: P-SUCCESSOR operation 28, or, for a first provisioning, P-PROV operation 22.
 - B is visible, and an owner can select, lock and revalidate it (§10.5), claim, and record acknowledged work.
@@ -1145,15 +1258,20 @@ No claim, record, acknowledgement or native admission can therefore exist on a s
 |---|---|---|
 | A1 | One filesystem: the `PROVISION` directory, the state root's parent and the root show the same `st_dev` (§6.4 step 8) | Unsupported |
 | A2 | For each directory, in this order: `journals/`, `dispositions/revoked/`, `dispositions/`, `archive/`, `<STATE_ROOT>`, the state root's parent, the `PROVISION` directory.<ul><li>Resolve it afresh by the component walk of §10.1.</li><li>Check its inode against `PROVISION` (the store's directories) or the selection (the parent and the `PROVISION` directory).</li><li>Open it `O_RDONLY \| O_DIRECTORY \| O_NOFOLLOW \| O_CLOEXEC` (an `O_PATH` descriptor cannot be synced), `fsync` it, and close it.</li></ul>EINTR is retried at most 3 times; any other error is final. Then `fdatasync` `<PROVISION_PATH>` itself through a new `O_RDONLY` descriptor. | Invalid or Lost (identity); Unreliable (any error) |
-| A3 | Certification probe: `futimens(NULL)` on the store-lock description, then `fsync` of that description. Both must return 0. `LOCK` is the store uid's own file, so no new permission is needed. | Unreliable |
-| A4 | Revalidate after the syncs: resolve every A2 directory again and check its inode; repeat §10.5 steps 1–4; repeat the mount checks of §6.4, step 8 included | SelectionChanged, Unsupported |
+| A3 | Probe, after the last A2 sync: `futimens(NULL)` on the store-lock description, then `fsync` of that description. Both must return 0. `LOCK` is the store uid's own file, so no new permission is needed. | Unreliable |
+| A4 | Revalidate after the syncs: resolve every A2 directory again and check its inode; repeat §10.5 steps 1–4; repeat the mount and profile checks of §6.4, steps 8 to 11 included | SelectionChanged, Unsupported |
 | A5 | **Linearization point**: A4 has succeeded with the store lock still held. The selection is activated, and the startup report records its revision and root id. | — |
 
-**What each step establishes**, on the supported profile (A-M2):
-- **A2, the directories.** A directory `fsync` that returns 0 has made that directory's entries, as of the call, durable; on ext4 it commits the whole journal. It does **not** certify an earlier commit that already failed: with nothing pending, it returns 0 having committed nothing.
-- **A3.** An abort lasts until the next mount, and the probe's journal handle detects it. A successful `futimens` and `fsync` of `LOCK` therefore show that the journal had not aborted by the time of the probe, so no commit before it failed. Each A2 sync then either committed what was pending or found it already committed.
+**What each step establishes**, on the supported profile (A-M2; R4 states it precisely in §10.7):
+- **A2, the directories.** Each directory `fsync` returns only after every transaction holding that directory's earlier operations has completed.
+  - A sync that waited tests the abort flag itself.
+  - A sync that found nothing to commit returns 0 having tested nothing. It does **not** certify an earlier commit that already failed.
+- **A3.** The probe's handle start tests the abort flag after every A2 sync has returned, and turns an abort into emergency read-only, which the probe's `fsync` returns first.
+  - A successful probe therefore shows that no transaction holding a dependency failed (§10.7).
+  - It does **not** show that the journal is healthy afterwards. The probe's `fsync` waits only for a running or committing transaction (F3), so it can pass after a later abort, which cannot uncommit a dependency (§10.7).
+  - R3 claimed more: that the journal "had not aborted by the time of the probe". R4 withdraws that claim.
 - **A2, `PROVISION` itself.** Defence in depth. It may report an unseen writeback error, but it never certifies the content: a sync on a new descriptor cannot (§4.3). The procedure that published `PROVISION` certified the content with its own descriptor before the rename (§13.1 rule 5).
-- **A4.** It binds the now-durable entries to this selection. A replacement racing the syncs, a directory swapped for another, or a remount read-only refuses. A read-only superblock also makes A2 return 0 having committed nothing, and A3 then fails with EROFS.
+- **A4.** It binds the now-durable entries to this selection. A replacement racing the syncs, a directory swapped for another, a remount read-only, or a profile changed during activation refuses. A read-only superblock also makes A2 return 0 having committed nothing, and A3 then fails with EROFS.
 
 **Failures, never success.** No timeout or retry turns a failure into activation:
 - EINTR is retried at most 3 times, then refuses;
@@ -1164,7 +1282,7 @@ No claim, record, acknowledgement or native admission can therefore exist on a s
 
 The refusing owner closes its NotStarted custody and exits; a later startup activates again from the beginning.
 
-**Persistence effects of opening.** An owner's startup commits the pending metadata of that filesystem (A2) and updates `LOCK`'s timestamps (A3), besides the evidence-preservation sync (§4.6). It changes no byte of the store.
+**Persistence effects of opening.** An owner's startup commits the pending metadata of that filesystem (A2) and updates `LOCK`'s timestamps (A3), besides the evidence-preservation sync (§4.6). It changes no byte of the store. Its profile reads (R4, §6.4 steps 9–11) write nothing.
 
 **Who activates:**
 - every owner, before it scans and decides (§10.2 step 3a), so that the decision reads a durable namespace;
@@ -1172,7 +1290,7 @@ The refusing owner closes its NotStarted custody and exits; a later startup acti
 
 **Who does not:** the standalone verifier. It reads and reports the visible state, never declares it durable, and authorizes nothing (§13.11).
 
-**Permissions.** Read and search on the root-owned 0755 directories and read on the 0444 `PROVISION`, which the store uid already has; ownership of `LOCK` for the probe, which the uid already owns. Nothing is expanded.
+**Permissions.** Read and search on the root-owned 0755 directories and read on the 0444 `PROVISION`, which the store uid already has; ownership of `LOCK` for the probe, which the uid already owns. R4's profile reads use world-readable kernel files (`sysfs.c:571-583`, `journal.c:1222-1229`), `/sys/dev/block` and `uname(2)`. Nothing is expanded.
 
 **Why the store's directories too.** A recycled pool file's name, a disposition's name, an archive entry or a successor root's entry could otherwise roll back after a decision used it. With activation, every name the decision read is durable before anything is authorized [M: C25, C26].
 
@@ -1196,6 +1314,85 @@ The refusing owner closes its NotStarted custody and exits; a later startup acti
 | 10.6/A3 | fsync | `LOCK` |
 
 Object names: `root` is `<STATE_ROOT>`, `parent` its parent, and `provdir` the directory of `<PROVISION_PATH>`.
+
+### 10.7 Activation proof (R4)
+
+**The property.** Before an owner or a maintenance session decides anything that depends on the selected store, the selection's dependencies are established durable under the declared supported model (§5.1, §6.4), or activation refuses. The dependencies are:
+- every entry the selection and the decision read in the seven A2 directories: the store's directories, the state root's entry in its parent, and `PROVISION`'s entry;
+- the content of `PROVISION`, which its publishing procedure synced through its own descriptor before the rename (§13.1 rule 5).
+
+It is **not** a certificate that every earlier filesystem transaction succeeded, that the filesystem stays healthy, or that no later error occurs. Activation runs one probe and never repeats it to argue for continuing health.
+
+**What activation establishes** (A-M2; Linux v6.17):
+1. **Each dependency is in a transaction that completed before its directory's A2 sync returned.**
+   - A sync that finds a running or committing transaction waits until every transaction up to it has completed (`journal.c:499-527`, `journal.c:678-686`).
+   - A sync that finds neither returns because all have completed (`journal.c:513-517`).
+   - Either way, the dependency's operation was issued before the sync, so its transaction is among them.
+2. **None of those transactions failed.** A failing commit sets the abort flag before the transaction completes (`commit.c:1102-1105`), and the flag stays (`journal.c:2515-2516`).
+   - A sync that waited tests the flag after its wait (`journal.c:689-690`).
+   - For a sync that found nothing to commit, the probe's handle start tests the flag (`ext4_jbd2.c:81-89`) after the last A2 sync has returned. It turns an abort into emergency read-only, which the probe's `fsync` returns before anything else (`fsync.c:135-137`), although `futimens` itself returns 0 (`inode.c:6531-6540`). Under `errors=panic` it panics instead (`super.c:717-720`), and nothing is claimed either.
+3. **A completed transaction that did not fail is committed.** Its commit record went out with a cache flush and forced unit access, and the completion was checked (`commit.c:152-154`, `commit.c:874-881`, `commit.c:888-889`). Under A-S1 the record and the log blocks before it are durable, and recovery replays the transaction from the log (`recovery.c:611`).
+4. **It stays durable.** jbd2 drops a committed transaction from the log only after its home blocks were written with no recorded error (`journal.c:1861-1864`) and a cache flush followed:
+   - at a commit, the commit record's flush, which is checked (`commit.c:746-765`, `commit.c:899-900`);
+   - at a checkpoint, a flush whose status is discarded (`checkpoint.c:338-339`). A-S5 makes that flush succeed.
+
+   An aborted journal never moves the tail (`journal.c:1859-1860`).
+
+**What the probe's `fsync` shows, and what it does not.** A successful probe shows (2) only: the journal had not aborted when the probe's handle start tested it.
+- **The `fsync` does not always wait.** It waits for the probe's transaction only while that transaction runs or commits (`journal.c:792-807`). For a completed one it returns 0 without the abort test (`journal.c:800-805`, F3), after ext4's own checked cache flush (`fsync.c:111-113`, `fsync.c:166-170`).
+- **So it can pass with the journal aborted.** That happens when the abort lands:
+  - after ext4's test and before jbd2's (`transaction.c:366-371`), which sets nothing;
+  - after the handle started, when the probe's transaction completes before its `fsync`.
+- **Neither window can hide a dependency that was not established.** By (1) and (2), every dependency's transaction completed without an abort before the probe's test. Such an abort is an error after the dependencies were established, so activation need not refuse it and does not relabel it as lost history.
+  - **After a handle start.** The next handle start, by any process, turns the abort into emergency read-only. From then on every sync fails, the recorder's included (§9.5).
+  - **Until then.** The recorder's syncs of its pure overwrites still issue and check their own cache flush (§4.3), so what they acknowledge is durable.
+
+**Timing windows** [M: C28, C29]:
+
+| Window | What v6.17 does | Activation | The dependencies |
+|---|---|---|---|
+| A dependency's transaction fails while its directory's sync waits | The sync tests the flag after the wait: EIO (`journal.c:689-690`) | Refuses (Unreliable) | Not established; nothing is claimed |
+| It fails and completes before a sync that then finds nothing to commit | That sync returns 0 untested (`journal.c:513-517`); the probe's handle start forces emergency read-only; its `fsync` returns EROFS (`fsync.c:135-137`) | Refuses | Not established. The earlier failure is not hidden by the later success. |
+| Any abort before the probe's handle test | EROFS, as above | Refuses; conservatively when the dependencies had committed | — |
+| An abort between ext4's and jbd2's handle tests | `start_this_handle` returns EROFS and sets nothing (`transaction.c:366-371`); the inode keeps an older, completed sync tid (`ext4_jbd2.h:354-365`); `fsync` returns 0 (`journal.c:800-805`) | Certifies | Established before the abort, a later error |
+| The probe's transaction still running at its `fsync` | Committed and waited for, then tested: EIO if the journal aborted meanwhile | Refuses on EIO, conservatively | Established before |
+| The probe's transaction committing at its `fsync` | Waited for, then tested | As above | Established before |
+| The probe's transaction completed before its `fsync` | 0 untested, after ext4's own checked flush | Certifies, even if a later commit has aborted the journal | Established before; not mislabelled as lost |
+| An error after the dependencies were established | Not reported to the activation, or refused conservatively | Either | Unaffected: committed transactions are replayed (`recovery.c:611`) |
+| Emergency read-only | Every `fsync` and `futimens` returns EROFS first (`fsync.c:135-137`, `inode.c:5854-5856`); the listing shows `emergency_ro` (`super.c:3034-3038`) | Refuses | — |
+| An ordinary read-only superblock | A directory `fsync` returns 0 having committed nothing (`fsync.c:143-144`); `futimens` returns EROFS; the listing begins `ro` | Refuses (A3, A4) | — |
+| After activation, a checkpoint whose flush the device fails | Status discarded (`checkpoint.c:338-339`); the tail can move; a power loss can then revert committed metadata, and no process sees an error | Already certified | **Outside domain H** (A-S5); the store cannot detect it (§12.2) |
+
+**Enumeration** [M: C28; counts computed by the model and compared by the reference check]. The model's transaction state and its four windows through the whole store model are described in §16.1.
+
+| Quantity | Count |
+|---|---|
+| Initial journal states: the two dependencies running, committing, committed or failed, with unrelated work | 50 |
+| Activation runs: any background event or none before each step, an abort inside the probe's handle start or not, forced commits succeeding or failing | 259200 |
+| Certified | 51820 |
+| Refused | 207380 |
+| Refused although the dependencies had committed (conservative) | 48404 |
+| Certified with the journal aborted after the probe's test, each through the completed-transaction return | 32460 |
+| Later continuations of certified runs, each followed by a power loss, every certified dependency kept | 310920 |
+
+The enumeration is bounded, over a model that is not a kernel. It shows that the argument's steps hold in every enumerated interleaving, not that no other interleaving exists.
+
+**Proof obligations.** Each claim; the source path or assumption it rests on; the modelled transition; the check that exercises it; and what remains to be established outside this design.
+
+| # | Claim | Source path or assumption | Modelled transition | Check | Still required |
+|---|---|---|---|---|---|
+| P1 | A directory sync waits for every transaction up to the running or committing one and then tests the abort flag; with neither, it returns 0 untested | `journal.c:499-527`, `journal.c:678-690`, `journal.c:513-517` | `JournalSim.dir_fsync`; `SimFS.sync_dir` | C28, C29 | G-HOST: the running build's code |
+| P2 | A failing commit sets the abort flag before the transaction completes; the flag is permanent | `commit.c:548`, `commit.c:866`, `commit.c:889`, `commit.c:1102-1105`, `journal.c:2515-2516` | `JournalSim.finish_commit`, `abort` | C28, C29 | G-HOST |
+| P3 | The probe's handle start turns an earlier abort into emergency read-only, which its `fsync` returns first | `ext4_jbd2.c:81-89`, `super.c:722-732`, `inode.c:6531-6540`, `fsync.c:135-137` | `probe_touch`, `probe_fsync`; `SimFS.touch`, `fsync_file` | C25, C28, C29 | G-HOST |
+| P4 | A regular file's `fsync` returns 0 untested for a completed transaction; an abort after ext4's handle test sets nothing | `journal.c:800-805`, `transaction.c:366-371`, `ext4_jbd2.h:354-365` | The completed branch; `abort_in_probe_handle` | C29 (conformance), C28 (safety) | G-HOST |
+| P5 | A committed transaction's record went out with a checked cache flush and forced unit access | `commit.c:152-154`, `commit.c:874-881`, `commit.c:888-889` | `finish_commit`: the log durable | C28 | A-S1; G-PWR if ever required |
+| P6 | The tail moves past a transaction only after its home blocks were written with no recorded error and a flush followed; at a checkpoint that flush's status is discarded | `journal.c:1861-1864`, `commit.c:899-900`, `checkpoint.c:338-339` | `checkpoint`, `_tail_update` | C28 (with A-S5), C29 (A-S5 necessary) | **A-S5 (new)**, attested; G-PWR |
+| P7 | Recovery replays the committed transactions from the tail | `recovery.c:282-345`, `recovery.c:611` | `JournalSim.survives` | C28 | G-HOST |
+| P8 | The probe follows the last A2 sync | §10.6 A3 | `journal_activation` order | C28 (NC-PROOF-ORDER) | G-IMPL: the Rust order |
+| P9 | Every dependency directory is synced, on one filesystem, and revalidated | §10.6 A1, A2, A4 | `activate` | C25, C26 | G-IMPL |
+| P10 | The profile excludes the two discarded `commit.c` flushes and fast commits, from effective state | §6.4; `commit.c:775-778`, `commit.c:883-886`, `super.c:4963-4968` | `check_profile`; the profile sweep | C27, C29 | The Owner's qualification facts (§13.2) |
+| P11 | The running kernel is the qualified build | §6.4 step 11 | `check_profile`, kernel comparison | C27 | G-HOST: each build qualified |
+| P12 | Nothing depends on the store before activation | §10.6 "Before what"; INV-18 | `startup`, `MaintenanceSession.begin` | C25, C26 | G-IMPL |
 
 ---
 
@@ -1372,8 +1569,9 @@ The model checks the following [M: C13]:
 | INV-15 | **Session authority (R2).** Maintenance verification and mutation run only under the session's retained exclusive lock descriptions, never through a new lock request, a conversion, a release, or an asserted identity. Competitors stay excluded for the whole session. | H, with the Owner following §13 | C20 |
 | INV-16 | **Bounded aggregates (R2).** Every directory is counted against its bound before any entry is examined. Reports beyond their detail bound say they are partial. Every decision uses the complete set. | H, M, S | C17, C24 |
 | INV-17 | **Protocol parity (R2).** Every durability operation the model performs is a written protocol step, in the written order, and the crash matrix of §15.2 is the one the model computes. | Model | C22, C23 |
-| INV-18 | **Durable activation (R3).** No claim, record, acknowledgement or native admission exists on a selection that its owner has not activated (§10.6): every dependency directory synced, the certification probe passed, and revalidation done, all under the store lock held since the selection was revalidated. No maintenance session verifies or mutates before activating. | H | C25 |
+| INV-18 | **Durable activation (R3; precise in R4).** No claim, record, acknowledgement or native admission exists on a selection that its owner has not activated (§10.6): every dependency directory synced, the probe passed, and revalidation done, all under the store lock held since the selection was revalidated. No maintenance session verifies or mutates before activating. R4: activation means that every transaction holding a dependency has committed, and that it stays durable under A-S1 and A-S5 (§10.7). It does not mean that every earlier transaction succeeded. | H | C25, C28 |
 | INV-19 | **History across recovery (R3).** Once work depends on a selection, every permitted later crash outcome (F1, or F2 under every schedule) and every specified recovery either selects a store whose decision includes every acknowledged, unsealed generation, or refuses explicitly with that generation's bytes retained. Recovery never provisions a fresh root over a root that may hold history. | H, with the Owner following §13 | C25, C26 |
+| INV-20 | **Supported profile (R4).** No owner, verifier or session acts on a store whose effective profile is not the qualified supported one (§6.4): the effective options, the journal's location and the kernel are read at every opening and again at A4. Unknown, contradictory or unqualified information refuses before any claim. | H, with the Owner keeping the qualification facts (§13.2) | C27 |
 
 **Why INV-3 holds.**
 - Any native owner arises from an admitted action, so its `ActionStarted` is durable (INV-2) and therefore visible at every later startup in domain H.
@@ -1388,7 +1586,7 @@ The model checks the following [M: C13]:
 | Domain | What holds |
 |---|---|
 | M | Totality, bounds, determinism and fail-closed structure. Arbitrary bytes can still form a well-formed, misleading journal. |
-| S | Detectable faults are refused. Lost or misdirected flushed writes are undetectable (§5.2). |
+| S | Detectable faults are refused. Lost or misdirected flushed writes are undetectable (§5.2). R4 adds one more undetectable fault: a cache flush the device fails at a checkpoint. v6.17 discards its status (`checkpoint.c:338-339`), and the tail can still move. A power loss before a later successful flush can then revert committed metadata, including an activated selection's dependencies, after work depended on them. INV-18 and INV-19 do not hold across it (A-S5). Every other flush failure on the profile's paths is reported: through a commit (an abort, then EIO or EROFS at the store's next sync) or through `fsync`'s own flush. |
 | A | Only INV-6, INV-7 and INV-8 hold (§3.3, G-AUTH). |
 
 ### 12.3 Bindings
@@ -1450,7 +1648,10 @@ Each procedure's crash points are listed in §15.2 and its operations in §15.3 
    - sysfs logical and physical block sizes for the mount's major:minor, each dividing 4096;
    - `write_cache` recorded;
    - the filesystem has a journal and no `fast_commit` feature (A-M1, §4.8);
-   - the A-S1 to A-S4, A-M1 and A-M2 attestation for the device and the running kernel;
+   - (R4) from the superblock, read as root: the journal is internal, at inode 8, with no journal device and no journal UUID; the feature list has `has_journal` and lacks `fast_commit`. The store uid cannot read these later (§5.3), so the Owner re-qualifies after any change to them, and the store is unsupported until then;
+   - (R4) every rule of §6.4 steps 9 and 10, read as the store uid will read it: the effective listing, and the journal's jbd2 name;
+   - (R4) the running kernel's build is qualified. The Owner checks the build's sources (the distribution's source package for that release, not only the upstream tag) against every source claim of §5.1 and §10.7. Its identity, `uname(2)` release and version, is pinned as `kernel` (§7.5). A version string alone qualifies nothing;
+   - the A-S1 to A-S5, A-M1 and A-M2 attestation for the device and the running kernel. A-S5 (R4): the device is not known to fail cache flushes; a device without a write-back cache meets it by construction (§5.1);
    - the directory of `<PROVISION_PATH>`, the parent of `<STATE_ROOT>` and every ancestor of both exist, are root-owned and neither group- nor other-writable, and lie on the state root's filesystem (§6.2). Each directory created for them is `fsync`ed, and so is its parent, so that no ancestor's entry can roll back (R3).
 2. **Create directories.** Create `<STATE_ROOT>`, `journals/`, `dispositions/`, `dispositions/revoked/` and `archive/`, each `root:root 0755`. `fsync` each, and its parent.
 3. **Create the lock.** Create `LOCK` as `uid:gid 0600`, empty, and `fsync` it. Then `fsync <STATE_ROOT>`, which now holds the new entry (R2: the R1 model performed this sync without the text saying so).
@@ -1484,6 +1685,9 @@ Used by recycling, retirement and re-qualification, always inside the procedure'
 `retired-through` and `predecessor` are the only fields that record retirement or succession. Both are root-owned.
 
 **Re-qualification.** When the mount options no longer match `PROVISION`, every opening refuses as Unsupported (§6.4). After re-qualifying the host (§13.2 step 1), the Owner rewrites `PROVISION` with the new option strings. Its session is begun in **re-qualification mode**: identical to §13.1 except that the option comparison of §6.4 step 5 is not applied to the stale strings being replaced; every other check, the lock and the revalidation still apply [M: C12, C21].
+- **After a kernel update (R4).** Every opening refuses as Unsupported ("kernel not qualified", §6.4 step 11) until the Owner qualifies the new build and rewrites `PROVISION` with its identity in the same way. Re-qualification mode also skips step 11's comparison, for the identity being replaced.
+- **What it never skips.** The rules of §6.4 steps 9 and 10, so a re-qualification never accepts an unsupported profile [M: C27].
+- **After any change to the superblock facts of §13.2 step 1.** The Owner re-qualifies.
 
 ### 13.4 Disposition publication, reading and revocation
 
@@ -1637,7 +1841,7 @@ Both are future modes of the owner binary, implemented in the later mission. The
 
 **Checks**, in both:
 - §10.1;
-- §10.2 steps 0–2 and 4–8, without the evidence-preservation sync;
+- §10.2 steps 0–2 and 4–8, without the evidence-preservation sync. Step 2 includes (R4) the effective profile, the journal's location and the kernel (§6.4 steps 9–11) [M: C27];
 - all of §11.
 
 Each reports every condition it finds rather than stopping at the first.
@@ -1743,6 +1947,9 @@ Notation:
 | A cause latched with nothing held; `close()` returned `Ok`; seal withheld (R2); process exited | No seal | No seal | No seal | Unsealed | Refused if AS (a disclosed false positive) |
 | Activation incomplete or refused (R3): a sync failed, blocked or was interrupted, the probe failed, or revalidation failed | No claim | No claim | No claim | The store as it then reads; nothing of this owner | Permitted to a later owner that activates; this owner made no claim |
 | Activated; claim and dependent records durable; then F2 (R3) | The activated selection | The activated selection: activation made it durable | The activated selection | The generation, unsealed if AS | Refused if AS [M: C25, C26] |
+| Activated; then the journal aborts, a later error (R4) | The activated selection; the journal stays aborted, so the next activation's probe sees emergency read-only | The activated selection: its transactions had committed and are replayed | The activated selection | After F1, Unreliable, a refusal that keeps the bytes; after F2, the generation | Refused [M: C28] |
+| The effective profile changes, or the kernel is updated (R4) | — | — | — | Unsupported until re-qualification (§13.3) | Refused [M: C27] |
+| A checkpoint flush the device fails, then F2 (domain S, R4) | — | Committed metadata, an activated selection's included, can revert, and nothing reports it | As after F2 | Possibly a predecessor, without the work | Outside every guarantee (A-S5, §12.2) |
 | `RunEnded` applied, not closed | Prefix with `RunEnded` | Same | Same | Unsealed; verdict reported | Refused if AS |
 | `close()` succeeded, seal not written | No seal | No seal | No seal | Unsealed | Refused if AS (a disclosed false positive) |
 | Seal written, not synced | Seal visible; made durable by the startup sync if that succeeds | Absent, unreadable or present | Absent unless synced | Sealed or unsealed | Permitted, or refused if AS |
@@ -1908,15 +2115,29 @@ A fresh owner that is Ready, or that decides on other incidents, without the gen
 
 **Bounds.** One generation of dependent work per run, one pool file claimed, every prefix of every procedure, and both crash families. The composed checks are a bounded enumeration, not a proof.
 
+**R4.** Every composed scenario was re-run on the R4 model, with the corrected `fsync` model and the profile checks, on the qualified profile. Every count and outcome above is identical [M: C26].
+
 ---
 
 ## 16. Verification: the design model now, Rust tests later
 
 ### 16.1 Design model (this mission) [M]
 
-`docs/evidence/p2-v1-r3b-i3-p-r3/design_checks.py` uses only the Python standard library, with in-memory byte images and simulated state. It opens no store, calls no native operation, performs no privileged I/O and causes no real crash. R3 carries the R2 model forward, which carried R1's, and implements:
+`docs/evidence/p2-v1-r3b-i3-p-r4/design_checks.py` uses only the Python standard library, with in-memory byte images and simulated state. It opens no store, calls no native operation, performs no privileged I/O and causes no real crash. R4 carries the R3 model forward, which carried R2's and R1's, and implements:
 - the §4 state model: **K**, **D**, pending writeback, errseq with per-description cursors, page reclaim separate from inode eviction, F1, F2, and the §4.8 metadata log with its ordered and per-directory schedules;
-- the journal behaviour of A-M2 (R3): a directory sync through a new descriptor, a read-only superblock, a commit that fails silently in the commit thread, emergency read-only, and the timestamp probe;
+- the journal behaviour of A-M2 (R3), as corrected in R4:
+  - a directory sync through a new descriptor;
+  - a read-only superblock;
+  - a commit that fails silently in the commit thread;
+  - emergency read-only;
+  - the timestamp probe, whose transaction runs or has completed, so that the probe's `fsync` waits only for a running one (F4);
+  - an abort that lands between ext4's and jbd2's handle tests;
+- (R4) the effective profile (§6.4 steps 9–11): the option listing, the jbd2 entry names and the kernel identity, as fixtures in the form v6.17 prints them, and the Owner's qualification as root;
+- (R4) the journal transaction model behind §10.7, `JournalSim`. It is the smallest state the proof needs:
+  - transactions running, committing or completed, then committed or failed;
+  - the abort and emergency read-only flags, and the probe inode's sync tid;
+  - each flush site, checked or discarded, on the internal or external journal and with synchronous or asynchronous commits;
+  - checkpointing, the log tail, and recovery from the tail;
 - the §5 containment profile, plus an unsupported profile for contrast;
 - the §6–§7 formats, with a version-1 encoder and decoder that reproduce all 50 golden record vectors of `codec-tests` (`RECORD_VECTORS`, `codec-tests:121`) [S];
 - the §8 lock model, with open-file-description semantics, and the §8.4 session objects;
@@ -1927,7 +2148,7 @@ A fresh owner that is Ready, or that decides on other incidents, without the gen
 - an enumerator of interleavings over the model's atomic steps, where one step stands for one critical section;
 - the composed scenarios and oracle of §15.4 (R3).
 
-It first re-runs every Architect counterexample on the **unchanged R1 and R2 models**, each loaded by path and checked against its published SHA-256, and requires each to reproduce (§19.3, §19.4).
+It first re-runs every Architect counterexample on the **unchanged R1 and R2 models**, and the R4 findings on the **unchanged R3 model**, each loaded by path and checked against its published SHA-256, and requires each to reproduce (§19.3, §19.4, §19.5).
 
 | Check | Marker | Requirement |
 |---|---|---|
@@ -1958,14 +2179,30 @@ It first re-runs every Architect counterexample on the **unchanged R1 and R2 mod
 | C24 | `[aggregate-bounds]` | Directory counts refused before any entry is examined; a partial report says so; neither a startup nor a retirement decides from a truncated set |
 | C25 | `[durable-activation]` | No claim on a selection that is not durable. Covers the two witnesses with every second crash; established stores and completed successions; EIO, EINTR, emergency and read-only states, a silent journal abort, identity failures, and process death or power loss during activation, each refused before any claim; the read-only verifier never activating; sessions activating; one filesystem; stale readers and competing owners; a replacement racing activation; and the activation operations of §10.6 |
 | C26 | `[composed-recovery]` | §15.4: every procedure prefix, a first crash, dependent work, a second crash and recovery, with the generation always discoverable or explicitly refused; chained administration; recovery that never provisions a fresh root over history |
+| C27 | `[supported-profile]` | INV-20. The qualified profile activates and claims. Each case below refuses before any claim, for owners, the verifier and sessions: an external journal; `data=writeback`, `nobarrier` or `data=journal` in effect but absent from `mountinfo`; `journal_async_commit`; `norecovery`; `fc_debug_force`; emergency or ordinary read-only; another kernel; an unresolved name; an unreadable listing; a contradiction. Also covered: a profile changed during activation, refused at A4; qualification refusing fast commits and an external journal; a kernel update refused until re-qualification, which never accepts an unsupported profile. |
+| C28 | `[activation-proof]` | §10.7, safety. In every enumerated transaction state and window, a certified activation has every dependency committed, and it survives every later continuation of domain H and a power loss. A refusal happens only after a failure. Harmless late aborts are certified. Four windows are also run through the whole model, with every second crash and the oracle. |
+| C29 | `[journal-conformance]` | §10.7, conformance. Each modelled transition follows its cited branch: the three `fsync` returns; an abort before the probe's test returned as EROFS; the completed-transaction return reached with the journal aborted. Each discarded flush (`checkpoint.c:338-339`, `commit.c:775-778`, `commit.c:883-886`) leaves the journal unaborted and loses a committed operation. The two `commit.c` sites never run on the profile. A-S5 is shown necessary, and the checked failures abort. |
 
-**Negative controls.** There are 54: R1's 27 (NC01–NC17, with lettered variants), R2's 21 (NC18a–f, NC19, NC20a–f, NC21a–b, NC22a–b, NC23, NC24a–c), all unchanged in identity and intent, and 6 new ones (NC-ACT-VISIBLE, NC-ACT-ORDER, NC-ACT-ERROR, NC-ACT-PROBE, NC-ACT-REVALIDATE, NC-ACT-COMPOSE).
+**Safety and conformance are kept apart.** C28 asks whether the protocol is safe on the modelled journal. C29 asks whether the modelled journal is the cited one. A model that wrongly reports more errors (R3's `fsync`, NC-FSYNC-COMPLETED) passes C28 and fails C29. A model that invents an abort where v6.17 discards the status (NC-ERR-DETECTED) would hide the need for A-S5, and fails C29.
+
+**Negative controls.** There are 61: R1's 27 (NC01–NC17, with lettered variants), R2's 21 (NC18a–f, NC19, NC20a–f, NC21a–b, NC22a–b, NC23, NC24a–c) and R3's 6 (NC-ACT-VISIBLE, NC-ACT-ORDER, NC-ACT-ERROR, NC-ACT-PROBE, NC-ACT-REVALIDATE, NC-ACT-COMPOSE), all unchanged in identity and intent, and 7 new ones:
+
+| Control | Target | Behaviour restored |
+|---|---|---|
+| NC-PROF-JOURNAL | C27 | An external journal accepted: the journal's location never checked |
+| NC-PROF-MODE | C27 | An excluded mode in the effective listing accepted |
+| NC-ACT-UNQUALIFIED | C27 | An unqualified profile authorizes: the profile taken from the pinned `mountinfo` strings and the attestation, the kernel never compared (R3) |
+| NC-PROF-GUARD | C27 | The effective profile not checked again after the syncs (A4) |
+| NC-PROOF-ORDER | C28 | The probe before the directory syncs |
+| NC-FSYNC-COMPLETED | C29 | R3's `fsync` model: every aborted, unnoticed journal reported as EIO, whatever the state of the inode's transaction |
+| NC-ERR-DETECTED | C29 | A discarded flush status treated as detected: an invented abort at an unchecked flush |
+
 - They are listed with their targets in the script and in `coverage.json`.
 - Each is an in-memory mutant that restores an incorrect behaviour, usually an earlier revision's, and must fail its target check's assertion carrying that check's marker.
 - NC-ACT-COMPOSE restores the whole R2 protocol. It counts as caught only if the earlier snapshot checks C12, C20, C21 and C22 still pass under it: it must be detected by composition alone.
 - A syntax, import or fixture error never counts as a caught control.
 
-The output reports separately the R1 and R2 reproductions, baseline passes, intended negative-control failures, the restored baseline, tool failures, the assertion and model changes (with the requirement each keeps), and the assumptions the model cannot establish.
+The output reports separately the R1 and R2 reproductions, the R3 reproductions, baseline passes, intended negative-control failures, the restored baseline, tool failures, the assertion and model changes (with the requirement each keeps), and the assumptions the model cannot establish.
 
 **Model simplifications,** each disclosed:
 - directory descriptors and component-by-component `O_PATH` walks are not modelled; directories are addressed by reference;
@@ -1975,16 +2212,22 @@ The output reports separately the R1 and R2 reproductions, baseline passes, inte
 - the model's verifier stops at the first refusal, whereas the §13.11 contract requires a full report;
 - the maintenance session is modelled as an object holding its lock descriptions; no executable exists;
 - the journal is one per simulated host, standing for the one filesystem the profile requires (§6.2); the per-directory family over-approximates independent directories, and so independent filesystems;
-- the journal's behaviour follows the v6.17 sources cited for A-M2; it is not a kernel.
+- the journal's behaviour follows the v6.17 sources cited for A-M2; it is not a kernel;
+- (R4) the whole-store model's abort leaves nothing running: it stands for the state after the commit thread has processed the running transaction that the abort itself requests (`journal.c:2565-2589`). `JournalSim` keeps the transaction states that the whole-store model abstracts away;
+- (R4) `JournalSim` runs one commit at a time, in order. Background commits and aborts happen at chosen points, and every flush is honoured unless a scenario fails it. Its initial states have at most four events, with one background event or none before each activation step;
+- (R4) the option listing, jbd2 names and kernel identity are fixtures; the superblock facts are an object only the qualification reads.
 
-`reference_check.py` verifies against `45898e05` every `file:line` reference in this document and the golden-vector literals in the model. It also checks that the following say exactly what the model computes and performs:
+`reference_check.py` verifies against `45898e05` every Rust `file:line` reference in this document and the golden-vector literals in the model. With `--kernel`, it verifies every Linux `file:line` citation against local copies of the v6.17 files, each checked by SHA-256, at the first and last line of each range. It also checks that the following say exactly what the model computes and performs:
 - the §15.2 crash matrix and coverage counts;
 - the §15.3 operation table;
 - the §10.6 activation operations;
 - the §15.4 composed dimensions;
+- (R4) the §10.7 enumeration counts;
+- (R4) the §6.4 step 9 required and excluded options;
+- (R4) the `PROVISION` keys of §7.5;
 - the §16.1 check table and control count.
 
-Existence and text matches are not semantic conformance.
+Existence and text matches are not semantic conformance. A successful line check is not a semantic proof.
 
 **The model validates this specification's internal consistency and protocols. It does not execute, test or prove the Rust code, the kernel, ext4 or any device.**
 
@@ -2009,6 +2252,12 @@ Existence and text matches are not semantic conformance.
   - the activation order of §10.6 and its refusals;
   - no claim before activation;
   - the composed scenarios of §15.4, rerun from the Rust procedures and the real core.
+- **Profile and activation proof (R4).**
+  - **Simulated storage** must also model the transaction windows of §10.7: running, committing and completed transactions; an abort before, inside and after the probe's handle start; the completed-transaction return; discarded and checked flushes; the log tail.
+  - **The tests then cover:**
+    - every profile case of C27, with the effective listing, the jbd2 names and the kernel identity supplied by the simulated host;
+    - the windows of C28;
+    - C29's conformance cases, written against the qualified kernel's sources.
 - **Unprivileged real-filesystem tests (R3)**, under `CARGO_TARGET_TMPDIR`, may check that:
   - a directory opened `O_RDONLY | O_DIRECTORY` can be synced and an `O_PATH` one cannot;
   - `futimens` succeeds on a file the test owns;
@@ -2039,6 +2288,14 @@ Each must compile and then fail its intended assertion, with its marker:
 - **Maintenance (R2):** in-session verification through a new shared lock; a lock converted or released around verification; Busy taken as success; authority from a flag; a verification skipped by reusing an earlier report; no post-lock revalidation; revalidation through the descriptor kept from the read; an undocumented durability step.
 - **Persistence and bounds (R2):** entries durable only through a directory sync; no page reclaim with descriptors open; bounds checked after the entries are examined; a startup decision or retirement preconditions taken from a truncated report.
 - **Activation (R3):** a revalidated, visible selection treated as activated; a claim, acknowledgement or admission before activation; a failed or uncertain activation sync treated as success; no certification probe; no revalidation around activation; the R2 protocol run through the composed tests while the snapshot tests still pass.
+- **Profile and proof (R4):**
+  - an external journal accepted;
+  - an excluded mode in the effective listing accepted;
+  - the profile decided from `mountinfo` strings, the attestation or a kernel version prefix;
+  - the profile not rechecked at A4;
+  - the probe before the directory syncs;
+  - a completed transaction's `fsync` modelled as failing;
+  - a discarded flush modelled as an abort.
 
 ### 16.5 Fixtures
 
@@ -2060,12 +2317,12 @@ Root-owned fixtures, host qualification and power-loss rigs are not authorized.
 | `support/custody/store/mod.rs` | API (`StoreGuard`, `StartupReport`, `Recorder`, `ExchangeSink`, `RecorderStatus`), claims and non-claims |
 | `support/custody/store/format.rs` | Header, seal and record blocks; `PROVISION`, disposition and entry-name grammars; bindings |
 | `support/custody/store/classify.rs` | The pure classifier and grammar (§11) |
-| `support/custody/store/open.rs` | Safe open, mount identification, the one-filesystem check, `PROVISION` selection and revalidation, durable activation, startup order (§10) |
-| `support/custody/store/io.rs` | The `StoreIo` trait and its Linux implementation: `openat2` through `SYS_openat2` and `open_how`; `statx`; `fstatat`; `fstatvfs`; `flock`; `pwrite`; `fdatasync`; `fsync` of directories and files; `futimens`; `getrandom`. All are in `libc` 0.2.183. |
+| `support/custody/store/open.rs` | Safe open, mount identification, the one-filesystem check, (R4) the effective-profile, journal-location and kernel checks of §6.4 steps 9–11, `PROVISION` selection and revalidation, durable activation, startup order (§10) |
+| `support/custody/store/io.rs` | The `StoreIo` trait and its Linux implementation: `openat2` through `SYS_openat2` and `open_how`; `statx`; `fstatat`; `fstatvfs`; `flock`; `pwrite`; `fdatasync`; `fsync` of directories and files; `futimens`; `getrandom`; (R4) `readlinkat` and `uname`. All are in `libc` 0.2.183 (R4: `readlinkat` in its `src/unix/mod.rs`, line 2270, and `uname` in its `src/unix/linux_like/mod.rs`, line 2003). |
 | `support/custody/store/exchange.rs` | The exchange and its fatal latch, the sink, the owner's apply step and failure delivery, and the store admission gate (§9) |
 | `support/custody/store/recorder.rs` | The worker: claim, append, seal, poison |
 | `support/custody/store/disposition.rs` | The `DispositionValidator` |
-| `support/custody/store/sim.rs` | Simulated storage (§16.2), including the §4.8 metadata log and schedules and the A-M2 journal behaviour |
+| `support/custody/store/sim.rs` | Simulated storage (§16.2), including the §4.8 metadata log and schedules, the A-M2 journal behaviour, (R4) the transaction windows of §10.7 and a simulated host profile |
 | `support/custody/store/maintenance.rs` | The maintenance session type and in-session verification (§13.1, §13.11), exercised against simulated storage only. No executable, binary target or privileged entry point. |
 | `support/custody/mod.rs` | `pub mod store;` and the integration-obligation documentation |
 | `phase2_custody_store.rs` | A new test target |
@@ -2098,10 +2355,10 @@ Root-owned fixtures, host qualification and power-loss rigs are not authorized.
 |---|---|
 | **G-AUTH** | An end-to-end authority model against tampering by the store uid (§3.3), before any production or runner use. **Unresolved.** |
 | **G-IMPL** | An implementation mission for §17 |
-| **G-HOST** | Owner qualification and provisioning on a named host (§13.2) |
+| **G-HOST** | Owner qualification and provisioning on a named host (§13.2). R4 adds to it: the qualification of the running kernel's exact build against the source claims of §5.1 and §10.7; the superblock facts (an internal journal at inode 8, no `fast_commit`); the effective profile of §6.4; and the A-S5 attestation. |
 | **G-NATIVE** | Native-layer guarantees for the residuals of §14.4 |
 | **G-LIVE** | Integration of the owner process and service, and live validation |
-| **G-PWR** | Empirical power-loss qualification, if it is ever required (D-10) |
+| **G-PWR** | Empirical power-loss qualification, if it is ever required (D-10). It would also be where A-S5, flush success, could be tested empirically. |
 
 API-5 (§2.3) is not a gate of this design: nothing here depends on it. It needs its own approval if it is ever wanted.
 
@@ -2126,8 +2383,10 @@ This design does not:
 - **No qualification or proof.** There is no tamper resistance against the store uid, no power-loss proof, no filesystem or device qualification, no authentication, and no proof of native cleanup.
 - **No completion.** There is no journal-completeness claim beyond §11, no live acceptance, no integration, and no Phase Two completion.
 - **No interface exists.** The admission gate, the fatal latch, the maintenance session and its in-session verification, the selection protocol and API-5 are specifications only.
-- **A-M1, A-M2 and A-S1 to A-S4 are assumptions.** The per-directory over-approximation shows which conclusions do not depend on A-M1. A-M2 was read from the Linux v6.17 sources, not tested. Nothing shows that a device or a running kernel honours them.
+- **A-M1, A-M2 and A-S1 to A-S5 are assumptions.** The per-directory over-approximation shows which conclusions do not depend on A-M1. A-M2 was read from the Linux v6.17 sources, not tested. Nothing shows that a device or a running kernel honours them. A-S5 is new in R4.
 - **No activation ran on a host.** No directory was synced, no timestamp probed and no state root created. Activation is a specification and a model.
+- **No host was observed in R4, and nothing was reproduced live.** The R4 findings rest on reading the v6.17 sources and on the models. R4 read no profile listing, jbd2 entry or kernel identity from any host. Its profile values are fixtures. No reproduction on the Owner's or any other machine is claimed.
+- **Activation does not certify filesystem health.** It establishes the dependencies of one selection under the declared model (§10.7), and nothing about later transactions.
 - **No approval.** Publication is not approval.
 
 ---
@@ -2231,3 +2490,35 @@ The R2 baseline was first re-run and reproduced exactly. The Architect's compose
 | The model's generation redraw ignored archive headers, which §7.7 includes | Model (C26: most second crashes refused as duplicate generations) | Corrected; the composed owner also draws its own generation instead of a fixed one |
 | With one pool file, disposition, revocation and archival could never be followed by dependent work | Model (C26 statistics) | The composed scenarios use two pool files |
 | Two new controls were caught by a state assertion or ended in a tool error rather than by the behavioural oracle | Review of the controls | The fault cases run the oracle before any state assertion; every new control now fails on an omitted generation |
+
+### 19.5 R4: the activation proof and the supported profile
+
+The R3 baseline was first re-run on the unchanged R3 evidence. The model's output, the reference check's output and `coverage.json` were byte-identical to those recorded. The Architect's findings F1–F4 were then traced through the complete v6.17 paths (§1.4). The R4 findings were re-run on the **unchanged R3 model** (`docs/evidence/p2-v1-r3b-i3-p-r3/design_checks.py`, loaded by path and checked against its SHA-256). The R4 model repeats these runs every time it is executed. The Architect has not claimed a live reproduction, and none is claimed here.
+
+| Finding | Minimal trace (v6.17) | Verdict | Resolution | Model |
+|---|---|---|---|---|
+| F1 | `commit.c:775-778` and `commit.c:883-886` call `blkdev_issue_flush` and discard the status (`blk-flush.c:468-474`). The first needs an external journal (`journal.c:1684` versus `journal.c:1641-1657`); the second needs asynchronous commits, set only by `journal_async_commit` (`super.c:4058-4095`), which v6.17 refuses with `data=ordered` (`super.c:4963-4968`). | Confirmed; unreachable on the R4 profile | The profile, established from effective state (§6.4) | C27, C29 |
+| F2 | `checkpoint.c:338-339` discards the flush status, then the tail moves (`journal.c:1056-1091`, `journal.c:1852-1885`); recovery starts at the tail (`recovery.c:611`). It is reached from ordinary handle starts (`transaction.c:272-279`). A failed home write is caught (`journal.c:1861-1864`, `buffer.c:1214-1222`); a failed flush is not. | Confirmed and reachable. A threat to required history only when the device fails that flush and a power loss follows before a later successful flush. | **A-S5 (new)**, stated with the event, its effect and the alternative (§5.1, §12.2) | C29 (A-S5 shown necessary) |
+| F3 | `journal.c:787-808`: no abort test unless the tid is running or committing (`journal.c:800-805`); reached from `fsync.c:115` through `fast_commit.c:1207-1208`. | Confirmed as a source fact. Its threat to activation is refuted once the certificate is restated: the syncs' own abort tests and the probe's handle-start test (§10.7). R3's wording is withdrawn. | §5.1 A-M2, §10.6, §10.7 | C28, C29 |
+| F4 | R3's `SimFS.fsync_file` returned EIO for every aborted, unnoticed journal | Confirmed model inaccuracy | Corrected (§16.1) | C29, NC-FSYNC-COMPLETED |
+| Profile | R3's §6.4 step 6 inferred a mode from a string absent from field 11, which omits defaults (`super.c:2949-2951`) | Confirmed | §6.4 steps 9–11, `PROVISION`'s `kernel` | C27 |
+
+| Id | Observed on the R3 model |
+|---|---|
+| R3-F4 | R3's probe state is one flag, with no running or completed distinction. After the probe's transaction completed and a later commit aborted the journal, R3's `fsync_file` returns EIO. v6.17 returns 0 (`journal.c:800-805`), as the R4 model does. |
+| R3-F4-REACH | Over R3's 27 checks, all passing, R3's `fsync_file` ran 3484 times and took the inaccurate branch 0 times. No R3 check result depended on it, and every retained R3 output is identical under the corrected model. |
+| R3-PROFILE | R3's host model observes only the `mountinfo` fields, sizes and link sysctls. Its opening is Ready, and claims, on a host whose effective `nobarrier`, or whose external journal, the R4 opening refuses. |
+
+**Changed assumptions.** R3's A-M2 said that an `fsync` of the probed file waits for the probe's transaction, and §10.6 said that a successful probe shows that the journal had not aborted by the time of the probe. Both overstated. The safety requirement is unchanged: no claim on a selection whose dependencies are not durable. Its argument now rests on the restated certificate (§10.7). The R3 evidence is kept unchanged and is not edited to agree.
+
+**R4 review.** The revision, the model runs and a review of the whole document against the sources found the items below. Each was resolved at the first repair; none needed a second.
+
+| Found | By | Resolution |
+|---|---|---|
+| The writer's first sync after its inode is loaded can also take the completed-transaction return; §4.3 claimed an unconditional flush | Source review | §4.3 states it. The first record's sync flushes the device again before any acknowledgement, so INV-1 is unchanged. |
+| Ordered-data wait errors are discarded by the commit (`commit.c:738-744`), and v6.17's `data_err=abort` is not consulted on that path | Source review | Recorded (§1.4). They stay in the file's errseq (`commit.c:240-247`), which every publishing procedure and the recorder read through their own descriptors. |
+| The proposed listing is world-readable but not bound to the root descriptor by itself | Review | Bound through the descriptor's `st_dev`, `/sys/dev/block` and the device name ext4 uses (§6.4 step 9). A contradiction with `mountinfo` refuses. |
+| The first version of C28's enumeration held every run in memory | Model | It yields one run at a time |
+| C29's discarded-flush cases were first written per profile with ad hoc set-up | Review of the check | One event list per profile, through the same event function as the enumeration |
+| NC-ACT-UNQUALIFIED was first caught by the external-journal case, not by a claimed-string case | Review of the controls | The cases begin with the hidden-default and kernel cases, so it fails where it should |
+| A cited line of `libc`'s own `mod.rs` matched the reference check's pattern for the custody `mod.rs` | Reference check design | Rephrased without the `file:line` form |
