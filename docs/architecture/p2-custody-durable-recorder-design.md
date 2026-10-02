@@ -1,13 +1,13 @@
-# P2 custody: durable recorder and refusal store — design (revision R4)
+# P2 custody: durable recorder and refusal store — design (revision R5)
 
 | | |
 |---|---|
-| Missions | P2-V1-R3B-I3-P (first candidate, `b23ae1ac`), revised by P2-V1-R3B-I3-P-R1 (`34cb35d8`), P2-V1-R3B-I3-P-R2 (`8f888252`), P2-V1-R3B-I3-P-R3 (`b0f84376`) and P2-V1-R3B-I3-P-R4. A module of Phase Two, not Phase Three. |
-| Status | **Design candidate for independent Architect review.** Not implemented, not provisioned, not qualified on any host, not live-validated, and not approved by being published. |
-| Design base | `b0f8437636d0bc7d38818e75df71d1bf516cff8e` (tree `08a0e04f…`, parent `8f888252…`), the R3 candidate. It is not accepted for implementation. |
+| Missions | P2-V1-R3B-I3-P (first candidate, `b23ae1ac`), revised by P2-V1-R3B-I3-P-R1 (`34cb35d8`), P2-V1-R3B-I3-P-R2 (`8f888252`), P2-V1-R3B-I3-P-R3 (`b0f84376`), P2-V1-R3B-I3-P-R4 (`91d91e50`) and P2-V1-R3B-I3-P-R5. A module of Phase Two, not Phase Three. |
+| Status | **Design candidate for independent Architect review.** Not implemented, not provisioned, not qualified on any host or device, not live-validated, and not approved by being published. |
+| Design base | `91d91e5052805f432586b5f1f9a0e2e14ca1af87` (tree `cd05e85b…`, parent `b0f84376…`), the R4 candidate. R4 is a published, blocked design candidate: it ended with an unresolved trust decision (A-S5, §19.6) and did not close the design gate. It is not accepted for implementation. |
 | Source baseline | `45898e05178a56efaadeb1f8f9ee7a0a521c72c9`. Every `file:line` reference to a Rust file below is to this commit; every reference to a Linux file is to the v6.17 tag (§1.4). |
-| Validation | `docs/evidence/p2-v1-r3b-i3-p-r4/` holds the R4 standard-library Python **design model**, its checks, its model-level negative controls, re-runs of the Architect's counterexamples on the unchanged R1 and R2 models and of the R4 findings on the unchanged R3 model, and a reference check. The R1, R2 and R3 evidence in `docs/evidence/p2-v1-r3b-i3-p-r1/`, `-r2/` and `-r3/` is kept unchanged. The model validates this specification's protocols against the model's own semantics. It is not the store, an owner service, a kernel, or a substitute for the later Rust tests (§16). |
-| Authorizes | Nothing beyond this document. Implementation, provisioning, qualification, service integration and live validation each need a separate Architect authorization (§18). |
+| Validation | `docs/evidence/p2-v1-r3b-i3-p-r5/` holds the R5 standard-library Python **design model**, its checks, its model-level negative controls, re-runs of the Architect's counterexamples on the unchanged R1 and R2 models, of the R4 findings on the unchanged R3 model and of the R5 findings on the unchanged R4 model, and a reference check. The R1 to R4 evidence in `docs/evidence/p2-v1-r3b-i3-p-r1/`, `-r2/`, `-r3/` and `-r4/` is kept unchanged. The model validates this specification's protocols against the model's own semantics. It is not the store, an owner service, a kernel, a device, or a substitute for the later Rust tests (§16). |
+| Authorizes | Nothing beyond this document. Implementation, provisioning, qualification of a host or device, service integration and live validation each need a separate Architect authorization (§18). |
 
 Source labels:
 
@@ -52,6 +52,7 @@ The module meets two of the core's unmet integration obligations: durability, an
 | 2 | An acknowledgement exists only as the recorder's published *durable-through* count. The count advances only after the record's block is fully written, synced on the writer's own long-open descriptor, and the journal's identity rechecked. No message, timeout or later event creates one. | §9 |
 | 3 | The crash model keeps separate: process-local state, kernel-visible bytes, durable bytes, pending writeback, writeback-error observation, and directory entries. Process death makes nothing durable. A sync on a newly opened descriptor certifies nothing about earlier writebacks. | §4 |
 | 4 | Physical containment is an explicit assumption [A]: a failed write of one aligned 4096-byte block alters no other block. The Owner attests it and it is qualified empirically later. The store refuses where the verifiable prerequisites do not hold. | §5 |
+| 4a | **Stable completion (R5).** The store runs only on storage that completes no write while its data are still only in volatile memory, anywhere below the completion (A-S1, restated). On such storage the kernel sends no cache flush, so no flush status, discarded or checked, carries durability. Reported failures stay in the supported failure model and are handled fail-closed. R4's A-S5, "every cache flush succeeds", is withdrawn; the Architect did not accept it. | §5.5–§5.9 |
 | 5 | Lock-bearing descriptors (the store lock and the claimed journal's lock) belong to the owner process's `StoreGuard`, beside `Custody`. The recorder thread has its own lock-free I/O descriptor. A recorder panic, disconnect or worker-side unlock cannot release exclusion. | §8 |
 | 6 | Submission and delivery use a bounded, idempotent, state-based **exchange**, not message queues. Every fatal condition (I/O failure, recorder loss, an invalid or conflicting submission, an unexpected acknowledgement outcome, a poisoned mutex) is one latch that records its first cause and the durable position P at that instant. After it nothing is published, admitted or acknowledged beyond P. The core is told only at a record it really issued. | §9 |
 | 6a | The integration calls `Custody::admit` only through the **store admission gate**: one critical section of the exchange mutex covers the health check and the call. A fatal latch therefore stops new admission at once, without waiting for a record. | §9.8 |
@@ -59,10 +60,11 @@ The module meets two of the core's unmet integration obligations: durability, an
 | 8 | Refusal stays conservative [D-3]. An unsealed generation that recorded any action start is refused, whatever its recorded-unsettled count. The restart report keeps separate the recorded unsettled entries, evidence completeness, whether native work was possible, and the refusal. It never invents an incident identity. | §11 |
 | 9 | Every container and text byte is assigned and validated, with full consumption and checked arithmetic. The NXCD version-1 record frame stays byte-identical [D-9]. | §7 |
 | 10 | Only ext4 is supported initially [D-6]. It is identified from the retained descriptor's mount ID in `mountinfo`, never from the shared `0xef53` magic alone. XFS is deferred. **R4 narrows the profile**: an internal journal, `data=ordered`, barriers, no fast or asynchronous commits, normal journal loading, and the kernel the Owner qualified. Each is read where the kernel shows its effective state, never inferred from a string absent from `mountinfo`; what the store uid cannot read is a qualification fact the Owner keeps. | §5.3, §6.4, §13.2 |
+| 10a | **Admitted storage (R5).** ext4 must sit directly on one NVMe namespace, or one of its partitions, behind a PCI Express controller, which the kernel registered without a volatile write cache, with no block layer in between. Everything else is unsupported: device-mapper, md, loop, network and fabrics, multipath, virtual machine disks, SATA and SAS. Every opening and A4 read the device's form, the kernel's registration of its cache and its identity afresh, and only that check makes a verified storage admission. No string, attestation or flag stands in for it. The observation is necessary, not sufficient: stable completion stays an assumption that the Owner's qualification addresses (G-HOST). | §5.9, §6.4 step 12, §10.8 |
 | 11 | Maintenance is offline, root-performed, and either fully specified or unsupported [D-7]. Every procedure runs inside one **maintenance session** that holds the store lock exclusively for its whole lifetime and verifies through that retained authority, never through a new lock request. Journal bindings are content-addressed, so archival keeps them. Any byte change creates a new binding, explicitly. | §12.3, §13 |
 | 11a | A `PROVISION` read is only a candidate until the reader holds the store lock and has **revalidated** it by fresh lookups: the same `PROVISION` inode and bytes, the same state root, and the locked `LOCK` inode. A failed revalidation re-selects, at most three times. A successor is published only while its maintenance session holds both stores' locks. | §10.5, §13.6 |
 | 11b | Crash outcomes of administrative procedures are computed under explicit metadata-persistence schedules: entries may become durable before any directory sync. Every model operation is a written protocol step, and the crash matrix is recomputed. | §4.8, §15 |
-| 11c | **Durable activation (R3; its proof restated in R4).** No owner claims a journal, and no maintenance session decides, on a selection that is merely visible. Under the store lock, each first syncs every directory its selection and decision depend on, then probes its own `LOCK`, and revalidates. Recovery never provisions a fresh root over a root that may hold history. R4 states exactly what this establishes: every transaction holding a dependency has committed, shown by the syncs' own abort tests and by the probe's handle start. It does not show that every earlier filesystem transaction succeeded (§10.7). | §10.6, §10.7, §13.2, §13.12 |
+| 11c | **Durable activation (R3; its proof restated in R4).** No owner claims a journal, and no maintenance session decides, on a selection that is merely visible. Under the store lock, each first syncs every directory its selection and decision depend on, then probes its own `LOCK`, and revalidates. Recovery never provisions a fresh root over a root that may hold history. R4 states exactly what this establishes: every transaction holding a dependency has committed, shown by the syncs' own abort tests and by the probe's handle start. It does not show that every earlier filesystem transaction succeeded (§10.7). R5: the dependencies stay durable on admitted storage through every later checkpoint, without any assumption about flushes (§5.7). | §10.6, §10.7, §13.2, §13.12 |
 | 12 | Store A0 is limited crash evidence, **not** tamper-resistant admission authority [D-4]. Production or runner use stays behind the unresolved gate **G-AUTH**. | §3.3, §18 |
 | 13 | No change to `core.rs`, `model.rs` or `codec.rs` is required. One narrow core API (API-5) is proposed for a later mission; the design does not depend on it. | §2.3 |
 
@@ -117,6 +119,22 @@ The Architect's findings F1–F4 were traced through the complete Linux v6.17 pa
 | F4, R3's model | `fsync_file` returned EIO for every aborted, unnoticed journal | Corrected. No R3 check took that branch, so no R3 result changes. | §16.1 |
 | Profile establishment | Pinned `mountinfo` strings; excluded options recognised only by their presence | The effective option listing, the journal's jbd2 name and the kernel identity are read at every opening and again after activation's syncs. Unknown, contradictory or unqualified information refuses. `PROVISION` gains the `kernel` field. | §5.3, §6.4, §7.5, §13.2 |
 
+This table records R4's position. Its F2 resolution, A-S5, was not accepted (§0.7, §19.6).
+
+### 0.7 Changes in R5
+
+The Architect did not accept A-S5 as the supported-runtime contract, and directed the design toward stable-completion storage. R4's baseline, and its checkpoint witness on the unchanged R4 model, were first reproduced (§19.6).
+
+| Item | R4 | R5 | Section |
+|---|---|---|---|
+| A-S5 | "The device completes every cache flush the kernel issues": a premise about one discarded status | Withdrawn. No storage that receives cache flushes is admitted, so no flush status carries durability. R4's witness is kept as a historical counterexample, on a volatile write-back cache. | §5.1, §5.8, §19.6 |
+| The storage contract | Flush honesty (A-S1) and flush success (A-S5), attested | **Stable completion**: a write the device completes is on non-volatile storage at that completion, at every layer below it (A-S1, restated). Failures the storage reports stay in domain H. | §5.5, §5.6 |
+| The checkpoint | Safe only if its discarded flush succeeds | On admitted storage the tail passes a transaction only after its home writes completed: successfully, and so stably; or with an error, which aborts the journal before a new tail is written. Traced through v6.17. | §5.7 |
+| The five paths | Not separated | A discarded flush failure, a checked superblock failure, native FUA, emulated FUA and a later successful flush have different outcomes on a volatile cache. Each is stated and modelled. | §5.8 |
+| Admitted storage | Any device the Owner attested; R4's fixture was a device-mapper device | One NVMe namespace, or one partition of it, behind a PCI Express controller, registered without a volatile write cache, with no layer in between. Its form, cache registration and identity are read at every opening and at A4. `queue/write_cache` alone is not sufficient. | §6.4 step 12 |
+| Qualification and authority | An attestation string | The prospective property, the qualification evidence the Owner needs, the runtime observation, what the store uid cannot see, the changes that invalidate a qualification, and exact refusals are kept apart. A verified admission has one constructor; decoding never makes one. No storage is qualified. | §5.9, §7.5, §10.8, §13.2, §13.3 |
+| Model and controls | 30 checks, 61 controls | 33 checks, 67 controls. Three checks are new: storage qualification (C30), stable completion (C31) and composed storage events (C32). Six storage controls are new. C28 and C29 change domain, as documented. | §16.1 |
+
 ---
 
 ## 1. Scope, base and sources
@@ -142,7 +160,7 @@ The module is the recorder, refusal store and disposition reader for the live ha
 
 ### 1.3 Governance and base
 
-- **Governance read.** `AGENTS.md` and `CLAUDE.md` were read at `45898e05`. They are byte-identical at `b23ae1ac`, `34cb35d8`, `8f888252` and the R4 design base `b0f84376`, verified by blob id. No descendant `AGENTS.md` or `CLAUDE.md` exists.
+- **Governance read.** `AGENTS.md` and `CLAUDE.md` were read at `45898e05`. They are byte-identical at `b23ae1ac`, `34cb35d8`, `8f888252`, `b0f84376` and the R5 design base `91d91e50`, verified by blob id. No descendant `AGENTS.md` or `CLAUDE.md` exists.
 - **Rules applied:**
   - fail closed, with no `$HOME`, cwd or temporary fallback;
   - explicit authority, and no recreation of trusted roots;
@@ -195,9 +213,9 @@ The module is the recorder, refusal store and disposition reader for the live ha
 - **sysfs-block ABI** (Linux v6.17 `Documentation/ABI/stable/sysfs-block`):
   - `logical_block_size` is "the smallest unit the storage device can address";
   - `physical_block_size` is "the smallest unit a physical storage device can write atomically";
-  - `write_cache` reports the cache mode.
+  - `write_cache` reports the cache mode. R5: it reports the **kernel's view**, which a write to the attribute changes without changing the device (`blk-sysfs.c:459-478`, below).
 
-- **Linux v6.17 sources** (`raw.githubusercontent.com/torvalds/linux/v6.17/…`; `checkpoint.c`, `commit.c` and `jbd2.h` were also compared byte for byte with `git.kernel.org`'s v6.17 tree; every file's SHA-256 is in the R4 evidence). Read in full along the paths below for R4; R3 read the first twelve files for single branches. Citations use short names: `journal.c`, `commit.c`, `checkpoint.c`, `recovery.c` and `transaction.c` are in `fs/jbd2/`; `fsync.c`, `super.c`, `inode.c`, `ext4_jbd2.c`, `ext4_jbd2.h`, `ext4.h`, `fast_commit.c` and `sysfs.c` in `fs/ext4/`; `fs-writeback.c`, `utimes.c`, `sync.c` and `buffer.c` in `fs/`; `blk-flush.c` and `blk-core.c` in `block/`; `jbd2.h` is `include/linux/jbd2.h` and `journal.rst` is `Documentation/filesystems/ext4/journal.rst`.
+- **Linux v6.17 sources** (`raw.githubusercontent.com/torvalds/linux/v6.17/…`; `checkpoint.c`, `commit.c` and `jbd2.h` were also compared byte for byte with `git.kernel.org`'s v6.17 tree, and so was every file R5 added; every file's SHA-256 is in the R5 evidence). Read in full along the paths below for R4 and R5; R3 read the first twelve files for single branches. Citations use short names: `journal.c`, `commit.c`, `checkpoint.c`, `recovery.c` and `transaction.c` are in `fs/jbd2/`; `fsync.c`, `super.c`, `inode.c`, `ext4_jbd2.c`, `ext4_jbd2.h`, `ext4.h`, `fast_commit.c` and `sysfs.c` in `fs/ext4/`; `fs-writeback.c`, `utimes.c`, `sync.c` and `buffer.c` in `fs/`; `blk-flush.c`, `blk-core.c`, (R5) `blk-sysfs.c` and `blk-settings.c` in `block/`; `jbd2.h` is `include/linux/jbd2.h` and `journal.rst` is `Documentation/filesystems/ext4/journal.rst`. R5 adds: `blkdev.h`, `pagemap.h` and `nvme.h` in `include/linux/`; `nvme/core.c`, `nvme/sysfs.c`, `nvme/pci.c` and `nvme/multipath.c` in `drivers/nvme/host/`; `base/core.c` (`drivers/base/core.c`); `errseq.c` (`lib/`); `filemap.c` (`mm/`); `page-io.c` (`fs/ext4/`); and `writeback_cache_control.rst` (`Documentation/block/`).
   - **Syncs.** `ext4_sync_file` (`fsync.c:129-177`):
     - returns an emergency state first (`fsync.c:135-137`);
     - returns having committed nothing when the superblock is read-only (`fsync.c:143-144`);
@@ -241,6 +259,14 @@ The module is the recorder, refusal store and disposition reader for the live ha
     - `/proc/fs/ext4/<device>/options` prints every option in its effective form (`super.c:3049-3058`) and is world-readable (`sysfs.c:571-583`).
   - `do_fsync` (`sync.c:205-213`): an `O_PATH` descriptor is rejected.
   - `journal.rst:31-40`: fast commits log minimal per-inode deltas outside the full-commit order.
+  - **Storage (R5).** The traces are in the R5 evidence (`validation.txt`, "Source traces").
+    - **The completion boundary.** Devices with volatile write-back caches "signal I/O completion to the operating system before data actually has hit the non-volatile storage" (`writeback_cache_control.rst:8-13`). For devices without one, "the block layer completes empty REQ_PREFLUSH requests before entering the driver and strips off the REQ_PREFLUSH and REQ_FUA bits" (`writeback_cache_control.rst:52-55`), as `blk-core.c:809-820` does. A driver with a volatile cache sets `BLK_FEAT_WRITE_CACHE`, "supports a volatile write cache", and `BLK_FEAT_FUA` if the device passes FUA (`writeback_cache_control.rst:57-68`, `blkdev.h:302-306`).
+    - **Flush sequencing.** With a write cache, FUA passes to the device or becomes a flush after the write (`blk-flush.c:8-26`, `blk-flush.c:398-403`, `blk-flush.c:437-446`, `writeback_cache_control.rst:92-95`). An error at any step ends the request with it (`blk-flush.c:160-163`, `blk-flush.c:182-192`). A flush makes every write completed before it stable (`writeback_cache_control.rst:23-27`).
+    - **The kernel's view of the cache.** `blk_queue_write_cache` is the feature without `BLK_FLAG_WRITE_CACHE_DISABLED`, "do not send FLUSH/FUA commands despite advertising a write cache" (`blkdev.h:1464-1468`, `blkdev.h:360-361`). Writing `queue/write_cache` sets or clears only that flag (`blk-sysfs.c:459-478`); reading it prints "write back" or "write through" (`blk-sysfs.c:452-457`); it is a 0644 entry (`blk-sysfs.c:499-504`, `blk-sysfs.c:554`). `queue/fua` shows `BLK_FEAT_FUA`, read-only (`blk-sysfs.c:284`, `blk-sysfs.c:555`, `blk-sysfs.c:493-497`). The block layer clears FUA without a write cache (`blk-settings.c:468-469`). An NVMe namespace gets both features together when the controller's Identify data report a volatile write cache and the namespace does not report it absent, and neither otherwise (`nvme/core.c:2395-2398`, `nvme/core.c:3578`, `nvme/core.c:1676`, `nvme.h:407`, `nvme.h:601`).
+    - **A sync on such a queue.** `ext4_sync_file` writes and waits for the file's pages (`fsync.c:154`, `filemap.c:785-804`) and checks the file's errseq (`fsync.c:172-174`).
+    - **A failed write.** For file data, ext4's own completion records the error on the file's mapping before it ends the folio's writeback (`page-io.c:349-395`, `page-io.c:100-147`). For a metadata buffer, the completion marks the error before it unlocks the buffer (`buffer.c:165-176`, `buffer.c:387-424`), through `mapping_set_error` (`buffer.c:1214-1222`, `pagemap.h:239-256`, `filemap.c:709-714`) into errseq (`errseq.c:62-109`). `errseq_check` reports any change since a sample and advances nothing (`errseq.c:146-153`). The journal samples the device's errseq once, when it is set up (`journal.c:1538`, `jbd2.h:1690-1699`). Collisions are possible when errors are frequent (`errseq.c:22-23`), with a counter of 19 bits (`errseq.c:36-46`); `errseq_set` rejects a zero error code and writes the code into every new value (`errseq.c:75-77`, `errseq.c:83`).
+    - **The checkpoint.** `__flush_batch` writes each queued buffer (`checkpoint.c:127-144`, `buffer.c:2833-2843`). A locked buffer is waited for (`checkpoint.c:235-248`), and an unlocked, clean one leaves the list (`checkpoint.c:249-258`, `checkpoint.c:566-618`, `checkpoint.c:627-648`). The rule is stated at `checkpoint.c:310-315`. The tail is the oldest transaction still listed (`journal.c:1017-1044`). The superblock write (`journal.c:1784-1840`) precedes the in-memory tail's move (`journal.c:1084-1086`). The new tail is set in the in-memory superblock only after the error test (`journal.c:1871-1872`). An abort writes the superblock with its error code (`journal.c:2592-2595`, `journal.c:2039-2052`). A metadata change after a recorded write error aborts the journal (`transaction.c:1222-1232`). A sync commit writes its record after its log blocks completed, each checked (`commit.c:803-840`, `commit.c:847-863`, `commit.c:874-881`).
+    - **The NVMe device in sysfs.** A controller "nvme<k>" has the PCI function as its parent (`nvme/core.c:5121-5126`, `nvme/core.c:5154`) and lives in a class directory under it (`base/core.c:3257-3264`). A namespace's disk is added under the controller (`nvme/core.c:4175`). A multipath disk is added under the subsystem device (`nvme/multipath.c:736-740`, `nvme/multipath.c:787-788`), which has no parent (`nvme/core.c:3238-3242`) and so is virtual (`base/core.c:3257-3258`); its per-path disks are hidden (`nvme/core.c:4146-4149`). With multipath configured, a private namespace's disk is named after the subsystem (`nvme/core.c:4150-4152`). `transport` prints the driver's name, "pcie" for PCI (`nvme/sysfs.c:406-414`, `nvme/pci.c:3240-3241`), and `address` the PCI function (`nvme/sysfs.c:470-478`, `nvme/pci.c:3212-3217`). `model`, `serial` and `firmware_rev` are read-only and keep their trailing spaces (`nvme/sysfs.c:362-374`); `wwid` is read-only, without spaces (`nvme/sysfs.c:103-132`).
 
 **PostgreSQL** `data_sync_retry` (`https://www.postgresql.org/docs/current/runtime-config-error-handling.html`) is corroboration only: "the second attempt may be reported as successful, when in fact the data has been lost."
 
@@ -258,7 +284,7 @@ None of this is host qualification, and none of it selects a state root.
 
 ## 2. Architect dispositions and contract inventory
 
-### 2.1 Final dispositions D-1 to D-10
+### 2.1 Final dispositions D-1 to D-11
 
 | Id | Disposition, as applied here |
 |---|---|
@@ -272,6 +298,7 @@ None of this is host qualification, and none of it selects a state root.
 | **D-8** | No provisioning executable. A manual procedure and a read-only verifier contract are specified, including how `PROVISION` itself is made durable (§13.2, §13.11). |
 | **D-9** | The NXCD version-1 frame stays byte-identical. The container, header and seal are new. No store has been deployed, so no migration is required. |
 | **D-10** | Hardware power-loss tests are deferred. They would be empirical qualification, not exhaustive proof. The physical assumptions stay explicit (§5). |
+| **D-11** (R5) | A-S5, "every device cache flush succeeds", is **not** the supported-runtime contract. R4's conditional results and its failure witness stay as history, and R4 is recorded as ending with an unresolved trust decision. The design is completed around an end-to-end stable write-completion profile, as a prospective support restriction: no host, device or configuration is approved now. Reported I/O failures stay in the failure model. Unknown or unsupported storage refuses before any claim, with no fallback to volatile write-back operation. Hardware truthfulness and containment stay explicit assumptions. New privileges, kernel changes, a broader trust assumption or a weakened invariant would need a further disposition. No device cache, queue flag, firmware setting, mount or kernel is changed (§5.5–§5.9, §19.6). |
 
 ### 2.2 Contract inventory at the source baseline
 
@@ -330,9 +357,9 @@ Every invariant (§12.1) names the domains in which it holds.
 
 | Domain | Meaning |
 |---|---|
-| **H**, honest reachable execution | The owner and recorder follow this protocol, and the core behaves as its tests establish. Storage meets the supported profile (§5). The faults are process termination (F1) and machine or power loss (F2), in any order and number, including F1, then restart, then F2. An error a system call of the store returns (EIO, EROFS, ENOSPC, EINTR) is handled fail-closed in this domain as in every other. R4: a cache flush that the device fails is not part of H (A-S5, §5.1), because the kernel discards one such status. |
+| **H**, honest reachable execution | The owner and recorder follow this protocol, and the core behaves as its tests establish. Storage is admitted storage (§5.5, §6.4 step 12) and meets A-S1 to A-S4 (§5.1). The faults are process termination (F1) and machine or power loss (F2), in any order and number, including F1, then restart, then F2. An error a system call of the store returns (EIO, EROFS, ENOSPC, EINTR) is handled fail-closed in this domain as in every other. (R5) So is every failure the storage reports: a failed or partly failed write, a failed log, commit-record, home or superblock write, a transport or device error, a request retried or aborted (§5.6). R4 excluded a failed cache flush from H (A-S5). R5 withdraws A-S5: admitted storage receives no cache flush (`blk-core.c:809-820`). |
 | **M**, malformed bytes | Arbitrary content in any store file. Required: totality, bounded resources, determinism, and refusal of anything structurally invalid. **Not** required: semantic truth. Arbitrary bytes can form a well-formed but misleading journal. |
-| **S**, storage faults (F3) | Bit flips, torn writes outside the containment unit, misdirected or lost writes, a device that lies about flushing, and (R4) a cache flush that the device fails. Required: refusal of every detectable fault. Undetectable faults are outside every guarantee; §12.2 names the one R4 found. |
+| **S**, storage faults (F3) | Bit flips, torn writes outside the containment unit, misdirected or lost writes, a device that reports a write complete before it is stable (a false report of no volatile write cache, a hypervisor's emulation included), an aborted command executing later, and an error storm that defeats errseq's counter (§5.6). Required: refusal of every detectable fault. Undetectable faults are outside every guarantee; §12.2 names them. A cache flush that a device fails, R4's addition here, concerns only storage R5 does not admit. |
 | **A**, adversarial rewriting (F4) | Any process with the store uid's write authority, including CI job code running as that uid. It can rewrite every uid-owned byte consistently, because nothing is keyed. It cannot forge root-owned files, given the account assumptions below. |
 
 ### 3.2 Account assumptions [A]
@@ -369,9 +396,9 @@ Every invariant (§12.1) names the domains in which it holds.
 | Event | Effect |
 |---|---|
 | `pwrite` | Updates **K** for the bytes written, which may be fewer than requested, or none. Marks those pages pending. |
-| Background writeback, success | The page's **D** becomes its **K**; the page is clean |
+| Background writeback, success | The page's **D** becomes its **K**; the page is clean. R5: on admitted storage, at the write's completion (A-S1). |
 | Background writeback, failure | **E** records an unseen error, and the page is clean but **D** is unchanged. **K** may keep the new bytes until the page is evicted. |
-| `fdatasync(d)` | Writes back every pending page of the file and flushes the device. Returns EIO if **E** has advanced past *d*'s cursor (an error recorded after *d* was opened, or after the last error reported through *d*), then advances the cursor and marks the error seen. Otherwise returns 0. |
+| `fdatasync(d)` | Writes back every pending page of the file and waits for those writes to complete (R5: on admitted storage, the durability point; the cache flush it requests is not sent, §5.5). Returns EIO if **E** has advanced past *d*'s cursor (an error recorded after *d* was opened, or after the last error reported through *d*), then advances the cursor and marks the error seen. Otherwise returns 0. |
 | Open | The new description's cursor is sampled: before the newest error if no description has seen it yet (the new description will report it), otherwise at it (the new description never reports it) [U] |
 | Page reclaim | Any **clean** page may be dropped at any time, **including while descriptors on the file are open**, so that page's **K** reverts to **D**. A page whose writeback failed is clean, so reclaim can remove bytes that only **K** held. An open descriptor keeps the inode, not its clean pages. |
 | Inode eviction | Only when no descriptor is open and nothing else holds the inode. It drops **E** and every page. |
@@ -383,9 +410,9 @@ Every invariant (§12.1) names the domains in which it holds.
 
 | Who syncs | In domain H, `fdatasync` returning 0 certifies | It does not certify |
 |---|---|---|
-| **The writer**: the recorder's I/O description, opened at the claim before any of its writes and kept open | Every page the writer dirtied before the call reached **D**, and the device was flushed (A-S1). A writeback failure of those pages, before or during the call, is reported to this still-open description [U, vfs]. R4, on the supported profile, how the flush happens: a record block is a pure overwrite of a written, preallocated extent (§6.5), so the inode's datasync transaction has completed and ext4 issues and checks its own cache flush (`fsync.c:111-113`, `fsync.c:166-170`). The exception is an inode loaded while a transaction ran (`inode.c:5400-5416`). The first sync after that load waits for that transaction instead. If the transaction completes between ext4's two tests, the sync returns 0 without the flush and without the abort test (`journal.c:800-805`). The startup's preservation sync is normally that first sync. If the inode was reloaded, it is the claim's header sync, and the first record's sync flushes the device again before any acknowledgement (§9.7). | — |
+| **The writer**: the recorder's I/O description, opened at the claim before any of its writes and kept open | Every page the writer dirtied before the call was written by a write that completed successfully, and so reached **D** at that completion (A-S1, stable completion). A writeback failure of those pages, before or during the call, is reported to this still-open description [U, vfs]. R5: the sync itself waits for those completions (`fsync.c:154`, `filemap.c:785-804`) and checks the file's errseq (`fsync.c:172-174`). A record block is a pure overwrite of a written, preallocated extent (§6.5), so no metadata is needed to read it back. ext4's own cache flush (`fsync.c:166-170`) is completed by the block layer without reaching admitted storage (`blk-core.c:809-820`), and carries nothing. R4 traced when that flush is issued: the inode loaded while a transaction ran (`inode.c:5400-5416`), and the completed-transaction return without it (`journal.c:800-805`). That account no longer bears on durability; it is kept in §19.5. | — |
 | **A newly opened description**: startup, the verifier, any other process | Only that the pages pending at the time of the call were written successfully | That earlier writebacks succeeded. An error already reported through another description, now closed, is never reported to it ("new callers will not see an old error" [U, errseq]). An error held by an evicted inode is gone. Pages whose writeback failed are clean; they may still show new bytes in **K** while **D** lacks them. |
-| **A newly opened description of a directory** (R3; R4 precise): activation | On the supported profile, when the sync waited for a running or committing transaction: that the operations issued before the call are in transactions that committed without an abort by the time of its abort test (`journal.c:499-527`, `journal.c:689-690`). Committed means the commit record went out with a cache flush and forced unit access, and its completion was checked (`commit.c:152-154`, `commit.c:888-889`). | When it waited for nothing: anything. It returns 0 having committed and tested nothing (`journal.c:513-517`), and an earlier commit may have failed silently; the probe's handle start detects that (§10.6, §10.7). In no case: that those transactions stay durable through a later checkpoint whose flush the device fails (A-S5). |
+| **A newly opened description of a directory** (R3; R4 precise): activation | On the supported profile, when the sync waited for a running or committing transaction: that the operations issued before the call are in transactions that committed without an abort by the time of its abort test (`journal.c:499-527`, `journal.c:689-690`). Committed means the log blocks, then the commit record, were written and each completion checked (`commit.c:803-840`, `commit.c:847-863`, `commit.c:874-881`, `commit.c:888-889`). R5: on admitted storage each was stable at its completion (A-S1). | When it waited for nothing: anything. It returns 0 having committed and tested nothing (`journal.c:513-517`), and an earlier commit may have failed silently; the probe's handle start detects that (§10.6, §10.7). Durability through later checkpoints is not this sync's certificate. On admitted storage it follows from the storage and the checkpoint's own rules (§5.7). R4 excluded a failed checkpoint flush instead (A-S5, withdrawn). |
 
 Neither this design nor any report it specifies may present a sync on a newly opened description as evidence that no earlier writeback failed [M: C03].
 
@@ -464,38 +491,32 @@ Activation, by owners and by sessions, removes both dependences.
 
 ---
 
-## 5. Physical storage assumptions and containment (R2)
+## 5. Physical storage assumptions and containment (R2; the storage contract, R5)
 
 ### 5.1 Assumptions [A]
 
-- **A-S1, flush honesty.** When `fdatasync` returns 0, the data is on stable media: the device honours cache flushes. sysfs `write_cache` may report a write-back cache [U]; flushes must still be honoured.
+- **A-S1, stable completion (R5; R2's flush honesty, restated).** On admitted storage (§5.5), a write the device completes successfully is on non-volatile storage at that completion, at every layer below the completion: the driver, the transport, the controller with its firmware and any memory it uses, and any bridge or hypervisor. A write it cannot store so is completed with an error. Its report that it has no volatile write cache is true. The store observes the kernel's registration of the device, never the device (§5.9).
+  - R2 to R4 stated A-S1 as flush honesty: "when `fdatasync` returns 0, the data is on stable media: the device honours cache flushes".
+  - Admitted storage receives no flush. A-S1 is the property the block layer itself assumes of a device without a volatile write cache (§5.5) [M: C31 shows it necessary].
 - **A-S2, containment.** A failed or interrupted write of one aligned 4096-byte block, issued by the filesystem for one page, can leave only that block indeterminate. It never alters any other block's durable content.
-- **A-S3, no silent loss.** After a successful flush the device neither loses nor misdirects writes. This is the boundary of domain S.
+- **A-S3, no silent loss.** After a successful completion the device neither loses nor misdirects the write. This is the boundary of domain S. (R2 said "after a successful flush".)
 - **A-S4, read stability.** Reading durable data returns those bytes or an error.
-- **A-S5, flush success (R4, new).** The device completes every cache flush the kernel issues to it. A flush the device fails is a storage fault outside domain H (§3.1).
-  - **Why it is needed.** At a checkpoint, v6.17 jbd2 discards the status of the flush it issues before moving the log tail (`checkpoint.c:338-339`).
-    - Suppose that flush fails while the superblock update succeeds.
-    - Transactions then leave the log, but their home blocks may not be durable.
-    - A power loss before a later successful flush can revert committed metadata, an activated selection's dependencies included, and no process receives an error.
-  - **Every other flush on the profile's paths is checked:**
-    - the commit record's flush (`commit.c:152-154`, `commit.c:888-889`);
-    - `fsync`'s own flush (`fsync.c:166-170`);
-    - recovery's flush (`recovery.c:339-343`).
-
-    A failed home write is caught before the tail moves (`journal.c:1861-1864`).
-  - **Why it is the minimum.** The store cannot observe the event (§10.7), and nothing within this design's means removes it without a kernel change. A device without a write-back cache meets A-S5 by construction: the block layer sends it no flush (`blk-core.c:809-820`), and A-S1 covers what the device reports about its cache.
-  - **Status.** It is new: R1 to R3 did not state it, and R3's A-M2 implied that every journal I/O failure aborts the journal [M: C29 shows a failed checkpoint flush losing a certified dependency].
+- **A-S5, flush success (R4): withdrawn in R5.**
+  - **What R4 assumed.** "The device completes every cache flush the kernel issues", because v6.17 discards the status of the flush issued before the log tail moves (`checkpoint.c:338-339`). The Architect did not accept it as the supported-runtime contract (D-11).
+  - **What replaces it.** No other premise about flushes, and no premise that operations never fail. R5 admits only storage to which the kernel sends no cache flush (§5.5), and keeps every failure that storage reports in domain H (§5.6).
+  - **What remains of it.** R4's witness stays as a historical counterexample, on a volatile write-back cache, which every opening now refuses (§5.8, §19.6) [M: C29, C30].
 - **A-M1, ordered metadata** (§4.8). Metadata operations become durable in issue order, in atomic transactions. The safety results of §15.2 also hold under the per-directory over-approximation, which does not assume it; A-M1 only removes one extra refusal.
 - **A-M2, the journal behaviour activation relies on (R3; corrected in R4).** On the supported profile, as the Linux v6.17 sources of §1.4 show:
   - **A directory `fsync`** waits for the running transaction, else the committing one, then returns EIO if the journal has aborted (`journal.c:499-527`, `journal.c:689-690`).
     - With neither, it returns 0 having committed and tested nothing (`journal.c:513-517`).
     - On a read-only superblock it returns 0 having committed nothing (`fsync.c:143-144`).
-  - **A regular file's `fsync`** waits for its inode's sync transaction only while that transaction runs or commits, then tests the abort flag. For a completed transaction it returns 0 without that test, after ext4's own cache flush, whose status it checks (`fsync.c:111-115`, `journal.c:787-808`, `fsync.c:166-170`).
+  - **A regular file's `fsync`** waits for its inode's sync transaction only while that transaction runs or commits, then tests the abort flag. For a completed transaction it returns 0 without that test, after ext4's own cache flush, whose status it checks (`fsync.c:111-115`, `journal.c:787-808`, `fsync.c:166-170`). R5: admitted storage does not receive that flush.
   - **Every `fsync`** returns an emergency state first (`fsync.c:135-137`).
   - **A journal abort** is permanent until the journal is closed (`journal.c:2515-2516`). A failing commit sets it before that transaction completes (`commit.c:1102-1105`).
   - **A handle start** turns an aborted journal into emergency read-only (`ext4_jbd2.c:81-89`, `super.c:732`). The exception is an abort landing after ext4's test and before jbd2's (`transaction.c:366-371`): that sets nothing.
   - **A timestamp update** by a file's owner starts a journal handle and joins the running transaction (`inode.c:6052-6056`, `inode.c:6531-6540`).
-  - **A committed transaction's record** went out with a cache flush and forced unit access, and both were checked (`commit.c:152-154`, `commit.c:888-889`). The tail then moves at commit only after that flush (`commit.c:899-900`). At a checkpoint it moves after a flush whose status is discarded (`checkpoint.c:338-339`), hence A-S5.
+  - **A committed transaction's record** is written after its log blocks completed, each completion checked (`commit.c:803-840`, `commit.c:847-863`, `commit.c:874-881`, `commit.c:888-889`). It carries PREFLUSH and FUA (`commit.c:152-154`), which admitted storage does not receive (`blk-core.c:809-820`).
+  - **The tail** moves, at a commit (`commit.c:899-900`) or at a checkpoint (`checkpoint.c:318-342`), only past transactions whose home writes have completed. R5: §5.7 shows why that keeps the history on admitted storage. R4 relied on A-S5 here instead.
 
   **The correction (F3).** R3 said that an `fsync` of the probed file "then waits for that handle's transaction". That holds only while the transaction runs or commits, and §10.7 restates what the probe establishes.
 
@@ -521,17 +542,192 @@ Activation, by owners and by sessions, removes both dependences.
 | ext4 through the descriptor's mount; mount options; filesystem block size 4096; page size 4096 | Verified at every opening (§6.4) |
 | The effective mode (R4): `data=ordered`, barriers, no asynchronous commits, normal journal loading, neither emergency read-only nor shut down | Read at every opening, and again after activation's syncs, from the listing that prints every option in its effective form (§6.4 steps 9 and 10) |
 | An internal journal (R4) | Read at every opening from the journal's jbd2 name (§6.4 step 10). Its superblock facts are established at qualification (below). |
-| The kernel (R4) | Its behaviour (A-M2) is qualified by the Owner for the exact build, from the build's sources (G-HOST). Its identity is pinned in `PROVISION` and compared at every opening (§6.4 step 11). A matching identity binds the running kernel to that qualification. It is not itself qualification. |
+| The kernel (R4) | Its behaviour (A-M2, and R5's block-layer and NVMe paths) is qualified by the Owner for the exact build, from the build's sources (G-HOST). Its identity is pinned in `PROVISION` and compared at every opening (§6.4 step 11). A matching identity binds the running kernel to that qualification. It is not itself qualification. |
+| The storage (R5): a direct NVMe namespace or one partition of it, on PCI Express, registered without a volatile write cache; its PCI function, partition and identity | Read at every opening and again at A4, by the store uid, from world-readable sysfs files (§6.4 step 12). The observation binds the store to its qualification. It is not the qualification. |
+| The controller's own report (its Identify data); that the host is not a virtual machine guest; the evidence for stable completion (R5) | Established by the Owner at qualification, as root (§5.9, §13.2). The store uid cannot read or observe them. |
 | Device logical and physical block sizes (sysfs, for the mount's major:minor); pool extents written, not shared, not delayed (FIEMAP); `fallocate` support | Verified at provisioning as part of the Owner's qualification, then pinned in `PROVISION` (§13.2). Not re-read at runtime. |
-| A-S1 to A-S5, A-M1 | Assumed. The Owner attests them in `PROVISION` (`storage-attestation`). They can be qualified empirically only (D-10), never proven. An attestation states them; it makes nothing true. |
+| A-S1 to A-S4, A-M1 | Assumed. The Owner states them in `PROVISION` (`storage-attestation`). They can be qualified empirically only (D-10), never proven. An attestation states them; it makes nothing true. A-S5 is withdrawn (§5.1). |
 | The ext4 journal at inode 8 with no external journal device; no `fast_commit` feature | Established by the Owner at qualification, as root, from the superblock (§13.2). The store uid cannot read the superblock, so these are not re-read at runtime. The Owner re-qualifies after any change, and a change made outside that is unsupported, like any root action outside a procedure (§13.1). |
 
 ### 5.4 When the assumptions cannot be established
 
 - **A verifiable property does not match.** Opening refuses as **Unsupported**.
 - **The effective profile cannot be read, is contradictory, or the kernel is not the qualified one (R4).** Opening refuses as **Unsupported** until the Owner re-qualifies (§13.3). Unknown information is never read as the supported value.
-- **The Owner cannot attest A-S1 to A-S5 for the device.** The store must not be provisioned there; it stays Unprovisioned, and every run is refused.
+- **The storage (R5) cannot be observed, is not admitted, is contradictory, or does not match its qualification (§6.4 step 12).** Opening refuses as **Unsupported**, before any claim, and makes no storage admission (§10.8). There is no fallback: storage that is not admitted is never used, whether or not flushes are sent to it.
+- **The Owner cannot qualify the storage (§5.9, §13.2).** The store must not be provisioned there; it stays Unprovisioned, and every run is refused.
 - **A torn block in domain H** (non-zero and invalid) is never read as benign. The journal is Malformed and refused (§11.1). A torn unacknowledged write and corruption cannot be told apart.
+
+### 5.5 The stable-completion contract (R5)
+
+**The direction.** A-S5 was a premise about one discarded status. R5 restricts the storage instead: admitted storage completes no write while the written data are still only in volatile memory. The kernel therefore sends it no cache flush, and no flush status, discarded or checked, carries durability. This is a prospective support restriction (D-11). It says what a future qualification must establish; it qualifies nothing now.
+
+**The completion boundary.** A write is *complete* when the block layer ends the request that carries it, with success or with an error.
+- **Metadata.** For a metadata buffer, that is when `end_buffer_write_sync` or `end_buffer_async_write` runs (`buffer.c:165-176`, `buffer.c:387-424`).
+- **File data.** For file data, it is when ext4's bio completion ends the folio's writeback (`page-io.c:100-147`, `page-io.c:349-395`), which is what `fsync` and `fdatasync` wait for (`fsync.c:154`, `filemap.c:785-804`).
+- **Not durability.** The return of `pwrite` changes only the page cache (§4.2). A sync is durable only because every completion it waited for was (A-S1).
+
+**The layers.**
+
+| Layer | Volatile | What carries a write past it | On admitted storage |
+|---|---|---|---|
+| The recorder's buffer | Yes | `pwrite` | Unchanged: lost at F1 and F2 |
+| The page cache (**K**) | Yes | Writeback, which `fsync` and `fdatasync` start and wait for | Unchanged: the syncs remain necessary (§4.3) |
+| Filesystem and journal state: running and committing transactions in memory; the log, commit records, journal superblock and home blocks on the medium | In memory, yes | jbd2's commit and checkpoint (A-M2, §5.7) | Unchanged rules |
+| Block-layer requests and the flush machinery | Yes | Dispatch to the driver | No write cache advertised: PREFLUSH and FUA are stripped, and an empty flush completes without the driver (`blk-core.c:809-820`, `writeback_cache_control.rst:52-55`) |
+| Driver, transport, controller and any intermediate memory: a cache, host memory the controller uses, a bridge, a mapping layer, a hypervisor | May be | The device's completion | Must hold no completed write only in volatile memory (A-S1) |
+| **Device completion** | — | — | **The boundary** |
+| Stable storage | No | — | Every successfully completed write is here (A-S1) |
+
+**Why this is the kernel's own boundary.**
+- **The kernel's definition.** The block layer defines it this way. Devices with volatile write-back caches "signal I/O completion to the operating system before data actually has hit the non-volatile storage" (`writeback_cache_control.rst:8-13`). For devices without one, flushes complete without the driver and FUA is stripped (`writeback_cache_control.rst:52-55`, `blk-core.c:809-820`).
+- **What A-S1 adds.** A device the kernel registers without `BLK_FEAT_WRITE_CACHE` (`blkdev.h:302-306`) is one whose completions the kernel already treats as durable. A-S1 is the claim that the device's report is true.
+
+**What A-S1 does not say.**
+- It does not say that writes, flushes or transports never fail, that power never fails, or that errors are rare.
+- Every failure the storage reports is in domain H and handled fail-closed (§5.6).
+- It says only that a write reported complete and successful is stable.
+
+**The syncs stay.** The page cache stays volatile, so `fdatasync` and `fsync` remain required: they start the writeback, wait for its completion and report its errors (§4.3). Only their cache flush (`fsync.c:166-170`), which admitted storage never receives, carries nothing.
+
+**Admitted storage.** All of the following must hold:
+- one NVMe namespace, or one partition of it;
+- behind an NVMe controller attached through PCI Express in the qualified host;
+- used directly by ext4;
+- registered by Linux v6.17 without a volatile write cache and without FUA;
+- with no block layer in between;
+- with an identity that matches the Owner's qualification (§6.4 step 12, §5.9).
+
+Everything else is unsupported, and refused before any claim:
+- device-mapper devices of every kind (LVM, dm-crypt, dm-cache, dm-writecache, dm-linear), md RAID, bcache and loop devices;
+- network block devices and NVMe over fabrics;
+- NVMe multipath disks, which the kernel adds under the subsystem (`nvme/multipath.c:787-788`);
+- virtual machine disks: virtio, any emulated or paravirtual controller, any device a hypervisor presents. An emulated NVMe controller cannot be told apart by the store (§5.9), so the qualification excludes virtual machine guests;
+- SATA and SAS disks, eMMC, UFS and SD: deferred, not analysed;
+- hardware RAID controllers presenting virtual disks, and USB-attached storage;
+- a controller behind any further remapping layer whose sysfs form differs;
+- any queue that reads `write back`, and any that reads `write through` with `fua` 1.
+
+### 5.6 Failures on admitted storage, without a "never fails" premise
+
+Every failure below is in domain H [M: C31, C32]:
+
+| Event | v6.17 | The store sees | On the medium | The store does |
+|---|---|---|---|---|
+| A record block's write fails, wholly or in part | ext4's completion records the error on the file's mapping (`page-io.c:365-376`, `page-io.c:118-121`, `pagemap.h:239-256`) before it ends the folio's writeback (`page-io.c:142-145`) | The writer's `fdatasync` returns EIO (`fsync.c:172-174`) | Old, new or torn, within the block (A-S2) | Latches `Sync(n)`; nothing is acknowledged at or after *n* (§9.4, §9.5); startup treats what is visible as evidence (§4.4) |
+| A write still in flight at a power loss | No completion | The sync had not returned | Old, new or torn, within the block | Nothing acknowledged it (INV-1) |
+| Power loss after a successful completion | — | — | Stable (A-S1) | — |
+| A transport or device error, a controller reset, a timeout | The request is retried, or ends with an error | A later successful completion, or EIO | A retried write is stable when it completes successfully | As for a failed write |
+| A log block or the commit record fails | Checked: the journal aborts before the transaction completes (`commit.c:866`, `commit.c:878`, `commit.c:888-889`, `commit.c:1102-1105`) | The waiting sync returns EIO; later handle starts force emergency read-only | The transaction is not committed | Activation refuses; the recorder latches at its next sync |
+| A home write fails | The error is recorded on the device's errseq before the buffer unlocks; the next tail update aborts before it writes a tail (`journal.c:1861-1864`), and so does the next metadata change (`transaction.c:1222-1232`) | As above | The log keeps the transaction; recovery replays it (`recovery.c:611`) | As above |
+| The tail's superblock write fails | The journal aborts (`journal.c:1827-1837`); the in-memory tail stays (`journal.c:1069-1071`); the abort rewrites the superblock with the new tail (`journal.c:2592-2595`) | As above | Either tail keeps the history (§5.7) | As above |
+| A cache flush | Not sent: no write cache is advertised (`blk-core.c:809-820`) | — | — | — |
+
+**Never success.** A reported failure is never retried into success, never acknowledged, and never read as durability (§9.5). A failure the store sees latches; one only the kernel sees aborts the journal, and the next sync or handle start reports it.
+
+**Failure versus truthfulness.** A failure the device reports is in domain H. A device that reports success for a write it did not store, or loses or misdirects a completed write, violates A-S1 or A-S3: that is domain S, and in general undetectable.
+
+**The bound of the detection.**
+- **The mechanism.** A home-write failure is detected through the device's errseq. The journal samples it once, when it is set up (`journal.c:1538`, `jbd2.h:1690-1699`), and each check compares without advancing (`jbd2.h:1701-1707`, `errseq.c:146-153`).
+- **What the source warns.** It notes that collisions are possible when errors are recorded frequently (`errseq.c:22-23`). The counter has 19 bits (`errseq.c:36-46`).
+- **What a missed error would take.** The counter would have to return exactly to the journal's sample. That needs 2^19 further errors on the device, each observed through the device's own mapping by another reader, before the next tail update or metadata change. A sample of zero can never recur (`errseq.c:75-77`, `errseq.c:83`).
+- **Its classification.** Such an error storm is a storage fault (domain S). It is named here, not assumed away silently.
+
+### 5.7 The checkpoint on admitted storage: why R4's witness cannot lose history
+
+**Claim.** On admitted storage jbd2 never discards required history. When the log tail passes a committed transaction, each of its home writes either completed successfully, and so was stable at that completion, or failed and aborted the journal before any new tail was written.
+
+**Source steps (v6.17)** [M: C29, C31]:
+1. **A transaction leaves the log only after its home writes completed.**
+   - A buffer leaves its transaction's checkpoint list only once unlocked and clean (`checkpoint.c:235-248`, `checkpoint.c:249-258`, `checkpoint.c:627-648`). Its write was submitted locked (`checkpoint.c:127-144`, `buffer.c:2833-2843`), so it has completed.
+   - A buffer re-logged in a later committed transaction, or freed and revoked, also leaves; those rules are jbd2's own and do not depend on storage.
+   - A transaction leaves the log only when its list is empty (`checkpoint.c:566-618`). The new tail is the oldest transaction still listed (`journal.c:1017-1044`).
+   - A home write still in flight at a power loss therefore keeps its transaction in the log.
+2. **A write that completed successfully was stable at that completion (A-S1).** The flush issued before the tail moves (`checkpoint.c:338-339`) is completed by the block layer without reaching the device (`blk-core.c:809-820`), and whatever status it returns changes nothing.
+3. **A write that failed stops the tail.** It recorded the error on the device's errseq before its buffer was unlocked (`buffer.c:165-176`, `buffer.c:387-424`, `buffer.c:1214-1222`, `pagemap.h:239-256`), so before the tail was computed.
+   - The tail update tests the errseq (`journal.c:1861-1864`) and aborts before the new tail is set in the in-memory superblock (`journal.c:1871-1872`).
+   - The abort's own superblock write (`journal.c:2592-2595`, `journal.c:2039-2052`) carries the old tail, and recovery replays the transaction from the log (`recovery.c:611`).
+   - A metadata change before then aborts too (`transaction.c:1222-1232`).
+4. **A failed superblock write keeps the history.** If the superblock write itself fails (`journal.c:1827-1837`), the journal aborts and the in-memory tail stays (`journal.c:1069-1071`). The abort then rewrites the superblock, carrying the new tail. Every home write of the released transactions had completed successfully by then, since step 3 aborted otherwise. Either tail on the medium therefore keeps the history.
+5. **An aborted journal moves no tail** (`journal.c:1859-1860`, `checkpoint.c:323-324`).
+
+So R4's witness cannot lose required history on admitted storage. That witness is a checkpoint whose flush fails, followed by a power loss. Either the completed home writes are already stable, or a failure has prevented the discard of the log data.
+- **The source's own rule.** `checkpoint.c:310-315` states it: "we must not update the super block if checkpointing may have failed".
+- **No model flag.** No flag stands in for any step: each is a branch that the model's `JournalSim` follows and C29 checks.
+- **A commit takes the same path.** A commit's own tail update (`commit.c:899-900`) goes through `journal.c:1098` and `journal.c:1056-1091`.
+
+**What this does not cover.** A device that violates A-S1. If it reports a write complete while the data are only in its volatile memory, the tail can pass the transaction and a power loss can revert it, with nothing reported anywhere [M: C31, the A-S1 witness]. That is domain S.
+
+### 5.8 The same events on a volatile write-back cache: not admitted
+
+R4's witness concerned a volatile write-back cache. On such storage these paths keep their own outcomes. None is assumed equal to another, and no abort is invented where v6.17 discards a status [M: C29]:
+
+| Path | v6.17 | Reported | Committed history after a power loss |
+|---|---|---|---|
+| (a) The checkpoint flush fails; its status is discarded | `checkpoint.c:338-339`; the superblock then goes out with FUA (`journal.c:1069`) | Nothing | Can be lost: the new tail is stable while the home writes may be only in the cache. This is R4's witness. |
+| (b) A checked superblock-write failure | `journal.c:1827-1837`; the in-memory tail stays (`journal.c:1069-1071`) | The journal aborts | After (a), can still be lost: the abort rewrites the superblock carrying the new tail (`journal.c:2592-2595`), and if that write succeeds the new tail is stable. Detected, not prevented. |
+| (c) Native FUA | FUA passed to the device (`blk-flush.c:22-23`, `blk-flush.c:398-403`) | — | The superblock is stable at its completion; the home writes are stable only if a flush succeeded first. Kept after a successful flush; after (a), as (a). |
+| (d) Emulated FUA: a flush after the superblock write | `blk-flush.c:25-26`, `blk-flush.c:437-446`, `writeback_cache_control.rst:92-95`; a failure of that flush fails the write (`blk-flush.c:160-163`, `blk-flush.c:182-192`), then (b) | Only if that flush fails | If it succeeds, every write completed before it is stable (`writeback_cache_control.rst:23-27`), the home writes included: kept. If it fails and the abort's rewrite flushes successfully: kept. If every flush fails: can be lost. |
+| (e) A later successful flush before the power loss | The next commit record's PREFLUSH (`commit.c:152-154`), or `fsync`'s flush (`fsync.c:166-170`) | — | Kept: the flush covers every write completed before it |
+
+Such storage is refused at every opening (§6.4 step 12), so none of these paths is in domain H. Admitting it would need a premise about the device's flushes, which is what D-11 rejected.
+
+### 5.9 Qualification, observation and authority (R5)
+
+Six things are kept apart.
+
+**1. The prospective property.** Admitted storage is of the admitted class (§5.5) and meets A-S1 to A-S4. That is a statement about future, qualified hardware. Nothing in this design or its model establishes it for any device.
+
+**2. The qualification evidence a later mission needs** (G-HOST, and G-PWR if the Architect requires it). The Owner, as root, before provisioning (§13.2 step 1), establishes:
+- **The storage path from ext4 down.** The filesystem is on a direct NVMe namespace or partition, with no device-mapper, md, loop, multipath or other layer. The controller is a physical PCI Express device of this host, and the host is not a virtual machine guest.
+- **The controller's own report.** Its Identify data, read with an admin command, report no volatile write cache for the controller, or the namespace reports it absent. This agrees with the kernel's registration: `queue/write_cache` `write through`, `queue/fua` 0.
+- **Evidence for stable completion.** Evidence that the device completes writes stably, including any power-loss protection it relies on. That means the vendor's documentation of its completion semantics and power-loss behaviour, and the Owner's own empirical tests if they are required (G-PWR). It is evidence, never proof.
+- **The kernel build.** Its block-layer and NVMe paths cited in §1.4, as part of the kernel qualification (§6.4 step 11).
+- **The identity to bind.** The PCI function, the partition, the controller's model, serial and firmware revision, and the namespace's wwid.
+
+This design names the evidence. It selects no product and gives no configuration instruction.
+
+**3. What the store observes at runtime, and the identities it keeps.**
+- **The observation.** At every opening and at A4, as the store uid, from world-readable files: the device's form, the kernel's registration of its cache (`write_cache` and `fua`), the transport and the identity attributes (§6.4 step 12).
+- **The identities kept.** `PROVISION` keeps the class, the PCI function, the partition and the identity digest (§7.5). They sit next to the store's own identities (root id, inodes) and the kernel (R4).
+- **What it is.** The observation binds this store, filesystem and device to the qualification; it is never the qualification. A device name, a sysfs string, a `uname` result, a configuration field, an attestation or a one-time test does not make A-S1 true.
+
+**4. What the store uid cannot observe.**
+- whether the controller's report of no volatile write cache is true, and what the device does internally (hardware truthfulness, A-S1);
+- the controller's Identify data, which only an admin command returns: the store sees the kernel's registration of them;
+- whether the host is a virtual machine guest: an emulated NVMe controller on a virtual PCI bus has the same sysfs form;
+- the health of any power-loss protection the device relies on;
+- a root action that changes a setting and restores it between two observations;
+- the superblock facts of §5.3 (R4).
+
+**5. Trusted configuration changes that invalidate a qualification.** Each needs the Owner's re-qualification (§13.3) before the store is used again; an observable one refuses at the next opening:
+- a write to the queue's `write_cache` attribute, in either direction. It is observable when it hides a cache (`write through` with `fua` 1). It is never a remedy: it changes the kernel's view, not the device (`blk-sysfs.c:459-478`);
+- a firmware change, a replaced device or controller, or any change of the device's settings or namespace format. Firmware and replacement are observable through the identity;
+- moving the device to another slot or host, or the filesystem to another device. The PCI function, partition or identity changes; a whole disk moved between hosts is not observable;
+- adding any block layer between ext4 and the namespace (observable through the form);
+- a kernel update (R4, observable);
+- running the host as a virtual machine guest, or changing the power arrangement or the power-loss protection the qualification relied on (not observable).
+
+A change outside a procedure is unsupported, like any root action outside one (§13.1).
+
+**6. Exact refusals.** Every opening (owner, verifier, session) and A4 refuse as **Unsupported**, before any claim, and make no storage admission. The reasons are:
+- "storage not a direct NVMe namespace on PCI Express";
+- "storage transport";
+- "storage unreadable";
+- "volatile write cache";
+- "volatile write cache, flushes disabled in the kernel's view only";
+- "contradictory storage information";
+- "storage not qualified" (an identity mismatch);
+- "storage changed during activation";
+- at the claim, "storage admission not verified".
+
+A `PROVISION` without the storage fields, or with another storage class, is **Invalid**. No refusal is ever turned into a fallback [M: C30].
+
+**Authority.** Only the opening's storage check makes a verified admission, and a claim needs its own opening's (§10.8). No `PROVISION` field, configuration value, environment variable or caller argument is a Boolean that admits storage: there is no `assume_safe` and no `flush_always_succeeds`. The rules of step 12 are constants of the code.
+
+**The current state.**
+- No host, device or configuration is qualified. There is no default, and no automatically approved deployment profile.
+- The model's storage is a fixture qualification, used only in the model.
+- The implementation may be developed and tested against simulated storage before any deployment qualification. Those tests qualify no machine, the Owner's included (§16.2, §18).
 
 ---
 
@@ -549,7 +745,7 @@ Activation, by owners and by sessions, removes both dependences.
 ### 6.2 Layout
 
 ```
-<PROVISION_PATH>               root:root 0444  identity, parameters, attestation (text, §7.5)
+<PROVISION_PATH>               root:root 0444  identity, parameters, storage qualification, attestation (text, §7.5)
 <PROVISION_PATH>.predecessor-<old root id>  root:root 0444  kept by a successor (§13.6)
 <STATE_ROOT>/                  root:root 0755
   LOCK                         uid:gid   0600  store lock (flock); never written (activation updates its timestamps, §10.6)
@@ -586,7 +782,7 @@ All offsets are in bytes, with B = 4096.
 - **File size.** (C_pool + 2) × 4096.
 - **Write-once rule.** No block that holds data is rewritten during its generation. Provisioning's zero-fill comes before the claim.
 
-### 6.4 Filesystem profile: ext4 only [D-6]; narrowed in R4
+### 6.4 Filesystem profile: ext4 only [D-6]; narrowed in R4; the storage below it in R5
 
 `statfs` magic `0xef53` is shared by ext2, ext3 and ext4 [U]. It is never used to identify ext4.
 
@@ -596,21 +792,23 @@ All offsets are in bytes, with B = 4096.
 |---|---|---|---|
 | ext4, through the mount | Only ext4's behaviour was read | Runtime, bound to the root descriptor: steps 1–4 | Another type, or an ambiguous record |
 | One filesystem | The probe and the qualified profile must cover the `PROVISION` directory | Runtime: step 8 | Different `st_dev` |
-| An internal journal | An external journal flushes the filesystem device with the status discarded (`commit.c:775-778`), and `fsync` relies on that flush (`journal.c:633-636`) | Qualification: the superblock's journal is inode 8, with no journal device. Runtime: step 10. | No `<name>-8` jbd2 entry |
+| An internal journal | An external journal flushes the filesystem device with the status discarded (`commit.c:775-778`), and `fsync` relies on that flush (`journal.c:633-636`). R5: admitted storage receives no flush, but an external journal is a second device, which step 12 does not admit. | Qualification: the superblock's journal is inode 8, with no journal device. Runtime: step 10. | No `<name>-8` jbd2 entry |
 | `data=ordered` | A-M1. v6.17 refuses it together with asynchronous commits (`super.c:4963-4968`). | Runtime: step 9 | Another mode, or none |
-| Barriers | The commit record's flush and forced unit access (`commit.c:152-154`); `fsync`'s own flush (`fsync.c:111-113`) | Runtime: step 9. The flag follows every remount (`super.c:5768-5788`). | `nobarrier`, or no `barrier` |
+| Barriers | The commit record's flush and forced unit access (`commit.c:152-154`); `fsync`'s own flush (`fsync.c:111-113`). R5: admitted storage receives neither, but the requirement keeps the configuration §10.7 analysed. | Runtime: step 9. The flag follows every remount (`super.c:5768-5788`). | `nobarrier`, or no `barrier` |
 | No asynchronous commits | The asynchronous commit's final flush discards its status (`commit.c:883-886`) | Runtime: step 9. Also excluded by `data=ordered` at v6.17. | `journal_async_commit` |
 | No fast commits | A file's `fsync` would take the fast-commit path, which §10.7 does not cover. Fast commits also log outside the full-commit order (A-M1, `journal.rst:31-40`). | Qualification: the superblock lacks the feature, the only enabler with the debug option (`super.c:4349-4350`, `super.c:1893-1896`). Runtime: step 9 refuses `fc_debug_force`. **The store uid cannot observe the feature itself**; the Owner keeps it (§13.2). | At qualification |
 | Normal journal loading and recovery | `noload` runs with no journal at all (`super.c:5415-5444`) | Runtime: steps 9 and 10 | `norecovery`, or no jbd2 entry |
 | Neither emergency read-only nor shut down | Every sync then fails | Runtime: step 9 (`super.c:3034-3038`), and the system calls themselves | Listed |
-| The qualified kernel | A-M2 and §10.7 are claims about v6.17's code | Qualification of the exact build (G-HOST). Runtime: step 11 binds the running kernel to it. | Another identity |
-| A-S1 to A-S5, A-M1 | §5.1 | Assumptions, attested by the Owner | Not provisioned |
+| The qualified kernel | A-M2, §5.7 and §10.7 are claims about v6.17's code | Qualification of the exact build (G-HOST). Runtime: step 11 binds the running kernel to it. | Another identity |
+| Admitted storage (R5) | Stable completion (§5.5): no flush status carries durability, and the checkpoint keeps history (§5.7) | Runtime: step 12, the form, the kernel's cache registration and the identity. Qualification: the controller's report, the host and the evidence for A-S1 (§5.9). | Any other storage, a volatile cache, a contradiction, another identity |
+| A-S1 to A-S4, A-M1 | §5.1 | Assumptions, stated by the Owner; A-S5 withdrawn | Not provisioned |
 
 **Kept apart.**
 - **Filesystem identity versus journal location.** Filesystem identity (steps 1–4 and 8) is not the journal device's identity (step 10).
 - **An absent string versus an effective state.** The absence of a string in `mountinfo` is not an effective state (step 6 versus step 9).
 - **A version string versus qualification.** A kernel version string is not behavioural qualification (step 11).
 - **An attestation versus a mechanism.** An attestation records what the Owner asserts; it makes nothing true.
+- **The kernel's view of a cache versus the device's cache (R5).** `queue/write_cache` is the kernel's view, and a write to it changes only that view (`blk-sysfs.c:459-478`). Step 12 therefore reads it together with `queue/fua` and the device's form, and even all three only bind the store to a qualification (§5.9).
 
 Identification is bound to the retained root descriptor:
 
@@ -625,7 +823,7 @@ Identification is bound to the retained root descriptor:
 7. `fstatvfs(root_fd)` must report `f_bsize` and `f_frsize` of 4096, and `sysconf(_SC_PAGESIZE)` must be 4096.
 8. **One filesystem (R3).** `fstat` must show the same `st_dev` for the `PROVISION` directory (reached by the component walk of §10.1), the state root's parent and the root descriptor. Otherwise the opening refuses as Unsupported. Activation checks this again after its syncs (§10.6).
 9. **The effective options (R4).**
-   - **Resolve the device name.** Resolve the root descriptor's `st_dev` to the device's name: the last component of `readlink("/sys/dev/block/<major>:<minor>")`.
+   - **Resolve the device name.** Resolve the root descriptor's `st_dev` to the device's name: the last component of `readlink("/sys/dev/block/<major>:<minor>")`. (R5: step 12 reads the whole target.)
    - **Read the listing.** Read `/proc/fs/ext4/<name>/options` with a bound of 4096 bytes. It lists every option of ext4's table in its effective form, one per line, defaults included (`super.c:3049-3058`), and is world-readable (`sysfs.c:571-583`).
    - **What the listing must hold:**
      - its first line is `rw`;
@@ -636,9 +834,31 @@ Identification is bound to the retained root descriptor:
 10. **The journal's location (R4).** `/proc/fs/jbd2/<name>-8` must exist. jbd2 names an internal journal "<device>-<inode>" and an external one after its own device (`journal.c:1691-1693`, `journal.c:1651-1653`), so its absence means an external journal or none, and refuses. Inode 8 is the qualified journal inode (§13.2).
 11. **The kernel (R4).** `uname(2)`'s `release` and `version`, joined by one space, must equal `kernel` in `PROVISION` (§7.5).
     - Another kernel refuses until the Owner qualifies it and re-qualifies the store (§13.3).
-    - A match only binds the running kernel to the build the Owner qualified. The qualification is the Owner's review of that build's sources against §5.1 (G-HOST), never the string.
+    - A match only binds the running kernel to the build the Owner qualified. The qualification is the Owner's review of that build's sources against §5.1 and §5.7 (G-HOST), never the string.
+12. **The storage (R5).** Let T be the whole target of `readlink("/sys/dev/block/<major>:<minor>")` (step 9).
+    - **The form.** T must be `../../devices/` followed by components that end with `<PCI function>/nvme/nvme<k>/<disk>`, optionally followed by `/<disk>p<i>`. The first component begins with `pci`, the PCI function has the form `dddd:bb:dd.f`, and the disk has the form `nvme<s>n<j>`. Such a disk's parent is an NVMe controller (`nvme/core.c:4175`), which lives in its class directory under a PCI function (`nvme/core.c:5121-5126`, `base/core.c:3257-3264`). Its name need not repeat the controller's number (`nvme/core.c:4150-4152`), and neither name is pinned: instance numbers can change between boots.
+    - **What the form refuses.** Anything else refuses, with these among it:
+      - a device-mapper, md, loop or other virtual block device;
+      - a multipath disk, which lives under `virtual/nvme-subsystem` (`nvme/multipath.c:787-788`, `nvme/core.c:3238-3242`);
+      - a controller over fabrics;
+      - any non-NVMe disk;
+      - a partition number above 255.
+    - **The reads.** Each attribute is read with a bound of 4096 bytes, by fresh lookups below `/sys` that follow no symbolic link:
+      - from the controller's directory, `transport`, `model`, `serial` and `firmware_rev`;
+      - from the disk's directory, `wwid`, `queue/write_cache` and `queue/fua`.
+      Every one is world-readable (`nvme/sysfs.c:362-374`, `nvme/sysfs.c:406-414`, `nvme/sysfs.c:103-132`, `blk-sysfs.c:493-497`, `blk-sysfs.c:499-504`). A missing or oversized attribute refuses as "storage unreadable".
+    - **The rules.** These are constants of the code; no `PROVISION` field relaxes them:
+      - `transport` is exactly `pcie` and a newline (`nvme/sysfs.c:406-414`, `nvme/pci.c:3240-3241`); otherwise "storage transport".
+      - `write_cache` is exactly `write through` and `fua` exactly `0`, each with its newline. That combination means the NVMe driver registered no volatile write cache (`nvme/core.c:2395-2398`, `blk-settings.c:468-469`, §1.4).
+      - `write back` refuses as "volatile write cache".
+      - `write through` with `fua` `1` refuses as "volatile write cache, flushes disabled in the kernel's view only": the cache is still advertised, and a write to the attribute only stopped the flushes (`blk-sysfs.c:459-478`).
+      - Any other combination refuses as "contradictory storage information".
+    - **The identity.** `PROVISION` must name the class `nvme-pcie`.
+      - **The identity record.** The ASCII prefix `nexus-phase2-custody-storage`, a zero byte and the version byte `01`; then, for each of `model`, `serial`, `firmware_rev` and `wwid` in that order, the attribute's length as a big-endian `u16` and its bytes as read, final newline and any trailing spaces included.
+      - **What must match.** The record's SHA-256 must equal `storage-identity`, the PCI function `storage-pci-function`, and the partition (or `none`) `storage-partition` (§7.5). Otherwise the opening refuses as "storage not qualified".
+    - **What it is.** This step observes the kernel's registration and the device's identity. It binds the store to the Owner's qualification (§5.9). It cannot observe whether the device's report is true (A-S1).
 
-Steps 9 to 11 run at every opening of an owner, the verifier or a session, and again at activation's A4 [M: C27]. Re-qualification mode (§13.3) skips step 11's comparison, because the pinned identity is being replaced. It never skips the rules of steps 9 and 10.
+Steps 9 to 12 run at every opening of an owner, the verifier or a session, and again at activation's A4 [M: C27, C30]. Re-qualification mode (§13.3) skips step 11's comparison and step 12's identity comparison, because those pinned identities are being replaced. It never skips the rules of steps 9, 10 and 12, so a re-qualification never admits a volatile cache or a stacked device.
 
 XFS and every other filesystem are outside the initial profile.
 
@@ -652,7 +872,7 @@ XFS and every other filesystem are outside the initial profile.
 | Copy-on-write and shared extents | Qualification must see no extent marked `SHARED`, `ENCODED`, `DELALLOC`, `UNKNOWN`, `DATA_INLINE` or `NOT_ALIGNED` [U] |
 | Quotas | Charged at provisioning. Runtime overwrites need no new blocks. |
 | Metadata and I/O failure | Possible regardless. At runtime EIO, or any uncertainty, poisons the journal (§9.5). |
-| Flush honesty and overwrite containment | A-S1 and A-S2: assumptions (§5) |
+| Stable completion and overwrite containment | A-S1 and A-S2: assumptions (§5). R2 to R4 stated A-S1 as flush honesty. |
 
 **ENOSPC, EDQUOT, EIO, EROFS and any uncertainty are never success**, at provisioning or at runtime.
 
@@ -673,6 +893,7 @@ XFS and every other filesystem are outside the initial profile.
 | Incidents held while scanning | At most N pool-file and journal incidents, one history binding per `u`, `m` or `p-` archive entry, and the enumerated claim gaps, which §7.7 bounds before enumerating. Authorization (§10.2 step 8, §13.9) always uses this complete set. |
 | Activation (R3) | Seven directory syncs, one sync of `PROVISION` and one probe per owner startup or session beginning, each sync retried at most 3 times on EINTR (§10.6) |
 | Profile reads (R4) | Per opening and again at A4: one `readlink` of the device's sysfs entry, one option listing of at most 4096 bytes, one jbd2 entry looked up, one `uname` (§6.4 steps 9–11) |
+| Storage reads (R5) | Per opening and again at A4: seven sysfs attributes of at most 4096 bytes each, found by fresh lookups below `/sys`, and one SHA-256 over at most 16,422 bytes (the identity record of four attributes at their read bound); no extra `readlink` (§6.4 step 12) |
 | Report detail (R2) | At most 64 incidents listed in full, in a fixed order (§11.2), with exact totals of all incidents and of current ones and an explicit **partial** flag when more exist (§11.2). The detail limit never truncates the set used for any decision. |
 | Exchange memory | `capacity` slots, each holding one fixed-size `RecordIntent` (`model.rs:457`) [S]. Allocated once at the claim and never grown. |
 | Header | 124 + 33 × n bytes, with n ≤ 32: at most 1180 |
@@ -785,6 +1006,7 @@ These rules cover `PROVISION`, dispositions and directory entry names:
   | Option string | Printable ASCII without spaces, at most 1024 bytes |
   | Statement | Printable ASCII `0x20`–`0x7e`, 1 to 512 bytes, no leading or trailing space |
   | Operator | The same as a statement, 1 to 64 bytes |
+  | PCI function (R5) | `[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]`, as Linux names a PCI function |
 
 `PROVISION`:
 
@@ -808,6 +1030,10 @@ page-size=4096
 device-logical-block-size=<dec, divides 4096>
 device-physical-block-size=<dec, divides 4096>
 kernel=<statement: uname(2) release, one space, version, as qualified (R4)>
+storage-class=nvme-pcie
+storage-pci-function=<PCI function (R5)>
+storage-partition=<none | dec, 1..255 (R5)>
+storage-identity=<64 hex: SHA-256 of the storage identity record, §6.4 step 12 (R5)>
 storage-attestation=<statement>
 pool=<N, 1..1024>
 pool-capacity=<C_pool, 1..4096>
@@ -826,6 +1052,13 @@ digest=<64 hex: SHA-256 of every preceding byte>
 - The digest is integrity only. Authority comes from root ownership at a root-controlled path.
 - `revision` (R2) is 1 at provisioning and one more than the replaced `PROVISION`'s at every rewrite and at succession. It is the maintenance epoch: every publication has different bytes, and reports name the revision they read (§10.5).
 - `kernel` (R4) is the identity of the kernel build the Owner qualified (§13.2). Every opening compares it with the running kernel (§6.4 step 11), and a re-qualification after a kernel update rewrites it (§13.3).
+- The storage fields (R5) record the Owner's storage qualification (§5.9, §13.2).
+  - **`storage-class`.** The literal `nvme-pcie`, the only admitted class. Another value is Invalid.
+  - **`storage-pci-function` and `storage-partition`.** They bind the attachment and the partition.
+  - **`storage-identity`.** It binds the controller and namespace (§6.4 step 12).
+  - **What they are not.** They are claims that each opening compares with a fresh observation. Decoding them never admits storage (§10.8). No field admits a volatile cache, names a profile to trust, or relaxes a rule: there is no such field.
+  - **An R4 `PROVISION`.** One without these fields is Invalid. No store has been deployed, so nothing migrates (D-9), and no default fills them in.
+- `storage-attestation` (R2) is the Owner's statement of the physical assumptions A-S1 to A-S4. It makes nothing true.
 
 A disposition is stored in `dispositions/<binding>.disposition`:
 
@@ -1170,9 +1403,9 @@ For each entry, before it is opened:
 |---|---|---|
 | 0 | Configuration: `record_capacity` ≤ C_pool, `incident_limit` ≤ 32 | Unsupported |
 | 1 | Select `PROVISION` (§10.5): open it safely, read it with a limit and parse it (§7.5). The result is only a candidate selection. | Unprovisioned, Invalid |
-| 2 | Open the candidate's `<STATE_ROOT>`; identify ext4 through the mount (§6.4); check block size, page size, the link sysctls and the ancestors; (R4) read the effective profile, the journal's location and the kernel (§6.4 steps 9–11) | Lost, Unsupported |
+| 2 | Open the candidate's `<STATE_ROOT>`; identify ext4 through the mount (§6.4); check block size, page size, the link sysctls and the ancestors; (R4) read the effective profile, the journal's location and the kernel (§6.4 steps 9–11); (R5) observe the storage and make this opening's storage admission (§6.4 step 12, §10.8) | Lost, Unsupported |
 | 3 | Open `LOCK` safely and take `flock(LOCK_EX \| LOCK_NB)`. Then revalidate the selection (§10.5). On a mismatch, close every descriptor of this attempt, which releases the lock, and return to step 1, at most three selections in all. | **Busy**, before any journal content is touched [M: C06]; **SelectionChanged** after three failed revalidations [M: C21] |
-| 3a | **Activate** the selection (§10.6, R3; §10.7, R4): one filesystem, every dependency directory synced, the probe, revalidation with the profile checked again | Unsupported, Invalid, Lost, Unreliable, SelectionChanged [M: C25, C27, C28] |
+| 3a | **Activate** the selection (§10.6, R3; §10.7, R4): one filesystem, every dependency directory synced, the probe, revalidation with the profile and (R5) the storage checked again | Unsupported, Invalid, Lost, Unreliable, SelectionChanged [M: C25, C27, C28, C30] |
 | 4 | Enumerate the store directories, entry names only. Every name must be accepted (§7.5); each entry is type-checked as in §10.1 step 1. | Invalid, MaintenanceIncomplete, Lost |
 | 5 | For each pool file, in index order: <ul><li>open it safely;</li><li>take `flock(LOCK_SH \| LOCK_NB)`; failure means **Live**, and the file is neither synced nor read;</li><li>`fdatasync` to preserve evidence; EIO refuses as **Unreliable**;</li><li>read the file and classify it (§11.1);</li><li>close it, which releases the shared lock.</li></ul> | Live, Unreliable |
 | 6 | Archive: safely open each entry and read blocks 0 and 1 (§11.3) | Invalid |
@@ -1199,7 +1432,7 @@ For each entry, before it is opened:
 
 | Kept for the life of the process | Closed by the end of startup |
 |---|---|
-| Root directory, journals directory, store lock description, journal lock description (all in `StoreGuard`) | Scan descriptors; activation descriptors; archive directory and entries; dispositions directories and files; `PROVISION`; `mountinfo`; (R4) the profile files |
+| Root directory, journals directory, store lock description, journal lock description (all in `StoreGuard`) | Scan descriptors; activation descriptors; archive directory and entries; dispositions directories and files; `PROVISION`; `mountinfo`; (R4) the profile files; (R5) the storage attributes |
 | The worker's I/O description (until the worker ends) | |
 
 ### 10.5 `PROVISION` selection and revalidation (R2)
@@ -1259,7 +1492,7 @@ No claim, record, acknowledgement or native admission can therefore exist on a s
 | A1 | One filesystem: the `PROVISION` directory, the state root's parent and the root show the same `st_dev` (§6.4 step 8) | Unsupported |
 | A2 | For each directory, in this order: `journals/`, `dispositions/revoked/`, `dispositions/`, `archive/`, `<STATE_ROOT>`, the state root's parent, the `PROVISION` directory.<ul><li>Resolve it afresh by the component walk of §10.1.</li><li>Check its inode against `PROVISION` (the store's directories) or the selection (the parent and the `PROVISION` directory).</li><li>Open it `O_RDONLY \| O_DIRECTORY \| O_NOFOLLOW \| O_CLOEXEC` (an `O_PATH` descriptor cannot be synced), `fsync` it, and close it.</li></ul>EINTR is retried at most 3 times; any other error is final. Then `fdatasync` `<PROVISION_PATH>` itself through a new `O_RDONLY` descriptor. | Invalid or Lost (identity); Unreliable (any error) |
 | A3 | Probe, after the last A2 sync: `futimens(NULL)` on the store-lock description, then `fsync` of that description. Both must return 0. `LOCK` is the store uid's own file, so no new permission is needed. | Unreliable |
-| A4 | Revalidate after the syncs: resolve every A2 directory again and check its inode; repeat §10.5 steps 1–4; repeat the mount and profile checks of §6.4, steps 8 to 11 included | SelectionChanged, Unsupported |
+| A4 | Revalidate after the syncs: resolve every A2 directory again and check its inode; repeat §10.5 steps 1–4; repeat the mount and profile checks of §6.4, steps 8 to 12 included; (R5) make this opening's storage admission afresh, with the identity the opening observed (§10.8) | SelectionChanged, Unsupported |
 | A5 | **Linearization point**: A4 has succeeded with the store lock still held. The selection is activated, and the startup report records its revision and root id. | — |
 
 **What each step establishes**, on the supported profile (A-M2; R4 states it precisely in §10.7):
@@ -1271,7 +1504,7 @@ No claim, record, acknowledgement or native admission can therefore exist on a s
   - It does **not** show that the journal is healthy afterwards. The probe's `fsync` waits only for a running or committing transaction (F3), so it can pass after a later abort, which cannot uncommit a dependency (§10.7).
   - R3 claimed more: that the journal "had not aborted by the time of the probe". R4 withdraws that claim.
 - **A2, `PROVISION` itself.** Defence in depth. It may report an unseen writeback error, but it never certifies the content: a sync on a new descriptor cannot (§4.3). The procedure that published `PROVISION` certified the content with its own descriptor before the rename (§13.1 rule 5).
-- **A4.** It binds the now-durable entries to this selection. A replacement racing the syncs, a directory swapped for another, a remount read-only, or a profile changed during activation refuses. A read-only superblock also makes A2 return 0 having committed nothing, and A3 then fails with EROFS.
+- **A4.** It binds the now-durable entries to this selection. A replacement racing the syncs, a directory swapped for another, a remount read-only, or a profile or (R5) storage changed during activation refuses. A read-only superblock also makes A2 return 0 having committed nothing, and A3 then fails with EROFS.
 
 **Failures, never success.** No timeout or retry turns a failure into activation:
 - EINTR is retried at most 3 times, then refuses;
@@ -1282,7 +1515,7 @@ No claim, record, acknowledgement or native admission can therefore exist on a s
 
 The refusing owner closes its NotStarted custody and exits; a later startup activates again from the beginning.
 
-**Persistence effects of opening.** An owner's startup commits the pending metadata of that filesystem (A2) and updates `LOCK`'s timestamps (A3), besides the evidence-preservation sync (§4.6). It changes no byte of the store. Its profile reads (R4, §6.4 steps 9–11) write nothing.
+**Persistence effects of opening.** An owner's startup commits the pending metadata of that filesystem (A2) and updates `LOCK`'s timestamps (A3), besides the evidence-preservation sync (§4.6). It changes no byte of the store. Its profile and storage reads (R4 and R5, §6.4 steps 9–12) write nothing.
 
 **Who activates:**
 - every owner, before it scans and decides (§10.2 step 3a), so that the decision reads a durable namespace;
@@ -1290,7 +1523,7 @@ The refusing owner closes its NotStarted custody and exits; a later startup acti
 
 **Who does not:** the standalone verifier. It reads and reports the visible state, never declares it durable, and authorizes nothing (§13.11).
 
-**Permissions.** Read and search on the root-owned 0755 directories and read on the 0444 `PROVISION`, which the store uid already has; ownership of `LOCK` for the probe, which the uid already owns. R4's profile reads use world-readable kernel files (`sysfs.c:571-583`, `journal.c:1222-1229`), `/sys/dev/block` and `uname(2)`. Nothing is expanded.
+**Permissions.** Read and search on the root-owned 0755 directories and read on the 0444 `PROVISION`, which the store uid already has; ownership of `LOCK` for the probe, which the uid already owns. R4's profile reads use world-readable kernel files (`sysfs.c:571-583`, `journal.c:1222-1229`), `/sys/dev/block` and `uname(2)`. R5's storage reads use world-readable sysfs attributes (§6.4 step 12). Nothing is expanded, and no privileged helper or administrative command is used.
 
 **Why the store's directories too.** A recycled pool file's name, a disposition's name, an archive entry or a successor root's entry could otherwise roll back after a decision used it. With activation, every name the decision read is durable before anything is authorized [M: C25, C26].
 
@@ -1317,7 +1550,7 @@ Object names: `root` is `<STATE_ROOT>`, `parent` its parent, and `provdir` the d
 
 ### 10.7 Activation proof (R4)
 
-**The property.** Before an owner or a maintenance session decides anything that depends on the selected store, the selection's dependencies are established durable under the declared supported model (§5.1, §6.4), or activation refuses. The dependencies are:
+**The property.** Before an owner or a maintenance session decides anything that depends on the selected store, the selection's dependencies are established durable under the declared supported model (§5.1, §5.5, §6.4), or activation refuses. The dependencies are:
 - every entry the selection and the decision read in the seven A2 directories: the store's directories, the state root's entry in its parent, and `PROVISION`'s entry;
 - the content of `PROVISION`, which its publishing procedure synced through its own descriptor before the rename (§13.1 rule 5).
 
@@ -1331,21 +1564,22 @@ It is **not** a certificate that every earlier filesystem transaction succeeded,
 2. **None of those transactions failed.** A failing commit sets the abort flag before the transaction completes (`commit.c:1102-1105`), and the flag stays (`journal.c:2515-2516`).
    - A sync that waited tests the flag after its wait (`journal.c:689-690`).
    - For a sync that found nothing to commit, the probe's handle start tests the flag (`ext4_jbd2.c:81-89`) after the last A2 sync has returned. It turns an abort into emergency read-only, which the probe's `fsync` returns before anything else (`fsync.c:135-137`), although `futimens` itself returns 0 (`inode.c:6531-6540`). Under `errors=panic` it panics instead (`super.c:717-720`), and nothing is claimed either.
-3. **A completed transaction that did not fail is committed.** Its commit record went out with a cache flush and forced unit access, and the completion was checked (`commit.c:152-154`, `commit.c:874-881`, `commit.c:888-889`). Under A-S1 the record and the log blocks before it are durable, and recovery replays the transaction from the log (`recovery.c:611`).
-4. **It stays durable.** jbd2 drops a committed transaction from the log only after its home blocks were written with no recorded error (`journal.c:1861-1864`) and a cache flush followed:
-   - at a commit, the commit record's flush, which is checked (`commit.c:746-765`, `commit.c:899-900`);
-   - at a checkpoint, a flush whose status is discarded (`checkpoint.c:338-339`). A-S5 makes that flush succeed.
+3. **A completed transaction that did not fail is committed.** Its log blocks, then its commit record, were written and each completion checked (`commit.c:803-840`, `commit.c:847-863`, `commit.c:874-881`, `commit.c:888-889`). The record carries PREFLUSH and FUA (`commit.c:152-154`), which admitted storage does not receive. R5: on admitted storage each write was stable at its completion (A-S1), and recovery replays the transaction from the log (`recovery.c:611`).
+4. **It stays durable (R5).** jbd2 drops a committed transaction from the log only after each of its home writes has completed (`checkpoint.c:235-258`, `checkpoint.c:627-648`).
+   - **A successful write.** On admitted storage it was stable at its completion (A-S1).
+   - **A failed write.** It aborts the journal before any new tail is written (`journal.c:1861-1864`, `journal.c:1871-1872`).
+   - **The flush before the tail moves.** That is the record's flush at a commit (`commit.c:746-765`, `commit.c:899-900`) and a flush whose status is discarded at a checkpoint (`checkpoint.c:338-339`). Neither is sent to admitted storage, and neither carries anything (§5.7).
 
-   An aborted journal never moves the tail (`journal.c:1859-1860`).
+   R4 rested this step on A-S5, which is withdrawn. An aborted journal never moves the tail (`journal.c:1859-1860`).
 
 **What the probe's `fsync` shows, and what it does not.** A successful probe shows (2) only: the journal had not aborted when the probe's handle start tested it.
-- **The `fsync` does not always wait.** It waits for the probe's transaction only while that transaction runs or commits (`journal.c:792-807`). For a completed one it returns 0 without the abort test (`journal.c:800-805`, F3), after ext4's own checked cache flush (`fsync.c:111-113`, `fsync.c:166-170`).
+- **The `fsync` does not always wait.** It waits for the probe's transaction only while that transaction runs or commits (`journal.c:792-807`). For a completed one it returns 0 without the abort test (`journal.c:800-805`, F3), after ext4's own checked cache flush (`fsync.c:111-113`, `fsync.c:166-170`), which admitted storage does not receive (R5).
 - **So it can pass with the journal aborted.** That happens when the abort lands:
   - after ext4's test and before jbd2's (`transaction.c:366-371`), which sets nothing;
   - after the handle started, when the probe's transaction completes before its `fsync`.
 - **Neither window can hide a dependency that was not established.** By (1) and (2), every dependency's transaction completed without an abort before the probe's test. Such an abort is an error after the dependencies were established, so activation need not refuse it and does not relabel it as lost history.
   - **After a handle start.** The next handle start, by any process, turns the abort into emergency read-only. From then on every sync fails, the recorder's included (§9.5).
-  - **Until then.** The recorder's syncs of its pure overwrites still issue and check their own cache flush (§4.3), so what they acknowledge is durable.
+  - **Until then.** The recorder's syncs of its pure overwrites still wait for their own writes to complete and report their errors (§4.3), so what they acknowledge is durable on admitted storage.
 
 **Timing windows** [M: C28, C29]:
 
@@ -1361,7 +1595,8 @@ It is **not** a certificate that every earlier filesystem transaction succeeded,
 | An error after the dependencies were established | Not reported to the activation, or refused conservatively | Either | Unaffected: committed transactions are replayed (`recovery.c:611`) |
 | Emergency read-only | Every `fsync` and `futimens` returns EROFS first (`fsync.c:135-137`, `inode.c:5854-5856`); the listing shows `emergency_ro` (`super.c:3034-3038`) | Refuses | — |
 | An ordinary read-only superblock | A directory `fsync` returns 0 having committed nothing (`fsync.c:143-144`); `futimens` returns EROFS; the listing begins `ro` | Refuses (A3, A4) | — |
-| After activation, a checkpoint whose flush the device fails | Status discarded (`checkpoint.c:338-339`); the tail can move; a power loss can then revert committed metadata, and no process sees an error | Already certified | **Outside domain H** (A-S5); the store cannot detect it (§12.2) |
+| After activation on admitted storage, any checkpoint (R5): its flush is never sent; a home write fails; the superblock write fails; or a write is in flight at a power loss | The flush completes without the device (`blk-core.c:809-820`). A failed home write aborts before a new tail (`journal.c:1861-1864`). A failed superblock write aborts, and either tail keeps the history. A write in flight holds the tail (§5.7). | Already certified | Kept [M: C28, C31, C32] |
+| On a volatile write-back cache, a checkpoint whose flush fails (R4's witness) | Status discarded (`checkpoint.c:338-339`); the tail can move; a power loss can then revert committed metadata, and no process sees an error | Never reached: such storage is refused at the opening (§6.4 step 12) | Not admitted (§5.8). R4 placed it outside H through A-S5, now withdrawn. |
 
 **Enumeration** [M: C28; counts computed by the model and compared by the reference check]. The model's transaction state and its four windows through the whole store model are described in §16.1.
 
@@ -1373,7 +1608,7 @@ It is **not** a certificate that every earlier filesystem transaction succeeded,
 | Refused | 207380 |
 | Refused although the dependencies had committed (conservative) | 48404 |
 | Certified with the journal aborted after the probe's test, each through the completed-transaction return | 32460 |
-| Later continuations of certified runs, each followed by a power loss, every certified dependency kept | 310920 |
+| Later continuations of certified runs on admitted storage, failures the storage reports included, each followed by a power loss, every certified dependency kept (R5) | 621840 |
 
 The enumeration is bounded, over a model that is not a kernel. It shows that the argument's steps hold in every enumerated interleaving, not that no other interleaving exists.
 
@@ -1385,14 +1620,45 @@ The enumeration is bounded, over a model that is not a kernel. It shows that the
 | P2 | A failing commit sets the abort flag before the transaction completes; the flag is permanent | `commit.c:548`, `commit.c:866`, `commit.c:889`, `commit.c:1102-1105`, `journal.c:2515-2516` | `JournalSim.finish_commit`, `abort` | C28, C29 | G-HOST |
 | P3 | The probe's handle start turns an earlier abort into emergency read-only, which its `fsync` returns first | `ext4_jbd2.c:81-89`, `super.c:722-732`, `inode.c:6531-6540`, `fsync.c:135-137` | `probe_touch`, `probe_fsync`; `SimFS.touch`, `fsync_file` | C25, C28, C29 | G-HOST |
 | P4 | A regular file's `fsync` returns 0 untested for a completed transaction; an abort after ext4's handle test sets nothing | `journal.c:800-805`, `transaction.c:366-371`, `ext4_jbd2.h:354-365` | The completed branch; `abort_in_probe_handle` | C29 (conformance), C28 (safety) | G-HOST |
-| P5 | A committed transaction's record went out with a checked cache flush and forced unit access | `commit.c:152-154`, `commit.c:874-881`, `commit.c:888-889` | `finish_commit`: the log durable | C28 | A-S1; G-PWR if ever required |
-| P6 | The tail moves past a transaction only after its home blocks were written with no recorded error and a flush followed; at a checkpoint that flush's status is discarded | `journal.c:1861-1864`, `commit.c:899-900`, `checkpoint.c:338-339` | `checkpoint`, `_tail_update` | C28 (with A-S5), C29 (A-S5 necessary) | **A-S5 (new)**, attested; G-PWR |
+| P5 | A committed transaction's log blocks, then its record, were written and each completion checked; on admitted storage each was stable at completion | `commit.c:803-840`, `commit.c:847-863`, `commit.c:874-881`, `commit.c:888-889`, `commit.c:152-154` | `finish_commit`: the log durable | C28 | A-S1 (R5, stable completion); G-PWR if ever required |
+| P6 | (R5) The tail moves past a transaction only after its home writes completed; a failed one aborts first; the flush before the tail carries nothing on admitted storage | `checkpoint.c:235-258`, `checkpoint.c:627-648`, `journal.c:1861-1864`, `journal.c:1871-1872`, `commit.c:899-900`, `checkpoint.c:338-339`, `blk-core.c:809-820` | `checkpoint`, `_tail_update`, `_home_done` | C28, C29, C31 | A-S1; the storage qualification (§5.9, G-HOST); G-PWR. R4 had A-S5 here, now withdrawn. |
 | P7 | Recovery replays the committed transactions from the tail | `recovery.c:282-345`, `recovery.c:611` | `JournalSim.survives` | C28 | G-HOST |
 | P8 | The probe follows the last A2 sync | §10.6 A3 | `journal_activation` order | C28 (NC-PROOF-ORDER) | G-IMPL: the Rust order |
 | P9 | Every dependency directory is synced, on one filesystem, and revalidated | §10.6 A1, A2, A4 | `activate` | C25, C26 | G-IMPL |
 | P10 | The profile excludes the two discarded `commit.c` flushes and fast commits, from effective state | §6.4; `commit.c:775-778`, `commit.c:883-886`, `super.c:4963-4968` | `check_profile`; the profile sweep | C27, C29 | The Owner's qualification facts (§13.2) |
 | P11 | The running kernel is the qualified build | §6.4 step 11 | `check_profile`, kernel comparison | C27 | G-HOST: each build qualified |
 | P12 | Nothing depends on the store before activation | §10.6 "Before what"; INV-18 | `startup`, `MaintenanceSession.begin` | C25, C26 | G-IMPL |
+| P13 | (R5) A failed superblock write aborts, and its rewrite keeps the history on admitted storage | `journal.c:1827-1837`, `journal.c:1069-1071`, `journal.c:2592-2595` | `_write_sb` | C29, C31 | A-S1 |
+| P14 | (R5) Only admitted storage is used: the opening and A4 observe it, and only that check makes an admission | §6.4 step 12, §10.8 | `check_storage`, `admit_storage`, `verify_admission` | C30, C32 | The storage qualification (G-HOST); G-IMPL |
+
+### 10.8 Storage admission: the one trusted construction (R5)
+
+**The verified object.** The implementation keeps one type for a verified storage qualification, here called `StorageAdmission` (§17). It has private fields and no public constructor. It has no `Default`, `Clone`, `Deserialize` or other decoding, and no constructor that takes a Boolean, a profile name or a configuration value.
+
+**Its one constructor.** One function makes it: the opening's storage check in `open.rs`.
+- **Inputs.** It takes the revalidated selection (§10.5), the retained root descriptor and the host view.
+- **What it does.** It performs the reads of §6.4 step 12 afresh, applies the rules and compares the identity with `PROVISION`.
+- **What it returns.** Either a refusal, or an admission that records the opening it belongs to, the selection's `PROVISION` digest and the identity it observed.
+
+**Decoding manufactures nothing.** Parsing `PROVISION` yields claimed fields only (§7.5). A claimed identity is compared with an observation; it never stands in for one.
+
+**Bound to one opening.** An admission is never stored, sent, serialized or kept across openings.
+- **At A4.** Activation's A4 performs the check again and requires the identity the opening observed. A change refuses as "storage changed during activation".
+- **At the claim.** The claim (§10.3 step 6) requires the admission A4 made, for this opening and this selection. Anything else refuses as "storage admission not verified": an admission from an earlier opening or another selection, or an object the check did not make.
+- **On refusal.** A refusal leaves no admission behind.
+
+**No Boolean.** No configuration value, `PROVISION` field, environment variable or caller argument admits storage: there is no `assume_safe` and no `flush_always_succeeds`.
+
+**Tests and fixtures.**
+- **Construction.** The store's tests build admissions from a simulated host through the same function, never through another constructor.
+- **The live path.** The owner binary's live entry point constructs only the Linux host view, and the simulated host is not reachable from it.
+- **What a test is.** A passing test is a fixture qualification, never support for a machine (§5.9).
+
+**Loss of qualification.**
+- **Later openings.** A change of the storage after an admission (a firmware update, a write to `queue/write_cache`, a replaced device) refuses every later opening, verification and session.
+- **What is not touched.** Nothing is retired, recycled, reconstructed or dropped.
+- **A running owner.** It keeps its custody until it ends: its locks, its native owners and the records it already made durable. The design does not re-check storage mid-run, and the change is a trusted-configuration change outside procedure (§5.9).
+- **Afterwards.** The history stays in the store, refused until the Owner re-qualifies (§13.3) [M: C30, C32].
 
 ---
 
@@ -1569,9 +1835,10 @@ The model checks the following [M: C13]:
 | INV-15 | **Session authority (R2).** Maintenance verification and mutation run only under the session's retained exclusive lock descriptions, never through a new lock request, a conversion, a release, or an asserted identity. Competitors stay excluded for the whole session. | H, with the Owner following §13 | C20 |
 | INV-16 | **Bounded aggregates (R2).** Every directory is counted against its bound before any entry is examined. Reports beyond their detail bound say they are partial. Every decision uses the complete set. | H, M, S | C17, C24 |
 | INV-17 | **Protocol parity (R2).** Every durability operation the model performs is a written protocol step, in the written order, and the crash matrix of §15.2 is the one the model computes. | Model | C22, C23 |
-| INV-18 | **Durable activation (R3; precise in R4).** No claim, record, acknowledgement or native admission exists on a selection that its owner has not activated (§10.6): every dependency directory synced, the probe passed, and revalidation done, all under the store lock held since the selection was revalidated. No maintenance session verifies or mutates before activating. R4: activation means that every transaction holding a dependency has committed, and that it stays durable under A-S1 and A-S5 (§10.7). It does not mean that every earlier transaction succeeded. | H | C25, C28 |
+| INV-18 | **Durable activation (R3; precise in R4).** No claim, record, acknowledgement or native admission exists on a selection that its owner has not activated (§10.6): every dependency directory synced, the probe passed, and revalidation done, all under the store lock held since the selection was revalidated. No maintenance session verifies or mutates before activating. R4: activation means that every transaction holding a dependency has committed. It does not mean that every earlier transaction succeeded. R5: on admitted storage, under A-S1, the transaction stays durable through every later checkpoint, whatever write or superblock failure is reported (§5.7, §10.7). R4 rested this on A-S5, now withdrawn. | H | C25, C28, C31 |
 | INV-19 | **History across recovery (R3).** Once work depends on a selection, every permitted later crash outcome (F1, or F2 under every schedule) and every specified recovery either selects a store whose decision includes every acknowledged, unsealed generation, or refuses explicitly with that generation's bytes retained. Recovery never provisions a fresh root over a root that may hold history. | H, with the Owner following §13 | C25, C26 |
 | INV-20 | **Supported profile (R4).** No owner, verifier or session acts on a store whose effective profile is not the qualified supported one (§6.4): the effective options, the journal's location and the kernel are read at every opening and again at A4. Unknown, contradictory or unqualified information refuses before any claim. | H, with the Owner keeping the qualification facts (§13.2) | C27 |
+| INV-21 | **Storage admission (R5).** No claim, record, acknowledgement or native admission exists unless both its opening's storage check and A4's admitted the storage (§6.4 step 12, §10.8). That means a direct NVMe namespace on PCI Express, registered without a volatile write cache, matching its qualification. No verified admission exists except as that check made it from fresh observations, for that opening and selection: decoded bytes, an earlier admission, an attestation and a flag never authorize. A loss of qualification refuses later openings, verifications and sessions, and discards nothing: no history is retired, and no custody is reconstructed or dropped. | H, with the Owner keeping the storage qualification (§5.9, §13.2) | C30, C32 |
 
 **Why INV-3 holds.**
 - Any native owner arises from an admitted action, so its `ActionStarted` is durable (INV-2) and therefore visible at every later startup in domain H.
@@ -1586,7 +1853,7 @@ The model checks the following [M: C13]:
 | Domain | What holds |
 |---|---|
 | M | Totality, bounds, determinism and fail-closed structure. Arbitrary bytes can still form a well-formed, misleading journal. |
-| S | Detectable faults are refused. Lost or misdirected flushed writes are undetectable (§5.2). R4 adds one more undetectable fault: a cache flush the device fails at a checkpoint. v6.17 discards its status (`checkpoint.c:338-339`), and the tail can still move. A power loss before a later successful flush can then revert committed metadata, including an activated selection's dependencies, after work depended on them. INV-18 and INV-19 do not hold across it (A-S5). Every other flush failure on the profile's paths is reported: through a commit (an abort, then EIO or EROFS at the store's next sync) or through `fsync`'s own flush. |
+| S | Detectable faults are refused. Lost or misdirected completed writes are undetectable (§5.2). R5: on admitted storage, the undetectable fault that matters to history is a device that violates A-S1, completing a write while its data are still in volatile memory. After a checkpoint and a power loss, committed metadata (an activated selection's dependencies included) and acknowledged records can then revert, and nothing reports it. INV-1, INV-18 and INV-19 do not hold across it [M: C31, the A-S1 witness]. An errseq collision (§5.6) is the other. R4 named a cache flush the device fails at a checkpoint (`checkpoint.c:338-339`). R5 admits no storage that receives flushes, so that event lies outside every admitted configuration (§5.8). |
 | A | Only INV-6, INV-7 and INV-8 hold (§3.3, G-AUTH). |
 
 ### 12.3 Bindings
@@ -1651,7 +1918,14 @@ Each procedure's crash points are listed in §15.2 and its operations in §15.3 
    - (R4) from the superblock, read as root: the journal is internal, at inode 8, with no journal device and no journal UUID; the feature list has `has_journal` and lacks `fast_commit`. The store uid cannot read these later (§5.3), so the Owner re-qualifies after any change to them, and the store is unsupported until then;
    - (R4) every rule of §6.4 steps 9 and 10, read as the store uid will read it: the effective listing, and the journal's jbd2 name;
    - (R4) the running kernel's build is qualified. The Owner checks the build's sources (the distribution's source package for that release, not only the upstream tag) against every source claim of §5.1 and §10.7. Its identity, `uname(2)` release and version, is pinned as `kernel` (§7.5). A version string alone qualifies nothing;
-   - the A-S1 to A-S5, A-M1 and A-M2 attestation for the device and the running kernel. A-S5 (R4): the device is not known to fail cache flushes; a device without a write-back cache meets it by construction (§5.1);
+   - (R5) the storage, as §5.9 lists it:
+     - **Admitted class.** ext4 directly on an NVMe namespace or partition behind a PCI Express controller of this host, with no other layer, and the host is not a virtual machine guest.
+     - **The controller's report.** Its Identify data, read with an admin command, report no volatile write cache, in agreement with the kernel's registration (`queue/write_cache` `write through`, `queue/fua` 0).
+     - **Evidence.** The Owner's evidence for stable completion (A-S1), including any power-loss protection relied on.
+     - **Step 12.** Every rule of §6.4 step 12, read as the store uid will read it.
+     - **The identity.** Its PCI function, partition and identity digest, pinned in `PROVISION` (§7.5).
+     - **What this is not.** This establishes facts and gathers evidence. It changes no device setting, queue attribute, firmware, mount or kernel. If the storage does not qualify, the store is not provisioned there;
+   - the A-S1 to A-S4, A-M1 and A-M2 statement for the device and the running kernel. R4's A-S5 attestation is withdrawn (§5.1);
    - the directory of `<PROVISION_PATH>`, the parent of `<STATE_ROOT>` and every ancestor of both exist, are root-owned and neither group- nor other-writable, and lie on the state root's filesystem (§6.2). Each directory created for them is `fsync`ed, and so is its parent, so that no ancestor's entry can roll back (R3).
 2. **Create directories.** Create `<STATE_ROOT>`, `journals/`, `dispositions/`, `dispositions/revoked/` and `archive/`, each `root:root 0755`. `fsync` each, and its parent.
 3. **Create the lock.** Create `LOCK` as `uid:gid 0600`, empty, and `fsync` it. Then `fsync <STATE_ROOT>`, which now holds the new entry (R2: the R1 model performed this sync without the text saying so).
@@ -1661,7 +1935,7 @@ Each procedure's crash points are listed in §15.2 and its operations in §15.3 
    - check with FIEMAP (`FIEMAP_FLAG_SYNC`) that every extent is written and unshared (§6.5).
 
    Then `fsync journals/`.
-5. **Publish `PROVISION`**, with `revision=1`. Write it to `<PROVISION_PATH>.tmp` and `fsync` it. Then `rename` it to `<PROVISION_PATH>` and `fsync` the directory.
+5. **Publish `PROVISION`**, with `revision=1` and (R5) the storage fields of step 1. Write it to `<PROVISION_PATH>.tmp` and `fsync` it. Then `rename` it to `<PROVISION_PATH>` and `fsync` the directory.
 6. **Check.** Run the standalone verifier as the store uid. It must report a fresh, openable store.
 
 Provisioning runs before any store exists, so it has no session; nothing can select the store before step 5. `PROVISION` is published **last**. Until its rename is visible, every opening reports Unprovisioned. Between the rename and the directory sync, an opening after F1 sees the fresh store, and after F2 either outcome. After the sync the store is fresh (§15.2). An owner that opens the store in that window activates it first (§10.6), which makes the rename durable before any claim.
@@ -1688,6 +1962,9 @@ Used by recycling, retirement and re-qualification, always inside the procedure'
 - **After a kernel update (R4).** Every opening refuses as Unsupported ("kernel not qualified", §6.4 step 11) until the Owner qualifies the new build and rewrites `PROVISION` with its identity in the same way. Re-qualification mode also skips step 11's comparison, for the identity being replaced.
 - **What it never skips.** The rules of §6.4 steps 9 and 10, so a re-qualification never accepts an unsupported profile [M: C27].
 - **After any change to the superblock facts of §13.2 step 1.** The Owner re-qualifies.
+- **After a storage change (R5).** That means any change §5.9 lists as invalidating: a firmware update, a replaced device, a moved device or filesystem, a write to `queue/write_cache`, an added block layer, or a change of host or power arrangement. Every opening refuses as Unsupported until the Owner qualifies the storage again (§13.2 step 1) and rewrites `PROVISION` with the new storage fields in the same way.
+  - **What the mode skips.** Re-qualification mode skips step 12's identity comparison, for the identity being replaced, and never its rules.
+  - **No remedy by configuration.** A re-qualification never admits a volatile cache or a stacked device. No configuration change is a remedy: a write to `queue/write_cache` makes nothing admissible [M: C30].
 
 ### 13.4 Disposition publication, reading and revocation
 
@@ -1740,7 +2017,7 @@ A successor store replaces a store that cannot continue: for example a store tha
 2. Inside that session:
    - **2a. Keep the predecessor's `PROVISION`.** Write a copy to `<PROVISION_PATH>.predecessor.tmp`, `fsync` it, `link` it to `<PROVISION_PATH>.predecessor-<old root id>`, `unlink` the temporary, and `fsync` the directory.
    - **2b. Create the successor's store** at a **new** `<STATE_ROOT>`, with a new root id: §13.2 steps 2 to 4.
-   - **2c. Take the successor's lock, then publish.** Open the successor's `LOCK` safely and take `LOCK_EX | LOCK_NB` on a description the session retains. Only then write the successor `PROVISION` (`predecessor` set to the old root id, `predecessor-statement` filled in, `revision` one more than the predecessor's) to `<PROVISION_PATH>.tmp`, `fsync` it, `rename` it over `<PROVISION_PATH>`, and `fsync` the directory.
+   - **2c. Take the successor's lock, then publish.** Open the successor's `LOCK` safely and take `LOCK_EX | LOCK_NB` on a description the session retains. Only then write the successor `PROVISION` (`predecessor` set to the old root id, `predecessor-statement` filled in, `revision` one more than the predecessor's; R5: the storage fields of the storage the session's own opening admitted, since the successor's root is on the same filesystem, §6.2) to `<PROVISION_PATH>.tmp`, `fsync` it, `rename` it over `<PROVISION_PATH>`, and `fsync` the directory.
    - **2d. Re-select** the successor under the session's lock on it (§13.3 step 4), and verify it in-session.
 3. End the session. The predecessor's state root is left unchanged, as evidence.
 
@@ -1841,7 +2118,7 @@ Both are future modes of the owner binary, implemented in the later mission. The
 
 **Checks**, in both:
 - §10.1;
-- §10.2 steps 0–2 and 4–8, without the evidence-preservation sync. Step 2 includes (R4) the effective profile, the journal's location and the kernel (§6.4 steps 9–11) [M: C27];
+- §10.2 steps 0–2 and 4–8, without the evidence-preservation sync. Step 2 includes (R4) the effective profile, the journal's location and the kernel (§6.4 steps 9–11) [M: C27], and (R5) the storage (§6.4 step 12) [M: C30];
 - all of §11.
 
 Each reports every condition it finds rather than stopping at the first.
@@ -1949,7 +2226,10 @@ Notation:
 | Activated; claim and dependent records durable; then F2 (R3) | The activated selection | The activated selection: activation made it durable | The activated selection | The generation, unsealed if AS | Refused if AS [M: C25, C26] |
 | Activated; then the journal aborts, a later error (R4) | The activated selection; the journal stays aborted, so the next activation's probe sees emergency read-only | The activated selection: its transactions had committed and are replayed | The activated selection | After F1, Unreliable, a refusal that keeps the bytes; after F2, the generation | Refused [M: C28] |
 | The effective profile changes, or the kernel is updated (R4) | — | — | — | Unsupported until re-qualification (§13.3) | Refused [M: C27] |
-| A checkpoint flush the device fails, then F2 (domain S, R4) | — | Committed metadata, an activated selection's included, can revert, and nothing reports it | As after F2 | Possibly a predecessor, without the work | Outside every guarantee (A-S5, §12.2) |
+| On admitted storage, after activation: a checkpoint whose home write or superblock write fails, or whose home write is in flight; then F1 or F2 (R5) | The journal aborted (a failure) or not (in flight); the next activation's probe sees emergency read-only after an abort | The activated selection: no tail passed a transaction whose home write was not stable (§5.7) | The activated selection | After F1 and an abort, Unreliable, a refusal that keeps the bytes; otherwise the generation | Refused [M: C31, C32] |
+| The storage changes after an admission (R5): a firmware update, a write to `queue/write_cache`, a replaced or moved device | The running owner keeps its custody | — | — | Unsupported until re-qualification (§13.3); the history stays | Refused [M: C30, C32] |
+| A device that completes writes while their data are only in volatile memory, then F2 (domain S, R5) | — | Committed metadata, an activated selection's included, and acknowledged records can revert, and nothing reports it | As after F2 | Possibly a predecessor, without the work | Outside every guarantee (A-S1, §12.2) [M: C31] |
+| Storage with a volatile write-back cache (R5) | — | — | — | Unsupported at every opening; R4's row for a failed checkpoint flush (§5.8) concerns only such storage | Refused [M: C30] |
 | `RunEnded` applied, not closed | Prefix with `RunEnded` | Same | Same | Unsealed; verdict reported | Refused if AS |
 | `close()` succeeded, seal not written | No seal | No seal | No seal | Unsealed | Refused if AS (a disclosed false positive) |
 | Seal written, not synced | Seal visible; made durable by the startup sync if that succeeds | Absent, unreadable or present | Absent unless synced | Sealed or unsealed | Permitted, or refused if AS |
@@ -2117,13 +2397,41 @@ A fresh owner that is Ready, or that decides on other incidents, without the gen
 
 **R4.** Every composed scenario was re-run on the R4 model, with the corrected `fsync` model and the profile checks, on the qualified profile. Every count and outcome above is identical [M: C26].
 
+**R5.** Every composed scenario was re-run on the R5 model. Its fixture host is admitted storage, and every opening and A4 checks the storage. Every count and outcome above is identical [M: C26].
+
+**Storage events (R5)** [M: C32]. The composition, extended:
+- **The scenario.** An administrative prefix and process death; an ordinary startup on each of four hosts; dependent work; one storage event; every second crash; then the oracle above.
+- **The hosts.** Admitted storage; a volatile write-back cache; a volatile cache hidden by a write to `queue/write_cache`; and a device-mapper device over a volatile cache.
+- **The storage events.** A checkpoint whose flush fails (never sent to admitted storage); a home write that fails; a superblock tail write that fails while the abort's rewrite succeeds; both superblock writes failing, with the new tail on the medium; a home write in flight.
+- **Loss of qualification.** After the dependent work on every succession prefix, a firmware update outside any procedure, then every second crash.
+
+| Quantity | Count |
+|---|---|
+| Administrative prefixes: every operation of first provisioning and of succession, each followed by process death | 60 |
+| Openings on the four hosts | 240 |
+| Runs with dependent work on admitted storage | 35 |
+| Second crashes after the storage events: F1, or F2 under every distinct schedule with data old and new | 849 |
+| Second crashes after a loss of qualification, each refused with the history kept | 261 |
+| Openings on storage that is not admitted, refused as Unsupported before any dependent work | 105 |
+| Openings on storage that is not admitted that found no `PROVISION` yet (Unprovisioned) | 75 |
+
+**Storage-event outcomes.**
+- **Discoverable or refused.** After every second crash on admitted storage, the generation was in the selected decision (PriorUnresolved). Alternatively, after a failure had aborted the journal and the second crash was F1, the opening refused as Unreliable with the generation's bytes kept.
+- **Loss of qualification.** Every opening refused as Unsupported, with the history kept.
+- **Storage that is not admitted.** None of it reached a claim.
+
+**Representative trace, failing** (NC-STORAGE-COMPOSED, the unsafe path: storage admitted on the attestation, as R4's domain allowed).
+- **The work.** P-SUCCESSOR prefix 31, then a volatile write-back cache admitted, then a checkpoint whose flush fails.
+- **The second crash.** F2 under the ordered cut 35, with data old.
+- **The outcome.** The fresh owner is Ready on A, and B's acknowledged, unsealed generation is outside the selected history. This is R4's witness, in composition.
+
 ---
 
 ## 16. Verification: the design model now, Rust tests later
 
 ### 16.1 Design model (this mission) [M]
 
-`docs/evidence/p2-v1-r3b-i3-p-r4/design_checks.py` uses only the Python standard library, with in-memory byte images and simulated state. It opens no store, calls no native operation, performs no privileged I/O and causes no real crash. R4 carries the R3 model forward, which carried R2's and R1's, and implements:
+`docs/evidence/p2-v1-r3b-i3-p-r5/design_checks.py` uses only the Python standard library, with in-memory byte images and simulated state. It opens no store, calls no native operation, performs no privileged I/O, reads no host or device, and causes no real crash. R5 carries the R4 model forward, which carried R3's, R2's and R1's, and implements:
 - the §4 state model: **K**, **D**, pending writeback, errseq with per-description cursors, page reclaim separate from inode eviction, F1, F2, and the §4.8 metadata log with its ordered and per-directory schedules;
 - the journal behaviour of A-M2 (R3), as corrected in R4:
   - a directory sync through a new descriptor;
@@ -2138,6 +2446,13 @@ A fresh owner that is Ready, or that decides on other incidents, without the gen
   - the abort and emergency read-only flags, and the probe inode's sync tid;
   - each flush site, checked or discarded, on the internal or external journal and with synchronous or asynchronous commits;
   - checkpointing, the log tail, and recovery from the tail;
+- (R5) the storage below the journal (§5.5–§5.8), in `JournalSim` and in the whole-store model:
+  - three kinds of device: admitted storage, where a completed write is stable and no flush is sent; a volatile write-back cache that receives flushes, with native or emulated FUA; and a volatile cache the kernel registered as absent, the configuration A-S1 excludes;
+  - home writes that complete successfully, fail with a reported error recorded on the device's errseq, or are still in flight;
+  - the tail as the oldest transaction whose home writes have not all completed;
+  - the superblock's tail write and the abort's rewrite of it, either of which may fail, after which the medium may hold the old tail or the new one;
+  - the whole-store model's checkpoint, which follows the same transitions (C31 compares them on every path);
+- (R5) the storage observation (§6.4 step 12): the `/sys/dev/block` link, the controller's and the disk's attributes, and the trusted construction of a storage admission (§10.8), with the Owner's root-only facts as fixtures only the qualification reads;
 - the §5 containment profile, plus an unsupported profile for contrast;
 - the §6–§7 formats, with a version-1 encoder and decoder that reproduce all 50 golden record vectors of `codec-tests` (`RECORD_VECTORS`, `codec-tests:121`) [S];
 - the §8 lock model, with open-file-description semantics, and the §8.4 session objects;
@@ -2148,7 +2463,7 @@ A fresh owner that is Ready, or that decides on other incidents, without the gen
 - an enumerator of interleavings over the model's atomic steps, where one step stands for one critical section;
 - the composed scenarios and oracle of §15.4 (R3).
 
-It first re-runs every Architect counterexample on the **unchanged R1 and R2 models**, and the R4 findings on the **unchanged R3 model**, each loaded by path and checked against its published SHA-256, and requires each to reproduce (§19.3, §19.4, §19.5).
+It first re-runs every Architect counterexample on the **unchanged R1 and R2 models**, the R4 findings on the **unchanged R3 model**, and the R5 findings, R4's checkpoint witness among them, on the **unchanged R4 model**. Each model is loaded by path and checked against its published SHA-256, and each run must reproduce (§19.3–§19.6).
 
 | Check | Marker | Requirement |
 |---|---|---|
@@ -2180,12 +2495,15 @@ It first re-runs every Architect counterexample on the **unchanged R1 and R2 mod
 | C25 | `[durable-activation]` | No claim on a selection that is not durable. Covers the two witnesses with every second crash; established stores and completed successions; EIO, EINTR, emergency and read-only states, a silent journal abort, identity failures, and process death or power loss during activation, each refused before any claim; the read-only verifier never activating; sessions activating; one filesystem; stale readers and competing owners; a replacement racing activation; and the activation operations of §10.6 |
 | C26 | `[composed-recovery]` | §15.4: every procedure prefix, a first crash, dependent work, a second crash and recovery, with the generation always discoverable or explicitly refused; chained administration; recovery that never provisions a fresh root over history |
 | C27 | `[supported-profile]` | INV-20. The qualified profile activates and claims. Each case below refuses before any claim, for owners, the verifier and sessions: an external journal; `data=writeback`, `nobarrier` or `data=journal` in effect but absent from `mountinfo`; `journal_async_commit`; `norecovery`; `fc_debug_force`; emergency or ordinary read-only; another kernel; an unresolved name; an unreadable listing; a contradiction. Also covered: a profile changed during activation, refused at A4; qualification refusing fast commits and an external journal; a kernel update refused until re-qualification, which never accepts an unsupported profile. |
-| C28 | `[activation-proof]` | §10.7, safety. In every enumerated transaction state and window, a certified activation has every dependency committed, and it survives every later continuation of domain H and a power loss. A refusal happens only after a failure. Harmless late aborts are certified. Four windows are also run through the whole model, with every second crash and the oracle. |
-| C29 | `[journal-conformance]` | §10.7, conformance. Each modelled transition follows its cited branch: the three `fsync` returns; an abort before the probe's test returned as EROFS; the completed-transaction return reached with the journal aborted. Each discarded flush (`checkpoint.c:338-339`, `commit.c:775-778`, `commit.c:883-886`) leaves the journal unaborted and loses a committed operation. The two `commit.c` sites never run on the profile. A-S5 is shown necessary, and the checked failures abort. |
+| C28 | `[activation-proof]` | §10.7, safety. In every enumerated transaction state and window, a certified activation has every dependency committed, and it survives every later continuation of domain H and a power loss. A refusal happens only after a failure. Harmless late aborts are certified. Four windows are also run through the whole model, with every second crash and the oracle. R5 changes the domain. The journal runs on admitted storage, and the continuations add failed home writes, failed superblock writes, a write in flight and R4's failed flush, which is never sent (§19.6). |
+| C29 | `[journal-conformance]` | §10.7, conformance. Each modelled transition follows its cited branch: the three `fsync` returns; an abort before the probe's test returned as EROFS; the completed-transaction return reached with the journal aborted. On a volatile write-back cache, each discarded flush (`checkpoint.c:338-339`, `commit.c:775-778`, `commit.c:883-886`) leaves the journal unaborted and loses a committed operation. The two `commit.c` sites never run on the profile. R4's counterexample is retained on such a cache, which is not admitted, and the checked failures abort. R5 adds the paths of §5.8, each with its own outcome, and the admitted-storage conformance: no flush is sent, a failed home write aborts before a new tail, a failed superblock write is rewritten with the new tail, and a write in flight holds the tail. |
+| C30 | `[storage-qualification]` | INV-21. A qualified stable-completion fixture activates, claims, acknowledges and admits, completes a succession, keeps prior history discoverable, and follows the existing disposition and retirement authority. 16 storage configurations refuse before any claim, for owners, the verifier and sessions, with no admission: a volatile cache hidden by `queue/write_cache`, a write-back cache, contradictory or unreadable attributes, device-mapper, multipath, fabrics, SATA or SAS, loop, virtio, a transport other than `pcie`, and another controller, firmware, namespace, PCI function or partition. A `PROVISION` without the storage fields, or with another class, is Invalid. A stale or forged admission refuses at the claim, and no admission comes from decoded bytes. Storage changed during activation refuses at A4, and re-qualification never admits a volatile cache. The qualification refuses a virtual machine guest and a controller reporting a cache, which the store uid cannot observe. After a firmware update, the running owner keeps its custody, later openings refuse with the history kept, and re-qualification restores the decision. |
+| C31 | `[stable-completion]` | §5.6, §5.7, safety on admitted storage. After a certified activation, every storage event keeps every dependency at a power loss: R4's witness sequence, failed home and superblock writes, a write in flight. A write the device reported failed is never acknowledged. No record is acknowledged before its write completed. The whole model's checkpoint agrees with `JournalSim` on 12 paths. A-S1 is shown necessary: on a cache the kernel registered as absent, an acknowledged generation is lost with nothing reported. |
+| C32 | `[storage-composed]` | §15.4, storage events. Every prefix of first provisioning and of succession, then process death; an opening on each of four hosts; dependent work; five storage events; every second crash and the oracle. Every acknowledged, unsealed generation is discoverable or explicitly refused. A loss of qualification refuses with the history kept, and no storage that is not admitted reaches dependent work. |
 
-**Safety and conformance are kept apart.** C28 asks whether the protocol is safe on the modelled journal. C29 asks whether the modelled journal is the cited one. A model that wrongly reports more errors (R3's `fsync`, NC-FSYNC-COMPLETED) passes C28 and fails C29. A model that invents an abort where v6.17 discards the status (NC-ERR-DETECTED) would hide the need for A-S5, and fails C29.
+**Safety and conformance are kept apart.** C28 and C31 ask whether the protocol is safe on the modelled journal and storage. C29 asks whether the modelled journal is the cited one. A model that wrongly reports more errors (R3's `fsync`, NC-FSYNC-COMPLETED) passes C28 and fails C29. A model that invents an abort where v6.17 discards the status (NC-ERR-DETECTED) would hide why a volatile cache cannot be admitted, and fails C29. The discarded flush is never "fixed" in the model: on a volatile cache it still loses history (C29), and R5's answer is to admit no such storage (C30).
 
-**Negative controls.** There are 61: R1's 27 (NC01–NC17, with lettered variants), R2's 21 (NC18a–f, NC19, NC20a–f, NC21a–b, NC22a–b, NC23, NC24a–c) and R3's 6 (NC-ACT-VISIBLE, NC-ACT-ORDER, NC-ACT-ERROR, NC-ACT-PROBE, NC-ACT-REVALIDATE, NC-ACT-COMPOSE), all unchanged in identity and intent, and 7 new ones:
+**Negative controls.** There are 67. R1's 27 (NC01–NC17, with lettered variants), R2's 21 (NC18a–f, NC19, NC20a–f, NC21a–b, NC22a–b, NC23, NC24a–c), R3's 6 (NC-ACT-VISIBLE, NC-ACT-ORDER, NC-ACT-ERROR, NC-ACT-PROBE, NC-ACT-REVALIDATE, NC-ACT-COMPOSE) and R4's 7 are all unchanged in identity and intent. R5 adds 6. R4's were:
 
 | Control | Target | Behaviour restored |
 |---|---|---|
@@ -2197,12 +2515,24 @@ It first re-runs every Architect counterexample on the **unchanged R1 and R2 mod
 | NC-FSYNC-COMPLETED | C29 | R3's `fsync` model: every aborted, unnoticed journal reported as EIO, whatever the state of the inode's transaction |
 | NC-ERR-DETECTED | C29 | A discarded flush status treated as detected: an invented abort at an unchecked flush |
 
+R5's:
+
+| Control | Target | Behaviour restored |
+|---|---|---|
+| NC-STORAGE-VOLATILE | C30 | A volatile-completion profile admitted as stable: `queue/write_cache` alone decides, so a write to it hides a volatile cache |
+| NC-STORAGE-CLAIM | C30 | An unverified storage claim or a stale qualification treated as authority: the identity `PROVISION` claims taken in place of the one observed, and any admission object accepted at the claim |
+| NC-STORAGE-COMPLETION | C31 | Durability published before the operation completes: a home write still in flight counted as complete, so the tail passes it |
+| NC-STORAGE-ERROR | C31 | A reported write error converted into success: the sync returns 0 for a write the device reported failed, and the record is acknowledged |
+| NC-STORAGE-TAIL | C31 | Required journal history discarded without durable home data or a retained log copy: the tail moves past a failed home write |
+| NC-STORAGE-COMPOSED | C32 | The unsafe path restored: storage admitted on the Owner's attestation (A-S5, R4's domain), a volatile write-back cache included |
+
 - They are listed with their targets in the script and in `coverage.json`.
 - Each is an in-memory mutant that restores an incorrect behaviour, usually an earlier revision's, and must fail its target check's assertion carrying that check's marker.
 - NC-ACT-COMPOSE restores the whole R2 protocol. It counts as caught only if the earlier snapshot checks C12, C20, C21 and C22 still pass under it: it must be detected by composition alone.
+- NC-STORAGE-COMPOSED (R5) counts as caught only if C25, C26, C27 and C28 still pass under it. C32's oracle must catch it, as a generation lost after a second crash.
 - A syntax, import or fixture error never counts as a caught control.
 
-The output reports separately the R1 and R2 reproductions, the R3 reproductions, baseline passes, intended negative-control failures, the restored baseline, tool failures, the assertion and model changes (with the requirement each keeps), and the assumptions the model cannot establish.
+The output reports separately the R1 and R2 reproductions, the R3 reproductions, the R4 reproductions, baseline passes, intended negative-control failures, the restored baseline, tool failures, the assertion and model changes (with the requirement each keeps), and the assumptions the model cannot establish.
 
 **Model simplifications,** each disclosed:
 - directory descriptors and component-by-component `O_PATH` walks are not modelled; directories are addressed by reference;
@@ -2216,6 +2546,10 @@ The output reports separately the R1 and R2 reproductions, the R3 reproductions,
 - (R4) the whole-store model's abort leaves nothing running: it stands for the state after the commit thread has processed the running transaction that the abort itself requests (`journal.c:2565-2589`). `JournalSim` keeps the transaction states that the whole-store model abstracts away;
 - (R4) `JournalSim` runs one commit at a time, in order. Background commits and aborts happen at chosen points, and every flush is honoured unless a scenario fails it. Its initial states have at most four events, with one background event or none before each activation step;
 - (R4) the option listing, jbd2 names and kernel identity are fixtures; the superblock facts are an object only the qualification reads.
+- (R5) the storage attributes, identities and controller report are fixtures. The fixture host is an NVMe partition; R4's was a device-mapper device, which R5 refuses. The Owner's root-only facts (the controller's Identify data, a virtual machine guest) are fields only the qualification reads. The fixture qualifies no device;
+- (R5) on admitted storage `JournalSim` sends no flush. On a volatile cache every flush is honoured unless a scenario fails it. On a cache the kernel registered as absent, the superblock is taken to reach the medium before the home writes, the worst order;
+- (R5) the whole-store model's checkpoint covers the directory metadata durable when it runs. On storage other than admitted storage, file data are not modelled as volatile: such storage is refused, or is outside A-S1. Its admission token is a Python object with a module-private key and a registry, a model of a private constructor, not a security boundary;
+- (R5) the errseq counter is not modelled (§5.6).
 
 `reference_check.py` verifies against `45898e05` every Rust `file:line` reference in this document and the golden-vector literals in the model. With `--kernel`, it verifies every Linux `file:line` citation against local copies of the v6.17 files, each checked by SHA-256, at the first and last line of each range. It also checks that the following say exactly what the model computes and performs:
 - the §15.2 crash matrix and coverage counts;
@@ -2225,6 +2559,8 @@ The output reports separately the R1 and R2 reproductions, the R3 reproductions,
 - (R4) the §10.7 enumeration counts;
 - (R4) the §6.4 step 9 required and excluded options;
 - (R4) the `PROVISION` keys of §7.5;
+- (R5) the §6.4 step 12 storage class, admitted cache values and identity attributes;
+- (R5) the §15.4 storage-event dimensions;
 - the §16.1 check table and control count.
 
 Existence and text matches are not semantic conformance. A successful line check is not a semantic proof.
@@ -2258,6 +2594,15 @@ Existence and text matches are not semantic conformance. A successful line check
     - every profile case of C27, with the effective listing, the jbd2 names and the kernel identity supplied by the simulated host;
     - the windows of C28;
     - C29's conformance cases, written against the qualified kernel's sources.
+- **Storage (R5).**
+  - **Simulated storage.** It must model the devices of §5.5 to §5.8: a completed write stable or still cached, a reported write failure, a write in flight, the superblock's tail write and the abort's rewrite, native and emulated FUA.
+  - **A simulated host view.** It supplies the `/sys/dev/block` link and the attributes of §6.4 step 12.
+  - **The tests then cover:**
+    - every storage case of C30, through the same storage check that the live path uses;
+    - the trusted construction of §10.8: no constructor but the check, no decoding, no reuse across openings, a stale or forged admission refused at the claim;
+    - the paths and the safety of C29 and C31, written against the qualified kernel's sources;
+    - C32's composed scenarios, from the Rust procedures and the real core.
+  - **What they are not.** These tests are fixture qualification only: they qualify no host or device, the Owner's machine included, and they read no real device attribute.
 - **Unprivileged real-filesystem tests (R3)**, under `CARGO_TARGET_TMPDIR`, may check that:
   - a directory opened `O_RDONLY | O_DIRECTORY` can be synced and an `O_PATH` one cannot;
   - `futimens` succeeds on a file the test owns;
@@ -2296,6 +2641,14 @@ Each must compile and then fail its intended assertion, with its marker:
   - the probe before the directory syncs;
   - a completed transaction's `fsync` modelled as failing;
   - a discarded flush modelled as an abort.
+- **Storage (R5):**
+  - a volatile-completion profile admitted: `queue/write_cache` alone decides;
+  - an admission taken from `PROVISION`'s claimed identity, or reused from another opening;
+  - an admission constructed outside the storage check, or decoded;
+  - a home write in flight counted as complete;
+  - a reported write error turned into an acknowledgement;
+  - the tail moved past a failed home write;
+  - volatile storage admitted on an attestation, caught by the composed tests.
 
 ### 16.5 Fixtures
 
@@ -2306,7 +2659,7 @@ Ordinary Rust tests use simulated storage only. Unprivileged real-filesystem tes
 - write and sync wiring;
 - mount identification of the fixture's own filesystem, asserting whichever outcome applies.
 
-Root-owned fixtures, host qualification and power-loss rigs are not authorized.
+Root-owned fixtures, host qualification, storage qualification, device attribute reads and power-loss rigs are not authorized.
 
 ---
 
@@ -2317,12 +2670,12 @@ Root-owned fixtures, host qualification and power-loss rigs are not authorized.
 | `support/custody/store/mod.rs` | API (`StoreGuard`, `StartupReport`, `Recorder`, `ExchangeSink`, `RecorderStatus`), claims and non-claims |
 | `support/custody/store/format.rs` | Header, seal and record blocks; `PROVISION`, disposition and entry-name grammars; bindings |
 | `support/custody/store/classify.rs` | The pure classifier and grammar (§11) |
-| `support/custody/store/open.rs` | Safe open, mount identification, the one-filesystem check, (R4) the effective-profile, journal-location and kernel checks of §6.4 steps 9–11, `PROVISION` selection and revalidation, durable activation, startup order (§10) |
+| `support/custody/store/open.rs` | Safe open, mount identification, the one-filesystem check, (R4) the effective-profile, journal-location and kernel checks of §6.4 steps 9–11, (R5) the storage check of step 12 and the only constructor of `StorageAdmission` (§10.8), `PROVISION` selection and revalidation, durable activation, startup order (§10) |
 | `support/custody/store/io.rs` | The `StoreIo` trait and its Linux implementation: `openat2` through `SYS_openat2` and `open_how`; `statx`; `fstatat`; `fstatvfs`; `flock`; `pwrite`; `fdatasync`; `fsync` of directories and files; `futimens`; `getrandom`; (R4) `readlinkat` and `uname`. All are in `libc` 0.2.183 (R4: `readlinkat` in its `src/unix/mod.rs`, line 2270, and `uname` in its `src/unix/linux_like/mod.rs`, line 2003). |
 | `support/custody/store/exchange.rs` | The exchange and its fatal latch, the sink, the owner's apply step and failure delivery, and the store admission gate (§9) |
 | `support/custody/store/recorder.rs` | The worker: claim, append, seal, poison |
 | `support/custody/store/disposition.rs` | The `DispositionValidator` |
-| `support/custody/store/sim.rs` | Simulated storage (§16.2), including the §4.8 metadata log and schedules, the A-M2 journal behaviour, (R4) the transaction windows of §10.7 and a simulated host profile |
+| `support/custody/store/sim.rs` | Simulated storage (§16.2), including the §4.8 metadata log and schedules, the A-M2 journal behaviour, (R4) the transaction windows of §10.7 and a simulated host profile, and (R5) the storage devices of §5.5–§5.8 and a simulated host view, reachable from tests only |
 | `support/custody/store/maintenance.rs` | The maintenance session type and in-session verification (§13.1, §13.11), exercised against simulated storage only. No executable, binary target or privileged entry point. |
 | `support/custody/mod.rs` | `pub mod store;` and the integration-obligation documentation |
 | `phase2_custody_store.rs` | A new test target |
@@ -2337,6 +2690,12 @@ Root-owned fixtures, host qualification and power-loss rigs are not authorized.
 **Unsafe code.** A small, reviewed FFI surface in `io.rs`, with each call wrapped once.
 
 **Not in this envelope.** API-5 (§2.3) needs its own approval and its own validation. A maintenance or provisioning executable needs a separate Architect authorization (G-HOST).
+
+**Storage (R5) in the envelope.**
+- **The type.** `StorageAdmission` lives in `open.rs`, with private fields and no constructor besides the step-12 check. It has no `Default`, `Clone`, serialization or deserialization.
+- **The reads.** `io.rs` reads the sysfs attributes with `openat2` and `pread` below `/sys`, and the link with `readlinkat`. These are already in the envelope or in `libc` 0.2.183; no privileged call, NVMe admin command or helper is added.
+- **The two host views.** The live entry point builds only the Linux host view. The simulated host view in `sim.rs` is reachable from the store's tests only.
+- **Not in the envelope.** No configuration value, environment variable or feature flag can admit storage. Qualifying the Owner's storage is not part of the implementation mission; it stays behind G-HOST.
 
 **Validation for that mission:**
 - targeted `cargo test --locked -p nexus-verifier-sandbox` for the custody targets;
@@ -2355,10 +2714,10 @@ Root-owned fixtures, host qualification and power-loss rigs are not authorized.
 |---|---|
 | **G-AUTH** | An end-to-end authority model against tampering by the store uid (§3.3), before any production or runner use. **Unresolved.** |
 | **G-IMPL** | An implementation mission for §17 |
-| **G-HOST** | Owner qualification and provisioning on a named host (§13.2). R4 adds to it: the qualification of the running kernel's exact build against the source claims of §5.1 and §10.7; the superblock facts (an internal journal at inode 8, no `fast_commit`); the effective profile of §6.4; and the A-S5 attestation. |
+| **G-HOST** | Owner qualification and provisioning on a named host (§13.2).<ul><li>R4 adds: the qualification of the running kernel's exact build against the source claims of §5.1 and §10.7; the superblock facts (an internal journal at inode 8, no `fast_commit`); and the effective profile of §6.4.</li><li>R5 adds the storage qualification of §5.9: the admitted class, the controller's own report, that the host is not a virtual machine guest, the evidence for stable completion (A-S1), and the identity pinned in `PROVISION`; and the kernel build's block-layer and NVMe paths.</li><li>R4's A-S5 attestation is withdrawn.</li><li>Nothing is qualified now. A storage qualification for the Owner's machine would be a separate, Architect-authorized step.</li></ul> |
 | **G-NATIVE** | Native-layer guarantees for the residuals of §14.4 |
 | **G-LIVE** | Integration of the owner process and service, and live validation |
-| **G-PWR** | Empirical power-loss qualification, if it is ever required (D-10). It would also be where A-S5, flush success, could be tested empirically. |
+| **G-PWR** | Empirical power-loss qualification, if it is ever required (D-10). R5: it would be where stable completion (A-S1) could be tested empirically on a qualified device: evidence, never proof. |
 
 API-5 (§2.3) is not a gate of this design: nothing here depends on it. It needs its own approval if it is ever wanted.
 
@@ -2374,7 +2733,8 @@ This design does not:
 - perform automatic maintenance;
 - offer a force-close, drop an owner, or clear a failure;
 - migrate any format;
-- build or authorize a maintenance or provisioning executable, a privileged helper or service, an account, a cloud service, a TPM dependency or a database.
+- build or authorize a maintenance or provisioning executable, a privileged helper or service, an account, a cloud service, a TPM dependency or a database;
+- (R5) change a device's cache, a queue attribute, firmware settings, a mount or the kernel; select, recommend or purchase a product; or give hardware configuration instructions. Writing `queue/write_cache` is never a remedy (§5.9).
 
 ### 18.3 Non-claims
 
@@ -2383,9 +2743,11 @@ This design does not:
 - **No qualification or proof.** There is no tamper resistance against the store uid, no power-loss proof, no filesystem or device qualification, no authentication, and no proof of native cleanup.
 - **No completion.** There is no journal-completeness claim beyond §11, no live acceptance, no integration, and no Phase Two completion.
 - **No interface exists.** The admission gate, the fatal latch, the maintenance session and its in-session verification, the selection protocol and API-5 are specifications only.
-- **A-M1, A-M2 and A-S1 to A-S5 are assumptions.** The per-directory over-approximation shows which conclusions do not depend on A-M1. A-M2 was read from the Linux v6.17 sources, not tested. Nothing shows that a device or a running kernel honours them. A-S5 is new in R4.
+- **A-M1, A-M2 and A-S1 to A-S4 are assumptions.** The per-directory over-approximation shows which conclusions do not depend on A-M1. A-M2 and R5's block-layer and checkpoint paths were read from the Linux v6.17 sources, not tested. Nothing shows that a device or a running kernel honours them. R4's A-S5 is withdrawn.
+- **Stable completion is not proven hardware safety (R5).** It is an assumption (A-S1) about future, qualified storage, with an observation that binds the store to a qualification. No device, controller or host has been qualified, examined or approved, and no storage profile is approved by default. The model's storage values are fixtures.
 - **No activation ran on a host.** No directory was synced, no timestamp probed and no state root created. Activation is a specification and a model.
 - **No host was observed in R4, and nothing was reproduced live.** The R4 findings rest on reading the v6.17 sources and on the models. R4 read no profile listing, jbd2 entry or kernel identity from any host. Its profile values are fixtures. No reproduction on the Owner's or any other machine is claimed.
+- **No host or device was observed in R5.** R5 read no sysfs attribute, Identify data, cache setting or firmware revision from any machine. No experiment, benchmark, fault injection, power cut, raw-device access or root command ran. R4's witness was re-run on the R4 model, not observed live; it is a conditional counterexample for one represented storage path.
 - **Activation does not certify filesystem health.** It establishes the dependencies of one selection under the declared model (§10.7), and nothing about later transactions.
 - **No approval.** Publication is not approval.
 
@@ -2522,3 +2884,66 @@ The R3 baseline was first re-run on the unchanged R3 evidence. The model's outpu
 | C29's discarded-flush cases were first written per profile with ad hoc set-up | Review of the check | One event list per profile, through the same event function as the enumeration |
 | NC-ACT-UNQUALIFIED was first caught by the external-journal case, not by a claimed-string case | Review of the controls | The cases begin with the hidden-default and kernel cases, so it fails where it should |
 | A cited line of `libc`'s own `mod.rs` matched the reference check's pattern for the custody `mod.rs` | Reference check design | Rephrased without the `file:line` form |
+
+### 19.6 R5: the storage contract and design closure
+
+**The Architect's disposition (D-11).**
+- A-S5, "every device cache flush succeeds", is not accepted as the supported-runtime contract.
+- R4's conditional results and its failure witness stay as history. R4's commit, results and evidence are unchanged.
+- The design is completed around an end-to-end stable write-completion profile: "successful completion must not leave the acknowledged data solely in volatile storage anywhere below that completion boundary".
+- It is a prospective support restriction. No host, device or configuration is approved.
+- Reported failures stay in the failure model. Unknown or unsupported storage refuses before any claim, with no fallback.
+- Hardware truthfulness and containment stay explicit.
+- New privileges, kernel changes, a broader trust assumption or a weakened invariant would need a further disposition. R5 needed none.
+
+**R4 ended with an unresolved trust decision.** To keep its activation proof, R4 published A-S5 as a new physical assumption. Only the Architect could take that decision. R4 recorded it, but could not close the design gate on it, and the Architect did not accept it. R4 remains a published, blocked design candidate.
+
+**Baseline.** R4's evidence was first checked against its manifest and re-run at its revision. The model's output, the reference check's output and `coverage.json` were byte-identical to those recorded. R4's checkpoint witness was then re-run on the **unchanged R4 model** (`docs/evidence/p2-v1-r3b-i3-p-r4/design_checks.py`, loaded by path and checked against its SHA-256). The R5 model repeats these runs every time it is executed.
+
+| Id | Observed on the R4 model |
+|---|---|
+| R4-F2-WITNESS | Activation certified with results 0, 0, 0, 0. After a checkpoint whose flush fails, the journal is not aborted and d1 does not survive a power loss: its transaction is committed and out of the log, with its home written but not durable. A later commit's successful flush before the power loss keeps it. |
+| R4-PATHS | R4's `JournalSim` has no superblock write outcome, no FUA mode, no failed or incomplete home write and no device without a write cache. Its tail moves at once. Paths (b) and (d) of §5.8, and the abort's rewrite of the new tail, are outside it. |
+| R4-FIXTURE | R4's fixture host is a device-mapper device (`253:1`, `dm-1`), on which R4's opening was Ready with a claim. R5's opening refuses it as "storage not a direct NVMe namespace on PCI Express". |
+
+**What the witness establishes, and what it does not.**
+- It is a conditional counterexample for the represented storage path: a volatile write-back cache whose checkpoint flush fails, with native FUA, and a power loss before any later successful flush.
+- It is not proof that every flush must succeed for every design. R5's design depends on no flush.
+- It is not a live observation. It was derived from the v6.17 sources and the model, and nothing ran on a device.
+- It is not proof that it is the only undetectable failure. §12.2 names a violation of A-S1 and an errseq collision.
+- The paths of §5.8 differ in outcome, and none is claimed to equal another: a discarded flush failure, a checked superblock-write failure, native FUA, emulated FUA with its later flush, and a later successful flush.
+- The kernel's discarded status is kept as it is. R5 neither models an abort the source does not perform nor validates the contract by one. NC-ERR-DETECTED still catches such an invention.
+
+**Domain changes.**
+
+| Check | Old assumption | New domain | Retained historical counterexample | Replacement assertion | Unchanged safety requirement |
+|---|---|---|---|---|---|
+| C28 | A-S5: the continuations ran on a volatile cache with every flush honoured | Admitted storage, where no flush is sent. The continuations add failed home and superblock writes, a write in flight and R4's failed flush (12 instead of 6). | R4-F2-WITNESS on the R4 model; R4's counterexample in C29 | Every certified dependency survives every continuation and a power loss, failures included | No certified activation's dependency is lost in domain H |
+| C29 | "A-S5 is shown necessary" | A volatile write-back cache, not admitted, as the domain of the discarded-status cases; admitted storage for the new conformance cases | The same experiment, relabelled "R4's counterexample, retained" | Each discarded status still loses history unaborted on a volatile cache, each path of §5.8 has its own outcome, and admitted storage receives no flush | The model follows the cited branches and invents no abort |
+| C25–C27 and every earlier check | The fixture host was a device-mapper device | An NVMe partition, the admitted class | R4-FIXTURE | — (every detail line identical to R4's) | Unchanged |
+
+**R5 review.** The revision, the model runs and a review of the whole document against the sources found the items below.
+
+| Found | By | Resolution |
+|---|---|---|
+| `queue/write_cache` alone cannot tell a device without a cache from a cache whose flushes a write to the attribute disabled | Source review (`blk-sysfs.c:459-478`, `blkdev.h:360-361`) | Step 12 reads `fua` too. The NVMe driver sets both features together (`nvme/core.c:2395-2398`), and the block layer clears FUA without a write cache (`blk-settings.c:468-469`). NC-STORAGE-VOLATILE |
+| A checked superblock-write failure is no guarantee on a volatile cache: the abort rewrites the superblock carrying the new tail | Source review (`journal.c:1871-1872`, `journal.c:2592-2595`) | §5.8 (b). On admitted storage either tail keeps the history (§5.7). |
+| jbd2 aborts at the first metadata change after a recorded write error, whatever ext4's `errors=` option | Source review (`transaction.c:1222-1232`) | §5.6 |
+| The errseq detection has a source-documented bound | Source review (`errseq.c:22-23`) | §5.6; domain S |
+| ext4's file data complete through ext4's own bio completion, not `buffer.c`'s | Source review (`page-io.c:349-395`) | §5.5 and §5.6 cite it |
+| R4's fixture host was a device-mapper device, which R5 refuses | Model | The fixture is an NVMe partition (R4-FIXTURE). Every retained detail line is unchanged. |
+| §1.4 called `write_cache` "the cache mode"; it is the kernel's view | Source review | §1.4 corrected |
+| §4.3 explained the writer's durability through ext4's own flush, which admitted storage never receives | Review | §4.3 restated around completion |
+| Under NC-STORAGE-COMPOSED, the Unprovisioned recovery re-published `PROVISION` on storage nothing can observe, and stopped at a fixture assertion | Model (a tool assertion, counted as WRONG-MARKER) | Under that mutant the Owner's record is the attested one that R4's domain allowed. In the correct model the assertion stays. |
+| C32 first checked the loss of qualification before all oracle runs, so NC-STORAGE-COMPOSED was caught by that assertion instead of by lost history | Review of the controls | The loss-of-qualification scenarios run after every oracle run; the control now fails on an omitted generation |
+| C32's first summary counted Unprovisioned openings with storage refusals | Review | Reported by state |
+| §6.6 first gave the identity record's bound as 1080 bytes | Review | 16,422 bytes, from the attributes' read bounds |
+
+Each item was resolved at the first repair; none needed a second.
+
+**Changed assumptions.**
+- A-S5 is withdrawn.
+- A-S1 is restated as stable completion, and A-S3 as no loss after a successful completion.
+- Admitted storage is the class of §5.5, observed at every opening and bound to a qualification that no one has performed.
+
+The safety requirements are unchanged: write-ahead, acknowledged-implies-durable, no false resolution, durable activation and history across recovery. The R4 evidence is kept unchanged and is not edited to agree.
