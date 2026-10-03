@@ -686,47 +686,64 @@ fn i4_10_an_uncertain_query_after_the_candidate_keeps_its_descriptor() {
 #[test]
 fn i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained() {
     // The kernel shows the helper in a cgroup of the unit's name that the
-    // manager does not have loaded: nothing is proven or launched, and the
-    // retained candidate is what cleanup is confirmed through.
-    let world = World::new(|state| state.unit_loaded = false);
-    let report = run_in(&world, None);
-    assert!(
-        matches!(
-            report.not_run,
-            Some(NotRun::Scope(ScopeError::Mismatch("unit not loaded")))
-        ),
-        "the manager's absence of the unit did not refuse the proof: {:?}",
-        report.not_run
-    );
-    assert_eq!(report.stdout.bytes, 0);
-    assert!(report.cleanup.is_confirmed());
-    assert!(world.lock().created().unwrap().killed);
-    // No candidate can be retained: the manager's absence alone confirms
-    // nothing while the helper is in a cgroup of the unit's name.
-    let world = World::new(|state| {
-        state.unit_loaded = false;
-        state.cgroup_v2 = false;
-    });
-    let report = run_in(&world, None);
-    let pid = requested_pid(&world);
-    assert_eq!(
-        report.classify(0),
-        ExitClass::CleanupFailed,
-        "manager absence alone confirmed an operation whose helper is in a cgroup of its unit"
-    );
-    let boundary = boundary_of(report);
-    assert!(!pending_state(&boundary).candidate);
-    // Once that cgroup is removed, the helper is outside it.
-    {
-        let mut state = world.lock();
-        let unit = state.requested().unwrap();
-        state.cgroups[0].removed = true;
-        state
-            .membership
-            .insert(pid, format!("{SLICE}/{unit} (deleted)"));
+    // manager does not have loaded: nothing is proven or launched. Nothing
+    // binds that cgroup to the invocation the start began
+    // (P2-V1-R3B-I4-R3-R1), so it is retained only as observed (when it can
+    // be opened) and never ended, and the manager's absence alone confirms
+    // nothing while the helper is in it.
+    for v2 in [true, false] {
+        let world = World::new(|state| {
+            state.unit_loaded = false;
+            state.cgroup_v2 = v2;
+        });
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        if v2 {
+            assert!(
+                matches!(
+                    report.not_run,
+                    Some(NotRun::Scope(ScopeError::Mismatch("unit not loaded")))
+                ),
+                "the manager's absence of the unit did not refuse the proof: {:?}",
+                report.not_run
+            );
+        }
+        assert_eq!(report.stdout.bytes, 0, "{v2}");
+        assert_eq!(
+            report.classify(0),
+            ExitClass::CleanupFailed,
+            "{v2}: manager absence alone confirmed an operation whose helper is in a cgroup of its unit"
+        );
+        let boundary = boundary_of(report);
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.candidate == v2 && !observed.owned,
+            "{v2}: {observed:?}"
+        );
+        {
+            let state = world.lock();
+            assert!(
+                state.cgroups[0].kills == 0 && !state.cgroups[0].killed,
+                "{v2}: a cgroup not bound to the start's invocation was ended"
+            );
+        }
+        // Once that cgroup is removed, the helper is outside it.
+        {
+            let mut state = world.lock();
+            let unit = state.requested().unwrap();
+            state.cgroups[0].removed = true;
+            state
+                .membership
+                .insert(pid, format!("{SLICE}/{unit} (deleted)"));
+        }
+        boundary.retry().unwrap();
+        assert!(!is_child(pid), "{v2}");
+        assert_eq!(
+            world.lock().count(|call| matches!(call, Call::Kill(_))),
+            0,
+            "{v2}"
+        );
     }
-    boundary.retry().unwrap();
-    assert!(!is_child(pid));
 }
 
 #[test]
@@ -901,13 +918,12 @@ fn i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit() {
 
 #[test]
 fn i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven() {
-    let unproven: [fn(&mut crate::scope::tests::State); 7] = [
+    let unproven: [fn(&mut crate::scope::tests::State); 6] = [
         |state| state.runtime_max = Property::Uncertain(Reply::Timeout),
         |state| state.oom_policy = Property::Uncertain(Reply::Disconnect),
         |state| state.get_unit = Script::first([Reply::Malformed], Reply::Delivered),
         |state| state.limit_mismatch = Some("cpu.max"),
         |state| state.listed = false,
-        |state| state.unit_loaded = false,
         // Never placed, and the manager has unloaded the unit by itself
         // (P2-V1-R3B-I4-R3: while it keeps it, nothing is confirmed).
         |state| {
@@ -930,6 +946,19 @@ fn i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven() {
             report.not_run
         );
     }
+    // The helper is in a cgroup of the unit's name that the manager does not
+    // have loaded: never proven or launched, and (P2-V1-R3B-I4-R3-R1) never
+    // bound, so never ended: retained (`i4_11`).
+    let world = World::new(|state| state.unit_loaded = false);
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert_eq!(report.stdout.bytes, 0, "a launch reached an unbound cgroup");
+    assert!(matches!(
+        report.not_run,
+        Some(NotRun::Scope(ScopeError::Mismatch("unit not loaded")))
+    ));
+    assert_eq!(report.classify(0), ExitClass::CleanupFailed);
+    abandon(boundary_of(report), pid);
     // An uncertain start that created nothing (I4-R1): never confirmed gone,
     // so its output is not waited for; the attempt ended at the scope,
     // before any handshake, and its helper is retained unreaped.
@@ -1111,34 +1140,44 @@ fn i4_24_dropping_an_unresolved_operation_is_best_effort_and_confirms_nothing() 
 
 #[test]
 fn i4_25_a_panic_after_the_start_request_keeps_its_owner() {
+    // The reply was delivered, but the panic came before it (and the
+    // identity captured with it) was recorded, so for the backend the
+    // request's outcome is uncertain (I4-R1). P2-V1-R3B-I4-R3-R1: the cgroup
+    // the helper is in is never opened or ended; the operation stays owned
+    // with its helper, through a retry once the manager answers again.
     let fault = Some(Fault::Panic(FaultPoint::AfterScopeStart));
-    // Settled through the cgroup the helper is found in.
-    let world = World::default();
-    let report = run_in(&world, fault);
-    assert!(
-        world.lock().created().unwrap().killed,
-        "a panic after StartTransientUnit lost the operation's owner"
-    );
-    assert!(matches!(report.not_run, Some(NotRun::Interrupted)));
-    assert_eq!(report.stdout.bytes, 0);
-    assert!(report.cleanup.is_confirmed());
-    // Nothing can be confirmed: retained. The reply was delivered, but the
-    // panic came before it was recorded, so for the backend the request's
-    // outcome is uncertain (I4-R1): a retry keeps it, with its helper.
-    let world = World::new(|state| state.placement = Placement::Never);
-    let report = run_in(&world, fault);
-    let pid = requested_pid(&world);
-    assert_eq!(
-        report.classify(0),
-        ExitClass::CleanupFailed,
-        "a panic after StartTransientUnit lost the operation's owner"
-    );
-    let boundary = boundary_of(report);
-    let observed = pending_state(&boundary);
-    assert!(observed.issued && !observed.accepted && is_child(pid));
-    world.release();
-    let boundary = boundary.retry().unwrap_err();
-    abandon(boundary, pid);
+    for placement in [Placement::Immediate, Placement::Never] {
+        let world = World::new(|state| state.placement = placement);
+        let report = run_in(&world, fault);
+        let pid = requested_pid(&world);
+        assert!(
+            matches!(report.not_run, Some(NotRun::Interrupted)),
+            "{placement:?}"
+        );
+        assert_eq!(report.stdout.bytes, 0, "{placement:?}");
+        assert_eq!(
+            report.classify(0),
+            ExitClass::CleanupFailed,
+            "{placement:?}: a panic after StartTransientUnit lost the operation's owner"
+        );
+        let boundary = boundary_of(report);
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.issued && !observed.accepted && !observed.instance && !observed.candidate,
+            "{placement:?}: {observed:?}"
+        );
+        assert!(is_child(pid), "{placement:?}");
+        world.release();
+        let boundary = boundary.retry().unwrap_err();
+        assert_eq!(
+            world
+                .lock()
+                .count(|call| matches!(call, Call::Open(_) | Call::Kill(_))),
+            0,
+            "{placement:?}: a panicked start's cgroup was opened or ended"
+        );
+        abandon(boundary, pid);
+    }
 }
 
 #[test]
@@ -1494,6 +1533,7 @@ fn i4r1_06_a_cgroup_of_the_unit_s_name_in_another_place_is_never_proven() {
     ] {
         let world = World::new(|state| state.placement = Placement::Beside(beside));
         let report = run_in(&world, None);
+        let pid = requested_pid(&world);
         assert!(
             matches!(
                 report.not_run,
@@ -1503,28 +1543,64 @@ fn i4r1_06_a_cgroup_of_the_unit_s_name_in_another_place_is_never_proven() {
             report.not_run
         );
         assert!(!launched(&report), "{beside}");
-        // The cgroup the helper was found in stays cleanup ownership: it is
-        // ended and confirmed empty through its retained descriptor; the
-        // unit's own cgroup is never opened by its path.
-        assert!(report.cleanup.is_confirmed(), "{beside}");
-        let state = world.lock();
-        let unit = state.requested().unwrap();
-        let found = expand(beside, &unit);
-        assert!(state
-            .cgroups
-            .iter()
-            .any(|cgroup| cgroup.path == found && cgroup.killed));
-        assert_eq!(
-            state
-                .calls
+        // P2-V1-R3B-I4-R3-R1: the cgroup the helper was found in is not the
+        // unit's own, so nothing binds it to the invocation the start began:
+        // it stays observed and is never ended, and the operation stays owned
+        // while the helper is in it. The unit's own cgroup is never opened by
+        // its path.
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{beside}");
+        let boundary = boundary_of(report);
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.candidate && !observed.owned,
+            "{beside}: {observed:?}"
+        );
+        let found = {
+            let state = world.lock();
+            let unit = state.requested().unwrap();
+            let found = expand(beside, &unit);
+            assert!(
+                state
+                    .cgroups
+                    .iter()
+                    .all(|cgroup| cgroup.kills == 0 && !cgroup.killed),
+                "{beside}: a cgroup not bound to the start's invocation was ended"
+            );
+            assert_eq!(
+                state
+                    .calls
+                    .iter()
+                    .filter(|call| matches!(call, Call::Open(_)))
+                    .collect::<Vec<_>>(),
+                [&Call::Open(found.clone())],
+                "{beside}"
+            );
+            found
+        };
+        // The manager unloads the unit by itself, and the cgroup the helper
+        // is in goes: the manager's absence with the helper outside confirms
+        // the accepted operation; nothing was ever ended.
+        {
+            let mut state = world.lock();
+            let unit = state.requested().unwrap();
+            state.unload(&unit);
+            let index = state
+                .cgroups
                 .iter()
-                .filter(|call| matches!(call, Call::Open(_)))
-                .collect::<Vec<_>>(),
-            [&Call::Open(found)],
+                .position(|cgroup| cgroup.path == found)
+                .unwrap();
+            state.cgroups[index].removed = true;
+            state.membership.insert(pid, format!("{found} (deleted)"));
+        }
+        boundary.retry().unwrap();
+        assert!(!is_child(pid), "{beside}");
+        assert_eq!(
+            world.lock().count(|call| matches!(call, Call::Kill(_))),
+            0,
             "{beside}"
         );
     }
-    // Through the harness's direct owner: not proven either.
+    // Through the harness's direct owner: not proven or ended either.
     let world = World::new(|state| state.placement = Placement::Beside("/other.slice/{unit}"));
     let (placed, pid) = place_cat(&world);
     let failed =
@@ -1533,7 +1609,12 @@ fn i4r1_06_a_cgroup_of_the_unit_s_name_in_another_place_is_never_proven() {
         failed.error,
         Some(ScopeError::Mismatch("unit control group"))
     ));
-    assert!(failed.cleanup.is_confirmed() && !is_child(pid));
+    let Cleanup::Failed(boundary) = failed.cleanup else {
+        panic!("a cgroup not bound to the start's invocation confirmed the operation");
+    };
+    assert!(boundary.holds_helper() && is_child(pid));
+    assert_eq!(world.lock().count(|call| matches!(call, Call::Kill(_))), 0);
+    abandon(boundary, pid);
 }
 
 #[test]
@@ -1579,6 +1660,7 @@ fn i4r1_07_a_control_group_that_is_not_exactly_the_kernel_s_is_refused() {
     ] {
         let world = World::new(|state| state.control_group = Text::Is(group));
         let report = run_in(&world, None);
+        let pid = requested_pid(&world);
         assert!(
             matches!(
                 report.not_run,
@@ -1588,8 +1670,19 @@ fn i4r1_07_a_control_group_that_is_not_exactly_the_kernel_s_is_refused() {
             report.not_run
         );
         assert!(!launched(&report), "{group:?}");
-        assert!(report.cleanup.is_confirmed(), "{group:?}");
+        // P2-V1-R3B-I4-R3-R1: not bound, so never ended; the operation stays
+        // owned with its helper.
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{group:?}");
+        assert_eq!(world.lock().created().unwrap().kills, 0, "{group:?}");
+        let boundary = boundary_of(report);
+        assert!(boundary.holds_helper() && is_child(pid), "{group:?}");
+        // Once the manager reports exactly the kernel's cgroup, the retained
+        // candidate is bound, ended and confirmed through its descriptor.
+        world.lock().control_group = Text::Exact;
+        boundary.retry().unwrap();
         assert!(world.lock().created().unwrap().killed, "{group:?}");
+        assert!(!is_child(pid), "{group:?}");
+        assert_eq!(opens(&world), 1, "{group:?}");
     }
 }
 
@@ -1604,6 +1697,7 @@ fn i4r1_08_an_unavailable_or_uncertain_control_group_is_refused() {
     ] {
         let world = World::new(|state| state.control_group = group);
         let report = run_in(&world, None);
+        let pid = requested_pid(&world);
         let refused = match group {
             Text::WrongType => matches!(
                 report.not_run,
@@ -1617,7 +1711,16 @@ fn i4r1_08_an_unavailable_or_uncertain_control_group_is_refused() {
             report.not_run
         );
         assert!(!launched(&report), "{group:?}");
-        assert!(report.cleanup.is_confirmed(), "{group:?}");
+        // P2-V1-R3B-I4-R3-R1: not bound, so never ended; once the manager
+        // answers exactly, the candidate is bound, ended and confirmed.
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{group:?}");
+        assert_eq!(world.lock().created().unwrap().kills, 0, "{group:?}");
+        let boundary = boundary_of(report);
+        world.release();
+        world.lock().control_group = Text::Exact;
+        boundary.retry().unwrap();
+        assert!(world.lock().created().unwrap().killed, "{group:?}");
+        assert!(!is_child(pid), "{group:?}");
     }
 }
 
@@ -1634,6 +1737,7 @@ fn i4r1_09_a_unit_id_that_is_not_exactly_the_generated_name_is_refused() {
     ] {
         let world = World::new(|state| state.unit_id = id);
         let report = run_in(&world, None);
+        let pid = requested_pid(&world);
         let refused = match id {
             Text::Uncertain(_) => {
                 matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_))))
@@ -1649,16 +1753,27 @@ fn i4r1_09_a_unit_id_that_is_not_exactly_the_generated_name_is_refused() {
             report.not_run
         );
         assert!(!launched(&report), "{id:?}");
-        assert!(report.cleanup.is_confirmed(), "{id:?}");
         // Refused before the control group or any property is asked for.
         assert_eq!(
             world.lock().count(|call| matches!(
                 call,
-                Call::ControlGroup(_) | Call::RuntimeMax(_) | Call::OomPolicy(_)
+                Call::ControlGroup(_)
+                    | Call::ControlGroupId(_)
+                    | Call::RuntimeMax(_)
+                    | Call::OomPolicy(_)
             )),
             0,
             "{id:?}"
         );
+        // P2-V1-R3B-I4-R3-R1: not bound, so never ended; once the manager
+        // answers exactly, the candidate is bound, ended and confirmed.
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{id:?}");
+        assert_eq!(world.lock().created().unwrap().kills, 0, "{id:?}");
+        let boundary = boundary_of(report);
+        world.lock().unit_id = Text::Exact;
+        boundary.retry().unwrap();
+        assert!(world.lock().created().unwrap().killed, "{id:?}");
+        assert!(!is_child(pid), "{id:?}");
     }
 }
 
@@ -1670,19 +1785,9 @@ fn i4r1_10_the_exact_binding_of_the_manager_s_unit_to_the_kernel_s_cgroup_proves
     {
         let state = world.lock();
         let unit = state.requested().unwrap();
-        let object = format!("/unit/{unit}");
         assert_eq!(
             state.calls,
-            [
-                Call::Start(unit.clone(), pid),
-                Call::Membership(pid, true),
-                Call::Open(format!("{SLICE}/{unit}")),
-                Call::GetUnit(unit.clone()),
-                Call::UnitId(object.clone()),
-                Call::ControlGroup(object.clone()),
-                Call::RuntimeMax(object.clone()),
-                Call::OomPolicy(object),
-            ],
+            proof_calls(&unit, pid),
             "the scope was proven without binding the manager's unit to the kernel's cgroup"
         );
     }
@@ -1696,6 +1801,30 @@ fn i4r1_10_the_exact_binding_of_the_manager_s_unit_to_the_kernel_s_cgroup_proves
     let world = World::default();
     let report = run_in(&world, None);
     assert!(launched(&report) && report.cleanup.is_confirmed());
+}
+
+/// The calls of a proof that passes (P2-V1-R3B-I4-R3-R1): the kernel's view
+/// of the helper, the candidate retained, the helper inside it again, the
+/// manager's unit bound by its invocation (read before and after its `Id`,
+/// control group and the directory's ID), the policy, and the invocation
+/// once more.
+fn proof_calls(unit: &str, pid: u32) -> Vec<Call> {
+    let object = format!("/unit/{unit}");
+    vec![
+        Call::Start(unit.to_string(), pid),
+        Call::Membership(pid, true),
+        Call::Open(format!("{SLICE}/{unit}")),
+        Call::Membership(pid, true),
+        Call::GetUnit(unit.to_string()),
+        Call::UnitInstance(object.clone()),
+        Call::UnitId(object.clone()),
+        Call::ControlGroup(object.clone()),
+        Call::ControlGroupId(object.clone()),
+        Call::UnitInstance(object.clone()),
+        Call::RuntimeMax(object.clone()),
+        Call::OomPolicy(object.clone()),
+        Call::UnitInstance(object),
+    ]
 }
 
 #[test]
@@ -1802,47 +1931,52 @@ fn i4r1_13_an_uncertain_start_without_a_candidate_keeps_its_helper_unreaped() {
 }
 
 #[test]
-fn i4r1_14_an_uncertain_start_that_places_the_helper_is_acquired_and_may_be_proven() {
-    // Placed while the proof waits: every proof passes, and only then does
-    // the launch reach the helper.
+fn i4r1_14_an_uncertain_start_that_places_the_helper_is_never_acquired_proven_or_ended() {
+    // P2-V1-R3B-I4-R3-R1 (reversing I4-R1's acquisition): the reply was lost,
+    // and the request's job places the helper in the unit's cgroup while the
+    // proof would wait, or only later. Nothing identifies the invocation the
+    // request may have started, so that cgroup is never opened, proven,
+    // launched into or ended, and nothing confirms the operation: it stays
+    // owned with its helper unreaped.
     for reply in [Reply::Timeout, Reply::Error, Reply::Malformed] {
+        let case = format!("{reply:?}");
         let world = World::new(|state| {
             state.start_reply = reply;
             state.placement = Placement::AfterReads(3);
         });
         let report = run_in(&world, None);
+        let pid = requested_pid(&world);
         assert!(
-            launched(&report) && report.cleanup.is_confirmed(),
-            "{reply:?}: {:?}",
+            !launched(&report),
+            "{case}: an uncertain start was launched into"
+        );
+        assert!(
+            matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_)))),
+            "{case}: {:?}",
             report.not_run
         );
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{case}");
+        let boundary = boundary_of(report);
+        // The start job places the helper now.
+        world.lock().place(pid, 0);
+        world.release();
+        let boundary = retained_through(boundary, 2, &case);
+        let observed = pending_state(&boundary);
+        assert!(
+            !observed.accepted && !observed.instance && !observed.candidate && !observed.owned,
+            "{case}: {observed:?}"
+        );
+        let state = world.lock();
+        assert_eq!(
+            state.count(|call| matches!(call, Call::Open(_) | Call::Kill(_))),
+            0,
+            "{case}: an uncertain start's cgroup was opened or ended"
+        );
+        assert!(state.cgroups[0].kills == 0 && !state.cgroups[0].killed);
+        drop(state);
+        assert!(boundary.holds_helper() && is_child(pid), "{case}");
+        abandon(boundary, pid);
     }
-    // Placed, then a later proof fails: the candidate is retained, ended and
-    // confirmed through its descriptor.
-    let world = World::new(|state| {
-        state.start_reply = Reply::Timeout;
-        state.control_group = Text::Is("/other.slice/{unit}");
-    });
-    let report = run_in(&world, None);
-    assert!(matches!(
-        report.not_run,
-        Some(NotRun::Scope(ScopeError::Mismatch("unit control group")))
-    ));
-    assert!(!launched(&report) && report.cleanup.is_confirmed());
-    assert!(world.lock().created().unwrap().killed);
-    // Never placed while the execution ran; a retry then finds the helper
-    // in the unit's cgroup: acquired, ended and confirmed through it.
-    let world = World::new(|state| uncertain_without_candidate(state, true, Reply::Timeout));
-    let report = run_in(&world, None);
-    let pid = requested_pid(&world);
-    let boundary = boundary_of(report);
-    assert!(!pending_state(&boundary).candidate);
-    world.lock().place(pid, 0);
-    boundary.retry().unwrap();
-    assert!(!is_child(pid));
-    let state = world.lock();
-    assert!(state.cgroups[0].killed);
-    assert_eq!(state.count(|call| matches!(call, Call::Open(_))), 1);
 }
 
 #[test]
@@ -1947,7 +2081,7 @@ fn i4r1_17_no_launch_while_the_unit_binding_is_unresolved() {
     for (case, script) in unresolved.into_iter().enumerate() {
         let world = World::new(script);
         let report = run_in(&world, None);
-        assert!(report.cleanup.is_confirmed(), "case {case}");
+        let pid = requested_pid(&world);
         assert!(
             !launched(&report),
             "case {case}: a launch message reached the helper before the binding was proven"
@@ -1964,6 +2098,35 @@ fn i4r1_17_no_launch_while_the_unit_binding_is_unresolved() {
             0,
             "case {case}: a property was proven before the binding"
         );
+        // P2-V1-R3B-I4-R3-R1: the candidate is ended only once bound. While
+        // the binding fails it stays observed, the operation owned; once the
+        // manager answers exactly (after a panic inside the model's read, at
+        // once) it is bound, ended and confirmed through its descriptor.
+        match report.cleanup {
+            Cleanup::Confirmed => assert_eq!(case, 7, "case {case}: confirmed unbound"),
+            Cleanup::Failed(boundary) => {
+                assert_ne!(case, 7, "case {case}");
+                let observed = pending_state(&boundary);
+                assert!(
+                    observed.candidate && !observed.owned,
+                    "case {case}: {observed:?}"
+                );
+                assert_eq!(
+                    world.lock().created().unwrap().kills,
+                    0,
+                    "case {case}: a candidate was ended before it was bound"
+                );
+                world.release();
+                {
+                    let mut state = world.lock();
+                    state.unit_id = Text::Exact;
+                    state.control_group = Text::Exact;
+                }
+                boundary.retry().unwrap();
+            }
+        }
+        assert!(world.lock().created().unwrap().killed, "case {case}");
+        assert!(!is_child(pid), "case {case}");
     }
     // A panic injected where the binding is checked.
     let world = World::default();
@@ -1983,23 +2146,11 @@ fn i4r1_18_a_proven_execution_s_lifecycle_is_unchanged() {
     assert_eq!(report.events, Some(ScopeEvents::default()));
     let state = world.lock();
     let unit = state.requested().unwrap();
-    let object = format!("/unit/{unit}");
     // The proof, the binding included; then finalization through the
     // retained descriptor only.
-    assert_eq!(
-        state.calls[..8],
-        [
-            Call::Start(unit.clone(), pid),
-            Call::Membership(pid, true),
-            Call::Open(format!("{SLICE}/{unit}")),
-            Call::GetUnit(unit.clone()),
-            Call::UnitId(object.clone()),
-            Call::ControlGroup(object.clone()),
-            Call::RuntimeMax(object.clone()),
-            Call::OomPolicy(object),
-        ]
-    );
-    assert!(state.calls[8..]
+    let proof = proof_calls(&unit, pid);
+    assert_eq!(state.calls[..proof.len()], proof);
+    assert!(state.calls[proof.len()..]
         .iter()
         .all(|call| matches!(call, Call::Kill(_))));
     assert!(state.created().unwrap().kills >= 1);
@@ -2023,15 +2174,25 @@ fn i4r1_19_a_binding_failure_s_candidate_is_retried_without_the_scope_manager() 
         Some(NotRun::Scope(ScopeError::Mismatch("unit control group")))
     ));
     let boundary = boundary_of(report);
-    assert!(pending_state(&boundary).candidate);
+    let observed = pending_state(&boundary);
+    // P2-V1-R3B-I4-R3-R1: retained, observed only: never ended unbound.
+    assert!(observed.candidate && !observed.owned, "{observed:?}");
+    assert_eq!(world.lock().created().unwrap().kills, 0);
     drop(scopes);
     world.release();
-    world.lock().opens_left = Some(0);
+    {
+        let mut state = world.lock();
+        state.opens_left = Some(0);
+        state.control_group = Text::Exact;
+    }
+    // Bound on the issuing connection by the retained descriptor (never
+    // opened again), then ended and confirmed through it.
     assert!(
         boundary.retry().is_ok(),
         "a retained boundary needs the ScopeManager that started it"
     );
     assert!(!is_child(pid));
+    assert!(world.lock().created().unwrap().killed);
     assert_eq!(opens(&world), 1);
 }
 
@@ -2459,13 +2620,13 @@ fn i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name() {
 }
 
 #[test]
-fn i4r2_03_an_uncertain_start_whose_helper_appears_later_is_ended_through_its_candidate() {
+fn i4r2_03_an_uncertain_start_whose_helper_appears_later_is_never_ended_through_its_cgroup() {
     // The request created the unit, its reply was lost, and the job has not
-    // attached the helper yet: no candidate, so the operation stays owned and
-    // nothing is stopped by the name. Later the kernel reports the helper in
-    // the unit's cgroup: a retry retains that cgroup by descriptor, located
-    // through the bound helper's membership, ends everything in it with
-    // `cgroup.kill`, observes it empty, and only then reaps the helper.
+    // attached the helper yet; later the kernel reports the helper in the
+    // unit's cgroup. P2-V1-R3B-I4-R3-R1 (reversing R2's acquisition by the
+    // helper's membership): nothing identifies the invocation the request may
+    // have started, so that cgroup is never opened or ended, by descriptor or
+    // by the name, and the operation stays owned with its helper unreaped.
     let world = World::new(|state| uncertain_without_candidate(state, true, Reply::Timeout));
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
@@ -2485,104 +2646,86 @@ fn i4r2_03_an_uncertain_start_whose_helper_appears_later_is_ended_through_its_ca
         "the helper of an unresolved uncertain start was reaped"
     );
     // The start job attaches the helper now.
-    let path = {
+    {
         let mut state = world.lock();
         let unit = state.requested().unwrap();
         assert!(state.units.contains_key(&unit));
         state.place(pid, 0);
-        state.cgroups[0].path.clone()
-    };
-    boundary.retry().unwrap();
-    assert!(!is_child(pid));
-    assert!(
-        observed_unreaped(&world),
-        "the helper was reaped before its candidate was confirmed"
-    );
+    }
+    let boundary = retained_through(boundary, 2, "the helper placed later");
+    assert!(boundary.holds_helper() && is_child(pid));
+    assert!(!pending_state(&boundary).candidate);
     let state = world.lock();
     assert!(
         !state.units.is_empty(),
         "an uncertain start was stopped by its name"
     );
-    // Located through the kernel's membership of the helper, retained by
-    // descriptor once, and ended through it.
-    let open = state
-        .calls
-        .iter()
-        .position(|call| *call == Call::Open(path.clone()))
-        .expect("the candidate was retained by descriptor");
-    assert!(matches!(state.calls[open - 1], Call::Membership(read, true) if read == pid));
-    assert!(state.calls[open..]
-        .iter()
-        .any(|call| *call == Call::Kill(path.clone())));
-    assert!(state.cgroups[0].killed);
-    assert_eq!(state.count(|call| matches!(call, Call::Open(_))), 1);
+    assert_eq!(
+        state.count(|call| matches!(call, Call::Open(_) | Call::Kill(_))),
+        0,
+        "an uncertain start's cgroup was opened or ended"
+    );
+    assert!(state.cgroups[0].kills == 0 && !state.cgroups[0].killed);
+    drop(state);
+    assert!(observed_unreaped(&world));
+    abandon(boundary, pid);
 }
 
 #[test]
-fn i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name() {
+fn i4r2_04_an_uncertain_start_s_cgroup_is_never_ended_by_descriptor_or_by_name() {
     // The reply is lost, but the job attaches the helper while the proof
-    // waits: the candidate is retained by descriptor, and the binding proof
-    // then fails (the manager's ControlGroup is another cgroup's). Nothing is
-    // launched. The candidate is cleanup ownership only: it is ended through
-    // its descriptor; while something the kill does not end keeps it
-    // populated, nothing is stopped by the name and the operation stays
-    // owned; once it is empty, a retry confirms it through the descriptor.
-    let world = World::new(|state| {
-        state.start_reply = Reply::Timeout;
-        state.control_group = Text::Is("/other.slice/{unit}");
-        state.phantom = Phantom::Forever;
-    });
-    let report = run_in(&world, None);
-    let pid = requested_pid(&world);
-    assert!(
-        matches!(
-            report.not_run,
-            Some(NotRun::Scope(ScopeError::Mismatch("unit control group")))
-        ),
-        "{:?}",
-        report.not_run
-    );
-    assert!(!launched(&report), "a launch reached an unproven scope");
-    assert!(
-        !world.lock().units.is_empty(),
-        "an uncertain start's candidate was stopped by its name"
-    );
-    assert_eq!(
-        report.classify(0),
-        ExitClass::CleanupFailed,
-        "an uncertain start's candidate was confirmed without being observed empty"
-    );
-    let boundary = boundary_of(report);
-    let observed = pending_state(&boundary);
-    assert!(
-        observed.candidate && !observed.accepted && !observed.settled,
-        "{observed:?}"
-    );
-    assert!(boundary.holds_helper() && is_child(pid));
-    assert!(
-        world.lock().created().unwrap().killed,
-        "the candidate was not ended through its descriptor"
-    );
-    world.release();
-    boundary.retry().unwrap();
-    assert!(!is_child(pid));
-    assert!(
-        !world.lock().units.is_empty(),
-        "an uncertain start's candidate was stopped by its name"
-    );
-    assert_eq!(opens(&world), 1);
-    // Nothing the kill leaves: confirmed at once, through the descriptor.
-    let world = World::new(|state| {
-        state.start_reply = Reply::Timeout;
-        state.control_group = Text::Is("/other.slice/{unit}");
-    });
-    let report = run_in(&world, None);
-    assert!(report.cleanup.is_confirmed() && !launched(&report));
-    assert!(
-        !world.lock().units.is_empty(),
-        "an uncertain start's candidate was stopped by its name"
-    );
-    assert!(world.lock().created().unwrap().killed);
+    // would wait. P2-V1-R3B-I4-R3-R1 (reversing R2's candidate cleanup):
+    // nothing identifies the invocation the request may have started, so the
+    // cgroup the helper is in is never opened, bound, launched into or ended
+    // through a descriptor, and nothing is stopped by the name: the operation
+    // stays owned, `CleanupFailed`, through retries once the manager answers
+    // again, whether or not something else stays in that cgroup.
+    for phantom in [Phantom::Forever, Phantom::None] {
+        let case = format!("{phantom:?}");
+        let world = World::new(|state| {
+            state.start_reply = Reply::Timeout;
+            state.phantom = phantom;
+        });
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert!(
+            matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_)))),
+            "{case}: {:?}",
+            report.not_run
+        );
+        assert!(
+            !launched(&report),
+            "{case}: a launch reached an unproven scope"
+        );
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{case}");
+        let boundary = boundary_of(report);
+        let observed = pending_state(&boundary);
+        assert!(
+            !observed.candidate && !observed.accepted && !observed.settled,
+            "{case}: {observed:?}"
+        );
+        world.release();
+        let boundary = retained_through(boundary, 2, &case);
+        let state = world.lock();
+        assert!(
+            !state.units.is_empty(),
+            "{case}: an uncertain start's unit was stopped by its name"
+        );
+        assert!(
+            state
+                .calls
+                .iter()
+                .all(|call| !matches!(call, Call::Open(_) | Call::Kill(_))),
+            "{case}: an uncertain start's cgroup was opened or ended"
+        );
+        let created = state.created().unwrap();
+        assert!(
+            created.kills == 0 && !created.killed && created.members.contains(&pid),
+            "{case}"
+        );
+        drop(state);
+        abandon(boundary, pid);
+    }
 }
 
 #[test]
@@ -3124,4 +3267,816 @@ fn i4r3_09_a_retained_operation_retried_without_its_scope_manager_never_acts_by_
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// P2-V1-R3B-I4-R3-R1: candidate cleanup ownership. Observing the helper in a
+// cgroup is never by itself authority over that cgroup: a retained
+// candidate is only observed until it is bound to the unit invocation this
+// request's start began (the identity captured from the start's own job);
+// only an owned candidate is ever ended, and only a proven scope is
+// launched into. Over the deterministic simulation only.
+
+use crate::scope::tests::{Capture, Interference};
+
+/// A process of a foreign unit whose cgroup also holds the helper (a model
+/// process id: the model never signals a real process).
+const HOLDER: u32 = 4_000_003;
+
+/// What a case arranges in the model.
+type Arrange = fn(&mut State);
+
+/// Every `cgroup.kill` in the log follows a complete binding of the unit's
+/// object path: GetUnit, the identity, `Id`, `ControlGroup`,
+/// `ControlGroupId` and the identity again, in one run (a call that panics
+/// breaks the run).
+fn kills_follow_a_binding(world: &World) -> bool {
+    let state = world.lock();
+    let Some(unit) = state.requested() else {
+        return true;
+    };
+    let object = format!("/unit/{unit}");
+    let binding = [
+        Call::GetUnit(unit.clone()),
+        Call::UnitInstance(object.clone()),
+        Call::UnitId(object.clone()),
+        Call::ControlGroup(object.clone()),
+        Call::ControlGroupId(object.clone()),
+        Call::UnitInstance(object),
+    ];
+    state
+        .calls
+        .iter()
+        .enumerate()
+        .filter(|(_, call)| matches!(call, Call::Kill(_)))
+        .all(|(at, _)| {
+            state.calls[..at]
+                .windows(binding.len())
+                .any(|window| window == binding)
+        })
+}
+
+/// The foreign unit of a lost collision holds the helper and is untouched:
+/// never opened, ended, read or proven; its process and the helper still
+/// in its cgroup.
+fn foreign_holder_untouched(world: &World, pid: u32, case: &str) {
+    foreign_untouched(world, case);
+    let state = world.lock();
+    let unit = state.requested().unwrap();
+    let cgroup = &state.cgroups[state.units[&unit].cgroup.unwrap()];
+    assert!(
+        cgroup.members.contains(&pid) && state.membership.get(&pid) == Some(&cgroup.path),
+        "{case}: the helper left the foreign cgroup"
+    );
+    assert_eq!(
+        state.count(|call| matches!(
+            call,
+            Call::GetUnit(_)
+                | Call::UnitInstance(_)
+                | Call::ControlGroupId(_)
+                | Call::RuntimeMax(_)
+                | Call::OomPolicy(_)
+        )),
+        0,
+        "{case}: the foreign unit was claimed"
+    );
+}
+
+/// The foreign unit loaded under the name (holding `HOLDER` and, moved
+/// there, the helper) is untouched: never ended or proven, and nothing of
+/// it read beyond its identity; still loaded with its process.
+fn replacement_untouched(world: &World, case: &str) {
+    let state = world.lock();
+    let unit = state.requested().unwrap();
+    let replacement = state
+        .units
+        .get(&unit)
+        .unwrap_or_else(|| panic!("{case}: the replacement was stopped by its name"));
+    assert!(!replacement.ours, "{case}");
+    let cgroup = &state.cgroups[replacement.cgroup.unwrap()];
+    assert!(
+        !cgroup.killed && cgroup.kills == 0 && !cgroup.removed && cgroup.members.contains(&HOLDER),
+        "{case}: a cgroup not bound to the start's invocation was ended"
+    );
+    assert_eq!(
+        state.count(|call| matches!(
+            call,
+            Call::UnitId(_)
+                | Call::ControlGroup(_)
+                | Call::ControlGroupId(_)
+                | Call::RuntimeMax(_)
+                | Call::OomPolicy(_)
+        )),
+        0,
+        "{case}: the replacement was claimed"
+    );
+}
+
+#[test]
+fn r3r1_01_a_lost_collision_holding_the_helper_is_never_ended_proven_or_launched() {
+    // A foreign unit already holds the generated name. Its cgroup holds a
+    // process of its own and the helper, with exactly the requested limits,
+    // and the manager would answer its `Id`, `ControlGroup`, runtime
+    // backstop and out-of-memory policy exactly. The request is refused as
+    // exactly `UnitExists`, without effect, but that answer is lost: the
+    // backend sees an uncertain start. Nothing identifies an invocation of
+    // this request, so that cgroup is never opened, ended, proven or
+    // launched into; the operation stays owned with its helper unreaped.
+    for reply in [
+        Reply::Timeout,
+        Reply::Disconnect,
+        Reply::Malformed,
+        Reply::Error,
+    ] {
+        let case = format!("{reply:?}");
+        let world = World::new(|state| {
+            foreign_collision(state, reply);
+            state.collision_holds_helper = true;
+        });
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert!(
+            !launched(&report),
+            "{case}: the foreign cgroup was launched into"
+        );
+        assert!(
+            matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_)))),
+            "{case}: {:?}",
+            report.not_run
+        );
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{case}");
+        let mut boundary = boundary_of(report);
+        world.release();
+        for retry in 1..=2 {
+            let retried = boundary.retry();
+            foreign_holder_untouched(&world, pid, &format!("{case}, retry {retry}"));
+            boundary = match retried {
+                Ok(()) => panic!(
+                    "{case}: confirmed while the foreign unit holds the helper (retry {retry})"
+                ),
+                Err(boundary) => boundary,
+            };
+        }
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.issued
+                && !observed.accepted
+                && !observed.collided
+                && !observed.instance
+                && !observed.candidate
+                && !observed.owned
+                && !observed.settled,
+            "{case}: {observed:?}"
+        );
+        assert!(
+            boundary.holds_helper() && is_child(pid) && observed_unreaped(&world),
+            "{case}: the helper of an unresolved operation was reaped"
+        );
+        abandon(boundary, pid);
+    }
+    // Through the live harness's direct owner.
+    let world = World::new(|state| {
+        foreign_collision(state, Reply::Timeout);
+        state.collision_holds_helper = true;
+    });
+    let (placed, pid) = place_cat(&world);
+    let failed = placed.expect_err("the foreign cgroup was proven");
+    let Cleanup::Failed(boundary) = failed.cleanup else {
+        panic!("an uncertain start was confirmed while a foreign cgroup holds its helper");
+    };
+    foreign_holder_untouched(&world, pid, "place");
+    assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
+    abandon(boundary, pid);
+}
+
+#[test]
+fn r3r1_02_a_same_name_replacement_holding_the_helper_is_never_ended_proven_or_launched() {
+    // While the proof waits: once the start's identity is captured, the
+    // manager unloads this request's unit and another client loads a unit
+    // of its own under the same name, its cgroup at the same path holding a
+    // process of its own and the helper. The candidate the kernel locates
+    // is the replacement's cgroup: its identity is not the captured one, so
+    // it is never bound, ended, proven or launched into, and nothing of it
+    // is read beyond its identity.
+    let world = World::new(|state| state.interference = Interference::Replace(HOLDER));
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert!(!launched(&report), "the replacement was launched into");
+    assert!(
+        matches!(
+            report.not_run,
+            Some(NotRun::Scope(ScopeError::Mismatch("unit instance")))
+        ),
+        "{:?}",
+        report.not_run
+    );
+    assert_eq!(report.classify(0), ExitClass::CleanupFailed);
+    let boundary = boundary_of(report);
+    let observed = pending_state(&boundary);
+    assert!(
+        observed.accepted && observed.instance && observed.candidate && !observed.owned,
+        "{observed:?}"
+    );
+    world.release();
+    let boundary = retained_through(boundary, 2, "replaced while the proof waits");
+    replacement_untouched(&world, "replaced while the proof waits");
+    assert!(boundary.holds_helper() && is_child(pid));
+    abandon(boundary, pid);
+    // After the execution: the helper was never placed; this request's unit
+    // is unloaded and the replacement takes the helper. Retries observe the
+    // replacement's cgroup and never bind or end it.
+    let world = World::new(|state| state.placement = Placement::Never);
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    let boundary = boundary_of(report);
+    {
+        let mut state = world.lock();
+        let unit = state.requested().unwrap();
+        state.unload(&unit);
+        let index = state.load_foreign(&unit, HOLDER);
+        state.place(pid, index);
+    }
+    let boundary = match boundary.retry() {
+        Ok(()) => {
+            panic!("replaced after the execution: confirmed while the replacement holds the helper")
+        }
+        Err(boundary) => boundary,
+    };
+    let observed = pending_state(&boundary);
+    assert!(
+        observed.candidate && !observed.owned,
+        "replaced after the execution: the replacement's cgroup was owned through the helper's membership: {observed:?}"
+    );
+    let boundary = retained_through(boundary, 1, "replaced after the execution");
+    replacement_untouched(&world, "replaced after the execution");
+    assert!(boundary.holds_helper() && is_child(pid));
+    abandon(boundary, pid);
+    // An owned candidate whose directory goes with its unit, a replacement
+    // then loaded at the same path: confirmed through the retained
+    // descriptor (removed); never re-opened from its path, so the
+    // replacement's cgroup is never opened or ended.
+    let world = World::new(|state| {
+        failing_proof(state);
+        state.phantom = Phantom::Forever;
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    let boundary = boundary_of(report);
+    assert!(pending_state(&boundary).owned);
+    world.release();
+    let since = world.lock().calls.len();
+    let foreign = reloaded_by_another(&world);
+    assert!(
+        boundary.retry().is_ok(),
+        "a removed owned candidate was not confirmed through its descriptor"
+    );
+    assert_eq!(
+        opens(&world),
+        1,
+        "a candidate was reconstructed from its path"
+    );
+    reuser_untouched(&world, foreign, since, "a removed owned candidate");
+    assert!(!is_child(pid));
+}
+
+#[test]
+fn r3r1_03_a_start_with_its_exact_identity_is_bound_owned_and_proven() {
+    // The start's identity is captured exactly and the helper is placed in
+    // the unit's own cgroup: bound (cleanup ownership), every policy proven,
+    // the scope proven and bound to that invocation and that directory.
+    let world = World::default();
+    let (placed, pid) = place_cat(&world);
+    let placed = placed.expect("a start with its exact identity was not proven");
+    let (unit, instance, id) = {
+        let state = world.lock();
+        let unit = state.requested().unwrap();
+        let instance = state.units[&unit].instance;
+        (unit, instance, state.created().unwrap().id)
+    };
+    let scope = placed.scope().expect("the scope is proven");
+    assert_eq!(scope.invocation_id(), instance.bytes());
+    assert_eq!(scope.cgroup_id().unwrap(), id);
+    assert_eq!(world.lock().calls, proof_calls(&unit, pid));
+    assert!(placed.end().is_confirmed());
+    assert!(!is_child(pid));
+    // The normal execution path stays usable: proven, launched, finalized
+    // through the descriptor.
+    let world = World::default();
+    let report = run_in(&world, None);
+    assert!(launched(&report) && report.cleanup.is_confirmed());
+    assert_eq!(report.classify(0), ExitClass::SandboxSetupFailed);
+    assert!(world.lock().created().unwrap().killed);
+    assert!(kills_follow_a_binding(&world));
+}
+
+#[test]
+fn r3r1_04_an_identity_that_is_not_the_captured_one_is_never_bound() {
+    // Everything else matches exactly; the manager's unit reports another
+    // identity (at every read, or only at the read that closes the
+    // binding), or its directory was replaced at the same path under the
+    // manager's record (another kernel cgroup ID). The candidate is never
+    // owned, ended, proven or launched into.
+    let cases: [(&str, Arrange, &str); 3] = [
+        (
+            "another identity",
+            |state| state.unit_instance = Script::always(Property::Wrong),
+            "unit instance",
+        ),
+        (
+            "another identity when the binding closes",
+            |state| state.unit_instance = Script::first([Property::Exact], Property::Wrong),
+            "unit instance",
+        ),
+        (
+            "another directory at the path",
+            |state| state.interference = Interference::Swap(HOLDER),
+            "unit control group id",
+        ),
+    ];
+    for (case, script, error) in cases {
+        let world = World::new(script);
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert!(
+            !launched(&report),
+            "{case}: launched into an unbound cgroup"
+        );
+        assert!(
+            world
+                .lock()
+                .cgroups
+                .iter()
+                .all(|cgroup| cgroup.kills == 0 && !cgroup.killed),
+            "{case}: a cgroup not bound to the captured identity was ended"
+        );
+        assert!(
+            matches!(report.not_run, Some(NotRun::Scope(ScopeError::Mismatch(found))) if found == error),
+            "{case}: {:?}",
+            report.not_run
+        );
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{case}");
+        let boundary = boundary_of(report);
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.candidate && !observed.owned,
+            "{case}: {observed:?}"
+        );
+        world.release();
+        let boundary = retained_through(boundary, 1, case);
+        {
+            let state = world.lock();
+            assert!(
+                state
+                    .cgroups
+                    .iter()
+                    .all(|cgroup| cgroup.kills == 0 && !cgroup.killed),
+                "{case}: a cgroup not bound to the captured identity was ended"
+            );
+            assert_eq!(
+                state.count(|call| matches!(call, Call::RuntimeMax(_) | Call::OomPolicy(_))),
+                0,
+                "{case}: a policy was proven unbound"
+            );
+        }
+        abandon(boundary, pid);
+    }
+}
+
+#[test]
+fn r3r1_05_an_unavailable_or_malformed_identity_binds_nothing() {
+    // At the capture: the start job's removal never arrives, the job fails,
+    // the identity is malformed, null, ambiguous or sent after the removal,
+    // or the sender's serials wrapped. The accepted start has no identity:
+    // nothing it created is ever opened, ended, proven or launched into, and
+    // it is confirmed only once the manager has unloaded the unit by itself
+    // (NoSuchUnit, the helper outside).
+    for capture in [
+        Capture::Timeout,
+        Capture::JobFailed,
+        Capture::Malformed,
+        Capture::Null,
+        Capture::Two,
+        Capture::Late,
+        Capture::Wrapped,
+    ] {
+        let case = format!("{capture:?}");
+        let world = World::new(|state| state.capture = capture);
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert!(!launched(&report), "{case}");
+        assert!(
+            matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_)))),
+            "{case}: {:?}",
+            report.not_run
+        );
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{case}");
+        let boundary = boundary_of(report);
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.accepted && !observed.instance && !observed.candidate && !observed.owned,
+            "{case}: {observed:?}"
+        );
+        let boundary = retained_through(boundary, 1, &case);
+        unloaded(&world);
+        boundary.retry().unwrap();
+        assert!(!is_child(pid), "{case}");
+        assert_eq!(
+            world
+                .lock()
+                .count(|call| matches!(call, Call::Open(_) | Call::Kill(_))),
+            0,
+            "{case}: what a start without an identity created was opened or ended"
+        );
+    }
+    // At the binding: the manager's answer is an error, a timeout, a broken
+    // connection, a reply that does not decode, or no usable identity
+    // (another type, another length, all zero: no identity). Never bound or
+    // ended; once the manager answers exactly, bound, ended and confirmed
+    // through the descriptor.
+    for answer in [
+        Property::Uncertain(Reply::Error),
+        Property::Uncertain(Reply::Timeout),
+        Property::Uncertain(Reply::Disconnect),
+        Property::Uncertain(Reply::Malformed),
+        Property::WrongType,
+    ] {
+        let case = format!("{answer:?}");
+        let world = World::new(|state| state.unit_instance = Script::always(answer));
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert!(!launched(&report), "{case}");
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{case}");
+        let boundary = boundary_of(report);
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.candidate && !observed.owned,
+            "{case}: {observed:?}"
+        );
+        assert_eq!(
+            world.lock().created().unwrap().kills,
+            0,
+            "{case}: a candidate was ended unbound"
+        );
+        world.release();
+        world.lock().unit_instance = Script::always(Property::Exact);
+        boundary.retry().unwrap();
+        assert!(world.lock().created().unwrap().killed, "{case}");
+        assert!(!is_child(pid), "{case}");
+        assert!(kills_follow_a_binding(&world), "{case}");
+    }
+}
+
+#[test]
+fn r3r1_06_an_owned_candidate_whose_policy_fails_is_ended_never_launched() {
+    // The candidate is bound to the captured identity (cleanup ownership);
+    // then a limit, the runtime backstop, the out-of-memory policy, or the
+    // identity read after them is not as required: no launch, and the owned
+    // candidate is ended through its descriptor and confirmed. A foreign
+    // unit elsewhere is never touched.
+    let cases: [(&str, Arrange, &str); 4] = [
+        (
+            "a limit",
+            |state| state.limit_mismatch = Some("memory.max"),
+            "memory.max",
+        ),
+        (
+            "the runtime backstop",
+            |state| state.runtime_max = Property::Wrong,
+            "runtime backstop",
+        ),
+        (
+            "the out-of-memory policy",
+            |state| state.oom_policy = Property::Wrong,
+            "out-of-memory policy",
+        ),
+        (
+            "the identity after the policy",
+            |state| {
+                state.unit_instance =
+                    Script::first([Property::Exact, Property::Exact], Property::Wrong)
+            },
+            "unit instance",
+        ),
+    ];
+    for (case, script, error) in cases {
+        let world = World::new(|state| {
+            script(state);
+            state.load_foreign("foreign.scope", HOLDER);
+        });
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert!(!launched(&report), "{case}: launched despite the policy");
+        assert!(
+            report.cleanup.is_confirmed(),
+            "{case}: the owned candidate was not ended through its descriptor"
+        );
+        assert!(
+            matches!(report.not_run, Some(NotRun::Scope(ScopeError::Mismatch(found))) if found == error),
+            "{case}: {:?}",
+            report.not_run
+        );
+        assert!(
+            world.lock().created().unwrap().killed,
+            "{case}: the owned candidate was not ended through its descriptor"
+        );
+        assert!(kills_follow_a_binding(&world), "{case}");
+        let state = world.lock();
+        let foreign = &state.cgroups[state.units["foreign.scope"].cgroup.unwrap()];
+        assert!(
+            !foreign.killed && foreign.kills == 0 && foreign.members.contains(&HOLDER),
+            "{case}: a foreign unit was touched"
+        );
+        drop(state);
+        assert!(!is_child(pid), "{case}");
+    }
+}
+
+#[test]
+fn r3r1_07_an_uncertain_start_that_created_its_scope_is_never_ended_proven_or_launched() {
+    // The start created the unit and placed the helper, but the success
+    // reply was lost: no identity exists independent of that reply, so the
+    // cgroup is never opened, ended, proven or launched into, and the
+    // operation stays owned with its helper unreaped, even once the manager
+    // has unloaded the unit by itself (the accepted availability cost).
+    for reply in [
+        Reply::Timeout,
+        Reply::Disconnect,
+        Reply::Error,
+        Reply::Malformed,
+    ] {
+        let case = format!("{reply:?}");
+        let world = World::new(|state| state.start_reply = reply);
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert!(
+            !launched(&report),
+            "{case}: an uncertain start was launched into"
+        );
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{case}");
+        let boundary = boundary_of(report);
+        world.release();
+        let boundary = retained_through(boundary, 1, &case);
+        {
+            let state = world.lock();
+            assert_eq!(
+                state.count(|call| matches!(call, Call::Open(_) | Call::Kill(_))),
+                0,
+                "{case}: an uncertain start's scope was opened or ended"
+            );
+            let created = state.created().unwrap();
+            assert!(
+                created.members.contains(&pid) && created.kills == 0 && !created.killed,
+                "{case}"
+            );
+        }
+        unloaded(&world);
+        let boundary = retained_through(boundary, 1, &case);
+        assert!(boundary.holds_helper() && is_child(pid), "{case}");
+        abandon(boundary, pid);
+    }
+    // Through the live harness's direct owner.
+    let world = World::new(|state| state.start_reply = Reply::Timeout);
+    let (placed, pid) = place_cat(&world);
+    let failed = placed.expect_err("an uncertain start was proven");
+    let Cleanup::Failed(boundary) = failed.cleanup else {
+        panic!("an uncertain start was confirmed");
+    };
+    assert_eq!(
+        world
+            .lock()
+            .count(|call| matches!(call, Call::Open(_) | Call::Kill(_))),
+        0,
+        "an uncertain start's scope was opened or ended"
+    );
+    abandon(boundary, pid);
+}
+
+#[test]
+fn r3r1_08_a_delivered_collision_is_unchanged() {
+    // Exactly `UnitExists`, delivered (I4-R1; i4r1_15, i4r1_16): the foreign
+    // unit, holding a process of its own and the helper or not, is never
+    // opened, ended, read, proven or launched into; the operation is
+    // confirmed once the helper is outside it.
+    for holds in [false, true] {
+        let case = format!("holds the helper: {holds}");
+        let world = World::new(|state| {
+            foreign_collision(state, Reply::Delivered);
+            state.collision_holds_helper = holds;
+        });
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert!(!launched(&report), "{case}");
+        assert!(
+            matches!(&report.not_run, Some(NotRun::Scope(ScopeError::Bus(reason))) if reason.contains("the unit exists")),
+            "{case}: {:?}",
+            report.not_run
+        );
+        if holds {
+            let boundary = boundary_of(report);
+            let observed = pending_state(&boundary);
+            assert!(observed.collided && !observed.instance && !observed.candidate);
+            world.lock().membership.remove(&pid);
+            boundary.retry().unwrap();
+        } else {
+            assert!(report.cleanup.is_confirmed(), "{case}");
+        }
+        foreign_untouched(&world, &case);
+        assert_eq!(
+            world.lock().count(|call| matches!(
+                call,
+                Call::GetUnit(_)
+                    | Call::UnitInstance(_)
+                    | Call::ControlGroupId(_)
+                    | Call::RuntimeMax(_)
+                    | Call::OomPolicy(_)
+            )),
+            0,
+            "{case}: the foreign unit was claimed"
+        );
+        assert!(!is_child(pid), "{case}");
+    }
+}
+
+#[test]
+fn r3r1_09_no_panic_grants_cleanup_or_launch_authority_early() {
+    // A panic at every identity and ownership boundary: inside the manager
+    // after the start is dispatched, once it returned, after its success
+    // reply while the identity is captured; once the candidate is retained;
+    // inside the binding; once it is owned; during the policy proof; at the
+    // promotion to the proven scope. No panic crosses the owner, nothing is
+    // ended before a complete binding of it, nothing is launched, and the
+    // helper is never reaped while the operation is unresolved. Before the
+    // identity is recorded the operation stays owned unconfirmed; after it,
+    // the candidate is bound (again, by the finalizer, if the panic came
+    // first), ended and confirmed.
+    #[derive(Debug, Clone, Copy)]
+    enum At {
+        Fault(FaultPoint),
+        Model(Op),
+    }
+    let points = [
+        (At::Model(Op::Start), false),
+        (At::Fault(FaultPoint::AfterScopeStart), false),
+        (At::Model(Op::Capture), false),
+        (At::Fault(FaultPoint::ScopeProof), true),
+        (At::Fault(FaultPoint::ScopeCandidate), true),
+        (At::Model(Op::GetUnit), true),
+        (At::Fault(FaultPoint::ScopeBinding), true),
+        (At::Model(Op::UnitInstance), true),
+        (At::Model(Op::UnitId), true),
+        (At::Model(Op::ControlGroup), true),
+        (At::Model(Op::ControlGroupId), true),
+        (At::Fault(FaultPoint::ScopeOwned), true),
+        (At::Fault(FaultPoint::ScopeProperties), true),
+        (At::Model(Op::RuntimeMax), true),
+        (At::Fault(FaultPoint::ScopePromotion), true),
+    ];
+    for (at, identified) in points {
+        let mut runs = vec![false];
+        if matches!(at, At::Model(_)) {
+            runs.push(true);
+        }
+        for direct in runs {
+            let case = format!("{at:?}, direct owner: {direct}");
+            let world = World::new(|state| {
+                if let At::Model(op) = at {
+                    state.panic_at = Some(op);
+                }
+            });
+            let fault = match at {
+                At::Fault(point) => Some(Fault::Panic(point)),
+                At::Model(_) => None,
+            };
+            let Ok((cleanup, launched, pid)) = catch_unwind(AssertUnwindSafe(|| {
+                if direct {
+                    let (placed, pid) = place_cat(&world);
+                    let cleanup = match placed {
+                        Ok(placed) => panic!("a panicked placement was proven: {placed:?}"),
+                        Err(failed) => failed.cleanup,
+                    };
+                    (cleanup, false, pid)
+                } else {
+                    let report = run_in(&world, fault);
+                    let launched = launched(&report);
+                    (report.cleanup, launched, requested_pid(&world))
+                }
+            })) else {
+                panic!("{case}: a panic crossed the owner");
+            };
+            assert!(!launched, "{case}: launched before the scope was proven");
+            assert!(
+                kills_follow_a_binding(&world),
+                "{case}: a cgroup was ended before it was bound"
+            );
+            assert!(
+                observed_unreaped(&world),
+                "{case}: the helper was reaped while unresolved"
+            );
+            match cleanup {
+                Cleanup::Confirmed => {
+                    assert!(identified, "{case}: confirmed without an identity");
+                    assert!(world.lock().created().unwrap().killed, "{case}");
+                    assert!(!is_child(pid), "{case}");
+                }
+                Cleanup::Failed(boundary) => {
+                    assert!(
+                        !identified,
+                        "{case}: an identified operation was not settled"
+                    );
+                    let observed = pending_state(&boundary);
+                    assert!(
+                        observed.issued && !observed.instance && !observed.candidate,
+                        "{case}: {observed:?}"
+                    );
+                    assert!(boundary.holds_helper() && is_child(pid), "{case}");
+                    assert_eq!(
+                        world
+                            .lock()
+                            .count(|call| matches!(call, Call::Open(_) | Call::Kill(_))),
+                        0,
+                        "{case}"
+                    );
+                    abandon(boundary, pid);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn r3r1_10_no_authority_appears_when_a_retained_operation_is_retried_without_its_scope_manager() {
+    // Retained operations retried on the issuing connection after the
+    // ScopeManager that started them is gone: an uncertain start whose
+    // helper is in the unit's cgroup, an accepted start without an
+    // identity, one whose candidate reports another identity, and one whose
+    // identity read went unanswered. Nothing is ended that was not bound; the
+    // unanswered one is bound, ended and confirmed once the manager answers.
+    let cases: [(&str, Arrange); 4] = [
+        ("uncertain", |state| state.start_reply = Reply::Timeout),
+        ("no identity", |state| state.capture = Capture::Timeout),
+        ("another identity", |state| {
+            state.unit_instance = Script::always(Property::Wrong)
+        }),
+        ("unanswered", |state| {
+            state.unit_instance = Script::always(Property::Uncertain(Reply::Timeout))
+        }),
+    ];
+    for (case, script) in cases {
+        let world = World::new(script);
+        let stand_in = StandIn::new();
+        let scopes = world.scopes();
+        let report = execute(&scopes, &stand_in.program(), launch_spec(), &LIMITS, None);
+        let pid = requested_pid(&world);
+        drop(scopes);
+        assert!(!launched(&report), "{case}");
+        let boundary = boundary_of(report);
+        world.release();
+        let boundary = retained_through(boundary, 2, case);
+        assert_eq!(
+            world.lock().count(|call| matches!(call, Call::Kill(_))),
+            0,
+            "{case}: authority appeared without the ScopeManager"
+        );
+        if case == "unanswered" {
+            world.lock().unit_instance = Script::always(Property::Exact);
+            boundary.retry().unwrap();
+            assert!(world.lock().created().unwrap().killed, "{case}");
+            assert!(kills_follow_a_binding(&world), "{case}");
+            assert!(!is_child(pid), "{case}");
+        } else {
+            assert!(boundary.holds_helper() && is_child(pid), "{case}");
+            abandon(boundary, pid);
+        }
+    }
+}
+
+#[test]
+fn r3r1_x_a_start_whose_signals_cannot_be_watched_is_never_sent() {
+    // The start's own signals are matched before its request exists; when
+    // they cannot be (Subscribe or a match refused or timed out), the
+    // request is never sent: nothing can exist, so the operation is
+    // confirmed at once, nothing is asked of the manager or the kernel
+    // beyond it, and the helper is reaped.
+    let world = World::new(|state| state.watch_fails = true);
+    let stand_in = StandIn::new();
+    let scopes = world.scopes();
+    let report = execute(&scopes, &stand_in.program(), launch_spec(), &LIMITS, None);
+    assert!(!launched(&report));
+    assert!(
+        matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_)))),
+        "{:?}",
+        report.not_run
+    );
+    assert!(
+        report.cleanup.is_confirmed(),
+        "a start never sent was not confirmed"
+    );
+    assert_eq!(report.classify(0), ExitClass::SandboxUnavailable);
+    let state = world.lock();
+    assert!(
+        state.calls.is_empty(),
+        "a start never sent asked the manager or the kernel: {:?}",
+        state.calls
+    );
+    assert!(state.units.is_empty() && state.cgroups.is_empty());
 }

@@ -16,13 +16,25 @@
 //! acts on a unit by its name (P2-V1-R3B-I4-R3). A unit goes only when the
 //! manager unloads it by itself, and a test may then load a foreign unit
 //! under the same name ([`State::unload`], [`State::load_foreign`]).
+//!
+//! Every unit invocation has its own random-like identity and every cgroup
+//! directory its own kernel ID, never reused (P2-V1-R3B-I4-R3-R1). An
+//! accepted start's identity is captured by the production rule
+//! ([`captured_instance`]) from the signals systemd would send, or from
+//! scripted others ([`Capture`]); the manager answers a unit's
+//! `InvocationID` and `ControlGroupId` from the truth it keeps or a
+//! scripted other answer, and a test may replace a unit's directory under
+//! the manager's record ([`State::swap_directory`]).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::io;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use super::manager::{Manager, Presence, Remote, ScopeRequest, Started};
+use super::manager::{
+    captured_instance, Invocation, Manager, Presence, Remote, ScopeRequest, Started, UnitChange,
+    UnitInstance,
+};
 use super::native::{CgroupDir, Native};
 use super::{expected_limit_files, Controller, ScopeError, ScopeManager, Timing};
 use crate::launcher::{Helper, HelperProgram};
@@ -92,6 +104,46 @@ pub(crate) enum Property {
     Uncertain(Reply),
 }
 
+/// How the start's own signals reach the backend, from which the
+/// production rule ([`captured_instance`]) captures the identity of the
+/// invocation the start began (P2-V1-R3B-I4-R3-R1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Capture {
+    /// What systemd sends: the pristine unit's null identity, then its new
+    /// identity, between the reply and the start job's removal (`done`).
+    Exact,
+    /// The start job's removal never arrives within the bound.
+    Timeout,
+    /// The start job ends `failed`.
+    JobFailed,
+    /// The change carries a malformed identity (another length or type).
+    Malformed,
+    /// The change carries only the null identity.
+    Null,
+    /// A second, different identity also appears inside the window.
+    Two,
+    /// The identity is sent only after the start job's removal.
+    Late,
+    /// The removal's serial is not above the reply's (the sender's serials
+    /// wrapped).
+    Wrapped,
+}
+
+/// What another client of the manager does once an accepted start's
+/// identity is captured, before the proof (P2-V1-R3B-I4-R3-R1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Interference {
+    None,
+    /// The manager unloads this request's unit, and the client loads a
+    /// unit of its own under the same name, its cgroup at the same path
+    /// holding this process of its own and the helper (moved there).
+    Replace(u32),
+    /// The client removes the unit's directory and creates another at the
+    /// same path, holding this process of its own and the helper; the
+    /// manager still records the unit's own directory.
+    Swap(u32),
+}
+
 /// A process in a unit's cgroup beyond the placed helper.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Phantom {
@@ -123,10 +175,15 @@ pub(crate) enum Placement {
 /// it has.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Op {
+    /// After the start's effect, before any reply.
     Start,
+    /// After the start's success reply, while its identity is captured.
+    Capture,
     GetUnit,
+    UnitInstance,
     UnitId,
     ControlGroup,
+    ControlGroupId,
     RuntimeMax,
     Membership,
     Open,
@@ -174,6 +231,10 @@ pub(crate) enum Call {
     UnitId(String),
     /// The unit's `ControlGroup`, at the object path GetUnit returned.
     ControlGroup(String),
+    /// The unit's `InvocationID`, at the object path GetUnit returned.
+    UnitInstance(String),
+    /// The unit's `ControlGroupId`, at the object path GetUnit returned.
+    ControlGroupId(String),
     RuntimeMax(String),
     OomPolicy(String),
     /// A membership read: the helper's process id, and whether it was then
@@ -187,12 +248,17 @@ pub(crate) enum Call {
 pub(crate) struct Unit {
     /// Created by a request of this backend (not a foreign unit).
     pub ours: bool,
+    /// The manager's record of its cgroup: the directory it realized.
     pub cgroup: Option<usize>,
+    /// This invocation's identity.
+    pub instance: UnitInstance,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct Cgroup {
     pub path: String,
+    /// The kernel's ID of this directory: never reused.
+    pub id: u64,
     pub v2: bool,
     pub removed: bool,
     pub members: BTreeSet<u32>,
@@ -236,6 +302,12 @@ pub(crate) struct State {
     /// process id: the model never signals a real process).
     pub foreign_member: Option<u32>,
     pub placement: Placement,
+    /// How the accepted start's own signals reach the backend.
+    pub capture: Capture,
+    /// The start's signals cannot be watched: the request is never sent.
+    pub watch_fails: bool,
+    /// What another client does once the identity is captured.
+    pub interference: Interference,
     /// The created unit is loaded in the manager (`false`: the kernel has
     /// a cgroup of its name the manager does not know).
     pub unit_loaded: bool,
@@ -247,6 +319,11 @@ pub(crate) struct State {
     pub get_unit: Script<Reply>,
     pub unit_id: Text,
     pub control_group: Text,
+    /// `InvocationID` reads, one answer per read (`Wrong`: another valid
+    /// identity).
+    pub unit_instance: Script<Property>,
+    /// `ControlGroupId` reads (`Wrong`: another directory's ID).
+    pub control_group_id: Property,
     pub runtime_max: Property,
     pub oom_policy: Property,
     /// Opens that still succeed (`None`: every one).
@@ -260,6 +337,8 @@ pub(crate) struct State {
     pub membership: HashMap<u32, String>,
     pub calls: Vec<Call>,
     placing: Option<(u32, usize, u32)>,
+    /// The last identity or directory ID handed out.
+    ids: u64,
 }
 
 impl Default for State {
@@ -273,6 +352,9 @@ impl Default for State {
             collision_reply: Reply::Delivered,
             foreign_member: None,
             placement: Placement::Immediate,
+            capture: Capture::Exact,
+            watch_fails: false,
+            interference: Interference::None,
             unit_loaded: true,
             cgroup_v2: true,
             listed: true,
@@ -281,6 +363,8 @@ impl Default for State {
             get_unit: Script::always(Reply::Delivered),
             unit_id: Text::Exact,
             control_group: Text::Exact,
+            unit_instance: Script::always(Property::Exact),
+            control_group_id: Property::Exact,
             runtime_max: Property::Exact,
             oom_policy: Property::Exact,
             opens_left: None,
@@ -291,11 +375,68 @@ impl Default for State {
             membership: HashMap::new(),
             calls: Vec::new(),
             placing: None,
+            ids: 0x1000,
         }
     }
 }
 
+/// The model's identity number `n`: 16 bytes, never all zero.
+pub(crate) fn model_instance(n: u64) -> UnitInstance {
+    let mut bytes = [0x5a; 16];
+    bytes[..8].copy_from_slice(&n.to_le_bytes());
+    UnitInstance::from_property(&bytes).expect("a valid identity")
+}
+
+/// A valid identity that is not `instance`.
+pub(crate) fn other_instance(instance: UnitInstance) -> UnitInstance {
+    let mut bytes = instance.bytes();
+    bytes[15] ^= 0xff;
+    UnitInstance::from_property(&bytes).expect("a valid identity")
+}
+
 impl State {
+    /// A fresh identity or directory ID: never handed out before.
+    fn fresh(&mut self) -> u64 {
+        self.ids += 1;
+        self.ids
+    }
+
+    /// A new unit invocation's identity.
+    pub(crate) fn fresh_instance(&mut self) -> UnitInstance {
+        let n = self.fresh();
+        model_instance(n)
+    }
+
+    /// Add `cgroup` as a new directory, with a kernel ID of its own; its
+    /// index.
+    pub(crate) fn add_cgroup(&mut self, mut cgroup: Cgroup) -> usize {
+        cgroup.id = self.fresh();
+        self.cgroups.push(cgroup);
+        self.cgroups.len() - 1
+    }
+
+    /// Someone removes the directory the manager realized for `unit` and
+    /// creates another at the same path, with the same limits, holding
+    /// `members` (moved there; a model process id never signals a real
+    /// process). The manager still records the unit's own directory: its
+    /// path, which is the new one's too, and its ID. Returns the new
+    /// directory's index.
+    pub(crate) fn swap_directory(&mut self, unit: &str, members: &[u32]) -> usize {
+        let index = self.units[unit].cgroup.expect("the unit's cgroup");
+        let mut replacement = self.cgroups[index].clone();
+        self.cgroups[index].removed = true;
+        self.cgroups[index].members.clear();
+        replacement.members.clear();
+        replacement.killed = false;
+        replacement.kills = 0;
+        replacement.phantom = Phantom::None;
+        let new = self.add_cgroup(replacement);
+        for member in members {
+            self.place(*member, new);
+        }
+        new
+    }
+
     /// The kernel reports `pid` in the cgroup at `index`.
     pub(crate) fn place(&mut self, pid: u32, index: usize) {
         self.cgroups[index].members.insert(pid);
@@ -328,9 +469,9 @@ impl State {
     /// Returns that cgroup's index.
     pub(crate) fn load_foreign(&mut self, unit: &str, member: u32) -> usize {
         assert!(!self.units.contains_key(unit), "the name is still loaded");
-        let index = self.cgroups.len();
-        self.cgroups.push(Cgroup {
+        let index = self.add_cgroup(Cgroup {
             path: format!("{SLICE}/{unit}"),
+            id: 0,
             v2: true,
             removed: false,
             members: BTreeSet::new(),
@@ -342,11 +483,13 @@ impl State {
             kills: 0,
         });
         self.place(member, index);
+        let instance = self.fresh_instance();
         self.units.insert(
             unit.to_string(),
             Unit {
                 ours: false,
                 cgroup: Some(index),
+                instance,
             },
         );
         index
@@ -445,9 +588,45 @@ impl World {
 
 struct FakeManager(World);
 
+/// The identity the backend captures for an accepted start that began
+/// `instance`: the production rule over the signals the script sends.
+fn captured(capture: Capture, instance: UnitInstance) -> Result<UnitInstance, String> {
+    const REPLY: u32 = 100;
+    let change = |serial, invocation| UnitChange { serial, invocation };
+    let (removed, result, changes) = match capture {
+        Capture::Exact => (
+            110,
+            "done",
+            vec![
+                change(101, Invocation::Null),
+                change(105, Invocation::Id(instance)),
+            ],
+        ),
+        Capture::Timeout => return Err("JobRemoved timed out".to_string()),
+        Capture::JobFailed => (110, "failed", vec![change(105, Invocation::Id(instance))]),
+        Capture::Malformed => (110, "done", vec![change(105, Invocation::Malformed)]),
+        Capture::Null => (110, "done", vec![change(105, Invocation::Null)]),
+        Capture::Two => (
+            110,
+            "done",
+            vec![
+                change(105, Invocation::Id(instance)),
+                change(107, Invocation::Id(other_instance(instance))),
+            ],
+        ),
+        Capture::Late => (110, "done", vec![change(111, Invocation::Id(instance))]),
+        Capture::Wrapped => (90, "done", vec![change(105, Invocation::Id(instance))]),
+    };
+    captured_instance(REPLY, removed, result, &changes)
+}
+
 impl Manager for FakeManager {
     fn start_scope(&self, request: &ScopeRequest<'_>) -> Started {
         let mut state = self.0.lock();
+        if state.watch_fails {
+            // Its signals could not be watched: the request is never sent.
+            return Started::NotIssued("watching the start timed out".to_string());
+        }
         state
             .calls
             .push(Call::Start(request.unit.to_string(), request.helper_pid));
@@ -459,9 +638,9 @@ impl Manager for FakeManager {
                 let holds_helper = state.collision_holds_helper;
                 let foreign = state.foreign_member;
                 let cgroup = (holds_helper || foreign.is_some()).then(|| {
-                    let index = state.cgroups.len();
-                    state.cgroups.push(Cgroup {
+                    let index = state.add_cgroup(Cgroup {
                         path: format!("{SLICE}/{}", request.unit),
+                        id: 0,
                         v2: true,
                         removed: false,
                         members: BTreeSet::new(),
@@ -480,11 +659,13 @@ impl Manager for FakeManager {
                     }
                     index
                 });
+                let instance = state.fresh_instance();
                 state.units.insert(
                     request.unit.to_string(),
                     Unit {
                         ours: false,
                         cgroup,
+                        instance,
                     },
                 );
             }
@@ -500,14 +681,15 @@ impl Manager for FakeManager {
             state.start_effect || state.start_reply != Reply::Delivered,
             "a delivered start always created its unit"
         );
+        let mut started = None;
         if state.start_effect {
             let path = match state.placement {
                 Placement::Elsewhere(path) => expand(path, request.unit),
                 _ => format!("{SLICE}/{}", request.unit),
             };
-            let index = state.cgroups.len();
             let cgroup = Cgroup {
                 path,
+                id: 0,
                 v2: state.cgroup_v2,
                 removed: false,
                 members: BTreeSet::new(),
@@ -518,13 +700,16 @@ impl Manager for FakeManager {
                 limit_mismatch: state.limit_mismatch,
                 kills: 0,
             };
-            state.cgroups.push(cgroup);
+            let index = state.add_cgroup(cgroup);
+            let instance = state.fresh_instance();
+            started = Some(instance);
             if state.unit_loaded {
                 state.units.insert(
                     request.unit.to_string(),
                     Unit {
                         ours: true,
                         cgroup: Some(index),
+                        instance,
                     },
                 );
             }
@@ -535,8 +720,7 @@ impl Manager for FakeManager {
                 Placement::Beside(path) => {
                     let mut beside = state.cgroups[index].clone();
                     beside.path = expand(path, request.unit);
-                    state.cgroups.push(beside);
-                    let beside = state.cgroups.len() - 1;
+                    let beside = state.add_cgroup(beside);
                     state.place(request.helper_pid, beside);
                 }
                 Placement::AfterReads(reads) => {
@@ -550,7 +734,27 @@ impl Manager for FakeManager {
         }
         let reply = state.start_reply;
         match state.connection(reply) {
-            Reply::Delivered => Started::Accepted,
+            Reply::Delivered => {
+                // The success reply is delivered; the identity is captured
+                // from the start's own signals before anything is returned.
+                if state.panics(Op::Capture) {
+                    panic_in(state, Op::Capture);
+                }
+                let instance = started.expect("a delivered start created its unit");
+                let captured = captured(state.capture, instance);
+                match state.interference {
+                    Interference::None => {}
+                    Interference::Replace(member) => {
+                        state.unload(request.unit);
+                        let index = state.load_foreign(request.unit, member);
+                        state.place(request.helper_pid, index);
+                    }
+                    Interference::Swap(member) => {
+                        state.swap_directory(request.unit, &[request.helper_pid, member]);
+                    }
+                }
+                Started::Accepted(captured)
+            }
             reply => Started::Uncertain(reply.reason("StartTransientUnit")),
         }
     }
@@ -642,6 +846,54 @@ impl Manager for FakeManager {
             )),
             Text::Is(text) => Remote::Answered(Some(expand(text, unit))),
             Text::WrongType => Remote::Answered(None),
+        }
+    }
+
+    fn unit_instance(&self, unit_path: &str) -> Remote<Option<UnitInstance>> {
+        let mut state = self.0.lock();
+        state.calls.push(Call::UnitInstance(unit_path.to_string()));
+        if state.panics(Op::UnitInstance) {
+            panic_in(state, Op::UnitInstance);
+        }
+        let unit = unit_path.strip_prefix("/unit/").unwrap_or_default();
+        let current = state.units.get(unit).map(|unit| unit.instance);
+        match state.unit_instance.next() {
+            Property::Uncertain(reply) => {
+                Remote::Uncertain(state.connection(reply).reason("Get InvocationID"))
+            }
+            _ if state.broken => Remote::Uncertain(Reply::Disconnect.reason("Get")),
+            Property::Exact => Remote::Answered(current),
+            Property::Wrong => Remote::Answered(Some(other_instance(
+                current.unwrap_or_else(|| model_instance(1)),
+            ))),
+            Property::WrongType => Remote::Answered(None),
+        }
+    }
+
+    fn control_group_id(&self, unit_path: &str) -> Remote<Option<u64>> {
+        let mut state = self.0.lock();
+        state
+            .calls
+            .push(Call::ControlGroupId(unit_path.to_string()));
+        if state.panics(Op::ControlGroupId) {
+            panic_in(state, Op::ControlGroupId);
+        }
+        let unit = unit_path.strip_prefix("/unit/").unwrap_or_default();
+        // The manager's record: the directory it realized for the unit (0
+        // without one, as systemd answers).
+        let recorded = state
+            .units
+            .get(unit)
+            .and_then(|unit| unit.cgroup)
+            .map_or(0, |index| state.cgroups[index].id);
+        match state.control_group_id {
+            Property::Uncertain(reply) => {
+                Remote::Uncertain(state.connection(reply).reason("Get ControlGroupId"))
+            }
+            _ if state.broken => Remote::Uncertain(Reply::Disconnect.reason("Get")),
+            Property::Exact => Remote::Answered(Some(recorded)),
+            Property::Wrong => Remote::Answered(Some(recorded + 0x10_0000)),
+            Property::WrongType => Remote::Answered(None),
         }
     }
 }
@@ -797,6 +1049,10 @@ impl CgroupDir for FakeDir {
     fn listing_is_empty(&self) -> io::Result<bool> {
         Ok(self.world.lock().cgroups[self.index].removed)
     }
+
+    fn cgroup_id(&self) -> io::Result<u64> {
+        Ok(self.world.lock().cgroups[self.index].id)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -860,22 +1116,37 @@ fn i4_01_a_confirmed_start_with_every_proof_is_proven() {
     assert_eq!(scope.unit(), unit);
     assert!(unit.starts_with("nexus-verifier-") && unit.ends_with(".scope"));
     // Proven through the kernel's view of the helper, the retained cgroup,
-    // the manager's unit bound to it and the manager's properties, and
+    // the manager's unit bound to it (P2-V1-R3B-I4-R3-R1: the invocation the
+    // start captured, read before and after its `Id`, control group and the
+    // directory's ID) and the manager's properties, still that invocation;
     // nothing was stopped.
+    let object = format!("/unit/{unit}");
     assert_eq!(
         state.calls,
         [
             Call::Start(unit.clone(), pid),
             Call::Membership(pid, true),
             Call::Open(format!("{SLICE}/{unit}")),
+            Call::Membership(pid, true),
             Call::GetUnit(unit.clone()),
-            Call::UnitId(format!("/unit/{unit}")),
-            Call::ControlGroup(format!("/unit/{unit}")),
-            Call::RuntimeMax(format!("/unit/{unit}")),
-            Call::OomPolicy(format!("/unit/{unit}")),
+            Call::UnitInstance(object.clone()),
+            Call::UnitId(object.clone()),
+            Call::ControlGroup(object.clone()),
+            Call::ControlGroupId(object.clone()),
+            Call::UnitInstance(object.clone()),
+            Call::RuntimeMax(object.clone()),
+            Call::OomPolicy(object.clone()),
+            Call::UnitInstance(object),
         ]
     );
+    let (instance, id) = (state.units[&unit].instance, state.created().unwrap().id);
     drop(state);
+    assert_eq!(
+        scope.invocation_id(),
+        instance.bytes(),
+        "the scope is bound to another invocation"
+    );
+    assert_eq!(scope.cgroup_id().unwrap(), id);
     assert_eq!(scope.occupancy().unwrap(), Occupancy::Populated);
     assert!(placed.end().is_confirmed());
     assert!(!unreaped(pid));
@@ -912,33 +1183,58 @@ fn i4_02_a_start_without_effect_whose_reply_is_lost_is_never_proven_absent() {
 }
 
 #[test]
-fn i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven() {
+fn i4_03_a_start_with_effect_whose_reply_is_lost_is_never_proven_or_ended() {
+    // P2-V1-R3B-I4-R3-R1: the request created the unit and its job placed
+    // the helper, but the reply was lost (a timeout, a reply that does not
+    // decode, an unexpected error, a broken connection). Nothing identifies
+    // the invocation it may have started, so the cgroup the helper is in is
+    // never opened, proven, launched into or ended: the operation stays owned
+    // with its helper unreaped, through retries once the manager answers
+    // again (the accepted availability cost).
     for (reply, placement) in [
         (Reply::Timeout, Placement::Immediate),
         (Reply::Malformed, Placement::AfterReads(3)),
         (Reply::Error, Placement::Immediate),
+        (Reply::Disconnect, Placement::Immediate),
     ] {
         let world = World::new(|state| {
             state.start_reply = reply;
             state.placement = placement;
         });
-        let placed = place(&world.scopes(), helper(), &LIMITS).unwrap_or_else(|failed| {
-            panic!("{reply:?}: the unit a lost-reply start created was not discovered and proven: {failed:?}")
-        });
-        assert_eq!(
-            Some(placed.scope().unwrap().unit().to_string()),
-            world.lock().requested()
+        let (failed, pid) = refused(&world);
+        assert!(
+            matches!(failed.error, Some(ScopeError::Bus(_))),
+            "{reply:?}: {:?}",
+            failed.error
         );
-        assert!(placed.end().is_confirmed());
+        let boundary = retained(failed.cleanup);
+        let observed = boundary
+            .pending()
+            .expect("the unresolved operation is retained");
+        assert!(
+            observed.issued
+                && !observed.accepted
+                && !observed.instance
+                && !observed.candidate
+                && !observed.owned
+                && !observed.settled,
+            "{reply:?}: {observed:?}"
+        );
+        assert!(boundary.holds_helper() && unreaped(pid), "{reply:?}");
+        world.release();
+        let boundary = boundary.retry().unwrap_err();
+        let state = world.lock();
+        assert_eq!(
+            state.count(|call| matches!(call, Call::Open(_) | Call::Kill(_))),
+            0,
+            "{reply:?}: what an uncertain start may have created was opened or ended"
+        );
+        let created = state.created().unwrap();
+        assert!(created.kills == 0 && !created.killed, "{reply:?}");
+        assert!(state.units[&state.requested().unwrap()].ours, "{reply:?}");
+        drop(state);
+        abandon(boundary, pid);
     }
-    // The connection broke with the request: the scope cannot be proven,
-    // and what was created is settled through its retained cgroup.
-    let world = World::new(|state| state.start_reply = Reply::Disconnect);
-    let (failed, pid) = refused(&world);
-    assert!(matches!(failed.error, Some(ScopeError::Bus(_))));
-    assert!(failed.cleanup.is_confirmed(), "{failed:?}");
-    assert!(world.lock().created().unwrap().killed);
-    assert!(!unreaped(pid));
 }
 
 #[test]
@@ -1593,11 +1889,72 @@ fn items<'a>(source: &'a str, head: &str, end: &str) -> Vec<&'a str> {
     bodies
 }
 
+/// The four arguments (object path, interface, method, body) of every
+/// request `manager` makes through its one bounded call
+/// (`self.call::<…>(…)` or `self.call_reply::<…>(…)`), in source order,
+/// whitespace-normalized.
+fn manager_requests(manager: &str) -> Vec<[String; 4]> {
+    let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut requests = Vec::new();
+    for (at, head) in manager.match_indices("self.call") {
+        let rest = &manager[at + head.len()..];
+        let Some(rest) = rest
+            .strip_prefix("::<")
+            .or_else(|| rest.strip_prefix("_reply::<"))
+        else {
+            // The forwarding inside `call` itself.
+            continue;
+        };
+        // Past the turbofish.
+        let mut depth = 1;
+        let mut end = rest.len();
+        for (index, c) in rest.char_indices() {
+            match c {
+                '<' => depth += 1,
+                '>' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = index + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let rest = rest[end..]
+            .strip_prefix('(')
+            .expect("a request's arguments");
+        let mut depth = 0;
+        let mut arguments = vec![String::new()];
+        for c in rest.chars() {
+            match c {
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' if depth == 0 => break,
+                ')' | ']' | '}' => depth -= 1,
+                ',' if depth == 0 => {
+                    arguments.push(String::new());
+                    continue;
+                }
+                _ => {}
+            }
+            arguments.last_mut().expect("an argument").push(c);
+        }
+        let arguments: Vec<String> = arguments
+            .iter()
+            .map(|argument| words(argument))
+            .filter(|argument| !argument.is_empty())
+            .collect();
+        requests.push(arguments.try_into().expect("four arguments"));
+    }
+    requests
+}
+
 #[test]
 fn i4r3_10_the_manager_can_only_start_a_scope_and_read() {
     let manager = code_of(include_str!("manager.rs"));
     // The trait: one request that acts (a start, for a fresh name); every
-    // other one reads.
+    // other one reads (P2-V1-R3B-I4-R3-R1 adds the unit's `InvocationID` and
+    // `ControlGroupId`).
     let declared: Vec<&str> = items(&manager, "pub(crate) trait Manager: Send + Sync {", "\n}\n")
         [0]
     .lines()
@@ -1612,64 +1969,76 @@ fn i4r3_10_the_manager_can_only_start_a_scope_and_read() {
             "runtime_max_usec",
             "oom_policy",
             "unit_id",
-            "control_group"
+            "control_group",
+            "unit_instance",
+            "control_group_id"
         ],
         "the manager can act on a unit by its name"
     );
     // Every request goes through the one bounded call, to these methods
-    // only: StartTransientUnit, GetUnit, and property reads.
+    // only: Subscribe (it acts on no unit: the manager sends this connection
+    // its signals, so that a start captures its own identity),
+    // StartTransientUnit, GetUnit, and property reads.
     assert_eq!(manager.matches(".call_method(").count(), 1);
     assert_eq!(
+        manager
+            .matches("self.call_reply(path, interface, method, body)")
+            .count(),
+        1
+    );
+    assert_eq!(
         manager.matches("self.call").count(),
-        6,
+        10,
         "the manager can act on a unit by its name"
     );
-    let requests: Vec<Vec<&str>> = manager
-        .split("self.call::<")
-        .skip(1)
-        .map(|call| {
-            call.lines()
-                .skip(1)
-                .take(4)
-                .map(|argument| argument.trim().trim_end_matches(','))
-                .collect()
-        })
-        .collect();
-    let expected: [[&str; 4]; 6] = [
-        [
-            "SYSTEMD_PATH",
-            "MANAGER",
-            "\"StartTransientUnit\"",
-            "&(request.unit, \"fail\", properties, aux)",
-        ],
-        ["SYSTEMD_PATH", "MANAGER", "\"GetUnit\"", "&(unit,)"],
-        [
-            "unit_path",
-            "PROPERTIES",
-            "\"Get\"",
-            "&(SCOPE_INTERFACE, \"RuntimeMaxUSec\")",
-        ],
-        [
-            "unit_path",
-            "PROPERTIES",
-            "\"Get\"",
-            "&(SCOPE_INTERFACE, \"OOMPolicy\")",
-        ],
-        [
-            "unit_path",
-            "PROPERTIES",
-            "\"Get\"",
-            "&(UNIT_INTERFACE, \"Id\")",
-        ],
-        [
-            "unit_path",
-            "PROPERTIES",
-            "\"Get\"",
-            "&(SCOPE_INTERFACE, \"ControlGroup\")",
-        ],
-    ];
     assert_eq!(
-        requests, expected,
+        manager_requests(&manager),
+        [
+            ["SYSTEMD_PATH", "MANAGER", "\"Subscribe\"", "&()"],
+            [
+                "SYSTEMD_PATH",
+                "MANAGER",
+                "\"StartTransientUnit\"",
+                "&(request.unit, \"fail\", properties, aux)",
+            ],
+            ["SYSTEMD_PATH", "MANAGER", "\"GetUnit\"", "&(unit,)"],
+            [
+                "unit_path",
+                "PROPERTIES",
+                "\"Get\"",
+                "&(SCOPE_INTERFACE, \"RuntimeMaxUSec\")",
+            ],
+            [
+                "unit_path",
+                "PROPERTIES",
+                "\"Get\"",
+                "&(SCOPE_INTERFACE, \"OOMPolicy\")",
+            ],
+            [
+                "unit_path",
+                "PROPERTIES",
+                "\"Get\"",
+                "&(UNIT_INTERFACE, \"Id\")"
+            ],
+            [
+                "unit_path",
+                "PROPERTIES",
+                "\"Get\"",
+                "&(SCOPE_INTERFACE, \"ControlGroup\")",
+            ],
+            [
+                "unit_path",
+                "PROPERTIES",
+                "\"Get\"",
+                "&(UNIT_INTERFACE, \"InvocationID\")",
+            ],
+            [
+                "unit_path",
+                "PROPERTIES",
+                "\"Get\"",
+                "&(SCOPE_INTERFACE, \"ControlGroupId\")",
+            ],
+        ],
         "the manager can act on a unit by its name"
     );
     for needle in [
@@ -1701,8 +2070,9 @@ fn i4r3_10_the_manager_can_only_start_a_scope_and_read() {
 #[test]
 fn i4r3_10_settling_never_acts_on_a_unit_by_its_name() {
     let pending = code_of(include_str!("pending.rs"));
-    // Every manager request of a pending operation: the start, the proof's
-    // reads, and GetUnit once more, as the evidence of absence.
+    // Every manager request of a pending operation: the start, the
+    // binding's and the proof's reads, and GetUnit once more, as the
+    // evidence of absence.
     let mut requests: Vec<&str> = pending
         .split("controller.manager.")
         .skip(1)
@@ -1713,22 +2083,26 @@ fn i4r3_10_settling_never_acts_on_a_unit_by_its_name() {
         requests,
         [
             "control_group",
+            "control_group_id",
             "get_unit",
             "get_unit",
             "oom_policy",
             "runtime_max_usec",
             "start_scope",
-            "unit_id"
+            "unit_id",
+            "unit_instance"
         ],
         "settling acts on a unit through the manager"
     );
-    // Settling, observing and the drop backstop ask the manager nothing but
-    // that one read, through `absent`.
+    // Settling, observing and the drop backstop ask the manager nothing
+    // themselves: only reads, through the binding (`bind`) and `absent`.
     for head in [
         "    pub(crate) fn reconcile(",
         "    fn observe(",
         "    fn acquire(",
+        "    fn own(",
         "    fn gone(",
+        "    fn end_owned(",
         "    pub(crate) fn end_now(",
     ] {
         for body in items(&pending, head, "\n    }\n") {
@@ -1739,8 +2113,12 @@ fn i4r3_10_settling_never_acts_on_a_unit_by_its_name() {
         }
     }
     assert!(
+        !items(&pending, "    fn bind(", "\n    }\n")[0].contains("start_scope"),
+        "settling acts on a unit through the manager"
+    );
+    assert!(
         items(&pending, "    fn gone(", "\n    }\n")[0]
-            .contains("None => absent(controller, &self.unit, helper),"),
+            .contains("self.accepted && absent(controller, &self.unit, helper)"),
         "settling acts on a unit through the manager"
     );
     let absent = items(&pending, "\nfn absent(", "\n}\n")[0];
@@ -1786,7 +2164,8 @@ fn i4r3_10_a_recorded_start_reply_changes_only_what_absence_confirms() {
     // Set only in the delivered reply's arm, after the post-dispatch fault
     // point: a panic before the reply is recorded grants nothing.
     assert!(
-        items(&pending, "Started::Accepted => {", "}")[0].contains("self.accepted = true;"),
+        items(&pending, "Started::Accepted(captured) => {", "}")[0]
+            .contains("self.accepted = true;"),
         "a start is accepted other than in the delivered reply's arm"
     );
     assert_eq!(
@@ -1807,7 +2186,7 @@ fn i4r3_10_a_recorded_start_reply_changes_only_what_absence_confirms() {
     // test and debug views: never by anything that acts.
     for (read, count) in [
         ("self.accepted", 4),
-        ("None if !self.accepted => false,", 1),
+        ("self.accepted && absent(controller, &self.unit, helper)", 1),
         ("accepted: self.accepted,", 1),
         (".field(\"accepted\", &self.accepted)", 1),
     ] {
@@ -1835,4 +2214,406 @@ fn i4r3_10_a_recorded_start_reply_changes_only_what_absence_confirms() {
             .contains("derive"),
         "a pending operation derives a capability"
     );
+}
+
+// ---------------------------------------------------------------------------
+// P2-V1-R3B-I4-R3-R1: the identity of the unit invocation a start began, and
+// the separation of an observed candidate, cleanup authority and scope
+// authority. The production decoding and capture rule over exact values,
+// and tripwires over rustfmt-formatted source beside the behavioural tests
+// (`execution::tests::r3r1_*`).
+
+#[test]
+fn r3r1_05_the_identity_decoding_and_the_capture_rule_fail_closed() {
+    use super::manager::invocation_of;
+    use zbus::zvariant::{OwnedValue, Value};
+    let owned = |value: Value<'_>| -> OwnedValue { value.try_to_owned().expect("an owned value") };
+    // The manager's encoding (`ay`): exactly 16 bytes, not all zero, is an
+    // identity, and the empty array the null identity of a unit never
+    // started; any other value is none.
+    let bytes: Vec<u8> = (1..=16).collect();
+    let id = UnitInstance::from_property(&bytes).expect("an identity");
+    assert_eq!(id.bytes().as_slice(), bytes.as_slice());
+    assert_eq!(
+        invocation_of(owned(Value::from(bytes.clone()))),
+        Invocation::Id(id)
+    );
+    assert_eq!(
+        invocation_of(owned(Value::from(Vec::<u8>::new()))),
+        Invocation::Null
+    );
+    for (value, what) in [
+        (owned(Value::from(vec![0u8; 16])), "all zero"),
+        (owned(Value::from(vec![7u8; 15])), "15 bytes"),
+        (owned(Value::from(vec![7u8; 17])), "17 bytes"),
+        (owned(Value::from(vec![7u32; 16])), "16 integers"),
+        (owned(Value::from(42u64)), "an integer"),
+        (owned(Value::from("0123456789abcdef")), "a string"),
+        (
+            owned(Value::Value(Box::new(Value::from(bytes.clone())))),
+            "a variant inside the variant",
+        ),
+    ] {
+        assert_eq!(
+            invocation_of(value),
+            Invocation::Malformed,
+            "a wrong, zero or malformed identity was accepted: {what}"
+        );
+    }
+    for wrong in [&[0u8; 16][..], &bytes[..15], &[7u8; 17][..], &[][..]] {
+        assert_eq!(
+            UnitInstance::from_property(wrong),
+            None,
+            "a wrong, zero or malformed identity was accepted: {wrong:?}"
+        );
+    }
+    // The capture rule: the start job's removal reports `done` after the
+    // reply, and between the two exactly one distinct identity appears from
+    // the sender, none malformed. What systemd sends:
+    let (a, b) = (model_instance(1), model_instance(2));
+    let change = |serial, invocation| UnitChange { serial, invocation };
+    assert_eq!(
+        captured_instance(
+            100,
+            110,
+            "done",
+            &[
+                change(101, Invocation::Null),
+                change(105, Invocation::Id(a))
+            ]
+        ),
+        Ok(a)
+    );
+    // The same identity twice is one; what lies outside the window (at its
+    // bounds included) is not this start's.
+    assert_eq!(
+        captured_instance(
+            100,
+            110,
+            "done",
+            &[
+                change(99, Invocation::Id(b)),
+                change(100, Invocation::Malformed),
+                change(103, Invocation::Id(a)),
+                change(105, Invocation::Id(a)),
+                change(110, Invocation::Id(b)),
+                change(111, Invocation::Malformed),
+            ]
+        ),
+        Ok(a)
+    );
+    let refused: [(u32, u32, &str, Vec<UnitChange>, &str); 13] = [
+        (100, 110, "done", vec![], "no change"),
+        (
+            100,
+            110,
+            "done",
+            vec![change(105, Invocation::Null)],
+            "the null identity",
+        ),
+        (
+            100,
+            110,
+            "done",
+            vec![
+                change(103, Invocation::Id(a)),
+                change(105, Invocation::Malformed),
+            ],
+            "a malformed identity",
+        ),
+        (
+            100,
+            110,
+            "done",
+            vec![
+                change(103, Invocation::Id(a)),
+                change(105, Invocation::Id(b)),
+            ],
+            "two identities",
+        ),
+        (
+            100,
+            110,
+            "done",
+            vec![
+                change(100, Invocation::Id(a)),
+                change(110, Invocation::Id(a)),
+            ],
+            "the window's bounds",
+        ),
+        (
+            100,
+            110,
+            "done",
+            vec![change(111, Invocation::Id(a))],
+            "after the removal",
+        ),
+        (
+            100,
+            110,
+            "done",
+            vec![change(99, Invocation::Id(a))],
+            "before the reply",
+        ),
+        (
+            100,
+            110,
+            "failed",
+            vec![change(105, Invocation::Id(a))],
+            "a failed job",
+        ),
+        (
+            100,
+            110,
+            "canceled",
+            vec![change(105, Invocation::Id(a))],
+            "a canceled job",
+        ),
+        (
+            100,
+            110,
+            "timeout",
+            vec![change(105, Invocation::Id(a))],
+            "a timed-out job",
+        ),
+        (
+            100,
+            110,
+            "",
+            vec![change(105, Invocation::Id(a))],
+            "no result",
+        ),
+        (
+            100,
+            100,
+            "done",
+            vec![change(105, Invocation::Id(a))],
+            "a removal at the reply",
+        ),
+        (
+            100,
+            90,
+            "done",
+            vec![change(95, Invocation::Id(a))],
+            "wrapped serials",
+        ),
+    ];
+    for (reply, removed, result, changes, what) in refused {
+        assert!(
+            captured_instance(reply, removed, result, &changes).is_err(),
+            "an identity was captured from {what}"
+        );
+    }
+}
+
+#[test]
+fn r3r1_x_a_start_watches_its_unit_s_own_object_path() {
+    // systemd's `unit_dbus_path_from_name` (`bus_label_escape`): every byte
+    // but an ASCII letter, or a digit after the first byte, as `_` and two
+    // lowercase hex digits; the empty name as `_`.
+    use super::manager::unit_object_path;
+    for (name, path) in [
+        (
+            "nexus-verifier-0123456789abcdef0123456789abcdef.scope",
+            "/org/freedesktop/systemd1/unit/nexus_2dverifier_2d0123456789abcdef0123456789abcdef_2escope",
+        ),
+        ("1a.scope", "/org/freedesktop/systemd1/unit/_31a_2escope"),
+        ("a_b", "/org/freedesktop/systemd1/unit/a_5fb"),
+        ("\u{e9}", "/org/freedesktop/systemd1/unit/_c3_a9"),
+        ("", "/org/freedesktop/systemd1/unit/_"),
+    ] {
+        assert_eq!(unit_object_path(name), path, "{name:?}");
+    }
+}
+
+#[test]
+fn r3r1_11_the_identity_and_the_ownership_have_no_surface() {
+    let manager = code_of(include_str!("manager.rs"));
+    let pending = code_of(include_str!("pending.rs"));
+    let scope = code_of(include_str!("../scope.rs"));
+    let native = code_of(include_str!("native.rs"));
+    // No public minting of an identity: the type and its one constructor
+    // are crate-private, it is made only from the manager's own property
+    // value, and nothing converts into one, defaults one or decodes one.
+    assert!(manager.contains(
+        "#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub(crate) struct UnitInstance([u8; 16]);"
+    ));
+    assert_eq!(
+        manager.matches("UnitInstance::from_property(").count(),
+        1,
+        "an identity is made other than from the manager's property"
+    );
+    assert!(items(&manager, "pub(crate) fn invocation_of(", "\n}\n")[0]
+        .contains("UnitInstance::from_property(&bytes)"));
+    for (file, source) in [
+        ("scope/manager.rs", &manager),
+        ("scope/pending.rs", &pending),
+        ("scope.rs", &scope),
+        ("scope/native.rs", &native),
+    ] {
+        for line in source.lines().filter(|line| line.contains("#[derive(")) {
+            assert!(
+                !line.contains("Serialize") && !line.contains("Deserialize"),
+                "{file}: a serializable scope type: {line}"
+            );
+        }
+        for needle in [
+            "for UnitInstance",
+            "impl serde",
+            "Candidate {}",
+            "impl Clone for Candidate",
+        ] {
+            assert!(
+                !source.contains(needle),
+                "{file}: an identity or a candidate gains a conversion: {needle}"
+            );
+        }
+    }
+    // No caller-supplied identity: a request names only the unit, the
+    // helper and the limits; an identity is recorded only from an accepted
+    // start's own capture, in that one arm.
+    let request = items(&manager, "pub(crate) struct ScopeRequest<'a> {", "\n}\n")[0];
+    assert_eq!(
+        request
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .collect::<Vec<_>>(),
+        [
+            "    pub unit: &'a str,",
+            "    pub helper_pid: u32,",
+            "    pub limits: &'a ResourcePolicy,"
+        ]
+    );
+    assert_eq!(manager.matches("Started::Accepted(").count(), 1);
+    assert_eq!(
+        pending.matches("self.instance = ").count(),
+        1,
+        "an identity is recorded other than from an accepted start's own capture"
+    );
+    assert!(items(&pending, "Started::Accepted(captured) => {", "}")[0]
+        .contains("self.instance = Some(captured.map_err(ScopeError::Bus)?);"));
+    // No frontend identity: nothing an execution reports or a normal build
+    // exposes names it; the scope's harness accessors only read it.
+    for (file, source) in [
+        ("execution.rs", include_str!("../execution.rs")),
+        ("protocol.rs", include_str!("../protocol.rs")),
+        ("lib.rs", include_str!("../lib.rs")),
+    ] {
+        let source = code_of(source);
+        for needle in ["UnitInstance", "InvocationID", "invocation_id", "cgroup_id"] {
+            assert!(!source.contains(needle), "{file} names {needle}");
+        }
+    }
+    for accessor in [
+        "    pub fn invocation_id(&self) -> [u8; 16] {",
+        "    pub fn cgroup_id(&self) -> io::Result<u64> {",
+    ] {
+        let before = scope
+            .split(accessor)
+            .next()
+            .unwrap_or_default()
+            .lines()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .unwrap_or_default();
+        assert_eq!(
+            before.trim(),
+            "#[cfg(any(test, feature = \"live-sandbox-harness\"))]",
+            "{accessor}"
+        );
+    }
+    // No start or stop seam in a normal build: the one start is the pending
+    // operation's own (see also `i4r1_04`, `i4r1_x` and `i4r3_10_*`).
+    assert_eq!(pending.matches("start_scope(").count(), 1);
+    assert!(manager.contains("\npub(crate) trait Manager: Send + Sync {"));
+    // An observed candidate and cleanup authority are separate: the one
+    // `cgroup.kill` of a pending operation goes through the owned candidate
+    // only; ownership is set in one place, once the binding closed; a
+    // candidate is made unowned, where it is opened, and never rebuilt.
+    assert_eq!(pending.matches(".kill()").count(), 2);
+    assert!(items(&pending, "    fn end_owned(", "\n    }\n")[0]
+        .contains("if let Some(owned) = self.owned_dir() {"));
+    assert!(
+        items(&pending, "    pub(crate) fn end_now(", "\n    }\n")[0].contains("self.end_owned();")
+    );
+    assert!(items(&pending, "    fn owned_dir(", "\n    }\n")[0]
+        .contains(".filter(|candidate| candidate.owned)"));
+    assert_eq!(pending.matches("owned = true").count(), 1);
+    let bind = items(&pending, "    fn bind(", "\n    }\n")[0];
+    assert!(bind.ends_with(
+        "same_instance(controller, &unit_path, instance)?;\n        candidate.owned = true;\n        Ok(unit_path)"
+    ));
+    assert_eq!(pending.matches("owned: false,").count(), 2);
+    assert_eq!(pending.matches("Candidate {").count(), 3);
+    for item in ["\nstruct Candidate {", "\npub(crate) struct PendingScope {"] {
+        let before = pending.split(item).next().unwrap_or_default();
+        assert!(
+            !before
+                .lines()
+                .rev()
+                .find(|line| !line.trim().is_empty())
+                .unwrap_or_default()
+                .contains("derive"),
+            "an observed or owned candidate derives a capability: {item}"
+        );
+    }
+    assert_eq!(pending.matches("controller.native.open(").count(), 2);
+    // Cleanup authority and scope authority are separate: the proven scope
+    // is made in one place, after every proof and the promotion point, from
+    // an owned candidate only.
+    assert_eq!(pending.matches("Self::Proven(Scope {").count(), 1);
+    let establish = items(&pending, "    pub(crate) fn establish(", "\n    }\n")[0];
+    assert!(
+        establish.find("pending.issue_and_prove(helper, fault)?;")
+            < establish.find("fault::at(fault, FaultPoint::ScopePromotion);")
+            && establish.find("fault::at(fault, FaultPoint::ScopePromotion);")
+                < establish.find("take_if(|candidate| candidate.owned)")
+            && establish.find("take_if(|candidate| candidate.owned)")
+                < establish.find("Self::Proven(Scope {")
+    );
+}
+
+#[test]
+fn r3r1_x_the_host_qualification_reads_the_identity_production_records() {
+    // P2-V1-R3B-I4-R3-R1: the live gate's H3/H4 case qualifies, on the real
+    // host and the same proven scope, the facts production now trusts: the
+    // unit's `InvocationID` is an `ay` of 16 bytes, not all zero, equal to
+    // the identity production recorded, read again after the other reads;
+    // `ControlGroupId` is a `t` equal to the retained directory's kernel
+    // cgroup ID; the helper's membership stays the bound cgroup. A
+    // same-name replacement's other identity rests on the primary source,
+    // without another state-mutating case: the count stays 39.
+    let harness = code_of(include_str!("../../tests/phase2_live_sandbox.rs"));
+    let case = items(
+        &harness,
+        "        pub fn h3_h4_binding(scopes: &ScopeManager) {",
+        "\n        }\n",
+    )[0];
+    for needle in [
+        "let recorded = placed.scope().unwrap().invocation_id();",
+        "\"ControlGroupId\"",
+        ".cgroup_id()",
+        "control_group_id, retained,",
+        "hq::membership(pid).unwrap().unified.as_deref(),",
+    ] {
+        assert_eq!(case.matches(needle).count(), 1, "{needle}");
+    }
+    assert_eq!(
+        case.matches("invocation_property(name, &probe, &object)")
+            .count(),
+        2
+    );
+    let property = items(&harness, "        fn invocation_property(", "\n        }\n")[0];
+    for needle in [
+        "probe.property(object, UNIT_INTERFACE, \"InvocationID\")",
+        "\"ay\",",
+        "assert_ne!(id, [0; 16],",
+    ] {
+        assert!(property.contains(needle), "{needle}");
+    }
+    let documented = include_str!("../../tests/phase2_live_sandbox.rs");
+    assert!(documented.contains("(`sd_id128_randomize`, the evidence of"));
+    assert!(documented.contains("state-mutating case; the live count stays 39."));
+    assert!(harness.contains("let mut passed = 10;"));
+    assert!(harness.contains("let scoped: [ScopedCase; 29]"));
 }

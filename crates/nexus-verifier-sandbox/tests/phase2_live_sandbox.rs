@@ -1517,6 +1517,29 @@ mod live {
             Probe::connect().unwrap_or_else(|error| panic!("{name}: the probe: {error}"))
         }
 
+        /// The unit's `InvocationID` at `object`: an `ay` of exactly 16
+        /// bytes, not all zero, or the case fails naming it.
+        fn invocation_property(name: &str, probe: &Probe, object: &str) -> [u8; 16] {
+            match probe.property(object, UNIT_INTERFACE, "InvocationID") {
+                Ok(Answer::Returned(value)) => {
+                    assert_eq!(
+                        value.value_signature().as_str(),
+                        "ay",
+                        "{name}: InvocationID is not an ay"
+                    );
+                    let bytes = Vec::<u8>::try_from(value).unwrap_or_else(|value| {
+                        panic!("{name}: InvocationID is not an ay: {value:?}")
+                    });
+                    let id: [u8; 16] = bytes.as_slice().try_into().unwrap_or_else(|_| {
+                        panic!("{name}: InvocationID has {} bytes", bytes.len())
+                    });
+                    assert_ne!(id, [0; 16], "{name}: InvocationID is null");
+                    id
+                }
+                other => panic!("{name}: InvocationID: {other:?}"),
+            }
+        }
+
         /// A string property at `object`, or the case fails naming it.
         fn text_property(
             name: &str,
@@ -1649,6 +1672,20 @@ mod live {
         /// are exactly what production requires. The production proof already
         /// required all of this to make the scope Proven; this reads the real
         /// values again, independently, as evidence.
+        ///
+        /// P2-V1-R3B-I4-R3-R1: production now also binds the scope to the
+        /// unit invocation its start began, by the identity it captured from
+        /// that start's own job, and to the retained directory itself. On
+        /// this host this case qualifies that the unit's `InvocationID` is an
+        /// `ay` of exactly 16 bytes, not all zero, equal to the identity
+        /// production recorded; that `ControlGroupId` is a `t` equal to the
+        /// retained descriptor's own kernel cgroup ID; and that the identity,
+        /// `ControlGroup` and the helper's membership stay bound across the
+        /// reads. That a unit loaded later under the same name has another
+        /// identity is not run here: systemd v255 draws a fresh random
+        /// identity on every start (`sd_id128_randomize`, the evidence of
+        /// P2-V1-R3B-I4-R3-R1), and showing it live would take a second
+        /// state-mutating case; the live count stays 39.
         pub fn h3_h4_binding(scopes: &ScopeManager) {
             let name = "h3-h4";
             let before = scopes_now(name);
@@ -1670,9 +1707,39 @@ mod live {
                 }
                 Err(error) => panic!("{name}: GetUnit: {error}"),
             };
+            // The identity production bound the scope to is the manager's own
+            // for this unit (P2-V1-R3B-I4-R3-R1), compared byte for byte.
+            let recorded = placed.scope().unwrap().invocation_id();
+            let invocation = invocation_property(name, &probe, &object);
+            assert_eq!(
+                invocation, recorded,
+                "{name}: InvocationID is not the identity production recorded"
+            );
             let id = text_property(name, &probe, &object, UNIT_INTERFACE, "Id");
             let control_group =
                 text_property(name, &probe, &object, SCOPE_INTERFACE, "ControlGroup");
+            // The manager's record of the unit's directory is the retained
+            // descriptor's own kernel cgroup ID.
+            let retained = placed.scope().unwrap().cgroup_id().unwrap();
+            let control_group_id = match probe.property(&object, SCOPE_INTERFACE, "ControlGroupId")
+            {
+                Ok(Answer::Returned(value)) => {
+                    assert_eq!(
+                        value.value_signature().as_str(),
+                        "t",
+                        "{name}: ControlGroupId is not a t"
+                    );
+                    u64::try_from(value).unwrap_or_else(|value| {
+                        panic!("{name}: ControlGroupId is not a t: {value:?}")
+                    })
+                }
+                other => panic!("{name}: ControlGroupId: {other:?}"),
+            };
+            assert_ne!(retained, 0, "{name}");
+            assert_eq!(
+                control_group_id, retained,
+                "{name}: ControlGroupId is not the retained directory's"
+            );
             // Byte for byte: no basename, suffix or canonical comparison.
             assert_eq!(id, unit, "{name}: Id is not the generated unit");
             assert_eq!(
@@ -1695,9 +1762,28 @@ mod live {
             );
             let oom_policy = text_property(name, &probe, &object, SCOPE_INTERFACE, "OOMPolicy");
             assert_eq!(oom_policy, "continue", "{name}");
+            // Still that invocation, and the helper still where the kernel
+            // reported it.
+            assert_eq!(
+                invocation_property(name, &probe, &object),
+                recorded,
+                "{name}: the invocation changed during the reads"
+            );
+            assert_eq!(
+                hq::membership(pid).unwrap().unified.as_deref(),
+                Some(kernel.as_str()),
+                "{name}: the helper left the bound cgroup"
+            );
             evidence(
                 "H3",
                 &format!("unit={unit} object={object} id={id} control_group={control_group} kernel={kernel} equal=yes"),
+            );
+            evidence(
+                "H3 (R3-R1)",
+                &format!(
+                    "InvocationID={} (ay, 16 bytes) recorded=equal ControlGroupId={control_group_id} (t) retained=equal",
+                    invocation.iter().map(|byte| format!("{byte:02x}")).collect::<String>()
+                ),
             );
             evidence(
                 "H4",

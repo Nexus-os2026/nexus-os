@@ -1,0 +1,17 @@
+   Compiling nexus-protocols v10.6.0 (/home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-v/protocols)
+   Compiling nexus-desktop-backend v10.6.0 (/home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-v/app/src-tauri)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.08s
+     Running unittests src/lib.rs (/home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-validate/debug/deps/nexus_desktop_backend-60d6af1f11a269b7)
+phase2_tests::p2_g_01_the_desktop_reaches_project_code_only_through_the_verifier_sandbox: test
+phase2_tests::p2_g_02_the_sandbox_crate_spawns_only_its_helper_and_reads_no_environment: test
+phase2_tests::p2_g_03_the_development_toolchain_is_never_production: test
+phase2_tests::p2_g_04_the_profile_and_policies_are_pinned: test
+phase2_tests::p2_g_05_verification_commands_are_registered_granted_and_nothing_else: test
+phase2_tests::p2_g_06_production_cannot_construct_a_helper_from_an_arbitrary_path: test
+phase2_tests::p2_g_07_a_retained_verification_cleanup_is_never_dropped: test
+phase2_tests::p2_g_08_the_linux_package_installs_the_verifier_runtime: test
+phase2_tests::p2_g_09_cleanup_is_observed_only_through_the_checked_observations: test
+phase2_tests::p2_g_10_the_live_gate_pins_every_case_and_the_host_qualification: test
+phase2_tests::p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name: test
+
+11 tests, 0 benchmarks

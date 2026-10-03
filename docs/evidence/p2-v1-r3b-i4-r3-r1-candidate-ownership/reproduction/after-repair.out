@@ -1,0 +1,138 @@
+the P2-V1-R3B-I4-R3-R1 reproduction against the candidate, 2026-10-03T12:56:16Z
+candidate snapshot: HEAD 370f5b636fb507466c12f04db1b32661d658eca0, tree c46796f92a334bdcdf4e6c42be61c99b6940b39f
+production pending.rs sha256: 59d6723b6dcfd3471cdb8b9b5b91fbe854921342d38698c751918bc461dd5ca3
+reproduction source sha256: 4ae94056b3efa75666e93ac7a21c427cb40ff8004736f9908c903e4aa1547333
+execution/tests.rs sha256 before: a6a972b42e3c39f82e4be6851e9ae1b25c02646aff9fe6d8a918df2ae68553bb
+    Blocking waiting for file lock on package cache
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling libc v0.2.183
+   Compiling version_check v0.9.5
+   Compiling typenum v1.19.0
+   Compiling cfg-if v1.0.4
+   Compiling pin-project-lite v0.2.17
+   Compiling winnow v1.0.0
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.16.1
+   Compiling serde_core v1.0.228
+   Compiling toml_datetime v1.0.1+spec-1.1.0
+   Compiling generic-array v0.14.9
+   Compiling serde v1.0.228
+   Compiling zerocopy v0.8.42
+   Compiling indexmap v2.13.0
+   Compiling cpufeatures v0.2.17
+   Compiling autocfg v1.5.0
+   Compiling syn v2.0.117
+   Compiling parking v2.2.1
+   Compiling memoffset v0.9.1
+   Compiling futures-core v0.3.32
+   Compiling cfg_aliases v0.2.1
+   Compiling nix v0.29.0
+   Compiling toml_parser v1.0.10+spec-1.1.0
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling getrandom v0.2.17
+   Compiling errno v0.3.14
+   Compiling digest v0.10.7
+   Compiling rand_core v0.6.4
+   Compiling event-listener v5.4.2
+   Compiling once_cell v1.21.4
+   Compiling endi v1.1.1
+   Compiling toml_edit v0.25.5+spec-1.1.0
+   Compiling thiserror v2.0.18
+   Compiling static_assertions v1.1.0
+   Compiling tracing-core v0.1.36
+   Compiling event-listener-strategy v0.5.4
+   Compiling sha2 v0.10.9
+   Compiling signal-hook-registry v1.4.8
+   Compiling socket2 v0.6.3
+   Compiling mio v1.1.1
+   Compiling futures-task v0.3.32
+   Compiling futures-sink v0.3.32
+   Compiling proc-macro-crate v3.5.0
+   Compiling slab v0.4.12
+   Compiling bytes v1.11.1
+   Compiling bitflags v2.11.0
+   Compiling futures-util v0.3.32
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-r/crates/nexus-verifier-sandbox)
+   Compiling async-broadcast v0.7.2
+   Compiling sha1 v0.10.6
+   Compiling xdg-home v1.3.0
+   Compiling ordered-stream v0.2.0
+   Compiling hex v0.4.3
+   Compiling tokio v1.50.0
+   Compiling seccompiler v0.5.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling zvariant_utils v2.1.0
+   Compiling rand_chacha v0.3.1
+   Compiling rand v0.8.6
+   Compiling serde_derive v1.0.228
+   Compiling enumflags2_derive v0.7.12
+   Compiling zvariant_derive v4.2.0
+   Compiling tracing-attributes v0.1.31
+   Compiling thiserror-impl v2.0.18
+   Compiling serde_repr v0.1.20
+   Compiling async-trait v0.1.89
+   Compiling zbus_macros v4.4.0
+   Compiling tracing v0.1.44
+   Compiling enumflags2 v0.7.12
+   Compiling zvariant v4.2.0
+   Compiling landlock v0.4.4
+   Compiling zbus_names v3.0.0
+   Compiling zbus v4.4.0
+warning: unused variable: `b2_kills`
+    --> crates/nexus-verifier-sandbox/src/execution/tests.rs:4285:25
+     |
+4285 |         let (b2_opened, b2_kills, b2_killed) = foreign_fate(&world, FOREIGN_B, 0, "B2");
+     |                         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_b2_kills`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nexus-verifier-sandbox` (lib test) generated 1 warning (run `cargo fix --lib -p nexus-verifier-sandbox --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 34.03s
+     Running unittests src/lib.rs (/home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/final/t-after/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+
+running 2 tests
+test execution::tests::r3r1_reproduction::r3r1_reproduction_a_lost_collision_holding_the_helper ... A1: execution (execution::run's path): lost UnitExists, the foreign unit holds the helper and its own process
+    not_run: Some(Scope(Bus("StartTransientUnit timed out"))); the launch reached the helper (only a Proven scope is launched): false; cleanup confirmed: false
+    A1: foreign cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-22b8b796c4b830132a8ff56fdf3a467e.scope (index 0): opened 0 time(s); manager proof reads 0; cgroup.kill through a descriptor of it: 0; killed: false; removed: false; its own process 4000101: untouched
+A2: the harness's direct owner (execution::place): the same world
+    placement failed: Some(Bus("StartTransientUnit timed out"))
+    the owner's end: confirmed false
+    A2: foreign cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-cc6fa1c2f352e91d072e4dea53210707.scope (index 0): opened 0 time(s); manager proof reads 0; cgroup.kill through a descriptor of it: 0; killed: false; removed: false; its own process 4000101: untouched
+A3: the same world, one manager property not as expected (OOMPolicy): no proof, then settling
+    not_run: Some(Scope(Bus("StartTransientUnit timed out"))); launched: false; cleanup confirmed: false
+    A3: foreign cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-50e42505e68bf14a446758ae072a5c6a.scope (index 0): opened 0 time(s); manager proof reads 0; cgroup.kill through a descriptor of it: 0; killed: false; removed: false; its own process 4000101: untouched
+
+thread 'execution::tests::r3r1_reproduction::r3r1_reproduction_a_lost_collision_holding_the_helper' (3708413) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:4215:9:
+A1 not reproduced
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test execution::tests::r3r1_reproduction::r3r1_reproduction_b_a_same_name_replacement_holding_the_helper ... B1: accepted start, the helper never placed; Nexus's unit unloaded; a foreign unit loaded under the same name holds the helper and its own process; a retry settles
+    after the execution: PendingState { issued: true, collided: false, accepted: true, instance: true, candidate: false, owned: false, settled: false }
+    retry confirmed: false
+    B1: foreign cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-c30a6f8de6263d695884634f9a14b23c.scope (index 1): opened 1 time(s); manager proof reads 0; cgroup.kill through a descriptor of it: 0; killed: false; removed: false; its own process 4000102: untouched
+B2: accepted start; while the proof waits for the helper, Nexus's unit is unloaded and a foreign unit loaded under the same name takes the helper (another thread, as another client would)
+    replaced during the proof: true; not_run: Some(Scope(Mismatch("unit instance"))); the launch reached the helper (Proven): false; cleanup confirmed: false
+    B2: foreign cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-31c4863ef948425eb65788717fc456e7.scope (index 1): opened 1 time(s); manager proof reads 0; cgroup.kill through a descriptor of it: 0; killed: false; removed: false; its own process 4000102: untouched
+
+thread 'execution::tests::r3r1_reproduction::r3r1_reproduction_b_a_same_name_replacement_holding_the_helper' (3708569) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:4290:9:
+B1 not reproduced
+FAILED
+
+failures:
+
+failures:
+    execution::tests::r3r1_reproduction::r3r1_reproduction_a_lost_collision_holding_the_helper
+    execution::tests::r3r1_reproduction::r3r1_reproduction_b_a_same_name_replacement_holding_the_helper
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 153 filtered out; finished in 1.07s
+
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`
+cargo test exit: 101 (expected 101: both tests fail)
+A fails at its own assertion ("A1 not reproduced"): yes
+B fails at its own assertion ("B1 not reproduced"): yes
+test result line: test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 153 filtered out; finished in 1.07s
+execution/tests.rs sha256 after restore: a6a972b42e3c39f82e4be6851e9ae1b25c02646aff9fe6d8a918df2ae68553bb (identical: yes)
+checkout status entries after restore: 0

@@ -1,0 +1,122 @@
+reproduction of the P2-V1-R3B-I4-R3-R1 candidate-cleanup defect, 2026-10-03T11:00:02Z
+base: 44a4fc6c2f5e81536c07119362c1507f00448cd7 (snapshot tree ad8bf4f46043c84b4feb961560603d452b2fc4d0)
+production pending.rs sha256: 86b297cadb5fefdc3d0d45f9a5823f44b05c2ad5c068a9fd537049bbdaae25ea
+reproduction source sha256: 4ae94056b3efa75666e93ac7a21c427cb40ff8004736f9908c903e4aa1547333
+execution/tests.rs sha256 before: 3ef2e7f329abf8cf702d764328b31215aa6778341bbb605f064e87c078582646
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.45
+   Compiling unicode-ident v1.0.24
+   Compiling libc v0.2.183
+   Compiling typenum v1.19.0
+   Compiling version_check v0.9.5
+   Compiling cfg-if v1.0.4
+   Compiling winnow v1.0.0
+   Compiling serde_core v1.0.228
+   Compiling equivalent v1.0.2
+   Compiling pin-project-lite v0.2.17
+   Compiling hashbrown v0.16.1
+   Compiling toml_datetime v1.0.1+spec-1.1.0
+   Compiling generic-array v0.14.9
+   Compiling serde v1.0.228
+   Compiling zerocopy v0.8.42
+   Compiling autocfg v1.5.0
+   Compiling cpufeatures v0.2.17
+   Compiling indexmap v2.13.0
+   Compiling memoffset v0.9.1
+   Compiling syn v2.0.117
+   Compiling parking v2.2.1
+   Compiling cfg_aliases v0.2.1
+   Compiling futures-core v0.3.32
+   Compiling toml_parser v1.0.10+spec-1.1.0
+   Compiling nix v0.29.0
+   Compiling crypto-common v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling event-listener v5.4.2
+   Compiling digest v0.10.7
+   Compiling toml_edit v0.25.5+spec-1.1.0
+   Compiling endi v1.1.1
+   Compiling static_assertions v1.1.0
+   Compiling thiserror v2.0.18
+   Compiling getrandom v0.2.17
+   Compiling errno v0.3.14
+   Compiling once_cell v1.21.4
+   Compiling rand_core v0.6.4
+   Compiling signal-hook-registry v1.4.8
+   Compiling tracing-core v0.1.36
+   Compiling mio v1.1.1
+   Compiling socket2 v0.6.3
+   Compiling event-listener-strategy v0.5.4
+   Compiling proc-macro-crate v3.5.0
+   Compiling sha2 v0.10.9
+   Compiling futures-sink v0.3.32
+   Compiling futures-task v0.3.32
+   Compiling bitflags v2.11.0
+   Compiling bytes v1.11.1
+   Compiling slab v0.4.12
+   Compiling async-broadcast v0.7.2
+   Compiling xdg-home v1.3.0
+   Compiling futures-util v0.3.32
+   Compiling sha1 v0.10.6
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/i4r3r1-repro/checkout/crates/nexus-verifier-sandbox)
+   Compiling ordered-stream v0.2.0
+   Compiling hex v0.4.3
+   Compiling tokio v1.50.0
+   Compiling seccompiler v0.5.0
+   Compiling zvariant_utils v2.1.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.3.1
+   Compiling serde_derive v1.0.228
+   Compiling enumflags2_derive v0.7.12
+   Compiling zvariant_derive v4.2.0
+   Compiling tracing-attributes v0.1.31
+   Compiling thiserror-impl v2.0.18
+   Compiling rand v0.8.6
+   Compiling async-trait v0.1.89
+   Compiling serde_repr v0.1.20
+   Compiling zbus_macros v4.4.0
+   Compiling tracing v0.1.44
+   Compiling enumflags2 v0.7.12
+   Compiling zvariant v4.2.0
+   Compiling landlock v0.4.4
+   Compiling zbus_names v3.0.0
+   Compiling zbus v4.4.0
+warning: unused variable: `b2_kills`
+    --> crates/nexus-verifier-sandbox/src/execution/tests.rs:3330:25
+     |
+3330 |         let (b2_opened, b2_kills, b2_killed) = foreign_fate(&world, FOREIGN_B, 0, "B2");
+     |                         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_b2_kills`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nexus-verifier-sandbox` (lib test) generated 1 warning (run `cargo fix --lib -p nexus-verifier-sandbox --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.66s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/i4r3r1-repro/target/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+
+running 2 tests
+test execution::tests::r3r1_reproduction::r3r1_reproduction_a_lost_collision_holding_the_helper ... A1: execution (execution::run's path): lost UnitExists, the foreign unit holds the helper and its own process
+    not_run: Some(Launch(SetupFailed { stage: Protocol, errno: 0 })); the launch reached the helper (only a Proven scope is launched): true; cleanup confirmed: true
+    A1: foreign cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-79b8b4d51e97d78c3627e94236fd050a.scope (index 0): opened 1 time(s); manager proof reads 4; cgroup.kill through a descriptor of it: 1; killed: true; removed: false; its own process 4000101: ENDED by Nexus's cgroup.kill
+A2: the harness's direct owner (execution::place): the same world
+    placed: PROVEN scope Some("nexus-verifier-02dda12532e2234e34a466f91994dd4e.scope") (a ScopedHelper owning the foreign cgroup)
+    the owner's end: confirmed true
+    A2: foreign cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-02dda12532e2234e34a466f91994dd4e.scope (index 0): opened 1 time(s); manager proof reads 4; cgroup.kill through a descriptor of it: 1; killed: true; removed: false; its own process 4000101: ENDED by Nexus's cgroup.kill
+A3: the same world, one manager property not as expected (OOMPolicy): no proof, then settling
+    not_run: Some(Scope(Mismatch("out-of-memory policy"))); launched: false; cleanup confirmed: true
+    A3: foreign cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-92abd89e80aa2c9c5c72e9fbc9086724.scope (index 0): opened 1 time(s); manager proof reads 4; cgroup.kill through a descriptor of it: 1; killed: true; removed: false; its own process 4000101: ENDED by Nexus's cgroup.kill
+REPRODUCED A: a lost UnitExists with the helper in the foreign cgroup: that cgroup is opened, proven and launched into (A1, A2), and its own process ended by Nexus's cgroup.kill (A1, A2, A3)
+ok
+test execution::tests::r3r1_reproduction::r3r1_reproduction_b_a_same_name_replacement_holding_the_helper ... B1: accepted start, the helper never placed; Nexus's unit unloaded; a foreign unit loaded under the same name holds the helper and its own process; a retry settles
+    after the execution: PendingState { issued: true, collided: false, accepted: true, candidate: false, settled: false }
+    retry confirmed: true
+    B1: foreign cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-c9022f043a438a943821e2c8e223ca41.scope (index 1): opened 1 time(s); manager proof reads 0; cgroup.kill through a descriptor of it: 1; killed: true; removed: false; its own process 4000102: ENDED by Nexus's cgroup.kill
+B2: accepted start; while the proof waits for the helper, Nexus's unit is unloaded and a foreign unit loaded under the same name takes the helper (another thread, as another client would)
+    replaced during the proof: true; not_run: Some(Launch(SetupFailed { stage: Protocol, errno: 0 })); the launch reached the helper (Proven): true; cleanup confirmed: true
+    B2: foreign cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-6861d6bce41f69a91dd0f55dcc8a3cb1.scope (index 1): opened 1 time(s); manager proof reads 4; cgroup.kill through a descriptor of it: 1; killed: true; removed: false; its own process 4000102: ENDED by Nexus's cgroup.kill
+REPRODUCED B: a same-name replacement holding the helper: settling opens it and ends its own process through cgroup.kill (B1); during the proof it is proven, launched into and ended (B2)
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 138 filtered out; finished in 0.33s
+
+cargo test exit: 0
+execution/tests.rs sha256 after restore: 3ef2e7f329abf8cf702d764328b31215aa6778341bbb605f064e87c078582646 (identical: yes)
+checkout status entries after restore: 0

@@ -1,0 +1,9 @@
+checkout: /home/nexus/NEXUS/p2-v1-r3b-i4-r3-r1-work/snapshots/final-c
+HEAD: dfa88bfddf57ddcd564cf5ea59100871691f62b6
+HEAD tree: c46796f92a334bdcdf4e6c42be61c99b6940b39f
+status entries before: 0
+r3r1 exit=0 status entries after: 0
+r3 exit=0 status entries after: 0
+r2 exit=0 status entries after: 0
+q1r1 exit=0 status entries after: 0
+q1 exit=0 status entries after: 0

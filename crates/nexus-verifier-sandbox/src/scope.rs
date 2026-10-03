@@ -33,16 +33,19 @@
 //! never authority), the expected limits and the manager connection that
 //! issued the request; it retains the candidate cgroup by descriptor as soon
 //! as the kernel reports the helper in it, so no later failed proof can lose
-//! it. A scope is proven only once the manager's own unit object for the
-//! name reports exactly that cgroup as its control group. A pending scope is
-//! crate-private: it is owned only beside its helper (by an execution, its
-//! retained boundary, or the live harness's scoped helper) and stays
-//! retryable after the [`ScopeManager`] that started it is gone. Nothing is
-//! reconstructed from a unit name, a process id or a path, nothing sweeps
-//! units by name, and nothing is ever acted upon by a unit name
-//! (P2-V1-R3B-I4-R3): a pending operation is ended only through the cgroup
-//! it retained by descriptor. The states and transitions are documented in
-//! `scope/pending.rs`.
+//! it. A retained candidate is only observed: it is ended (`cgroup.kill`)
+//! only once it is bound to the unit invocation this request's start began,
+//! by the identity captured from that start's own job (P2-V1-R3B-I4-R3-R1),
+//! and a scope is proven only once, beyond that binding, the manager's unit
+//! for the name and the cgroup carry exactly the requested policy. A pending
+//! scope is crate-private: it is owned only beside its helper (by an
+//! execution, its retained boundary, or the live harness's scoped helper)
+//! and stays retryable after the [`ScopeManager`] that started it is gone.
+//! Nothing is reconstructed from a unit name, a process id or a path,
+//! nothing sweeps units by name, and nothing is ever acted upon by a unit
+//! name (P2-V1-R3B-I4-R3): a pending operation is ended only through the
+//! cgroup it retained by descriptor and bound to its own invocation. The
+//! states and transitions are documented in `scope/pending.rs`.
 //!
 //! A normal build constructs a manager only with [`ScopeManager::connect`]
 //! and starts a scope only within `execution::run`: there is no public
@@ -66,7 +69,7 @@ pub use manager::BUS_CALL_TIMEOUT;
 pub(crate) use pending::PendingState;
 pub(crate) use pending::{PendingScope, ScopeBoundary};
 
-use manager::{Manager, ZbusManager};
+use manager::{Manager, UnitInstance, ZbusManager};
 use native::{CgroupDir, Kernel, Native};
 
 /// Bound on waiting for systemd to move the helper into its scope.
@@ -271,12 +274,32 @@ fn verify_limits(dir: &dyn CgroupDir, limits: &ResourcePolicy) -> Result<(), Sco
 pub struct Scope {
     unit: String,
     dir: Box<dyn CgroupDir>,
+    /// The unit invocation the scope was proven bound to. Read only by the
+    /// live host qualification (`invocation_id`, harness builds); a normal
+    /// build keeps it as the record of that binding.
+    #[cfg_attr(not(any(test, feature = "live-sandbox-harness")), allow(dead_code))]
+    instance: UnitInstance,
 }
 
 impl Scope {
     /// The backend-generated unit name (display and diagnostics only).
     pub fn unit(&self) -> &str {
         &self.unit
+    }
+
+    /// The `InvocationID` this scope was proven bound to, captured from its
+    /// start's own job: the live host qualification compares it with the
+    /// manager's answer. Read only; nothing accepts one.
+    #[cfg(any(test, feature = "live-sandbox-harness"))]
+    pub fn invocation_id(&self) -> [u8; 16] {
+        self.instance.bytes()
+    }
+
+    /// The kernel's ID of the retained cgroup directory: the live host
+    /// qualification compares it with the manager's `ControlGroupId`.
+    #[cfg(any(test, feature = "live-sandbox-harness"))]
+    pub fn cgroup_id(&self) -> io::Result<u64> {
+        self.dir.cgroup_id()
     }
 
     /// Kill every process in the scope (`cgroup.kill`).

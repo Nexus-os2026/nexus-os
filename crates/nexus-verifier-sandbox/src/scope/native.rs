@@ -11,6 +11,13 @@
 //! Production uses [`Kernel`]: `/proc/<pid>/cgroup` and `/sys/fs/cgroup`.
 //! The interface is private to the crate; the deterministic test cgroups
 //! exist only in test builds.
+//!
+//! A retained descriptor is the native identity of one cgroup directory,
+//! never by itself authority over what is in it (P2-V1-R3B-I4-R3-R1):
+//! `cgroup.kill` reaches it only once the pending operation has bound it to
+//! the unit invocation its start began (`super::pending`), with the
+//! directory's own kernel cgroup ID ([`CgroupDir::cgroup_id`]) among the
+//! evidence.
 
 use std::ffi::CString;
 use std::fmt::Debug;
@@ -22,6 +29,9 @@ use crate::launcher::Helper;
 use crate::sys;
 
 const CGROUP2_SUPER_MAGIC: i64 = 0x6367_7270;
+/// The file handle type of a kernfs node, whose 8 bytes are its ID
+/// (`include/linux/exportfs.h`).
+const FILEID_KERNFS: libc::c_int = 0xfe;
 
 /// A cgroup directory retained by descriptor.
 pub(crate) trait CgroupDir: Send + Sync + Debug {
@@ -31,6 +41,11 @@ pub(crate) trait CgroupDir: Send + Sync + Debug {
     fn kill(&self) -> io::Result<()>;
     /// Whether the directory lists no entry (a removed cgroup lists none).
     fn listing_is_empty(&self) -> io::Result<bool>;
+    /// The kernel's ID of this very directory: its file handle, exactly as
+    /// systemd reads a unit's `ControlGroupId`. Never reused while the
+    /// system runs, so another directory created at the same path has
+    /// another one.
+    fn cgroup_id(&self) -> io::Result<u64>;
 }
 
 /// The kernel observations.
@@ -123,5 +138,41 @@ impl CgroupDir for KernelDir {
 
     fn listing_is_empty(&self) -> io::Result<bool> {
         sys::directory_is_empty(self.dir.as_fd())
+    }
+
+    fn cgroup_id(&self) -> io::Result<u64> {
+        /// `struct file_handle` with room for exactly the 8 bytes of a
+        /// kernfs node's ID.
+        #[repr(C)]
+        struct Handle {
+            bytes: libc::c_uint,
+            kind: libc::c_int,
+            id: [u8; 8],
+        }
+        let mut handle = Handle {
+            bytes: 8,
+            kind: 0,
+            id: [0; 8],
+        };
+        let mut mount: libc::c_int = 0;
+        // SAFETY: the retained descriptor itself (an empty path); the
+        // kernel writes at most `bytes` bytes after the header.
+        let rc = unsafe {
+            libc::name_to_handle_at(
+                self.dir.as_raw_fd(),
+                c"".as_ptr(),
+                (&raw mut handle).cast(),
+                &mut mount,
+                libc::AT_EMPTY_PATH,
+            )
+        };
+        if rc != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let id = u64::from_ne_bytes(handle.id);
+        if handle.bytes != 8 || handle.kind != FILEID_KERNFS || id == 0 {
+            return Err(io::Error::from_raw_os_error(libc::EINVAL));
+        }
+        Ok(id)
     }
 }

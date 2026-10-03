@@ -1,0 +1,16 @@
+fmt-check exit=0 started=2026-10-03T12:56:17Z :: cargo fmt --all -- --check
+diff-check exit=0 started=2026-10-03T12:56:32Z :: git diff --check
+clippy exit=0 started=2026-10-03T12:56:32Z :: cargo clippy --locked -p nexus-verifier-sandbox --lib --tests -- -D warnings
+lib-tests exit=0 started=2026-10-03T12:56:55Z :: cargo test --locked -p nexus-verifier-sandbox --lib
+store-tests exit=0 started=2026-10-03T12:57:34Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_store
+codec-tests exit=0 started=2026-10-03T12:58:23Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_codec
+core-tests exit=0 started=2026-10-03T12:58:29Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_core
+cleanup-observation exit=0 started=2026-10-03T12:59:01Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_cleanup_observation
+package-layout exit=0 started=2026-10-03T12:59:04Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_package_layout
+live-harness-build-only exit=0 started=2026-10-03T12:59:05Z :: cargo test --locked -p nexus-verifier-sandbox --features development-toolchain --test phase2_live_sandbox --no-run
+live-step-fixture-controls exit=0 started=2026-10-03T12:59:11Z :: python3 scripts/ci/test_phase2_cleanup_check.py
+desktop-check exit=0 started=2026-10-03T12:59:12Z :: cargo check --locked -p nexus-desktop-backend --lib --tests
+desktop-clippy exit=0 started=2026-10-03T13:03:44Z :: cargo clippy --locked -p nexus-desktop-backend --lib --tests -- -D warnings
+desktop-phase2-guards exit=0 started=2026-10-03T13:05:46Z :: cargo test --locked -p nexus-desktop-backend --lib -- phase2_tests::
+lib-test-list exit=0 started=2026-10-03T13:11:05Z :: cargo test --locked -p nexus-verifier-sandbox --lib -- --list
+desktop-guard-list exit=0 started=2026-10-03T13:11:05Z :: cargo test --locked -p nexus-desktop-backend --lib -- phase2_tests:: --list

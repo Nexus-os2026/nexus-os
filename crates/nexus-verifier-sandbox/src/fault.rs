@@ -23,14 +23,22 @@ pub enum FaultPoint {
     /// Inside scope creation: the new unit holds the helper but is not yet
     /// proven.
     ScopeProof,
-    /// The candidate cgroup's descriptor is retained; its limits and the
-    /// manager's properties are not yet proven.
+    /// The candidate cgroup's descriptor is retained: observed, not yet
+    /// bound to the unit invocation (no cleanup or launch authority); its
+    /// limits and the manager's properties are not yet proven.
     ScopeCandidate,
-    /// GetUnit answered; the unit's identity and control group are not yet
-    /// bound to the kernel's cgroup (P2-V1-R3B-I4-R1).
+    /// GetUnit answered; the unit's invocation, identity and control group
+    /// are not yet bound to the kernel's cgroup (P2-V1-R3B-I4-R1, -R3-R1).
     ScopeBinding,
+    /// The candidate is bound to the unit invocation the start began
+    /// (cleanup ownership); the sandbox policy is not yet proven
+    /// (P2-V1-R3B-I4-R3-R1).
+    ScopeOwned,
     /// During the manager-property proof (RuntimeMaxUSec, OOMPolicy).
     ScopeProperties,
+    /// Every proof passed; the pending operation is about to become the
+    /// proven scope (P2-V1-R3B-I4-R3-R1).
+    ScopePromotion,
     /// During the reconciliation that confirms a pending scope is gone.
     ScopeReconcile,
     /// The proven scope holds the helper; no launch has been sent.
