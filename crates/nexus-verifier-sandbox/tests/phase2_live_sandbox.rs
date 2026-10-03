@@ -37,6 +37,12 @@ fn main() -> ExitCode {
 #[path = "support/cleanup_observation.rs"]
 mod cleanup_observation;
 
+/// The host-qualification probe (P2-V1-R3B-I4-Q1): bounded observations of
+/// the real user manager and kernel beside the production path.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "support/host_qualification.rs"]
+mod host_qualification;
+
 /// Where the sandbox does not exist: the suite's own note only; the
 /// observation and every other mode fail.
 #[cfg_attr(all(target_os = "linux", target_arch = "x86_64"), allow(dead_code))]
@@ -578,7 +584,7 @@ mod live {
             }
             Ok(scopes) => {
                 type ScopedCase = (&'static str, fn(&p2d::ScopeManager));
-                let scoped: [ScopedCase; 21] = [
+                let scoped: [ScopedCase; 29] = [
                     (
                         "p2d_live_execution_runs_in_a_verified_scope",
                         p2d::scoped_run_passes,
@@ -654,6 +660,42 @@ mod live {
                         "p2r1_live_failed_finalization_is_retried_to_confirmation",
                         p2r1::finalizing_failure,
                     ),
+                    // P2-V1-R3B-I4-Q1: the supported-host qualification of
+                    // the facts the accepted scope mechanism depends on
+                    // (G-HOST H1 to H7), and the production finalizer over a
+                    // retained candidate on the real host.
+                    (
+                        "p2q_live_h1_the_manager_is_the_real_uid_s_user_bus",
+                        p2q::h1_manager_bus,
+                    ),
+                    (
+                        "p2q_live_h2_the_helper_s_membership_is_one_unified_cgroup_v2_line",
+                        p2q::h2_unified_membership,
+                    ),
+                    (
+                        "p2q_live_h3_h4_the_manager_s_unit_binds_to_the_kernel_s_cgroup",
+                        p2q::h3_h4_binding,
+                    ),
+                    (
+                        "p2q_live_h5_a_fresh_name_is_exactly_no_such_unit",
+                        p2q::h5_no_such_unit,
+                    ),
+                    (
+                        "p2q_live_h6_an_existing_name_is_exactly_unit_exists",
+                        p2q::h6_unit_exists,
+                    ),
+                    (
+                        "p2q_live_h7_a_killed_unreaped_helper_keeps_its_membership",
+                        p2q::h7_killed_unreaped_membership,
+                    ),
+                    (
+                        "p2r1_live_panic_after_the_candidate_is_retained_settles_it",
+                        p2r1::candidate_retained,
+                    ),
+                    (
+                        "p2r1_live_panic_during_the_binding_proof_settles_it",
+                        p2r1::binding_proof,
+                    ),
                 ];
                 for (name, case) in scoped {
                     print!("test {name} ... ");
@@ -713,7 +755,7 @@ mod live {
         /// A direct placement that proved no scope: its cleanup (the helper
         /// and whatever the operation may have created, owned together) is
         /// settled explicitly (bounded) before the case fails.
-        fn unplaced(name: &str, failed: execution::PlacementFailed) -> ! {
+        pub fn unplaced(name: &str, failed: execution::PlacementFailed) -> ! {
             let mut failures = vec![format!("no scope was proven: {:?}", failed.error)];
             if let execution::Cleanup::Failed(boundary) = failed.cleanup {
                 match settle(
@@ -1350,6 +1392,497 @@ mod live {
                 Expect::Retained,
                 true,
             );
+        }
+
+        /// P2-V1-R3B-I4-Q1 (H7, the production path): a panic right after the
+        /// candidate cgroup is retained, on the real host. The finalizer kills
+        /// the helper, keeps it unreaped, settles the operation through the
+        /// retained candidate (Empty or Removed), then reaps; nothing launched,
+        /// nothing left.
+        pub fn candidate_retained(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::ScopeCandidate),
+                "noop",
+                60,
+                Expect::NotRun,
+                false,
+            );
+        }
+
+        /// P2-V1-R3B-I4-Q1 (H3, the production path): a panic after GetUnit
+        /// answered, while the unit's `Id` and `ControlGroup` are being bound
+        /// to the kernel's cgroup: no launch, the candidate settled, nothing
+        /// left.
+        pub fn binding_proof(scopes: &ScopeManager) {
+            case(
+                scopes,
+                panic_at(FaultPoint::ScopeBinding),
+                "noop",
+                60,
+                Expect::NotRun,
+                false,
+            );
+        }
+    }
+
+    /// P2-V1-R3B-I4-Q1: the supported-host qualification (G-HOST H1 to H7).
+    /// Each case establishes, on this host and the same live helper the
+    /// production path uses, one fact the accepted scope mechanism depends
+    /// on, beside the production proof (which stays the only authority): the
+    /// real values are printed as bounded evidence. Everything a case
+    /// creates it owns and ends; the loaded verifier scopes are the same
+    /// before and after.
+    mod p2q {
+        use super::p2d::{execution, loaded_scopes, loaded_scopes_by, Occupancy, ScopeManager};
+        use super::*;
+        use crate::cleanup_observation::{user_bus, wait_for, Host, Scopes};
+        use crate::host_qualification::{
+            self as hq, Answer, Probe, CGROUP2_SUPER_MAGIC, NO_SUCH_UNIT, SCOPE_INTERFACE,
+            TMPFS_MAGIC, UNIT_EXISTS, UNIT_INTERFACE,
+        };
+        use nexus_verifier_sandbox::policy::ResourcePolicy;
+        use std::os::unix::fs::{FileTypeExt, MetadataExt};
+
+        fn limits() -> ResourcePolicy {
+            ResourcePolicy {
+                wall_timeout_secs: 60,
+                runtime_backstop_secs: 120,
+                ..ResourcePolicy::RUST_OFFLINE_V1
+            }
+        }
+
+        fn uid() -> u32 {
+            // SAFETY: getuid has no preconditions.
+            unsafe { libc::getuid() }
+        }
+
+        fn evidence(what: &str, text: &str) {
+            println!("\n    {what}: {text}");
+        }
+
+        /// The loaded verifier scopes now, or the case fails: an observation
+        /// that cannot answer is never "none".
+        fn scopes_now(name: &str) -> Scopes {
+            loaded_scopes().unwrap_or_else(|error| panic!("{name}: the loaded scopes: {error}"))
+        }
+
+        /// The loaded verifier scopes are back to `before` within 10 s.
+        fn scopes_back(name: &str, before: &Scopes) {
+            match wait_for(Duration::from_secs(10), loaded_scopes_by, |now| {
+                now == before
+            }) {
+                Ok(true) => {}
+                Ok(false) => panic!(
+                    "{name}: verifier scopes left: {:?}",
+                    scopes_now(name).difference(before).collect::<Vec<_>>()
+                ),
+                Err(error) => panic!("{name}: the loaded scopes were not observed: {error}"),
+            }
+        }
+
+        /// Spawn the real helper and place it in a proven scope through the
+        /// production path (`execution::place`), owned with its scope; its
+        /// output is drained.
+        fn placed(name: &str, scopes: &ScopeManager) -> execution::ScopedHelper {
+            let (helper, output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
+            // The helper's output pipes are drained until it is gone.
+            std::mem::forget((read_all(output.stdout), read_all(output.stderr)));
+            match execution::place(scopes, helper, &limits()) {
+                Ok(placed) => placed,
+                Err(failed) => super::p2d::unplaced(name, failed),
+            }
+        }
+
+        /// End a proven placement as finalization does: `cgroup.kill`, the
+        /// helper reaped, the scope empty, the owner confirming.
+        fn released(name: &str, mut placed: execution::ScopedHelper) {
+            placed.scope().unwrap().kill().unwrap();
+            placed.reap_helper().unwrap();
+            assert!(
+                placed
+                    .scope()
+                    .unwrap()
+                    .wait_empty(Duration::from_secs(10))
+                    .unwrap(),
+                "{name}: the scope did not empty"
+            );
+            assert!(
+                placed.end().is_confirmed(),
+                "{name}: the ended scope was not confirmed"
+            );
+        }
+
+        fn probe(name: &str) -> Probe {
+            Probe::connect().unwrap_or_else(|error| panic!("{name}: the probe: {error}"))
+        }
+
+        /// A string property at `object`, or the case fails naming it.
+        fn text_property(
+            name: &str,
+            probe: &Probe,
+            object: &str,
+            interface: &str,
+            property: &str,
+        ) -> String {
+            match probe.property(object, interface, property) {
+                Ok(Answer::Returned(value)) => String::try_from(value).unwrap_or_else(|value| {
+                    panic!("{name}: {property} is not a string: {value:?}")
+                }),
+                Ok(Answer::Refused {
+                    name: error,
+                    message,
+                }) => {
+                    panic!("{name}: Get {property} refused ({error}): {message}")
+                }
+                Err(error) => panic!("{name}: Get {property}: {error}"),
+            }
+        }
+
+        /// H1: the manager a normal build connects to is the real uid's user
+        /// bus: `/run/user/<uid>/bus`, a socket of the uid beneath its
+        /// private tmpfs runtime directory, the same socket the checked
+        /// cleanup observation reaches, and not anything the environment
+        /// names.
+        pub fn h1_manager_bus(_: &ScopeManager) {
+            let name = "h1";
+            let uid = uid();
+            let runtime = format!("/run/user/{uid}");
+            let bus = format!("{runtime}/bus");
+            let dir = fs::metadata(&runtime).unwrap();
+            assert!(
+                dir.is_dir() && dir.uid() == uid && dir.mode() & 0o7777 == 0o700,
+                "{name}: {runtime}"
+            );
+            assert_eq!(
+                hq::filesystem_magic(&runtime).unwrap(),
+                TMPFS_MAGIC,
+                "{name}: {runtime} is a tmpfs"
+            );
+            let socket = fs::symlink_metadata(&bus).unwrap();
+            assert!(
+                socket.file_type().is_socket() && socket.uid() == uid,
+                "{name}: {bus}"
+            );
+            // The checked observation's bus is this very socket.
+            let checked = user_bus(&Host::real()).unwrap_or_else(|error| panic!("{name}: {error}"));
+            assert_eq!(
+                checked.identity().unwrap(),
+                (socket.dev(), socket.ino()),
+                "{name}"
+            );
+            // A session bus address in the environment changes nothing: the
+            // production manager derives its bus from the real uid.
+            std::env::set_var(
+                "DBUS_SESSION_BUS_ADDRESS",
+                "unix:path=/nonexistent/nexus-q1/bus",
+            );
+            let connected = ScopeManager::connect();
+            std::env::remove_var("DBUS_SESSION_BUS_ADDRESS");
+            assert!(
+                connected.as_ref().map(|_| ()).is_ok(),
+                "{name}: connect() followed the environment: {:?}",
+                connected.as_ref().err()
+            );
+            drop(connected);
+            // Any other path, even a real socket of this uid, is not the
+            // manager a normal build can reach (connect_at is the harness's).
+            assert!(matches!(
+                ScopeManager::connect_at(&format!("{runtime}/nexus-q1-no-such-bus")),
+                Err(nexus_verifier_sandbox::scope::ScopeError::BusUnavailable(_))
+            ));
+            evidence(
+                "H1",
+                &format!("uid={uid} bus={bus} socket_owner={} runtime_mode={:o} tmpfs=yes same_socket_as_observation=yes", socket.uid(), dir.mode() & 0o7777),
+            );
+        }
+
+        /// H2: the live helper's `/proc/<pid>/cgroup` is exactly one unified
+        /// cgroup v2 line, `0::<absolute path in normal form>/<unit>`, on a
+        /// cgroup2 hierarchy; a hybrid or v1 host would yield none and the
+        /// production proof would have refused (fail closed).
+        pub fn h2_unified_membership(scopes: &ScopeManager) {
+            let name = "h2";
+            let before = scopes_now(name);
+            let placed = placed(name, scopes);
+            let pid = placed.helper().unwrap().pid();
+            let unit = placed.scope().unwrap().unit().to_string();
+            let membership = hq::membership(pid).unwrap();
+            assert_eq!(
+                membership.raw.lines().count(),
+                1,
+                "{name}: {:?}",
+                membership.raw
+            );
+            let path = membership
+                .unified
+                .clone()
+                .unwrap_or_else(|| panic!("{name}: no unified `0::` line: {:?}", membership.raw));
+            assert!(hq::is_normal_absolute(&path), "{name}: {path:?}");
+            assert_eq!(hq::last_component(&path), unit, "{name}");
+            assert_eq!(
+                hq::filesystem_magic("/sys/fs/cgroup").unwrap(),
+                CGROUP2_SUPER_MAGIC,
+                "{name}"
+            );
+            // The kernel's own list of that cgroup names the helper (read by
+            // path here as evidence only; production reads its retained
+            // descriptor).
+            let procs = fs::read_to_string(format!("/sys/fs/cgroup{path}/cgroup.procs")).unwrap();
+            assert!(
+                procs.lines().any(|line| line.trim() == pid.to_string()),
+                "{name}: {procs:?}"
+            );
+            evidence(
+                "H2",
+                &format!(
+                    "pid={pid} membership={:?} unit={unit}",
+                    membership.raw.trim_end()
+                ),
+            );
+            released(name, placed);
+            scopes_back(name, &before);
+        }
+
+        /// H3 and H4: for one real scope, from the same live helper and the
+        /// same manager object, `GetUnit(unit)`'s object reports `Id` equal
+        /// to the generated name and `ControlGroup` byte-equal to the kernel's
+        /// membership path, and `RuntimeMaxUSec` (`t`) and `OOMPolicy` (`s`)
+        /// are exactly what production requires. The production proof already
+        /// required all of this to make the scope Proven; this reads the real
+        /// values again, independently, as evidence.
+        pub fn h3_h4_binding(scopes: &ScopeManager) {
+            let name = "h3-h4";
+            let before = scopes_now(name);
+            let placed = placed(name, scopes);
+            let pid = placed.helper().unwrap().pid();
+            let unit = placed.scope().unwrap().unit().to_string();
+            let kernel = hq::membership(pid)
+                .unwrap()
+                .unified
+                .unwrap_or_else(|| panic!("{name}: no unified membership"));
+            let probe = probe(name);
+            let object = match probe.get_unit(&unit) {
+                Ok(Answer::Returned(path)) => path.as_str().to_string(),
+                Ok(Answer::Refused {
+                    name: error,
+                    message,
+                }) => {
+                    panic!("{name}: GetUnit refused ({error}): {message}")
+                }
+                Err(error) => panic!("{name}: GetUnit: {error}"),
+            };
+            let id = text_property(name, &probe, &object, UNIT_INTERFACE, "Id");
+            let control_group =
+                text_property(name, &probe, &object, SCOPE_INTERFACE, "ControlGroup");
+            // Byte for byte: no basename, suffix or canonical comparison.
+            assert_eq!(id, unit, "{name}: Id is not the generated unit");
+            assert_eq!(
+                control_group, kernel,
+                "{name}: ControlGroup is not the kernel's membership"
+            );
+            assert!(
+                hq::is_normal_absolute(&control_group),
+                "{name}: {control_group:?}"
+            );
+            let runtime_max = match probe.property(&object, SCOPE_INTERFACE, "RuntimeMaxUSec") {
+                Ok(Answer::Returned(value)) => u64::try_from(value)
+                    .unwrap_or_else(|value| panic!("{name}: RuntimeMaxUSec is not a t: {value:?}")),
+                other => panic!("{name}: RuntimeMaxUSec: {other:?}"),
+            };
+            assert_eq!(
+                runtime_max,
+                limits().runtime_backstop_secs * 1_000_000,
+                "{name}"
+            );
+            let oom_policy = text_property(name, &probe, &object, SCOPE_INTERFACE, "OOMPolicy");
+            assert_eq!(oom_policy, "continue", "{name}");
+            evidence(
+                "H3",
+                &format!("unit={unit} object={object} id={id} control_group={control_group} kernel={kernel} equal=yes"),
+            );
+            evidence(
+                "H4",
+                &format!("RuntimeMaxUSec={runtime_max} (t) OOMPolicy={oom_policy} (s)"),
+            );
+            drop(probe);
+            released(name, placed);
+            scopes_back(name, &before);
+        }
+
+        /// H5: `GetUnit` of a fresh, unpredictable name the manager has never
+        /// seen is refused with exactly `org.freedesktop.systemd1.NoSuchUnit`
+        /// (not any other error, timeout or failure).
+        pub fn h5_no_such_unit(_: &ScopeManager) {
+            let name = "h5";
+            let before = scopes_now(name);
+            let probe = probe(name);
+            let fresh = hq::fresh_unit_name("q1h5-");
+            let (error, message) = match probe.get_unit(&fresh) {
+                Ok(Answer::Refused { name, message }) => (name, message),
+                other => panic!("{name}: GetUnit of a fresh name: {other:?}"),
+            };
+            assert_eq!(error, NO_SUCH_UNIT, "{name}: {message}");
+            evidence(
+                "H5",
+                &format!("unit={fresh} error={error} message={message:?}"),
+            );
+            drop(probe);
+            assert_eq!(scopes_now(name), before, "{name}");
+        }
+
+        /// A deliberately existing scope the collision case owns: its helper
+        /// and its unit are ended by the case; drop is defense only.
+        struct Existing {
+            probe: Probe,
+            helper: Option<Helper>,
+            unit: String,
+            done: bool,
+        }
+
+        impl Drop for Existing {
+            fn drop(&mut self) {
+                if self.done {
+                    return;
+                }
+                if let Some(mut helper) = self.helper.take() {
+                    let _ = helper.kill();
+                    let _ = helper.reap();
+                }
+                let _ = self.probe.stop_unit(&self.unit);
+            }
+        }
+
+        /// H6: a transient scope this harness creates under a fresh unique
+        /// name, holding a helper it owns, is refused a second
+        /// `StartTransientUnit` with exactly
+        /// `org.freedesktop.systemd1.UnitExists`; the case then ends its own
+        /// helper and unit and observes both gone. No other unit is touched.
+        pub fn h6_unit_exists(_: &ScopeManager) {
+            let name = "h6";
+            let before = scopes_now(name);
+            let (helper, output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
+            std::mem::forget((read_all(output.stdout), read_all(output.stderr)));
+            let pid = helper.pid();
+            let mut existing = Existing {
+                probe: probe(name),
+                helper: Some(helper),
+                unit: hq::fresh_unit_name("q1h6-"),
+                done: false,
+            };
+            let unit = existing.unit.clone();
+            match existing.probe.start_transient_scope(&unit, pid) {
+                Ok(Answer::Returned(job)) => evidence(
+                    "H6",
+                    &format!("created unit={unit} pid={pid} job={}", job.as_str()),
+                ),
+                other => panic!("{name}: StartTransientUnit of the fresh name: {other:?}"),
+            }
+            assert!(
+                wait_until(Duration::from_secs(10), || {
+                    hq::membership(pid)
+                        .ok()
+                        .and_then(|membership| membership.unified)
+                        .is_some_and(|path| hq::last_component(&path) == unit)
+                }),
+                "{name}: the owned helper did not enter {unit}"
+            );
+            let (error, message) = match existing.probe.start_transient_scope(&unit, pid) {
+                Ok(Answer::Refused { name, message }) => (name, message),
+                other => panic!("{name}: a second StartTransientUnit of {unit}: {other:?}"),
+            };
+            assert_eq!(error, UNIT_EXISTS, "{name}: {message}");
+            evidence(
+                "H6",
+                &format!("second start error={error} message={message:?}"),
+            );
+            // Owned cleanup: the helper, then the unit; the reply is
+            // diagnostics, the manager's absence is observed.
+            let mut helper = existing.helper.take().unwrap();
+            helper.kill().unwrap();
+            helper.reap().unwrap();
+            let stopped = existing.probe.stop_unit(&unit);
+            evidence(
+                "H6",
+                &format!("StopUnit reply (diagnostics only): {stopped:?}"),
+            );
+            assert!(
+                wait_until(Duration::from_secs(10), || existing
+                    .probe
+                    .is_no_such_unit(&unit)),
+                "{name}: {unit} is still loaded"
+            );
+            existing.done = true;
+            drop(existing);
+            scopes_back(name, &before);
+        }
+
+        /// H7: once the helper has entered its proven scope, killing it
+        /// (`cgroup.kill`) while keeping it unreaped leaves its
+        /// `/proc/<pid>/cgroup` readable and naming that cgroup (with the
+        /// kernel's ` (deleted)` mark once the manager has removed it), as
+        /// the finalizer's settling of a pending operation relies on. The
+        /// zombie is reaped only after, by its owner, and nothing is left.
+        pub fn h7_killed_unreaped_membership(scopes: &ScopeManager) {
+            let name = "h7";
+            let before = scopes_now(name);
+            let mut placed = placed(name, scopes);
+            let pid = placed.helper().unwrap().pid();
+            let entered = hq::membership(pid)
+                .unwrap()
+                .unified
+                .unwrap_or_else(|| panic!("{name}: no unified membership"));
+            placed.scope().unwrap().kill().unwrap();
+            assert!(
+                wait_until(Duration::from_secs(10), || hq::process_state(pid).ok()
+                    == Some('Z')),
+                "{name}: the killed helper did not become a zombie (state {:?})",
+                hq::process_state(pid)
+            );
+            // Unreaped: still this process's child, in state Z.
+            let status = fs::read_to_string(format!("/proc/{pid}/status")).unwrap();
+            assert!(
+                status
+                    .lines()
+                    .any(|line| line == format!("PPid:\t{}", std::process::id())),
+                "{name}"
+            );
+            // Observed repeatedly over 2 s: readable, naming the entered
+            // cgroup, deleted or not.
+            let (mut same, mut deleted) = (0u32, 0u32);
+            let start = Instant::now();
+            while start.elapsed() < Duration::from_secs(2) {
+                let membership = hq::membership(pid).unwrap_or_else(|error| {
+                    panic!("{name}: /proc/{pid}/cgroup of the zombie: {error}")
+                });
+                match membership.path_and_deleted() {
+                    Some((path, false)) if path == entered => same += 1,
+                    Some((path, true)) if path == entered => deleted += 1,
+                    other => panic!("{name}: the zombie's membership is {other:?}, not {entered}"),
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            let occupancy = placed.scope().unwrap().occupancy().unwrap();
+            assert_ne!(
+                occupancy,
+                Occupancy::Populated,
+                "{name}: a zombie still populates the cgroup"
+            );
+            evidence(
+                "H7",
+                &format!("pid={pid} entered={entered} zombie_reads={} (same path {same}, marked deleted {deleted}) occupancy_after_kill={occupancy:?}", same + deleted),
+            );
+            // Reaped only now, by its owner, with the scope proven; then the
+            // scope is confirmed gone.
+            placed.reap_helper().unwrap();
+            assert!(
+                wait_until(Duration::from_secs(10), || {
+                    placed.scope().unwrap().occupancy().ok() == Some(Occupancy::Removed)
+                }),
+                "{name}: the emptied scope was not removed"
+            );
+            assert!(placed.end().is_confirmed(), "{name}");
+            scopes_back(name, &before);
         }
     }
 

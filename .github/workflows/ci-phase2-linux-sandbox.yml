@@ -6,9 +6,18 @@ name: NEXUS OS Phase Two Linux Sandbox
 # every layer required. If this host cannot provide one (unprivileged user,
 # PID, network, IPC, UTS and cgroup namespaces; Landlock ABI >= 6; the seccomp
 # allow-list; cgroup v2 limits delegated through the runner user's systemd
-# user manager; a private /run/user/<uid>), the job fails. There is no
-# degraded mode and no skipped case: the suite runs with
-# NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX=1 and the passed-case count is checked.
+# user manager; a private /run/user/<uid>; the unified cgroup v2
+# hierarchy), the job fails. There is no degraded mode and no skipped case:
+# the suite runs with NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX=1 and the passed-case
+# count is checked.
+#
+# The suite includes the supported-host qualification of the native scope
+# mechanism (P2-V1-R3B-I4-Q1, G-HOST H1 to H7): the real user manager's
+# bus, the live helper's unified cgroup membership, the manager's unit Id and
+# ControlGroup bound to that membership, the runtime properties, the exact
+# NoSuchUnit and UnitExists answers, and a killed, unreaped helper's
+# membership; a passing run means the manager/native binding held on this
+# host. Host and version facts are printed as evidence only.
 #
 # It never runs for pull requests or pushes (the repository is public and
 # this runner is a self-hosted machine): only by dispatch, on the ref whose
@@ -139,6 +148,18 @@ jobs:
           [[ -d "$runtime" && "$(stat -f -c %T "$runtime")" == "tmpfs" && "$(stat -c %u:%a "$runtime")" == "$uid:700" ]] \
             || need "$runtime is missing or not a private tmpfs: the runner user needs a systemd user manager (lingering)"
           [[ -S "$runtime/bus" ]] || need "no systemd user manager bus at $runtime/bus for $(id -un)"
+          # The unified cgroup v2 hierarchy (I4's membership model: one
+          # `0::` line per process); hybrid or v1 fails closed here too.
+          [[ "$(stat -f -c %T /sys/fs/cgroup)" == "cgroup2fs" ]] || need "/sys/fs/cgroup is not the unified cgroup v2 hierarchy ($(stat -f -c %T /sys/fs/cgroup))"
+          echo "this job's cgroup membership: $(tr '\n' ' ' < /proc/self/cgroup)"
+          # Version facts of the host (evidence only, never authority).
+          echo "systemd: $(/usr/lib/systemd/systemd --version 2>/dev/null | head -1 || echo unknown)"
+          echo "dbus: $(dbus-daemon --version 2>/dev/null | head -1 || echo unknown)"
+          echo "os: $(. /etc/os-release && echo "$PRETTY_NAME")"
+          {
+            echo "Host: $(id -un) ($uid), $(uname -r) $(uname -m), $(. /etc/os-release && echo "$PRETTY_NAME")"
+            echo "systemd: $(/usr/lib/systemd/systemd --version 2>/dev/null | head -1 || echo unknown)"
+          } >> "$GITHUB_STEP_SUMMARY"
           delegated="/sys/fs/cgroup/user.slice/user-$uid.slice/user@$uid.service/cgroup.controllers"
           for controller in memory pids cpu; do
             grep -qw "$controller" "$delegated" 2>/dev/null || need "the $controller controller is not delegated to $(id -un)'s user manager"
@@ -214,14 +235,14 @@ jobs:
           live=${statuses[0]:-255}
           captured=${statuses[1]:-255}
           passed=0
-          grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log || passed=$?
+          grep -qx 'test result: ok. 39 live sandbox cases passed' phase2-live.log || passed=$?
           observed=0
           observe_cleanup || observed=$?
           if (( captured != 0 )); then
             echo "::error::the live suite's output was not fully captured (tee exit $captured)"
           fi
           if (( passed != 0 )); then
-            echo "::error::the live suite did not report 31 passed cases"
+            echo "::error::the live suite did not report 39 passed cases"
           fi
           if (( observed != 0 )); then
             echo "::error::the cleanup observation found something left, or could not answer, after the live suite (cargo exit $observed)"

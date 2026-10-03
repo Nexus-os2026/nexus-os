@@ -646,8 +646,9 @@ mod linux {
     }
 
     impl UserBus {
-        /// This process's own path to the checked socket.
-        fn path(&self) -> PathBuf {
+        /// This process's own path to the checked socket (the host
+        /// qualification probe connects through it too).
+        pub fn path(&self) -> PathBuf {
             PathBuf::from(format!("/proc/self/fd/{}", self.socket.as_raw_fd()))
         }
 

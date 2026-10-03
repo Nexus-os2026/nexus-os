@@ -27,7 +27,7 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORKFLOW = os.path.join(HERE, "..", "..", ".github", "workflows", "ci-phase2-linux-sandbox.yml")
 LIVE_STEP = "      - name: Live Phase Two isolation, escape and cleanup suite (every layer required)"
-PASSED = "test result: ok. 31 live sandbox cases passed"
+PASSED = "test result: ok. 39 live sandbox cases passed"
 SUITE = [
     "test",
     "-p",
@@ -188,7 +188,7 @@ exit 97
     def test_each_pipeline_command_keeps_its_own_status(self):
         captured = "::error::the live suite's output was not fully captured (tee exit 73)"
         failed = "::error::the live suite failed (cargo exit 101)"
-        uncounted = "::error::the live suite did not report 31 passed cases"
+        uncounted = "::error::the live suite did not report 39 passed cases"
         for cargo, tee, observed, output, status, present, absent in (
             (101, 73, 0, PASSED, 101, [failed, captured], [uncounted]),
             (0, 73, 0, PASSED, 1, [captured], ["the live suite failed"]),
@@ -217,7 +217,7 @@ exit 97
                 result, calls = self.step(0, 0, output, 0)
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertEqual(calls, [OBSERVE, LIVE, OBSERVE])
-                self.assertIn("::error::the live suite did not report 31 passed cases", result.stdout)
+                self.assertIn("::error::the live suite did not report 39 passed cases", result.stdout)
 
     def test_a_failed_observation_after_the_suite_fails_a_passing_suite(self):
         for observed in (1, 2, 101, 127):

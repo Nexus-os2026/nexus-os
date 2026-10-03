@@ -855,16 +855,20 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
         "pub fn loaded_scopes_by(deadline: Instant) -> Result<Scopes, ObservationError> {\n            \
          cleanup_observation::observe_scopes_by(deadline)\n"
     ));
-    assert_eq!(harness.matches("loaded_scopes()").count(), 4);
+    // P2-V1-R3B-I4-Q1: the host-qualification cases (`p2q`) add one checked
+    // use before anything is owned (`scopes_now`), one checked wait after
+    // (`scopes_back`), and two more failing `unwrap_or_else` of the probe and
+    // the checked bus; none reads a failed observation as "no scopes".
+    assert_eq!(harness.matches("loaded_scopes()").count(), 5);
     assert_eq!(
         harness.matches(".unwrap_or_else(|error| panic!(").count(),
-        2
+        5
     );
     assert_eq!(
         harness
             .matches("wait_for(Duration::from_secs(10), loaded_scopes_by, |now| {")
             .count(),
-        2
+        3
     );
     assert_eq!(
         harness
@@ -1002,7 +1006,7 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
         "live=${statuses[0]:-255}\n",
         "captured=${statuses[1]:-255}\n",
         "passed=0\n",
-        "grep -qx 'test result: ok. 31 live sandbox cases passed' phase2-live.log || passed=$?\n",
+        "grep -qx 'test result: ok. 39 live sandbox cases passed' phase2-live.log || passed=$?\n",
         "observed=0\n",
         "observe_cleanup || observed=$?\n",
         "if (( captured != 0 )); then\n",
@@ -1037,4 +1041,120 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
     for needle in ["import phase2_cleanup_check", "os.waitid", "killpg", "dbus"] {
         assert!(!steps.contains(needle), "{needle}");
     }
+}
+
+#[test]
+fn p2_g_10_the_live_gate_pins_every_case_and_the_host_qualification() {
+    // P2-V1-R3B-I4-Q1: the exact-SHA live gate's passed-case count is exactly
+    // the suite's cases (the unscoped ones run one by one, then the scoped
+    // array), every host-qualification case is in the array by name, the
+    // count cannot be met by a degraded run, and the identities the host
+    // cases assert are the production manager's own.
+    let read = |path: &str| std::fs::read_to_string(repo().join(path)).unwrap();
+    let harness = read("crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs");
+    let workflow = read(".github/workflows/ci-phase2-linux-sandbox.yml");
+    let steps = read("scripts/ci/test_phase2_cleanup_check.py");
+    let probe = read("crates/nexus-verifier-sandbox/tests/support/host_qualification.rs");
+    let manager = read("crates/nexus-verifier-sandbox/src/scope/manager.rs");
+    let suite = indented_item(&harness, "    fn suite() {");
+    let unscoped = code(suite).matches("run_case(").count();
+    assert_eq!(unscoped, 10);
+    assert!(suite.contains("let mut passed = 10;"));
+    let scoped: usize = suite
+        .split("let scoped: [ScopedCase; ")
+        .nth(1)
+        .and_then(|rest| rest.split(']').next())
+        .and_then(|n| n.parse().ok())
+        .expect("the scoped array's length");
+    let pinned: usize = workflow
+        .split("grep -qx 'test result: ok. ")
+        .nth(1)
+        .and_then(|rest| rest.split(' ').next())
+        .and_then(|n| n.parse().ok())
+        .expect("the workflow's pinned count");
+    assert_eq!(pinned, unscoped + scoped, "the pinned count is every case");
+    assert_eq!(pinned, 39);
+    assert!(
+        workflow.contains(&format!(
+            "grep -qx 'test result: ok. {pinned} live sandbox cases passed' phase2-live.log || passed=$?"
+        )),
+        "the gate greps the exact count"
+    );
+    assert!(
+        workflow.contains(&format!("did not report {pinned} passed cases")),
+        "the gate's error names the exact count"
+    );
+    assert!(
+        steps.contains(&format!(
+            "PASSED = \"test result: ok. {pinned} live sandbox cases passed\""
+        )),
+        "the step's fixture controls use the exact count"
+    );
+    assert_eq!(
+        steps
+            .matches(&format!("did not report {pinned} passed cases"))
+            .count(),
+        2,
+        "the step's fixture controls expect the exact count"
+    );
+    // The host qualification: every case once, by name, in the array.
+    for name in [
+        "p2q_live_h1_the_manager_is_the_real_uid_s_user_bus",
+        "p2q_live_h2_the_helper_s_membership_is_one_unified_cgroup_v2_line",
+        "p2q_live_h3_h4_the_manager_s_unit_binds_to_the_kernel_s_cgroup",
+        "p2q_live_h5_a_fresh_name_is_exactly_no_such_unit",
+        "p2q_live_h6_an_existing_name_is_exactly_unit_exists",
+        "p2q_live_h7_a_killed_unreaped_helper_keeps_its_membership",
+        "p2r1_live_panic_after_the_candidate_is_retained_settles_it",
+        "p2r1_live_panic_during_the_binding_proof_settles_it",
+    ] {
+        assert_eq!(suite.matches(&format!("\"{name}\",")).count(), 1, "{name}");
+    }
+    // Every scoped case runs, and the count is exact: no optional case.
+    for needle in ["#[ignore]", "--skip", "test-threads"] {
+        assert!(!harness.contains(needle), "{needle}");
+        assert!(!workflow.contains(needle), "{needle}");
+    }
+    assert!(
+        !workflow.contains("continue-on-error"),
+        "no step may continue on error"
+    );
+    assert!(!workflow.contains("cases passed' phase2-live.log || true"));
+    // The error identities the host cases assert are exactly the production
+    // manager's constants (bus-common-errors.h, systemd v255).
+    for (constant, identity) in [
+        ("NO_SUCH_UNIT", "org.freedesktop.systemd1.NoSuchUnit"),
+        ("UNIT_EXISTS", "org.freedesktop.systemd1.UnitExists"),
+    ] {
+        assert!(
+            code(&manager).contains(&format!("const {constant}: &str = \"{identity}\";")),
+            "the production manager's {constant} is systemd's {identity}"
+        );
+        assert!(
+            code(&probe).contains(&format!("pub const {constant}: &str = \"{identity}\";")),
+            "the probe asserts the production identity {identity}"
+        );
+    }
+    // The probe is the live harness's own: a tests/ file, included by the
+    // harness alone, in no library and no normal build.
+    assert!(
+        harness.contains("#[path = \"support/host_qualification.rs\"]\nmod host_qualification;")
+    );
+    let sandbox = repo().join("crates/nexus-verifier-sandbox");
+    let mut sources = Vec::new();
+    production_files(&sandbox.join("src"), &mut sources);
+    assert!(
+        count_in(&sources, "host_qualification").is_empty(),
+        "no production source names the probe"
+    );
+    assert!(
+        !read("crates/nexus-verifier-sandbox/Cargo.toml").contains("host_qualification"),
+        "the probe is no target of the crate"
+    );
+    // The host layers step requires the unified hierarchy (fail closed), and
+    // the live step's observations are unchanged (p2_g_09).
+    assert!(
+        workflow.contains("[[ \"$(stat -f -c %T /sys/fs/cgroup)\" == \"cgroup2fs\" ]] || need"),
+        "the host layers step requires the unified hierarchy"
+    );
 }

@@ -756,6 +756,30 @@ in `docs/evidence/p2-v1-r3b-i4-r1-native-scope/`.
 | the helper's identity: refused instead of wrapping; no spawn once exhausted | `i4r1_20`, `i4r1_21` |
 | no real manager or kernel in unit tests | `i4r1_24`; the strace proof in the evidence |
 
+P2-V1-R3B-I4-Q1 host qualification (live). The live suite qualifies, on
+the supported host and the same live helper the production path uses, the
+facts the accepted scope mechanism depends on (G-HOST H1 to H7), beside the
+production proof, which stays the only authority; the real values are
+printed as bounded evidence. Its probe (`tests/support/host_qualification.rs`)
+is the live harness's own: a bounded connection to the checked user bus, in
+no library and no normal build (`p2_g_10`).
+
+| Fact | Live case |
+|---|---|
+| H1: the manager is the real uid's `/run/user/<uid>/bus`, the socket the cleanup observation checks; the environment's bus address changes nothing | `p2q_live_h1_the_manager_is_the_real_uid_s_user_bus` |
+| H2: the live helper's `/proc/<pid>/cgroup` is one unified `0::` line, absolute and in normal form, on a cgroup2 hierarchy (hybrid or v1 fails closed) | `p2q_live_h2_the_helper_s_membership_is_one_unified_cgroup_v2_line` |
+| H3, H4: `GetUnit`'s object reports `Id` equal to the generated name and `ControlGroup` byte-equal to the kernel's membership; `RuntimeMaxUSec` (`t`) and `OOMPolicy` (`s`) exact | `p2q_live_h3_h4_the_manager_s_unit_binds_to_the_kernel_s_cgroup`, `p2r1_live_panic_during_the_binding_proof_settles_it` |
+| H5: a fresh name is refused with exactly `org.freedesktop.systemd1.NoSuchUnit` | `p2q_live_h5_a_fresh_name_is_exactly_no_such_unit` |
+| H6: a uniquely named scope the harness created and owns is refused a second start with exactly `org.freedesktop.systemd1.UnitExists`; the harness ends its own helper and unit | `p2q_live_h6_an_existing_name_is_exactly_unit_exists` |
+| H7: a helper killed in its proven scope and kept unreaped keeps a readable `/proc/<pid>/cgroup` naming that cgroup (marked ` (deleted)` once removed); the finalizer settles a retained candidate on the real host | `p2q_live_h7_a_killed_unreaped_helper_keeps_its_membership`, `p2r1_live_panic_after_the_candidate_is_retained_settles_it`, `p2r1_live_panic_while_proving_the_scope_stops_it` |
+
+The error identities the cases assert are the production manager's own
+constants (`i4q1_the_manager_s_definite_answers_are_exactly_systemd_s_error_names`,
+`p2_g_10`); the gate's passed-case count (39) is exactly the suite's cases
+(`p2_g_10`). The qualification establishes facts of this host and systemd
+version; it adds no generic D-Bus or systemd ordering guarantee, and the
+no-candidate rule for an uncertain start is unchanged.
+
 CI: a dedicated exact-SHA workflow on the self-hosted runner
 (`.github/workflows/ci-phase2-linux-sandbox.yml`) runs the live suite and
 fails if a layer is missing. Hosted CI runs the portable tests and asserts
@@ -817,13 +841,16 @@ build-output directories.
 - Timing: a verification's generation binds the toolchain verification it
   was prepared with; a re-verification from scratch is a new binding.
 - Uncertain scope operations (P2-V1-R3B-I4, -R1) are validated against a
-  deterministic simulation, not on a supported host: that systemd names
+  deterministic simulation; the facts they depend on (that systemd names
   `UnitExists` and `NoSuchUnit` as relied on, reports a scope's `Id` and
   `ControlGroup` exactly as `/proc/<pid>/cgroup` names the same cgroup for
-  a backend in the manager's cgroup namespace (a backend that sees other
-  paths proves nothing: fail closed), and that `/proc/<pid>/cgroup` of an
-  unreaped, killed helper still names its cgroup (with ` (deleted)` once it
-  is removed) remain to be exercised live (G-HOST, G-LIVE).
+  a backend in the manager's cgroup namespace, and that `/proc/<pid>/cgroup`
+  of an unreaped, killed helper still names its cgroup, with ` (deleted)`
+  once it is removed) are qualified on the supported host only by the
+  exact-SHA live gate's host-qualification cases (section 15,
+  P2-V1-R3B-I4-Q1); a backend that sees other paths proves nothing (fail
+  closed). Until that gate has passed on the runner, G-HOST and G-LIVE
+  remain open.
 - An uncertain StartTransientUnit whose helper is never seen in a cgroup of
   its unit is never confirmed (P2-V1-R3B-I4-R1): it stays `CleanupFailed`,
   its helper an unreaped zombie, for the life of the backend process. No

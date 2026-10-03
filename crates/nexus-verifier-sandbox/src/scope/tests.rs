@@ -1157,3 +1157,31 @@ fn i4r1_x_a_normal_build_starts_a_scope_only_within_run() {
         "a normal build exposes a direct scope start"
     );
 }
+
+#[test]
+fn i4q1_the_manager_s_definite_answers_are_exactly_systemd_s_error_names() {
+    // P2-V1-R3B-I4-Q1: the only two error names read as definite answers are
+    // systemd's own (bus-common-errors.h, v255), each in exactly one arm;
+    // every other error is uncertain. The live host qualification asserts
+    // the same literals against the real user manager (`p2q` cases).
+    let code: String = include_str!("manager.rs")
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\n");
+    for needle in [
+        "const NO_SUCH_UNIT: &str = \"org.freedesktop.systemd1.NoSuchUnit\";",
+        "const UNIT_EXISTS: &str = \"org.freedesktop.systemd1.UnitExists\";",
+        "Ok(Err(name)) if name == UNIT_EXISTS => Started::Collision,",
+        "Ok(Err(name)) if name == NO_SUCH_UNIT => Remote::Answered(Presence::Absent),",
+        "Ok(Err(name)) => Started::Uncertain(format!(\"StartTransientUnit: {name}\")),",
+        "Ok(Err(name)) => Remote::Uncertain(format!(\"GetUnit: {name}\")),",
+    ] {
+        assert_eq!(code.matches(needle).count(), 1, "{needle}");
+    }
+    // No other path answers a collision or an absence.
+    assert_eq!(code.matches("=> Started::Collision").count(), 1);
+    assert_eq!(code.matches("Presence::Absent").count(), 1);
+    assert_eq!(code.matches("NoSuchUnit").count(), 1);
+    assert_eq!(code.matches("UnitExists").count(), 1);
+}

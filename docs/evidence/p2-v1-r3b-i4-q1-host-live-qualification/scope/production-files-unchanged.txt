@@ -1,0 +1,14 @@
+same crates/nexus-verifier-sandbox/src/scope.rs
+same crates/nexus-verifier-sandbox/src/scope/manager.rs
+same crates/nexus-verifier-sandbox/src/scope/pending.rs
+same crates/nexus-verifier-sandbox/src/scope/native.rs
+same crates/nexus-verifier-sandbox/src/execution.rs
+same crates/nexus-verifier-sandbox/src/launcher.rs
+same crates/nexus-verifier-sandbox/src/helper.rs
+same crates/nexus-verifier-sandbox/Cargo.toml
+same Cargo.lock
+same Cargo.toml
+same AGENTS.md
+same CLAUDE.md
+same .gitignore
+same app/src-tauri/src/coding_flow/verification.rs
