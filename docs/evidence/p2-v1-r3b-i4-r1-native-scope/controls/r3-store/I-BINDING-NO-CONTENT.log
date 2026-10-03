@@ -1,0 +1,24 @@
+
+running 1 test
+test f07_bindings_are_content_addressed ... FAILED
+
+failures:
+
+---- f07_bindings_are_content_addressed stdout ----
+
+thread 'f07_bindings_are_content_addressed' (1247326) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:1405:5:
+assertion `left == right` failed: [archive-binding] journal binding bytes
+  left: [179, 246, 2, 165, 50, 13, 42, 220, 238, 170, 2, 107, 29, 66, 30, 86, 97, 201, 48, 49, 255, 3, 56, 234, 223, 89, 248, 46, 74, 116, 75, 197]
+ right: [83, 27, 246, 235, 75, 160, 239, 38, 207, 78, 63, 184, 253, 182, 163, 136, 63, 109, 13, 227, 5, 71, 3, 95, 65, 18, 16, 3, 215, 147, 177, 232]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    f07_bindings_are_content_addressed
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.93s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

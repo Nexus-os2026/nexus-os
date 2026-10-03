@@ -1,0 +1,22 @@
+
+running 1 test
+test r304_a_kept_copy_that_is_not_root_0444_with_one_link_refuses ... FAILED
+
+failures:
+
+---- r304_a_kept_copy_that_is_not_root_0444_with_one_link_refuses stdout ----
+
+thread 'r304_a_kept_copy_that_is_not_root_0444_with_one_link_refuses' (1285234) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:11206:32:
+[succession-keep] owner: the repeat proceeded
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r304_a_kept_copy_that_is_not_root_0444_with_one_link_refuses
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.02s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

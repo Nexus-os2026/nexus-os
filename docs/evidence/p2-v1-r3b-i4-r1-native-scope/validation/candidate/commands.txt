@@ -1,0 +1,11 @@
+lib-tests exit=0 started=2026-10-03T00:06:25Z :: cargo test --locked -p nexus-verifier-sandbox --lib
+store-tests exit=0 started=2026-10-03T00:06:55Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_store
+codec-tests exit=0 started=2026-10-03T00:07:25Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_codec
+core-tests exit=0 started=2026-10-03T00:07:29Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_core
+cleanup-observation exit=0 started=2026-10-03T00:07:49Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_cleanup_observation
+package-layout exit=0 started=2026-10-03T00:07:51Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_package_layout
+live-harness-build-only exit=0 started=2026-10-03T00:07:52Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_live_sandbox --no-run
+clippy exit=0 started=2026-10-03T00:07:53Z :: cargo clippy --locked -p nexus-verifier-sandbox --lib --tests -- -D warnings
+fmt-check exit=0 started=2026-10-03T00:08:05Z :: cargo fmt --all -- --check
+diff-check exit=0 started=2026-10-03T00:08:09Z :: git diff --check
+lib-test-list exit=0 started=2026-10-03T00:08:09Z :: cargo test --locked -p nexus-verifier-sandbox --lib -- --list

@@ -1,0 +1,8 @@
+error[E0425]: cannot find type `StartFailed` in module `nexus_verifier_sandbox::scope`
+  --> src/main.rs:11:49
+   |
+11 |     fn failed(_: nexus_verifier_sandbox::scope::StartFailed) {}
+   |                                                 ^^^^^^^^^^^ not found in `nexus_verifier_sandbox::scope`
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `i4r1-normal-caller` (bin "i4r1-normal-caller") due to 1 previous error

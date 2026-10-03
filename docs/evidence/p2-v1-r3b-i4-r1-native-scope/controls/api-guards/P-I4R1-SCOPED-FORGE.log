@@ -1,0 +1,20 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0451]: fields `helper` and `scope` of struct `ScopedHelper` are private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:28
+   |
+21 |     let _ = ScopedHelper { helper: None, scope: todo!() };
+   |                            ^^^^^^        ^^^^^ private field
+   |                            |
+   |                            private field
+
+error: type `nexus_verifier_sandbox::scope::pending::ScopeBoundary` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:49
+   |
+21 |     let _ = ScopedHelper { helper: None, scope: todo!() };
+   |                                                 ^^^^^^^ private type
+   |
+   = note: this error originates in the macro `todo` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+For more information about this error, try `rustc --explain E0451`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...

@@ -1,0 +1,24 @@
+
+running 1 test
+test execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit ... FAILED
+
+failures:
+
+---- execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit stdout ----
+
+thread 'execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit' (1209500) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:830:5:
+assertion `left == right` failed: the colliding unit, not this request's, was stopped
+  left: 1
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.30s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.44s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

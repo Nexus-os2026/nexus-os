@@ -21,26 +21,32 @@
 //! `cgroup.events` file every live cgroup has is gone and the directory lists
 //! nothing.
 //!
-//! **Uncertain remote operations (P2-V1-R3B-I4).** StartTransientUnit and
-//! StopUnit are remote calls whose effect and reply are independent: a
+//! **Uncertain remote operations (P2-V1-R3B-I4, -R1).** StartTransientUnit
+//! and StopUnit are remote calls whose effect and reply are independent: a
 //! timeout or a broken transport proves nothing about what the manager did,
 //! and a reply proves nothing about what is left. So from the moment a start
 //! request may have been dispatched, the possible scope is owned as a
-//! [`PendingScope`] until independent observation either proves it (then,
-//! and only then, it becomes a [`Scope`]) or confirms that nothing it may
-//! have created can still hold or receive a process. A pending scope is bound
-//! to the retained helper, the backend-generated unit name (a locator, never
-//! authority), the expected limits and the manager connection that issued
-//! the request; it retains the candidate cgroup by descriptor as soon as the
-//! kernel reports the helper in it, so no later failed proof can lose it. It
-//! is owned by the execution (and its retained boundary) and stays retryable
-//! after the [`ScopeManager`] that started it is gone. Nothing is
+//! pending scope operation until independent observation either proves it
+//! (then, and only then, it becomes a [`Scope`]) or confirms that nothing it
+//! may have created can still hold or receive a process. A pending scope is
+//! bound to the retained helper, the backend-generated unit name (a locator,
+//! never authority), the expected limits and the manager connection that
+//! issued the request; it retains the candidate cgroup by descriptor as soon
+//! as the kernel reports the helper in it, so no later failed proof can lose
+//! it. A scope is proven only once the manager's own unit object for the
+//! name reports exactly that cgroup as its control group. A pending scope is
+//! crate-private: it is owned only beside its helper (by an execution, its
+//! retained boundary, or the live harness's scoped helper) and stays
+//! retryable after the [`ScopeManager`] that started it is gone. Nothing is
 //! reconstructed from a unit name, a process id or a path, and nothing
 //! sweeps units by name. The states and transitions are documented in
 //! `scope/pending.rs`.
+//!
+//! A normal build constructs a manager only with [`ScopeManager::connect`]
+//! and starts a scope only within `execution::run`: there is no public
+//! direct scope start and no caller-selected bus.
 
 use std::io;
-use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -56,8 +62,7 @@ pub(crate) mod tests;
 pub use manager::BUS_CALL_TIMEOUT;
 #[cfg(test)]
 pub(crate) use pending::PendingState;
-pub(crate) use pending::ScopeBoundary;
-pub use pending::{PendingScope, StartFailed};
+pub(crate) use pending::{PendingScope, ScopeBoundary};
 
 use manager::{Manager, ZbusManager};
 use native::{CgroupDir, Kernel, Native};
@@ -131,16 +136,24 @@ pub struct ScopeManager {
 }
 
 impl ScopeManager {
-    /// Connect to `/run/user/<uid>/bus`, derived from the real uid.
+    /// Connect to `/run/user/<uid>/bus`, derived from the real uid: the
+    /// only manager a normal build can construct.
     pub fn connect() -> Result<Self, ScopeError> {
         // SAFETY: getuid has no preconditions.
         let uid = unsafe { libc::getuid() };
-        Self::connect_at(&format!("/run/user/{uid}/bus"))
+        Self::connect_to(&format!("/run/user/{uid}/bus"))
+    }
+
+    /// Connect to the bus socket at `path` with [`Self::connect`]'s own
+    /// checks: the live harness's fail-closed checks of those checks only.
+    #[cfg(any(test, feature = "live-sandbox-harness"))]
+    pub fn connect_at(path: &str) -> Result<Self, ScopeError> {
+        Self::connect_to(path)
     }
 
     /// Connect to the user manager bus socket at `path`, which must be a
     /// socket owned by this process's real uid.
-    pub fn connect_at(path: &str) -> Result<Self, ScopeError> {
+    fn connect_to(path: &str) -> Result<Self, ScopeError> {
         Ok(Self {
             controller: Arc::new(Controller {
                 manager: Box::new(ZbusManager::connect_at(path)?),
@@ -173,48 +186,6 @@ impl ScopeManager {
             helper,
             limits,
         )))
-    }
-
-    /// Create a scope holding exactly `helper`, the backend's own unreaped
-    /// child, with `limits`, and prove it. The helper's process id is only
-    /// the locator of that retained child.
-    ///
-    /// When no scope is proven, whatever the attempt may have created is
-    /// settled first (a panic while proving included, as before): the
-    /// failure carries it, owned, unless it was confirmed gone
-    /// (P2-V1-R3B-I4).
-    pub fn start(&self, helper: &Helper, limits: &ResourcePolicy) -> Result<Scope, StartFailed> {
-        let pending = self.prepare(helper, limits).map_err(|error| StartFailed {
-            error,
-            unresolved: None,
-        })?;
-        let mut boundary = ScopeBoundary::Pending(pending);
-        let error = match catch_unwind(AssertUnwindSafe(|| boundary.establish(helper, None))) {
-            Ok(Ok(())) => None,
-            Ok(Err(error)) => Some(error),
-            Err(panic) => {
-                if let ScopeBoundary::Pending(pending) = &mut boundary {
-                    let _ = catch_unwind(AssertUnwindSafe(|| pending.settle(helper)));
-                }
-                resume_unwind(panic)
-            }
-        };
-        match boundary {
-            ScopeBoundary::Proven(scope) => Ok(scope),
-            boundary => {
-                let mut unresolved = boundary.into_pending();
-                if unresolved
-                    .as_mut()
-                    .is_some_and(|pending| pending.settle(helper))
-                {
-                    unresolved = None;
-                }
-                Err(StartFailed {
-                    error: error.unwrap_or(ScopeError::Mismatch("scope not proven")),
-                    unresolved,
-                })
-            }
-        }
     }
 }
 
@@ -292,7 +263,8 @@ fn verify_limits(dir: &dyn CgroupDir, limits: &ResourcePolicy) -> Result<(), Sco
 }
 
 /// A verifier execution's cgroup, retained by descriptor: a proven scope.
-/// The only way to one is a [`PendingScope`] whose every proof passed.
+/// The only way to one is a pending scope operation whose every proof
+/// passed.
 #[derive(Debug)]
 pub struct Scope {
     unit: String,

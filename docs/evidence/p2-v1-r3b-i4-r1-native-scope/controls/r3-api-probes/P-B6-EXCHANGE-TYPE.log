@@ -1,0 +1,21 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 101
+--- probe body ---
+    fn reach(exchange: &custody::store::exchange::Exchange) {}
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0603]: struct `Exchange` is private
+   --> crates/nexus-verifier-sandbox/tests/r3_api_probe.rs:57:51
+    |
+ 57 |     fn reach(exchange: &custody::store::exchange::Exchange) {}
+    |                                                   ^^^^^^^^ private struct
+    |
+note: the struct `Exchange` is defined here
+   --> crates/nexus-verifier-sandbox/tests/support/custody/store/exchange.rs:180:1
+    |
+180 | pub(super) struct Exchange {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "r3_api_probe") due to 1 previous error
+--- stdout ---

@@ -1,0 +1,34 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/base-target/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+
+running 4 tests
+test scope::tests::r1_baseline::b_r1_1_a_panic_in_the_direct_start_crosses_the_last_owner ...
+thread 'scope::tests::r1_baseline::b_r1_1_a_panic_in_the_direct_start_crosses_the_last_owner' (858001) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:852:13:
+B-R1-1: an injected manager panic in GetUnit
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'scope::tests::r1_baseline::b_r1_1_a_panic_in_the_direct_start_crosses_the_last_owner' (858001) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:852:13:
+B-R1-1: an injected manager panic in GetUnit
+B-R1-1: ScopeManager::start unwound to its caller: true
+B-R1-1: owners of the issuing controller: before 1, after the unwind 1 (a surviving PendingScope would be one more)
+B-R1-1: the unit the uncertain start created is still loaded: true
+B-R1-1: StopUnit calls: 0; GetUnit calls (each panicked): 2
+B-R1-1: every call: [Start("nexus-verifier-6d4eb61bda0d5a4c741aa0ce64741e35.scope", 858002), GetUnit("nexus-verifier-6d4eb61bda0d5a4c741aa0ce64741e35.scope"), Membership(858002, true), GetUnit("nexus-verifier-6d4eb61bda0d5a4c741aa0ce64741e35.scope")]
+ok
+test scope::tests::r1_baseline::b_r1_2_a_start_failure_splits_the_operation_from_its_helper ... B-R1-2: error NotPlaced; the failure carries an unresolved operation: true
+B-R1-2: the helper (pid 858004) is a separate caller-owned value, not part of the failure
+B-R1-2: after dropping the unresolved owner, the unit is still loaded: true (owned by nothing)
+B-R1-2: simulated cgroups: [Cgroup { path: "/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-0b96af62f194889c28fa2e12608cee03.scope", v2: true, removed: false, members: {}, listed: true, killed: false, phantom: None, limits: ResourcePolicy { memory_max_bytes: 4294967296, swap_max_bytes: 0, pids_max: 256, cpu_quota_us_per_sec: 4000000, wall_timeout_secs: 600, runtime_backstop_secs: 660, output_ceiling_bytes: 8388608, excerpt_bytes: 16384 }, limit_mismatch: None, kills: 0 }]
+B-R1-2: the helper was then reaped on its own (safe API)
+B-R1-2: with its helper reaped first, settling the kept operation (with any other helper) confirms: false
+ok
+test scope::tests::r1_baseline::b_r1_3_settling_neither_kills_nor_owns_the_helper ... B-R1-3: start settled internally (unresolved: false); the helper is still running afterwards: true
+B-R1-3: PendingScope::settle returned true; the helper is still running afterwards: true; still this process's child: true
+ok
+test scope::tests::r1_baseline::b_r1_4_a_cgroup_of_another_slice_with_the_unit_basename_is_proven ... B-R1-4: the kernel reports the helper in Some("/foreign.slice/nexus-verifier-cb3fb50c317edec0aba052f2cb9d6a00.scope")
+B-R1-4: opened: [Open("/foreign.slice/nexus-verifier-cb3fb50c317edec0aba052f2cb9d6a00.scope")]
+B-R1-4: manager calls: [Start("nexus-verifier-cb3fb50c317edec0aba052f2cb9d6a00.scope", 858011), GetUnit("nexus-verifier-cb3fb50c317edec0aba052f2cb9d6a00.scope"), RuntimeMax("/unit/nexus-verifier-cb3fb50c317edec0aba052f2cb9d6a00.scope"), OomPolicy("/unit/nexus-verifier-cb3fb50c317edec0aba052f2cb9d6a00.scope")]
+B-R1-4: proven (Ok(Scope)): true
+ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 90 filtered out; finished in 1.21s

@@ -1,0 +1,22 @@
+P2-V1-R3B-I4-R1 baseline commands (base bb0dfec0338273ddf187b1dfcb22cd4b8eb8b2f9, tree d92c819da744722701a1db103b70fc17f6d7f4c9)
+
+Isolated copy (never the review worktree):
+$ git -C <worktree> archive bb0dfec0338273ddf187b1dfcb22cd4b8eb8b2f9 | tar -x -C <scratch>/base
+$ git init; git add -f -A; git commit   -> tree d92c819da744722701a1db103b70fc17f6d7f4c9 (equal to the base's)
+(provenance.txt)
+
+B-R1-1 to B-R1-4: probes appended to the copy's src/scope/tests.rs (the base's test-only simulation module):
+$ CARGO_TARGET_DIR=<scratch>/base-target cargo test --locked -p nexus-verifier-sandbox --lib -- r1_baseline --nocapture --test-threads=1
+exit 0; 4 passed (b-r1-1-to-4-run.txt; the probes: b-r1-1-to-4-probes.diff)
+
+B-R1-5: a normal external caller (a crate outside the workspace, depending on the copy's sandbox crate by path, no feature of it enabled):
+$ cargo check --offline        exit 0 (b-r1-5-normal-caller.txt; source b-r1-5-normal-caller.rs, manifest b-r1-5-normal-caller.Cargo.toml)
+
+B-R1-6: a source-derived, standard-library-only model of the serial allocation (no 2^64 spawns attempted):
+$ rustc --edition 2021 -O -o <scratch>/b-r1-6-serial-model b-r1-6-serial-model.rs   exit 0, no output (b-r1-6-build.txt)
+$ <scratch>/b-r1-6-serial-model                                                    exit 0 (b-r1-6-run.txt)
+The launcher source it is derived from, and the spawn-before-serial order: b-r1-6-source.txt
+
+B-R1-7: the base's absence rule verbatim (b-r1-7-absence-rule.txt); primary sources (primary/: retrieval.txt,
+excerpts.md, the retrieved documents and their text conversions). No real StartTransientUnit, StopUnit,
+GetUnit or timeout was exercised, and no systemd ordering test was run: no bus was contacted.

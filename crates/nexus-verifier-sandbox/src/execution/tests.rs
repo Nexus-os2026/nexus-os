@@ -325,7 +325,9 @@ fn p2r1_a_panicking_output_thread_loses_its_record() {
 
 use crate::helper::enforced_policy_hash;
 use crate::protocol::{FromHelper, PROTOCOL_VERSION};
-use crate::scope::tests::{Call, Phantom, Placement, Property, Reply, Script, World, SLICE};
+use crate::scope::tests::{
+    abandon, Call, Phantom, Placement, Property, Reply, Script, World, SLICE,
+};
 
 /// A stand-in helper that greets like the real one, then copies the first
 /// message the backend sends it to its stdout and refuses it: a launch that
@@ -864,7 +866,7 @@ fn i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit() {
 
 #[test]
 fn i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven() {
-    let unproven: [fn(&mut crate::scope::tests::State); 8] = [
+    let unproven: [fn(&mut crate::scope::tests::State); 7] = [
         |state| state.runtime_max = Property::Uncertain(Reply::Timeout),
         |state| state.oom_policy = Property::Uncertain(Reply::Disconnect),
         |state| state.get_unit = Script::first([Reply::Malformed], Reply::Delivered),
@@ -872,10 +874,6 @@ fn i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven() {
         |state| state.listed = false,
         |state| state.unit_loaded = false,
         |state| state.placement = Placement::Never,
-        |state| {
-            state.start_effect = false;
-            state.start_reply = Reply::Timeout;
-        },
     ];
     for (case, script) in unproven.into_iter().enumerate() {
         let world = World::new(script);
@@ -892,6 +890,23 @@ fn i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven() {
             report.not_run
         );
     }
+    // An uncertain start that created nothing (I4-R1): never confirmed gone,
+    // so its output is not waited for; the attempt ended at the scope,
+    // before any handshake, and its helper is retained unreaped.
+    let world = World::new(|state| {
+        state.start_effect = false;
+        state.start_reply = Reply::Timeout;
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert!(
+        matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_)))),
+        "{:?}",
+        report.not_run
+    );
+    assert!(report.outcome.is_none() && report.ended_by.is_none());
+    assert_eq!(report.classify(0), ExitClass::CleanupFailed);
+    abandon(boundary_of(report), pid);
     // The stand-in shows a launch that does reach it: once proven.
     let world = World::default();
     let report = run_in(&world, None);
@@ -973,9 +988,12 @@ fn i4_21_an_unconfirmed_operation_is_a_cleanup_failure_never_an_unavailable_sand
     );
     let boundary = boundary_of(report);
     assert!(pending_state(&boundary).issued && is_child(pid));
+    // I4-R1: without a candidate, nothing the manager answers later
+    // confirms an uncertain start; a retry keeps it, with its helper.
     world.release();
-    boundary.retry().unwrap();
-    assert!(!is_child(pid));
+    let boundary = boundary.retry().unwrap_err();
+    assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
+    abandon(boundary, pid);
 }
 
 #[test]
@@ -1070,7 +1088,9 @@ fn i4_25_a_panic_after_the_start_request_keeps_its_owner() {
     assert!(matches!(report.not_run, Some(NotRun::Interrupted)));
     assert_eq!(report.stdout.bytes, 0);
     assert!(report.cleanup.is_confirmed());
-    // Nothing can be confirmed: retained.
+    // Nothing can be confirmed: retained. The reply was delivered, but the
+    // panic came before it was recorded, so for the backend the request's
+    // outcome is uncertain (I4-R1): a retry keeps it, with its helper.
     let world = World::new(|state| {
         state.placement = Placement::Never;
         state.stop = Script::always((false, Reply::Timeout));
@@ -1083,9 +1103,11 @@ fn i4_25_a_panic_after_the_start_request_keeps_its_owner() {
         "a panic after StartTransientUnit lost the operation's owner"
     );
     let boundary = boundary_of(report);
-    assert!(pending_state(&boundary).issued && is_child(pid));
+    let observed = pending_state(&boundary);
+    assert!(observed.issued && !observed.accepted && is_child(pid));
     world.release();
-    boundary.retry().unwrap();
+    let boundary = boundary.retry().unwrap_err();
+    abandon(boundary, pid);
 }
 
 #[test]
@@ -1172,19 +1194,30 @@ fn i4_29_the_classification_of_settled_executions_is_unchanged() {
     // A proven scope and a refused launch.
     let report = run_in(&World::default(), None);
     assert_eq!(report.classify(0), ExitClass::SandboxSetupFailed);
-    // No scope, and nothing it may have created remains.
+    // No scope, and nothing it may have created remains: settled through
+    // the retained candidate, or (a delivered start whose helper was never
+    // placed) stopped and observed unloaded.
     for script in [
         (|state: &mut crate::scope::tests::State| state.limit_mismatch = Some("pids.max"))
             as fn(&mut crate::scope::tests::State),
-        |state| {
-            state.start_effect = false;
-            state.start_reply = Reply::Error;
-        },
+        |state| state.placement = Placement::Never,
     ] {
         let report = run_in(&World::new(script), None);
         assert!(report.cleanup.is_confirmed());
         assert_eq!(report.classify(0), ExitClass::SandboxUnavailable);
     }
+    // I4-R1: an uncertain start without a candidate is never settled, even
+    // when it created nothing: an unconfirmed cleanup, never an unavailable
+    // sandbox.
+    let world = World::new(|state| {
+        state.start_effect = false;
+        state.start_reply = Reply::Error;
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert!(matches!(report.not_run, Some(NotRun::Scope(_))));
+    assert_eq!(report.classify(0), ExitClass::CleanupFailed);
+    abandon(boundary_of(report), pid);
 }
 
 #[test]
@@ -1237,4 +1270,998 @@ fn i4_30_no_cgroup_of_the_unit_s_name_is_ever_taken_by_its_path() {
     world.lock().stop = Script::always((true, Reply::Delivered));
     boundary.retry().unwrap();
     assert_eq!(opens(&world), 0);
+}
+
+// ---------------------------------------------------------------------------
+// P2-V1-R3B-I4-R1: the owners of a scope operation, the binding of the
+// manager's unit to the kernel's cgroup, uncertain starts without a
+// candidate, and the helper's identity. Over the deterministic simulation
+// only; no test here contacts a bus or creates a cgroup.
+
+use std::sync::atomic::AtomicU64;
+
+use crate::launcher::{allocate_serial, SPAWNED};
+use crate::scope::tests::{expand, Op, State, Text};
+
+const LIMITS: ResourcePolicy = ResourcePolicy::RUST_OFFLINE_V1;
+
+/// A stand-in helper that only holds its control socket open (`cat`).
+fn cat() -> Helper {
+    Helper::spawn(&HelperProgram::at("/bin/cat")).unwrap().0
+}
+
+/// Place a `cat` stand-in through the live harness's direct owner.
+fn place_cat(world: &World) -> (Result<ScopedHelper, PlacementFailed>, u32) {
+    let helper = cat();
+    let pid = helper.pid();
+    (place(&world.scopes(), helper, &LIMITS), pid)
+}
+
+/// An uncertain StartTransientUnit whose helper is never placed, so that
+/// no candidate can be retained; `effect`: whether the manager created the
+/// unit.
+fn uncertain_without_candidate(state: &mut State, effect: bool, reply: Reply) {
+    state.start_effect = effect;
+    state.start_reply = reply;
+    state.placement = Placement::Never;
+}
+
+/// The stand-in's launch reached it: the attempt went past the handshake.
+fn launched(report: &ExecutionReport) -> bool {
+    report.stdout.bytes > 0
+}
+
+#[test]
+fn i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner() {
+    // The manager created nothing: asked, it would answer NoSuchUnit, and
+    // the helper is outside. A panic after the request, before or after its
+    // outcome was recorded, neither loses nor releases the operation.
+    for point in [
+        FaultPoint::AfterScopeStart,
+        FaultPoint::ScopeReconcile,
+        FaultPoint::BeforeScopeStop,
+        FaultPoint::AfterScopeStop,
+    ] {
+        let world = World::new(|state| uncertain_without_candidate(state, false, Reply::Timeout));
+        let report = run_in(&world, Some(Fault::Panic(point)));
+        let pid = requested_pid(&world);
+        assert!(!launched(&report), "{point:?}");
+        assert_eq!(
+            report.classify(0),
+            ExitClass::CleanupFailed,
+            "{point:?}: a panic after an uncertain start lost or released its operation"
+        );
+        let boundary = boundary_of(report);
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.issued && !observed.accepted && !observed.settled,
+            "{point:?}: {observed:?}"
+        );
+        assert!(boundary.holds_helper() && is_child(pid), "{point:?}");
+        world.release();
+        let boundary = boundary.retry().unwrap_err();
+        abandon(boundary, pid);
+    }
+    // A panic inside the manager's own StartTransientUnit, after its effect
+    // and before any reply, through the harness's direct owner: one owner
+    // of the operation and its helper (StopUnit even unloads the unit).
+    let world = World::new(|state| {
+        uncertain_without_candidate(state, true, Reply::Delivered);
+        state.panic_at = Some(Op::Start);
+    });
+    let Ok((placed, pid)) = catch_unwind(AssertUnwindSafe(|| place_cat(&world))) else {
+        panic!("a panic crossed the direct owner of an unresolved operation");
+    };
+    let failed = placed.expect_err("nothing was proven");
+    assert!(failed.error.is_none(), "{:?}", failed.error);
+    let Cleanup::Failed(boundary) = failed.cleanup else {
+        panic!("a panic inside StartTransientUnit lost or released its operation");
+    };
+    assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
+    assert!(
+        world.lock().units.is_empty(),
+        "the unit was stopped and unloaded"
+    );
+    abandon(boundary, pid);
+}
+
+#[test]
+fn i4r1_02_a_direct_placement_failure_returns_one_owner_of_the_operation_and_its_helper() {
+    let world = World::new(|state| uncertain_without_candidate(state, true, Reply::Disconnect));
+    let (placed, pid) = place_cat(&world);
+    let failed = placed.expect_err("nothing was proven");
+    assert!(
+        matches!(failed.error, Some(ScopeError::Bus(_))),
+        "{:?}",
+        failed.error
+    );
+    let Cleanup::Failed(boundary) = failed.cleanup else {
+        panic!("the direct owner lost the unresolved operation");
+    };
+    assert!(
+        boundary.holds_scope(),
+        "the direct owner lost the unresolved operation"
+    );
+    assert!(
+        boundary.holds_helper() && is_child(pid),
+        "the operation's failure was split from its helper"
+    );
+    let observed = pending_state(&boundary);
+    assert!(observed.issued && !observed.accepted && !observed.candidate && !observed.settled);
+    // The retry stays explicit, and keeps both together.
+    let boundary = boundary.retry().unwrap_err();
+    assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
+    abandon(boundary, pid);
+}
+
+#[test]
+fn i4r1_03_dropping_a_direct_owner_is_defense_only_and_never_a_confirmation() {
+    // An unresolved failure, dropped: what it holds is ended without
+    // waiting, without the manager, and its helper is never reaped.
+    let world = World::new(|state| {
+        uncertain_without_candidate(state, true, Reply::Timeout);
+        state.stop = Script::always((false, Reply::Timeout));
+    });
+    let (placed, pid) = place_cat(&world);
+    let failed = placed.expect_err("nothing was proven");
+    assert!(!failed.cleanup.is_confirmed());
+    let before = world.lock().calls.len();
+    drop(failed);
+    {
+        let state = world.lock();
+        assert!(
+            state.calls[before..].is_empty(),
+            "a dropped failure asked the manager or the kernel: {:?}",
+            &state.calls[before..]
+        );
+        assert!(state.units.contains_key(&state.requested().unwrap()));
+    }
+    assert!(
+        is_child(pid),
+        "a dropped direct failure reaped the helper of its unresolved operation"
+    );
+    let start = Instant::now();
+    while is_running(pid) && start.elapsed() < FINALIZE_TIMEOUT {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(
+        !is_running(pid),
+        "the dropped failure did not end its helper"
+    );
+    // SAFETY: an unreaped child of this process; nothing else reaps it.
+    assert_eq!(
+        unsafe { libc::waitpid(pid as libc::pid_t, std::ptr::null_mut(), 0) },
+        pid as libc::pid_t
+    );
+    // A proven direct owner, dropped: its scope is ended through the
+    // retained descriptor, without the manager; only `end` confirms.
+    let world = World::default();
+    let (placed, _pid) = place_cat(&world);
+    let placed = placed.unwrap();
+    let before = world.lock().calls.len();
+    drop(placed);
+    let state = world.lock();
+    assert!(state.calls[before..]
+        .iter()
+        .all(|call| matches!(call, Call::Kill(_))));
+    assert!(state.created().unwrap().killed);
+    assert_eq!(state.count(|call| matches!(call, Call::Stop(_))), 0);
+}
+
+#[test]
+fn i4r1_06_a_cgroup_of_the_unit_s_name_in_another_place_is_never_proven() {
+    for beside in [
+        "/other.slice/{unit}",
+        "{slice}/nested.slice/{unit}",
+        "/{unit}",
+    ] {
+        let world = World::new(|state| state.placement = Placement::Beside(beside));
+        let report = run_in(&world, None);
+        assert!(
+            matches!(
+                report.not_run,
+                Some(NotRun::Scope(ScopeError::Mismatch("unit control group")))
+            ),
+            "{beside}: a cgroup of the unit's name that is not the unit's own was proven: {:?}",
+            report.not_run
+        );
+        assert!(!launched(&report), "{beside}");
+        // The cgroup the helper was found in stays cleanup ownership: it is
+        // ended and confirmed empty through its retained descriptor; the
+        // unit's own cgroup is never opened by its path.
+        assert!(report.cleanup.is_confirmed(), "{beside}");
+        let state = world.lock();
+        let unit = state.requested().unwrap();
+        let found = expand(beside, &unit);
+        assert!(state
+            .cgroups
+            .iter()
+            .any(|cgroup| cgroup.path == found && cgroup.killed));
+        assert_eq!(
+            state
+                .calls
+                .iter()
+                .filter(|call| matches!(call, Call::Open(_)))
+                .collect::<Vec<_>>(),
+            [&Call::Open(found)],
+            "{beside}"
+        );
+    }
+    // Through the harness's direct owner: not proven either.
+    let world = World::new(|state| state.placement = Placement::Beside("/other.slice/{unit}"));
+    let (placed, pid) = place_cat(&world);
+    let failed =
+        placed.expect_err("a cgroup of the unit's name that is not the unit's own was proven");
+    assert!(matches!(
+        failed.error,
+        Some(ScopeError::Mismatch("unit control group"))
+    ));
+    assert!(failed.cleanup.is_confirmed() && !is_child(pid));
+}
+
+#[test]
+fn i4r1_x_a_membership_path_not_in_normal_form_never_locates_a_candidate() {
+    // The manager's unit really is at these paths and would report them as
+    // its control group; the kernel names them for the helper. A path that
+    // is not absolute and in normal form locates nothing.
+    for path in ["{slice}/./{unit}", "{slice}//{unit}", "{unit}"] {
+        let world = World::new(|state| state.placement = Placement::Elsewhere(path));
+        let report = run_in(&world, None);
+        assert!(
+            matches!(report.not_run, Some(NotRun::Scope(ScopeError::NotPlaced))),
+            "{path}: a membership path not in normal form located the scope: {:?}",
+            report.not_run
+        );
+        assert!(!launched(&report), "{path}");
+        assert_eq!(opens(&world), 0, "{path}");
+        assert!(report.cleanup.is_confirmed(), "{path}");
+    }
+}
+
+#[test]
+fn i4r1_07_a_control_group_that_is_not_exactly_the_kernel_s_is_refused() {
+    // The kernel reports the helper in the unit's own cgroup; the manager
+    // reports another control group for the unit.
+    for group in [
+        "/other.slice/{unit}",
+        "{slice}/x-{unit}",
+        "{slice}/{unit}/child",
+        "{slice}/{unit}/",
+        "{slice}//{unit}",
+        "{slice}/./{unit}",
+        "{slice}/../app.slice/{unit}",
+        "{unit}",
+        "/",
+        "",
+    ] {
+        let world = World::new(|state| state.control_group = Text::Is(group));
+        let report = run_in(&world, None);
+        assert!(
+            matches!(
+                report.not_run,
+                Some(NotRun::Scope(ScopeError::Mismatch("unit control group")))
+            ),
+            "{group:?}: a control group that is not exactly the kernel's was accepted: {:?}",
+            report.not_run
+        );
+        assert!(!launched(&report), "{group:?}");
+        assert!(report.cleanup.is_confirmed(), "{group:?}");
+        assert!(world.lock().created().unwrap().killed, "{group:?}");
+    }
+}
+
+#[test]
+fn i4r1_08_an_unavailable_or_uncertain_control_group_is_refused() {
+    for group in [
+        Text::WrongType,
+        Text::Uncertain(Reply::Timeout),
+        Text::Uncertain(Reply::Error),
+        Text::Uncertain(Reply::Malformed),
+        Text::Uncertain(Reply::Disconnect),
+    ] {
+        let world = World::new(|state| state.control_group = group);
+        let report = run_in(&world, None);
+        let refused = match group {
+            Text::WrongType => matches!(
+                report.not_run,
+                Some(NotRun::Scope(ScopeError::Mismatch("unit control group")))
+            ),
+            _ => matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_)))),
+        };
+        assert!(
+            refused,
+            "{group:?}: an unavailable or malformed control group was accepted: {:?}",
+            report.not_run
+        );
+        assert!(!launched(&report), "{group:?}");
+        assert!(report.cleanup.is_confirmed(), "{group:?}");
+    }
+}
+
+#[test]
+fn i4r1_09_a_unit_id_that_is_not_exactly_the_generated_name_is_refused() {
+    for id in [
+        Text::Is("other.scope"),
+        Text::Is("x{unit}"),
+        Text::Is("{unit}.alias"),
+        Text::Is(""),
+        Text::WrongType,
+        Text::Uncertain(Reply::Timeout),
+        Text::Uncertain(Reply::Error),
+    ] {
+        let world = World::new(|state| state.unit_id = id);
+        let report = run_in(&world, None);
+        let refused = match id {
+            Text::Uncertain(_) => {
+                matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_))))
+            }
+            _ => matches!(
+                report.not_run,
+                Some(NotRun::Scope(ScopeError::Mismatch("unit id")))
+            ),
+        };
+        assert!(
+            refused,
+            "{id:?}: a unit id that is not the generated name was accepted: {:?}",
+            report.not_run
+        );
+        assert!(!launched(&report), "{id:?}");
+        assert!(report.cleanup.is_confirmed(), "{id:?}");
+        // Refused before the control group or any property is asked for.
+        assert_eq!(
+            world.lock().count(|call| matches!(
+                call,
+                Call::ControlGroup(_) | Call::RuntimeMax(_) | Call::OomPolicy(_)
+            )),
+            0,
+            "{id:?}"
+        );
+    }
+}
+
+#[test]
+fn i4r1_10_the_exact_binding_of_the_manager_s_unit_to_the_kernel_s_cgroup_proves() {
+    let world = World::default();
+    let (placed, pid) = place_cat(&world);
+    let placed = placed.unwrap();
+    {
+        let state = world.lock();
+        let unit = state.requested().unwrap();
+        let object = format!("/unit/{unit}");
+        assert_eq!(
+            state.calls,
+            [
+                Call::Start(unit.clone(), pid),
+                Call::Membership(pid, true),
+                Call::Open(format!("{SLICE}/{unit}")),
+                Call::GetUnit(unit.clone()),
+                Call::UnitId(object.clone()),
+                Call::ControlGroup(object.clone()),
+                Call::RuntimeMax(object.clone()),
+                Call::OomPolicy(object),
+            ],
+            "the scope was proven without binding the manager's unit to the kernel's cgroup"
+        );
+    }
+    assert_eq!(
+        placed.scope().unwrap().occupancy().unwrap(),
+        crate::scope::Occupancy::Populated
+    );
+    assert!(placed.end().is_confirmed());
+    assert!(!is_child(pid));
+    // An execution: the launch reaches the helper only after the binding.
+    let world = World::default();
+    let report = run_in(&world, None);
+    assert!(launched(&report) && report.cleanup.is_confirmed());
+}
+
+#[test]
+fn i4r1_11_an_uncertain_start_without_a_candidate_is_not_released_by_no_such_unit() {
+    for reply in [
+        Reply::Timeout,
+        Reply::Error,
+        Reply::Malformed,
+        Reply::Disconnect,
+    ] {
+        // The manager created nothing: asked, it would answer NoSuchUnit,
+        // and the kernel reports the helper outside any cgroup of the name.
+        let world = World::new(|state| uncertain_without_candidate(state, false, reply));
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert!(
+            matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_)))),
+            "{reply:?}: {:?}",
+            report.not_run
+        );
+        assert!(!launched(&report), "{reply:?}");
+        assert_eq!(
+            report.classify(0),
+            ExitClass::CleanupFailed,
+            "{reply:?}: an uncertain start without a candidate was released by the manager's absence"
+        );
+        let boundary = boundary_of(report);
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.issued && !observed.accepted && !observed.candidate && !observed.settled,
+            "{reply:?}: {observed:?}"
+        );
+        assert!(boundary.holds_helper() && is_child(pid), "{reply:?}");
+        {
+            let state = world.lock();
+            assert!(state.units.is_empty() && !state.membership.contains_key(&pid));
+        }
+        // The manager answers again: a retry still confirms nothing.
+        world.release();
+        let boundary = boundary.retry().unwrap_err();
+        abandon(boundary, pid);
+    }
+}
+
+#[test]
+fn i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_reply() {
+    // The manager created the unit; StopUnit stops and unloads it and its
+    // reply is delivered; the kernel never reported the helper in it.
+    let world = World::new(|state| {
+        uncertain_without_candidate(state, true, Reply::Timeout);
+        state.stop = Script::always((true, Reply::Delivered));
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert!(stops(&world) >= 1, "StopUnit was attempted");
+    assert!(world.lock().units.is_empty(), "the stop took effect");
+    assert_eq!(
+        report.classify(0),
+        ExitClass::CleanupFailed,
+        "a StopUnit reply released an uncertain start without a candidate"
+    );
+    let boundary = boundary_of(report);
+    let observed = pending_state(&boundary);
+    assert!(observed.stops >= 1 && !observed.settled && !observed.candidate);
+    assert!(boundary.holds_helper() && is_child(pid));
+    let boundary = boundary.retry().unwrap_err();
+    abandon(boundary, pid);
+}
+
+#[test]
+fn i4r1_13_an_uncertain_start_without_a_candidate_is_not_released_by_a_timed_out_stop() {
+    for effect in [true, false] {
+        let world = World::new(|state| {
+            uncertain_without_candidate(state, true, Reply::Timeout);
+            state.stop = Script::always((effect, Reply::Timeout));
+        });
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert_eq!(
+            report.classify(0),
+            ExitClass::CleanupFailed,
+            "{effect}: a timed-out StopUnit released an uncertain start without a candidate"
+        );
+        let boundary = boundary_of(report);
+        assert!(
+            boundary.holds_scope() && boundary.holds_helper(),
+            "{effect}"
+        );
+        assert!(
+            is_child(pid),
+            "{effect}: the helper of an unresolved uncertain start was reaped"
+        );
+        let boundary = boundary.retry().unwrap_err();
+        assert!(
+            is_child(pid),
+            "{effect}: the helper of an unresolved uncertain start was reaped"
+        );
+        abandon(boundary, pid);
+    }
+}
+
+#[test]
+fn i4r1_14_an_uncertain_start_that_places_the_helper_is_acquired_and_may_be_proven() {
+    // Placed while the proof waits: every proof passes, and only then does
+    // the launch reach the helper.
+    for reply in [Reply::Timeout, Reply::Error, Reply::Malformed] {
+        let world = World::new(|state| {
+            state.start_reply = reply;
+            state.placement = Placement::AfterReads(3);
+        });
+        let report = run_in(&world, None);
+        assert!(
+            launched(&report) && report.cleanup.is_confirmed(),
+            "{reply:?}: {:?}",
+            report.not_run
+        );
+        assert_eq!(stops(&world), 0, "{reply:?}");
+    }
+    // Placed, then a later proof fails: the candidate is retained, ended and
+    // confirmed through its descriptor.
+    let world = World::new(|state| {
+        state.start_reply = Reply::Timeout;
+        state.control_group = Text::Is("/other.slice/{unit}");
+    });
+    let report = run_in(&world, None);
+    assert!(matches!(
+        report.not_run,
+        Some(NotRun::Scope(ScopeError::Mismatch("unit control group")))
+    ));
+    assert!(!launched(&report) && report.cleanup.is_confirmed());
+    assert!(world.lock().created().unwrap().killed);
+    // Never placed while the execution ran (StopUnit never acts); a retry
+    // then finds the helper in the unit's cgroup: acquired, ended and
+    // confirmed through it.
+    let world = World::new(|state| {
+        uncertain_without_candidate(state, true, Reply::Timeout);
+        state.stop = Script::always((false, Reply::Timeout));
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    let boundary = boundary_of(report);
+    assert!(!pending_state(&boundary).candidate);
+    world.lock().place(pid, 0);
+    boundary.retry().unwrap();
+    assert!(!is_child(pid));
+    let state = world.lock();
+    assert!(state.cgroups[0].killed);
+    assert_eq!(state.count(|call| matches!(call, Call::Open(_))), 1);
+}
+
+#[test]
+fn i4r1_15_a_collision_never_stops_or_claims_the_foreign_unit() {
+    for holds in [false, true] {
+        let world = World::new(|state| {
+            state.collide = true;
+            state.collision_holds_helper = holds;
+        });
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert!(
+            matches!(report.not_run, Some(NotRun::Scope(ScopeError::Bus(_)))),
+            "{holds}"
+        );
+        assert!(!launched(&report), "{holds}");
+        if holds {
+            // The helper is in the foreign unit's cgroup: nothing confirms
+            // the operation, and retries still never touch that unit.
+            let boundary = boundary_of(report);
+            assert!(pending_state(&boundary).collided);
+            let boundary = boundary.retry().unwrap_err();
+            world.lock().membership.remove(&pid);
+            boundary.retry().unwrap();
+        } else {
+            assert!(report.cleanup.is_confirmed());
+        }
+        let state = world.lock();
+        assert_eq!(
+            state.count(|call| matches!(call, Call::Stop(_))),
+            0,
+            "{holds}: the foreign unit was stopped"
+        );
+        assert!(
+            state.calls.iter().all(|call| !matches!(
+                call,
+                Call::Open(_)
+                    | Call::Kill(_)
+                    | Call::GetUnit(_)
+                    | Call::UnitId(_)
+                    | Call::ControlGroup(_)
+            )),
+            "{holds}: the foreign unit was claimed"
+        );
+        assert!(!state.units[&state.requested().unwrap()].ours);
+        drop(state);
+        assert!(!is_child(pid));
+    }
+}
+
+#[test]
+fn i4r1_16_a_collision_is_never_proven_by_the_foreign_cgroup_s_name() {
+    // The foreign unit's cgroup has the requested name, holds the helper
+    // with exactly the requested limits, and the manager would bind it
+    // exactly; but this request created nothing.
+    let collide = |state: &mut State| {
+        state.collide = true;
+        state.collision_holds_helper = true;
+    };
+    let world = World::new(collide);
+    let (placed, pid) = place_cat(&world);
+    let failed = placed.expect_err("a collision was proven by the foreign cgroup's name");
+    assert!(
+        matches!(failed.error, Some(ScopeError::Bus(_))),
+        "{:?}",
+        failed.error
+    );
+    assert_eq!(
+        world.lock().count(|call| matches!(
+            call,
+            Call::Open(_) | Call::GetUnit(_) | Call::UnitId(_) | Call::ControlGroup(_)
+        )),
+        0,
+        "a collision was proven by the foreign cgroup's name"
+    );
+    let Cleanup::Failed(boundary) = failed.cleanup else {
+        panic!("the helper is in the foreign cgroup: nothing is confirmed");
+    };
+    world.lock().membership.remove(&pid);
+    boundary.retry().unwrap();
+    // Through an execution: nothing reaches the helper.
+    let world = World::new(collide);
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert!(!launched(&report));
+    let boundary = boundary_of(report);
+    world.lock().membership.remove(&pid);
+    boundary.retry().unwrap();
+}
+
+#[test]
+fn i4r1_17_no_launch_while_the_unit_binding_is_unresolved() {
+    let unresolved: [fn(&mut State); 8] = [
+        |state| state.unit_id = Text::Uncertain(Reply::Timeout),
+        |state| state.unit_id = Text::Uncertain(Reply::Disconnect),
+        |state| state.unit_id = Text::WrongType,
+        |state| state.control_group = Text::Uncertain(Reply::Timeout),
+        |state| state.control_group = Text::Uncertain(Reply::Malformed),
+        |state| state.control_group = Text::WrongType,
+        |state| state.control_group = Text::Is("/other.slice/{unit}"),
+        |state| state.panic_at = Some(Op::ControlGroup),
+    ];
+    for (case, script) in unresolved.into_iter().enumerate() {
+        let world = World::new(script);
+        let report = run_in(&world, None);
+        assert!(report.cleanup.is_confirmed(), "case {case}");
+        assert!(
+            !launched(&report),
+            "case {case}: a launch message reached the helper before the binding was proven"
+        );
+        assert!(
+            matches!(report.not_run, Some(NotRun::Scope(_) | NotRun::Interrupted)),
+            "case {case}: {:?}",
+            report.not_run
+        );
+        assert_eq!(
+            world
+                .lock()
+                .count(|call| matches!(call, Call::RuntimeMax(_) | Call::OomPolicy(_))),
+            0,
+            "case {case}: a property was proven before the binding"
+        );
+    }
+    // A panic injected where the binding is checked.
+    let world = World::default();
+    let report = run_in(&world, Some(Fault::Panic(FaultPoint::ScopeBinding)));
+    assert!(matches!(report.not_run, Some(NotRun::Interrupted)));
+    assert!(!launched(&report) && report.cleanup.is_confirmed());
+    assert!(world.lock().created().unwrap().killed);
+}
+
+#[test]
+fn i4r1_18_a_proven_execution_s_lifecycle_is_unchanged() {
+    let world = World::default();
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert!(launched(&report), "the launch reached the helper");
+    assert!(report.cleanup.is_confirmed());
+    assert_eq!(report.events, Some(ScopeEvents::default()));
+    let state = world.lock();
+    let unit = state.requested().unwrap();
+    let object = format!("/unit/{unit}");
+    // The proof, the binding included; then finalization through the
+    // retained descriptor only.
+    assert_eq!(
+        state.calls[..8],
+        [
+            Call::Start(unit.clone(), pid),
+            Call::Membership(pid, true),
+            Call::Open(format!("{SLICE}/{unit}")),
+            Call::GetUnit(unit.clone()),
+            Call::UnitId(object.clone()),
+            Call::ControlGroup(object.clone()),
+            Call::RuntimeMax(object.clone()),
+            Call::OomPolicy(object),
+        ]
+    );
+    assert!(state.calls[8..]
+        .iter()
+        .all(|call| matches!(call, Call::Kill(_))));
+    assert!(state.created().unwrap().kills >= 1);
+    drop(state);
+    assert!(!is_child(pid));
+}
+
+#[test]
+fn i4r1_19_a_binding_failure_s_candidate_is_retried_without_the_scope_manager() {
+    let world = World::new(|state| {
+        state.control_group = Text::Is("/other.slice/{unit}");
+        state.phantom = Phantom::Forever;
+        state.opens_left = Some(1);
+        state.stop = Script::always((false, Reply::Timeout));
+    });
+    let stand_in = StandIn::new();
+    let scopes = world.scopes();
+    let report = execute(&scopes, &stand_in.program(), launch_spec(), &LIMITS, None);
+    let pid = requested_pid(&world);
+    assert!(matches!(
+        report.not_run,
+        Some(NotRun::Scope(ScopeError::Mismatch("unit control group")))
+    ));
+    let boundary = boundary_of(report);
+    assert!(pending_state(&boundary).candidate);
+    drop(scopes);
+    world.release();
+    world.lock().opens_left = Some(0);
+    assert!(
+        boundary.retry().is_ok(),
+        "a retained boundary needs the ScopeManager that started it"
+    );
+    assert!(!is_child(pid));
+    assert_eq!(opens(&world), 1);
+}
+
+#[test]
+fn i4r1_20_helper_identities_are_refused_instead_of_wrapping() {
+    let next = AtomicU64::new(u64::MAX - 2);
+    assert_eq!(allocate_serial(&next), Some(u64::MAX - 2));
+    assert_eq!(allocate_serial(&next), Some(u64::MAX - 1));
+    for _ in 0..3 {
+        assert_eq!(allocate_serial(&next), None, "the helper identity wrapped");
+    }
+    assert_eq!(next.load(Ordering::SeqCst), u64::MAX);
+    // Nonzero and increasing; zero is never issued.
+    let next = AtomicU64::new(1);
+    let issued: Vec<_> = (0..4).map(|_| allocate_serial(&next)).collect();
+    assert_eq!(issued, [Some(1), Some(2), Some(3), Some(4)]);
+    assert_eq!(
+        allocate_serial(&AtomicU64::new(0)),
+        None,
+        "the helper identity wrapped"
+    );
+}
+
+#[test]
+fn i4r1_21_no_helper_is_spawned_once_identities_are_exhausted() {
+    let program = HelperProgram::at("/bin/cat");
+    let spawned = || SPAWNED.with(std::cell::Cell::get);
+    let before = spawned();
+    let exhausted = AtomicU64::new(u64::MAX);
+    assert!(matches!(
+        Helper::spawn_with(&program, &exhausted),
+        Err(LaunchError::IdentitiesExhausted)
+    ));
+    assert_eq!(
+        spawned(),
+        before,
+        "a helper was spawned without an identity"
+    );
+    // With the last identity: one child, bound to it; then none.
+    let next = AtomicU64::new(u64::MAX - 1);
+    let (helper, _output) = Helper::spawn_with(&program, &next).unwrap();
+    assert_eq!(helper.serial(), u64::MAX - 1);
+    assert_eq!(spawned(), before + 1);
+    assert!(matches!(
+        Helper::spawn_with(&program, &next),
+        Err(LaunchError::IdentitiesExhausted)
+    ));
+    assert_eq!(
+        spawned(),
+        before + 1,
+        "a helper was spawned without an identity"
+    );
+    let mut helper = helper;
+    let _ = helper.kill();
+    helper.reap().unwrap();
+}
+
+#[test]
+fn i4r1_23_the_harness_owner_lets_the_helper_hold_its_scope_until_released() {
+    // The live scope-hold test's sequence over the model: placed and owned
+    // with its scope, launched only then; after its final report the
+    // helper still holds the scope and its counters; the scope is ended
+    // through its descriptor, the helper reaped, and the owner confirms.
+    let world = World::default();
+    let stand_in = StandIn::new();
+    let (helper, _output) = Helper::spawn(&stand_in.program()).unwrap();
+    let pid = helper.pid();
+    let mut placed = place(&world.scopes(), helper, &LIMITS).unwrap();
+    {
+        let helper = placed.helper().unwrap();
+        helper.handshake().unwrap();
+        // The stand-in refuses the launch: its final report.
+        assert!(matches!(
+            helper.launch(launch_spec()),
+            Err(LaunchError::SetupFailed { .. })
+        ));
+    }
+    let scope = placed.scope().unwrap();
+    assert_eq!(
+        scope.occupancy().unwrap(),
+        crate::scope::Occupancy::Populated
+    );
+    assert_eq!(scope.events().unwrap(), ScopeEvents::default());
+    scope.kill().unwrap();
+    // The model's `cgroup.kill` ends no real process: this test ends it.
+    // SAFETY: the stand-in is this process's unreaped child.
+    assert_eq!(unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) }, 0);
+    // Never while an operation is unresolved; here the scope is proven.
+    placed.reap_helper().unwrap();
+    assert!(!is_child(pid));
+    assert!(placed
+        .scope()
+        .unwrap()
+        .wait_empty(Duration::from_secs(1))
+        .unwrap());
+    assert!(placed.end().is_confirmed());
+    assert_eq!(world.lock().count(|call| matches!(call, Call::Stop(_))), 0);
+}
+
+#[test]
+fn i4r1_24_unit_tests_never_construct_the_real_manager_or_kernel() {
+    // Every unit test reaches the scope module through the model; only the
+    // production constructors name the real ones (the needles are split so
+    // that this test does not name them).
+    let needles = [
+        concat!("ScopeManager::", "connect"),
+        concat!("Zbus", "Manager"),
+        concat!("Box::new(", "Kernel)"),
+        concat!("Timing::", "PRODUCTION"),
+        concat!("/run/", "user/"),
+    ];
+    for (name, source) in [
+        ("scope/tests.rs", include_str!("../scope/tests.rs")),
+        ("execution/tests.rs", include_str!("tests.rs")),
+    ] {
+        // Code only: a comment may name what is never called.
+        let code: String = source
+            .lines()
+            .map(|line| line.split("//").next().unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join("\n");
+        for needle in needles {
+            assert!(!code.contains(needle), "{name} names {needle}");
+        }
+    }
+}
+
+/// Whether a panic left confirmed cleanup or one owner of everything still
+/// unconfirmed (the operation, if unresolved, with its unreaped helper);
+/// the boundary, if any, is given up afterwards.
+fn judge_panic(world: &World, case: &str, cleanup: Cleanup, pid: u32) {
+    match cleanup {
+        Cleanup::Confirmed => {
+            // Confirmed only with nothing left: no cgroup of the model
+            // still holds a process, and the helper is reaped.
+            let state = world.lock();
+            assert!(
+                state.cgroups.iter().all(|cgroup| !cgroup.populated()),
+                "{case}: confirmed with a populated cgroup"
+            );
+            drop(state);
+            assert!(!is_child(pid), "{case}: confirmed with its helper unreaped");
+        }
+        Cleanup::Failed(boundary) => {
+            assert!(
+                boundary.holds_helper() && is_child(pid),
+                "{case}: the retained boundary lost its helper"
+            );
+            if let Some(observed) = boundary.pending() {
+                assert!(observed.issued && !observed.settled, "{case}: {observed:?}");
+            }
+            world.release();
+            match boundary.retry() {
+                Ok(()) => assert!(!is_child(pid), "{case}"),
+                Err(boundary) => abandon(boundary, pid),
+            }
+        }
+    }
+}
+
+#[test]
+fn i4r1_x_a_panic_at_any_ownership_point_leaves_confirmation_or_one_owner() {
+    // Each panic boundary, for an accepted and an uncertain start whose
+    // helper is placed (a candidate) or never placed (none).
+    let starts: [(Reply, Placement); 4] = [
+        (Reply::Delivered, Placement::Immediate),
+        (Reply::Delivered, Placement::Never),
+        (Reply::Timeout, Placement::Immediate),
+        (Reply::Timeout, Placement::Never),
+    ];
+    let points = [
+        FaultPoint::BeforeScopeStart,
+        FaultPoint::AfterScopeStart,
+        FaultPoint::ScopeProof,
+        FaultPoint::ScopeCandidate,
+        FaultPoint::ScopeBinding,
+        FaultPoint::ScopeProperties,
+        FaultPoint::ScopeReconcile,
+        FaultPoint::BeforeScopeStop,
+        FaultPoint::AfterScopeStop,
+        FaultPoint::AfterScope,
+        FaultPoint::Finalizing,
+    ];
+    let ops = [
+        Op::Start,
+        Op::Membership,
+        Op::Open,
+        Op::GetUnit,
+        Op::UnitId,
+        Op::ControlGroup,
+        Op::RuntimeMax,
+        Op::Stop,
+    ];
+    for (reply, placement) in starts {
+        let script = move |state: &mut State| {
+            state.start_reply = reply;
+            state.placement = placement;
+        };
+        // Execution: an injected fault, and a panic inside the model.
+        for point in points {
+            let world = World::new(script);
+            let report = run_in(&world, Some(Fault::Panic(point)));
+            let pid = requested_pid_or_spawned(&world, &report);
+            if let Some(pid) = pid {
+                judge_panic(
+                    &world,
+                    &format!("{reply:?} {placement:?} {point:?}"),
+                    report.cleanup,
+                    pid,
+                );
+            } else {
+                assert!(report.cleanup.is_confirmed());
+            }
+        }
+        for op in ops {
+            let world = World::new(|state| {
+                script(state);
+                state.panic_at = Some(op);
+            });
+            let report = run_in(&world, None);
+            let pid = requested_pid(&world);
+            judge_panic(
+                &world,
+                &format!("{reply:?} {placement:?} run {op:?}"),
+                report.cleanup,
+                pid,
+            );
+            // The harness's direct owner.
+            let world = World::new(|state| {
+                script(state);
+                state.panic_at = Some(op);
+            });
+            let (placed, pid) = place_cat(&world);
+            let cleanup = match placed {
+                Ok(placed) => placed.end(),
+                Err(failed) => failed.cleanup,
+            };
+            judge_panic(
+                &world,
+                &format!("{reply:?} {placement:?} place {op:?}"),
+                cleanup,
+                pid,
+            );
+        }
+    }
+    // A panic while retrying a retained boundary keeps it.
+    let world = World::new(|state| {
+        state.placement = Placement::Never;
+        state.stop = Script::always((false, Reply::Timeout));
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    let boundary = boundary_of(report);
+    world.lock().panic_at = Some(Op::Stop);
+    let boundary = boundary.retry().unwrap_err();
+    assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
+    world.release();
+    boundary.retry().unwrap();
+    assert!(!is_child(pid));
+}
+
+/// The helper's process id if the scope was requested; `None` when the
+/// execution never reached the request (its helper then ended with it).
+fn requested_pid_or_spawned(world: &World, report: &ExecutionReport) -> Option<u32> {
+    let pid = world.lock().calls.iter().find_map(|call| match call {
+        Call::Start(_, pid) => Some(*pid),
+        _ => None,
+    });
+    if pid.is_none() {
+        assert!(report.cleanup.is_confirmed());
+    }
+    pid
 }

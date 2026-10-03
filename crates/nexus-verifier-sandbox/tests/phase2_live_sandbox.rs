@@ -669,7 +669,9 @@ mod live {
 
     mod p2d {
         use super::*;
-        use crate::cleanup_observation::{self, wait_for, ObservationError, Scopes};
+        use crate::cleanup_observation::{
+            self, release, settle, wait_for, ObservationError, Scopes, Settled, EXPLICIT_ATTEMPTS,
+        };
         pub use nexus_verifier_sandbox::execution::{self, EndedBy, ExitClass};
         pub use nexus_verifier_sandbox::policy::ResourcePolicy;
         pub use nexus_verifier_sandbox::scope::{Occupancy, ScopeError, ScopeManager};
@@ -708,6 +710,31 @@ mod live {
             assert!(checks.is_empty());
         }
 
+        /// A direct placement that proved no scope: its cleanup (the helper
+        /// and whatever the operation may have created, owned together) is
+        /// settled explicitly (bounded) before the case fails.
+        fn unplaced(name: &str, failed: execution::PlacementFailed) -> ! {
+            let mut failures = vec![format!("no scope was proven: {:?}", failed.error)];
+            if let execution::Cleanup::Failed(boundary) = failed.cleanup {
+                match settle(
+                    boundary,
+                    EXPLICIT_ATTEMPTS,
+                    execution::RetainedBoundary::retry,
+                ) {
+                    Settled::Confirmed(attempt) => failures.push(format!(
+                        "its cleanup was confirmed on explicit attempt {attempt}"
+                    )),
+                    Settled::Unconfirmed(owner, attempts) => {
+                        failures.push(format!(
+                            "its cleanup is unconfirmed after {attempts} explicit attempts"
+                        ));
+                        panic!("{}", release(owner, name, &failures));
+                    }
+                }
+            }
+            panic!("{name}: {}", failures.join("; "))
+        }
+
         pub fn helper_holds_the_scope(scopes: &ScopeManager) {
             let fixture = Fixture::new("hold");
             let listeners = Listeners::start(&fixture.outside);
@@ -718,7 +745,13 @@ mod live {
             let (helper, output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
             let stdout = read_all(output.stdout);
             let stderr = read_all(output.stderr);
-            let scope = scopes.start(&helper, &limits()).unwrap();
+            // The helper is owned with its scope operation from here on
+            // (P2-V1-R3B-I4-R1): proven, or ended or retained together.
+            let mut placed = match execution::place(scopes, helper, &limits()) {
+                Ok(placed) => placed,
+                Err(failed) => unplaced("helper_holds_the_scope", failed),
+            };
+            let helper = placed.helper().unwrap();
             helper.handshake().unwrap();
             helper.launch(spec).unwrap();
             let outcome = helper.wait_report(Duration::from_secs(60)).unwrap();
@@ -726,11 +759,13 @@ mod live {
             // After its final report the helper keeps the scope, and with it
             // the kernel's counters, until it is released.
             std::thread::sleep(Duration::from_secs(1));
+            let scope = placed.scope().unwrap();
             assert_eq!(scope.occupancy().unwrap(), Occupancy::Populated);
             let events = scope.events().unwrap();
             assert_eq!((events.oom_kills, events.pids_max), (0, 0));
             scope.kill().unwrap();
-            helper.reap().unwrap();
+            placed.reap_helper().unwrap();
+            let scope = placed.scope().unwrap();
             assert!(scope.wait_empty(Duration::from_secs(10)).unwrap());
             // The manager then removes the emptied scope; the removal is
             // recognised through the retained descriptor alone.
@@ -738,6 +773,11 @@ mod live {
                 scope.occupancy().ok() == Some(Occupancy::Removed)
             }));
             assert!(scope.events().is_err(), "no counters outlive the scope");
+            // Its owner confirms that nothing of it remains.
+            assert!(
+                placed.end().is_confirmed(),
+                "the ended scope was not confirmed"
+            );
             let _ = (stdout.join(), stderr.join());
         }
 
@@ -852,9 +892,24 @@ mod live {
                 loaded_scopes().unwrap_or_else(|error| panic!("the loaded scopes: {error}"));
             let (mut helper, _output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
             helper.kill().unwrap();
-            let refused = scopes.start(&helper, &limits());
-            assert!(refused.is_err(), "{refused:?}");
-            helper.reap().unwrap();
+            // The killed helper is owned with the scope operation: it is
+            // reaped only once that operation is confirmed gone.
+            let failed = match execution::place(scopes, helper, &limits()) {
+                Ok(placed) => panic!("a scope was proven for an unmovable process: {placed:?}"),
+                Err(failed) => failed,
+            };
+            if let execution::Cleanup::Failed(boundary) = failed.cleanup {
+                if let Settled::Unconfirmed(owner, attempts) = settle(
+                    boundary,
+                    EXPLICIT_ATTEMPTS,
+                    execution::RetainedBoundary::retry,
+                ) {
+                    let failures = [format!(
+                        "the refused scope is unconfirmed after {attempts} explicit attempts"
+                    )];
+                    panic!("{}", release(owner, "unmovable_process", &failures));
+                }
+            }
             match wait_for(Duration::from_secs(10), loaded_scopes_by, |now| {
                 now.len() <= before.len()
             }) {

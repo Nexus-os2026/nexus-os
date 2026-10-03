@@ -1,0 +1,22 @@
+
+running 1 test
+test v07_capacity_without_a_complete_proof_refuses_succession ... FAILED
+
+failures:
+
+---- v07_capacity_without_a_complete_proof_refuses_succession stdout ----
+
+thread 'v07_capacity_without_a_complete_proof_refuses_succession' (1275245) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:9236:5:
+[succession-complete-set] counted, not enumerated
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v07_capacity_without_a_complete_proof_refuses_succession
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.18s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

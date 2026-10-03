@@ -1,0 +1,18 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0603]: module `manager` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:57
+   |
+21 |     fn transport(_: &dyn nexus_verifier_sandbox::scope::manager::Manager) {}
+   |                                                         ^^^^^^^  ------- trait `Manager` is not publicly re-exported
+   |                                                         |
+   |                                                         private module
+   |
+note: the module `manager` is defined here
+  --> crates/nexus-verifier-sandbox/src/scope.rs:56:1
+   |
+56 | mod manager;
+   | ^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

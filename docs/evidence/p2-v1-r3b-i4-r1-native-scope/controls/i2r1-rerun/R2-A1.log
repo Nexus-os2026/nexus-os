@@ -1,0 +1,22 @@
+
+running 1 test
+test r07_cancellation_accepted_in_candidate_prevents_a_pass ... FAILED
+
+failures:
+
+---- r07_cancellation_accepted_in_candidate_prevents_a_pass stdout ----
+
+thread 'r07_cancellation_accepted_in_candidate_prevents_a_pass' (1303680) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_core.rs:1386:9:
+[cancel-before-commit] observe false: receipt Accepted(Closure { reason: Cancelled(Requested), at: Tick(18), after: 1 }); admission AdmissionView { admitted: 1, closure: Some(Closure { reason: Cancelled(Requested), at: Tick(18), after: 1 }), committed: Some(Commitment { at: Tick(20) }) }; failures []; terminal Some((RecordId { generation: Generation([17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17]), seq: 6 }, Passed)); published Passed; control facts at [], terminal at Some(5); close Some(Closed { terminal: Some(RecordId { generation: Generation([17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17]), seq: 6 }), verdict: Passed, resolved_by: None, records: 6, failure_counts: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], fault_counts: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], released: 0, .. })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r07_cancellation_accepted_in_candidate_prevents_a_pass
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.24s
+     Running tests/phase2_custody_core.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/i2r1/debug/deps/phase2_custody_core-db1a3a13afbe1e16)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_core`

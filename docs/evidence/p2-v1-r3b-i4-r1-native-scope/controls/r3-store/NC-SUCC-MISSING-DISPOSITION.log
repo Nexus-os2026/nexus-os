@@ -1,0 +1,22 @@
+
+running 1 test
+test v01_succession_needs_every_bound_incident_dispositioned ... FAILED
+
+failures:
+
+---- v01_succession_needs_every_bound_incident_dispositioned stdout ----
+
+thread 'v01_succession_needs_every_bound_incident_dispositioned' (1272417) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:8823:10:
+[succession-dispositioned] two undispositioned incidents
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v01_succession_needs_every_bound_incident_dispositioned
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.06s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

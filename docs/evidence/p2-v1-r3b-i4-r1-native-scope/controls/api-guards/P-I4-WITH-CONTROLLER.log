@@ -1,0 +1,21 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0599]: no function or associated item named `with_controller` found for struct `ScopeManager` in the current scope
+   --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:27
+    |
+ 21 |     let _ = ScopeManager::with_controller(todo!());
+    |                           ^^^^^^^^^^^^^^^ function or associated item not found in `ScopeManager`
+    |
+note: if you're trying to build a new `ScopeManager` consider using one of the following associated functions:
+      ScopeManager::connect
+      ScopeManager::connect_at
+   --> crates/nexus-verifier-sandbox/src/scope.rs:141:5
+    |
+141 |     pub fn connect() -> Result<Self, ScopeError> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+150 |     pub fn connect_at(path: &str) -> Result<Self, ScopeError> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

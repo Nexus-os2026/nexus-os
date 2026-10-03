@@ -1,0 +1,24 @@
+
+running 1 test
+test r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record ... FAILED
+
+failures:
+
+---- r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record stdout ----
+
+thread 'r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record' (1270597) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:4670:5:
+assertion `left == right` failed: [exchange-contained] the next valid record is not a fault
+  left: Ok(())
+ right: Err(NotAFault("the sink would store it as the next record"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r02_invalid_and_conflicting_submissions_latch_and_land_at_an_issued_record
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.04s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.88s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

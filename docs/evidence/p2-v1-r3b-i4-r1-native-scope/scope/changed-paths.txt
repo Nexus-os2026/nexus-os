@@ -1,0 +1,14 @@
+Changed paths of the candidate relative to the base bb0dfec0338273ddf187b1dfcb22cd4b8eb8b2f9 (worktree status before the commit), outside the new evidence directory:
+ M app/src-tauri/src/phase2_tests.rs
+ M crates/nexus-verifier-sandbox/src/execution.rs
+ M crates/nexus-verifier-sandbox/src/execution/tests.rs
+ M crates/nexus-verifier-sandbox/src/fault.rs
+ M crates/nexus-verifier-sandbox/src/launcher.rs
+ M crates/nexus-verifier-sandbox/src/scope.rs
+ M crates/nexus-verifier-sandbox/src/scope/manager.rs
+ M crates/nexus-verifier-sandbox/src/scope/pending.rs
+ M crates/nexus-verifier-sandbox/src/scope/tests.rs
+ M crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+ M docs/security/phase2-governed-verification.md
+
+and the new evidence directory docs/evidence/p2-v1-r3b-i4-r1-native-scope/ (its files: SHA256SUMS).

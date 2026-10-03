@@ -1,0 +1,24 @@
+
+running 1 test
+test execution::tests::i4_09_a_timed_out_stop_whose_target_remains_retains_the_operation ... FAILED
+
+failures:
+
+---- execution::tests::i4_09_a_timed_out_stop_whose_target_remains_retains_the_operation stdout ----
+
+thread 'execution::tests::i4_09_a_timed_out_stop_whose_target_remains_retains_the_operation' (1205147) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:623:5:
+assertion `left == right` failed: a timed-out StopUnit dropped the operation
+  left: SandboxUnavailable
+ right: CleanupFailed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4_09_a_timed_out_stop_whose_target_remains_retains_the_operation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.21s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

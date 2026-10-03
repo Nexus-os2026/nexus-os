@@ -1,0 +1,214 @@
+diff --git a/crates/nexus-verifier-sandbox/src/scope/tests.rs b/crates/nexus-verifier-sandbox/src/scope/tests.rs
+index e06dea8..6ef7f9c 100644
+--- a/crates/nexus-verifier-sandbox/src/scope/tests.rs
++++ b/crates/nexus-verifier-sandbox/src/scope/tests.rs
+@@ -827,3 +827,209 @@ fn i4_owners_are_self_contained_values() {
+     owned::<ScopeManager>();
+     owned::<crate::execution::RetainedBoundary>();
+ }
++
++// ---------------------------------------------------------------------------
++// P2-V1-R3B-I4-R1 baseline probes: an isolated copy of bb0dfec0 only, never
++// the review branch. Each prints what it observed and asserts only that.
++
++mod r1_baseline {
++    use super::*;
++    use crate::scope::StartFailed;
++    use std::panic::{catch_unwind, AssertUnwindSafe};
++
++    /// The deterministic manager, panicking in every GetUnit.
++    struct PanickingGetUnit(FakeManager);
++
++    impl Manager for PanickingGetUnit {
++        fn start_scope(&self, request: &ScopeRequest<'_>) -> Started {
++            self.0.start_scope(request)
++        }
++        fn stop_unit(&self, unit: &str) -> Remote<()> {
++            self.0.stop_unit(unit)
++        }
++        fn get_unit(&self, unit: &str) -> Remote<Presence> {
++            self.0 .0.lock().calls.push(Call::GetUnit(unit.to_string()));
++            panic!("B-R1-1: an injected manager panic in GetUnit")
++        }
++        fn runtime_max_usec(&self, unit_path: &str) -> Remote<Option<u64>> {
++            self.0.runtime_max_usec(unit_path)
++        }
++        fn oom_policy(&self, unit_path: &str) -> Remote<Option<String>> {
++            self.0.oom_policy(unit_path)
++        }
++    }
++
++    fn running(pid: u32) -> bool {
++        std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| {
++            stat.rsplit_once(") ")
++                .is_some_and(|(_, rest)| !rest.starts_with('Z'))
++        })
++    }
++
++    #[test]
++    fn b_r1_1_a_panic_in_the_direct_start_crosses_the_last_owner() {
++        // Start may have taken effect (the unit is created, its reply lost),
++        // the helper is never placed (no candidate), and every GetUnit panics,
++        // so reconciliation cannot confirm absence.
++        let world = World::new(|state| {
++            state.start_reply = Reply::Timeout;
++            state.placement = Placement::Never;
++        });
++        let scopes = ScopeManager::with_controller(Controller {
++            manager: Box::new(PanickingGetUnit(FakeManager(world.clone()))),
++            native: Box::new(FakeNative(world.clone())),
++            timing: TIMING,
++        });
++        let owners_before = Arc::strong_count(&scopes.controller);
++        let helper = helper();
++        let unwound = catch_unwind(AssertUnwindSafe(|| scopes.start(&helper, &LIMITS)));
++        let owners_after = Arc::strong_count(&scopes.controller);
++        let state = world.lock();
++        let unit = state.requested().unwrap();
++        println!("B-R1-1: ScopeManager::start unwound to its caller: {}", unwound.is_err());
++        println!(
++            "B-R1-1: owners of the issuing controller: before {owners_before}, after the unwind {owners_after} (a surviving PendingScope would be one more)"
++        );
++        println!(
++            "B-R1-1: the unit the uncertain start created is still loaded: {}",
++            state.units.contains_key(&unit)
++        );
++        println!(
++            "B-R1-1: StopUnit calls: {}; GetUnit calls (each panicked): {}",
++            state.count(|call| matches!(call, Call::Stop(_))),
++            state.count(|call| matches!(call, Call::GetUnit(_)))
++        );
++        println!("B-R1-1: every call: {:?}", state.calls);
++        assert!(unwound.is_err());
++        assert_eq!(owners_after, owners_before);
++        assert!(state.units.contains_key(&unit));
++        drop(state);
++        finish(helper);
++    }
++
++    #[test]
++    fn b_r1_2_a_start_failure_splits_the_operation_from_its_helper() {
++        // The unit is created, the helper never enters it, StopUnit has no
++        // effect: the failure carries the unresolved operation.
++        let world = World::new(|state| {
++            state.placement = Placement::Never;
++            state.stop = Script::always((false, Reply::Timeout));
++        });
++        let helper = helper();
++        let failed = world.scopes().start(&helper, &LIMITS).unwrap_err();
++        let StartFailed { error, unresolved } = failed;
++        println!(
++            "B-R1-2: error {error:?}; the failure carries an unresolved operation: {}",
++            unresolved.is_some()
++        );
++        println!(
++            "B-R1-2: the helper (pid {}) is a separate caller-owned value, not part of the failure",
++            helper.pid()
++        );
++        // Safe code drops the unresolved owner and keeps the helper ...
++        drop(unresolved);
++        let state = world.lock();
++        let unit = state.requested().unwrap();
++        println!(
++            "B-R1-2: after dropping the unresolved owner, the unit is still loaded: {} (owned by nothing)",
++            state.units.contains_key(&unit)
++        );
++        println!("B-R1-2: simulated cgroups: {:?}", state.cgroups);
++        assert!(state.units.contains_key(&unit));
++        drop(state);
++        // ... and reaps the helper independently.
++        finish(helper);
++        println!("B-R1-2: the helper was then reaped on its own (safe API)");
++
++        // The converse: keep the operation, reap its helper first.
++        let world = World::new(|state| {
++            state.placement = Placement::Never;
++            state.stop = Script::always((false, Reply::Timeout));
++        });
++        let helper = super::helper();
++        let mut pending = world
++            .scopes()
++            .start(&helper, &LIMITS)
++            .unwrap_err()
++            .unresolved
++            .unwrap();
++        finish(helper);
++        world.release();
++        let other = super::helper();
++        let settled = pending.settle(&other);
++        println!(
++            "B-R1-2: with its helper reaped first, settling the kept operation (with any other helper) confirms: {settled}"
++        );
++        finish(other);
++    }
++
++    #[test]
++    fn b_r1_3_settling_neither_kills_nor_owns_the_helper() {
++        // start's own settlement, with the caller's live helper.
++        let world = World::new(|state| state.placement = Placement::Never);
++        let helper = helper();
++        let failed = world.scopes().start(&helper, &LIMITS).unwrap_err();
++        println!(
++            "B-R1-3: start settled internally (unresolved: {}); the helper is still running afterwards: {}",
++            failed.unresolved.is_some(),
++            running(helper.pid())
++        );
++        // The public PendingScope::settle on an unresolved operation.
++        let world = World::new(|state| {
++            state.placement = Placement::Never;
++            state.stop = Script::always((false, Reply::Timeout));
++        });
++        let live = super::helper();
++        let mut pending = world
++            .scopes()
++            .start(&live, &LIMITS)
++            .unwrap_err()
++            .unresolved
++            .unwrap();
++        world.release();
++        let settled = pending.settle(&live);
++        println!(
++            "B-R1-3: PendingScope::settle returned {settled}; the helper is still running afterwards: {}; still this process's child: {}",
++            running(live.pid()),
++            unreaped(live.pid())
++        );
++        assert!(running(helper.pid()) && settled && running(live.pid()));
++        finish(helper);
++        finish(live);
++    }
++
++    #[test]
++    fn b_r1_4_a_cgroup_of_another_slice_with_the_unit_basename_is_proven() {
++        // The helper is in /foreign.slice/<generated unit>; the manager has
++        // the generated unit with matching properties.
++        let world = World::new(|state| state.placement = Placement::Elsewhere("/foreign.slice/{unit}"));
++        let helper = helper();
++        let started = world.scopes().start(&helper, &LIMITS);
++        let state = world.lock();
++        println!(
++            "B-R1-4: the kernel reports the helper in {:?}",
++            state.membership.get(&helper.pid())
++        );
++        println!(
++            "B-R1-4: opened: {:?}",
++            state
++                .calls
++                .iter()
++                .filter(|call| matches!(call, Call::Open(_)))
++                .collect::<Vec<_>>()
++        );
++        println!(
++            "B-R1-4: manager calls: {:?}",
++            state
++                .calls
++                .iter()
++                .filter(|call| !matches!(call, Call::Membership(..) | Call::Open(_) | Call::Kill(_)))
++                .collect::<Vec<_>>()
++        );
++        println!("B-R1-4: proven (Ok(Scope)): {}", started.is_ok());
++        assert!(started.is_ok());
++        drop(state);
++        drop(started);
++        finish(helper);
++    }
++}

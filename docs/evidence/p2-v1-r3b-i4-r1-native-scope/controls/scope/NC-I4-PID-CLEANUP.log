@@ -1,0 +1,73 @@
+
+running 1 test
+test execution::tests::i4_30_the_helper_s_death_is_never_the_operation_s_cleanup ... FAILED
+
+failures:
+
+---- execution::tests::i4_30_the_helper_s_death_is_never_the_operation_s_cleanup stdout ----
+
+thread 'execution::tests::i4_30_the_helper_s_death_is_never_the_operation_s_cleanup' (1208415) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:1232:5:
+assertion `left == right` failed: the helper's death was taken as the operation's cleanup
+  left: SandboxUnavailable
+ right: CleanupFailed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4_30_the_helper_s_death_is_never_the_operation_s_cleanup
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+warning: field `settle` is never read
+   --> crates/nexus-verifier-sandbox/src/scope.rs:110:9
+    |
+106 | pub(crate) struct Timing {
+    |                   ------ field in this struct
+...
+110 |     pub settle: Duration,
+    |         ^^^^^^
+    |
+    = note: `Timing` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `stop_unit` is never used
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:86:8
+   |
+83 | pub(crate) trait Manager: Send + Sync {
+   |                  ------- method in this trait
+...
+86 |     fn stop_unit(&self, unit: &str) -> Remote<()>;
+   |        ^^^^^^^^^
+
+warning: methods `reconcile`, `acquire`, and `gone` are never used
+   --> crates/nexus-verifier-sandbox/src/scope/pending.rs:164:19
+    |
+125 | impl PendingScope {
+    | ----------------- methods in this implementation
+...
+164 |     pub(crate) fn reconcile(&mut self, helper: Option<&Helper>, fault: Option<Fault>) -> bool {
+    |                   ^^^^^^^^^
+...
+212 |     fn acquire(&mut self, controller: &Controller, helper: Option<&Helper>) {
+    |        ^^^^^^^
+...
+231 |     fn gone(&self, controller: &Controller, helper: Option<&Helper>) -> bool {
+    |        ^^^^
+
+warning: function `outside` is never used
+   --> crates/nexus-verifier-sandbox/src/scope/pending.rs:428:4
+    |
+428 | fn outside(controller: &Controller, helper: Option<&Helper>, unit: &str) -> bool {
+    |    ^^^^^^^
+
+warning: function `absent` is never used
+   --> crates/nexus-verifier-sandbox/src/scope/pending.rs:438:4
+    |
+438 | fn absent(controller: &Controller, unit: &str, helper: Option<&Helper>) -> bool {
+    |    ^^^^^^
+
+warning: `nexus-verifier-sandbox` (lib) generated 5 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.33s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

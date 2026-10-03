@@ -24,6 +24,7 @@ use crate::policy::ResourcePolicy;
 const SYSTEMD: &str = "org.freedesktop.systemd1";
 const SYSTEMD_PATH: &str = "/org/freedesktop/systemd1";
 const MANAGER: &str = "org.freedesktop.systemd1.Manager";
+const UNIT_INTERFACE: &str = "org.freedesktop.systemd1.Unit";
 const SCOPE_INTERFACE: &str = "org.freedesktop.systemd1.Scope";
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
 /// systemd's answer to GetUnit for a unit it has not loaded.
@@ -90,6 +91,12 @@ pub(crate) trait Manager: Send + Sync {
     /// The scope's `OOMPolicy`, at the object path GetUnit returned;
     /// `Answered(None)`: a value that is not a string.
     fn oom_policy(&self, unit_path: &str) -> Remote<Option<String>>;
+    /// The unit's primary name (`Id`, of the unit interface), at the object
+    /// path GetUnit returned; `Answered(None)`: a value that is not a string.
+    fn unit_id(&self, unit_path: &str) -> Remote<Option<String>>;
+    /// The scope's control group path (`ControlGroup`), at the object path
+    /// GetUnit returned; `Answered(None)`: a value that is not a string.
+    fn control_group(&self, unit_path: &str) -> Remote<Option<String>>;
 }
 
 /// The user manager over its D-Bus interface.
@@ -268,6 +275,32 @@ impl Manager for ZbusManager {
         ) {
             Ok(Ok(value)) => Remote::Answered(String::try_from(value).ok()),
             Ok(Err(name)) => Remote::Uncertain(format!("Get OOMPolicy: {name}")),
+            Err(reason) => Remote::Uncertain(reason),
+        }
+    }
+
+    fn unit_id(&self, unit_path: &str) -> Remote<Option<String>> {
+        match self.call::<_, zbus::zvariant::OwnedValue>(
+            unit_path,
+            PROPERTIES,
+            "Get",
+            &(UNIT_INTERFACE, "Id"),
+        ) {
+            Ok(Ok(value)) => Remote::Answered(String::try_from(value).ok()),
+            Ok(Err(name)) => Remote::Uncertain(format!("Get Id: {name}")),
+            Err(reason) => Remote::Uncertain(reason),
+        }
+    }
+
+    fn control_group(&self, unit_path: &str) -> Remote<Option<String>> {
+        match self.call::<_, zbus::zvariant::OwnedValue>(
+            unit_path,
+            PROPERTIES,
+            "Get",
+            &(SCOPE_INTERFACE, "ControlGroup"),
+        ) {
+            Ok(Ok(value)) => Remote::Answered(String::try_from(value).ok()),
+            Ok(Err(name)) => Remote::Uncertain(format!("Get ControlGroup: {name}")),
             Err(reason) => Remote::Uncertain(reason),
         }
     }

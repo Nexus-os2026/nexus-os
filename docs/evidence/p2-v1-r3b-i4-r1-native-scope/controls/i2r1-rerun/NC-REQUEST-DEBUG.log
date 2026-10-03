@@ -1,0 +1,24 @@
+
+running 1 test
+test c17_core_retains_the_canonical_request_digest_in_its_receipts ... FAILED
+
+failures:
+
+---- c17_core_retains_the_canonical_request_digest_in_its_receipts stdout ----
+
+thread 'c17_core_retains_the_canonical_request_digest_in_its_receipts' (1305580) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_codec.rs:2329:17:
+assertion `left == right` failed: [request-receipt] custody A retained 38d65886bde99e90330b3977184097ea533788b6f92baa77a76fd4cdc50732cd for Request { generation: Generation([60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60]), seq: 1, op: Retry { epoch: 0 } }, not its canonical digest fa39efc25ef1f1b8d6e29a9235d66dd59b124a9081237aab0220590a950f6de4
+  left: Some([56, 214, 88, 134, 189, 233, 158, 144, 51, 11, 57, 119, 24, 64, 151, 234, 83, 55, 136, 182, 249, 43, 170, 119, 167, 111, 212, 205, 197, 7, 50, 205])
+ right: Some([250, 57, 239, 194, 94, 241, 241, 184, 214, 226, 154, 146, 53, 214, 109, 213, 155, 18, 74, 144, 129, 35, 122, 171, 2, 32, 89, 10, 149, 15, 109, 228])
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    c17_core_retains_the_canonical_request_digest_in_its_receipts
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.04s
+     Running tests/phase2_custody_codec.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/i2r1/debug/deps/phase2_custody_codec-9296cffc986e9dd6)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_codec`

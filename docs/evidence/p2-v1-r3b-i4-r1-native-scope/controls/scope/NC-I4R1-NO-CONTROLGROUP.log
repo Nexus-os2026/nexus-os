@@ -1,0 +1,37 @@
+
+running 1 test
+test execution::tests::i4r1_10_the_exact_binding_of_the_manager_s_unit_to_the_kernel_s_cgroup_proves ... FAILED
+
+failures:
+
+---- execution::tests::i4r1_10_the_exact_binding_of_the_manager_s_unit_to_the_kernel_s_cgroup_proves stdout ----
+
+thread 'execution::tests::i4r1_10_the_exact_binding_of_the_manager_s_unit_to_the_kernel_s_cgroup_proves' (1214376) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:1631:9:
+assertion `left == right` failed: the scope was proven without binding the manager's unit to the kernel's cgroup
+  left: [Start("nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope", 1214377), Membership(1214377, true), Open("/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope"), GetUnit("nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope"), UnitId("/unit/nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope"), RuntimeMax("/unit/nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope"), OomPolicy("/unit/nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope")]
+ right: [Start("nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope", 1214377), Membership(1214377, true), Open("/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope"), GetUnit("nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope"), UnitId("/unit/nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope"), ControlGroup("/unit/nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope"), RuntimeMax("/unit/nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope"), OomPolicy("/unit/nexus-verifier-0956382b692ff5a330aff562f30bdd88.scope")]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4r1_10_the_exact_binding_of_the_manager_s_unit_to_the_kernel_s_cgroup_proves
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.00s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+warning: method `control_group` is never used
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:99:8
+   |
+83 | pub(crate) trait Manager: Send + Sync {
+   |                  ------- method in this trait
+...
+99 |     fn control_group(&self, unit_path: &str) -> Remote<Option<String>>;
+   |        ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nexus-verifier-sandbox` (lib) generated 1 warning
+warning: `nexus-verifier-sandbox` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.42s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

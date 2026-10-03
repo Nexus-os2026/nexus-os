@@ -1,0 +1,27 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 101
+--- probe body ---
+    let admissible = maint::revocation_admissible(&fixture.root, &[], &[], &[0; 32], "x", &[0; 16]);
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0603]: function `revocation_admissible` is private
+    --> crates/nexus-verifier-sandbox/tests/r3_api_probe.rs:57:29
+     |
+  57 |     let admissible = maint::revocation_admissible(&fixture.root, &[], &[], &[0; 32], "x", &[0; 16]);
+     |                             ^^^^^^^^^^^^^^^^^^^^^ private function
+     |
+note: the function `revocation_admissible` is defined here
+    --> crates/nexus-verifier-sandbox/tests/support/custody/store/maintenance.rs:2793:1
+     |
+2793 | / fn revocation_admissible<P: Platform>(
+2794 | |     io: &P,
+2795 | |     dispositions_path: &[String],
+2796 | |     revoked_path: &[String],
+...    |
+2834 | |     Ok(stat.ino)
+2835 | | }
+     | |_^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "r3_api_probe") due to 1 previous error
+--- stdout ---

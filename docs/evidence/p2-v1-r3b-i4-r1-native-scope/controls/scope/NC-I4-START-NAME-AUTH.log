@@ -1,0 +1,42 @@
+
+running 1 test
+test execution::tests::i4_16_a_pending_operation_is_never_proven_by_its_unit_name ... FAILED
+
+failures:
+
+---- execution::tests::i4_16_a_pending_operation_is_never_proven_by_its_unit_name stdout ----
+
+thread 'execution::tests::i4_16_a_pending_operation_is_never_proven_by_its_unit_name' (1201894) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:816:5:
+a scope was proven by its unit name: Some(Launch(SetupFailed { stage: Protocol, errno: 0 }))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4_16_a_pending_operation_is_never_proven_by_its_unit_name
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+warning: field `placement` is never read
+   --> crates/nexus-verifier-sandbox/src/scope.rs:108:9
+    |
+106 | pub(crate) struct Timing {
+    |                   ------ field in this struct
+107 |     /// Waiting for the helper to appear in the new scope.
+108 |     pub placement: Duration,
+    |         ^^^^^^^^^
+    |
+    = note: `Timing` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `wait_for_placement` is never used
+   --> crates/nexus-verifier-sandbox/src/scope/pending.rs:449:4
+    |
+449 | fn wait_for_placement(
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: `nexus-verifier-sandbox` (lib) generated 2 warnings
+warning: `nexus-verifier-sandbox` (lib test) generated 2 warnings (2 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.54s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

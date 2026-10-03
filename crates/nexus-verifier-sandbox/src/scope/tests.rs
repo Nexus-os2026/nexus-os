@@ -1,13 +1,16 @@
 //! A deterministic simulation of the systemd user manager and of the kernel
-//! for the scope module's ownership tests (P2-V1-R3B-I4). Test builds only:
-//! nothing here contacts a bus, reads `/proc` for a decision or creates a
-//! cgroup, and nothing here is production authority.
+//! for the scope module's ownership tests (P2-V1-R3B-I4, -R1). Test builds
+//! only: nothing here contacts a bus, reads `/proc` for a decision or
+//! creates a cgroup, and nothing here is production authority.
 //!
 //! The model's manager answers every call from a script: a reply delivered,
 //! an effect whose reply is lost, no effect with the reply lost, a timeout,
-//! a disconnection or a malformed reply. The model's kernel keeps each
-//! helper's membership and the cgroups the manager created. Every call is
-//! logged, so a test can assert what was and was not asked.
+//! a disconnection or a malformed reply; a unit's `Id` and `ControlGroup`
+//! are the truth it keeps or a scripted other answer. The model's kernel
+//! keeps each helper's membership and the cgroups the manager created, and
+//! can report the helper in a cgroup that is not the unit's. One call can
+//! be scripted to panic inside the manager or the kernel layer. Every call
+//! is logged, so a test can assert what was and was not asked.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::io;
@@ -60,6 +63,20 @@ impl Reply {
     }
 }
 
+/// What a unit's `Id` or `ControlGroup` read answers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Text {
+    /// The truth the model keeps: the unit's name, or the path of the
+    /// cgroup the manager created for it (empty without one).
+    Exact,
+    /// This text instead (the unit's name substituted for `{unit}`, the
+    /// slice's path for `{slice}`).
+    Is(&'static str),
+    /// A value of another type.
+    WrongType,
+    Uncertain(Reply),
+}
+
 /// What a property read answers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Property {
@@ -89,9 +106,33 @@ pub(crate) enum Placement {
     /// After this many membership reads.
     AfterReads(u32),
     Never,
-    /// In a cgroup of this path instead (the unit name substituted for
-    /// `{unit}`).
+    /// In a cgroup of this path instead, which the manager created for the
+    /// unit (the unit name substituted for `{unit}`, the slice's path for
+    /// `{slice}`).
     Elsewhere(&'static str),
+    /// The manager creates the unit's cgroup where it always does, but the
+    /// kernel reports the helper in another cgroup, of this path and with
+    /// the same limits, that is not the unit's.
+    Beside(&'static str),
+}
+
+/// A model call that panics instead of answering, once, after any effect
+/// it has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Op {
+    Start,
+    Stop,
+    GetUnit,
+    UnitId,
+    ControlGroup,
+    RuntimeMax,
+    Membership,
+    Open,
+}
+
+/// The template `path` with the unit's name and the slice's path.
+pub(crate) fn expand(path: &str, unit: &str) -> String {
+    path.replace("{unit}", unit).replace("{slice}", SLICE)
 }
 
 /// Answers consumed one per call, then one answer for every later call.
@@ -128,6 +169,10 @@ pub(crate) enum Call {
     Start(String, u32),
     Stop(String),
     GetUnit(String),
+    /// The unit's `Id`, at the object path GetUnit returned.
+    UnitId(String),
+    /// The unit's `ControlGroup`, at the object path GetUnit returned.
+    ControlGroup(String),
     RuntimeMax(String),
     OomPolicy(String),
     /// A membership read: the helper's process id, and whether it was then
@@ -192,12 +237,16 @@ pub(crate) struct State {
     pub phantom: Phantom,
     // The other calls.
     pub get_unit: Script<Reply>,
+    pub unit_id: Text,
+    pub control_group: Text,
     pub runtime_max: Property,
     pub oom_policy: Property,
     /// StopUnit: whether it takes effect, and its reply.
     pub stop: Script<(bool, Reply)>,
     /// Opens that still succeed (`None`: every one).
     pub opens_left: Option<u32>,
+    /// The next call of this kind panics (then the script is spent).
+    pub panic_at: Option<Op>,
     // The world.
     pub broken: bool,
     pub units: BTreeMap<String, Unit>,
@@ -222,10 +271,13 @@ impl Default for State {
             limit_mismatch: None,
             phantom: Phantom::None,
             get_unit: Script::always(Reply::Delivered),
+            unit_id: Text::Exact,
+            control_group: Text::Exact,
             runtime_max: Property::Exact,
             oom_policy: Property::Exact,
             stop: Script::always((true, Reply::Delivered)),
             opens_left: None,
+            panic_at: None,
             broken: false,
             units: BTreeMap::new(),
             cgroups: Vec::new(),
@@ -237,7 +289,8 @@ impl Default for State {
 }
 
 impl State {
-    fn place(&mut self, pid: u32, index: usize) {
+    /// The kernel reports `pid` in the cgroup at `index`.
+    pub(crate) fn place(&mut self, pid: u32, index: usize) {
         self.cgroups[index].members.insert(pid);
         self.membership
             .insert(pid, self.cgroups[index].path.clone());
@@ -296,6 +349,23 @@ impl State {
     pub(crate) fn count(&self, call: impl Fn(&Call) -> bool) -> usize {
         self.calls.iter().filter(|logged| call(logged)).count()
     }
+
+    /// Whether the call of kind `op` is scripted to panic (spending the
+    /// script).
+    fn panics(&mut self, op: Op) -> bool {
+        if self.panic_at == Some(op) {
+            self.panic_at = None;
+            return true;
+        }
+        false
+    }
+}
+
+/// Panic as the manager or the kernel layer would, with the model's lock
+/// released.
+fn panic_in(state: MutexGuard<'_, State>, op: Op) -> ! {
+    drop(state);
+    panic!("a panic inside the model's {op:?}")
 }
 
 /// The shared model.
@@ -336,6 +406,7 @@ impl World {
         state.get_unit = Script::always(Reply::Delivered);
         state.broken = false;
         state.opens_left = None;
+        state.panic_at = None;
     }
 }
 
@@ -385,7 +456,7 @@ impl Manager for FakeManager {
         );
         if state.start_effect {
             let path = match state.placement {
-                Placement::Elsewhere(path) => path.replace("{unit}", request.unit),
+                Placement::Elsewhere(path) => expand(path, request.unit),
                 _ => format!("{SLICE}/{}", request.unit),
             };
             let index = state.cgroups.len();
@@ -415,11 +486,21 @@ impl Manager for FakeManager {
                 Placement::Immediate | Placement::Elsewhere(_) => {
                     state.place(request.helper_pid, index)
                 }
+                Placement::Beside(path) => {
+                    let mut beside = state.cgroups[index].clone();
+                    beside.path = expand(path, request.unit);
+                    state.cgroups.push(beside);
+                    let beside = state.cgroups.len() - 1;
+                    state.place(request.helper_pid, beside);
+                }
                 Placement::AfterReads(reads) => {
                     state.placing = Some((request.helper_pid, index, reads))
                 }
                 Placement::Never => {}
             }
+        }
+        if state.panics(Op::Start) {
+            panic_in(state, Op::Start);
         }
         let reply = state.start_reply;
         match state.connection(reply) {
@@ -438,6 +519,9 @@ impl Manager for FakeManager {
         if effect {
             state.stopped(unit);
         }
+        if state.panics(Op::Stop) {
+            panic_in(state, Op::Stop);
+        }
         match state.connection(reply) {
             Reply::Delivered => Remote::Answered(()),
             reply => Remote::Uncertain(reply.reason("StopUnit")),
@@ -447,6 +531,9 @@ impl Manager for FakeManager {
     fn get_unit(&self, unit: &str) -> Remote<Presence> {
         let mut state = self.0.lock();
         state.calls.push(Call::GetUnit(unit.to_string()));
+        if state.panics(Op::GetUnit) {
+            panic_in(state, Op::GetUnit);
+        }
         let reply = state.get_unit.next();
         match state.connection(reply) {
             Reply::Delivered if state.units.contains_key(unit) => {
@@ -460,6 +547,9 @@ impl Manager for FakeManager {
     fn runtime_max_usec(&self, unit_path: &str) -> Remote<Option<u64>> {
         let mut state = self.0.lock();
         state.calls.push(Call::RuntimeMax(unit_path.to_string()));
+        if state.panics(Op::RuntimeMax) {
+            panic_in(state, Op::RuntimeMax);
+        }
         let expected = backstop(&state, unit_path);
         match state.runtime_max {
             Property::Uncertain(reply) => {
@@ -483,6 +573,48 @@ impl Manager for FakeManager {
             Property::Exact => Remote::Answered(Some("continue".to_string())),
             Property::Wrong => Remote::Answered(Some("stop".to_string())),
             Property::WrongType => Remote::Answered(None),
+        }
+    }
+
+    fn unit_id(&self, unit_path: &str) -> Remote<Option<String>> {
+        let mut state = self.0.lock();
+        state.calls.push(Call::UnitId(unit_path.to_string()));
+        if state.panics(Op::UnitId) {
+            panic_in(state, Op::UnitId);
+        }
+        let unit = unit_path.strip_prefix("/unit/").unwrap_or_default();
+        match state.unit_id {
+            Text::Uncertain(reply) => Remote::Uncertain(state.connection(reply).reason("Get Id")),
+            _ if state.broken => Remote::Uncertain(Reply::Disconnect.reason("Get")),
+            Text::Exact => Remote::Answered(Some(unit.to_string())),
+            Text::Is(text) => Remote::Answered(Some(expand(text, unit))),
+            Text::WrongType => Remote::Answered(None),
+        }
+    }
+
+    fn control_group(&self, unit_path: &str) -> Remote<Option<String>> {
+        let mut state = self.0.lock();
+        state.calls.push(Call::ControlGroup(unit_path.to_string()));
+        if state.panics(Op::ControlGroup) {
+            panic_in(state, Op::ControlGroup);
+        }
+        let unit = unit_path.strip_prefix("/unit/").unwrap_or_default();
+        match state.control_group {
+            Text::Uncertain(reply) => {
+                Remote::Uncertain(state.connection(reply).reason("Get ControlGroup"))
+            }
+            _ if state.broken => Remote::Uncertain(Reply::Disconnect.reason("Get")),
+            // The cgroup the manager created for the unit; none: empty.
+            Text::Exact => Remote::Answered(Some(
+                state
+                    .units
+                    .get(unit)
+                    .and_then(|unit| unit.cgroup)
+                    .map(|index| state.cgroups[index].path.clone())
+                    .unwrap_or_default(),
+            )),
+            Text::Is(text) => Remote::Answered(Some(expand(text, unit))),
+            Text::WrongType => Remote::Answered(None),
         }
     }
 }
@@ -522,6 +654,9 @@ impl Native for FakeNative {
         let pid = helper.pid();
         let mut state = self.0.lock();
         state.calls.push(Call::Membership(pid, unreaped(pid)));
+        if state.panics(Op::Membership) {
+            panic_in(state, Op::Membership);
+        }
         if let Some((placing, index, reads)) = state.placing {
             if placing == pid {
                 if reads == 0 {
@@ -544,6 +679,9 @@ impl Native for FakeNative {
     fn open(&self, path: &str) -> Result<Box<dyn CgroupDir>, ScopeError> {
         let mut state = self.0.lock();
         state.calls.push(Call::Open(path.to_string()));
+        if state.panics(Op::Open) {
+            panic_in(state, Op::Open);
+        }
         if let Some(left) = state.opens_left {
             if left == 0 {
                 return Err(ScopeError::Io(io::Error::from_raw_os_error(libc::EACCES)));
@@ -635,7 +773,13 @@ impl CgroupDir for FakeDir {
 }
 
 // ---------------------------------------------------------------------------
-// Scope-level tests: the public `ScopeManager::start` and `PendingScope`.
+// Scope-level tests: the live harness's direct owner (`execution::place`,
+// which owns the helper and its scope operation together) and the
+// crate-private boundary it shares with executions (P2-V1-R3B-I4-R1: a
+// normal build has no public direct scope start).
+
+use super::{Occupancy, ScopeBoundary};
+use crate::execution::{place, Cleanup, PlacementFailed, RetainedBoundary};
 
 const LIMITS: ResourcePolicy = ResourcePolicy::RUST_OFFLINE_V1;
 
@@ -649,57 +793,94 @@ fn finish(mut helper: Helper) {
     helper.reap().unwrap();
 }
 
+/// A placement over `world` that must fail.
+fn refused(world: &World) -> (PlacementFailed, u32) {
+    let helper = helper();
+    let pid = helper.pid();
+    match place(&world.scopes(), helper, &LIMITS) {
+        Ok(placed) => panic!("a scope was proven: {placed:?}"),
+        Err(failed) => (failed, pid),
+    }
+}
+
+/// The retained boundary of a cleanup that must be unconfirmed.
+fn retained(cleanup: Cleanup) -> RetainedBoundary {
+    match cleanup {
+        Cleanup::Failed(boundary) => boundary,
+        Cleanup::Confirmed => panic!("cleanup reported confirmed without proof"),
+    }
+}
+
+/// Give up a boundary that can never be confirmed: its drop (defense only)
+/// kills the helper and must leave it unreaped; this test then reaps it, as
+/// this process's own child.
+pub(crate) fn abandon(boundary: RetainedBoundary, pid: u32) {
+    drop(boundary);
+    assert!(unreaped(pid), "a dropped boundary reaped the helper");
+    // SAFETY: an unreaped child of this process; nothing else reaps it.
+    let reaped = unsafe { libc::waitpid(pid as libc::pid_t, std::ptr::null_mut(), 0) };
+    assert_eq!(reaped, pid as libc::pid_t);
+}
+
 #[test]
 fn i4_01_a_confirmed_start_with_every_proof_is_proven() {
     let world = World::default();
-    let helper = helper();
-    let scope = world.scopes().start(&helper, &LIMITS).unwrap();
+    let placed = place(&world.scopes(), helper(), &LIMITS).unwrap();
+    let pid = placed.helper().unwrap().pid();
+    let scope = placed.scope().expect("the scope is proven");
     let state = world.lock();
     let unit = state.requested().unwrap();
     assert_eq!(scope.unit(), unit);
     assert!(unit.starts_with("nexus-verifier-") && unit.ends_with(".scope"));
-    // Proven through the kernel's view of the helper, the retained cgroup
-    // and the manager's properties, and nothing was stopped.
+    // Proven through the kernel's view of the helper, the retained cgroup,
+    // the manager's unit bound to it and the manager's properties, and
+    // nothing was stopped.
     assert_eq!(
         state.calls,
         [
-            Call::Start(unit.clone(), helper.pid()),
-            Call::Membership(helper.pid(), true),
+            Call::Start(unit.clone(), pid),
+            Call::Membership(pid, true),
             Call::Open(format!("{SLICE}/{unit}")),
             Call::GetUnit(unit.clone()),
+            Call::UnitId(format!("/unit/{unit}")),
+            Call::ControlGroup(format!("/unit/{unit}")),
             Call::RuntimeMax(format!("/unit/{unit}")),
             Call::OomPolicy(format!("/unit/{unit}")),
         ]
     );
     drop(state);
-    assert_eq!(
-        scope.occupancy().unwrap(),
-        crate::scope::Occupancy::Populated
-    );
-    finish(helper);
+    assert_eq!(scope.occupancy().unwrap(), Occupancy::Populated);
+    assert!(placed.end().is_confirmed());
+    assert!(!unreaped(pid));
 }
 
 #[test]
-fn i4_02_a_start_without_effect_whose_reply_is_lost_is_proven_absent() {
+fn i4_02_a_start_without_effect_whose_reply_is_lost_is_never_proven_absent() {
+    // I4-R1: the manager would answer that no unit of the name is loaded,
+    // and the helper is outside it; neither confirms an uncertain request.
     for reply in [Reply::Timeout, Reply::Error, Reply::Malformed] {
         let world = World::new(|state| {
             state.start_effect = false;
             state.start_reply = reply;
         });
-        let helper = helper();
-        let failed = world.scopes().start(&helper, &LIMITS).unwrap_err();
-        assert!(matches!(failed.error, ScopeError::Bus(_)), "{reply:?}");
-        assert!(failed.unresolved.is_none(), "{reply:?}: absence was proven");
+        let (failed, pid) = refused(&world);
+        assert!(
+            matches!(failed.error, Some(ScopeError::Bus(_))),
+            "{reply:?}"
+        );
+        let boundary = retained(failed.cleanup);
+        assert!(
+            boundary.holds_scope() && boundary.holds_helper() && unreaped(pid),
+            "{reply:?}"
+        );
         let state = world.lock();
-        // Proven by the manager, on the issuing connection after the
-        // request, and by the kernel (when the request fails and again when
-        // the operation is settled); nothing to stop, nothing opened.
-        assert!(matches!(state.calls[0], Call::Start(..)));
-        assert_eq!(state.count(|call| matches!(call, Call::GetUnit(_))), 2);
-        assert_eq!(state.count(|call| matches!(call, Call::Stop(_))), 0);
+        assert!(state.units.is_empty(), "{reply:?}: nothing was created");
+        // The manager's absence is never asked for as evidence; nothing was
+        // opened.
+        assert_eq!(state.count(|call| matches!(call, Call::GetUnit(_))), 0);
         assert_eq!(state.count(|call| matches!(call, Call::Open(_))), 0);
         drop(state);
-        finish(helper);
+        abandon(boundary, pid);
     }
 }
 
@@ -714,70 +895,71 @@ fn i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven() {
             state.start_reply = reply;
             state.placement = placement;
         });
-        let helper = helper();
-        let started = world.scopes().start(&helper, &LIMITS);
-        let scope = started.unwrap_or_else(|failed| {
+        let placed = place(&world.scopes(), helper(), &LIMITS).unwrap_or_else(|failed| {
             panic!("{reply:?}: the unit a lost-reply start created was not discovered and proven: {failed:?}")
         });
-        assert_eq!(Some(scope.unit().to_string()), world.lock().requested());
+        assert_eq!(
+            Some(placed.scope().unwrap().unit().to_string()),
+            world.lock().requested()
+        );
         assert_eq!(
             world.lock().count(|call| matches!(call, Call::Stop(_))),
             0,
             "{reply:?}"
         );
-        finish(helper);
+        assert!(placed.end().is_confirmed());
     }
     // The connection broke with the request: the scope cannot be proven,
     // and what was created is settled through its retained cgroup.
     let world = World::new(|state| state.start_reply = Reply::Disconnect);
-    let helper = helper();
-    let failed = world.scopes().start(&helper, &LIMITS).unwrap_err();
-    assert!(matches!(failed.error, ScopeError::Bus(_)));
-    assert!(failed.unresolved.is_none(), "{failed:?}");
+    let (failed, pid) = refused(&world);
+    assert!(matches!(failed.error, Some(ScopeError::Bus(_))));
+    assert!(failed.cleanup.is_confirmed(), "{failed:?}");
     assert!(world.lock().created().unwrap().killed);
-    finish(helper);
+    assert!(!unreaped(pid));
 }
 
 #[test]
-fn i4_03_a_start_whose_effect_cannot_be_confirmed_gone_is_returned_owned() {
+fn i4_03_a_start_whose_effect_cannot_be_confirmed_gone_stays_owned_with_its_helper() {
     // Created, reply lost, the helper never placed, the connection gone:
     // nothing can establish that the unit is gone, so the failure carries
-    // the operation, owned.
+    // the operation and its helper, owned together.
     let world = World::new(|state| {
         state.start_reply = Reply::Disconnect;
         state.placement = Placement::Never;
     });
-    let helper = helper();
-    let failed = world.scopes().start(&helper, &LIMITS).unwrap_err();
-    let mut pending = failed.unresolved.expect("the uncertain operation is owned");
-    let observed = pending.state();
-    assert!(observed.issued && !observed.settled && !observed.candidate);
-    assert!(
-        !pending.settle(&helper),
-        "nothing is confirmed while uncertain"
-    );
-    // Once the manager answers again on the same connection, settling it
-    // confirms it gone.
+    let (failed, pid) = refused(&world);
+    let boundary = retained(failed.cleanup);
+    let observed = boundary
+        .pending()
+        .expect("the unresolved operation is retained");
+    assert!(observed.issued && !observed.accepted && !observed.settled && !observed.candidate);
+    assert!(boundary.holds_helper() && unreaped(pid));
+    let boundary = boundary.retry().unwrap_err();
+    // I4-R1: once the manager answers again (and acts on StopUnit), nothing
+    // without a candidate confirms it either.
     world.release();
-    assert!(pending.settle(&helper));
-    assert!(!world.lock().units.contains_key(pending.unit()));
-    finish(helper);
+    let boundary = boundary.retry().unwrap_err();
+    assert!(boundary.holds_scope() && boundary.holds_helper() && unreaped(pid));
+    abandon(boundary, pid);
 }
 
 #[test]
-fn i4_start_failed_settles_with_the_live_helper_and_reports_the_proof_failure() {
+fn i4_a_failed_placement_settles_with_its_helper_and_reports_the_proof_failure() {
     // A proof that fails on the retained cgroup: settling ends what is in
     // it, and the failure names the proof.
     let world = World::new(|state| state.limit_mismatch = Some("pids.max"));
-    let helper = helper();
-    let failed = world.scopes().start(&helper, &LIMITS).unwrap_err();
-    assert!(matches!(failed.error, ScopeError::Mismatch("pids.max")));
-    assert!(failed.unresolved.is_none());
+    let (failed, pid) = refused(&world);
+    assert!(matches!(
+        failed.error,
+        Some(ScopeError::Mismatch("pids.max"))
+    ));
+    assert!(failed.cleanup.is_confirmed());
     let state = world.lock();
     assert!(state.created().unwrap().killed);
     assert_eq!(state.count(|call| matches!(call, Call::Open(_))), 1);
     drop(state);
-    finish(helper);
+    assert!(!unreaped(pid), "settled, then reaped");
 }
 
 #[test]
@@ -786,13 +968,22 @@ fn i4_a_pending_operation_is_bound_to_its_own_helper() {
         state.placement = Placement::Never;
         state.stop = Script::always((false, Reply::Timeout));
     });
-    let (bound, other) = (helper(), helper());
-    let failed = world.scopes().start(&bound, &LIMITS).unwrap_err();
-    let mut pending = failed.unresolved.expect("the unit is still loaded");
+    let (mut bound, other) = (helper(), helper());
+    let scopes = world.scopes();
+    let mut boundary = ScopeBoundary::Pending(scopes.prepare(&bound, &LIMITS).unwrap());
+    assert!(matches!(
+        boundary.establish(&bound, None),
+        Err(ScopeError::NotPlaced)
+    ));
+    let ScopeBoundary::Pending(pending) = &mut boundary else {
+        panic!("the unresolved operation is not held: {boundary:?}");
+    };
+    // As the finalizer settles: its bound helper killed, kept unreaped.
+    let _ = bound.kill();
     // Another helper's membership is no evidence for this operation.
     world.release();
     assert!(
-        !pending.settle(&other),
+        !pending.reconcile(Some(&other), None),
         "another helper's membership settled the operation"
     );
     assert_eq!(
@@ -802,28 +993,167 @@ fn i4_a_pending_operation_is_bound_to_its_own_helper() {
         0,
         "another helper's membership settled the operation"
     );
-    assert!(pending.settle(&bound));
+    assert!(pending.reconcile(Some(&bound), None));
     // A prepared operation is never issued for another helper.
-    let scopes = world.scopes();
-    let mut boundary = super::ScopeBoundary::Pending(scopes.prepare(&bound, &LIMITS).unwrap());
+    let mut boundary = ScopeBoundary::Pending(scopes.prepare(&bound, &LIMITS).unwrap());
     assert!(matches!(
         boundary.establish(&other, None),
         Err(ScopeError::Mismatch("scope operation"))
     ));
-    let unresolved = boundary.into_pending().unwrap();
-    assert!(!unresolved.state().issued);
+    assert!(matches!(&boundary, ScopeBoundary::Pending(pending) if !pending.state().issued));
     finish(bound);
     finish(other);
 }
 
 #[test]
 fn i4_owners_are_self_contained_values() {
-    // Movable to any thread and borrowing nothing: an unresolved operation
-    // and a retained boundary outlive whatever created them.
+    // Movable to any thread and borrowing nothing: an unresolved operation,
+    // a retained boundary and the harness's owners outlive whatever created
+    // them.
     fn owned<T: Send + 'static>() {}
     owned::<super::PendingScope>();
-    owned::<super::StartFailed>();
     owned::<super::Scope>();
     owned::<ScopeManager>();
-    owned::<crate::execution::RetainedBoundary>();
+    owned::<RetainedBoundary>();
+    owned::<crate::execution::ScopedHelper>();
+    owned::<PlacementFailed>();
+}
+
+/// The names of the items `source` declares public in a build without the
+/// test or harness configuration: `pub` items (never `pub(crate)`), outside
+/// any item or block gated by `cfg(test)` or the `live-sandbox-harness`
+/// feature. A tripwire over rustfmt-formatted source; the authoritative
+/// check of the normal build's surface compiles an external caller.
+fn normal_public(source: &str) -> Vec<String> {
+    const ITEMS: [&str; 9] = [
+        "fn ", "struct ", "enum ", "trait ", "use ", "mod ", "const ", "static ", "type ",
+    ];
+    let mut names = Vec::new();
+    let mut gated = false;
+    let mut skip_until: Option<String> = None;
+    for line in source.lines() {
+        if let Some(end) = &skip_until {
+            if line == end {
+                skip_until = None;
+            }
+            continue;
+        }
+        let item = line.trim_start();
+        let indent = &line[..line.len() - item.len()];
+        if item.starts_with("#[") {
+            gated |= item.contains("cfg(test)")
+                || item.contains("cfg(any(test, feature = \"live-sandbox-harness\"))");
+            continue;
+        }
+        if item.starts_with("//") || item.is_empty() {
+            continue;
+        }
+        if gated {
+            gated = false;
+            // A gated item with a body: everything up to its closing brace.
+            if item.ends_with('{') {
+                skip_until = Some(format!("{indent}}}"));
+            }
+            continue;
+        }
+        if let Some(rest) = item.strip_prefix("pub ") {
+            if let Some(kind) = ITEMS.iter().find(|kind| rest.starts_with(**kind)) {
+                let declared = &rest[kind.len()..];
+                let name: String = if *kind == "use " {
+                    declared.trim_end_matches(';').to_string()
+                } else {
+                    declared
+                        .chars()
+                        .take_while(|c| c.is_alphanumeric() || *c == '_')
+                        .collect()
+                };
+                names.push(format!("{kind}{name}"));
+            }
+        }
+    }
+    names
+}
+
+#[test]
+fn i4r1_04_a_normal_build_constructs_a_manager_only_by_connect() {
+    // P2-V1-R3B-I4-R1: no caller-selected bus, no other manager.
+    let constructors: Vec<_> = normal_public(include_str!("../scope.rs"))
+        .into_iter()
+        .filter(|item| item.starts_with("fn connect") || item.starts_with("fn with_"))
+        .collect();
+    assert_eq!(
+        constructors,
+        ["fn connect"],
+        "a normal build exposes a caller-selected manager socket"
+    );
+    assert_eq!(
+        normal_public(include_str!("manager.rs")),
+        ["const BUS_CALL_TIMEOUT"]
+    );
+    assert!(normal_public(include_str!("native.rs")).is_empty());
+}
+
+#[test]
+fn i4r1_05_a_normal_build_holds_no_scope_operation_apart_from_its_helper() {
+    // No public pending operation, no public settling, and no failure that
+    // carries a pending operation without its helper.
+    assert!(
+        normal_public(include_str!("pending.rs")).is_empty(),
+        "a normal build exposes a pending scope operation"
+    );
+    for source in [
+        include_str!("../scope.rs"),
+        include_str!("pending.rs"),
+        include_str!("../execution.rs"),
+    ] {
+        assert!(
+            !source.contains(concat!("Start", "Failed")),
+            "a normal build exposes a pending scope operation"
+        );
+    }
+}
+
+#[test]
+fn i4r1_x_a_normal_build_starts_a_scope_only_within_run() {
+    // The whole normal-build surface of the scope and execution modules:
+    // `ScopeManager::connect`, then `execution::run`.
+    assert_eq!(
+        normal_public(include_str!("../scope.rs")),
+        [
+            "use manager::BUS_CALL_TIMEOUT",
+            "const PLACEMENT_TIMEOUT",
+            "const SETTLE_TIMEOUT",
+            "enum ScopeError",
+            "fn expected_limit_files",
+            "struct ScopeManager",
+            "fn connect",
+            "struct ScopeEvents",
+            "enum Occupancy",
+            "struct Scope",
+            "fn unit",
+            "fn kill",
+            "fn occupancy",
+            "fn wait_empty",
+            "fn events",
+        ],
+        "a normal build exposes a direct scope start"
+    );
+    assert_eq!(
+        normal_public(include_str!("../execution.rs")),
+        [
+            "const FINALIZE_TIMEOUT",
+            "struct StreamRecord",
+            "enum EndedBy",
+            "enum NotRun",
+            "enum Cleanup",
+            "fn is_confirmed",
+            "struct RetainedBoundary",
+            "fn retry",
+            "struct ExecutionReport",
+            "enum ExitClass",
+            "fn classify",
+            "fn run",
+        ],
+        "a normal build exposes a direct scope start"
+    );
 }

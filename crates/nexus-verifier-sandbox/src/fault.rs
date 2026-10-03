@@ -26,6 +26,9 @@ pub enum FaultPoint {
     /// The candidate cgroup's descriptor is retained; its limits and the
     /// manager's properties are not yet proven.
     ScopeCandidate,
+    /// GetUnit answered; the unit's identity and control group are not yet
+    /// bound to the kernel's cgroup (P2-V1-R3B-I4-R1).
+    ScopeBinding,
     /// During the manager-property proof (RuntimeMaxUSec, OOMPolicy).
     ScopeProperties,
     /// Settling a pending scope: StopUnit is about to be issued.

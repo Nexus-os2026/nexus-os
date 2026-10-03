@@ -143,6 +143,9 @@ pub enum LaunchError {
     Mapping(io::Error),
     /// The helper reported where setup stopped; nothing untrusted ran.
     SetupFailed { stage: SetupStage, errno: i32 },
+    /// Every helper identity of this backend process is used: no helper is
+    /// spawned again (P2-V1-R3B-I4-R1).
+    IdentitiesExhausted,
 }
 
 /// How a launched execution ended, as the helper reported it.
@@ -171,21 +174,50 @@ pub struct HelperOutput {
 pub struct Helper {
     child: Child,
     control: OwnedFd,
-    /// This value's identity within the backend process, never reused
-    /// (P2-V1-R3B-I4): what a pending scope operation is bound to. Unlike
-    /// the process id, it cannot come to name another child once this one
-    /// is reaped. It is no authority by itself.
+    /// This value's identity within the backend process, nonzero and never
+    /// reused (P2-V1-R3B-I4, -R1): what a pending scope operation is bound
+    /// to. Unlike the process id, it cannot come to name another child once
+    /// this one is reaped. It is allocated before the child is spawned, and
+    /// none is spawned once they are exhausted. It is no authority by
+    /// itself.
     serial: u64,
 }
 
 /// The next helper's [`Helper::serial`].
 static NEXT_SERIAL: AtomicU64 = AtomicU64::new(1);
 
+/// A helper identity from `next`: nonzero, increasing, never reused. Once
+/// the next one would not fit, none is ever issued again: the counter never
+/// wraps to an identity already issued.
+pub(crate) fn allocate_serial(next: &AtomicU64) -> Option<u64> {
+    next.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |serial| {
+        serial.checked_add(1).filter(|_| serial != 0)
+    })
+    .ok()
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Helper children this thread has spawned (unit tests only).
+    pub(crate) static SPAWNED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 impl Helper {
     /// Spawn the helper. Its environment is empty, it has no arguments, its
     /// working directory is `/`, stdin is the control socket and stdout and
     /// stderr are fresh pipes.
     pub fn spawn(program: &HelperProgram) -> Result<(Helper, HelperOutput), LaunchError> {
+        Self::spawn_with(program, &NEXT_SERIAL)
+    }
+
+    /// [`Self::spawn`], with its identity from `serials`.
+    pub(crate) fn spawn_with(
+        program: &HelperProgram,
+        serials: &AtomicU64,
+    ) -> Result<(Helper, HelperOutput), LaunchError> {
+        // The identity first: no child exists without one, and none is
+        // spawned once they are exhausted.
+        let serial = allocate_serial(serials).ok_or(LaunchError::IdentitiesExhausted)?;
         let (control, helper_end) = sys::seqpacket_pair().map_err(LaunchError::Spawn)?;
         let (stdout_read, stdout_write) = sys::pipe().map_err(LaunchError::Spawn)?;
         let (stderr_read, stderr_write) = sys::pipe().map_err(LaunchError::Spawn)?;
@@ -197,12 +229,14 @@ impl Helper {
             .stderr(Stdio::from(stderr_write))
             .spawn()
             .map_err(LaunchError::Spawn)?;
+        #[cfg(test)]
+        SPAWNED.with(|spawned| spawned.set(spawned.get() + 1));
         // The Command and its copies of the child's ends are gone here, so
         // the output pipes reach end of file when the verifier tree exits.
         let mut helper = Helper {
             child,
             control,
-            serial: NEXT_SERIAL.fetch_add(1, Ordering::Relaxed),
+            serial,
         };
         if let Err(error) = helper.set_receive_timeout(Some(SETUP_STEP_TIMEOUT)) {
             // The helper is never left running or unreaped.

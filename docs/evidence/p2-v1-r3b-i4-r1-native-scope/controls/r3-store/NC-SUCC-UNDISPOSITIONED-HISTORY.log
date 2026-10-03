@@ -1,0 +1,22 @@
+
+running 1 test
+test v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes ... FAILED
+
+failures:
+
+---- v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes stdout ----
+
+thread 'v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes' (1277360) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:9783:6:
+[succession-dispositioned] archived history without a disposition
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    v16_an_archived_incident_is_dispositioned_again_from_its_archived_bytes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.04s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.07s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

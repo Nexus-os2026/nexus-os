@@ -1,0 +1,29 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0603]: struct `PendingScope` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:22:45
+   |
+22 |     copied::<nexus_verifier_sandbox::scope::PendingScope>();
+   |                                             ^^^^^^^^^^^^ private struct
+   |
+note: the struct `PendingScope` is defined here
+  --> crates/nexus-verifier-sandbox/src/scope.rs:65:26
+   |
+65 | pub(crate) use pending::{PendingScope, ScopeBoundary};
+   |                          ^^^^^^^^^^^^
+
+error[E0277]: the trait bound `nexus_verifier_sandbox::scope::pending::PendingScope: Clone` is not satisfied
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:22:14
+   |
+22 |     copied::<nexus_verifier_sandbox::scope::PendingScope>();
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Clone` is not implemented for `nexus_verifier_sandbox::scope::pending::PendingScope`
+   |
+note: required by a bound in `probe::copied`
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:18
+   |
+21 |     fn copied<T: Clone>() {}
+   |                  ^^^^^ required by this bound in `copied`
+
+Some errors have detailed explanations: E0277, E0603.
+For more information about an error, try `rustc --explain E0277`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...

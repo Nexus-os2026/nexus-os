@@ -1,0 +1,7 @@
+snapshot tree: e7a631270803a566ae0a175e3fc70bd452257774
+snapshot checkout: /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen
+snapshot HEAD: cca9cb7ad351b50da18774c63fa0fe1ed0df31bc
+made at: 2026-10-03T00:06:15Z
+from worktree: /home/nexus/NEXUS/nexus-os-p2-v1-native-scope-ownership (HEAD bb0dfec0338273ddf187b1dfcb22cd4b8eb8b2f9, branch review/p2-v1-native-scope-ownership)
+base: bb0dfec0338273ddf187b1dfcb22cd4b8eb8b2f9
+worktree status entries: 38

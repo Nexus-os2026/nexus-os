@@ -1,0 +1,17 @@
+error[E0425]: cannot find type `PlacementFailed` in module `execution`
+   --> src/main.rs:11:29
+    |
+ 11 |     fn failed(_: execution::PlacementFailed) {}
+    |                             ^^^^^^^^^^^^^^^ not found in `execution`
+    |
+note: found an item that was configured out
+   --> /home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox/src/execution.rs:245:12
+    |
+243 | #[cfg(any(test, feature = "live-sandbox-harness"))]
+    |          ---------------------------------------- the item is gated here
+244 | #[derive(Debug)]
+245 | pub struct PlacementFailed {
+    |            ^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `i4r1-normal-caller` (bin "i4r1-normal-caller") due to 1 previous error

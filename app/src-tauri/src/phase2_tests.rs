@@ -61,6 +61,10 @@ fn p2_g_01_the_desktop_reaches_project_code_only_through_the_verifier_sandbox() 
     let flow = code(include_str!("coding_flow/verification.rs"));
     for (needle, expected) in [
         ("execution::run(", 1),
+        ("ScopeManager::connect()", 1),
+        ("connect_at", 0),
+        ("execution::place", 0),
+        ("ScopedHelper", 0),
         ("HelperProgram::installed()", 1),
         ("VerifiedVerifierToolchain::installed()", 1),
         ("launch_spec(", 1),
@@ -272,6 +276,40 @@ fn p2_g_06_production_cannot_construct_a_helper_from_an_arbitrary_path() {
     for function in ["run_with_fault", "holds_scope", "holds_helper"] {
         assert!(gated(&execution, function, HARNESS_ONLY), "{function}");
     }
+    // P2-V1-R3B-I4-R1: the direct scope start, its owners and a
+    // caller-selected manager bus exist only for the sandbox crate's own
+    // tests and live harness. A normal build constructs a manager only by
+    // `ScopeManager::connect`, starts a scope only within `execution::run`,
+    // and holds no scope operation apart from its helper.
+    let scope = std::fs::read_to_string(sandbox.join("src/scope.rs")).unwrap();
+    let pending = std::fs::read_to_string(sandbox.join("src/scope/pending.rs")).unwrap();
+    assert!(gated(&execution, "place", HARNESS_ONLY), "execution::place");
+    assert!(
+        gated(&scope, "connect_at", HARNESS_ONLY),
+        "ScopeManager::connect_at"
+    );
+    assert!(!gated(&scope, "connect", HARNESS_ONLY));
+    for owner in [
+        "#[derive(Debug)]\npub struct ScopedHelper {",
+        "#[derive(Debug)]\npub struct PlacementFailed {",
+        "impl ScopedHelper {",
+        "impl Drop for ScopedHelper {",
+    ] {
+        assert_eq!(execution.matches(owner).count(), 1, "{owner}");
+        assert!(
+            execution.contains(&format!("{HARNESS_ONLY}\n{owner}")),
+            "{owner}"
+        );
+    }
+    assert!(
+        !code(&scope).contains("pub fn start("),
+        "a public direct scope start"
+    );
+    assert!(code(&pending).contains("pub(crate) struct PendingScope"));
+    for source in [&scope, &pending, &execution] {
+        assert!(!code(source).contains("StartFailed"));
+        assert!(!code(source).contains("pub fn settle("));
+    }
     let mut sources = Vec::new();
     production_files(&sandbox.join("src"), &mut sources);
     assert!(
@@ -311,6 +349,11 @@ fn p2_g_06_production_cannot_construct_a_helper_from_an_arbitrary_path() {
         "FaultPoint",
         "holds_scope",
         "holds_helper",
+        "execution::place",
+        "ScopedHelper",
+        "PlacementFailed",
+        "reap_helper",
+        "connect_at",
         "live-sandbox-harness",
         "live_sandbox_harness",
     ] {
@@ -840,9 +883,21 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
     ] {
         assert!(!harness.contains(needle), "{needle}");
     }
-    assert_eq!(harness.matches("RetainedBoundary::retry").count(), 2);
+    // P2-V1-R3B-I4-R1: the live harness's direct scope owner hands a failed
+    // placement's cleanup to a retained boundary, which is settled the same
+    // way: a failed scope-hold placement and the unmovable process.
+    assert_eq!(harness.matches("RetainedBoundary::retry").count(), 4);
     assert!(
         harness.contains("match settle(boundary, EXPLICIT_ATTEMPTS, RetainedBoundary::retry) {")
+    );
+    assert_eq!(
+        harness
+            .matches(
+                "settle(\n                    boundary,\n                    EXPLICIT_ATTEMPTS,\n                    \
+                 execution::RetainedBoundary::retry,\n                )"
+            )
+            .count(),
+        2
     );
     // Whatever the report owns leaves it before any check, and nothing
     // between the execution and that can fail.

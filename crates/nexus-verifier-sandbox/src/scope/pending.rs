@@ -1,5 +1,5 @@
 //! Ownership of a scope operation whose remote effect is not yet known
-//! (P2-V1-R3B-I4).
+//! (P2-V1-R3B-I4, -R1).
 //!
 //! One execution's scope is a [`ScopeBoundary`]:
 //!
@@ -8,13 +8,28 @@
 //!   issued until either every proof passed or settling confirmed that
 //!   nothing the request may have created can still hold a process.
 //! - `Proven`: a [`Scope`], the exact cgroup, retained by descriptor, that
-//!   holds the helper with exactly the requested limits and policy.
+//!   holds the helper with exactly the requested limits and policy and that
+//!   the manager reports as exactly this unit's control group.
 //!
 //! The only transitions are None → Pending (the operation is prepared and
 //! owned before its request is issued), Pending → Proven (every proof
 //! passed; in place, so the owner never lets go) and Pending → gone
-//! ([`PendingScope::settle`] confirmed it). A unit name, a process id or a
-//! cgroup path never creates, promotes or confirms one.
+//! (settling confirmed it). A unit name, a process id or a cgroup path
+//! never creates, promotes or confirms one. Nothing outside the crate holds
+//! a pending operation: it lives only in an owner that also owns its helper
+//! (an execution's, its retained boundary, or the live harness's scoped
+//! helper), and it is settled only by the execution's finalizer, which
+//! kills that helper, unreaped, first.
+//!
+//! Proven requires, of the candidate retained from the kernel's report of
+//! the helper's cgroup: a populated cgroup v2 directory listing the helper,
+//! with exactly the requested limits; and, of the manager's unit object for
+//! the name (GetUnit): its primary name (`Id`) exactly the requested one,
+//! its control group (`ControlGroup`) exactly the path the kernel reported
+//! and the candidate was opened from, and exactly the requested runtime
+//! backstop and out-of-memory policy. A matching last path component is no
+//! binding; a property that is unavailable, uncertain or malformed proves
+//! nothing.
 //!
 //! What confirms a pending operation gone:
 //!
@@ -26,10 +41,22 @@
 //! - a candidate cgroup is retained (the kernel reported the helper in it,
 //!   so the start job has run): it is empty or removed, exactly as for a
 //!   proven scope;
-//! - no candidate: the manager answers on the issuing connection, after the
-//!   request (one connection's calls are answered in order), that no unit
-//!   of the name is loaded, so neither the unit nor its start job remains;
-//!   and then the kernel reports the helper in a cgroup not of that name.
+//! - no candidate, after StartTransientUnit's reply (its job path) was
+//!   delivered and recorded: GetUnit answers `NoSuchUnit` (it was sent
+//!   after that reply arrived, so after the request was handled, and a unit
+//!   that still has a job is not unloaded), and then the kernel reports the
+//!   helper in a cgroup not of that name.
+//!
+//! Without a delivered and recorded reply (a timeout, a broken transport,
+//! an unexpected error, a reply that does not decode, or a panic before the
+//! reply was recorded) nothing without a candidate confirms the operation.
+//! D-Bus delivers one peer's messages to another in the order they were
+//! sent, but a recipient need not process or answer calls in that order, so
+//! a later `NoSuchUnit` does not show that the request has had, or will
+//! have, no effect; nor does any StopUnit reply. Such an operation stays
+//! owned, its helper unreaped and its execution's cleanup unconfirmed,
+//! unless a candidate is found and confirmed: possibly for the life of the
+//! backend process.
 //!
 //! A timeout is evidence of uncertainty, never of absence. A StopUnit reply
 //! confirms nothing, and a failed or timed-out one never proves that
@@ -59,8 +86,8 @@ use crate::policy::ResourcePolicy;
 /// A scope operation that may have had an effect the backend has neither
 /// proven nor confirmed gone: the owner of everything its request may have
 /// created. Never constructed from a name, a process id or a path, never
-/// serialized and never copied.
-pub struct PendingScope {
+/// serialized and never copied; crate-private, held only beside its helper.
+pub(crate) struct PendingScope {
     /// The manager connection that issued the request, and the kernel
     /// observations: shared, so settling never needs the [`ScopeManager`].
     ///
@@ -79,6 +106,10 @@ pub struct PendingScope {
     /// The manager refused the request: a unit of that name was already
     /// loaded, and it is not this request's.
     collided: bool,
+    /// The manager accepted the request: its reply, a job path, was
+    /// delivered and recorded. Until then (an uncertain outcome, or a panic
+    /// before it was recorded) the manager's absence confirms nothing.
+    accepted: bool,
     /// The cgroup the kernel reported the helper in, retained by descriptor
     /// as soon as it was seen: cleanup ownership only, never scope
     /// authority.
@@ -89,17 +120,6 @@ pub struct PendingScope {
     last_stop: Option<Remote<()>>,
     /// Confirmed gone: nothing is left to own.
     settled: bool,
-}
-
-/// A [`super::ScopeManager::start`] that proved no scope.
-#[derive(Debug)]
-pub struct StartFailed {
-    /// Why no scope was proven.
-    pub error: ScopeError,
-    /// What the attempt may have created and could not be confirmed gone:
-    /// owned here, with the helper kept unreaped, until
-    /// [`PendingScope::settle`] confirms it. `None` once confirmed.
-    pub unresolved: Option<Box<PendingScope>>,
 }
 
 impl PendingScope {
@@ -117,16 +137,12 @@ impl PendingScope {
             limits: *limits,
             issued: false,
             collided: false,
+            accepted: false,
             candidate: None,
             stops: 0,
             last_stop: None,
             settled: false,
         }
-    }
-
-    /// The backend-generated unit name (display and diagnostics only).
-    pub fn unit(&self) -> &str {
-        &self.unit
     }
 
     /// Whether `helper` is exactly the retained helper this operation is
@@ -142,14 +158,9 @@ impl PendingScope {
 
     /// Settle this operation: end whatever it may have created and confirm
     /// it gone. `true` once nothing it may have created can still hold or
-    /// receive a process; `false` keeps it owned here, for another attempt.
-    /// `helper` must be the retained, unreaped helper it was started for
-    /// (another is ignored); killed first, it lets its cgroup empty.
-    pub fn settle(&mut self, helper: &Helper) -> bool {
-        self.reconcile(Some(helper), None)
-    }
-
-    /// [`Self::settle`], with the panic controls' fault injection.
+    /// receive a process; `false` keeps it owned, for another attempt. Only
+    /// the execution's finalizer settles, after killing `helper`, the bound
+    /// helper its owner keeps unreaped (another helper is ignored).
     pub(crate) fn reconcile(&mut self, helper: Option<&Helper>, fault: Option<Fault>) -> bool {
         if !self.unresolved() {
             return true;
@@ -223,6 +234,9 @@ impl PendingScope {
                 occupancy(candidate.as_ref()),
                 Ok(Occupancy::Empty | Occupancy::Removed)
             ),
+            // Without a delivered reply the manager's absence proves
+            // nothing.
+            None if !self.accepted => false,
             None => absent(controller, &self.unit, helper),
         }
     }
@@ -253,25 +267,21 @@ impl PendingScope {
         });
         fault::at(fault, FaultPoint::AfterScopeStart);
         let uncertain = match started {
-            Started::Accepted => None,
+            Started::Accepted => {
+                self.accepted = true;
+                None
+            }
             Started::Collision => {
                 self.collided = true;
                 return Err(ScopeError::Bus(
                     "StartTransientUnit: the unit exists".into(),
                 ));
             }
-            Started::Uncertain(reason) => {
-                // The request may or may not have taken effect. It ended
-                // without one only if the manager now answers that no unit
-                // of the name is loaded and the helper is outside it;
-                // otherwise it is discovered and proven like an accepted
-                // one, or settled.
-                fault::at(fault, FaultPoint::ScopeReconcile);
-                if absent(&controller, &self.unit, Some(helper)) {
-                    return Err(ScopeError::Bus(reason));
-                }
-                Some(reason)
-            }
+            // The request may or may not have taken effect, or take it
+            // later: it is discovered through the helper's membership and
+            // proven like an accepted one, or settled, and nothing the
+            // manager answers without a candidate releases it.
+            Started::Uncertain(reason) => Some(reason),
         };
         // A helper never placed after an uncertain request: the request's
         // own failure is what is reported.
@@ -285,8 +295,9 @@ impl PendingScope {
     /// Prove the scope: the kernel reports the helper in a cgroup of the
     /// unit, retained at once by descriptor; it is a populated cgroup v2
     /// directory holding the helper with exactly the requested limits; and
-    /// the manager has the unit loaded with the requested runtime backstop
-    /// and out-of-memory policy.
+    /// the manager's unit object for the name is exactly this unit, its
+    /// control group exactly that cgroup's path, with the requested runtime
+    /// backstop and out-of-memory policy.
     fn prove(
         &mut self,
         controller: &Controller,
@@ -321,6 +332,21 @@ impl PendingScope {
             }
             Remote::Uncertain(reason) => return Err(ScopeError::Bus(reason)),
         };
+        fault::at(fault, FaultPoint::ScopeBinding);
+        // The manager's unit, bound to the kernel's cgroup: its primary name
+        // is exactly the requested one, and its control group is exactly the
+        // path the kernel reports the helper in and the candidate was opened
+        // from, never merely one with the same last component.
+        match controller.manager.unit_id(&unit_path) {
+            Remote::Answered(Some(id)) if id == self.unit => {}
+            Remote::Answered(_) => return Err(ScopeError::Mismatch("unit id")),
+            Remote::Uncertain(reason) => return Err(ScopeError::Bus(reason)),
+        }
+        match controller.manager.control_group(&unit_path) {
+            Remote::Answered(Some(group)) if group == path => {}
+            Remote::Answered(_) => return Err(ScopeError::Mismatch("unit control group")),
+            Remote::Uncertain(reason) => return Err(ScopeError::Bus(reason)),
+        }
         fault::at(fault, FaultPoint::ScopeProperties);
         match controller.manager.runtime_max_usec(&unit_path) {
             Remote::Answered(Some(backstop))
@@ -342,6 +368,7 @@ impl PendingScope {
         PendingState {
             issued: self.issued,
             collided: self.collided,
+            accepted: self.accepted,
             candidate: self.candidate.is_some(),
             stops: self.stops,
             settled: self.settled,
@@ -356,6 +383,7 @@ impl fmt::Debug for PendingScope {
             .field("helper_pid", &self.helper_pid)
             .field("issued", &self.issued)
             .field("collided", &self.collided)
+            .field("accepted", &self.accepted)
             .field("candidate", &self.candidate.is_some())
             .field("stops", &self.stops)
             .field("last_stop", &self.last_stop)
@@ -379,14 +407,21 @@ impl Drop for PendingScope {
 pub(crate) struct PendingState {
     pub issued: bool,
     pub collided: bool,
+    pub accepted: bool,
     pub candidate: bool,
     pub stops: u32,
     pub settled: bool,
 }
 
-/// Whether the cgroup `path` (as the kernel reports it) is the unit's own.
+/// Whether the cgroup `path` (as the kernel reports it, relative to the
+/// cgroup root) is absolute, in normal form (no empty, `.` or `..`
+/// component) and named for the unit: a locator of the unit's possible
+/// cgroup, never a binding to the unit.
 fn names_unit(path: &str, unit: &str) -> bool {
-    path.rsplit('/').next() == Some(unit) && !path.contains("..")
+    path.strip_prefix('/')
+        .is_some_and(|relative| relative.split('/').all(|part| !matches!(part, "" | ".")))
+        && path.rsplit('/').next() == Some(unit)
+        && !path.contains("..")
 }
 
 /// The kernel reports the bound helper in a cgroup not of the unit.
@@ -396,8 +431,10 @@ fn outside(controller: &Controller, helper: Option<&Helper>, unit: &str) -> bool
     })
 }
 
-/// The manager answers, on the issuing connection, that no unit of the name
-/// is loaded, and then the kernel reports the bound helper outside it.
+/// The manager answers that no unit of the name is loaded, and then the
+/// kernel reports the bound helper outside it: evidence only after a
+/// delivered and recorded StartTransientUnit reply (see the module
+/// documentation).
 fn absent(controller: &Controller, unit: &str, helper: Option<&Helper>) -> bool {
     matches!(
         controller.manager.get_unit(unit),
@@ -489,14 +526,6 @@ impl ScopeBoundary {
     /// unreaped.
     pub(crate) fn unresolved(&self) -> bool {
         matches!(self, Self::Pending(pending) if pending.unresolved())
-    }
-
-    /// The pending operation, if one is held.
-    pub(crate) fn into_pending(self) -> Option<Box<PendingScope>> {
-        match self {
-            Self::Pending(pending) => Some(pending),
-            _ => None,
-        }
     }
 
     /// Best effort and without waiting: end what is held. Defense in depth

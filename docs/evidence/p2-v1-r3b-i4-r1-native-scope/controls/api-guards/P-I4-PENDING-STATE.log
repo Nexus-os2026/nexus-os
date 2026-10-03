@@ -1,0 +1,29 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0603]: struct `PendingScope` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:21:58
+   |
+21 |     fn edit(pending: &mut nexus_verifier_sandbox::scope::PendingScope) {
+   |                                                          ^^^^^^^^^^^^ private struct
+   |
+note: the struct `PendingScope` is defined here
+  --> crates/nexus-verifier-sandbox/src/scope.rs:65:26
+   |
+65 | pub(crate) use pending::{PendingScope, ScopeBoundary};
+   |                          ^^^^^^^^^^^^
+
+error[E0616]: field `settled` of struct `nexus_verifier_sandbox::scope::pending::PendingScope` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:22:17
+   |
+22 |         pending.settled = true;
+   |                 ^^^^^^^ private field
+
+error[E0616]: field `issued` of struct `nexus_verifier_sandbox::scope::pending::PendingScope` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:23:17
+   |
+23 |         pending.issued = false;
+   |                 ^^^^^^ private field
+
+Some errors have detailed explanations: E0603, E0616.
+For more information about an error, try `rustc --explain E0603`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...

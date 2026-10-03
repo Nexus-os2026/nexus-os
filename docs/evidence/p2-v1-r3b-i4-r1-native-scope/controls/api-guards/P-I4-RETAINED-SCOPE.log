@@ -1,0 +1,10 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+error[E0616]: field `scope` of struct `RetainedBoundary` is private
+  --> crates/nexus-verifier-sandbox/tests/i4r1_api_probe.rs:22:22
+   |
+22 |     let _ = boundary.scope;
+   |                      ^^^^^ private field
+
+For more information about this error, try `rustc --explain E0616`.
+error: could not compile `nexus-verifier-sandbox` (test "i4r1_api_probe") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

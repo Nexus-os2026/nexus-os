@@ -1,0 +1,45 @@
+launcher.rs at bb0dfec0338273ddf187b1dfcb22cd4b8eb8b2f9:
+173-    control: OwnedFd,
+174:    /// This value's identity within the backend process, never reused
+175-    /// (P2-V1-R3B-I4): what a pending scope operation is bound to. Unlike
+--
+177-    /// is reaped. It is no authority by itself.
+178:    serial: u64,
+179-}
+--
+181-/// The next helper's [`Helper::serial`].
+182:static NEXT_SERIAL: AtomicU64 = AtomicU64::new(1);
+183-
+--
+204-            control,
+205:            serial: NEXT_SERIAL.fetch_add(1, Ordering::Relaxed),
+206-        };
+--
+229-    /// field): binds a pending scope operation to exactly this child.
+230:    pub(crate) fn serial(&self) -> u64 {
+231-        self.serial
+
+Helper::spawn at the base: the child is spawned before its serial is allocated:
+   188	    pub fn spawn(program: &HelperProgram) -> Result<(Helper, HelperOutput), LaunchError> {
+   189	        let (control, helper_end) = sys::seqpacket_pair().map_err(LaunchError::Spawn)?;
+   190	        let (stdout_read, stdout_write) = sys::pipe().map_err(LaunchError::Spawn)?;
+   191	        let (stderr_read, stderr_write) = sys::pipe().map_err(LaunchError::Spawn)?;
+   192	        let child = Command::new(program.path())
+   193	            .env_clear()
+   194	            .current_dir("/")
+   195	            .stdin(Stdio::from(helper_end))
+   196	            .stdout(Stdio::from(stdout_write))
+   197	            .stderr(Stdio::from(stderr_write))
+   198	            .spawn()
+   199	            .map_err(LaunchError::Spawn)?;
+   200	        // The Command and its copies of the child's ends are gone here, so
+   201	        // the output pipes reach end of file when the verifier tree exits.
+   202	        let mut helper = Helper {
+   203	            child,
+   204	            control,
+   205	            serial: NEXT_SERIAL.fetch_add(1, Ordering::Relaxed),
+   206	        };
+   207	        if let Err(error) = helper.set_receive_timeout(Some(SETUP_STEP_TIMEOUT)) {
+   208	            // The helper is never left running or unreaped.
+   209	            let _ = helper.child.kill();
+   210	            let _ = helper.child.wait();

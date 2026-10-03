@@ -1,0 +1,22 @@
+
+running 1 test
+test r318_revocations_at_two_times_are_both_kept ... FAILED
+
+failures:
+
+---- r318_revocations_at_two_times_are_both_kept stdout ----
+
+thread 'r318_revocations_at_two_times_are_both_kept' (1291909) panicked at crates/nexus-verifier-sandbox/tests/phase2_custody_store.rs:12189:10:
+[revocation-replace] a second revocation at another time: "revoked/0db6d144682a20992a1737eac78e49212d94867a7892109b7303ed5ed4731560-20260101T000000Z.disposition exists: a revocation never replaces revoked evidence"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    r318_revocations_at_two_times_are_both_kept
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.02s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.11s
+     Running tests/phase2_custody_store.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-store/debug/deps/phase2_custody_store-69b895920c37797c)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_custody_store`

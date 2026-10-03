@@ -1,0 +1,113 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+warning: type `ScopeRequest<'_>` is more private than the item `Manager::start_scope`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:84:5
+   |
+84 |     fn start_scope(&self, request: &ScopeRequest<'_>) -> Started;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `Manager::start_scope` is reachable at visibility `pub`
+   |
+note: but type `ScopeRequest<'_>` is only usable at visibility `pub(crate)`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:74:1
+   |
+74 | pub(crate) struct ScopeRequest<'a> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(private_interfaces)]` on by default
+
+warning: type `Started` is more private than the item `Manager::start_scope`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:84:5
+   |
+84 |     fn start_scope(&self, request: &ScopeRequest<'_>) -> Started;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `Manager::start_scope` is reachable at visibility `pub`
+   |
+note: but type `Started` is only usable at visibility `pub(crate)`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:51:1
+   |
+51 | pub(crate) enum Started {
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `Remote<()>` is more private than the item `Manager::stop_unit`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:86:5
+   |
+86 |     fn stop_unit(&self, unit: &str) -> Remote<()>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `Manager::stop_unit` is reachable at visibility `pub`
+   |
+note: but type `Remote<()>` is only usable at visibility `pub(crate)`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:41:1
+   |
+41 | pub(crate) enum Remote<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `Remote<Presence>` is more private than the item `Manager::get_unit`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:87:5
+   |
+87 |     fn get_unit(&self, unit: &str) -> Remote<Presence>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `Manager::get_unit` is reachable at visibility `pub`
+   |
+note: but type `Remote<Presence>` is only usable at visibility `pub(crate)`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:41:1
+   |
+41 | pub(crate) enum Remote<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `Presence` is more private than the item `Manager::get_unit`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:87:5
+   |
+87 |     fn get_unit(&self, unit: &str) -> Remote<Presence>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `Manager::get_unit` is reachable at visibility `pub`
+   |
+note: but type `Presence` is only usable at visibility `pub(crate)`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:63:1
+   |
+63 | pub(crate) enum Presence {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `Remote<std::option::Option<u64>>` is more private than the item `Manager::runtime_max_usec`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:90:5
+   |
+90 |     fn runtime_max_usec(&self, unit_path: &str) -> Remote<Option<u64>>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `Manager::runtime_max_usec` is reachable at visibility `pub`
+   |
+note: but type `Remote<std::option::Option<u64>>` is only usable at visibility `pub(crate)`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:41:1
+   |
+41 | pub(crate) enum Remote<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `Remote<std::option::Option<std::string::String>>` is more private than the item `Manager::oom_policy`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:93:5
+   |
+93 |     fn oom_policy(&self, unit_path: &str) -> Remote<Option<String>>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `Manager::oom_policy` is reachable at visibility `pub`
+   |
+note: but type `Remote<std::option::Option<std::string::String>>` is only usable at visibility `pub(crate)`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:41:1
+   |
+41 | pub(crate) enum Remote<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `Remote<std::option::Option<std::string::String>>` is more private than the item `Manager::unit_id`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:96:5
+   |
+96 |     fn unit_id(&self, unit_path: &str) -> Remote<Option<String>>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `Manager::unit_id` is reachable at visibility `pub`
+   |
+note: but type `Remote<std::option::Option<std::string::String>>` is only usable at visibility `pub(crate)`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:41:1
+   |
+41 | pub(crate) enum Remote<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type `Remote<std::option::Option<std::string::String>>` is more private than the item `Manager::control_group`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:99:5
+   |
+99 |     fn control_group(&self, unit_path: &str) -> Remote<Option<String>>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `Manager::control_group` is reachable at visibility `pub`
+   |
+note: but type `Remote<std::option::Option<std::string::String>>` is only usable at visibility `pub(crate)`
+  --> crates/nexus-verifier-sandbox/src/scope/manager.rs:41:1
+   |
+41 | pub(crate) enum Remote<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `nexus-verifier-sandbox` (lib) generated 9 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.86s
+  Executable tests/i4r1_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/api-guards/debug/deps/i4r1_api_probe-d71022ea4b4345c7)

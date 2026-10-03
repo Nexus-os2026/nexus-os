@@ -1,0 +1,21 @@
+$ cargo test --locked -p nexus-verifier-sandbox --test r3_api_probe --no-run
+exit 0
+--- probe body ---
+    let io = fixture.store_process("probe");
+    let opened = open_owner(&io, &fixture.path, config, &mut NoHooks).expect("opens");
+    let session = maint::begin(fixture.root_process("probe"), &fixture.path, false)
+        .expect("a session");
+    let forged = maint::Verification {
+        epoch: 0,
+        opening: opened.opening(),
+        root_id: [0; 16],
+        revision: 1,
+        digest: [0; 32],
+        state: String::new(),
+        assessment: session.assessment().expect("assessed"),
+    };
+--- stderr ---
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.99s
+  Executable tests/r3_api_probe.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/r3-api/debug/deps/r3_api_probe-c22bd2e7894be692)
+--- stdout ---

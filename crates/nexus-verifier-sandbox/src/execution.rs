@@ -19,6 +19,13 @@
 //! confirmed gone is retained with the helper, retryable without the
 //! [`ScopeManager`] that issued it.
 //!
+//! A normal build starts a scope only here, within [`run`]
+//! (P2-V1-R3B-I4-R1). The live harness's direct view of a scope
+//! (`execution::place`, harness builds only) consumes the helper and owns it
+//! with its scope operation in the same way: a failure or a panic ends both
+//! with the finalizer's own steps or retains them together, and it never
+//! unwinds.
+//!
 //! Panic safety: everything an execution creates (the helper, its scope and
 //! the output threads) is owned in [`run`]'s own frame, never inside a
 //! closure that can panic. The launch and the wait run behind
@@ -52,6 +59,8 @@ pub use crate::fault::{Fault, FaultPoint, RUNNING_FAULT_AFTER};
 use crate::launcher::{Helper, HelperProgram, LaunchError, LaunchSpec, Outcome};
 use crate::policy::ResourcePolicy;
 use crate::protocol::{SetupStage, VerifierStatus};
+#[cfg(any(test, feature = "live-sandbox-harness"))]
+use crate::scope::Scope;
 use crate::scope::{ScopeBoundary, ScopeError, ScopeEvents, ScopeManager};
 
 /// Bound on confirming the scope is empty after `cgroup.kill`.
@@ -198,12 +207,133 @@ impl RetainedBoundary {
     pub fn holds_helper(&self) -> bool {
         self.helper.is_some()
     }
+
+    /// What unit tests observe of a retained scope operation.
+    #[cfg(test)]
+    pub(crate) fn pending(&self) -> Option<crate::scope::PendingState> {
+        match &self.scope {
+            ScopeBoundary::Pending(pending) => Some(pending.state()),
+            _ => None,
+        }
+    }
 }
 
 impl Drop for RetainedBoundary {
     /// Defense in depth for a boundary dropped without a confirmed retry:
     /// end what it holds without waiting. Never a confirmation; owners keep
     /// a retained boundary until [`Self::retry`] succeeds.
+    fn drop(&mut self) {
+        end_now(&self.scope, &mut self.helper);
+    }
+}
+
+/// A helper placed in its proven scope, owned together: the live harness's
+/// direct view of a scope (harness builds only; a normal build runs an
+/// execution only through [`run`]). Dropping it is defense in depth only.
+#[cfg(any(test, feature = "live-sandbox-harness"))]
+#[derive(Debug)]
+pub struct ScopedHelper {
+    helper: Option<Helper>,
+    scope: ScopeBoundary,
+}
+
+/// A placement that proved no scope: why, and the cleanup of everything the
+/// attempt owned (the helper it consumed and whatever its scope operation
+/// may have created): confirmed, or retained together in one boundary.
+#[cfg(any(test, feature = "live-sandbox-harness"))]
+#[derive(Debug)]
+pub struct PlacementFailed {
+    /// Why no scope was proven; `None`: a panic interrupted the attempt.
+    pub error: Option<ScopeError>,
+    pub cleanup: Cleanup,
+}
+
+/// Place `helper` (consumed: from here on it is owned with its scope
+/// operation) in a new proven scope with `limits`: the live harness's
+/// direct scope start (harness builds only). It never unwinds: a failure, a
+/// panic included, ends everything the attempt owned with the finalizer's
+/// own steps, and what cannot be confirmed is retained together.
+#[cfg(any(test, feature = "live-sandbox-harness"))]
+pub fn place(
+    scopes: &ScopeManager,
+    helper: Helper,
+    limits: &ResourcePolicy,
+) -> Result<ScopedHelper, PlacementFailed> {
+    let mut owned = ScopedHelper {
+        helper: Some(helper),
+        scope: ScopeBoundary::None,
+    };
+    let error = match catch_unwind(AssertUnwindSafe(|| owned.establish(scopes, limits))) {
+        Ok(Ok(())) => return Ok(owned),
+        Ok(Err(error)) => Some(error),
+        Err(_) => None,
+    };
+    Err(PlacementFailed {
+        error,
+        cleanup: owned.end(),
+    })
+}
+
+#[cfg(any(test, feature = "live-sandbox-harness"))]
+impl ScopedHelper {
+    /// Prepare the scope operation beside the helper and establish it in
+    /// place: whatever the request may create is owned here, with the
+    /// helper, before it can have any effect.
+    fn establish(
+        &mut self,
+        scopes: &ScopeManager,
+        limits: &ResourcePolicy,
+    ) -> Result<(), ScopeError> {
+        let Some(helper) = self.helper.as_ref() else {
+            return Err(ScopeError::Mismatch("helper"));
+        };
+        self.scope = ScopeBoundary::Pending(scopes.prepare(helper, limits)?);
+        self.scope.establish(helper, None)
+    }
+
+    /// The helper, until it is reaped.
+    pub fn helper(&self) -> Option<&Helper> {
+        self.helper.as_ref()
+    }
+
+    /// The proven scope.
+    pub fn scope(&self) -> Option<&Scope> {
+        self.scope.proven()
+    }
+
+    /// Reap the helper once its proven scope ended it (`cgroup.kill`) or it
+    /// exited: the scope stays owned here, observable through its retained
+    /// descriptor, as finalization sees it. Never while a scope operation
+    /// is unresolved.
+    pub fn reap_helper(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        if !self.scope.is_proven() {
+            return Err(std::io::Error::from_raw_os_error(libc::EBUSY));
+        }
+        match self.helper.take() {
+            Some(helper) => helper.reap(),
+            None => Err(std::io::Error::from_raw_os_error(libc::ECHILD)),
+        }
+    }
+
+    /// End everything with the finalizer's own steps: confirmed, or what
+    /// cannot be confirmed retained together in one boundary.
+    pub fn end(mut self) -> Cleanup {
+        let ended = catch_unwind(AssertUnwindSafe(|| {
+            end(&mut self.scope, &mut self.helper, None)
+        }))
+        .unwrap_or(false);
+        if ended {
+            Cleanup::Confirmed
+        } else {
+            retain(&mut self.scope, &mut self.helper)
+        }
+    }
+}
+
+#[cfg(any(test, feature = "live-sandbox-harness"))]
+impl Drop for ScopedHelper {
+    /// Defense in depth only: end what it holds without waiting. Never a
+    /// confirmation.
     fn drop(&mut self) {
         end_now(&self.scope, &mut self.helper);
     }
@@ -364,11 +494,17 @@ impl Owned {
     /// Hand whatever remains to a retained boundary; with nothing left, the
     /// cleanup is confirmed.
     fn retain(&mut self) -> Cleanup {
-        let scope = std::mem::take(&mut self.scope);
-        match (scope.holds(), self.helper.take()) {
-            (false, None) => Cleanup::Confirmed,
-            (_, helper) => Cleanup::Failed(RetainedBoundary { scope, helper }),
-        }
+        retain(&mut self.scope, &mut self.helper)
+    }
+}
+
+/// Hand whatever remains of a boundary, its scope and its helper together,
+/// to a retained boundary; with nothing left, the cleanup is confirmed.
+fn retain(scope: &mut ScopeBoundary, helper: &mut Option<Helper>) -> Cleanup {
+    let scope = std::mem::take(scope);
+    match (scope.holds(), helper.take()) {
+        (false, None) => Cleanup::Confirmed,
+        (_, helper) => Cleanup::Failed(RetainedBoundary { scope, helper }),
     }
 }
 

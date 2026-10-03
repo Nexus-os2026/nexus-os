@@ -1,0 +1,35 @@
+
+running 1 test
+test execution::tests::i4_24_dropping_an_unresolved_operation_is_best_effort_and_confirms_nothing ... FAILED
+
+failures:
+
+---- execution::tests::i4_24_dropping_an_unresolved_operation_is_best_effort_and_confirms_nothing stdout ----
+
+thread 'execution::tests::i4_24_dropping_an_unresolved_operation_is_best_effort_and_confirms_nothing' (1210041) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:1065:5:
+a dropped boundary reaped the helper
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    execution::tests::i4_24_dropping_an_unresolved_operation_is_best_effort_and_confirms_nothing
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.15s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+warning: method `unresolved` is never used
+   --> crates/nexus-verifier-sandbox/src/scope/pending.rs:527:19
+    |
+480 | impl ScopeBoundary {
+    | ------------------ method in this implementation
+...
+527 |     pub(crate) fn unresolved(&self) -> bool {
+    |                   ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nexus-verifier-sandbox` (lib) generated 1 warning
+warning: `nexus-verifier-sandbox` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.41s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`

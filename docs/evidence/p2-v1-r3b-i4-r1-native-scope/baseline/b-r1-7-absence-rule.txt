@@ -1,0 +1,134 @@
+B-R1-7: the base's absence rule, verbatim (bb0dfec0338273ddf187b1dfcb22cd4b8eb8b2f9)
+
+-- crates/nexus-verifier-sandbox/src/scope/pending.rs:20-40 sha256 33b54df76cba801767f01b925b7a5e62ea0717d04cc7fbcf0bd2a63ac51cfeec
+    20	//!
+    21	//! - nothing was issued: nothing can exist;
+    22	//! - the manager refused the name as already loaded (`UnitExists`): the
+    23	//!   request had no effect, so the unit of that name is not this request's
+    24	//!   and is never stopped or claimed; confirmed once the kernel reports the
+    25	//!   helper in a cgroup not of that name;
+    26	//! - a candidate cgroup is retained (the kernel reported the helper in it,
+    27	//!   so the start job has run): it is empty or removed, exactly as for a
+    28	//!   proven scope;
+    29	//! - no candidate: the manager answers on the issuing connection, after the
+    30	//!   request (one connection's calls are answered in order), that no unit
+    31	//!   of the name is loaded, so neither the unit nor its start job remains;
+    32	//!   and then the kernel reports the helper in a cgroup not of that name.
+    33	//!
+    34	//! A timeout is evidence of uncertainty, never of absence. A StopUnit reply
+    35	//! confirms nothing, and a failed or timed-out one never proves that
+    36	//! nothing was stopped: after every attempt what remains is observed again.
+    37	//! Whatever cannot be confirmed stays owned, and settling can be retried
+    38	//! for as long as the owner keeps it, after the [`ScopeManager`] that
+    39	//! started it is gone. Dropping an unresolved operation is defense in depth
+    40	//! only: it ends what its candidate holds and confirms nothing.
+
+-- crates/nexus-verifier-sandbox/src/scope/pending.rs:150-196 sha256 292a394736fef9fd3fe7c55d392864831cd8041d007ecd47cad40ad751707d06
+   150	    }
+   151
+   152	    /// [`Self::settle`], with the panic controls' fault injection.
+   153	    pub(crate) fn reconcile(&mut self, helper: Option<&Helper>, fault: Option<Fault>) -> bool {
+   154	        if !self.unresolved() {
+   155	            return true;
+   156	        }
+   157	        let controller = Arc::clone(&self.controller);
+   158	        let helper = helper.filter(|helper| self.binds(helper));
+   159	        if self.collided {
+   160	            // Refused before any effect: the unit of that name is not this
+   161	            // request's, so it is never stopped or claimed.
+   162	            fault::at(fault, FaultPoint::ScopeReconcile);
+   163	            self.settled = outside(&controller, helper, &self.unit);
+   164	            return self.settled;
+   165	        }
+   166	        // Cleanup ownership: everything in the candidate is ended.
+   167	        if let Some(candidate) = &self.candidate {
+   168	            let _ = candidate.kill();
+   169	        }
+   170	        self.acquire(&controller, helper);
+   171	        fault::at(fault, FaultPoint::ScopeReconcile);
+   172	        if self.gone(&controller, helper) {
+   173	            self.settled = true;
+   174	            return true;
+   175	        }
+   176	        fault::at(fault, FaultPoint::BeforeScopeStop);
+   177	        self.stops = self.stops.saturating_add(1);
+   178	        // Neither reply is a confirmation, nor a failure proof that nothing
+   179	        // was stopped: it is kept for diagnostics only, and what remains is
+   180	        // observed again.
+   181	        self.last_stop = Some(controller.manager.stop_unit(&self.unit));
+   182	        fault::at(fault, FaultPoint::AfterScopeStop);
+   183	        let start = Instant::now();
+   184	        loop {
+   185	            self.acquire(&controller, helper);
+   186	            fault::at(fault, FaultPoint::ScopeReconcile);
+   187	            if self.gone(&controller, helper) {
+   188	                self.settled = true;
+   189	                return true;
+   190	            }
+   191	            if start.elapsed() >= controller.timing.settle {
+   192	                return false;
+   193	            }
+   194	            std::thread::sleep(controller.timing.poll);
+   195	        }
+   196	    }
+
+-- crates/nexus-verifier-sandbox/src/scope/pending.rs:216-228 sha256 576af9c2fd2004bb21f28ec4442c2e538e56b2d306b17d6f2c98851c94d26eda
+   216	    }
+   217
+   218	    /// Whether nothing this operation may have created can still hold or
+   219	    /// receive a process (see the module documentation).
+   220	    fn gone(&self, controller: &Controller, helper: Option<&Helper>) -> bool {
+   221	        match &self.candidate {
+   222	            Some(candidate) => matches!(
+   223	                occupancy(candidate.as_ref()),
+   224	                Ok(Occupancy::Empty | Occupancy::Removed)
+   225	            ),
+   226	            None => absent(controller, &self.unit, helper),
+   227	        }
+   228	    }
+
+-- crates/nexus-verifier-sandbox/src/scope/pending.rs:259-275 sha256 4e49a309fe94fda4081a07825e54891b5a63085b15deed90a5f7380a676af9c2
+   259	                return Err(ScopeError::Bus(
+   260	                    "StartTransientUnit: the unit exists".into(),
+   261	                ));
+   262	            }
+   263	            Started::Uncertain(reason) => {
+   264	                // The request may or may not have taken effect. It ended
+   265	                // without one only if the manager now answers that no unit
+   266	                // of the name is loaded and the helper is outside it;
+   267	                // otherwise it is discovered and proven like an accepted
+   268	                // one, or settled.
+   269	                fault::at(fault, FaultPoint::ScopeReconcile);
+   270	                if absent(&controller, &self.unit, Some(helper)) {
+   271	                    return Err(ScopeError::Bus(reason));
+   272	                }
+   273	                Some(reason)
+   274	            }
+   275	        };
+
+-- crates/nexus-verifier-sandbox/src/scope/pending.rs:391-406 sha256 16d3352dc9e8736da6ad6e2d7fbceb4ca073e156be22e0d134017b3c06bfac2e
+   391
+   392	/// The kernel reports the bound helper in a cgroup not of the unit.
+   393	fn outside(controller: &Controller, helper: Option<&Helper>, unit: &str) -> bool {
+   394	    helper.is_some_and(|helper| {
+   395	        matches!(controller.native.membership(helper), Ok(Some(path)) if !names_unit(&path, unit))
+   396	    })
+   397	}
+   398
+   399	/// The manager answers, on the issuing connection, that no unit of the name
+   400	/// is loaded, and then the kernel reports the bound helper outside it.
+   401	fn absent(controller: &Controller, unit: &str, helper: Option<&Helper>) -> bool {
+   402	    matches!(
+   403	        controller.manager.get_unit(unit),
+   404	        Remote::Answered(Presence::Absent)
+   405	    ) && outside(controller, helper, unit)
+   406	}
+
+-- docs/security/phase2-governed-verification.md (lines naming the ordering assumption)
+223:this request's and is never stopped or claimed) and `NoSuchUnit` (GetUnit:
+237:  answers, on the issuing connection after the request (one connection's
+238:  calls are answered in order), that no unit of the name is loaded, and the
+255:  (b) without a candidate, the manager answers on the issuing connection
+264:  it again on the issuing connection, without the `ScopeManager` that
+742:  one connection's calls in order (a GetUnit answered after
+744:  user manager synchronously, names `UnitExists` and `NoSuchUnit` as

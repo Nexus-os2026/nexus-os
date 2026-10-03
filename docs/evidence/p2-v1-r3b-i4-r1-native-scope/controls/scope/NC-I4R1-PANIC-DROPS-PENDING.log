@@ -1,0 +1,37 @@
+
+running 1 test
+test execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner ... FAILED
+
+failures:
+
+---- execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner stdout ----
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (1212207) panicked at crates/nexus-verifier-sandbox/src/fault.rs:74:50:
+injected verifier fault at AfterScopeStart
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (1212207) panicked at crates/nexus-verifier-sandbox/src/fault.rs:74:50:
+injected verifier fault at ScopeReconcile
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (1212207) panicked at crates/nexus-verifier-sandbox/src/fault.rs:74:50:
+injected verifier fault at BeforeScopeStop
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (1212207) panicked at crates/nexus-verifier-sandbox/src/fault.rs:74:50:
+injected verifier fault at AfterScopeStop
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (1212207) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:368:5:
+a panic inside the model's Start
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (1212207) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:1353:9:
+a panic crossed the direct owner of an unresolved operation
+
+
+failures:
+    execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 1.21s
+
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.50s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/frozen-targets/scope-controls/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`
