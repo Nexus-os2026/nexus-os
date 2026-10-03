@@ -1,0 +1,17 @@
+a779aebb6dee9fb4d2da5d8c93985bb8d4dc4e86fd07f5a1f50dab63d9777236  app/src-tauri/src/phase2_tests.rs
+c11f7447751d70d06b6efb9e17d3e9e1e28fa5a605b77e3bee2e565cc48811c8  crates/nexus-verifier-sandbox/src/scope/tests.rs
+4919ed5d55b2416c168cf5177f124a4fdddab895b8f011646146de8a0bc45362  crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+afdd4980efdadb63c34d75fa75c4ba6c0c20fae00081afa1317c5e2e4efb2396  crates/nexus-verifier-sandbox/tests/support/host_qualification.rs
+579904f582c450bb25f50e70d237b7d886fea30a2167b6c8b42fc88b3397c224  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/matrices/controls.md
+17f9fdf5eef68bdb59636df7f15cf979936c96f948c7842ed584797a48b4de32  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/matrices/finding-reproduction.md
+c4dade82e864ed5d3fcf96de353ba03d161fa3e035031a1322058eef660fb5ea  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/matrices/h1-environment-review.md
+501c0edfd7c9a6a9463079f6f4daf90dab5e41da240b1864060f7d9771afbd00  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/matrices/ownership-model.md
+fd504afd35445a19074ab345ff4c46c8e507313fc6b0604b83d819639edc99b1  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/primary/excerpts.md
+86ea07e03f0a33a7bbff088cd9dc3b543338936b686394bf09cb269e31550c0f  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/primary/retrieval.txt
+ba50f96a93a4a5112c93815f14b3984286e5d81e333b23fcfd0a0aa3674d2db4  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/assemble.sh
+60b34746d4a3c608cb9e40315aba90df47e7d355d49d606aeb7626011575711a  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/make_snapshot.sh
+eea344ea8394fbc6f0eb46c6b8db3b21d3f3bf728eb38b61ffdecd2c1a93a3c0  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/r1_controls.py
+185d5f43e662f685db786775f8f8cb71d109e7009fbcdcda524809bb7c448fe2  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/reproduce_old_h6.sh
+df046f987dd2eca50d5790a37625ab515e4c744715944c541111cb09f672088c  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/run_controls.sh
+1f7059b5055c5ccfb2cab413a45018563f24bea209a64ac5ae5464e0135ec8ef  docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/validate.sh
+a79d50ccb83d06b1b7cb3f02a5a3c5cb91cdc04dcde4826965870e922bcb5fc4  docs/security/phase2-governed-verification.md

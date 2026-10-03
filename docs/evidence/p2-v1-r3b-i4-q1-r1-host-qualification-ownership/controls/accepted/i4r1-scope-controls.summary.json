@@ -1,0 +1,942 @@
+{
+  "summary": {
+    "i4_script": "docs/evidence/p2-v1-r3b-i4-native-scope/scripts/scope_controls.py",
+    "i4_script_sha256": "5aaca1bb738a56ffd5fc3fd538f4f8f4dee0ce8b7cd42fd0c410d721463f38bc",
+    "original": {
+      "crates/nexus-verifier-sandbox/src/scope.rs": "4cfe27366f9d0dc3e5261440ce00d488a6bde29deb0aa4a55632df9cac47718b",
+      "crates/nexus-verifier-sandbox/src/scope/pending.rs": "cc8438bdfbcca880a2eb1cc0895b8ccd985de849f722bc43647f5cb8c54f178b",
+      "crates/nexus-verifier-sandbox/src/execution.rs": "78b0375b10b96b818b208141a218b39b13efa730ab590127c9aa5ecf43262883",
+      "crates/nexus-verifier-sandbox/src/launcher.rs": "d6158c210ab88099839b73264ca18cf47208c7430f875d6913b4d8916de8d139",
+      "crates/nexus-verifier-sandbox/src/scope/manager.rs": "93ce6f661fcb3a502fc1416b84c8fd94fe2536c7d71fb2ea4a827b578d7c7a22",
+      "crates/nexus-verifier-sandbox/src/scope/native.rs": "4b07490bccbc9549cd22a4d903f0022ba62d3fb65ff5b3089710df8e5a30d23a",
+      "crates/nexus-verifier-sandbox/src/scope/tests.rs": "c11f7447751d70d06b6efb9e17d3e9e1e28fa5a605b77e3bee2e565cc48811c8",
+      "crates/nexus-verifier-sandbox/src/execution/tests.rs": "7786e9d3a00dc8fabd09a80d3b103659377670a5de7fb8c7af911bd33fb1d035",
+      "crates/nexus-verifier-sandbox/src/fault.rs": "1e19f8e82f33b01e2a7779583f67f7bd51582ef706a701936b89ecb20193fce0"
+    },
+    "final": {
+      "crates/nexus-verifier-sandbox/src/scope.rs": "4cfe27366f9d0dc3e5261440ce00d488a6bde29deb0aa4a55632df9cac47718b",
+      "crates/nexus-verifier-sandbox/src/scope/pending.rs": "cc8438bdfbcca880a2eb1cc0895b8ccd985de849f722bc43647f5cb8c54f178b",
+      "crates/nexus-verifier-sandbox/src/execution.rs": "78b0375b10b96b818b208141a218b39b13efa730ab590127c9aa5ecf43262883",
+      "crates/nexus-verifier-sandbox/src/launcher.rs": "d6158c210ab88099839b73264ca18cf47208c7430f875d6913b4d8916de8d139",
+      "crates/nexus-verifier-sandbox/src/scope/manager.rs": "93ce6f661fcb3a502fc1416b84c8fd94fe2536c7d71fb2ea4a827b578d7c7a22",
+      "crates/nexus-verifier-sandbox/src/scope/native.rs": "4b07490bccbc9549cd22a4d903f0022ba62d3fb65ff5b3089710df8e5a30d23a",
+      "crates/nexus-verifier-sandbox/src/scope/tests.rs": "c11f7447751d70d06b6efb9e17d3e9e1e28fa5a605b77e3bee2e565cc48811c8",
+      "crates/nexus-verifier-sandbox/src/execution/tests.rs": "7786e9d3a00dc8fabd09a80d3b103659377670a5de7fb8c7af911bd33fb1d035",
+      "crates/nexus-verifier-sandbox/src/fault.rs": "1e19f8e82f33b01e2a7779583f67f7bd51582ef706a701936b89ecb20193fce0"
+    },
+    "identical": true,
+    "status": [],
+    "expected_status": [],
+    "counted": 38,
+    "by_category": {
+      "i4-additional": 5,
+      "i4-required": 16,
+      "i4r1-additional": 3,
+      "i4r1-required": 14
+    },
+    "i4_adapted": [
+      "NC-I4-PENDING-NOT-RETAINED",
+      "NC-I4-START-TIMEOUT-ABSENT"
+    ],
+    "baseline_all_pass": true,
+    "all_required": true,
+    "failures": []
+  },
+  "baseline": {
+    "execution::tests::i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate": true,
+    "execution::tests::i4_06_a_failed_stop_of_a_unit_the_helper_never_entered_retains_the_operation": true,
+    "execution::tests::i4_07_a_delivered_stop_reply_with_the_scope_still_populated_confirms_nothing": true,
+    "execution::tests::i4_09_a_timed_out_stop_whose_target_remains_retains_the_operation": true,
+    "execution::tests::i4_10_an_uncertain_query_after_the_candidate_keeps_its_descriptor": true,
+    "execution::tests::i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained": true,
+    "execution::tests::i4_15_a_membership_mismatch_never_launches": true,
+    "execution::tests::i4_16_a_pending_operation_is_never_proven_by_its_unit_name": true,
+    "execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit": true,
+    "execution::tests::i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven": true,
+    "execution::tests::i4_20_finalization_settles_a_pending_operation": true,
+    "execution::tests::i4_21_an_unconfirmed_operation_is_a_cleanup_failure_never_an_unavailable_sandbox": true,
+    "execution::tests::i4_23_a_retained_boundary_is_retried_without_the_scope_manager": true,
+    "execution::tests::i4_24_dropping_an_unresolved_operation_is_best_effort_and_confirms_nothing": true,
+    "execution::tests::i4_25_a_panic_after_the_start_request_keeps_its_owner": true,
+    "execution::tests::i4_30_no_cgroup_of_the_unit_s_name_is_ever_taken_by_its_path": true,
+    "execution::tests::i4_30_the_helper_s_death_is_never_the_operation_s_cleanup": true,
+    "execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner": true,
+    "execution::tests::i4r1_02_a_direct_placement_failure_returns_one_owner_of_the_operation_and_its_helper": true,
+    "execution::tests::i4r1_06_a_cgroup_of_the_unit_s_name_in_another_place_is_never_proven": true,
+    "execution::tests::i4r1_07_a_control_group_that_is_not_exactly_the_kernel_s_is_refused": true,
+    "execution::tests::i4r1_08_an_unavailable_or_uncertain_control_group_is_refused": true,
+    "execution::tests::i4r1_09_a_unit_id_that_is_not_exactly_the_generated_name_is_refused": true,
+    "execution::tests::i4r1_10_the_exact_binding_of_the_manager_s_unit_to_the_kernel_s_cgroup_proves": true,
+    "execution::tests::i4r1_11_an_uncertain_start_without_a_candidate_is_not_released_by_no_such_unit": true,
+    "execution::tests::i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_reply": true,
+    "execution::tests::i4r1_13_an_uncertain_start_without_a_candidate_is_not_released_by_a_timed_out_stop": true,
+    "execution::tests::i4r1_20_helper_identities_are_refused_instead_of_wrapping": true,
+    "execution::tests::i4r1_21_no_helper_is_spawned_once_identities_are_exhausted": true,
+    "execution::tests::i4r1_x_a_membership_path_not_in_normal_form_never_locates_a_candidate": true,
+    "scope::tests::i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven": true,
+    "scope::tests::i4_a_pending_operation_is_bound_to_its_own_helper": true,
+    "scope::tests::i4r1_04_a_normal_build_constructs_a_manager_only_by_connect": true,
+    "scope::tests::i4r1_x_a_normal_build_starts_a_scope_only_within_run": true
+  },
+  "counted": [
+    {
+      "id": "NC-I4-START-TIMEOUT-ABSENT",
+      "category": "i4-required",
+      "what": "an uncertain StartTransientUnit (timeout, error, malformed reply) is taken as no effect: nothing is owned, nothing reconciled",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "scope::tests::i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven",
+      "marker": "the unit a lost-reply start created was not discovered and proven",
+      "mapping": {
+        "kind": "adapted",
+        "i4_test": "scope::tests::i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven",
+        "i4_edits": [
+          {
+            "file": "crates/nexus-verifier-sandbox/src/scope/pending.rs",
+            "anchor": "            Started::Uncertain(reason) => {\n                // The request may or may not have taken effect. It ended\n                // without one only if the manager now answers that no unit\n                // of the name is loaded and the helper is outside it;\n                // otherwise it is discovered and proven like an accepted\n                // one, or settled.\n                fault::at(fault, FaultPoint::ScopeReconcile);\n                if absent(&controller, &self.unit, Some(helper)) {\n                    return Err(ScopeError::Bus(reason));\n                }\n                Some(reason)\n            }",
+            "replacement": "            Started::Uncertain(reason) => {\n                // NC-I4-START-TIMEOUT-ABSENT: the uncertain start is taken\n                // as no effect.\n                self.issued = false;\n                return Err(ScopeError::Bus(reason));\n            }"
+          }
+        ],
+        "reason": "I4-R1 removed the uncertain arm's GetUnit absence check (A-R1-5), so the arm the I4 anchor quoted no longer exists; the same mutation (an uncertain start taken as no effect: nothing owned, nothing reconciled) is applied to the arm as it now stands. Its test keeps its name and marker; it now places through the harness's direct owner (execution::place), since the public start is gone."
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "Timeout: the unit a lost-reply start created was not discovered and proven: PlacementFailed { error: Some(Bus(\"StartTransientUnit timed out\")), cleanup: Confirmed }"
+    },
+    {
+      "id": "NC-I4-START-LOST-OWNER",
+      "category": "i4-required",
+      "what": "a start that failed or stayed uncertain returns its error with no owner for what it may have created",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_21_an_unconfirmed_operation_is_a_cleanup_failure_never_an_unavailable_sandbox",
+      "marker": "an unconfirmed scope operation was reported as an unavailable sandbox with confirmed cleanup",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_21_an_unconfirmed_operation_is_a_cleanup_failure_never_an_unavailable_sandbox",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: an unconfirmed scope operation was reported as an unavailable sandbox with confirmed cleanup\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-I4-START-NAME-AUTH",
+      "category": "i4-required",
+      "what": "the unit name alone locates and proves the scope (its cgroup taken beside the helper's, no membership or process-list proof)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 2,
+      "test": "execution::tests::i4_16_a_pending_operation_is_never_proven_by_its_unit_name",
+      "marker": "a scope was proven by its unit name",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_16_a_pending_operation_is_never_proven_by_its_unit_name",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "a scope was proven by its unit name: Some(Launch(SetupFailed { stage: Protocol, errno: 0 }))"
+    },
+    {
+      "id": "NC-I4-LAUNCH-PENDING",
+      "category": "i4-required",
+      "what": "the helper is handshaken and launched whatever the scope's state (pending included)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven",
+      "marker": "a launch message reached the helper before the proof",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: case 0: a launch message reached the helper before the proof\n  left: 71\n right: 0"
+    },
+    {
+      "id": "NC-I4-NO-EARLY-DIR",
+      "category": "i4-required",
+      "what": "the candidate's descriptor is kept only once every proof passed, not as soon as the helper is seen in it",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 2,
+      "test": "execution::tests::i4_10_an_uncertain_query_after_the_candidate_keeps_its_descriptor",
+      "marker": "the candidate retained before the uncertain query was not kept",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_10_an_uncertain_query_after_the_candidate_keeps_its_descriptor",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the candidate retained before the uncertain query was not kept"
+    },
+    {
+      "id": "NC-I4-PROPERTY-ERROR-DROPS",
+      "category": "i4-required",
+      "what": "an uncertain property read (RuntimeMaxUSec, OOMPolicy) drops the retained candidate",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 2,
+      "test": "execution::tests::i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate",
+      "marker": "cleanup not confirmed through the retained candidate",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "cleanup not confirmed through the retained candidate"
+    },
+    {
+      "id": "NC-I4-STOP-OK-CONFIRMS",
+      "category": "i4-required",
+      "what": "a delivered StopUnit reply is taken as cleanup confirmation",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_07_a_delivered_stop_reply_with_the_scope_still_populated_confirms_nothing",
+      "marker": "a delivered StopUnit reply was taken as cleanup",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_07_a_delivered_stop_reply_with_the_scope_still_populated_confirms_nothing",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a delivered StopUnit reply was taken as cleanup\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-I4-STOP-ERR-NO-EFFECT",
+      "category": "i4-required",
+      "what": "a StopUnit error reply is taken as proof that nothing was there to stop",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_06_a_failed_stop_of_a_unit_the_helper_never_entered_retains_the_operation",
+      "marker": "a StopUnit error was taken as proof that nothing remained",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_06_a_failed_stop_of_a_unit_the_helper_never_entered_retains_the_operation",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a StopUnit error was taken as proof that nothing remained\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-I4-STOP-TIMEOUT-DROPS",
+      "category": "i4-required",
+      "what": "a timed-out StopUnit drops the pending operation",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_09_a_timed_out_stop_whose_target_remains_retains_the_operation",
+      "marker": "a timed-out StopUnit dropped the operation",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_09_a_timed_out_stop_whose_target_remains_retains_the_operation",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a timed-out StopUnit dropped the operation\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-I4-MANAGER-ABSENCE-ONLY",
+      "category": "i4-required",
+      "what": "the manager's NoSuchUnit alone confirms absence, whatever the kernel reports of the helper",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained",
+      "marker": "manager absence alone confirmed an operation whose helper is in a cgroup of its unit",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: manager absence alone confirmed an operation whose helper is in a cgroup of its unit\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-I4-MEMBERSHIP-NAME-ONLY",
+      "category": "i4-required",
+      "what": "the cgroup named in the helper's membership is proven by its name alone, without its process list",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_15_a_membership_mismatch_never_launches",
+      "marker": "a cgroup that does not list the helper was proven",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_15_a_membership_mismatch_never_launches",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "a cgroup that does not list the helper was proven: Some(Launch(SetupFailed { stage: Protocol, errno: 0 }))"
+    },
+    {
+      "id": "NC-I4-PENDING-NOT-RETAINED",
+      "category": "i4-required",
+      "what": "an unresolved pending operation is not handed to the retained boundary",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_20_finalization_settles_a_pending_operation",
+      "marker": "the unresolved operation was not retained",
+      "mapping": {
+        "kind": "adapted",
+        "i4_test": "execution::tests::i4_20_finalization_settles_a_pending_operation",
+        "i4_edits": [
+          {
+            "file": "crates/nexus-verifier-sandbox/src/execution.rs",
+            "anchor": "        let scope = std::mem::take(&mut self.scope);\n        match (scope.holds(), self.helper.take()) {",
+            "replacement": "        // NC-I4-PENDING-NOT-RETAINED: a pending operation is not handed on.\n        let scope = match std::mem::take(&mut self.scope) {\n            ScopeBoundary::Pending(_) => ScopeBoundary::None,\n            other => other,\n        };\n        match (scope.holds(), self.helper.take()) {"
+          }
+        ],
+        "reason": "Owned::retain's body moved into the free function retain(), now shared by the execution's owner and the harness's direct owner (ScopedHelper::end); the same mutation is applied there. Same test, same marker."
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the unresolved operation was not retained"
+    },
+    {
+      "id": "NC-I4-RETRY-NEEDS-MANAGER-BORROW",
+      "category": "i4-required",
+      "what": "a pending operation reaches its manager connection only through the ScopeManager (a non-owning handle)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs",
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 5,
+      "test": "execution::tests::i4_23_a_retained_boundary_is_retried_without_the_scope_manager",
+      "marker": "a retained boundary needs the ScopeManager that started it",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_23_a_retained_boundary_is_retried_without_the_scope_manager",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "a retained boundary needs the ScopeManager that started it"
+    },
+    {
+      "id": "NC-I4-PANIC-OWNER-LOSS",
+      "category": "i4-required",
+      "what": "the operation is owned by a local of the attempt while its request is uncertain, so a panic there loses it",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_25_a_panic_after_the_start_request_keeps_its_owner",
+      "marker": "a panic after StartTransientUnit lost the operation's owner",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_25_a_panic_after_the_start_request_keeps_its_owner",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "a panic after StartTransientUnit lost the operation's owner"
+    },
+    {
+      "id": "NC-I4-PID-CLEANUP",
+      "category": "i4-required",
+      "what": "the helper's death (a kill and reap of its process) is taken as the pending operation's cleanup",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_30_the_helper_s_death_is_never_the_operation_s_cleanup",
+      "marker": "the helper's death was taken as the operation's cleanup",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_30_the_helper_s_death_is_never_the_operation_s_cleanup",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: the helper's death was taken as the operation's cleanup\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-I4-STRING-SWEEP",
+      "category": "i4-required",
+      "what": "the unit's cgroup is rebuilt from the unit-name string (beside the helper's cgroup) and claimed for cleanup",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_30_no_cgroup_of_the_unit_s_name_is_ever_taken_by_its_path",
+      "marker": "a cgroup was opened by a path the kernel never reported for the helper",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_30_no_cgroup_of_the_unit_s_name_is_ever_taken_by_its_path",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a cgroup was opened by a path the kernel never reported for the helper\n  left: 1\n right: 0"
+    },
+    {
+      "id": "NC-I4-X-COLLISION-CLAIMED",
+      "category": "i4-additional",
+      "what": "a unit already loaded under the requested name (UnitExists) is taken as this request's and settled as such",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit",
+      "marker": "the colliding unit, not this request's, was stopped",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: the colliding unit, not this request's, was stopped\n  left: 1\n right: 0"
+    },
+    {
+      "id": "NC-I4-X-DROP-REAPS",
+      "category": "i4-additional",
+      "what": "a dropped boundary reaps the helper of an unresolved operation (its process id released while a start job may remain)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_24_dropping_an_unresolved_operation_is_best_effort_and_confirms_nothing",
+      "marker": "a dropped boundary reaped the helper",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_24_dropping_an_unresolved_operation_is_best_effort_and_confirms_nothing",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "a dropped boundary reaped the helper"
+    },
+    {
+      "id": "NC-I4-X-ANY-HELPER",
+      "category": "i4-additional",
+      "what": "a pending operation takes any helper's membership as evidence",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "scope::tests::i4_a_pending_operation_is_bound_to_its_own_helper",
+      "marker": "another helper's membership settled the operation",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "scope::tests::i4_a_pending_operation_is_bound_to_its_own_helper",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "another helper's membership settled the operation"
+    },
+    {
+      "id": "NC-I4-X-UNLOADED-PROVEN",
+      "category": "i4-additional",
+      "what": "the manager's absence of the unit is ignored by the proof (the kernel's view alone is taken)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained",
+      "marker": "the manager's absence of the unit did not refuse the proof",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_11_manager_absence_with_the_helper_in_the_candidate_is_refused_and_retained",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the manager's absence of the unit did not refuse the proof: Some(Scope(Mismatch(\"unit control group\")))"
+    },
+    {
+      "id": "NC-I4-X-NO-CANDIDATE-KILL",
+      "category": "i4-additional",
+      "what": "settling observes the candidate without ending what it holds",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 2,
+      "test": "execution::tests::i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate",
+      "marker": "cleanup not confirmed through the retained candidate",
+      "mapping": {
+        "kind": "unchanged",
+        "i4_test": "execution::tests::i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate",
+        "reason": "the I4 definition, byte for byte"
+      },
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "cleanup not confirmed through the retained candidate"
+    },
+    {
+      "id": "NC-I4R1-PANIC-DROPS-PENDING",
+      "category": "i4r1-required",
+      "what": "the harness's direct start resumes a panic past its owner while the operation is unresolved",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner",
+      "marker": "a panic crossed the direct owner of an unresolved operation",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "a panic crossed the direct owner of an unresolved operation"
+    },
+    {
+      "id": "NC-I4R1-SPLIT-OWNER",
+      "category": "i4r1-required",
+      "what": "a failed direct placement returns the helper apart from its unresolved operation",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "edits": 2,
+      "test": "execution::tests::i4r1_02_a_direct_placement_failure_returns_one_owner_of_the_operation_and_its_helper",
+      "marker": "the operation's failure was split from its helper",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the operation's failure was split from its helper"
+    },
+    {
+      "id": "NC-I4R1-PUBLIC-START",
+      "category": "i4r1-required",
+      "what": "a public direct scope start in every build (the weaker lifecycle beside execution::run)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs"
+      ],
+      "edits": 1,
+      "test": "scope::tests::i4r1_x_a_normal_build_starts_a_scope_only_within_run",
+      "marker": "a normal build exposes a direct scope start",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a normal build exposes a direct scope start\n  left: [\"use manager::BUS_CALL_TIMEOUT\", \"const PLACEMENT_TIMEOUT\", \"const SETTLE_TIMEOUT\", \"enum ScopeError\", \"fn expected_limit_files\", \"struct ScopeManager\", \"fn connect\", \"fn start\", \"struct ScopeEvents\", \"enum Occupancy\", \"struct Scope\", \"fn unit\", \"fn kill\", \"fn occupancy\", \"fn wait_empty\", \"fn events\"]\n right: [\"use manager::BUS_CALL_TIMEOUT\", \"const PLACEMENT_TIMEOUT\", \"const SETTLE_TIMEOUT\", \"enum ScopeError\", \"fn expected_limit_files\", \"struct ScopeManager\", \"fn connect\", \"struct ScopeEvents\", \"enum Occupancy\", \"struct Scope\", \"fn unit\", \"fn kill\", \"fn occupancy\", \"fn wait_empty\", \"fn events\"]"
+    },
+    {
+      "id": "NC-I4R1-PUBLIC-CONNECT-AT",
+      "category": "i4r1-required",
+      "what": "a caller-selected manager socket in every build",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope.rs"
+      ],
+      "edits": 1,
+      "test": "scope::tests::i4r1_04_a_normal_build_constructs_a_manager_only_by_connect",
+      "marker": "a normal build exposes a caller-selected manager socket",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a normal build exposes a caller-selected manager socket\n  left: [\"fn connect\", \"fn connect_at\"]\n right: [\"fn connect\"]"
+    },
+    {
+      "id": "NC-I4R1-NO-CONTROLGROUP",
+      "category": "i4r1-required",
+      "what": "Pending becomes Proven without querying or binding the unit's ControlGroup",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_10_the_exact_binding_of_the_manager_s_unit_to_the_kernel_s_cgroup_proves",
+      "marker": "the scope was proven without binding the manager's unit to the kernel's cgroup",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: the scope was proven without binding the manager's unit to the kernel's cgroup\n  left: [Start(\"nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\", 1950765), Membership(1950765, true), Open(\"/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\"), GetUnit(\"nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\"), UnitId(\"/unit/nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\"), RuntimeMax(\"/unit/nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\"), OomPolicy(\"/unit/nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\")]\n right: [Start(\"nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\", 1950765), Membership(1950765, true), Open(\"/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\"), GetUnit(\"nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\"), UnitId(\"/unit/nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\"), ControlGroup(\"/unit/nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\"), RuntimeMax(\"/unit/nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\"), OomPolicy(\"/unit/nexus-verifier-81a8b3dec8afa6e0b6a2913ed1fe15b5.scope\")]"
+    },
+    {
+      "id": "NC-I4R1-CONTROLGROUP-BASENAME",
+      "category": "i4r1-required",
+      "what": "the manager's ControlGroup and the kernel's path are compared by their last components only",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_06_a_cgroup_of_the_unit_s_name_in_another_place_is_never_proven",
+      "marker": "a cgroup of the unit's name that is not the unit's own was proven",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "/other.slice/{unit}: a cgroup of the unit's name that is not the unit's own was proven: Some(Launch(SetupFailed { stage: Protocol, errno: 0 }))"
+    },
+    {
+      "id": "NC-I4R1-CONTROLGROUP-MISMATCH",
+      "category": "i4r1-required",
+      "what": "a ControlGroup that disagrees with the kernel's path is ignored",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_07_a_control_group_that_is_not_exactly_the_kernel_s_is_refused",
+      "marker": "a control group that is not exactly the kernel's was accepted",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "\"/other.slice/{unit}\": a control group that is not exactly the kernel's was accepted: Some(Launch(SetupFailed { stage: Protocol, errno: 0 }))"
+    },
+    {
+      "id": "NC-I4R1-ID-MISMATCH",
+      "category": "i4r1-required",
+      "what": "a unit Id other than the generated name is ignored",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_09_a_unit_id_that_is_not_exactly_the_generated_name_is_refused",
+      "marker": "a unit id that is not the generated name was accepted",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "Is(\"other.scope\"): a unit id that is not the generated name was accepted: Some(Launch(SetupFailed { stage: Protocol, errno: 0 }))"
+    },
+    {
+      "id": "NC-I4R1-ABSENCE-GETUNIT",
+      "category": "i4r1-required",
+      "what": "GetUnit NoSuchUnit with the helper outside confirms an uncertain start without a candidate (the I4 R1 rule restored)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_11_an_uncertain_start_without_a_candidate_is_not_released_by_no_such_unit",
+      "marker": "an uncertain start without a candidate was released by the manager's absence",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: Timeout: an uncertain start without a candidate was released by the manager's absence\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-I4R1-STOP-REPLY-ABSENCE",
+      "category": "i4r1-required",
+      "what": "a delivered StopUnit reply settles an uncertain start without a candidate",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_reply",
+      "marker": "a StopUnit reply released an uncertain start without a candidate",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a StopUnit reply released an uncertain start without a candidate\n  left: SandboxUnavailable\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-I4R1-REAP-UNRESOLVED",
+      "category": "i4r1-required",
+      "what": "the helper is reaped while its uncertain operation stays unresolved",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_13_an_uncertain_start_without_a_candidate_is_not_released_by_a_timed_out_stop",
+      "marker": "the helper of an unresolved uncertain start was reaped",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "true: the helper of an unresolved uncertain start was reaped"
+    },
+    {
+      "id": "NC-I4R1-SERIAL-WRAP",
+      "category": "i4r1-required",
+      "what": "the helper identity counter wraps (the I4 fetch_add behaviour)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/launcher.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_20_helper_identities_are_refused_instead_of_wrapping",
+      "marker": "the helper identity wrapped",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: the helper identity wrapped\n  left: Some(18446744073709551615)\n right: None"
+    },
+    {
+      "id": "NC-I4R1-SPAWN-BEFORE-IDENTITY",
+      "category": "i4r1-required",
+      "what": "the helper is spawned before its identity is allocated (the I4 order)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/launcher.rs"
+      ],
+      "edits": 2,
+      "test": "execution::tests::i4r1_21_no_helper_is_spawned_once_identities_are_exhausted",
+      "marker": "a helper was spawned without an identity",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: a helper was spawned without an identity\n  left: 1\n right: 0"
+    },
+    {
+      "id": "NC-I4R1-HARNESS-WEAK-OWNER",
+      "category": "i4r1-required",
+      "what": "the harness's direct start owns the operation in a local until it is proven, not with its helper",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/execution.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_02_a_direct_placement_failure_returns_one_owner_of_the_operation_and_its_helper",
+      "marker": "the direct owner lost the unresolved operation",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the direct owner lost the unresolved operation"
+    },
+    {
+      "id": "NC-I4R1-X-CONTROLGROUP-UNCERTAIN",
+      "category": "i4r1-additional",
+      "what": "an uncertain ControlGroup read is taken as a binding",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_08_an_unavailable_or_uncertain_control_group_is_refused",
+      "marker": "an unavailable or malformed control group was accepted",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "Uncertain(Timeout): an unavailable or malformed control group was accepted: Some(Launch(SetupFailed { stage: Protocol, errno: 0 }))"
+    },
+    {
+      "id": "NC-I4R1-X-ACCEPTED-EARLY",
+      "category": "i4r1-additional",
+      "what": "a start is taken as accepted when it is dispatched, before its reply is recorded",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner",
+      "marker": "a panic after an uncertain start lost or released its operation",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: AfterScopeStart: a panic after an uncertain start lost or released its operation\n  left: SandboxSetupFailed\n right: CleanupFailed"
+    },
+    {
+      "id": "NC-I4R1-X-MEMBERSHIP-NOT-NORMAL",
+      "category": "i4r1-additional",
+      "what": "a kernel membership path not in normal form locates the candidate (the last component alone)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/pending.rs"
+      ],
+      "edits": 1,
+      "test": "execution::tests::i4r1_x_a_membership_path_not_in_normal_form_never_locates_a_candidate",
+      "marker": "a membership path not in normal form located the scope",
+      "mapping": null,
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "{slice}/./{unit}: a membership path not in normal form located the scope: Some(Launch(SetupFailed { stage: Protocol, errno: 0 }))"
+    }
+  ]
+}

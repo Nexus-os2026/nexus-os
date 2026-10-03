@@ -1,0 +1,17 @@
+ M app/src-tauri/src/phase2_tests.rs
+ M crates/nexus-verifier-sandbox/src/scope/tests.rs
+ M crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs
+ M crates/nexus-verifier-sandbox/tests/support/host_qualification.rs
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/matrices/controls.md
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/matrices/finding-reproduction.md
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/matrices/h1-environment-review.md
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/matrices/ownership-model.md
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/primary/excerpts.md
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/primary/retrieval.txt
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/assemble.sh
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/make_snapshot.sh
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/r1_controls.py
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/reproduce_old_h6.sh
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/run_controls.sh
+ A docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/scripts/validate.sh
+ M docs/security/phase2-governed-verification.md

@@ -762,15 +762,20 @@ facts the accepted scope mechanism depends on (G-HOST H1 to H7), beside the
 production proof, which stays the only authority; the real values are
 printed as bounded evidence. Its probe (`tests/support/host_qualification.rs`)
 is the live harness's own: a bounded connection to the checked user bus, in
-no library and no normal build (`p2_g_10`).
+no library and no normal build (`p2_g_10`). It creates nothing and holds
+nothing by a unit name: besides its reads (`GetUnit`, `Properties.Get`), its
+one request is a start that carries no process and no property, sent only
+for the unit of a scope the production owner has proven and still holds; it
+has no request that stops, kills or changes a unit (P2-V1-R3B-I4-Q1-R1,
+`p2_g_11`).
 
 | Fact | Live case |
 |---|---|
-| H1: the manager is the real uid's `/run/user/<uid>/bus`, the socket the cleanup observation checks; the environment's bus address changes nothing | `p2q_live_h1_the_manager_is_the_real_uid_s_user_bus` |
+| H1: the manager is the real uid's `/run/user/<uid>/bus`, the socket the cleanup observation checks; `ScopeManager::connect` derives it from the real uid alone and reads no environment (pinned at the source, `i4q1r1_connect_derives_the_bus_from_the_real_uid_alone`; no case changes the environment of the multi-threaded live harness) | `p2q_live_h1_the_manager_is_the_real_uid_s_user_bus` |
 | H2: the live helper's `/proc/<pid>/cgroup` is one unified `0::` line, absolute and in normal form, on a cgroup2 hierarchy (hybrid or v1 fails closed) | `p2q_live_h2_the_helper_s_membership_is_one_unified_cgroup_v2_line` |
 | H3, H4: `GetUnit`'s object reports `Id` equal to the generated name and `ControlGroup` byte-equal to the kernel's membership; `RuntimeMaxUSec` (`t`) and `OOMPolicy` (`s`) exact | `p2q_live_h3_h4_the_manager_s_unit_binds_to_the_kernel_s_cgroup`, `p2r1_live_panic_during_the_binding_proof_settles_it` |
 | H5: a fresh name is refused with exactly `org.freedesktop.systemd1.NoSuchUnit` | `p2q_live_h5_a_fresh_name_is_exactly_no_such_unit` |
-| H6: a uniquely named scope the harness created and owns is refused a second start with exactly `org.freedesktop.systemd1.UnitExists`; the harness ends its own helper and unit | `p2q_live_h6_an_existing_name_is_exactly_unit_exists` |
+| H6: a start for the name of a loaded transient scope is refused with exactly `org.freedesktop.systemd1.UnitExists`; the scope is the production owner's (`execution::place`, proven and held with its helper), the request carries no process and no property, and the owner releases the scope only after the answer, the helper seen where the proof put it (P2-V1-R3B-I4-Q1-R1) | `p2q_live_h6_an_existing_name_is_exactly_unit_exists` |
 | H7: a helper killed in its proven scope and kept unreaped keeps a readable `/proc/<pid>/cgroup` naming that cgroup (marked ` (deleted)` once removed); the finalizer settles a retained candidate on the real host | `p2q_live_h7_a_killed_unreaped_helper_keeps_its_membership`, `p2r1_live_panic_after_the_candidate_is_retained_settles_it`, `p2r1_live_panic_while_proving_the_scope_stops_it` |
 
 The error identities the cases assert are the production manager's own
@@ -779,6 +784,27 @@ constants (`i4q1_the_manager_s_definite_answers_are_exactly_systemd_s_error_name
 (`p2_g_10`). The qualification establishes facts of this host and systemd
 version; it adds no generic D-Bus or systemd ordering guarantee, and the
 no-candidate rule for an uncertain start is unchanged.
+
+P2-V1-R3B-I4-Q1-R1 (collision qualification ownership). The Q1 collision
+case owned its first start itself: an owner built before the request ended
+its helper (killed and reaped) and stopped the unit by its name whatever
+the request's outcome, so a first start refused as already loaded
+(`UnitExists`, a foreign unit) was stopped by name, and an uncertain or
+panicking first start had its helper reaped while the request could still
+attach it. The case now makes no start of its own: its first start is the
+production owner's (`execution::place`), with the accepted I4-R1 semantics
+for every outcome (proven; a collision never stopped, killed or claimed,
+its helper ended only once outside; an uncertain start or a panic settled,
+or retained with its helper unreaped). Its one request names only the unit
+of the proven scope and carries no process and no property: systemd refuses
+a loaded transient unit's name before it reads any property, and a request
+handled after that unit is gone would create a scope without processes,
+which systemd refuses when it loads it (systemd v255 `dbus-manager.c`,
+`unit.c`, `scope.c`, `transaction.c`); whatever it is answered and whenever
+it is handled, it cannot place a process or change the loaded unit. The
+targeted tests `i4q1r1_nc1` to `i4q1r1_nc4` (the first start's outcomes
+through `execution::place`) and `p2_g_11` (the harness) carry it; the
+evidence is in `docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/`.
 
 CI: a dedicated exact-SHA workflow on the self-hosted runner
 (`.github/workflows/ci-phase2-linux-sandbox.yml`) runs the live suite and
@@ -856,6 +882,16 @@ build-output directories.
   its helper an unreaped zombie, for the life of the backend process. No
   systemd-specific fence is relied on to release it; whether one exists is
   for G-HOST/G-LIVE to qualify.
+- A collision whose `UnitExists` reply is lost (a timeout, a broken
+  connection) is, to the backend, an uncertain start without a candidate:
+  settling then attempts `StopUnit` for the operation's own generated name
+  (never as a confirmation; the operation stays `CleanupFailed`, its helper
+  unreaped), and in that case a foreign unit holds that name. It requires a
+  foreign unit already loaded under a fresh backend-random 128-bit name. The
+  live qualification inherits it (its first start is the production
+  owner's) and adds no stop path of its own (P2-V1-R3B-I4-Q1-R1); whether
+  settling should ever stop a unit without a delivered reply or a candidate
+  is an Architect decision.
 - A pending operation whose manager connection broke cannot be confirmed
   through that connection: unless its retained candidate empties, it stays
   `CleanupFailed` for the life of the backend process. No other connection

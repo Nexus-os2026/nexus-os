@@ -1,0 +1,223 @@
+{
+  "summary": {
+    "original": {
+      "crates/nexus-verifier-sandbox/src/scope/manager.rs": "93ce6f661fcb3a502fc1416b84c8fd94fe2536c7d71fb2ea4a827b578d7c7a22",
+      "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs": "4919ed5d55b2416c168cf5177f124a4fdddab895b8f011646146de8a0bc45362",
+      "crates/nexus-verifier-sandbox/tests/support/host_qualification.rs": "afdd4980efdadb63c34d75fa75c4ba6c0c20fae00081afa1317c5e2e4efb2396",
+      ".github/workflows/ci-phase2-linux-sandbox.yml": "802b5ec68092e7c501fe558c581ea395241a50cf1dbcf9ffd5549be8c96a2daa",
+      "scripts/ci/test_phase2_cleanup_check.py": "3b3762d63e1399c7ea1040d5e28134ef4c9e3e04f1e889fa951fbb3b5744fdf5",
+      "crates/nexus-verifier-sandbox/src/scope/tests.rs": "c11f7447751d70d06b6efb9e17d3e9e1e28fa5a605b77e3bee2e565cc48811c8",
+      "crates/nexus-verifier-sandbox/src/scope/pending.rs": "cc8438bdfbcca880a2eb1cc0895b8ccd985de849f722bc43647f5cb8c54f178b",
+      "crates/nexus-verifier-sandbox/src/scope.rs": "4cfe27366f9d0dc3e5261440ce00d488a6bde29deb0aa4a55632df9cac47718b",
+      "crates/nexus-verifier-sandbox/src/execution.rs": "78b0375b10b96b818b208141a218b39b13efa730ab590127c9aa5ecf43262883",
+      "crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs": "f74a6f80b0ffd14b02d7ea986d4d4544c067bd22df28948487395adb2c414b51",
+      "app/src-tauri/src/phase2_tests.rs": "a779aebb6dee9fb4d2da5d8c93985bb8d4dc4e86fd07f5a1f50dab63d9777236"
+    },
+    "final": {
+      "crates/nexus-verifier-sandbox/src/scope/manager.rs": "93ce6f661fcb3a502fc1416b84c8fd94fe2536c7d71fb2ea4a827b578d7c7a22",
+      "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs": "4919ed5d55b2416c168cf5177f124a4fdddab895b8f011646146de8a0bc45362",
+      "crates/nexus-verifier-sandbox/tests/support/host_qualification.rs": "afdd4980efdadb63c34d75fa75c4ba6c0c20fae00081afa1317c5e2e4efb2396",
+      ".github/workflows/ci-phase2-linux-sandbox.yml": "802b5ec68092e7c501fe558c581ea395241a50cf1dbcf9ffd5549be8c96a2daa",
+      "scripts/ci/test_phase2_cleanup_check.py": "3b3762d63e1399c7ea1040d5e28134ef4c9e3e04f1e889fa951fbb3b5744fdf5",
+      "crates/nexus-verifier-sandbox/src/scope/tests.rs": "c11f7447751d70d06b6efb9e17d3e9e1e28fa5a605b77e3bee2e565cc48811c8",
+      "crates/nexus-verifier-sandbox/src/scope/pending.rs": "cc8438bdfbcca880a2eb1cc0895b8ccd985de849f722bc43647f5cb8c54f178b",
+      "crates/nexus-verifier-sandbox/src/scope.rs": "4cfe27366f9d0dc3e5261440ce00d488a6bde29deb0aa4a55632df9cac47718b",
+      "crates/nexus-verifier-sandbox/src/execution.rs": "78b0375b10b96b818b208141a218b39b13efa730ab590127c9aa5ecf43262883",
+      "crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs": "f74a6f80b0ffd14b02d7ea986d4d4544c067bd22df28948487395adb2c414b51",
+      "app/src-tauri/src/phase2_tests.rs": "a779aebb6dee9fb4d2da5d8c93985bb8d4dc4e86fd07f5a1f50dab63d9777236"
+    },
+    "identical": true,
+    "status": [],
+    "expected_status": [],
+    "counted": 10,
+    "baseline_all_pass": true,
+    "all_required": true,
+    "failures": []
+  },
+  "baseline": {
+    "phase2_tests::p2_g_10_the_live_gate_pins_every_case_and_the_host_qualification": true,
+    "scope::tests::i4q1_the_manager_s_definite_answers_are_exactly_systemd_s_error_names": true
+  },
+  "counted": [
+    {
+      "id": "NC-Q1-NO-SUCH-UNIT-NAME",
+      "item": 6,
+      "what": "the production manager reads another error name as the manager's absence",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/manager.rs"
+      ],
+      "test": "scope::tests::i4q1_the_manager_s_definite_answers_are_exactly_systemd_s_error_names",
+      "marker": "const NO_SUCH_UNIT: &str = \"org.freedesktop.systemd1.NoSuchUnit\";",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: const NO_SUCH_UNIT: &str = \"org.freedesktop.systemd1.NoSuchUnit\";\n  left: 0\n right: 1"
+    },
+    {
+      "id": "NC-Q1-UNIT-EXISTS-NAME",
+      "item": 7,
+      "what": "the production manager reads another error name as a collision",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/manager.rs"
+      ],
+      "test": "scope::tests::i4q1_the_manager_s_definite_answers_are_exactly_systemd_s_error_names",
+      "marker": "const UNIT_EXISTS: &str = \"org.freedesktop.systemd1.UnitExists\";",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: const UNIT_EXISTS: &str = \"org.freedesktop.systemd1.UnitExists\";\n  left: 0\n right: 1"
+    },
+    {
+      "id": "NC-Q1-ANY-ERROR-IS-ABSENT",
+      "item": 6,
+      "what": "every GetUnit error is read as the manager's absence",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/manager.rs"
+      ],
+      "test": "scope::tests::i4q1_the_manager_s_definite_answers_are_exactly_systemd_s_error_names",
+      "marker": "Ok(Err(name)) if name == NO_SUCH_UNIT => Remote::Answered(Presence::Absent),",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: Ok(Err(name)) if name == NO_SUCH_UNIT => Remote::Answered(Presence::Absent),\n  left: 0\n right: 1"
+    },
+    {
+      "id": "NC-Q1-ANY-ERROR-IS-COLLISION",
+      "item": 7,
+      "what": "every StartTransientUnit error is read as a collision (no effect)",
+      "files": [
+        "crates/nexus-verifier-sandbox/src/scope/manager.rs"
+      ],
+      "test": "scope::tests::i4q1_the_manager_s_definite_answers_are_exactly_systemd_s_error_names",
+      "marker": "Ok(Err(name)) if name == UNIT_EXISTS => Started::Collision,",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: Ok(Err(name)) if name == UNIT_EXISTS => Started::Collision,\n  left: 0\n right: 1"
+    },
+    {
+      "id": "NC-Q1-LIVE-COUNT-STALE",
+      "item": 12,
+      "what": "the gate's pinned count omits a case (38 of 39)",
+      "files": [
+        ".github/workflows/ci-phase2-linux-sandbox.yml"
+      ],
+      "test": "phase2_tests::p2_g_10_the_live_gate_pins_every_case_and_the_host_qualification",
+      "marker": "the pinned count is every case",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: the pinned count is every case\n  left: 38\n right: 39"
+    },
+    {
+      "id": "NC-Q1-LIVE-CASE-DROPPED",
+      "item": 12,
+      "what": "a host-qualification case is dropped from the suite while the count is kept",
+      "files": [
+        "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs"
+      ],
+      "test": "phase2_tests::p2_g_10_the_live_gate_pins_every_case_and_the_host_qualification",
+      "marker": "the pinned count is every case",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "assertion `left == right` failed: the pinned count is every case\n  left: 39\n right: 38"
+    },
+    {
+      "id": "NC-Q1-STEP-TEST-STALE",
+      "item": 12,
+      "what": "the live step's fixture controls still expect the old count",
+      "files": [
+        "scripts/ci/test_phase2_cleanup_check.py"
+      ],
+      "test": "phase2_tests::p2_g_10_the_live_gate_pins_every_case_and_the_host_qualification",
+      "marker": "the step's fixture controls use the exact count",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the step's fixture controls use the exact count"
+    },
+    {
+      "id": "NC-Q1-PROBE-IDENTITY-DRIFT",
+      "item": 6,
+      "what": "the host case asserts an error name other than the production manager's",
+      "files": [
+        "crates/nexus-verifier-sandbox/tests/support/host_qualification.rs"
+      ],
+      "test": "phase2_tests::p2_g_10_the_live_gate_pins_every_case_and_the_host_qualification",
+      "marker": "the probe asserts the production identity org.freedesktop.systemd1.NoSuchUnit",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the probe asserts the production identity org.freedesktop.systemd1.NoSuchUnit"
+    },
+    {
+      "id": "NC-Q1-CGROUP2-LAYER-OPTIONAL",
+      "item": 10,
+      "what": "the host layers step no longer requires the unified hierarchy",
+      "files": [
+        ".github/workflows/ci-phase2-linux-sandbox.yml"
+      ],
+      "test": "phase2_tests::p2_g_10_the_live_gate_pins_every_case_and_the_host_qualification",
+      "marker": "the host layers step requires the unified hierarchy",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "the host layers step requires the unified hierarchy"
+    },
+    {
+      "id": "NC-Q1-CONTINUE-ON-ERROR",
+      "item": 12,
+      "what": "the live step continues on error",
+      "files": [
+        ".github/workflows/ci-phase2-linux-sandbox.yml"
+      ],
+      "test": "phase2_tests::p2_g_10_the_live_gate_pins_every_case_and_the_host_qualification",
+      "marker": "no step may continue on error",
+      "test_passes_unmutated": true,
+      "compiled": true,
+      "failed_intended_test": true,
+      "marker_in_assertion": true,
+      "files_restored": true,
+      "exit": 101,
+      "ok": true,
+      "assertion": "no step may continue on error"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+P2-V1-R3B-I4-Q1-R1: production and protected files, worktree vs the Q1 candidate 3d46b4d and the accepted I4-R1 base ea475eac (2026-10-03T03:47:47Z)
+same-as-Q1 same-as-I4R1 crates/nexus-verifier-sandbox/src/scope.rs
+same-as-Q1 same-as-I4R1 crates/nexus-verifier-sandbox/src/scope/manager.rs
+same-as-Q1 same-as-I4R1 crates/nexus-verifier-sandbox/src/scope/pending.rs
+same-as-Q1 same-as-I4R1 crates/nexus-verifier-sandbox/src/scope/native.rs
+same-as-Q1 same-as-I4R1 crates/nexus-verifier-sandbox/src/execution.rs
+same-as-Q1 same-as-I4R1 crates/nexus-verifier-sandbox/src/launcher.rs
+same-as-Q1 same-as-I4R1 crates/nexus-verifier-sandbox/src/helper.rs
+same-as-Q1 same-as-I4R1 crates/nexus-verifier-sandbox/src/fault.rs
+same-as-Q1 same-as-I4R1 crates/nexus-verifier-sandbox/Cargo.toml
+same-as-Q1 same-as-I4R1 Cargo.lock
+same-as-Q1 same-as-I4R1 Cargo.toml
+same-as-Q1 same-as-I4R1 AGENTS.md
+same-as-Q1 same-as-I4R1 CLAUDE.md
+same-as-Q1 same-as-I4R1 .gitignore
+same-as-Q1 same-as-I4R1 app/src-tauri/src/coding_flow/verification.rs
+same-as-Q1 differs-from-I4R1 .github/workflows/ci-phase2-linux-sandbox.yml
+same-as-Q1 differs-from-I4R1 scripts/ci/test_phase2_cleanup_check.py
+same-as-Q1 differs-from-I4R1 crates/nexus-verifier-sandbox/tests/support/cleanup_observation.rs
+production src/ files changed vs 3d46b4d: 0
+production src/ files changed vs ea475eac: 0

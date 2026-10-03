@@ -1542,8 +1542,12 @@ mod live {
         /// H1: the manager a normal build connects to is the real uid's user
         /// bus: `/run/user/<uid>/bus`, a socket of the uid beneath its
         /// private tmpfs runtime directory, the same socket the checked
-        /// cleanup observation reaches, and not anything the environment
-        /// names.
+        /// cleanup observation reaches. `ScopeManager::connect` derives that
+        /// path from the real uid alone and reads no environment (pinned at
+        /// the source: `scope::tests::i4q1r1_connect_derives_the_bus_from_the_real_uid_alone`).
+        /// This case changes nothing process-wide (P2-V1-R3B-I4-Q1-R1): the
+        /// live harness is multi-threaded, so no case sets or removes an
+        /// environment variable to show that.
         pub fn h1_manager_bus(_: &ScopeManager) {
             let name = "h1";
             let uid = uid();
@@ -1571,17 +1575,11 @@ mod live {
                 (socket.dev(), socket.ino()),
                 "{name}"
             );
-            // A session bus address in the environment changes nothing: the
-            // production manager derives its bus from the real uid.
-            std::env::set_var(
-                "DBUS_SESSION_BUS_ADDRESS",
-                "unix:path=/nonexistent/nexus-q1/bus",
-            );
+            // The production manager's own connection reaches it.
             let connected = ScopeManager::connect();
-            std::env::remove_var("DBUS_SESSION_BUS_ADDRESS");
             assert!(
                 connected.as_ref().map(|_| ()).is_ok(),
-                "{name}: connect() followed the environment: {:?}",
+                "{name}: connect() did not reach the real uid's bus: {:?}",
                 connected.as_ref().err()
             );
             drop(connected);
@@ -1731,89 +1729,58 @@ mod live {
             assert_eq!(scopes_now(name), before, "{name}");
         }
 
-        /// A deliberately existing scope the collision case owns: its helper
-        /// and its unit are ended by the case; drop is defense only.
-        struct Existing {
-            probe: Probe,
-            helper: Option<Helper>,
-            unit: String,
-            done: bool,
-        }
-
-        impl Drop for Existing {
-            fn drop(&mut self) {
-                if self.done {
-                    return;
-                }
-                if let Some(mut helper) = self.helper.take() {
-                    let _ = helper.kill();
-                    let _ = helper.reap();
-                }
-                let _ = self.probe.stop_unit(&self.unit);
-            }
-        }
-
-        /// H6: a transient scope this harness creates under a fresh unique
-        /// name, holding a helper it owns, is refused a second
-        /// `StartTransientUnit` with exactly
-        /// `org.freedesktop.systemd1.UnitExists`; the case then ends its own
-        /// helper and unit and observes both gone. No other unit is touched.
-        pub fn h6_unit_exists(_: &ScopeManager) {
+        /// H6: `StartTransientUnit` for the name of a transient scope that is
+        /// loaded is refused with exactly
+        /// `org.freedesktop.systemd1.UnitExists`.
+        ///
+        /// The loaded scope is the production owner's (P2-V1-R3B-I4-Q1-R1):
+        /// `execution::place` makes the first start and owns it with its
+        /// helper from before the request, as for every scoped case: proven,
+        /// or (a collision, an uncertain answer, a panic) settled or retained
+        /// together by the accepted I4-R1 semantics (`p2d::unplaced`). The
+        /// case creates no unit of its own, holds nothing by a name and has
+        /// no stop path. Its one request names the proven unit and carries no
+        /// process and no property: whatever it is answered, and whenever the
+        /// manager handles it, it cannot place a process or change the loaded
+        /// unit (handled after the unit is gone, it would be a scope without
+        /// processes, refused when loaded). The proven scope holds the live
+        /// helper, untouched, until the answer is read and the helper is seen
+        /// where the proof put it; only then does its owner release it, and
+        /// nothing is left.
+        pub fn h6_unit_exists(scopes: &ScopeManager) {
             let name = "h6";
             let before = scopes_now(name);
-            let (helper, output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
-            std::mem::forget((read_all(output.stdout), read_all(output.stderr)));
-            let pid = helper.pid();
-            let mut existing = Existing {
-                probe: probe(name),
-                helper: Some(helper),
-                unit: hq::fresh_unit_name("q1h6-"),
-                done: false,
-            };
-            let unit = existing.unit.clone();
-            match existing.probe.start_transient_scope(&unit, pid) {
-                Ok(Answer::Returned(job)) => evidence(
-                    "H6",
-                    &format!("created unit={unit} pid={pid} job={}", job.as_str()),
-                ),
-                other => panic!("{name}: StartTransientUnit of the fresh name: {other:?}"),
-            }
-            assert!(
-                wait_until(Duration::from_secs(10), || {
-                    hq::membership(pid)
-                        .ok()
-                        .and_then(|membership| membership.unified)
-                        .is_some_and(|path| hq::last_component(&path) == unit)
-                }),
-                "{name}: the owned helper did not enter {unit}"
-            );
-            let (error, message) = match existing.probe.start_transient_scope(&unit, pid) {
+            let placed = placed(name, scopes);
+            let pid = placed.helper().unwrap().pid();
+            let unit = placed.scope().unwrap().unit().to_string();
+            let entered = hq::membership(pid)
+                .unwrap()
+                .unified
+                .unwrap_or_else(|| panic!("{name}: no unified membership"));
+            let probe = probe(name);
+            let (error, message) = match probe.start_without_processes(&unit) {
                 Ok(Answer::Refused { name, message }) => (name, message),
-                other => panic!("{name}: a second StartTransientUnit of {unit}: {other:?}"),
+                other => panic!("{name}: StartTransientUnit of the loaded {unit}: {other:?}"),
             };
             assert_eq!(error, UNIT_EXISTS, "{name}: {message}");
+            // The refused request changed nothing: the helper is where the
+            // proof put it, and the scope still holds it.
+            assert_eq!(
+                hq::membership(pid).unwrap().unified.as_deref(),
+                Some(entered.as_str()),
+                "{name}: the refused request moved the helper"
+            );
+            assert_eq!(
+                placed.scope().unwrap().occupancy().unwrap(),
+                Occupancy::Populated,
+                "{name}: the refused request emptied the scope"
+            );
             evidence(
                 "H6",
-                &format!("second start error={error} message={message:?}"),
+                &format!("unit={unit} (proven, holding pid={pid} in {entered}) start without processes: error={error} message={message:?} membership_unchanged=yes"),
             );
-            // Owned cleanup: the helper, then the unit; the reply is
-            // diagnostics, the manager's absence is observed.
-            let mut helper = existing.helper.take().unwrap();
-            helper.kill().unwrap();
-            helper.reap().unwrap();
-            let stopped = existing.probe.stop_unit(&unit);
-            evidence(
-                "H6",
-                &format!("StopUnit reply (diagnostics only): {stopped:?}"),
-            );
-            assert!(
-                wait_until(Duration::from_secs(10), || existing
-                    .probe
-                    .is_no_such_unit(&unit)),
-                "{name}: {unit} is still loaded"
-            );
-            existing.done = true;
-            drop(existing);
+            drop(probe);
+            released(name, placed);
             scopes_back(name, &before);
         }
 

@@ -1,0 +1,130 @@
+reproduction of the P2-V1-R3B-I4-Q1 H6 finding, 2026-10-03T03:29:36Z
+base: 3d46b4dbe6b920dfcc2a1fa0c2d3b055f86c1823 (snapshot tree d2bafa9b81edca6d5b07c3a23d4f2546404abede)
+reproduction source sha256: c4407848a5b239c568030682b506fbe69cb75f42045b1fc978a4dbcd9f7d28c3
+scope/tests.rs sha256 before: 56f6ed239e78d336d3e961eedf6feb3626d94356421a081f3790132add10cd54
+scratch model extension applied (reproduction E)
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.45
+   Compiling unicode-ident v1.0.24
+   Compiling libc v0.2.183
+   Compiling version_check v0.9.5
+   Compiling typenum v1.19.0
+   Compiling cfg-if v1.0.4
+   Compiling pin-project-lite v0.2.17
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.16.1
+   Compiling winnow v1.0.0
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling generic-array v0.14.9
+   Compiling toml_datetime v1.0.1+spec-1.1.0
+   Compiling zerocopy v0.8.42
+   Compiling autocfg v1.5.0
+   Compiling indexmap v2.13.0
+   Compiling cpufeatures v0.2.17
+   Compiling memoffset v0.9.1
+   Compiling syn v2.0.117
+   Compiling futures-core v0.3.32
+   Compiling parking v2.2.1
+   Compiling cfg_aliases v0.2.1
+   Compiling toml_parser v1.0.10+spec-1.1.0
+   Compiling nix v0.29.0
+   Compiling event-listener v5.4.2
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling digest v0.10.7
+   Compiling thiserror v2.0.18
+   Compiling static_assertions v1.1.0
+   Compiling once_cell v1.21.4
+   Compiling toml_edit v0.25.5+spec-1.1.0
+   Compiling getrandom v0.2.17
+   Compiling errno v0.3.14
+   Compiling endi v1.1.1
+   Compiling rand_core v0.6.4
+   Compiling signal-hook-registry v1.4.8
+   Compiling tracing-core v0.1.36
+   Compiling mio v1.1.1
+   Compiling socket2 v0.6.3
+   Compiling sha2 v0.10.9
+   Compiling proc-macro-crate v3.5.0
+   Compiling event-listener-strategy v0.5.4
+   Compiling slab v0.4.12
+   Compiling futures-task v0.3.32
+   Compiling futures-sink v0.3.32
+   Compiling bitflags v2.11.0
+   Compiling bytes v1.11.1
+   Compiling async-broadcast v0.7.2
+   Compiling futures-util v0.3.32
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/repro/checkout/crates/nexus-verifier-sandbox)
+   Compiling xdg-home v1.3.0
+   Compiling sha1 v0.10.6
+   Compiling ordered-stream v0.2.0
+   Compiling hex v0.4.3
+   Compiling tokio v1.50.0
+   Compiling seccompiler v0.5.0
+   Compiling zvariant_utils v2.1.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling serde_derive v1.0.228
+   Compiling enumflags2_derive v0.7.12
+   Compiling zvariant_derive v4.2.0
+   Compiling thiserror-impl v2.0.18
+   Compiling tracing-attributes v0.1.31
+   Compiling rand_chacha v0.3.1
+   Compiling serde_repr v0.1.20
+   Compiling async-trait v0.1.89
+   Compiling rand v0.8.6
+   Compiling zbus_macros v4.4.0
+   Compiling tracing v0.1.44
+   Compiling enumflags2 v0.7.12
+   Compiling zvariant v4.2.0
+   Compiling landlock v0.4.4
+   Compiling zbus_names v3.0.0
+   Compiling zbus v4.4.0
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.65s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r1/repro/target/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+
+running 5 tests
+test scope::tests::q1r1_reproduction::q1r1_reproduction_a_old_h6_stops_a_foreign_unit_that_answered_unit_exists ...
+thread 'scope::tests::q1r1_reproduction::q1r1_reproduction_a_old_h6_stops_a_foreign_unit_that_answered_unit_exists' (1895730) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:1263:22:
+h6: StartTransientUnit of the fresh name: Collision
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+    old H6 panicked: h6: StartTransientUnit of the fresh name: Collision
+    calls: [Start("nexus-verifier-q1h6-0123456789abcdef0123456789abcdef.scope", 1895731), Stop("nexus-verifier-q1h6-0123456789abcdef0123456789abcdef.scope")]
+    foreign unit loaded after old H6: false; its cgroup killed: true, removed: true; its process now in: Some("/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-q1h6-0123456789abcdef0123456789abcdef.scope (deleted)")
+REPRODUCED (A): a first start answered UnitExists made old H6 stop the foreign unit by name
+ok
+test scope::tests::q1r1_reproduction::q1r1_reproduction_b_old_h6_reaps_its_helper_after_an_uncertain_first_start ...
+thread 'scope::tests::q1r1_reproduction::q1r1_reproduction_b_old_h6_reaps_its_helper_after_an_uncertain_first_start' (1895732) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:1263:22:
+h6: StartTransientUnit of the fresh name: Uncertain("StartTransientUnit timed out")
+    old H6 panicked: h6: StartTransientUnit of the fresh name: Uncertain("StartTransientUnit timed out")
+    calls: [Start("nexus-verifier-q1h6-0123456789abcdef0123456789abcdef.scope", 1895733), Stop("nexus-verifier-q1h6-0123456789abcdef0123456789abcdef.scope")]
+    after old H6: helper 1895733 unreaped: false; unit nexus-verifier-q1h6-0123456789abcdef0123456789abcdef.scope loaded: true; its start job still to attach: Some((1895733, 0, 2))
+REPRODUCED (B, the reply lost): old H6 reaped the helper while its first start could still act
+ok
+test scope::tests::q1r1_reproduction::q1r1_reproduction_c_old_h6_reaps_its_helper_after_a_panic_in_the_first_start ...
+thread 'scope::tests::q1r1_reproduction::q1r1_reproduction_c_old_h6_reaps_its_helper_after_a_panic_in_the_first_start' (1895734) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:368:5:
+a panic inside the model's Start
+    old H6 panicked: a panic inside the model's Start
+    calls: [Start("nexus-verifier-q1h6-0123456789abcdef0123456789abcdef.scope", 1895735), Stop("nexus-verifier-q1h6-0123456789abcdef0123456789abcdef.scope")]
+    after old H6: helper 1895735 unreaped: false; unit nexus-verifier-q1h6-0123456789abcdef0123456789abcdef.scope loaded: true; its start job still to attach: Some((1895735, 0, 2))
+REPRODUCED (C, a panic after dispatch): old H6 reaped the helper while its first start could still act
+ok
+test scope::tests::q1r1_reproduction::q1r1_reproduction_d_the_repaired_first_start_keeps_ownership_in_the_same_worlds ...     place, collision: error Some(Bus("StartTransientUnit: the unit exists")), cleanup confirmed: true, calls: [Start("nexus-verifier-e50354b262f761dbe1a2e663cb1ab07e.scope", 1895737), Membership(1895737, true)]
+REPAIRED (A): the foreign unit was never stopped, killed or claimed; the harness's own helper was ended
+    place, B: discovered and proven, then ended by its owner: confirmed true; calls: [Start("nexus-verifier-6ec544883c815d8aa985235348249163.scope", 1895738), Membership(1895738, true), Membership(1895738, true), Membership(1895738, true), Open("/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-6ec544883c815d8aa985235348249163.scope"), GetUnit("nexus-verifier-6ec544883c815d8aa985235348249163.scope"), UnitId("/unit/nexus-verifier-6ec544883c815d8aa985235348249163.scope"), ControlGroup("/unit/nexus-verifier-6ec544883c815d8aa985235348249163.scope"), RuntimeMax("/unit/nexus-verifier-6ec544883c815d8aa985235348249163.scope"), OomPolicy("/unit/nexus-verifier-6ec544883c815d8aa985235348249163.scope"), Kill("/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-6ec544883c815d8aa985235348249163.scope")]
+REPAIRED (B): the helper was reaped only after the operation was proven or settled
+
+thread 'scope::tests::q1r1_reproduction::q1r1_reproduction_d_the_repaired_first_start_keeps_ownership_in_the_same_worlds' (1895736) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:368:5:
+a panic inside the model's Start
+    place, C: not proven (None); settled, then confirmed; calls: [Start("nexus-verifier-31dd8b860c764dd75e4f6d01238d619e.scope", 1895739), Membership(1895739, true), Stop("nexus-verifier-31dd8b860c764dd75e4f6d01238d619e.scope"), Membership(1895739, true), Membership(1895739, true), Open("/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-31dd8b860c764dd75e4f6d01238d619e.scope"), Kill("/user.slice/user-1000.slice/user@1000.service/app.slice/nexus-verifier-31dd8b860c764dd75e4f6d01238d619e.scope")]
+REPAIRED (C): the helper was reaped only after the operation was proven or settled
+ok
+test scope::tests::q1r1_reproduction::q1r1_reproduction_e_residual_a_collision_whose_reply_is_lost_is_an_uncertain_start ...     place, collision with its reply lost: error Some(Bus("StartTransientUnit timed out")); calls: [Start("nexus-verifier-bba372da37a7d96218b8f1b29fa854de.scope", 1895741), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Stop("nexus-verifier-bba372da37a7d96218b8f1b29fa854de.scope"), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true), Membership(1895741, true)]
+RESIDUAL (E): StopUnit attempts for the generated name: 1; the foreign unit is still loaded: false; the operation stays retained with its helper unreaped
+ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 117 filtered out; finished in 0.32s
+
+cargo test exit: 0
+scope/tests.rs sha256 after restore: 56f6ed239e78d336d3e961eedf6feb3626d94356421a081f3790132add10cd54 (identical: yes)
+checkout status entries after restore: 0

@@ -17,9 +17,14 @@
 //! The strings it returns (unit names, object paths, `Id`, `ControlGroup`,
 //! kernel membership) are evidence for the Architect, never authority: the
 //! production proof remains `scope::pending`'s, over the retained descriptor
-//! and the crate's own fixed-destination manager. The one thing the probe
-//! creates (a deliberately existing, uniquely named transient scope for the
-//! collision case) it owns and ends itself.
+//! and the crate's own fixed-destination manager.
+//!
+//! The probe creates nothing and owns nothing (P2-V1-R3B-I4-Q1-R1). Besides
+//! its reads (`GetUnit`, `Properties.Get`), its one request is a start that
+//! carries no process and no property, sent only for the unit of a scope the
+//! production owner has proven and still holds
+//! ([`Probe::start_without_processes`]). It has no request that stops,
+//! kills or changes a unit: a unit name grants it nothing.
 #![allow(dead_code)]
 
 use std::fmt;
@@ -182,23 +187,20 @@ impl Probe {
         self.call(object, PROPERTIES, "Get", &(interface, name))
     }
 
-    /// `StartTransientUnit(unit, "fail", ...)` for a scope holding exactly
-    /// `pid`: the deliberately existing unit of the collision case. The
-    /// caller owns `pid` and the unit it creates, and ends both.
-    pub fn start_transient_scope(
+    /// `StartTransientUnit(unit, "fail", [], [])`: a start request that
+    /// carries no process and no property. The collision case (H6) sends it
+    /// only for the unit of a scope the production owner has proven and
+    /// still holds, which the manager refuses as already loaded
+    /// (`UnitExists`) before it reads any property. Whatever it is answered,
+    /// and whenever the manager handles it (a timeout proves nothing), it
+    /// cannot place a process or change the existing unit: it names no
+    /// process, and a scope without processes is refused when it is loaded
+    /// (systemd v255, `docs/evidence/p2-v1-r3b-i4-q1-r1-host-qualification-ownership/primary/`).
+    pub fn start_without_processes(
         &self,
         unit: &str,
-        pid: u32,
     ) -> Result<Answer<OwnedObjectPath>, ProbeError> {
-        let properties: Vec<(&str, Value<'_>)> = vec![
-            (
-                "Description",
-                Value::from("Nexus P2-V1-R3B-I4-Q1 host qualification (owned by the live harness)"),
-            ),
-            ("PIDs", Value::from(vec![pid])),
-            ("KillSignal", Value::from(libc::SIGKILL)),
-            ("CollectMode", Value::from("inactive-or-failed")),
-        ];
+        let properties: Vec<(&str, Value<'_>)> = Vec::new();
         let aux: Vec<(&str, Vec<(&str, Value<'_>)>)> = Vec::new();
         self.call(
             SYSTEMD_PATH,
@@ -206,23 +208,6 @@ impl Probe {
             "StartTransientUnit",
             &(unit, "fail", properties, aux),
         )
-    }
-
-    /// `StopUnit(unit, "replace")`: for the unit this harness created only.
-    /// Its reply is diagnostics; whether the unit is gone is observed.
-    pub fn stop_unit(&self, unit: &str) -> Result<Answer<OwnedObjectPath>, ProbeError> {
-        self.call(
-            SYSTEMD_PATH,
-            MANAGER_INTERFACE,
-            "StopUnit",
-            &(unit, "replace"),
-        )
-    }
-
-    /// Whether the manager answers `GetUnit(unit)` with exactly
-    /// [`NO_SUCH_UNIT`].
-    pub fn is_no_such_unit(&self, unit: &str) -> bool {
-        matches!(self.get_unit(unit), Ok(Answer::Refused { name, .. }) if name == NO_SUCH_UNIT)
     }
 }
 

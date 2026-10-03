@@ -1158,3 +1158,160 @@ fn p2_g_10_the_live_gate_pins_every_case_and_the_host_qualification() {
         "the host layers step requires the unified hierarchy"
     );
 }
+
+/// The item of `source` that starts at `head` and ends at the first closing
+/// brace eight spaces in (an item one level deeper than `indented_item`'s).
+fn nested_item<'a>(source: &'a str, head: &str) -> &'a str {
+    let start = source.find(head).unwrap_or_else(|| panic!("{head}"));
+    let rest = &source[start..];
+    &rest[..rest
+        .find("\n        }\n")
+        .map_or(rest.len(), |end| end + 10)]
+}
+
+/// `text` with every run of whitespace one space.
+fn words(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[test]
+fn p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name() {
+    // P2-V1-R3B-I4-Q1-R1: the live host qualification creates no unit of its
+    // own and has no authority by a unit name. Its probe reads; its one start
+    // request carries no process and no property and is sent only for the
+    // unit of a scope the production owner (`execution::place`) has proven
+    // and still holds; nothing in it stops, kills or changes a unit. The
+    // qualification cases own no native effect beside the production owner,
+    // release a proven scope in the owner's order and change nothing
+    // process-wide in the multi-threaded live harness.
+    let read = |path: &str| std::fs::read_to_string(repo().join(path)).unwrap();
+    let harness = code(&read(
+        "crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs",
+    ));
+    let probe = code(&read(
+        "crates/nexus-verifier-sandbox/tests/support/host_qualification.rs",
+    ));
+    // The probe: every remote call goes through its one bounded call, and
+    // its methods are two reads and the start.
+    assert_eq!(probe.matches("call_method(").count(), 1);
+    let mut methods: Vec<&str> = probe
+        .split("self.call(")
+        .skip(1)
+        .map(|call| call.split('"').nth(1).unwrap_or_default())
+        .collect();
+    methods.sort_unstable();
+    assert_eq!(
+        methods,
+        ["Get", "GetUnit", "StartTransientUnit"],
+        "the probe acts on a unit by its name"
+    );
+    for needle in ["kill", "Kill", "reap", "signal", "set_var", "std::env"] {
+        assert!(
+            !probe.contains(needle),
+            "the probe acts on a unit by its name: {needle}"
+        );
+    }
+    // The start names no process and no property.
+    for needle in ["PIDs", "PIDFDs", "Value::from"] {
+        assert!(
+            !probe.contains(needle),
+            "the probe's start request carries a process or a property: {needle}"
+        );
+    }
+    assert_eq!(
+        words(indented_item(&probe, "    pub fn start_without_processes(")),
+        concat!(
+            "pub fn start_without_processes( &self, unit: &str, ) ",
+            "-> Result<Answer<OwnedObjectPath>, ProbeError> { ",
+            "let properties: Vec<(&str, Value<'_>)> = Vec::new(); ",
+            "let aux: Vec<(&str, Vec<(&str, Value<'_>)>)> = Vec::new(); ",
+            "self.call( SYSTEMD_PATH, MANAGER_INTERFACE, \"StartTransientUnit\", ",
+            "&(unit, \"fail\", properties, aux), ) }"
+        ),
+        "the probe's start request carries a process or a property"
+    );
+    // The qualification cases (`p2q`).
+    let p2q = indented_item(&harness, "    mod p2q {");
+    for needle in ["set_var", "remove_var", "std::env"] {
+        assert!(
+            !p2q.contains(needle),
+            "the qualification changes the process environment: {needle}"
+        );
+    }
+    assert!(
+        !p2q.contains("struct ") && !p2q.contains("impl "),
+        "the qualification owns a native effect beside the production owner"
+    );
+    assert!(
+        !p2q.contains(".reap()")
+            && !p2q.contains("try_reap")
+            && !p2q.contains("libc::kill")
+            && p2q.matches(".kill()").count()
+                == p2q.matches("placed.scope().unwrap().kill()").count(),
+        "the qualification ends a helper outside its owner"
+    );
+    assert_eq!(
+        p2q.matches("Helper::spawn(").count(),
+        1,
+        "the qualification ends a helper outside its owner"
+    );
+    let placed = words(nested_item(p2q, "        fn placed("));
+    for needle in [
+        "let (helper, output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();",
+        "match execution::place(scopes, helper, &limits()) {",
+        "Err(failed) => super::p2d::unplaced(name, failed),",
+    ] {
+        assert!(placed.contains(needle), "placed(): {needle}");
+    }
+    assert!(
+        !p2q.contains("stop_unit") && !p2q.contains("StopUnit"),
+        "the qualification stops a unit by its name"
+    );
+    // H6: the production owner's proven unit, the one request, and only
+    // then the owner's release; no unit name of its own.
+    let h6 = nested_item(p2q, "        pub fn h6_unit_exists(");
+    for needle in [
+        "let placed = placed(name, scopes);",
+        "let unit = placed.scope().unwrap().unit().to_string();",
+        "match probe.start_without_processes(&unit) {",
+    ] {
+        assert!(
+            words(h6).contains(needle),
+            "H6 acts on a unit it has not proven: {needle}"
+        );
+    }
+    assert!(
+        !h6.contains("fresh_unit_name") && p2q.matches("start_without_processes(").count() == 1,
+        "H6 acts on a unit it has not proven"
+    );
+    let at = |needle: &str| h6.find(needle).unwrap_or_else(|| panic!("H6: {needle}"));
+    assert!(
+        at("start_without_processes(") < at("released(name, placed);")
+            && at("released(name, placed);") < at("scopes_back(name, &before);"),
+        "H6 releases its scope before the answer is read"
+    );
+    // A fresh name is only ever read (H5).
+    assert_eq!(p2q.matches("fresh_unit_name(").count(), 1);
+    let h5 = nested_item(p2q, "        pub fn h5_no_such_unit(");
+    assert!(h5.contains("hq::fresh_unit_name(\"q1h5-\")") && h5.contains("probe.get_unit(&fresh)"));
+    // A proven scope is released in its owner's order: ended through its
+    // descriptor, its helper reaped only then, observed empty, confirmed.
+    let released = words(nested_item(p2q, "        fn released("));
+    let order: Vec<usize> = [
+        "placed.scope().unwrap().kill().unwrap();",
+        "placed.reap_helper().unwrap();",
+        ".wait_empty(Duration::from_secs(10))",
+        "placed.end().is_confirmed()",
+    ]
+    .iter()
+    .map(|needle| {
+        released
+            .find(needle)
+            .unwrap_or_else(|| panic!("released(): {needle}"))
+    })
+    .collect();
+    assert!(
+        order.windows(2).all(|pair| pair[0] < pair[1]),
+        "released() reaps the helper before its scope is ended"
+    );
+}

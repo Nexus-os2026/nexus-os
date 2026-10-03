@@ -1185,3 +1185,366 @@ fn i4q1_the_manager_s_definite_answers_are_exactly_systemd_s_error_names() {
     assert_eq!(code.matches("NoSuchUnit").count(), 1);
     assert_eq!(code.matches("UnitExists").count(), 1);
 }
+
+// ---------------------------------------------------------------------------
+// P2-V1-R3B-I4-Q1-R1: the collision qualification's first start. The live
+// harness's H6 makes it only through `execution::place`, never by a request
+// of its own, and holds nothing by a unit name; these are that start's
+// outcomes over the model, with what each may and may not touch (the
+// controls Q1-R1-NC1 to NC4 mutate them).
+
+/// Every membership read of `pid` was made while it was still this
+/// process's unreaped child.
+fn read_unreaped(world: &World, pid: u32) -> bool {
+    world
+        .lock()
+        .calls
+        .iter()
+        .all(|call| !matches!(call, Call::Membership(read, false) if *read == pid))
+}
+
+#[test]
+fn i4q1r1_nc1_a_first_start_refused_as_loaded_ends_only_the_harness_s_helper() {
+    // The first start is answered exactly `UnitExists` (the model's
+    // collision): the unit of that name is foreign. It is never stopped,
+    // killed or claimed (nothing is opened, read or proven for it), and the
+    // only thing ended is the helper the harness owns: at once when it is
+    // outside that unit, and only once it is outside when the foreign unit's
+    // cgroup is reported holding it.
+    for holds in [false, true] {
+        let world = World::new(|state| {
+            state.collide = true;
+            state.collision_holds_helper = holds;
+        });
+        let (failed, pid) = refused(&world);
+        assert!(
+            matches!(&failed.error, Some(ScopeError::Bus(reason)) if reason.contains("the unit exists")),
+            "{holds}: {:?}",
+            failed.error
+        );
+        if holds {
+            let boundary = retained(failed.cleanup);
+            assert!(boundary.holds_helper() && unreaped(pid), "{holds}");
+            let boundary = boundary.retry().unwrap_err();
+            world.lock().membership.remove(&pid);
+            boundary.retry().unwrap();
+        } else {
+            assert!(failed.cleanup.is_confirmed(), "{holds}");
+        }
+        let state = world.lock();
+        let unit = state.requested().unwrap();
+        assert_eq!(
+            state.count(|call| matches!(call, Call::Stop(_))),
+            0,
+            "{holds}: the foreign unit was stopped"
+        );
+        assert!(
+            state.units.get(&unit).is_some_and(|unit| !unit.ours),
+            "{holds}: the foreign unit was stopped"
+        );
+        assert!(
+            state.count(|call| matches!(call, Call::Kill(_))) == 0
+                && state
+                    .cgroups
+                    .iter()
+                    .all(|cgroup| cgroup.kills == 0 && !cgroup.killed),
+            "{holds}: the foreign unit was killed"
+        );
+        assert_eq!(
+            state.count(|call| matches!(
+                call,
+                Call::Open(_)
+                    | Call::GetUnit(_)
+                    | Call::UnitId(_)
+                    | Call::ControlGroup(_)
+                    | Call::RuntimeMax(_)
+                    | Call::OomPolicy(_)
+            )),
+            0,
+            "{holds}: the foreign unit was claimed"
+        );
+        drop(state);
+        assert!(read_unreaped(&world, pid), "{holds}");
+        assert!(
+            !unreaped(pid),
+            "{holds}: the harness's own helper was not ended"
+        );
+    }
+}
+
+#[test]
+fn i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed() {
+    // No delivered reply (a timeout, a broken connection, an unexpected
+    // error, a reply that does not decode), with and without an effect, the
+    // helper never placed: nothing confirms the operation. Its helper is
+    // killed but stays this process's unreaped child, owned with the
+    // operation; neither a delivered and effective StopUnit nor the
+    // manager's absence confirms it.
+    for effect in [false, true] {
+        for reply in [
+            Reply::Timeout,
+            Reply::Disconnect,
+            Reply::Error,
+            Reply::Malformed,
+        ] {
+            let case = format!("{reply:?}, effect {effect}");
+            let world = World::new(|state| {
+                state.start_effect = effect;
+                state.start_reply = reply;
+                state.placement = Placement::Never;
+            });
+            let (failed, pid) = refused(&world);
+            assert!(
+                matches!(failed.error, Some(ScopeError::Bus(_))),
+                "{case}: {:?}",
+                failed.error
+            );
+            let Cleanup::Failed(boundary) = failed.cleanup else {
+                panic!("{case}: an uncertain first start was confirmed without proof");
+            };
+            let observed = boundary
+                .pending()
+                .expect("the unresolved operation is retained");
+            assert!(
+                observed.issued
+                    && !observed.accepted
+                    && !observed.collided
+                    && !observed.candidate
+                    && !observed.settled,
+                "{case}: {observed:?}"
+            );
+            assert!(
+                boundary.holds_helper() && unreaped(pid),
+                "{case}: the helper was reaped while unresolved"
+            );
+            // The manager answers again: StopUnit acts and its reply is
+            // delivered, GetUnit would answer NoSuchUnit, the helper is
+            // outside. Still nothing confirms the operation.
+            world.release();
+            let Err(boundary) = boundary.retry() else {
+                panic!("{case}: an uncertain first start was confirmed without proof");
+            };
+            assert!(
+                boundary.holds_scope() && boundary.holds_helper() && unreaped(pid),
+                "{case}: the helper was reaped while unresolved"
+            );
+            assert!(
+                world.lock().count(|call| matches!(call, Call::Stop(_))) >= 1,
+                "{case}"
+            );
+            assert!(
+                read_unreaped(&world, pid),
+                "{case}: the helper was reaped while unresolved"
+            );
+            abandon(boundary, pid);
+        }
+    }
+}
+
+#[test]
+fn i4q1r1_nc3_a_panic_after_the_first_start_is_dispatched_keeps_one_owner() {
+    // A panic inside StartTransientUnit after its effect and before any
+    // reply, or while its outcome is observed: it never crosses
+    // `execution::place`, the operation is never split from its helper, and
+    // the helper is never reaped while the operation is unresolved (its
+    // process id stays reserved: no reused id can be attached).
+    let worlds: [(Op, Placement); 4] = [
+        (Op::Start, Placement::Never),
+        (Op::Start, Placement::AfterReads(2)),
+        (Op::Membership, Placement::Never),
+        (Op::Open, Placement::Immediate),
+    ];
+    for (op, placement) in worlds {
+        let case = format!("{op:?}, {placement:?}");
+        let world = World::new(|state| {
+            state.placement = placement;
+            state.panic_at = Some(op);
+        });
+        let helper = helper();
+        let pid = helper.pid();
+        let Ok(placed) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            place(&world.scopes(), helper, &LIMITS)
+        })) else {
+            panic!("{case}: a panic crossed the owner of the first start");
+        };
+        let failed = match placed {
+            Ok(placed) => panic!("{case}: a panicked start was proven: {placed:?}"),
+            Err(failed) => failed,
+        };
+        assert!(failed.error.is_none(), "{case}: {:?}", failed.error);
+        match failed.cleanup {
+            Cleanup::Failed(boundary) => {
+                assert!(
+                    boundary.holds_helper() && unreaped(pid),
+                    "{case}: the operation was split from its helper"
+                );
+                if let Some(observed) = boundary.pending() {
+                    assert!(observed.issued && !observed.settled, "{case}: {observed:?}");
+                }
+                world.release();
+                match boundary.retry() {
+                    Ok(()) => assert!(!unreaped(pid), "{case}"),
+                    Err(boundary) => abandon(boundary, pid),
+                }
+            }
+            Cleanup::Confirmed => {
+                // Only with nothing left: no cgroup of the model holds a
+                // process, and the helper is reaped.
+                assert!(
+                    world
+                        .lock()
+                        .cgroups
+                        .iter()
+                        .all(|cgroup| !cgroup.populated()),
+                    "{case}: confirmed with a populated cgroup"
+                );
+                assert!(!unreaped(pid), "{case}");
+            }
+        }
+        assert!(
+            read_unreaped(&world, pid),
+            "{case}: the helper was reaped while unresolved"
+        );
+    }
+}
+
+#[test]
+fn i4q1r1_nc4_a_proven_first_start_is_released_by_its_owner_and_observed() {
+    // The accepted path: the scope H6 holds while its request without
+    // processes is refused is the production owner's proven scope. It is
+    // released as the live harness's `released` does: `cgroup.kill` of
+    // exactly the created unit's cgroup through the retained descriptor, the
+    // helper reaped only then (the scope is proven), the scope observed
+    // empty, the owner's end confirmed; nothing is stopped by a name and no
+    // other cgroup is touched.
+    let world = World::default();
+    let stand_in = helper();
+    let pid = stand_in.pid();
+    let mut placed = place(&world.scopes(), stand_in, &LIMITS).unwrap();
+    let unit = world.lock().requested().unwrap();
+    let created = format!("{SLICE}/{unit}");
+    let proven = world.lock().calls.len();
+    let scope = placed.scope().expect("the scope is proven");
+    assert_eq!(scope.unit(), unit);
+    assert_eq!(scope.occupancy().unwrap(), Occupancy::Populated);
+    scope.kill().unwrap();
+    // The model's `cgroup.kill` ends no real process: as the kernel would.
+    // SAFETY: the stand-in is this process's unreaped child.
+    assert_eq!(unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) }, 0);
+    assert!(unreaped(pid));
+    placed.reap_helper().unwrap();
+    assert!(!unreaped(pid));
+    assert!(placed
+        .scope()
+        .unwrap()
+        .wait_empty(Duration::from_secs(1))
+        .unwrap());
+    assert!(
+        placed.end().is_confirmed(),
+        "the released scope was not confirmed"
+    );
+    let state = world.lock();
+    assert!(
+        state.calls[proven..]
+            .iter()
+            .all(|call| *call == Call::Kill(created.clone())),
+        "the release touched more than the created unit's cgroup: {:?}",
+        &state.calls[proven..]
+    );
+    assert_eq!(
+        state.count(|call| matches!(call, Call::Stop(_))),
+        0,
+        "the created unit was stopped by a name"
+    );
+    assert!(state.cgroups.iter().all(|cgroup| !cgroup.populated()));
+    drop(state);
+    // A scope that stays populated is never confirmed: the owner's end
+    // confirms only what it observed empty, and keeps the rest.
+    let world = World::new(|state| state.phantom = Phantom::Forever);
+    let placed = place(&world.scopes(), helper(), &LIMITS).unwrap();
+    let Cleanup::Failed(boundary) = placed.end() else {
+        panic!("the owner confirmed a scope that was never observed empty");
+    };
+    assert!(boundary.holds_scope());
+    world.release();
+    boundary.retry().unwrap();
+}
+
+#[test]
+fn i4q1r1_connect_derives_the_bus_from_the_real_uid_alone() {
+    // P2-V1-R3B-I4-Q1-R1 (H1): the one manager a normal build constructs is
+    // the real uid's user bus, its path derived from `getuid` alone and
+    // connected by that explicit address (zbus 4.4.0's `Builder::address`
+    // reads no environment; only its session and system builders do). The
+    // scope module reads no environment and names no ambient bus. The live
+    // H1 case relies on this pin instead of changing the environment of the
+    // multi-threaded live harness.
+    let code = |source: &str| -> String {
+        source
+            .lines()
+            .map(|line| line.split("//").next().unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let sources = [
+        ("scope.rs", code(include_str!("../scope.rs"))),
+        ("scope/manager.rs", code(include_str!("manager.rs"))),
+        ("scope/pending.rs", code(include_str!("pending.rs"))),
+        ("scope/native.rs", code(include_str!("native.rs"))),
+    ];
+    for (file, source) in &sources {
+        for needle in [
+            "std::env",
+            "env::var",
+            "var_os",
+            "getenv",
+            "set_var",
+            "Builder::session",
+            "Builder::system",
+            "Connection::session",
+            "Connection::system",
+            "Address::session",
+            "Address::system",
+            "DBUS_",
+            "XDG_RUNTIME_DIR",
+        ] {
+            assert!(
+                !source.contains(needle),
+                "the scope module reads the environment or names an ambient bus: {needle} in {file}"
+            );
+        }
+    }
+    let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let scope = &sources[0].1;
+    let connect = scope
+        .split("pub fn connect() -> Result<Self, ScopeError> {")
+        .nth(1)
+        .and_then(|rest| rest.split("\n    }\n").next())
+        .expect("ScopeManager's connect()");
+    assert_eq!(
+        words(connect),
+        concat!(
+            "let uid = unsafe { libc::getuid() }; ",
+            "Self::connect_to(&format!(\"/run/",
+            "user/{uid}/bus\"))"
+        ),
+        "connect() derives its bus from more than the real uid"
+    );
+    // The one path to a connection: connect() and the harness's checks of
+    // its checks (`connect_at`), both through the same owner-checked socket.
+    assert_eq!(scope.matches("Self::connect_to(").count(), 2);
+    assert_eq!(
+        scope
+            .matches(concat!("Box::new(Zbus", "Manager::connect_at(path)?)"))
+            .count(),
+        1
+    );
+    let manager = &sources[1].1;
+    for needle in [
+        "let address = format!(\"unix:path={path}\");",
+        "zbus::connection::Builder::address(address.as_str())?",
+    ] {
+        assert_eq!(manager.matches(needle).count(), 1, "{needle}");
+    }
+    assert_eq!(manager.matches("connection::Builder::").count(), 1);
+}
