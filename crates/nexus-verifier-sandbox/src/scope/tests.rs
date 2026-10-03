@@ -11,6 +11,11 @@
 //! can report the helper in a cgroup that is not the unit's. One call can
 //! be scripted to panic inside the manager or the kernel layer. Every call
 //! is logged, so a test can assert what was and was not asked.
+//!
+//! The manager has nothing to stop or kill a unit with: the backend never
+//! acts on a unit by its name (P2-V1-R3B-I4-R3). A unit goes only when the
+//! manager unloads it by itself, and a test may then load a foreign unit
+//! under the same name ([`State::unload`], [`State::load_foreign`]).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::io;
@@ -93,8 +98,6 @@ pub(crate) enum Phantom {
     None,
     /// Ended by `cgroup.kill`.
     UntilKill,
-    /// Ended only by an effective StopUnit.
-    UntilStop,
     /// Ended by nothing, until the test releases it.
     Forever,
 }
@@ -121,7 +124,6 @@ pub(crate) enum Placement {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Op {
     Start,
-    Stop,
     GetUnit,
     UnitId,
     ControlGroup,
@@ -167,7 +169,6 @@ impl<T: Copy> Script<T> {
 pub(crate) enum Call {
     /// StartTransientUnit: the unit and the helper's process id.
     Start(String, u32),
-    Stop(String),
     GetUnit(String),
     /// The unit's `Id`, at the object path GetUnit returned.
     UnitId(String),
@@ -197,7 +198,7 @@ pub(crate) struct Cgroup {
     pub members: BTreeSet<u32>,
     /// `cgroup.procs` lists the members.
     pub listed: bool,
-    /// `cgroup.kill` (or a stop) ended every member.
+    /// `cgroup.kill` ended every member.
     pub killed: bool,
     pub phantom: Phantom,
     pub limits: ResourcePolicy,
@@ -211,7 +212,7 @@ impl Cgroup {
         let phantom = match self.phantom {
             Phantom::None => false,
             Phantom::UntilKill => !self.killed,
-            Phantom::UntilStop | Phantom::Forever => true,
+            Phantom::Forever => true,
         };
         !self.removed && (phantom || (!self.killed && !self.members.is_empty()))
     }
@@ -248,8 +249,6 @@ pub(crate) struct State {
     pub control_group: Text,
     pub runtime_max: Property,
     pub oom_policy: Property,
-    /// StopUnit: whether it takes effect, and its reply.
-    pub stop: Script<(bool, Reply)>,
     /// Opens that still succeed (`None`: every one).
     pub opens_left: Option<u32>,
     /// The next call of this kind panics (then the script is spent).
@@ -284,7 +283,6 @@ impl Default for State {
             control_group: Text::Exact,
             runtime_max: Property::Exact,
             oom_policy: Property::Exact,
-            stop: Script::always((true, Reply::Delivered)),
             opens_left: None,
             panic_at: None,
             broken: false,
@@ -305,28 +303,53 @@ impl State {
             .insert(pid, self.cgroups[index].path.clone());
     }
 
-    /// An effective StopUnit: the manager ends everything in the unit's
-    /// cgroup and, once it is empty, removes it and unloads the unit.
-    fn stopped(&mut self, unit: &str) {
-        let Some(index) = self.units.get(unit).map(|unit| unit.cgroup) else {
+    /// The manager unloads `unit` by itself, as systemd collects a unit
+    /// once nothing is left in it: its cgroup is removed, every member
+    /// reported in that removed cgroup, and the name is free again. Never a
+    /// request of the backend; the test arranges that nothing is left.
+    pub(crate) fn unload(&mut self, unit: &str) {
+        let Some(unloaded) = self.units.remove(unit) else {
             return;
         };
-        if let Some(index) = index {
+        if let Some(index) = unloaded.cgroup {
             let cgroup = &mut self.cgroups[index];
-            cgroup.killed = true;
-            if cgroup.phantom == Phantom::UntilStop {
-                cgroup.phantom = Phantom::None;
-            }
-            if cgroup.populated() {
-                return;
-            }
             cgroup.removed = true;
             let path = cgroup.path.clone();
             for member in cgroup.members.clone() {
                 self.membership.insert(member, format!("{path} (deleted)"));
             }
         }
-        self.units.remove(unit);
+    }
+
+    /// Another client of the manager loads a unit of its own under `unit`
+    /// (the name free again), in a new cgroup of the same path and with the
+    /// same limits as the backend's, holding `member`, a process of its own
+    /// (a model process id: the model never signals a real process).
+    /// Returns that cgroup's index.
+    pub(crate) fn load_foreign(&mut self, unit: &str, member: u32) -> usize {
+        assert!(!self.units.contains_key(unit), "the name is still loaded");
+        let index = self.cgroups.len();
+        self.cgroups.push(Cgroup {
+            path: format!("{SLICE}/{unit}"),
+            v2: true,
+            removed: false,
+            members: BTreeSet::new(),
+            listed: true,
+            killed: false,
+            phantom: Phantom::None,
+            limits: ResourcePolicy::RUST_OFFLINE_V1,
+            limit_mismatch: None,
+            kills: 0,
+        });
+        self.place(member, index);
+        self.units.insert(
+            unit.to_string(),
+            Unit {
+                ours: false,
+                cgroup: Some(index),
+            },
+        );
+        index
     }
 
     fn connection(&mut self, reply: Reply) -> Reply {
@@ -405,13 +428,14 @@ impl World {
         ScopeManager::with_controller(self.controller())
     }
 
-    /// Release every process the model kept alive and let StopUnit act.
+    /// Release every process the model kept alive and let every call be
+    /// answered. Units stay loaded: only the manager unloads one
+    /// ([`State::unload`]).
     pub(crate) fn release(&self) {
         let mut state = self.lock();
         for cgroup in &mut state.cgroups {
             cgroup.phantom = Phantom::None;
         }
-        state.stop = Script::always((true, Reply::Delivered));
         state.get_unit = Script::always(Reply::Delivered);
         state.broken = false;
         state.opens_left = None;
@@ -528,25 +552,6 @@ impl Manager for FakeManager {
         match state.connection(reply) {
             Reply::Delivered => Started::Accepted,
             reply => Started::Uncertain(reply.reason("StartTransientUnit")),
-        }
-    }
-
-    fn stop_unit(&self, unit: &str) -> Remote<()> {
-        let mut state = self.0.lock();
-        state.calls.push(Call::Stop(unit.to_string()));
-        if state.broken {
-            return Remote::Uncertain(Reply::Disconnect.reason("StopUnit"));
-        }
-        let (effect, reply) = state.stop.next();
-        if effect {
-            state.stopped(unit);
-        }
-        if state.panics(Op::Stop) {
-            panic_in(state, Op::Stop);
-        }
-        match state.connection(reply) {
-            Reply::Delivered => Remote::Answered(()),
-            reply => Remote::Uncertain(reply.reason("StopUnit")),
         }
     }
 
@@ -924,11 +929,6 @@ fn i4_03_a_start_with_effect_whose_reply_is_lost_is_discovered_and_proven() {
             Some(placed.scope().unwrap().unit().to_string()),
             world.lock().requested()
         );
-        assert_eq!(
-            world.lock().count(|call| matches!(call, Call::Stop(_))),
-            0,
-            "{reply:?}"
-        );
         assert!(placed.end().is_confirmed());
     }
     // The connection broke with the request: the scope cannot be proven,
@@ -958,8 +958,8 @@ fn i4_03_a_start_whose_effect_cannot_be_confirmed_gone_stays_owned_with_its_help
     assert!(observed.issued && !observed.accepted && !observed.settled && !observed.candidate);
     assert!(boundary.holds_helper() && unreaped(pid));
     let boundary = boundary.retry().unwrap_err();
-    // I4-R1: once the manager answers again (and acts on StopUnit), nothing
-    // without a candidate confirms it either.
+    // I4-R1: once the manager answers again, nothing without a candidate
+    // confirms it either.
     world.release();
     let boundary = boundary.retry().unwrap_err();
     assert!(boundary.holds_scope() && boundary.holds_helper() && unreaped(pid));
@@ -986,10 +986,7 @@ fn i4_a_failed_placement_settles_with_its_helper_and_reports_the_proof_failure()
 
 #[test]
 fn i4_a_pending_operation_is_bound_to_its_own_helper() {
-    let world = World::new(|state| {
-        state.placement = Placement::Never;
-        state.stop = Script::always((false, Reply::Timeout));
-    });
+    let world = World::new(|state| state.placement = Placement::Never);
     let (mut bound, other) = (helper(), helper());
     let scopes = world.scopes();
     let mut boundary = ScopeBoundary::Pending(scopes.prepare(&bound, &LIMITS).unwrap());
@@ -1002,8 +999,14 @@ fn i4_a_pending_operation_is_bound_to_its_own_helper() {
     };
     // As the finalizer settles: its bound helper killed, kept unreaped.
     let _ = bound.kill();
-    // Another helper's membership is no evidence for this operation.
-    world.release();
+    // The manager has unloaded the unit by itself (P2-V1-R3B-I4-R3: nothing
+    // stops it), so only the bound helper's position is left to observe;
+    // another helper's membership is no evidence for this operation.
+    {
+        let mut state = world.lock();
+        let unit = state.requested().unwrap();
+        state.unload(&unit);
+    }
     assert!(
         !pending.reconcile(Some(&other), None),
         "another helper's membership settled the operation"
@@ -1255,11 +1258,6 @@ fn i4q1r1_nc1_a_first_start_refused_as_loaded_ends_only_the_harness_s_helper() {
         }
         let state = world.lock();
         let unit = state.requested().unwrap();
-        assert_eq!(
-            state.count(|call| matches!(call, Call::Stop(_))),
-            0,
-            "{holds}: the foreign unit was stopped"
-        );
         assert!(
             state.units.get(&unit).is_some_and(|unit| !unit.ours),
             "{holds}: the foreign unit was stopped"
@@ -1301,7 +1299,7 @@ fn i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed
     // helper never placed: nothing confirms the operation. Its helper is
     // killed but stays this process's unreaped child, owned with the
     // operation; the manager's absence does not confirm it, and
-    // (P2-V1-R3B-I4-R2) nothing is ever stopped by the unit's name.
+    // (P2-V1-R3B-I4-R2, -R3) nothing is ever acted upon by the unit's name.
     for effect in [false, true] {
         for reply in [
             Reply::Timeout,
@@ -1339,10 +1337,10 @@ fn i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed
                 boundary.holds_helper() && unreaped(pid),
                 "{case}: the helper was reaped while unresolved"
             );
-            // The manager answers again: it would act on StopUnit and deliver
-            // its reply, GetUnit would answer NoSuchUnit, the helper is
-            // outside. Still nothing confirms the operation, and nothing is
-            // stopped by its name.
+            // The manager answers again (GetUnit would answer NoSuchUnit
+            // without the effect, the unit with it) and the helper is
+            // outside. Still nothing confirms the operation, and the unit the
+            // effect created stays loaded: nothing acts on it by its name.
             world.release();
             let Err(boundary) = boundary.retry() else {
                 panic!("{case}: an uncertain first start was confirmed without proof");
@@ -1352,8 +1350,8 @@ fn i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed
                 "{case}: the helper was reaped while unresolved"
             );
             assert_eq!(
-                world.lock().count(|call| matches!(call, Call::Stop(_))),
-                0,
+                world.lock().units.len(),
+                usize::from(effect),
                 "{case}: an uncertain first start was stopped by its name"
             );
             assert!(
@@ -1475,11 +1473,6 @@ fn i4q1r1_nc4_a_proven_first_start_is_released_by_its_owner_and_observed() {
         "the release touched more than the created unit's cgroup: {:?}",
         &state.calls[proven..]
     );
-    assert_eq!(
-        state.count(|call| matches!(call, Call::Stop(_))),
-        0,
-        "the created unit was stopped by a name"
-    );
     assert!(state.cgroups.iter().all(|cgroup| !cgroup.populated()));
     drop(state);
     // A scope that stays populated is never confirmed: the owner's end
@@ -1573,79 +1566,227 @@ fn i4q1r1_connect_derives_the_bus_from_the_real_uid_alone() {
     assert_eq!(manager.matches("connection::Builder::").count(), 1);
 }
 
+// ---------------------------------------------------------------------------
+// P2-V1-R3B-I4-R3: no scope operation acts on a unit by its name. Tripwires
+// over rustfmt-formatted source beside the behavioural tests
+// (`execution::tests::i4r3_*`): the manager can start a scope and read,
+// nothing else; settling asks it only whether the unit is loaded; and the
+// recorded start reply changes only what that absence can confirm.
+
+/// `source` without its `//` comments.
+fn code_of(source: &str) -> String {
+    source
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The body of every item `head` opens in `source`, each up to `end`.
+fn items<'a>(source: &'a str, head: &str, end: &str) -> Vec<&'a str> {
+    let bodies: Vec<&str> = source
+        .split(head)
+        .skip(1)
+        .map(|rest| rest.split(end).next().unwrap_or_default())
+        .collect();
+    assert!(!bodies.is_empty(), "{head} not found");
+    bodies
+}
+
 #[test]
-fn i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name() {
-    // P2-V1-R3B-I4-R2, a tripwire over rustfmt-formatted source beside the
-    // behavioural tests (`execution::tests::i4r2_*`): the one request that
-    // acts on a unit by its name (StopUnit) is reachable only past the
-    // operation's name authority, and that authority is exactly a recorded
-    // StartTransientUnit success reply, set in that reply's arm only (never
-    // from a name, a presence or a later observation).
-    let code = |source: &str| -> String {
-        source
-            .lines()
-            .map(|line| line.split("//").next().unwrap_or_default())
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-    let pending = code(include_str!("pending.rs"));
-    // The only stop by name in the scope module and the execution.
+fn i4r3_10_the_manager_can_only_start_a_scope_and_read() {
+    let manager = code_of(include_str!("manager.rs"));
+    // The trait: one request that acts (a start, for a fresh name); every
+    // other one reads.
+    let declared: Vec<&str> = items(&manager, "pub(crate) trait Manager: Send + Sync {", "\n}\n")
+        [0]
+    .lines()
+    .filter_map(|line| line.trim().strip_prefix("fn "))
+    .map(|rest| rest.split('(').next().unwrap_or_default())
+    .collect();
     assert_eq!(
-        pending.matches("stop_unit(").count(),
-        1,
-        "a stop by name outside settling"
+        declared,
+        [
+            "start_scope",
+            "get_unit",
+            "runtime_max_usec",
+            "oom_policy",
+            "unit_id",
+            "control_group"
+        ],
+        "the manager can act on a unit by its name"
     );
-    for (file, source) in [
-        ("scope.rs", include_str!("../scope.rs")),
-        ("scope/native.rs", include_str!("native.rs")),
-        ("execution.rs", include_str!("../execution.rs")),
+    // Every request goes through the one bounded call, to these methods
+    // only: StartTransientUnit, GetUnit, and property reads.
+    assert_eq!(manager.matches(".call_method(").count(), 1);
+    assert_eq!(
+        manager.matches("self.call").count(),
+        6,
+        "the manager can act on a unit by its name"
+    );
+    let requests: Vec<Vec<&str>> = manager
+        .split("self.call::<")
+        .skip(1)
+        .map(|call| {
+            call.lines()
+                .skip(1)
+                .take(4)
+                .map(|argument| argument.trim().trim_end_matches(','))
+                .collect()
+        })
+        .collect();
+    let expected: [[&str; 4]; 6] = [
+        [
+            "SYSTEMD_PATH",
+            "MANAGER",
+            "\"StartTransientUnit\"",
+            "&(request.unit, \"fail\", properties, aux)",
+        ],
+        ["SYSTEMD_PATH", "MANAGER", "\"GetUnit\"", "&(unit,)"],
+        [
+            "unit_path",
+            "PROPERTIES",
+            "\"Get\"",
+            "&(SCOPE_INTERFACE, \"RuntimeMaxUSec\")",
+        ],
+        [
+            "unit_path",
+            "PROPERTIES",
+            "\"Get\"",
+            "&(SCOPE_INTERFACE, \"OOMPolicy\")",
+        ],
+        [
+            "unit_path",
+            "PROPERTIES",
+            "\"Get\"",
+            "&(UNIT_INTERFACE, \"Id\")",
+        ],
+        [
+            "unit_path",
+            "PROPERTIES",
+            "\"Get\"",
+            "&(SCOPE_INTERFACE, \"ControlGroup\")",
+        ],
+    ];
+    assert_eq!(
+        requests, expected,
+        "the manager can act on a unit by its name"
+    );
+    for needle in [
+        "StopUnit",
+        "KillUnit",
+        "RestartUnit",
+        "ReloadUnit",
+        "ResetFailed",
+        "AbandonScope",
+        "QueueSignal",
+        "FreezeUnit",
+        "ThawUnit",
+        "SetUnitProperties",
+        "AttachProcesses",
+        "\"Stop\"",
+        "\"Kill\"",
+        "\"Set\"",
+        "\"Unref\"",
+        "stop_unit",
+        "kill_unit",
     ] {
         assert!(
-            !code(source).contains("stop_unit"),
-            "a stop by name in {file}"
+            !manager.contains(needle),
+            "the manager can act on a unit by its name: {needle}"
         );
     }
-    let manager = code(include_str!("manager.rs"));
+}
+
+#[test]
+fn i4r3_10_settling_never_acts_on_a_unit_by_its_name() {
+    let pending = code_of(include_str!("pending.rs"));
+    // Every manager request of a pending operation: the start, the proof's
+    // reads, and GetUnit once more, as the evidence of absence.
+    let mut requests: Vec<&str> = pending
+        .split("controller.manager.")
+        .skip(1)
+        .map(|call| call.split('(').next().unwrap_or_default())
+        .collect();
+    requests.sort_unstable();
     assert_eq!(
-        manager.matches("stop_unit(").count(),
-        2,
-        "the manager's StopUnit"
+        requests,
+        [
+            "control_group",
+            "get_unit",
+            "get_unit",
+            "oom_policy",
+            "runtime_max_usec",
+            "start_scope",
+            "unit_id"
+        ],
+        "settling acts on a unit through the manager"
     );
-    // Settling reaches it only past the authority check.
-    let reconcile = pending
-        .split("    pub(crate) fn reconcile(")
-        .nth(1)
-        .and_then(|rest| rest.split("\n    }\n").next())
-        .expect("reconcile");
-    let check = reconcile
-        .find("if !self.stop_authorized() {\n            return self.observe(&controller, helper, fault);\n        }")
-        .expect("the stop by name is not behind the operation's name authority");
-    let stop = reconcile
-        .find("controller.manager.stop_unit(&self.unit)")
-        .expect("the stop by name has moved");
+    // Settling, observing and the drop backstop ask the manager nothing but
+    // that one read, through `absent`.
+    for head in [
+        "    pub(crate) fn reconcile(",
+        "    fn observe(",
+        "    fn acquire(",
+        "    fn gone(",
+        "    pub(crate) fn end_now(",
+    ] {
+        for body in items(&pending, head, "\n    }\n") {
+            assert!(
+                !body.contains("manager"),
+                "settling acts on a unit through the manager: {head}"
+            );
+        }
+    }
     assert!(
-        check < stop,
-        "the stop by name is not behind the operation's name authority"
+        items(&pending, "    fn gone(", "\n    }\n")[0]
+            .contains("None => absent(controller, &self.unit, helper),"),
+        "settling acts on a unit through the manager"
     );
-    assert_eq!(pending.matches("self.stop_authorized()").count(), 1);
-    // The authority is the recorded reply alone.
-    let authority = pending
-        .split("    fn stop_authorized(&self) -> bool {")
-        .nth(1)
-        .and_then(|rest| rest.split("\n    }\n").next())
-        .expect("stop_authorized");
+    let absent = items(&pending, "\nfn absent(", "\n}\n")[0];
     assert_eq!(
-        authority.trim(),
-        "self.accepted",
-        "the name authority is not exactly the recorded start reply"
+        absent.matches("manager").count(),
+        1,
+        "settling acts on a unit through the manager"
     );
-    let accepted_arm = pending
-        .split("Started::Accepted => {")
-        .nth(1)
-        .and_then(|rest| rest.split('}').next())
-        .expect("the delivered reply's arm");
+    assert!(absent.contains("controller.manager.get_unit(unit),"));
+    assert!(!items(&pending, "\nfn outside(", "\n}\n")[0].contains("manager"));
+    // No stop or kill by a unit name anywhere in the crate's production
+    // sources, nor what served one.
+    for (file, source) in [
+        ("scope.rs", include_str!("../scope.rs")),
+        ("scope/manager.rs", include_str!("manager.rs")),
+        ("scope/pending.rs", include_str!("pending.rs")),
+        ("scope/native.rs", include_str!("native.rs")),
+        ("execution.rs", include_str!("../execution.rs")),
+        ("launcher.rs", include_str!("../launcher.rs")),
+        ("fault.rs", include_str!("../fault.rs")),
+    ] {
+        let source = code_of(source);
+        for needle in [
+            "StopUnit",
+            "stop_unit",
+            "KillUnit",
+            "kill_unit",
+            "stop_authorized",
+            "last_stop",
+            "ScopeStop",
+        ] {
+            assert!(
+                !source.contains(needle),
+                "a stop by name in {file}: {needle}"
+            );
+        }
+    }
+}
+
+#[test]
+fn i4r3_10_a_recorded_start_reply_changes_only_what_absence_confirms() {
+    let pending = code_of(include_str!("pending.rs"));
+    // Set only in the delivered reply's arm, after the post-dispatch fault
+    // point: a panic before the reply is recorded grants nothing.
     assert!(
-        accepted_arm.contains("self.accepted = true;"),
+        items(&pending, "Started::Accepted => {", "}")[0].contains("self.accepted = true;"),
         "a start is accepted other than in the delivered reply's arm"
     );
     assert_eq!(
@@ -1656,14 +1797,26 @@ fn i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name() {
     assert_eq!(
         pending.matches("accepted = ").count(),
         1,
-        "the recorded start reply is set elsewhere"
+        "a start is accepted other than in the delivered reply's arm"
     );
-    // Its reply is recorded only after the post-dispatch fault point: a
-    // panic before the reply is recorded grants no authority.
     assert!(
         pending.find("fault::at(fault, FaultPoint::AfterScopeStart);")
             < pending.find("self.accepted = true;")
     );
+    // Read only where the manager's absence is weighed (`gone`), and by the
+    // test and debug views: never by anything that acts.
+    for (read, count) in [
+        ("self.accepted", 4),
+        ("None if !self.accepted => false,", 1),
+        ("accepted: self.accepted,", 1),
+        (".field(\"accepted\", &self.accepted)", 1),
+    ] {
+        assert_eq!(
+            pending.matches(read).count(),
+            count,
+            "the recorded start reply gates more than what the manager's absence can confirm: {read}"
+        );
+    }
     // A pending operation stays crate-private, uncopied and unserialized
     // (and see `i4r1_05`, the accepted API guards and the normal-build
     // probes).

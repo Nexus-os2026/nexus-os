@@ -1,5 +1,5 @@
 //! Ownership of a scope operation whose remote effect is not yet known
-//! (P2-V1-R3B-I4, -R1).
+//! (P2-V1-R3B-I4, -R1, -R2, -R3).
 //!
 //! One execution's scope is a [`ScopeBoundary`]:
 //!
@@ -53,31 +53,34 @@
 //! D-Bus delivers one peer's messages to another in the order they were
 //! sent, but a recipient need not process or answer calls in that order, so
 //! a later `NoSuchUnit` does not show that the request has had, or will
-//! have, no effect; nor does any StopUnit reply. Such an operation stays
-//! owned, its helper unreaped and its execution's cleanup unconfirmed,
-//! unless a candidate is found and confirmed: possibly for the life of the
-//! backend process.
+//! have, no effect. Such an operation stays owned, its helper unreaped and
+//! its execution's cleanup unconfirmed, unless a candidate is found and
+//! confirmed: possibly for the life of the backend process.
 //!
-//! **Name authority (P2-V1-R3B-I4-R2).** Only an operation whose
-//! StartTransientUnit reply (its job path) was delivered and recorded asks
-//! the manager to stop its unit by name: that reply shows that the manager
-//! created the unit for this very request. The unit name is a locator,
-//! never authority. An uncertain start may as well have been refused as
-//! already loaded (`UnitExists`) with that answer lost, the name then a
-//! foreign unit's, and a collision's unit is foreign: neither is ever
-//! stopped by name. An uncertain operation is ended only through its
-//! retained candidate (`cgroup.kill` through the descriptor) and confirmed
-//! only once that cgroup is observed empty or removed; without a candidate
-//! it stays owned as above. That availability cost is accepted so that no
-//! unit this backend did not create is ever stopped.
+//! **No name actuation (P2-V1-R3B-I4-R2, -R3).** No pending operation is
+//! ever acted upon by its unit name: nothing is stopped, killed or changed
+//! through the manager. The name is a locator and evidence, never a
+//! retained identity, however random. A recorded start reply shows that the
+//! manager created a unit for this request at that moment; it does not bind
+//! a unit loaded under the name later (this one may have been unloaded and
+//! a foreign one loaded under the same name), so it changes what the
+//! manager's absence can confirm (above), never what may be acted upon. An
+//! uncertain start may as well have been refused as already loaded with that
+//! answer lost, and a collision's unit is foreign. What an operation may
+//! have created is ended only through its retained candidate (`cgroup.kill`
+//! through the descriptor) and confirmed only once that cgroup is observed
+//! empty or removed. Without a candidate, an accepted operation is confirmed
+//! only by the manager's absence of the unit with the helper outside, and an
+//! uncertain one never: either stays owned meanwhile, its helper unreaped
+//! and its execution `CleanupFailed`, possibly for the life of the backend
+//! process. A unit loaded under the name can delay that confirmation; it is
+//! never acted upon.
 //!
-//! A timeout is evidence of uncertainty, never of absence. A StopUnit reply
-//! confirms nothing, and a failed or timed-out one never proves that
-//! nothing was stopped: after every attempt what remains is observed again.
-//! Whatever cannot be confirmed stays owned, and settling can be retried
-//! for as long as the owner keeps it, after the [`ScopeManager`] that
-//! started it is gone. Dropping an unresolved operation is defense in depth
-//! only: it ends what its candidate holds and confirms nothing.
+//! A timeout is evidence of uncertainty, never of absence. Whatever cannot
+//! be confirmed stays owned, and settling can be retried for as long as the
+//! owner keeps it, after the [`ScopeManager`] that started it is gone.
+//! Dropping an unresolved operation is defense in depth only: it ends what
+//! its candidate holds and confirms nothing.
 //!
 //! The helper bound to an unresolved operation must stay unreaped: its
 //! process id stays reserved, so a still-queued start job cannot attach a
@@ -121,18 +124,14 @@ pub(crate) struct PendingScope {
     collided: bool,
     /// The manager accepted the request: its reply, a job path, was
     /// delivered and recorded. Until then (an uncertain outcome, or a panic
-    /// before it was recorded) the manager's absence confirms nothing, and
-    /// nothing may be stopped by the unit's name: this is the only authority
-    /// for that (P2-V1-R3B-I4-R2).
+    /// before it was recorded) the manager's absence confirms nothing. It
+    /// changes only what that absence can confirm, never what may be acted
+    /// upon (P2-V1-R3B-I4-R3).
     accepted: bool,
     /// The cgroup the kernel reported the helper in, retained by descriptor
     /// as soon as it was seen: cleanup ownership only, never scope
     /// authority.
     candidate: Option<Box<dyn CgroupDir>>,
-    /// StopUnit attempts (an accepted operation's only), and the last one's
-    /// outcome: diagnostics only, never evidence.
-    stops: u32,
-    last_stop: Option<Remote<()>>,
     /// Confirmed gone: nothing is left to own.
     settled: bool,
 }
@@ -154,8 +153,6 @@ impl PendingScope {
             collided: false,
             accepted: false,
             candidate: None,
-            stops: 0,
-            last_stop: None,
             settled: false,
         }
     }
@@ -175,9 +172,8 @@ impl PendingScope {
     /// it gone. `true` once nothing it may have created can still hold or
     /// receive a process; `false` keeps it owned, for another attempt. Only
     /// the execution's finalizer settles, after killing `helper`, the bound
-    /// helper its owner keeps unreaped (another helper is ignored). A stop by
-    /// the unit's name is asked only for an accepted operation
-    /// ([`Self::stop_authorized`]).
+    /// helper its owner keeps unreaped (another helper is ignored). Nothing
+    /// is acted upon by the unit's name (see the module documentation).
     pub(crate) fn reconcile(&mut self, helper: Option<&Helper>, fault: Option<Fault>) -> bool {
         if !self.unresolved() {
             return true;
@@ -195,39 +191,10 @@ impl PendingScope {
         if let Some(candidate) = &self.candidate {
             let _ = candidate.kill();
         }
-        self.acquire(&controller, helper);
-        fault::at(fault, FaultPoint::ScopeReconcile);
-        if self.gone(&controller, helper) {
-            self.settled = true;
-            return true;
-        }
-        // Name authority (P2-V1-R3B-I4-R2): without a recorded start reply,
-        // nothing is stopped by the unit's name; what the operation may have
-        // created is ended only through its candidate, and observed.
-        if !self.stop_authorized() {
-            return self.observe(&controller, helper, fault);
-        }
-        fault::at(fault, FaultPoint::BeforeScopeStop);
-        self.stops = self.stops.saturating_add(1);
-        // Neither reply is a confirmation, nor a failure proof that nothing
-        // was stopped: it is kept for diagnostics only, and what remains is
-        // observed again.
-        self.last_stop = Some(controller.manager.stop_unit(&self.unit));
-        fault::at(fault, FaultPoint::AfterScopeStop);
+        // Nothing is acted upon by the unit's name (P2-V1-R3B-I4-R3): what
+        // the operation may have created is ended only through its
+        // candidate, by descriptor, and confirmed only by observation.
         self.observe(&controller, helper, fault)
-    }
-
-    /// Whether this operation may ask the manager to stop its unit by name
-    /// (P2-V1-R3B-I4-R2): only once StartTransientUnit's success reply (its
-    /// job path) was delivered and recorded, which shows that the manager
-    /// created the unit for this very request. The unit name grants nothing:
-    /// an uncertain start (a timeout, a broken transport, an unexpected
-    /// error, a reply that does not decode, or a panic before the reply was
-    /// recorded) may as well have been refused as already loaded
-    /// (`UnitExists`) with that answer lost, the name then a foreign unit's;
-    /// a collision's unit is foreign. Neither is ever stopped by name.
-    fn stop_authorized(&self) -> bool {
-        self.accepted
     }
 
     /// Observe, within the settling bound, until nothing this operation may
@@ -236,7 +203,8 @@ impl PendingScope {
     /// of the unit, everything in it is ended through its descriptor, and it
     /// must be seen empty or removed (or, for an accepted operation without
     /// one, the manager's absence of the unit with the helper outside).
-    /// `false` keeps the operation owned, for another attempt.
+    /// Only observation: nothing is acted upon by the unit's name. `false`
+    /// keeps the operation owned, for another attempt.
     fn observe(
         &mut self,
         controller: &Controller,
@@ -422,7 +390,6 @@ impl PendingScope {
             collided: self.collided,
             accepted: self.accepted,
             candidate: self.candidate.is_some(),
-            stops: self.stops,
             settled: self.settled,
         }
     }
@@ -437,8 +404,6 @@ impl fmt::Debug for PendingScope {
             .field("collided", &self.collided)
             .field("accepted", &self.accepted)
             .field("candidate", &self.candidate.is_some())
-            .field("stops", &self.stops)
-            .field("last_stop", &self.last_stop)
             .field("settled", &self.settled)
             .finish_non_exhaustive()
     }
@@ -461,7 +426,6 @@ pub(crate) struct PendingState {
     pub collided: bool,
     pub accepted: bool,
     pub candidate: bool,
-    pub stops: u32,
     pub settled: bool,
 }
 

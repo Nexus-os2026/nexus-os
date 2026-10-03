@@ -31,10 +31,6 @@ pub enum FaultPoint {
     ScopeBinding,
     /// During the manager-property proof (RuntimeMaxUSec, OOMPolicy).
     ScopeProperties,
-    /// Settling a pending scope: StopUnit is about to be issued.
-    BeforeScopeStop,
-    /// StopUnit returned or failed; nothing is confirmed yet.
-    AfterScopeStop,
     /// During the reconciliation that confirms a pending scope is gone.
     ScopeReconcile,
     /// The proven scope holds the helper; no launch has been sent.

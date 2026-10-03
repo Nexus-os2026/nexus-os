@@ -452,8 +452,13 @@ fn opens(world: &World) -> usize {
     world.lock().count(|call| matches!(call, Call::Open(_)))
 }
 
-fn stops(world: &World) -> usize {
-    world.lock().count(|call| matches!(call, Call::Stop(_)))
+/// The manager unloads the requested unit by itself, as systemd collects a
+/// unit once nothing is left in it (P2-V1-R3B-I4-R3: the backend never
+/// stops it).
+fn unloaded(world: &World) {
+    let mut state = world.lock();
+    let unit = state.requested().unwrap();
+    state.unload(&unit);
 }
 
 /// Every membership read happened while the helper was unreaped.
@@ -475,7 +480,7 @@ fn failing_proof(state: &mut crate::scope::tests::State) {
 fn i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candidate() {
     for runtime in [true, false] {
         // Only the cgroup opened during the proof can ever be retained (no
-        // later open succeeds), and StopUnit never acts.
+        // later open succeeds).
         let world = World::new(|state| {
             let timeout = Property::Uncertain(Reply::Timeout);
             if runtime {
@@ -484,7 +489,6 @@ fn i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candida
                 state.oom_policy = timeout;
             }
             state.opens_left = Some(1);
-            state.stop = Script::always((false, Reply::Timeout));
         });
         let report = run_in(&world, None);
         let pid = requested_pid(&world);
@@ -507,7 +511,13 @@ fn i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candida
 
 #[test]
 fn i4_05_a_unit_the_helper_never_entered_is_confirmed_gone_before_the_failure() {
-    let world = World::new(|state| state.placement = Placement::Never);
+    // The manager has unloaded the unit by itself (as systemd collects a
+    // scope whose start attached no process). P2-V1-R3B-I4-R3: nothing stops
+    // it, and while the manager keeps it nothing is confirmed (i4_06).
+    let world = World::new(|state| {
+        state.placement = Placement::Never;
+        state.unit_loaded = false;
+    });
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
     assert!(matches!(
@@ -519,26 +529,22 @@ fn i4_05_a_unit_the_helper_never_entered_is_confirmed_gone_before_the_failure() 
     let state = world.lock();
     let unit = state.requested().unwrap();
     assert!(!state.units.contains_key(&unit));
-    // Stopped, then observed gone on the issuing connection with the helper
-    // (unreaped then) outside it.
-    let stop = state
+    // Observed gone on the issuing connection (exactly NoSuchUnit) with the
+    // helper (unreaped then) outside it; nothing opened or killed.
+    assert!(state.calls.contains(&Call::GetUnit(unit.clone())));
+    assert!(state
         .calls
         .iter()
-        .position(|call| matches!(call, Call::Stop(_)))
-        .expect("the unit was stopped");
-    assert!(state.calls[stop..]
-        .iter()
-        .any(|call| matches!(call, Call::GetUnit(_))));
+        .all(|call| !matches!(call, Call::Open(_) | Call::Kill(_))));
     drop(state);
     assert!(observed_unreaped(&world) && !is_child(pid));
 }
 
 #[test]
-fn i4_06_a_failed_stop_of_a_unit_the_helper_never_entered_retains_the_operation() {
-    let world = World::new(|state| {
-        state.placement = Placement::Never;
-        state.stop = Script::always((false, Reply::Error));
-    });
+fn i4_06_a_unit_the_helper_never_entered_that_stays_loaded_retains_the_operation() {
+    // P2-V1-R3B-I4-R3: nothing acts on the unit by its name, so while the
+    // manager keeps it loaded nothing confirms the operation.
+    let world = World::new(|state| state.placement = Placement::Never);
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
     assert!(matches!(
@@ -548,39 +554,45 @@ fn i4_06_a_failed_stop_of_a_unit_the_helper_never_entered_retains_the_operation(
     assert_eq!(
         report.classify(0),
         ExitClass::CleanupFailed,
-        "a StopUnit error was taken as proof that nothing remained"
+        "a unit still loaded was taken as proof that nothing remained"
     );
     let boundary = boundary_of(report);
     let observed = pending_state(&boundary);
-    assert!(observed.issued && !observed.settled && observed.stops >= 1);
+    assert!(observed.issued && observed.accepted && !observed.candidate && !observed.settled);
     assert!(boundary.holds_scope() && boundary.holds_helper());
     assert!(
         is_child(pid),
         "the helper of an unresolved operation was reaped"
     );
-    // Once the manager acts, a retry confirms it gone.
+    // The manager answering every call changes nothing; once it has
+    // unloaded the unit by itself, a retry confirms it gone.
     world.release();
+    let boundary = boundary.retry().unwrap_err();
+    unloaded(&world);
     boundary.retry().unwrap();
     assert!(!is_child(pid));
 }
 
 #[test]
-fn i4_07_a_delivered_stop_reply_with_the_scope_still_populated_confirms_nothing() {
+fn i4_07_a_candidate_still_populated_after_its_kill_confirms_nothing() {
     let world = World::new(|state| {
         failing_proof(state);
         state.phantom = Phantom::Forever;
-        state.stop = Script::always((true, Reply::Delivered));
     });
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
     assert_eq!(
         report.classify(0),
         ExitClass::CleanupFailed,
-        "a delivered StopUnit reply was taken as cleanup"
+        "a candidate still populated was taken as cleanup"
     );
-    assert!(stops(&world) >= 1);
     let boundary = boundary_of(report);
     assert!(pending_state(&boundary).candidate);
+    {
+        let state = world.lock();
+        let created = state.created().unwrap();
+        assert!(created.killed && created.populated());
+    }
     assert!(is_child(pid));
     world.release();
     boundary.retry().unwrap();
@@ -588,23 +600,23 @@ fn i4_07_a_delivered_stop_reply_with_the_scope_still_populated_confirms_nothing(
 }
 
 #[test]
-fn i4_08_a_timed_out_stop_whose_target_is_gone_may_confirm() {
-    // With the retained candidate: the stop took effect, its reply was lost,
-    // and the cgroup is removed.
+fn i4_08_a_target_observed_gone_confirms() {
+    // With the retained candidate: what the kill left ended, and the
+    // manager unloaded the unit by itself, its cgroup removed.
     let world = World::new(|state| {
         failing_proof(state);
-        state.phantom = Phantom::UntilStop;
-        state.stop = Script::always((true, Reply::Timeout));
+        state.phantom = Phantom::Forever;
     });
-    let report = run_in(&world, None);
-    assert!(report.cleanup.is_confirmed(), "{:?}", report.cleanup);
-    assert_eq!(stops(&world), 1);
+    let boundary = boundary_of(run_in(&world, None));
+    world.release();
+    unloaded(&world);
+    boundary.retry().unwrap();
     assert!(world.lock().created().unwrap().removed);
     // Without one: the manager answers the unit gone and the helper is
     // outside it.
     let world = World::new(|state| {
         state.placement = Placement::Never;
-        state.stop = Script::always((true, Reply::Timeout));
+        state.unit_loaded = false;
     });
     let report = run_in(&world, None);
     assert!(report.cleanup.is_confirmed(), "{:?}", report.cleanup);
@@ -612,23 +624,26 @@ fn i4_08_a_timed_out_stop_whose_target_is_gone_may_confirm() {
 }
 
 #[test]
-fn i4_09_a_timed_out_stop_whose_target_remains_retains_the_operation() {
+fn i4_09_a_timed_out_observation_retains_the_operation() {
+    // The manager has unloaded the unit, but GetUnit times out: a timeout is
+    // evidence of uncertainty, never of absence.
     let world = World::new(|state| {
-        failing_proof(state);
-        state.phantom = Phantom::Forever;
-        state.stop = Script::always((false, Reply::Timeout));
+        state.placement = Placement::Never;
+        state.unit_loaded = false;
+        state.get_unit = Script::always(Reply::Timeout);
     });
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
     assert_eq!(
         report.classify(0),
         ExitClass::CleanupFailed,
-        "a timed-out StopUnit dropped the operation"
+        "a timed-out GetUnit dropped the operation"
     );
     let boundary = boundary_of(report);
     let observed = pending_state(&boundary);
-    assert!(observed.candidate && !observed.settled);
-    assert!(world.lock().created().unwrap().populated());
+    assert!(observed.accepted && !observed.candidate && !observed.settled);
+    assert!(is_child(pid));
+    let boundary = boundary.retry().unwrap_err();
     assert!(is_child(pid));
     world.release();
     boundary.retry().unwrap();
@@ -638,11 +653,10 @@ fn i4_09_a_timed_out_stop_whose_target_remains_retains_the_operation() {
 #[test]
 fn i4_10_an_uncertain_query_after_the_candidate_keeps_its_descriptor() {
     // GetUnit times out once the candidate is retained; no cgroup can be
-    // opened again and StopUnit never acts.
+    // opened again.
     let world = World::new(|state| {
         state.get_unit = Script::first([Reply::Timeout], Reply::Delivered);
         state.opens_left = Some(1);
-        state.stop = Script::always((false, Reply::Timeout));
     });
     let report = run_in(&world, None);
     assert!(matches!(
@@ -774,17 +788,25 @@ fn i4_14_an_out_of_memory_policy_mismatch_never_launches() {
 
 #[test]
 fn i4_15_a_membership_mismatch_never_launches() {
-    // The helper is in a cgroup that is not the unit's.
+    // The helper is in a cgroup that is not the unit's. No candidate, and
+    // the manager keeps the unit: nothing acts on it by its name
+    // (P2-V1-R3B-I4-R3), so the operation stays owned until the manager has
+    // unloaded it by itself.
     for elsewhere in ["/elsewhere/../{unit}", "/elsewhere/{unit}-not"] {
         let world = World::new(|state| state.placement = Placement::Elsewhere(elsewhere));
         let report = run_in(&world, None);
+        let pid = requested_pid(&world);
         assert!(
             matches!(report.not_run, Some(NotRun::Scope(ScopeError::NotPlaced))),
             "{elsewhere}: {:?}",
             report.not_run
         );
         assert_eq!(opens(&world), 0, "{elsewhere}");
-        assert!(report.cleanup.is_confirmed(), "{elsewhere}");
+        let boundary = boundary_of(report);
+        assert!(is_child(pid), "{elsewhere}");
+        unloaded(&world);
+        boundary.retry().unwrap();
+        assert!(!is_child(pid), "{elsewhere}");
     }
     // The cgroup of the unit's name does not list the helper.
     let world = World::new(|state| state.listed = false);
@@ -820,16 +842,25 @@ fn i4_16_a_pending_operation_is_never_proven_by_its_unit_name() {
     );
     assert_eq!(report.stdout.bytes, 0);
     assert_eq!(opens(&world), 0, "a cgroup was opened by the unit's name");
-    assert!(report.cleanup.is_confirmed());
+    // Nor acted upon by it (P2-V1-R3B-I4-R3): that cgroup is never killed,
+    // and the operation stays owned while the manager has the unit.
+    let pid = requested_pid(&world);
+    assert_eq!(report.classify(0), ExitClass::CleanupFailed);
+    assert_eq!(world.lock().created().unwrap().kills, 0);
+    let boundary = boundary_of(report);
+    world.release();
+    unloaded(&world);
+    boundary.retry().unwrap();
+    assert!(!is_child(pid));
+    assert_eq!(opens(&world), 0, "a cgroup was opened by the unit's name");
 }
 
 #[test]
 fn i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit() {
     let world = World::new(|state| state.collide = true);
     let report = run_in(&world, None);
-    assert_eq!(
-        stops(&world),
-        0,
+    assert!(
+        world.lock().units.values().any(|unit| !unit.ours),
         "the colliding unit, not this request's, was stopped"
     );
     assert!(matches!(
@@ -858,10 +889,14 @@ fn i4_17_a_name_collision_fails_closed_and_never_touches_the_other_unit() {
     assert_eq!(report.classify(0), ExitClass::CleanupFailed);
     let boundary = boundary_of(report);
     assert!(pending_state(&boundary).collided);
-    assert_eq!(stops(&world), 0);
     world.lock().membership.remove(&pid);
     boundary.retry().unwrap();
-    assert_eq!(stops(&world), 0);
+    let state = world.lock();
+    assert!(state.units.values().any(|unit| !unit.ours));
+    assert!(state
+        .cgroups
+        .iter()
+        .all(|cgroup| cgroup.kills == 0 && !cgroup.killed));
 }
 
 #[test]
@@ -873,7 +908,12 @@ fn i4_18_no_launch_message_reaches_the_helper_before_the_scope_is_proven() {
         |state| state.limit_mismatch = Some("cpu.max"),
         |state| state.listed = false,
         |state| state.unit_loaded = false,
-        |state| state.placement = Placement::Never,
+        // Never placed, and the manager has unloaded the unit by itself
+        // (P2-V1-R3B-I4-R3: while it keeps it, nothing is confirmed).
+        |state| {
+            state.placement = Placement::Never;
+            state.unit_loaded = false;
+        },
     ];
     for (case, script) in unproven.into_iter().enumerate() {
         let world = World::new(script);
@@ -938,7 +978,7 @@ fn i4_19_finalization_ends_a_proven_scope_as_before() {
     assert!(cgroup.killed && cgroup.kills >= 1);
     // Through the retained descriptor only: nothing is stopped, nothing
     // asked of the manager after the proof.
-    assert_eq!(state.count(|call| matches!(call, Call::Stop(_))), 0);
+    assert_eq!(state.count(|call| matches!(call, Call::GetUnit(_))), 1);
     assert_eq!(state.count(|call| matches!(call, Call::Open(_))), 1);
     drop(state);
     assert!(!is_child(pid));
@@ -998,17 +1038,14 @@ fn i4_21_an_unconfirmed_operation_is_a_cleanup_failure_never_an_unavailable_sand
 
 #[test]
 fn i4_22_a_retry_resolves_a_pending_operation() {
-    let world = World::new(|state| {
-        state.placement = Placement::Never;
-        state.stop = Script::always((false, Reply::Timeout));
-    });
+    let world = World::new(|state| state.placement = Placement::Never);
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
     let boundary = boundary_of(report);
-    // Still uncertain: the retry keeps it.
+    // The unit still loaded: the retry keeps it.
     let boundary = boundary.retry().unwrap_err();
     assert!(boundary.holds_scope() && is_child(pid));
-    world.release();
+    unloaded(&world);
     boundary.retry().unwrap();
     let state = world.lock();
     assert!(!state.units.contains_key(&state.requested().unwrap()));
@@ -1018,10 +1055,7 @@ fn i4_22_a_retry_resolves_a_pending_operation() {
 
 #[test]
 fn i4_23_a_retained_boundary_is_retried_without_the_scope_manager() {
-    let world = World::new(|state| {
-        state.placement = Placement::Never;
-        state.stop = Script::always((false, Reply::Error));
-    });
+    let world = World::new(|state| state.placement = Placement::Never);
     let stand_in = StandIn::new();
     let scopes = world.scopes();
     let report = execute(
@@ -1034,7 +1068,7 @@ fn i4_23_a_retained_boundary_is_retried_without_the_scope_manager() {
     let pid = requested_pid(&world);
     let boundary = boundary_of(report);
     drop(scopes);
-    world.release();
+    unloaded(&world);
     assert!(
         boundary.retry().is_ok(),
         "a retained boundary needs the ScopeManager that started it"
@@ -1091,10 +1125,7 @@ fn i4_25_a_panic_after_the_start_request_keeps_its_owner() {
     // Nothing can be confirmed: retained. The reply was delivered, but the
     // panic came before it was recorded, so for the backend the request's
     // outcome is uncertain (I4-R1): a retry keeps it, with its helper.
-    let world = World::new(|state| {
-        state.placement = Placement::Never;
-        state.stop = Script::always((false, Reply::Timeout));
-    });
+    let world = World::new(|state| state.placement = Placement::Never);
     let report = run_in(&world, fault);
     let pid = requested_pid(&world);
     assert_eq!(
@@ -1120,7 +1151,6 @@ fn i4_26_a_panic_after_the_candidate_is_retained_keeps_it() {
         let world = World::new(|state| {
             state.opens_left = Some(1);
             state.phantom = phantom;
-            state.stop = Script::always((false, Reply::Timeout));
         });
         let report = run_in(&world, Some(Fault::Panic(point)));
         assert!(
@@ -1152,21 +1182,28 @@ fn i4_26_a_panic_after_the_candidate_is_retained_keeps_it() {
 }
 
 #[test]
-fn i4_27_a_panic_while_stopping_or_reconciling_retains_the_operation() {
-    for point in [
-        FaultPoint::BeforeScopeStop,
-        FaultPoint::AfterScopeStop,
-        FaultPoint::ScopeReconcile,
-    ] {
-        let world = World::new(|state| state.placement = Placement::Never);
-        let report = run_in(&world, Some(Fault::Panic(point)));
+fn i4_27_a_panic_while_reconciling_retains_the_operation() {
+    // Without a candidate (the unit loaded), and with one that stays
+    // populated.
+    let worlds: [fn(&mut crate::scope::tests::State); 2] = [
+        |state| state.placement = Placement::Never,
+        |state| {
+            failing_proof(state);
+            state.phantom = Phantom::Forever;
+        },
+    ];
+    for (case, script) in worlds.into_iter().enumerate() {
+        let world = World::new(script);
+        let report = run_in(&world, Some(Fault::Panic(FaultPoint::ScopeReconcile)));
         let pid = requested_pid(&world);
-        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{point:?}");
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "case {case}");
         let boundary = boundary_of(report);
-        assert!(pending_state(&boundary).issued, "{point:?}");
-        assert!(boundary.holds_helper() && is_child(pid), "{point:?}");
+        assert!(pending_state(&boundary).issued, "case {case}");
+        assert!(boundary.holds_helper() && is_child(pid), "case {case}");
+        world.release();
+        unloaded(&world);
         boundary.retry().unwrap();
-        assert!(!is_child(pid), "{point:?}");
+        assert!(!is_child(pid), "case {case}");
     }
 }
 
@@ -1196,11 +1233,15 @@ fn i4_29_the_classification_of_settled_executions_is_unchanged() {
     assert_eq!(report.classify(0), ExitClass::SandboxSetupFailed);
     // No scope, and nothing it may have created remains: settled through
     // the retained candidate, or (a delivered start whose helper was never
-    // placed) stopped and observed unloaded.
+    // placed) observed unloaded by the manager itself (P2-V1-R3B-I4-R3:
+    // nothing stops it).
     for script in [
         (|state: &mut crate::scope::tests::State| state.limit_mismatch = Some("pids.max"))
             as fn(&mut crate::scope::tests::State),
-        |state| state.placement = Placement::Never,
+        |state| {
+            state.placement = Placement::Never;
+            state.unit_loaded = false;
+        },
     ] {
         let report = run_in(&World::new(script), None);
         assert!(report.cleanup.is_confirmed());
@@ -1252,7 +1293,6 @@ fn i4_30_no_cgroup_of_the_unit_s_name_is_ever_taken_by_its_path() {
     let world = World::new(|state| {
         state.placement = Placement::Never;
         state.phantom = Phantom::UntilKill;
-        state.stop = Script::always((false, Reply::Timeout));
     });
     let report = run_in(&world, None);
     assert_eq!(
@@ -1267,9 +1307,14 @@ fn i4_30_no_cgroup_of_the_unit_s_name_is_ever_taken_by_its_path() {
         assert!(cgroup.populated() && cgroup.kills == 0);
     }
     let boundary = boundary_of(report);
-    world.lock().stop = Script::always((true, Reply::Delivered));
+    // That process ends and the manager unloads the unit by itself
+    // (P2-V1-R3B-I4-R3: nothing stops it): only then is the operation
+    // confirmed, the cgroup still never opened or killed by the backend.
+    world.release();
+    unloaded(&world);
     boundary.retry().unwrap();
     assert_eq!(opens(&world), 0);
+    assert_eq!(world.lock().created().unwrap().kills, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -1316,12 +1361,7 @@ fn i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner(
     // The manager created nothing: asked, it would answer NoSuchUnit, and
     // the helper is outside. A panic after the request, before or after its
     // outcome was recorded, neither loses nor releases the operation.
-    for point in [
-        FaultPoint::AfterScopeStart,
-        FaultPoint::ScopeReconcile,
-        FaultPoint::BeforeScopeStop,
-        FaultPoint::AfterScopeStop,
-    ] {
+    for point in [FaultPoint::AfterScopeStart, FaultPoint::ScopeReconcile] {
         let world = World::new(|state| uncertain_without_candidate(state, false, Reply::Timeout));
         let report = run_in(&world, Some(Fault::Panic(point)));
         let pid = requested_pid(&world);
@@ -1344,8 +1384,8 @@ fn i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner(
     }
     // A panic inside the manager's own StartTransientUnit, after its effect
     // and before any reply, through the harness's direct owner: one owner
-    // of the operation and its helper. P2-V1-R3B-I4-R2: no start reply was
-    // recorded, so nothing is stopped by the unit's name: it stays loaded.
+    // of the operation and its helper. P2-V1-R3B-I4-R2, -R3: nothing is
+    // acted upon by the unit's name: it stays loaded.
     let world = World::new(|state| {
         uncertain_without_candidate(state, true, Reply::Delivered);
         state.panic_at = Some(Op::Start);
@@ -1360,7 +1400,7 @@ fn i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner(
     };
     assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
     assert!(
-        !world.lock().units.is_empty() && stops(&world) == 0,
+        !world.lock().units.is_empty(),
         "the unit was stopped by its name"
     );
     abandon(boundary, pid);
@@ -1399,10 +1439,7 @@ fn i4r1_02_a_direct_placement_failure_returns_one_owner_of_the_operation_and_its
 fn i4r1_03_dropping_a_direct_owner_is_defense_only_and_never_a_confirmation() {
     // An unresolved failure, dropped: what it holds is ended without
     // waiting, without the manager, and its helper is never reaped.
-    let world = World::new(|state| {
-        uncertain_without_candidate(state, true, Reply::Timeout);
-        state.stop = Script::always((false, Reply::Timeout));
-    });
+    let world = World::new(|state| uncertain_without_candidate(state, true, Reply::Timeout));
     let (placed, pid) = place_cat(&world);
     let failed = placed.expect_err("nothing was proven");
     assert!(!failed.cleanup.is_confirmed());
@@ -1446,7 +1483,6 @@ fn i4r1_03_dropping_a_direct_owner_is_defense_only_and_never_a_confirmation() {
         .iter()
         .all(|call| matches!(call, Call::Kill(_))));
     assert!(state.created().unwrap().killed);
-    assert_eq!(state.count(|call| matches!(call, Call::Stop(_))), 0);
 }
 
 #[test]
@@ -1508,6 +1544,7 @@ fn i4r1_x_a_membership_path_not_in_normal_form_never_locates_a_candidate() {
     for path in ["{slice}/./{unit}", "{slice}//{unit}", "{unit}"] {
         let world = World::new(|state| state.placement = Placement::Elsewhere(path));
         let report = run_in(&world, None);
+        let pid = requested_pid(&world);
         assert!(
             matches!(report.not_run, Some(NotRun::Scope(ScopeError::NotPlaced))),
             "{path}: a membership path not in normal form located the scope: {:?}",
@@ -1515,7 +1552,12 @@ fn i4r1_x_a_membership_path_not_in_normal_form_never_locates_a_candidate() {
         );
         assert!(!launched(&report), "{path}");
         assert_eq!(opens(&world), 0, "{path}");
-        assert!(report.cleanup.is_confirmed(), "{path}");
+        // No candidate, and the manager keeps the unit: owned until it has
+        // unloaded the unit by itself (P2-V1-R3B-I4-R3).
+        let boundary = boundary_of(report);
+        unloaded(&world);
+        boundary.retry().unwrap();
+        assert!(!is_child(pid), "{path}");
     }
 }
 
@@ -1699,23 +1741,16 @@ fn i4r1_11_an_uncertain_start_without_a_candidate_is_not_released_by_no_such_uni
 }
 
 #[test]
-fn i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_reply() {
-    // The manager created the unit and would stop and unload it with a
-    // delivered reply; the kernel never reported the helper in it.
-    // P2-V1-R3B-I4-R2: without a recorded start reply nothing is stopped by
-    // the unit's name, so no stop reply can release it: the unit stays
-    // loaded, and the operation stays owned with its helper.
-    let world = World::new(|state| {
-        uncertain_without_candidate(state, true, Reply::Timeout);
-        state.stop = Script::always((true, Reply::Delivered));
-    });
+fn i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_once_its_unit_is_unloaded() {
+    // The manager created the unit, the reply was lost, and the kernel never
+    // reported the helper in it. Nothing acts on the unit by its name
+    // (P2-V1-R3B-I4-R2, -R3): it stays loaded, and the operation stays owned
+    // with its helper. Once the manager has unloaded it by itself
+    // (NoSuchUnit, the helper outside), still nothing confirms an uncertain
+    // start.
+    let world = World::new(|state| uncertain_without_candidate(state, true, Reply::Timeout));
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
-    assert_eq!(
-        stops(&world),
-        0,
-        "an uncertain start was stopped by its name"
-    );
     assert!(
         !world.lock().units.is_empty(),
         "the unit was stopped by its name"
@@ -1723,34 +1758,30 @@ fn i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_repl
     assert_eq!(
         report.classify(0),
         ExitClass::CleanupFailed,
-        "a StopUnit reply released an uncertain start without a candidate"
+        "an uncertain start without a candidate was released"
     );
     let boundary = boundary_of(report);
     let observed = pending_state(&boundary);
-    assert!(observed.stops == 0 && !observed.settled && !observed.candidate);
+    assert!(!observed.accepted && !observed.settled && !observed.candidate);
     assert!(boundary.holds_helper() && is_child(pid));
-    let boundary = boundary.retry().unwrap_err();
-    assert_eq!(
-        stops(&world),
-        0,
-        "an uncertain start was stopped by its name"
-    );
+    unloaded(&world);
+    let Err(boundary) = boundary.retry() else {
+        panic!("an uncertain start without a candidate was released once its unit was unloaded");
+    };
+    assert!(boundary.holds_helper() && is_child(pid));
     abandon(boundary, pid);
 }
 
 #[test]
-fn i4r1_13_an_uncertain_start_without_a_candidate_is_not_released_by_a_timed_out_stop() {
+fn i4r1_13_an_uncertain_start_without_a_candidate_keeps_its_helper_unreaped() {
     for effect in [true, false] {
-        let world = World::new(|state| {
-            uncertain_without_candidate(state, true, Reply::Timeout);
-            state.stop = Script::always((effect, Reply::Timeout));
-        });
+        let world = World::new(|state| uncertain_without_candidate(state, effect, Reply::Timeout));
         let report = run_in(&world, None);
         let pid = requested_pid(&world);
         assert_eq!(
             report.classify(0),
             ExitClass::CleanupFailed,
-            "{effect}: a timed-out StopUnit released an uncertain start without a candidate"
+            "{effect}: an uncertain start without a candidate was released"
         );
         let boundary = boundary_of(report);
         assert!(
@@ -1785,7 +1816,6 @@ fn i4r1_14_an_uncertain_start_that_places_the_helper_is_acquired_and_may_be_prov
             "{reply:?}: {:?}",
             report.not_run
         );
-        assert_eq!(stops(&world), 0, "{reply:?}");
     }
     // Placed, then a later proof fails: the candidate is retained, ended and
     // confirmed through its descriptor.
@@ -1800,13 +1830,9 @@ fn i4r1_14_an_uncertain_start_that_places_the_helper_is_acquired_and_may_be_prov
     ));
     assert!(!launched(&report) && report.cleanup.is_confirmed());
     assert!(world.lock().created().unwrap().killed);
-    // Never placed while the execution ran (StopUnit never acts); a retry
-    // then finds the helper in the unit's cgroup: acquired, ended and
-    // confirmed through it.
-    let world = World::new(|state| {
-        uncertain_without_candidate(state, true, Reply::Timeout);
-        state.stop = Script::always((false, Reply::Timeout));
-    });
+    // Never placed while the execution ran; a retry then finds the helper
+    // in the unit's cgroup: acquired, ended and confirmed through it.
+    let world = World::new(|state| uncertain_without_candidate(state, true, Reply::Timeout));
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
     let boundary = boundary_of(report);
@@ -1836,20 +1862,19 @@ fn i4r1_15_a_collision_never_stops_or_claims_the_foreign_unit() {
         if holds {
             // The helper is in the foreign unit's cgroup: nothing confirms
             // the operation, and retries still never touch that unit.
-            let boundary = boundary_of(report);
+            let Cleanup::Failed(boundary) = report.cleanup else {
+                panic!("a collision was confirmed while the foreign unit holds the helper");
+            };
             assert!(pending_state(&boundary).collided);
-            let boundary = boundary.retry().unwrap_err();
+            let Err(boundary) = boundary.retry() else {
+                panic!("a collision was confirmed while the foreign unit holds the helper");
+            };
             world.lock().membership.remove(&pid);
             boundary.retry().unwrap();
         } else {
             assert!(report.cleanup.is_confirmed());
         }
         let state = world.lock();
-        assert_eq!(
-            state.count(|call| matches!(call, Call::Stop(_))),
-            0,
-            "{holds}: the foreign unit was stopped"
-        );
         assert!(
             state.calls.iter().all(|call| !matches!(
                 call,
@@ -1988,7 +2013,6 @@ fn i4r1_19_a_binding_failure_s_candidate_is_retried_without_the_scope_manager() 
         state.control_group = Text::Is("/other.slice/{unit}");
         state.phantom = Phantom::Forever;
         state.opens_left = Some(1);
-        state.stop = Script::always((false, Reply::Timeout));
     });
     let stand_in = StandIn::new();
     let scopes = world.scopes();
@@ -2104,7 +2128,10 @@ fn i4r1_23_the_harness_owner_lets_the_helper_hold_its_scope_until_released() {
         .wait_empty(Duration::from_secs(1))
         .unwrap());
     assert!(placed.end().is_confirmed());
-    assert_eq!(world.lock().count(|call| matches!(call, Call::Stop(_))), 0);
+    assert_eq!(
+        world.lock().count(|call| matches!(call, Call::GetUnit(_))),
+        1
+    );
 }
 
 #[test]
@@ -2186,8 +2213,6 @@ fn i4r1_x_a_panic_at_any_ownership_point_leaves_confirmation_or_one_owner() {
         FaultPoint::ScopeBinding,
         FaultPoint::ScopeProperties,
         FaultPoint::ScopeReconcile,
-        FaultPoint::BeforeScopeStop,
-        FaultPoint::AfterScopeStop,
         FaultPoint::AfterScope,
         FaultPoint::Finalizing,
     ];
@@ -2199,7 +2224,6 @@ fn i4r1_x_a_panic_at_any_ownership_point_leaves_confirmation_or_one_owner() {
         Op::UnitId,
         Op::ControlGroup,
         Op::RuntimeMax,
-        Op::Stop,
     ];
     for (reply, placement) in starts {
         let script = move |state: &mut State| {
@@ -2254,17 +2278,14 @@ fn i4r1_x_a_panic_at_any_ownership_point_leaves_confirmation_or_one_owner() {
         }
     }
     // A panic while retrying a retained boundary keeps it.
-    let world = World::new(|state| {
-        state.placement = Placement::Never;
-        state.stop = Script::always((false, Reply::Timeout));
-    });
+    let world = World::new(|state| state.placement = Placement::Never);
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
     let boundary = boundary_of(report);
-    world.lock().panic_at = Some(Op::Stop);
+    unloaded(&world);
+    world.lock().panic_at = Some(Op::GetUnit);
     let boundary = boundary.retry().unwrap_err();
     assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
-    world.release();
     boundary.retry().unwrap();
     assert!(!is_child(pid));
 }
@@ -2283,12 +2304,12 @@ fn requested_pid_or_spawned(world: &World, report: &ExecutionReport) -> Option<u
 }
 
 // ---------------------------------------------------------------------------
-// P2-V1-R3B-I4-R2: the name authority of a scope operation. Only an accepted
-// operation (StartTransientUnit's success reply delivered and recorded) may
-// ask the manager to stop its unit by name. An uncertain one may as well
-// have been refused as already loaded, that answer lost: it is ended only
-// through its retained candidate, by descriptor, or stays owned with its
-// helper unreaped. Over the deterministic simulation only.
+// P2-V1-R3B-I4-R2: an uncertain scope operation (no recorded start reply)
+// may as well have been refused as already loaded, that answer lost: it is
+// ended only through its retained candidate, by descriptor, or stays owned
+// with its helper unreaped. P2-V1-R3B-I4-R3 extends this to every
+// operation: nothing is ever acted upon by a unit name (`i4r3_*`). Over the
+// deterministic simulation only.
 
 /// A process of a foreign unit (a model process id: the model never signals
 /// a real process).
@@ -2308,11 +2329,6 @@ fn foreign_collision(state: &mut State, reply: Reply) {
 fn foreign_untouched(world: &World, case: &str) {
     let state = world.lock();
     let unit = state.requested().unwrap();
-    assert_eq!(
-        state.count(|call| matches!(call, Call::Stop(_))),
-        0,
-        "{case}: the foreign unit was stopped by its name"
-    );
     let foreign = state
         .units
         .get(&unit)
@@ -2376,8 +2392,7 @@ fn i4r2_01_a_lost_collision_reply_never_stops_the_foreign_unit() {
                 && !observed.accepted
                 && !observed.collided
                 && !observed.candidate
-                && !observed.settled
-                && observed.stops == 0,
+                && !observed.settled,
             "{case}: {observed:?}"
         );
         assert!(
@@ -2426,14 +2441,9 @@ fn i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name() {
         );
         world.release();
         let boundary = retained_through(boundary_of(report), 3, &case);
-        assert_eq!(
-            stops(&world),
-            0,
-            "{case}: an uncertain start was stopped by its name"
-        );
         let observed = pending_state(&boundary);
         assert!(
-            observed.issued && !observed.accepted && !observed.settled && observed.stops == 0,
+            observed.issued && !observed.accepted && !observed.settled,
             "{case}: {observed:?}"
         );
         assert!(
@@ -2459,9 +2469,8 @@ fn i4r2_03_an_uncertain_start_whose_helper_appears_later_is_ended_through_its_ca
     let world = World::new(|state| uncertain_without_candidate(state, true, Reply::Timeout));
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
-    assert_eq!(
-        stops(&world),
-        0,
+    assert!(
+        !world.lock().units.is_empty(),
         "an uncertain start was stopped by its name"
     );
     assert_eq!(
@@ -2490,9 +2499,8 @@ fn i4r2_03_an_uncertain_start_whose_helper_appears_later_is_ended_through_its_ca
         "the helper was reaped before its candidate was confirmed"
     );
     let state = world.lock();
-    assert_eq!(
-        state.count(|call| matches!(call, Call::Stop(_))),
-        0,
+    assert!(
+        !state.units.is_empty(),
         "an uncertain start was stopped by its name"
     );
     // Located through the kernel's membership of the helper, retained by
@@ -2522,7 +2530,7 @@ fn i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name()
     let world = World::new(|state| {
         state.start_reply = Reply::Timeout;
         state.control_group = Text::Is("/other.slice/{unit}");
-        state.phantom = Phantom::UntilStop;
+        state.phantom = Phantom::Forever;
     });
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
@@ -2535,9 +2543,8 @@ fn i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name()
         report.not_run
     );
     assert!(!launched(&report), "a launch reached an unproven scope");
-    assert_eq!(
-        stops(&world),
-        0,
+    assert!(
+        !world.lock().units.is_empty(),
         "an uncertain start's candidate was stopped by its name"
     );
     assert_eq!(
@@ -2548,7 +2555,7 @@ fn i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name()
     let boundary = boundary_of(report);
     let observed = pending_state(&boundary);
     assert!(
-        observed.candidate && !observed.accepted && !observed.settled && observed.stops == 0,
+        observed.candidate && !observed.accepted && !observed.settled,
         "{observed:?}"
     );
     assert!(boundary.holds_helper() && is_child(pid));
@@ -2559,9 +2566,8 @@ fn i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name()
     world.release();
     boundary.retry().unwrap();
     assert!(!is_child(pid));
-    assert_eq!(
-        stops(&world),
-        0,
+    assert!(
+        !world.lock().units.is_empty(),
         "an uncertain start's candidate was stopped by its name"
     );
     assert_eq!(opens(&world), 1);
@@ -2572,62 +2578,56 @@ fn i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name()
     });
     let report = run_in(&world, None);
     assert!(report.cleanup.is_confirmed() && !launched(&report));
-    assert_eq!(
-        stops(&world),
-        0,
+    assert!(
+        !world.lock().units.is_empty(),
         "an uncertain start's candidate was stopped by its name"
     );
     assert!(world.lock().created().unwrap().killed);
 }
 
 #[test]
-fn i4r2_05_only_a_recorded_start_reply_authorizes_a_stop_by_name() {
-    // A delivered StartTransientUnit reply, recorded: the manager created the
-    // unit for this request, and the helper never entered it (no candidate).
-    // Only such an operation asks the manager to stop its unit by name, and
-    // the stop's reply (delivered, without effect) confirms nothing: what
-    // remains is observed, and the helper stays unreaped until the manager
-    // answers the unit gone with the helper outside.
-    let world = World::new(|state| {
-        state.placement = Placement::Never;
-        state.stop = Script::always((false, Reply::Delivered));
-    });
-    let report = run_in(&world, None);
-    let pid = requested_pid(&world);
-    assert_eq!(
-        report.classify(0),
-        ExitClass::CleanupFailed,
-        "a StopUnit reply confirmed the operation"
-    );
-    let boundary = boundary_of(report);
-    let observed = pending_state(&boundary);
-    assert!(
-        observed.accepted && observed.stops >= 1 && !observed.settled,
-        "the recorded start reply did not authorize a stop by name: {observed:?}"
-    );
-    assert!(boundary.holds_helper() && is_child(pid));
-    {
+fn i4r2_05_a_recorded_start_reply_authorizes_no_stop_by_name() {
+    // P2-V1-R3B-I4-R3: a delivered StartTransientUnit reply, recorded, shows
+    // that the manager created the unit for this request; it never
+    // authorizes acting on a unit by its name. The helper never entered it
+    // (no candidate) and the manager keeps it loaded: with the reply
+    // recorded or lost, the unit is untouched and the operation stays owned
+    // with its helper unreaped, whatever the manager answers.
+    for reply in [Reply::Delivered, Reply::Timeout] {
+        let world = World::new(|state| {
+            state.start_reply = reply;
+            state.placement = Placement::Never;
+        });
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert_eq!(report.classify(0), ExitClass::CleanupFailed, "{reply:?}");
+        let boundary = boundary_of(report);
+        assert_eq!(
+            pending_state(&boundary).accepted,
+            reply == Reply::Delivered,
+            "{reply:?}"
+        );
+        world.release();
+        let Err(boundary) = boundary.retry() else {
+            panic!("{reply:?}: a loaded unit was taken as gone");
+        };
+        assert!(boundary.holds_helper() && is_child(pid), "{reply:?}");
         let state = world.lock();
-        assert!(state.units.contains_key(&state.requested().unwrap()));
+        let unit = state.requested().unwrap();
+        assert!(
+            state.units.get(&unit).is_some_and(|loaded| loaded.ours),
+            "{reply:?}: the unit was stopped by its name"
+        );
+        assert!(
+            state
+                .calls
+                .iter()
+                .all(|call| !matches!(call, Call::Open(_) | Call::Kill(_))),
+            "{reply:?}: the unit was acted upon by its name"
+        );
+        drop(state);
+        abandon(boundary, pid);
     }
-    // The stop takes effect: the manager answers the unit gone, the helper is
-    // outside; confirmed, and only then reaped.
-    world.release();
-    boundary.retry().unwrap();
-    assert!(!is_child(pid) && observed_unreaped(&world));
-    // The same unit, created with the reply lost: no stop by name at all.
-    let world = World::new(|state| {
-        uncertain_without_candidate(state, true, Reply::Timeout);
-        state.stop = Script::always((false, Reply::Delivered));
-    });
-    let report = run_in(&world, None);
-    let pid = requested_pid(&world);
-    assert_eq!(
-        stops(&world),
-        0,
-        "a stop by name was asked without a recorded start reply"
-    );
-    abandon(boundary_of(report), pid);
 }
 
 #[test]
@@ -2671,9 +2671,8 @@ fn i4r2_07_a_panic_before_the_start_reply_is_recorded_grants_no_name_authority()
         "{:?}",
         report.not_run
     );
-    assert_eq!(
-        stops(&world),
-        0,
+    assert!(
+        !world.lock().units.is_empty(),
         "a stop by name was asked without a recorded start reply"
     );
     assert_eq!(
@@ -2683,15 +2682,14 @@ fn i4r2_07_a_panic_before_the_start_reply_is_recorded_grants_no_name_authority()
     );
     let boundary = boundary_of(report);
     let observed = pending_state(&boundary);
-    assert!(observed.issued && !observed.accepted && observed.stops == 0);
+    assert!(observed.issued && !observed.accepted);
     assert!(boundary.holds_helper() && is_child(pid));
+    // P2-V1-R3B-I4-R3: the outcome stays uncertain, so even the manager's
+    // later absence of the unit (unloaded by itself, the helper outside)
+    // confirms nothing.
     world.release();
+    unloaded(&world);
     let boundary = retained_through(boundary, 1, "a panic before the reply was recorded");
-    assert_eq!(
-        stops(&world),
-        0,
-        "a stop by name was asked without a recorded start reply"
-    );
     abandon(boundary, pid);
     // A panic inside StartTransientUnit itself, after its effect and before
     // any reply, through the harness's direct owner: no panic crosses it; the
@@ -2709,11 +2707,6 @@ fn i4r2_07_a_panic_before_the_start_reply_is_recorded_grants_no_name_authority()
         panic!("a panic inside StartTransientUnit lost or released its operation");
     };
     assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
-    assert_eq!(
-        stops(&world),
-        0,
-        "a stop by name was asked without a recorded start reply"
-    );
     assert!(
         !world.lock().units.is_empty(),
         "the unit was stopped by its name"
@@ -2725,9 +2718,8 @@ fn i4r2_07_a_panic_before_the_start_reply_is_recorded_grants_no_name_authority()
 fn i4r2_08_a_retained_uncertain_operation_never_gains_name_authority_without_its_scope_manager() {
     // The unit created, its reply lost, the helper never placed; the
     // ScopeManager that started it is gone. Retried on the issuing
-    // connection, with the manager answering again and acting on StopUnit,
-    // the retained operation still never stops its unit by name and stays
-    // owned with its helper.
+    // connection, with the manager answering again, the retained operation
+    // still never stops its unit by name and stays owned with its helper.
     let world = World::new(|state| uncertain_without_candidate(state, true, Reply::Timeout));
     let stand_in = StandIn::new();
     let scopes = world.scopes();
@@ -2736,15 +2728,400 @@ fn i4r2_08_a_retained_uncertain_operation_never_gains_name_authority_without_its
     drop(scopes);
     world.release();
     let boundary = retained_through(boundary_of(report), 3, "without its ScopeManager");
-    assert_eq!(
-        stops(&world),
-        0,
-        "a retained uncertain operation was stopped by its name"
-    );
     {
         let state = world.lock();
         assert!(state.units.contains_key(&state.requested().unwrap()));
     }
     assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
     abandon(boundary, pid);
+}
+
+// ---------------------------------------------------------------------------
+// P2-V1-R3B-I4-R3: no scope operation acts on a unit by its name. A unit name
+// is a locator and evidence, never a retained identity: once this request's
+// unit is unloaded, another client can load a unit of its own under the same
+// name. What an operation may have created is ended only through its
+// retained candidate, by descriptor; without one, an accepted operation is
+// confirmed only once the manager answers the unit gone with the helper
+// outside, and stays owned (`CleanupFailed`, its helper unreaped) while a
+// unit of the name is loaded. Over the deterministic simulation only.
+
+/// A process of the foreign unit loaded under a reused name (a model process
+/// id: the model never signals a real process).
+const REUSER: u32 = 4_000_002;
+
+/// This request's unit is unloaded, and another client loads a unit of its
+/// own under the same name, holding `REUSER`: the foreign cgroup's index.
+fn reloaded_by_another(world: &World) -> usize {
+    let mut state = world.lock();
+    let unit = state.requested().unwrap();
+    state.unload(&unit);
+    state.load_foreign(&unit, REUSER)
+}
+
+/// The foreign unit loaded under the reused name (its cgroup at `index`) is
+/// untouched by the calls since `since`: nothing of it opened or read, its
+/// cgroup never killed, the unit still loaded with its process in it.
+fn reuser_untouched(world: &World, index: usize, since: usize, case: &str) {
+    let state = world.lock();
+    let unit = state.requested().unwrap();
+    assert!(
+        state.calls[since..].iter().all(|call| !matches!(
+            call,
+            Call::Open(_)
+                | Call::UnitId(_)
+                | Call::ControlGroup(_)
+                | Call::RuntimeMax(_)
+                | Call::OomPolicy(_)
+        )),
+        "{case}: the foreign unit loaded under the name was claimed: {:?}",
+        &state.calls[since..]
+    );
+    let cgroup = &state.cgroups[index];
+    assert!(
+        !cgroup.killed && cgroup.kills == 0 && !cgroup.removed && cgroup.members.contains(&REUSER),
+        "{case}: the foreign unit loaded under the name was killed"
+    );
+    assert!(
+        state
+            .units
+            .get(&unit)
+            .is_some_and(|loaded| !loaded.ours && loaded.cgroup == Some(index)),
+        "{case}: the foreign unit loaded under the name was stopped"
+    );
+}
+
+#[test]
+fn i4r3_01_an_accepted_operation_never_acts_on_a_unit_loaded_under_its_name_again() {
+    // The start's reply was delivered and recorded: the manager created the
+    // unit for this request. The helper never entered it (no candidate).
+    // Then that unit is unloaded and another client loads a unit of its own
+    // under the same name, with a process of its own. Nothing is acted upon
+    // by the name: the foreign unit is only observed (GetUnit), never
+    // stopped, killed, opened or claimed, and the operation stays owned,
+    // `CleanupFailed`, its helper unreaped, through every retry.
+    let world = World::new(|state| state.placement = Placement::Never);
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert_eq!(
+        report.classify(0),
+        ExitClass::CleanupFailed,
+        "an accepted operation was confirmed while a unit of its name is loaded"
+    );
+    let mut boundary = boundary_of(report);
+    let observed = pending_state(&boundary);
+    assert!(
+        observed.accepted && !observed.candidate && !observed.settled,
+        "{observed:?}"
+    );
+    let since = world.lock().calls.len();
+    let foreign = reloaded_by_another(&world);
+    for retry in 1..=3 {
+        boundary = match boundary.retry() {
+            Ok(()) => panic!(
+                "an accepted operation was confirmed while a unit of its name is loaded (retry {retry})"
+            ),
+            Err(boundary) => boundary,
+        };
+        reuser_untouched(&world, foreign, since, &format!("retry {retry}"));
+        assert!(
+            boundary.holds_scope() && boundary.holds_helper() && is_child(pid),
+            "retry {retry}: the helper of an unresolved operation was reaped"
+        );
+    }
+    {
+        // Only observed: the manager's view of the name, and the helper's
+        // position.
+        let state = world.lock();
+        assert!(
+            state.calls[since..]
+                .iter()
+                .all(|call| matches!(call, Call::GetUnit(_) | Call::Membership(..))),
+            "the foreign unit loaded under the name was acted upon: {:?}",
+            &state.calls[since..]
+        );
+        assert!(state.calls[since..].contains(&Call::GetUnit(state.requested().unwrap())));
+    }
+    assert!(observed_unreaped(&world));
+    abandon(boundary, pid);
+    // Through the live harness's direct owner: the same.
+    let world = World::new(|state| state.placement = Placement::Never);
+    let (placed, pid) = place_cat(&world);
+    let failed = placed.expect_err("a unit the helper never entered was proven");
+    let Cleanup::Failed(boundary) = failed.cleanup else {
+        panic!("an accepted operation was confirmed while a unit of its name is loaded");
+    };
+    let since = world.lock().calls.len();
+    let foreign = reloaded_by_another(&world);
+    let Err(boundary) = boundary.retry() else {
+        panic!("an accepted operation was confirmed while a unit of its name is loaded");
+    };
+    reuser_untouched(&world, foreign, since, "place");
+    assert!(boundary.holds_helper() && is_child(pid));
+    abandon(boundary, pid);
+}
+
+#[test]
+fn i4r3_02_an_accepted_operation_whose_unit_stays_loaded_stays_owned_and_bounded() {
+    // Accepted, the helper never placed, and the manager keeps the unit
+    // loaded: no candidate and no absence, so nothing confirms the
+    // operation. Each settling attempt ends within its bound and only
+    // observes: the unit is never stopped, killed or opened, and the helper
+    // stays unreaped, whatever the manager answers.
+    let world = World::new(|state| state.placement = Placement::Never);
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert_eq!(
+        report.classify(0),
+        ExitClass::CleanupFailed,
+        "an accepted operation was confirmed while its unit is loaded"
+    );
+    let mut boundary = boundary_of(report);
+    world.release();
+    for retry in 1..=3 {
+        let started = Instant::now();
+        boundary = match boundary.retry() {
+            Ok(()) => panic!(
+                "an accepted operation was confirmed while its unit is loaded (retry {retry})"
+            ),
+            Err(boundary) => boundary,
+        };
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "retry {retry}: settling was not bounded"
+        );
+        assert!(
+            boundary.holds_scope() && boundary.holds_helper() && is_child(pid),
+            "retry {retry}: the helper of an accepted operation was reaped while its unit is loaded"
+        );
+    }
+    let observed = pending_state(&boundary);
+    assert!(
+        observed.accepted && !observed.candidate && !observed.settled,
+        "{observed:?}"
+    );
+    {
+        let state = world.lock();
+        let unit = state.requested().unwrap();
+        assert!(
+            state.units.get(&unit).is_some_and(|loaded| loaded.ours),
+            "the unit was stopped by its name"
+        );
+        assert!(
+            state.calls.iter().all(|call| matches!(
+                call,
+                Call::Start(..) | Call::Membership(..) | Call::GetUnit(_)
+            )),
+            "the unit was acted upon by its name: {:?}",
+            state.calls
+        );
+        assert!(state
+            .cgroups
+            .iter()
+            .all(|cgroup| cgroup.kills == 0 && !cgroup.killed));
+    }
+    assert!(
+        observed_unreaped(&world),
+        "the helper of an accepted operation was reaped while its unit is loaded"
+    );
+    abandon(boundary, pid);
+}
+
+#[test]
+fn i4r3_03_an_accepted_operation_is_confirmed_once_the_manager_has_unloaded_its_unit() {
+    // Owned while the manager keeps the unit. Once it has unloaded the unit
+    // by itself, GetUnit answers exactly NoSuchUnit on the issuing
+    // connection and the kernel then reports the helper outside any cgroup
+    // of the name: the operation is confirmed, and only then is the helper
+    // reaped. Nothing was stopped, killed or opened.
+    let world = World::new(|state| state.placement = Placement::Never);
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert_eq!(report.classify(0), ExitClass::CleanupFailed);
+    let boundary = boundary_of(report);
+    let since = world.lock().calls.len();
+    unloaded(&world);
+    assert!(
+        boundary.retry().is_ok(),
+        "an accepted operation was not confirmed once its unit was unloaded"
+    );
+    assert!(!is_child(pid));
+    assert!(
+        observed_unreaped(&world),
+        "the helper was reaped before the operation was confirmed"
+    );
+    {
+        let state = world.lock();
+        let unit = state.requested().unwrap();
+        let after = &state.calls[since..];
+        let asked = after
+            .iter()
+            .rposition(|call| *call == Call::GetUnit(unit.clone()))
+            .expect("the manager's absence was asked for");
+        assert_eq!(after[asked + 1..], [Call::Membership(pid, true)]);
+        assert!(state
+            .calls
+            .iter()
+            .all(|call| !matches!(call, Call::Open(_) | Call::Kill(_))));
+    }
+    // Already unloaded when the first attempt settles: confirmed at once.
+    let world = World::new(|state| {
+        state.placement = Placement::Never;
+        state.unit_loaded = false;
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert!(report.cleanup.is_confirmed(), "{:?}", report.cleanup);
+    assert_eq!(report.classify(0), ExitClass::SandboxUnavailable);
+    assert!(observed_unreaped(&world) && !is_child(pid));
+}
+
+#[test]
+fn i4r3_04_an_accepted_operation_s_candidate_is_ended_by_descriptor_and_observed() {
+    // Accepted, the helper placed (its cgroup retained by descriptor as the
+    // candidate), then a proof fails. The candidate is ended with
+    // `cgroup.kill` through its descriptor and confirmed once observed empty;
+    // nothing is asked of the manager after the proof, and the unit, still
+    // loaded, is never acted upon by its name.
+    let world = World::new(|state| {
+        failing_proof(state);
+        state.phantom = Phantom::UntilKill;
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert!(report.cleanup.is_confirmed(), "{:?}", report.cleanup);
+    assert_eq!(report.classify(0), ExitClass::SandboxUnavailable);
+    {
+        let state = world.lock();
+        let unit = state.requested().unwrap();
+        let proof = state
+            .calls
+            .iter()
+            .rposition(|call| matches!(call, Call::OomPolicy(_)))
+            .expect("the proof");
+        assert_eq!(
+            state.calls[proof + 1..],
+            [Call::Kill(format!("{SLICE}/{unit}"))],
+            "the candidate was not ended through its descriptor alone"
+        );
+        assert!(state.created().unwrap().killed);
+        assert!(
+            state.units.get(&unit).is_some_and(|loaded| loaded.ours),
+            "the unit was stopped by its name"
+        );
+    }
+    assert!(observed_unreaped(&world) && !is_child(pid));
+    // Still populated after the kill (a process the kill does not end):
+    // never confirmed meanwhile; once empty, confirmed through the
+    // descriptor.
+    let world = World::new(|state| {
+        failing_proof(state);
+        state.phantom = Phantom::Forever;
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert_eq!(
+        report.classify(0),
+        ExitClass::CleanupFailed,
+        "a candidate still populated was confirmed"
+    );
+    let boundary = boundary_of(report);
+    assert!(pending_state(&boundary).candidate && is_child(pid));
+    world.release();
+    boundary.retry().unwrap();
+    assert!(!is_child(pid));
+    assert_eq!(opens(&world), 1);
+    // Removed, and the name reused: this request's unit unloaded with its
+    // cgroup, and another client's unit loaded under the same name in a new
+    // cgroup of the same path. The candidate is the removed cgroup, by
+    // descriptor: confirmed (removed), and the foreign cgroup of that path
+    // is never opened or killed.
+    let world = World::new(|state| {
+        failing_proof(state);
+        state.phantom = Phantom::Forever;
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    let boundary = boundary_of(report);
+    world.release();
+    let since = world.lock().calls.len();
+    let foreign = reloaded_by_another(&world);
+    assert!(
+        boundary.retry().is_ok(),
+        "a removed candidate was not confirmed through its descriptor"
+    );
+    assert!(!is_child(pid));
+    reuser_untouched(&world, foreign, since, "a removed candidate");
+    assert_eq!(opens(&world), 1);
+}
+
+#[test]
+fn i4r3_09_a_retained_operation_retried_without_its_scope_manager_never_acts_by_name() {
+    // Accepted and uncertain, the helper never placed, the unit loaded; the
+    // ScopeManager that started it is gone. Retried on the issuing
+    // connection: each attempt is bounded and only observes, nothing is
+    // acted upon by the name, and the operation stays owned with its
+    // helper. Then the manager unloads the unit by itself: that confirms the
+    // accepted operation, never the uncertain one.
+    for reply in [Reply::Delivered, Reply::Timeout] {
+        let case = format!("{reply:?}");
+        let world = World::new(|state| {
+            state.start_reply = reply;
+            state.placement = Placement::Never;
+        });
+        let stand_in = StandIn::new();
+        let scopes = world.scopes();
+        let report = execute(&scopes, &stand_in.program(), launch_spec(), &LIMITS, None);
+        let pid = requested_pid(&world);
+        drop(scopes);
+        world.release();
+        let mut boundary = boundary_of(report);
+        for retry in 1..=3 {
+            let started = Instant::now();
+            boundary = match boundary.retry() {
+                Ok(()) => panic!(
+                    "{case}: an operation was confirmed while its unit is loaded (retry {retry})"
+                ),
+                Err(boundary) => boundary,
+            };
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "{case}: retry {retry} was not bounded"
+            );
+        }
+        {
+            let state = world.lock();
+            let unit = state.requested().unwrap();
+            assert!(
+                state.units.get(&unit).is_some_and(|loaded| loaded.ours),
+                "{case}: the unit was stopped by its name"
+            );
+            assert!(
+                state.calls.iter().all(|call| matches!(
+                    call,
+                    Call::Start(..) | Call::Membership(..) | Call::GetUnit(_)
+                )),
+                "{case}: the unit was acted upon by its name: {:?}",
+                state.calls
+            );
+        }
+        assert!(
+            boundary.holds_scope() && boundary.holds_helper() && is_child(pid),
+            "{case}"
+        );
+        unloaded(&world);
+        match (reply, boundary.retry()) {
+            (Reply::Delivered, Ok(())) => assert!(!is_child(pid), "{case}"),
+            (Reply::Delivered, Err(_)) => {
+                panic!("{case}: an accepted operation was not confirmed once its unit was unloaded")
+            }
+            (_, Ok(())) => {
+                panic!("{case}: an uncertain start was resolved by its unit name or presence")
+            }
+            (_, Err(boundary)) => {
+                let boundary = retained_through(boundary, 1, &case);
+                abandon(boundary, pid);
+            }
+        }
+    }
 }

@@ -1,0 +1,1 @@
+self-test anchor missing in scope/manager.rs: '    fn stop_unit(&self, unit: &str) -> Remote<()>;'

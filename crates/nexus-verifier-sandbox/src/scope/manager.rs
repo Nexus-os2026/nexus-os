@@ -80,10 +80,14 @@ pub(crate) struct ScopeRequest<'a> {
 /// The manager operations of the scope module. Destination, object path and
 /// interfaces are fixed by the implementation; callers name only the
 /// backend-generated unit and the object path the manager itself returned.
+///
+/// One request acts (the start, for a fresh name); every other one only
+/// reads. Nothing here acts on a unit by its name or its object path
+/// (P2-V1-R3B-I4-R3): a name is a locator and evidence, never a retained
+/// identity, so a pending operation is ended only through the cgroup it
+/// retained by descriptor (`super::pending`).
 pub(crate) trait Manager: Send + Sync {
     fn start_scope(&self, request: &ScopeRequest<'_>) -> Started;
-    /// StopUnit. Its outcome is never a confirmation of anything.
-    fn stop_unit(&self, unit: &str) -> Remote<()>;
     fn get_unit(&self, unit: &str) -> Remote<Presence>;
     /// The scope's `RuntimeMaxUSec`, at the object path GetUnit returned;
     /// `Answered(None)`: a value that is not an unsigned integer.
@@ -223,19 +227,6 @@ impl Manager for ZbusManager {
             Ok(Err(name)) if name == UNIT_EXISTS => Started::Collision,
             Ok(Err(name)) => Started::Uncertain(format!("StartTransientUnit: {name}")),
             Err(reason) => Started::Uncertain(reason),
-        }
-    }
-
-    fn stop_unit(&self, unit: &str) -> Remote<()> {
-        match self.call::<_, zbus::zvariant::OwnedObjectPath>(
-            SYSTEMD_PATH,
-            MANAGER,
-            "StopUnit",
-            &(unit, "replace"),
-        ) {
-            Ok(Ok(_job)) => Remote::Answered(()),
-            Ok(Err(name)) => Remote::Uncertain(format!("StopUnit: {name}")),
-            Err(reason) => Remote::Uncertain(reason),
         }
     }
 

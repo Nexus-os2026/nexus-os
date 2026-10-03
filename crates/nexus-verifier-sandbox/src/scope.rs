@@ -22,9 +22,9 @@
 //! nothing.
 //!
 //! **Uncertain remote operations (P2-V1-R3B-I4, -R1).** StartTransientUnit
-//! and StopUnit are remote calls whose effect and reply are independent: a
-//! timeout or a broken transport proves nothing about what the manager did,
-//! and a reply proves nothing about what is left. So from the moment a start
+//! is a remote call whose effect and reply are independent: a timeout or a
+//! broken transport proves nothing about what the manager did, and a reply
+//! proves nothing about what is left. So from the moment a start
 //! request may have been dispatched, the possible scope is owned as a
 //! pending scope operation until independent observation either proves it
 //! (then, and only then, it becomes a [`Scope`]) or confirms that nothing it
@@ -38,8 +38,10 @@
 //! crate-private: it is owned only beside its helper (by an execution, its
 //! retained boundary, or the live harness's scoped helper) and stays
 //! retryable after the [`ScopeManager`] that started it is gone. Nothing is
-//! reconstructed from a unit name, a process id or a path, and nothing
-//! sweeps units by name. The states and transitions are documented in
+//! reconstructed from a unit name, a process id or a path, nothing sweeps
+//! units by name, and nothing is ever acted upon by a unit name
+//! (P2-V1-R3B-I4-R3): a pending operation is ended only through the cgroup
+//! it retained by descriptor. The states and transitions are documented in
 //! `scope/pending.rs`.
 //!
 //! A normal build constructs a manager only with [`ScopeManager::connect`]
@@ -69,8 +71,8 @@ use native::{CgroupDir, Kernel, Native};
 
 /// Bound on waiting for systemd to move the helper into its scope.
 pub const PLACEMENT_TIMEOUT: Duration = Duration::from_secs(10);
-/// Bound on confirming that what a pending scope may have created is gone,
-/// after each StopUnit attempt (P2-V1-R3B-I4).
+/// Bound on each attempt to observe that what a pending scope may have
+/// created is gone (P2-V1-R3B-I4).
 pub const SETTLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug)]
@@ -106,7 +108,7 @@ pub fn expected_limit_files(limits: &ResourcePolicy) -> [(&'static str, String);
 pub(crate) struct Timing {
     /// Waiting for the helper to appear in the new scope.
     pub placement: Duration,
-    /// Confirming a pending scope gone after a StopUnit attempt.
+    /// Observing, in one settling attempt, that a pending scope is gone.
     pub settle: Duration,
     /// Between two observations.
     pub poll: Duration,

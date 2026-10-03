@@ -1,0 +1,60 @@
+P2-V1-R3B-I4-R3: the base's settling, removed or changed by R3 (git show 2438f47f1726ae4075a52878bec005b6047691f0:crates/nexus-verifier-sandbox/src/scope/pending.rs; line numbers of the base)
+
+  174      /// Settle this operation: end whatever it may have created and confirm
+  175      /// it gone. `true` once nothing it may have created can still hold or
+  176      /// receive a process; `false` keeps it owned, for another attempt. Only
+  177      /// the execution's finalizer settles, after killing `helper`, the bound
+  178      /// helper its owner keeps unreaped (another helper is ignored). A stop by
+  179      /// the unit's name is asked only for an accepted operation
+  180      /// ([`Self::stop_authorized`]).
+  181      pub(crate) fn reconcile(&mut self, helper: Option<&Helper>, fault: Option<Fault>) -> bool {
+  182          if !self.unresolved() {
+  183              return true;
+  184          }
+  185          let controller = Arc::clone(&self.controller);
+  186          let helper = helper.filter(|helper| self.binds(helper));
+  187          if self.collided {
+  188              // Refused before any effect: the unit of that name is not this
+  189              // request's, so it is never stopped or claimed.
+  190              fault::at(fault, FaultPoint::ScopeReconcile);
+  191              self.settled = outside(&controller, helper, &self.unit);
+  192              return self.settled;
+  193          }
+  194          // Cleanup ownership: everything in the candidate is ended.
+  195          if let Some(candidate) = &self.candidate {
+  196              let _ = candidate.kill();
+  197          }
+  198          self.acquire(&controller, helper);
+  199          fault::at(fault, FaultPoint::ScopeReconcile);
+  200          if self.gone(&controller, helper) {
+  201              self.settled = true;
+  202              return true;
+  203          }
+  204          // Name authority (P2-V1-R3B-I4-R2): without a recorded start reply,
+  205          // nothing is stopped by the unit's name; what the operation may have
+  206          // created is ended only through its candidate, and observed.
+  207          if !self.stop_authorized() {
+  208              return self.observe(&controller, helper, fault);
+  209          }
+  210          fault::at(fault, FaultPoint::BeforeScopeStop);
+  211          self.stops = self.stops.saturating_add(1);
+  212          // Neither reply is a confirmation, nor a failure proof that nothing
+  213          // was stopped: it is kept for diagnostics only, and what remains is
+  214          // observed again.
+  215          self.last_stop = Some(controller.manager.stop_unit(&self.unit));
+  216          fault::at(fault, FaultPoint::AfterScopeStop);
+  217          self.observe(&controller, helper, fault)
+  218      }
+
+  220      /// Whether this operation may ask the manager to stop its unit by name
+  221      /// (P2-V1-R3B-I4-R2): only once StartTransientUnit's success reply (its
+  222      /// job path) was delivered and recorded, which shows that the manager
+  223      /// created the unit for this very request. The unit name grants nothing:
+  224      /// an uncertain start (a timeout, a broken transport, an unexpected
+  225      /// error, a reply that does not decode, or a panic before the reply was
+  226      /// recorded) may as well have been refused as already loaded
+  227      /// (`UnitExists`) with that answer lost, the name then a foreign unit's;
+  228      /// a collision's unit is foreign. Neither is ever stopped by name.
+  229      fn stop_authorized(&self) -> bool {
+  230          self.accepted
+  231      }

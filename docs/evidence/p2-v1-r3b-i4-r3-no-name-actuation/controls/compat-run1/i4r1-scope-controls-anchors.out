@@ -1,0 +1,2 @@
+{"runner": "docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/scope_controls.py", "runner_sha256": "6e84f051e0b050966db2fa277e356614b2074d1fef3e36e3ad949c4f67f611f2", "r2_adapted": ["NC-I4R1-STOP-REPLY-ABSENCE", "NC-I4-X-COLLISION-CLAIMED"]}
+NC-I4-STOP-OK-CONFIRMS: anchor occurs 0 times in crates/nexus-verifier-sandbox/src/scope/pending.rs: '        self.last_stop = Some(controller.manager.stop_unit(&self.unit));\n'

@@ -1,0 +1,14 @@
+P2-V1-R3B-I4-R3 protected refs before committing, 2026-10-03T10:08:37Z
+main                                             expected 4b36f60694148b60029733bc7b3d26e5a215d460 local 4b36f60694148b60029733bc7b3d26e5a215d460 github 4b36f60694148b60029733bc7b3d26e5a215d460 OK
+repair/p2-validation-workflow-bootstrap          expected 4b36f60694148b60029733bc7b3d26e5a215d460 local 4b36f60694148b60029733bc7b3d26e5a215d460 github 4b36f60694148b60029733bc7b3d26e5a215d460 OK
+implement/phase2-governed-verification           expected 4d6763a8afe998bb5a54f0b9ecfd420cd4abfa8f local 4d6763a8afe998bb5a54f0b9ecfd420cd4abfa8f github 4d6763a8afe998bb5a54f0b9ecfd420cd4abfa8f OK
+rebuild/phase0-trust-boundary                    expected f727f5c39fab8d5c729a55eb28ad576d3d56ce47 local f727f5c39fab8d5c729a55eb28ad576d3d56ce47 github f727f5c39fab8d5c729a55eb28ad576d3d56ce47 OK
+evidence/phase0-closure                          expected e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1 local e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1 github e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1 OK
+rebuild/phase1-governed-coding                   expected 14270a9a38770ac84456c1f812042d2967edec42 local 14270a9a38770ac84456c1f812042d2967edec42 github 14270a9a38770ac84456c1f812042d2967edec42 OK
+evidence/phase1-closure                          expected c237937189b5977eaad01acad6a4c52bcce796cc local c237937189b5977eaad01acad6a4c52bcce796cc github c237937189b5977eaad01acad6a4c52bcce796cc OK
+review/p2-v1-cleanup-observers                   expected 45898e05178a56efaadeb1f8f9ee7a0a521c72c9 local 45898e05178a56efaadeb1f8f9ee7a0a521c72c9 github 45898e05178a56efaadeb1f8f9ee7a0a521c72c9 OK
+evidence/p2-v1-r3b-i2-r1                         expected 8e2c46c00cd4071bbae41815d1d1cd0c4814655f local 8e2c46c00cd4071bbae41815d1d1cd0c4814655f github 8e2c46c00cd4071bbae41815d1d1cd0c4814655f OK
+review/p2-v1-custody-recorder-design             expected 7689e599ed8fc89ec7720d13869ef58cab767ecb local 7689e599ed8fc89ec7720d13869ef58cab767ecb github 7689e599ed8fc89ec7720d13869ef58cab767ecb OK
+review/p2-v1-custody-store-implementation        expected 3805204f941d9694b2c0c36549d32a5f4e6c157c local 3805204f941d9694b2c0c36549d32a5f4e6c157c github 3805204f941d9694b2c0c36549d32a5f4e6c157c OK
+review/p2-v1-native-scope-ownership              expected ea475eac8c2a9b527bd1b6e1f6e7b47beede7203 local ea475eac8c2a9b527bd1b6e1f6e7b47beede7203 github ea475eac8c2a9b527bd1b6e1f6e7b47beede7203 OK
+review/p2-v1-native-scope-host-qualification     expected 2438f47f1726ae4075a52878bec005b6047691f0 local 2438f47f1726ae4075a52878bec005b6047691f0 github 2438f47f1726ae4075a52878bec005b6047691f0 OK

@@ -1,0 +1,17 @@
+P2-V1-R3B-I4-R3: the base's StopUnit, removed by R3 (git show 2438f47f1726ae4075a52878bec005b6047691f0:crates/nexus-verifier-sandbox/src/scope/manager.rs; line numbers of the base)
+
+   85      /// StopUnit. Its outcome is never a confirmation of anything.
+   86      fn stop_unit(&self, unit: &str) -> Remote<()>;
+
+  229      fn stop_unit(&self, unit: &str) -> Remote<()> {
+  230          match self.call::<_, zbus::zvariant::OwnedObjectPath>(
+  231              SYSTEMD_PATH,
+  232              MANAGER,
+  233              "StopUnit",
+  234              &(unit, "replace"),
+  235          ) {
+  236              Ok(Ok(_job)) => Remote::Answered(()),
+  237              Ok(Err(name)) => Remote::Uncertain(format!("StopUnit: {name}")),
+  238              Err(reason) => Remote::Uncertain(reason),
+  239          }
+  240      }

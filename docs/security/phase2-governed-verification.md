@@ -217,8 +217,9 @@ the unit has the runtime backstop and `OOMPolicy=continue` (an
 out-of-memory kill ends only the chosen process; the manager never stops the
 scope for it).
 
-Uncertain remote operations (P2-V1-R3B-I4, -R1). StartTransientUnit and
-StopUnit are remote operations whose effect and reply are independent. A
+Uncertain remote operations (P2-V1-R3B-I4, -R1, -R3). StartTransientUnit
+is a remote operation whose effect and reply are independent, and the only
+request to the manager that acts; every other one reads (P2-V1-R3B-I4-R3). A
 timeout, a broken transport, an unexpected error reply or a reply that does
 not decode is evidence of uncertainty, never of absence or of success. The
 only definite answers relied on are a delivered reply, systemd's
@@ -271,10 +272,10 @@ What the primary sources establish, and what they do not
   through the candidate cgroup. Without a candidate nothing the manager
   answers confirms it (P2-V1-R3B-I4-R1): not a later `NoSuchUnit` with the
   helper outside, since the request may still be processed after GetUnit
-  is answered (above), and not any `StopUnit` reply. It stays Pending, its
-  helper killed but unreaped, its execution `CleanupFailed`: possibly for
-  the life of the backend process. Nothing of it is ever stopped by the
-  unit's name (P2-V1-R3B-I4-R2, name authority below).
+  is answered (above). It stays Pending, its helper killed but unreaped,
+  its execution `CleanupFailed`: possibly for the life of the backend
+  process. Nothing of it is ever acted upon by the unit's name
+  (P2-V1-R3B-I4-R2, -R3, below).
 - The candidate. The cgroup the kernel reports the helper in, at an
   absolute path in normal form whose last component is the unit's name, is
   retained by descriptor as soon as it is seen, before any later fallible
@@ -305,29 +306,45 @@ What the primary sources establish, and what they do not
   connection that no unit of the name is loaded and the kernel then reports
   the helper outside any cgroup of that name (GetUnit was sent after that
   reply arrived, so after the request was handled, and systemd unloads no
-  unit that still has a job or running processes). Otherwise, for an
-  accepted operation only, `StopUnit` is attempted: its reply is never a
-  confirmation, and a failed or timed-out one never proves that nothing
-  was stopped; after every attempt the state is observed again, within a
-  bound. An uncertain operation is only observed, within the same bound:
-  once the kernel reports the helper in a cgroup of the unit, that cgroup
-  is retained, ended through its descriptor and confirmed only once empty
-  or removed. A collided operation is confirmed once the helper is outside
-  any cgroup of that name.
-- Name authority (P2-V1-R3B-I4-R2). `StopUnit` acts on a unit by its name,
-  so it is asked only for an operation whose StartTransientUnit success
-  reply (its job path) was delivered and recorded (accepted): only that
-  reply shows that the manager created the unit for this request. The
-  generated name is a locator, never authority, however random: an
-  uncertain start may as well have been refused as already loaded
-  (`UnitExists`) with that answer lost, the name then a foreign unit's, and
-  a collision's unit is foreign; neither is ever stopped by name, and
-  neither GetUnit's presence or absence nor the helper's position grants
-  or settles anything. A reply that arrived but was not recorded before a
-  panic grants nothing. The availability cost is explicit: an uncertain
-  operation without a candidate is never confirmed; its helper stays an
-  unreaped zombie and its execution `CleanupFailed`, possibly for the life
-  of the backend process.
+  unit that still has a job or running processes). Otherwise the
+  operation, accepted or not, is only observed, within a bound
+  (P2-V1-R3B-I4-R3): once the kernel reports the helper in a cgroup of the
+  unit, that cgroup is retained, ended through its descriptor and
+  confirmed only once empty or removed. A collided operation is confirmed
+  once the helper is outside any cgroup of that name.
+- No name actuation (P2-V1-R3B-I4-R2, -R3). **No pending verifier scope
+  operation is actively cleaned by unit name.** Unit names are locators and
+  evidence only, never a retained identity, however random: once a unit is
+  unloaded, another client of the same manager can load a unit of its own
+  under the same name. R2 still let an accepted operation stop its unit by
+  name, and a foreign unit loaded under that name after this backend's was
+  unloaded was stopped (reproduced against the R2 candidate,
+  `docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/`); R3 removes the
+  request. The manager's interface has exactly one request that acts,
+  StartTransientUnit for a fresh name; GetUnit and the property reads only
+  observe. Nothing stops, kills or otherwise acts on a unit by its name, by
+  the object path GetUnit returns (derived from the name, and as
+  reusable), or after comparing its properties.
+  - An accepted start reply (its job path, delivered and recorded) changes
+    absence semantics, not actuation authority: it lets the manager's
+    `NoSuchUnit`, with the helper then outside, confirm an operation
+    without a candidate, and authorizes nothing. A reply that arrived but
+    was not recorded before a panic changes nothing.
+  - Candidate cleanup is descriptor-based: what an operation may have
+    created is ended only with `cgroup.kill` through the cgroup it retained
+    by descriptor, and confirmed only once that cgroup is observed empty or
+    removed.
+  - An accepted operation without a candidate can remain `CleanupFailed`,
+    its helper an unreaped zombie, until its unit is independently observed
+    absent.
+  - An uncertain operation without a candidate can remain `CleanupFailed`
+    indefinitely, possibly for the life of the backend process: an
+    uncertain start may as well have been refused as already loaded
+    (`UnitExists`) with that answer lost, the name then a foreign unit's,
+    and neither GetUnit's presence or absence nor the helper's position
+    settles it.
+  - A same-name replacement can delay cleanup but can never be harmed: it
+    is only observed (GetUnit), never stopped, killed, opened or claimed.
 - What cannot be confirmed is `CleanupFailed`. The pending operation stays
   in the `RetainedBoundary` with the unreaped helper, and a retry reconciles
   it again on the issuing connection, without the `ScopeManager` that
@@ -752,11 +769,11 @@ contacts a bus or creates a cgroup. Behavioural source-mutation controls
 |---|---|
 | a confirmed start; a start without effect, its reply lost (never proven absent: P2-V1-R3B-I4-R1); with effect, its reply lost (discovered and proven); a lost connection | `i4_01`–`i4_03` (`scope::tests`) |
 | a property or a manager query uncertain after the candidate is retained; mismatched limits, runtime backstop, out-of-memory policy, membership; a name never proves | `i4_04`, `i4_10`, `i4_12`–`i4_16` |
-| a unit the helper never entered; `StopUnit` failed, delivered with the scope still populated, timed out with the target gone or remaining | `i4_05`–`i4_09` |
+| a unit the helper never entered, unloaded by the manager or still loaded (P2-V1-R3B-I4-R3: nothing stops it); a candidate still populated after its kill; a target observed gone; a timed-out observation | `i4_05`–`i4_09` |
 | the manager's absence with the helper in a cgroup of the unit's name; a name collision | `i4_11`, `i4_17` |
 | no launch message before the proof | `i4_18` (a stand-in helper that shows any launch reaching it) |
 | finalization of a proven and of a pending scope; `CleanupFailed`; retry, also without the `ScopeManager`; drop | `i4_19`–`i4_24` |
-| a panic after the start request, after the candidate is retained, while proving, while stopping or reconciling; ordering; classification | `i4_25`–`i4_30` |
+| a panic after the start request, after the candidate is retained, while proving, while reconciling; ordering; classification | `i4_25`–`i4_30` |
 
 P2-V1-R3B-I4-R1 controls (scope ownership closure). Over the same
 simulation; nothing in them contacts a bus or creates a cgroup.
@@ -770,17 +787,17 @@ in `docs/evidence/p2-v1-r3b-i4-r1-native-scope/`.
 | the harness owner: one owner of the operation and its helper; drop is defense only; the scope-hold sequence | `i4r1_02`, `i4r1_03`, `i4r1_23` |
 | a normal build: a manager only by `connect`; no public pending operation, direct start, settling or split failure | `i4r1_04`, `i4r1_05`; the normal-build API guards; desktop `p2_g_01`, `p2_g_06` |
 | the binding: a cgroup of the unit's name elsewhere; a control group not exactly the kernel's; one unavailable or uncertain; a unit id not exactly the name; the exact binding; no launch before it | `i4r1_06`–`i4r1_10`, `i4r1_17` |
-| an uncertain start without a candidate: not released by `NoSuchUnit` or a timed-out stop, and (P2-V1-R3B-I4-R2) never stopped by name; acquired once the helper is placed | `i4r1_11`–`i4r1_14` |
+| an uncertain start without a candidate: not released by `NoSuchUnit`, nor once its unit is unloaded; its helper kept unreaped; (P2-V1-R3B-I4-R2, -R3) never acted upon by name; acquired once the helper is placed | `i4r1_11`–`i4r1_14` |
 | collisions; the proven lifecycle; a retry without the `ScopeManager` | `i4r1_15`, `i4r1_16`, `i4r1_18`, `i4r1_19` |
 | the helper's identity: refused instead of wrapping; no spawn once exhausted | `i4r1_20`, `i4r1_21` |
 | no real manager or kernel in unit tests | `i4r1_24`; the strace proof in the evidence |
 
 P2-V1-R3B-I4-R2 name authority. A collision whose `UnitExists` reply was
 lost made settling stop the foreign unit by its name (reproduced on the
-model against the I4-R1 code, and by the tests below against it); settling
-now asks a stop by name only for an accepted operation. Tests over the
-deterministic model, controls and evidence in
-`docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/`.
+model against the I4-R1 code, and by the tests below against it); R2
+limited a stop by name to an accepted operation, and P2-V1-R3B-I4-R3
+(below) removed it. Tests over the deterministic model, controls and
+evidence in `docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/`.
 
 | Control | Test |
 |---|---|
@@ -788,11 +805,29 @@ deterministic model, controls and evidence in
 | an uncertain start without effect or candidate: never stopped by name, never resolved by the manager's absence, its helper unreaped after bounded retries | `i4r2_02` |
 | an uncertain start whose helper is placed later: its cgroup retained by descriptor through the helper's membership, ended and observed empty, the helper reaped only then; no stop by name | `i4r2_03` |
 | an uncertain start's candidate whose proof fails: ended by descriptor, never stopped by name, nothing launched, retained while populated | `i4r2_04` |
-| a recorded start reply alone authorizes a stop by name, whose reply confirms nothing | `i4r2_05` |
+| (P2-V1-R3B-I4-R3) a recorded start reply authorizes no stop by name: the unit, still loaded, is untouched and the operation owned, the reply recorded or lost | `i4r2_05` |
 | a delivered `UnitExists`: never stopped or claimed (unchanged) | `i4r2_06` |
-| a panic before the start reply is recorded: no stop by name, no owner escape | `i4r2_07` |
+| a panic before the start reply is recorded: uncertain, so never confirmed, even by the manager's later absence; no stop by name, no owner escape | `i4r2_07` |
 | a retained uncertain operation retried without its `ScopeManager`: no stop by name | `i4r2_08` |
-| the only stop by name is behind the recorded start reply, which is set in that reply's arm only | `i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name` |
+| the recorded start reply is set in that reply's arm only (the R2 structural guard, replaced by P2-V1-R3B-I4-R3's) | `i4r3_10_a_recorded_start_reply_changes_only_what_absence_confirms` |
+
+P2-V1-R3B-I4-R3 (no name actuation). An accepted operation (its start reply
+recorded) still stopped its unit by name when settling could not confirm it,
+and once that unit was unloaded, a foreign unit loaded under the same name
+was stopped (reproduced on the model against the R2 code). The manager's
+StopUnit is removed: its interface has no request that acts besides the
+start, and settling only observes. Tests over the deterministic model;
+controls and evidence in `docs/evidence/p2-v1-r3b-i4-r3-no-name-actuation/`.
+
+| Control | Test |
+|---|---|
+| an accepted operation without a candidate whose unit is replaced by a foreign one under the same name: the replacement only observed (never stopped, killed, opened or claimed); the operation owned, `CleanupFailed`, its helper unreaped, through retries and through the harness owner | `i4r3_01` |
+| an accepted operation without a candidate whose unit stays loaded: each attempt bounded and only observing; retained, its helper unreaped | `i4r3_02` |
+| an accepted operation whose unit the manager has unloaded: exactly `NoSuchUnit`, then the helper outside, confirm it; the helper reaped only then | `i4r3_03` |
+| an accepted operation's candidate: ended with `cgroup.kill` through its descriptor, confirmed empty or removed; the name then reused by a foreign unit, that unit's cgroup never touched | `i4r3_04` |
+| an uncertain candidate; an uncertain start without one; a definite collision; a panic before the start reply is recorded (R2's tests, preserved) | `i4r2_03`, `i4r2_04`; `i4r2_01`, `i4r2_02`; `i4r2_06`, `i4r1_15`; `i4r2_07` |
+| a retained operation, accepted or uncertain, retried without its `ScopeManager`: bounded and only observing; its unit unloaded then confirms the accepted one, never the uncertain one | `i4r3_09` |
+| the manager's interface: one request that acts (the start), reads otherwise; settling asks the manager only GetUnit; the recorded start reply gates only what absence confirms | `i4r3_10_the_manager_can_only_start_a_scope_and_read`, `i4r3_10_settling_never_acts_on_a_unit_by_its_name`, `i4r3_10_a_recorded_start_reply_changes_only_what_absence_confirms` (structural) |
 
 P2-V1-R3B-I4-Q1 host qualification (live). The live suite qualifies, on
 the supported host and the same live helper the production path uses, the
@@ -873,7 +908,7 @@ the eight runtime files) and with path-based metadata mutation denied.
 | Spawn a process | `launcher::Helper::spawn` (the only `Command::new` in the sandbox crate) | only `execution::run`, only from the desktop's verification module after the owner's recorded native approval; the program is `HelperProgram::installed()` (root-owned, `/usr/bin`, beside the installed application; the arbitrary-path `HelperProgram::at` and the other live-harness seams exist only for the sandbox crate's own tests, through its `live-sandbox-harness` feature, which only its own dev-dependency enables); cleared environment, no arguments, `/` as working directory, no `pre_exec`; each helper's backend-local identity is allocated before it is spawned and never wraps, and none is spawned once they are exhausted (P2-V1-R3B-I4-R1) |
 | Execute project code | the helper's verifier child (`execveat` of the verified `cargo` by descriptor) | every mandatory layer established and re-checked first; any failure reports a setup stage and executes nothing |
 | Namespaces | the helper (`unshare` once) | uid/gid identity maps written only for the backend's own unreaped child; identities verified by `readlink` of `/proc/self/ns/*` |
-| cgroup scope | `scope::ScopeManager` over the user manager's fixed D-Bus interface | constructed in a normal build only by `ScopeManager::connect`: bus from the real uid, owner-checked; a scope started only within `execution::run` (P2-V1-R3B-I4-R1); backend-random unit names; limits verified from the cgroup files; the manager's unit bound to the kernel's cgroup by its exact `Id` and `ControlGroup` (P2-V1-R3B-I4-R1); the operation owned as a pending scope, beside its helper, from before its request until proven or confirmed gone (P2-V1-R3B-I4); `StopUnit` only for an operation whose StartTransientUnit success reply was delivered and recorded, never for an uncertain or collided one, never merely because the backend generated the unit name, and never taken as confirmation (P2-V1-R3B-I4-R2); kill, counters and emptiness through the retained descriptor |
+| cgroup scope | `scope::ScopeManager` over the user manager's fixed D-Bus interface | constructed in a normal build only by `ScopeManager::connect`: bus from the real uid, owner-checked; a scope started only within `execution::run` (P2-V1-R3B-I4-R1); backend-random unit names; limits verified from the cgroup files; the manager's unit bound to the kernel's cgroup by its exact `Id` and `ControlGroup` (P2-V1-R3B-I4-R1); the operation owned as a pending scope, beside its helper, from before its request until proven or confirmed gone (P2-V1-R3B-I4); no request acts on a unit by its name or object path: StartTransientUnit, for a fresh backend-random name, is the manager's only request that acts, and GetUnit and the property reads only observe (P2-V1-R3B-I4-R3; R2 had limited a stop by name to an accepted operation); kill, counters and emptiness through the retained descriptor |
 | Workspace | `workspace::WorkspaceRoot`/`Workspace` under `/run/user/<uid>/nexus-verifier` | uid-derived, walked without symlinks, owner-only, exclusive creation, identity-bound removal |
 | Toolchain | `toolchain::VerifiedVerifierToolchain::installed()` | embedded manifest, root-owned installed tree, host runtime checks, re-verified before each launch |
 | Candidate copy | `CodingRun::materialize_verification_input` | the retained staging handle, the verified manifest, an empty backend-created directory |
@@ -922,18 +957,28 @@ build-output directories.
   for G-HOST/G-LIVE to qualify.
 - A collision whose `UnitExists` reply is lost (a timeout, a broken
   connection) is, to the backend, an uncertain start without a candidate.
-  Since P2-V1-R3B-I4-R2 nothing of it is ever stopped by the unit's name, so
-  the foreign unit is never touched; the operation stays `CleanupFailed`,
-  its helper an unreaped zombie, for the life of the backend process. That
+  Since P2-V1-R3B-I4-R2 nothing of it is stopped by the unit's name, and
+  since P2-V1-R3B-I4-R3 nothing is acted upon by a unit name at all, so the
+  foreign unit is never touched; the operation stays `CleanupFailed`, its
+  helper an unreaped zombie, for the life of the backend process. That
   availability cost applies to every uncertain start without a candidate
-  and is accepted: no unit this backend did not create is ever stopped.
-- An accepted operation without a candidate may still be stopped by name.
-  Its recorded reply shows that the manager created the unit for this
-  request; it does not bind a unit loaded under the name later. A party of
-  the same uid that learned the name could load another unit under it
-  after this backend's was unloaded, and a later settling stop could reach
-  that unit (its reply still confirms nothing). Binding the stop to the
-  unit's own identity is not attempted.
+  and is accepted.
+- An accepted operation without a candidate is confirmed only once the
+  manager answers that no unit of its name is loaded and the helper is then
+  outside (P2-V1-R3B-I4-R3). While a unit of that name is loaded (this
+  backend's, or a foreign one loaded under the name after this one was
+  unloaded), it stays `CleanupFailed`, its helper an unreaped zombie, and
+  nothing acts on that unit: a same-name replacement delays cleanup for as
+  long as it stays loaded and is never harmed. The request asks
+  `CollectMode=inactive-or-failed`, so the manager may unload an inactive
+  or failed scope by itself; when it does is host behaviour (G-HOST,
+  G-LIVE), never relied on for safety.
+- Candidate acquisition is unchanged (P2-V1-R3B-I4-R1): the cgroup of the
+  unit's name the kernel reports the bound, unreaped helper in. A party
+  able to move this backend's helper into a cgroup of its own at that path
+  (the same uid, within the delegated tree) would make that cgroup the
+  candidate, and what it holds would be ended through its descriptor; such
+  a party can already signal the helper. No name is acted upon.
 - A pending operation whose manager connection broke cannot be confirmed
   through that connection: unless its retained candidate empties, it stays
   `CleanupFailed` for the life of the backend process. No other connection
