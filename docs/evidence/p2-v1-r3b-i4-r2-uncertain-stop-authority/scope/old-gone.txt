@@ -1,0 +1,14 @@
+  229      /// Whether nothing this operation may have created can still hold or
+  230      /// receive a process (see the module documentation).
+  231      fn gone(&self, controller: &Controller, helper: Option<&Helper>) -> bool {
+  232          match &self.candidate {
+  233              Some(candidate) => matches!(
+  234                  occupancy(candidate.as_ref()),
+  235                  Ok(Occupancy::Empty | Occupancy::Removed)
+  236              ),
+  237              // Without a delivered reply the manager's absence proves
+  238              // nothing.
+  239              None if !self.accepted => false,
+  240              None => absent(controller, &self.unit, helper),
+  241          }
+  242      }

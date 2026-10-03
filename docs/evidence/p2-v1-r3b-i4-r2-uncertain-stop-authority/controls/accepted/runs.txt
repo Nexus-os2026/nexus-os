@@ -1,0 +1,27 @@
+checkout: /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b
+HEAD: 384808e4ab4e44421b6a570fb401f8b494dd3c00
+HEAD tree: ef085a1723f7add9b1ae34f5fe5a482897739409
+targets: /home/nexus/.claude/jobs/4a4dc130/tmp/r2/targets-accepted (each step's own, empty before it)
+before status entries: 0
+i4r1-scope-controls exit=0 started=2026-10-03T06:26:10Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/scripts/accepted_scope_controls_r2.py /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/i4r1-scope-controls --target-dir /home/nexus/.claude/jobs/4a4dc130/tmp/r2/targets-accepted/i4r1-scope-controls
+after i4r1-scope-controls status entries: 0
+i4r1-api-guards exit=0 started=2026-10-03T06:28:38Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/api_guards.py /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/i4r1-api-guards --target-dir /home/nexus/.claude/jobs/4a4dc130/tmp/r2/targets-accepted/i4r1-api-guards
+after i4r1-api-guards status entries: 0
+i4r1-normal-api-probes exit=0 started=2026-10-03T06:30:12Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/normal_api_probes.py /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b /home/nexus/.claude/jobs/4a4dc130/tmp/r2/targets-accepted/base-bb0dfec0 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/targets-accepted/normal-api-probes-scratch /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/i4r1-normal-api-probes --target-dir /home/nexus/.claude/jobs/4a4dc130/tmp/r2/targets-accepted/i4r1-normal-api-probes
+after i4r1-normal-api-probes status entries: 0
+i4r1-source-guards exit=0 started=2026-10-03T06:30:49Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i4-r1-native-scope/scripts/source_guards.py /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/i4r1-source-guards.json
+after i4r1-source-guards status entries: 0
+custody-hashes exit=0 started=2026-10-03T06:30:49Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/custody_hashes.py /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b
+after custody-hashes status entries: 0
+r3-store-controls exit=0 started=2026-10-03T06:30:50Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/r2/targets-accepted/r3-store python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/store_controls.py /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/r3-store
+after r3-store-controls status entries: 0
+i2r1-rerun exit=0 started=2026-10-03T06:40:22Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/r2/targets-accepted/i2r1 python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i3-i1/scripts/i2r1_controls_rerun.py /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/i2r1-rerun
+after i2r1-rerun status entries: 0
+r3-api-probes exit=0 started=2026-10-03T06:41:18Z :: env CARGO_TARGET_DIR=/home/nexus/.claude/jobs/4a4dc130/tmp/r2/targets-accepted/r3-api python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/api_probes.py /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/r3-api-probes
+after r3-api-probes status entries: 0
+r3-store-comparison exit=0 started=2026-10-03T06:42:26Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/compare_reruns.py store /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i3-i1-r3/controls/store/summary.json /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/r3-store/summary.json
+after r3-store-comparison status entries: 0
+i2r1-comparison exit=0 started=2026-10-03T06:42:26Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i3-i1-r3/scripts/compare_i2r1.py /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i3-i1-r3/controls/i2r1-rerun/summary.json /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/i2r1-rerun/summary.json
+after i2r1-comparison status entries: 0
+r3-api-comparison exit=0 started=2026-10-03T06:42:27Z :: python3 /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i4-native-scope/scripts/compare_reruns.py api /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i3-i1-r3/controls/api-probes/api_probes.json /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/r3-api-probes/api_probes.json
+after r3-api-comparison status entries: 0

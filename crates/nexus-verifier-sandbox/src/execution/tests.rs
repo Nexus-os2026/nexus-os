@@ -1344,7 +1344,8 @@ fn i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner(
     }
     // A panic inside the manager's own StartTransientUnit, after its effect
     // and before any reply, through the harness's direct owner: one owner
-    // of the operation and its helper (StopUnit even unloads the unit).
+    // of the operation and its helper. P2-V1-R3B-I4-R2: no start reply was
+    // recorded, so nothing is stopped by the unit's name: it stays loaded.
     let world = World::new(|state| {
         uncertain_without_candidate(state, true, Reply::Delivered);
         state.panic_at = Some(Op::Start);
@@ -1359,8 +1360,8 @@ fn i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner(
     };
     assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
     assert!(
-        world.lock().units.is_empty(),
-        "the unit was stopped and unloaded"
+        !world.lock().units.is_empty() && stops(&world) == 0,
+        "the unit was stopped by its name"
     );
     abandon(boundary, pid);
 }
@@ -1699,16 +1700,26 @@ fn i4r1_11_an_uncertain_start_without_a_candidate_is_not_released_by_no_such_uni
 
 #[test]
 fn i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_reply() {
-    // The manager created the unit; StopUnit stops and unloads it and its
-    // reply is delivered; the kernel never reported the helper in it.
+    // The manager created the unit and would stop and unload it with a
+    // delivered reply; the kernel never reported the helper in it.
+    // P2-V1-R3B-I4-R2: without a recorded start reply nothing is stopped by
+    // the unit's name, so no stop reply can release it: the unit stays
+    // loaded, and the operation stays owned with its helper.
     let world = World::new(|state| {
         uncertain_without_candidate(state, true, Reply::Timeout);
         state.stop = Script::always((true, Reply::Delivered));
     });
     let report = run_in(&world, None);
     let pid = requested_pid(&world);
-    assert!(stops(&world) >= 1, "StopUnit was attempted");
-    assert!(world.lock().units.is_empty(), "the stop took effect");
+    assert_eq!(
+        stops(&world),
+        0,
+        "an uncertain start was stopped by its name"
+    );
+    assert!(
+        !world.lock().units.is_empty(),
+        "the unit was stopped by its name"
+    );
     assert_eq!(
         report.classify(0),
         ExitClass::CleanupFailed,
@@ -1716,9 +1727,14 @@ fn i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_repl
     );
     let boundary = boundary_of(report);
     let observed = pending_state(&boundary);
-    assert!(observed.stops >= 1 && !observed.settled && !observed.candidate);
+    assert!(observed.stops == 0 && !observed.settled && !observed.candidate);
     assert!(boundary.holds_helper() && is_child(pid));
     let boundary = boundary.retry().unwrap_err();
+    assert_eq!(
+        stops(&world),
+        0,
+        "an uncertain start was stopped by its name"
+    );
     abandon(boundary, pid);
 }
 
@@ -2264,4 +2280,471 @@ fn requested_pid_or_spawned(world: &World, report: &ExecutionReport) -> Option<u
         assert!(report.cleanup.is_confirmed());
     }
     pid
+}
+
+// ---------------------------------------------------------------------------
+// P2-V1-R3B-I4-R2: the name authority of a scope operation. Only an accepted
+// operation (StartTransientUnit's success reply delivered and recorded) may
+// ask the manager to stop its unit by name. An uncertain one may as well
+// have been refused as already loaded, that answer lost: it is ended only
+// through its retained candidate, by descriptor, or stays owned with its
+// helper unreaped. Over the deterministic simulation only.
+
+/// A process of a foreign unit (a model process id: the model never signals
+/// a real process).
+const FOREIGN: u32 = 4_000_001;
+
+/// A foreign unit already loaded under the generated name, holding a
+/// process of its own: the request is refused as exactly `UnitExists`,
+/// without effect, and that reply reaches the backend as `reply`.
+fn foreign_collision(state: &mut State, reply: Reply) {
+    state.collide = true;
+    state.collision_reply = reply;
+    state.foreign_member = Some(FOREIGN);
+}
+
+/// The foreign unit is untouched: never stopped by its name, still loaded
+/// and foreign, its cgroup never opened or killed, its process still in it.
+fn foreign_untouched(world: &World, case: &str) {
+    let state = world.lock();
+    let unit = state.requested().unwrap();
+    assert_eq!(
+        state.count(|call| matches!(call, Call::Stop(_))),
+        0,
+        "{case}: the foreign unit was stopped by its name"
+    );
+    let foreign = state
+        .units
+        .get(&unit)
+        .unwrap_or_else(|| panic!("{case}: the foreign unit was stopped by its name"));
+    assert!(!foreign.ours, "{case}");
+    let cgroup = &state.cgroups[foreign.cgroup.expect("the foreign unit's cgroup")];
+    assert!(
+        !cgroup.killed && cgroup.kills == 0 && !cgroup.removed && cgroup.members.contains(&FOREIGN),
+        "{case}: the foreign unit was killed"
+    );
+    assert!(
+        state.calls.iter().all(|call| !matches!(
+            call,
+            Call::Open(_) | Call::Kill(_) | Call::UnitId(_) | Call::ControlGroup(_)
+        )),
+        "{case}: the foreign unit was claimed"
+    );
+}
+
+/// Retry `boundary` `attempts` times; each must keep it.
+fn retained_through(
+    mut boundary: RetainedBoundary,
+    attempts: usize,
+    case: &str,
+) -> RetainedBoundary {
+    for attempt in 1..=attempts {
+        boundary = match boundary.retry() {
+            Ok(()) => panic!(
+                "{case}: an uncertain start was resolved by its unit name or presence (retry {attempt})"
+            ),
+            Err(boundary) => boundary,
+        };
+    }
+    boundary
+}
+
+#[test]
+fn i4r2_01_a_lost_collision_reply_never_stops_the_foreign_unit() {
+    // A foreign unit already holds the generated name: the request is refused
+    // as `UnitExists`, without effect, but that reply is lost, so the backend
+    // sees an uncertain start, never a collision. The helper is never placed
+    // (no candidate). Nothing grants a stop by the name: the foreign unit is
+    // untouched, and the operation stays owned with its helper unreaped
+    // (`CleanupFailed`), through retries once the manager answers again.
+    for reply in [Reply::Timeout, Reply::Disconnect, Reply::Malformed] {
+        let case = format!("{reply:?}");
+        let world = World::new(|state| foreign_collision(state, reply));
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        foreign_untouched(&world, &case);
+        assert!(!launched(&report), "{case}");
+        assert_eq!(
+            report.classify(0),
+            ExitClass::CleanupFailed,
+            "{case}: an uncertain start was resolved by its unit name or presence"
+        );
+        let boundary = boundary_of(report);
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.issued
+                && !observed.accepted
+                && !observed.collided
+                && !observed.candidate
+                && !observed.settled
+                && observed.stops == 0,
+            "{case}: {observed:?}"
+        );
+        assert!(
+            boundary.holds_helper() && is_child(pid),
+            "{case}: the helper of an unresolved uncertain start was reaped"
+        );
+        world.release();
+        let boundary = retained_through(boundary, 2, &case);
+        foreign_untouched(&world, &case);
+        assert!(boundary.holds_helper() && is_child(pid) && observed_unreaped(&world));
+        abandon(boundary, pid);
+    }
+    // Through the live harness's direct owner (the qualification's H6).
+    let world = World::new(|state| foreign_collision(state, Reply::Timeout));
+    let (placed, pid) = place_cat(&world);
+    let failed = placed.expect_err("a lost collision was proven");
+    foreign_untouched(&world, "place");
+    let Cleanup::Failed(boundary) = failed.cleanup else {
+        panic!("place: an uncertain start was resolved by its unit name or presence");
+    };
+    assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
+    abandon(boundary, pid);
+}
+
+#[test]
+fn i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name() {
+    // No effect, the reply lost (a timeout, a broken connection, an unexpected
+    // error, a reply that does not decode): nothing can show what happened
+    // and nothing grants a stop by the name. After bounded retries the
+    // operation is still owned with its helper unreaped; neither the
+    // manager's absence nor the helper outside confirms it.
+    for reply in [
+        Reply::Timeout,
+        Reply::Disconnect,
+        Reply::Error,
+        Reply::Malformed,
+    ] {
+        let case = format!("{reply:?}");
+        let world = World::new(|state| uncertain_without_candidate(state, false, reply));
+        let report = run_in(&world, None);
+        let pid = requested_pid(&world);
+        assert_eq!(
+            report.classify(0),
+            ExitClass::CleanupFailed,
+            "{case}: an uncertain start was resolved by its unit name or presence"
+        );
+        world.release();
+        let boundary = retained_through(boundary_of(report), 3, &case);
+        assert_eq!(
+            stops(&world),
+            0,
+            "{case}: an uncertain start was stopped by its name"
+        );
+        let observed = pending_state(&boundary);
+        assert!(
+            observed.issued && !observed.accepted && !observed.settled && observed.stops == 0,
+            "{case}: {observed:?}"
+        );
+        assert!(
+            boundary.holds_scope() && boundary.holds_helper() && is_child(pid),
+            "{case}: the helper of an unresolved uncertain start was reaped"
+        );
+        assert!(
+            observed_unreaped(&world),
+            "{case}: the helper of an unresolved uncertain start was reaped"
+        );
+        abandon(boundary, pid);
+    }
+}
+
+#[test]
+fn i4r2_03_an_uncertain_start_whose_helper_appears_later_is_ended_through_its_candidate() {
+    // The request created the unit, its reply was lost, and the job has not
+    // attached the helper yet: no candidate, so the operation stays owned and
+    // nothing is stopped by the name. Later the kernel reports the helper in
+    // the unit's cgroup: a retry retains that cgroup by descriptor, located
+    // through the bound helper's membership, ends everything in it with
+    // `cgroup.kill`, observes it empty, and only then reaps the helper.
+    let world = World::new(|state| uncertain_without_candidate(state, true, Reply::Timeout));
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert_eq!(
+        stops(&world),
+        0,
+        "an uncertain start was stopped by its name"
+    );
+    assert_eq!(
+        report.classify(0),
+        ExitClass::CleanupFailed,
+        "an uncertain start was resolved by its unit name or presence"
+    );
+    let boundary = boundary_of(report);
+    assert!(!pending_state(&boundary).candidate);
+    assert!(
+        boundary.holds_helper() && is_child(pid),
+        "the helper of an unresolved uncertain start was reaped"
+    );
+    // The start job attaches the helper now.
+    let path = {
+        let mut state = world.lock();
+        let unit = state.requested().unwrap();
+        assert!(state.units.contains_key(&unit));
+        state.place(pid, 0);
+        state.cgroups[0].path.clone()
+    };
+    boundary.retry().unwrap();
+    assert!(!is_child(pid));
+    assert!(
+        observed_unreaped(&world),
+        "the helper was reaped before its candidate was confirmed"
+    );
+    let state = world.lock();
+    assert_eq!(
+        state.count(|call| matches!(call, Call::Stop(_))),
+        0,
+        "an uncertain start was stopped by its name"
+    );
+    // Located through the kernel's membership of the helper, retained by
+    // descriptor once, and ended through it.
+    let open = state
+        .calls
+        .iter()
+        .position(|call| *call == Call::Open(path.clone()))
+        .expect("the candidate was retained by descriptor");
+    assert!(matches!(state.calls[open - 1], Call::Membership(read, true) if read == pid));
+    assert!(state.calls[open..]
+        .iter()
+        .any(|call| *call == Call::Kill(path.clone())));
+    assert!(state.cgroups[0].killed);
+    assert_eq!(state.count(|call| matches!(call, Call::Open(_))), 1);
+}
+
+#[test]
+fn i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name() {
+    // The reply is lost, but the job attaches the helper while the proof
+    // waits: the candidate is retained by descriptor, and the binding proof
+    // then fails (the manager's ControlGroup is another cgroup's). Nothing is
+    // launched. The candidate is cleanup ownership only: it is ended through
+    // its descriptor; while something the kill does not end keeps it
+    // populated, nothing is stopped by the name and the operation stays
+    // owned; once it is empty, a retry confirms it through the descriptor.
+    let world = World::new(|state| {
+        state.start_reply = Reply::Timeout;
+        state.control_group = Text::Is("/other.slice/{unit}");
+        state.phantom = Phantom::UntilStop;
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert!(
+        matches!(
+            report.not_run,
+            Some(NotRun::Scope(ScopeError::Mismatch("unit control group")))
+        ),
+        "{:?}",
+        report.not_run
+    );
+    assert!(!launched(&report), "a launch reached an unproven scope");
+    assert_eq!(
+        stops(&world),
+        0,
+        "an uncertain start's candidate was stopped by its name"
+    );
+    assert_eq!(
+        report.classify(0),
+        ExitClass::CleanupFailed,
+        "an uncertain start's candidate was confirmed without being observed empty"
+    );
+    let boundary = boundary_of(report);
+    let observed = pending_state(&boundary);
+    assert!(
+        observed.candidate && !observed.accepted && !observed.settled && observed.stops == 0,
+        "{observed:?}"
+    );
+    assert!(boundary.holds_helper() && is_child(pid));
+    assert!(
+        world.lock().created().unwrap().killed,
+        "the candidate was not ended through its descriptor"
+    );
+    world.release();
+    boundary.retry().unwrap();
+    assert!(!is_child(pid));
+    assert_eq!(
+        stops(&world),
+        0,
+        "an uncertain start's candidate was stopped by its name"
+    );
+    assert_eq!(opens(&world), 1);
+    // Nothing the kill leaves: confirmed at once, through the descriptor.
+    let world = World::new(|state| {
+        state.start_reply = Reply::Timeout;
+        state.control_group = Text::Is("/other.slice/{unit}");
+    });
+    let report = run_in(&world, None);
+    assert!(report.cleanup.is_confirmed() && !launched(&report));
+    assert_eq!(
+        stops(&world),
+        0,
+        "an uncertain start's candidate was stopped by its name"
+    );
+    assert!(world.lock().created().unwrap().killed);
+}
+
+#[test]
+fn i4r2_05_only_a_recorded_start_reply_authorizes_a_stop_by_name() {
+    // A delivered StartTransientUnit reply, recorded: the manager created the
+    // unit for this request, and the helper never entered it (no candidate).
+    // Only such an operation asks the manager to stop its unit by name, and
+    // the stop's reply (delivered, without effect) confirms nothing: what
+    // remains is observed, and the helper stays unreaped until the manager
+    // answers the unit gone with the helper outside.
+    let world = World::new(|state| {
+        state.placement = Placement::Never;
+        state.stop = Script::always((false, Reply::Delivered));
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert_eq!(
+        report.classify(0),
+        ExitClass::CleanupFailed,
+        "a StopUnit reply confirmed the operation"
+    );
+    let boundary = boundary_of(report);
+    let observed = pending_state(&boundary);
+    assert!(
+        observed.accepted && observed.stops >= 1 && !observed.settled,
+        "the recorded start reply did not authorize a stop by name: {observed:?}"
+    );
+    assert!(boundary.holds_helper() && is_child(pid));
+    {
+        let state = world.lock();
+        assert!(state.units.contains_key(&state.requested().unwrap()));
+    }
+    // The stop takes effect: the manager answers the unit gone, the helper is
+    // outside; confirmed, and only then reaped.
+    world.release();
+    boundary.retry().unwrap();
+    assert!(!is_child(pid) && observed_unreaped(&world));
+    // The same unit, created with the reply lost: no stop by name at all.
+    let world = World::new(|state| {
+        uncertain_without_candidate(state, true, Reply::Timeout);
+        state.stop = Script::always((false, Reply::Delivered));
+    });
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    assert_eq!(
+        stops(&world),
+        0,
+        "a stop by name was asked without a recorded start reply"
+    );
+    abandon(boundary_of(report), pid);
+}
+
+#[test]
+fn i4r2_06_a_definite_collision_is_never_stopped_or_claimed() {
+    // Exactly `UnitExists`, delivered (I4-R1, unchanged): the foreign unit,
+    // holding its own process, is never stopped, killed, opened or claimed;
+    // the helper, never placed, is outside it, so the collided operation is
+    // confirmed and the helper reaped. The same through the direct owner.
+    let world = World::new(|state| foreign_collision(state, Reply::Delivered));
+    let report = run_in(&world, None);
+    let pid = requested_pid(&world);
+    foreign_untouched(&world, "execution");
+    assert!(matches!(
+        report.not_run,
+        Some(NotRun::Scope(ScopeError::Bus(_)))
+    ));
+    assert!(report.cleanup.is_confirmed() && !is_child(pid));
+    assert_eq!(
+        world.lock().count(|call| matches!(call, Call::GetUnit(_))),
+        0,
+        "the foreign unit was claimed"
+    );
+    let world = World::new(|state| foreign_collision(state, Reply::Delivered));
+    let (placed, pid) = place_cat(&world);
+    let failed = placed.expect_err("a collision was proven");
+    assert!(failed.cleanup.is_confirmed() && !is_child(pid));
+    foreign_untouched(&world, "place");
+}
+
+#[test]
+fn i4r2_07_a_panic_before_the_start_reply_is_recorded_grants_no_name_authority() {
+    // The success reply arrives, but a panic comes before it is recorded: for
+    // the backend the outcome is uncertain, so it never stops the unit by
+    // name; the operation and its helper stay owned together, unreaped, and
+    // no panic crosses the owner.
+    let world = World::new(|state| state.placement = Placement::Never);
+    let report = run_in(&world, Some(Fault::Panic(FaultPoint::AfterScopeStart)));
+    let pid = requested_pid(&world);
+    assert!(
+        matches!(report.not_run, Some(NotRun::Interrupted)),
+        "{:?}",
+        report.not_run
+    );
+    assert_eq!(
+        stops(&world),
+        0,
+        "a stop by name was asked without a recorded start reply"
+    );
+    assert_eq!(
+        report.classify(0),
+        ExitClass::CleanupFailed,
+        "an uncertain start was resolved by its unit name or presence"
+    );
+    let boundary = boundary_of(report);
+    let observed = pending_state(&boundary);
+    assert!(observed.issued && !observed.accepted && observed.stops == 0);
+    assert!(boundary.holds_helper() && is_child(pid));
+    world.release();
+    let boundary = retained_through(boundary, 1, "a panic before the reply was recorded");
+    assert_eq!(
+        stops(&world),
+        0,
+        "a stop by name was asked without a recorded start reply"
+    );
+    abandon(boundary, pid);
+    // A panic inside StartTransientUnit itself, after its effect and before
+    // any reply, through the harness's direct owner: no panic crosses it; the
+    // unit is never stopped by name; the helper stays owned, unreaped.
+    let world = World::new(|state| {
+        uncertain_without_candidate(state, true, Reply::Delivered);
+        state.panic_at = Some(Op::Start);
+    });
+    let Ok((placed, pid)) = catch_unwind(AssertUnwindSafe(|| place_cat(&world))) else {
+        panic!("a panic crossed the direct owner of an unresolved operation");
+    };
+    let failed = placed.expect_err("nothing was proven");
+    assert!(failed.error.is_none(), "{:?}", failed.error);
+    let Cleanup::Failed(boundary) = failed.cleanup else {
+        panic!("a panic inside StartTransientUnit lost or released its operation");
+    };
+    assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
+    assert_eq!(
+        stops(&world),
+        0,
+        "a stop by name was asked without a recorded start reply"
+    );
+    assert!(
+        !world.lock().units.is_empty(),
+        "the unit was stopped by its name"
+    );
+    abandon(boundary, pid);
+}
+
+#[test]
+fn i4r2_08_a_retained_uncertain_operation_never_gains_name_authority_without_its_scope_manager() {
+    // The unit created, its reply lost, the helper never placed; the
+    // ScopeManager that started it is gone. Retried on the issuing
+    // connection, with the manager answering again and acting on StopUnit,
+    // the retained operation still never stops its unit by name and stays
+    // owned with its helper.
+    let world = World::new(|state| uncertain_without_candidate(state, true, Reply::Timeout));
+    let stand_in = StandIn::new();
+    let scopes = world.scopes();
+    let report = execute(&scopes, &stand_in.program(), launch_spec(), &LIMITS, None);
+    let pid = requested_pid(&world);
+    drop(scopes);
+    world.release();
+    let boundary = retained_through(boundary_of(report), 3, "without its ScopeManager");
+    assert_eq!(
+        stops(&world),
+        0,
+        "a retained uncertain operation was stopped by its name"
+    );
+    {
+        let state = world.lock();
+        assert!(state.units.contains_key(&state.requested().unwrap()));
+    }
+    assert!(boundary.holds_scope() && boundary.holds_helper() && is_child(pid));
+    abandon(boundary, pid);
 }

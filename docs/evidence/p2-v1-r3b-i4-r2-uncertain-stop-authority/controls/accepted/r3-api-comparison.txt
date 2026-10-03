@@ -1,0 +1,31 @@
+reference: /home/nexus/.claude/jobs/4a4dc130/tmp/r2/frozen-b/docs/evidence/p2-v1-r3b-i3-i1-r3/controls/api-probes/api_probes.json (28 entries)
+rerun:     /home/nexus/NEXUS/p2-v1-r3b-i4-r2-work/accepted/r3-api-probes/api_probes.json (28 entries)
+  same H-TYPE-ERROR
+  same P-B1-CLOSURE-DATA
+  same P-B2-CUSTODY-SWAP
+  same P-B2-HEADER-SWAP
+  same P-B3-CLAIM-CALL
+  same P-B3-DECISION-EDIT
+  same P-B3-SCAN-EDIT
+  same P-B4-ADMISSION-FORGE
+  same P-B4-IDENTITY-EDIT
+  same P-B4-OPENING-MINT
+  same P-B5-VALIDATOR-FROM-COPY
+  same P-B6-EXCHANGE-TYPE
+  same P-B6-WORKER-TYPE
+  same P-CLOSE-TWICE
+  same P-PROVISION-REWRITE
+  same P-R3-HOLDS-SELECTION
+  same P-R3-INSPECT
+  same P-R3-KEPT-COPY
+  same P-R3-REMOVE-KNOWN
+  same P-R3-REVOCATION-ADMISSIBLE
+  same P-R3-REVOCATION-STATE
+  same P-R3-UNREFERENCED
+  same P-SEAL-AGAIN
+  same P-SESSION-VERIFIED
+  same P-TAKE-ASSESSMENT
+  same P-VERIFICATION-FORGE
+  same P-VERIFICATION-TRANSPLANT
+  same POSITIVE-CONTROL
+RESULT: IDENTICAL

@@ -227,6 +227,13 @@ pub(crate) struct State {
     pub collide: bool,
     /// The foreign unit's cgroup holds the helper.
     pub collision_holds_helper: bool,
+    /// How the refusal of a colliding request (exactly `UnitExists`, no
+    /// effect) reaches the backend: delivered, or lost like any other reply
+    /// (P2-V1-R3B-I4-R2).
+    pub collision_reply: Reply,
+    /// The foreign unit's cgroup holds this process of its own (a model
+    /// process id: the model never signals a real process).
+    pub foreign_member: Option<u32>,
     pub placement: Placement,
     /// The created unit is loaded in the manager (`false`: the kernel has
     /// a cgroup of its name the manager does not know).
@@ -264,6 +271,8 @@ impl Default for State {
             start_reply: Reply::Delivered,
             collide: false,
             collision_holds_helper: false,
+            collision_reply: Reply::Delivered,
+            foreign_member: None,
             placement: Placement::Immediate,
             unit_loaded: true,
             cgroup_v2: true,
@@ -423,7 +432,9 @@ impl Manager for FakeManager {
         }
         if state.collide || state.units.contains_key(request.unit) {
             if !state.units.contains_key(request.unit) {
-                let cgroup = state.collision_holds_helper.then(|| {
+                let holds_helper = state.collision_holds_helper;
+                let foreign = state.foreign_member;
+                let cgroup = (holds_helper || foreign.is_some()).then(|| {
                     let index = state.cgroups.len();
                     state.cgroups.push(Cgroup {
                         path: format!("{SLICE}/{}", request.unit),
@@ -437,7 +448,12 @@ impl Manager for FakeManager {
                         limit_mismatch: None,
                         kills: 0,
                     });
-                    state.place(request.helper_pid, index);
+                    if holds_helper {
+                        state.place(request.helper_pid, index);
+                    }
+                    if let Some(member) = foreign {
+                        state.place(member, index);
+                    }
                     index
                 });
                 state.units.insert(
@@ -448,7 +464,13 @@ impl Manager for FakeManager {
                     },
                 );
             }
-            return Started::Collision;
+            // Refused before any effect; the refusal's reply can be lost like
+            // any other, and then the backend sees an uncertain start.
+            let reply = state.collision_reply;
+            return match state.connection(reply) {
+                Reply::Delivered => Started::Collision,
+                reply => Started::Uncertain(reply.reason("StartTransientUnit")),
+            };
         }
         assert!(
             state.start_effect || state.start_reply != Reply::Delivered,
@@ -1278,8 +1300,8 @@ fn i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed
     // error, a reply that does not decode), with and without an effect, the
     // helper never placed: nothing confirms the operation. Its helper is
     // killed but stays this process's unreaped child, owned with the
-    // operation; neither a delivered and effective StopUnit nor the
-    // manager's absence confirms it.
+    // operation; the manager's absence does not confirm it, and
+    // (P2-V1-R3B-I4-R2) nothing is ever stopped by the unit's name.
     for effect in [false, true] {
         for reply in [
             Reply::Timeout,
@@ -1317,9 +1339,10 @@ fn i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed
                 boundary.holds_helper() && unreaped(pid),
                 "{case}: the helper was reaped while unresolved"
             );
-            // The manager answers again: StopUnit acts and its reply is
-            // delivered, GetUnit would answer NoSuchUnit, the helper is
-            // outside. Still nothing confirms the operation.
+            // The manager answers again: it would act on StopUnit and deliver
+            // its reply, GetUnit would answer NoSuchUnit, the helper is
+            // outside. Still nothing confirms the operation, and nothing is
+            // stopped by its name.
             world.release();
             let Err(boundary) = boundary.retry() else {
                 panic!("{case}: an uncertain first start was confirmed without proof");
@@ -1328,9 +1351,10 @@ fn i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed
                 boundary.holds_scope() && boundary.holds_helper() && unreaped(pid),
                 "{case}: the helper was reaped while unresolved"
             );
-            assert!(
-                world.lock().count(|call| matches!(call, Call::Stop(_))) >= 1,
-                "{case}"
+            assert_eq!(
+                world.lock().count(|call| matches!(call, Call::Stop(_))),
+                0,
+                "{case}: an uncertain first start was stopped by its name"
             );
             assert!(
                 read_unreaped(&world, pid),
@@ -1547,4 +1571,115 @@ fn i4q1r1_connect_derives_the_bus_from_the_real_uid_alone() {
         assert_eq!(manager.matches(needle).count(), 1, "{needle}");
     }
     assert_eq!(manager.matches("connection::Builder::").count(), 1);
+}
+
+#[test]
+fn i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name() {
+    // P2-V1-R3B-I4-R2, a tripwire over rustfmt-formatted source beside the
+    // behavioural tests (`execution::tests::i4r2_*`): the one request that
+    // acts on a unit by its name (StopUnit) is reachable only past the
+    // operation's name authority, and that authority is exactly a recorded
+    // StartTransientUnit success reply, set in that reply's arm only (never
+    // from a name, a presence or a later observation).
+    let code = |source: &str| -> String {
+        source
+            .lines()
+            .map(|line| line.split("//").next().unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let pending = code(include_str!("pending.rs"));
+    // The only stop by name in the scope module and the execution.
+    assert_eq!(
+        pending.matches("stop_unit(").count(),
+        1,
+        "a stop by name outside settling"
+    );
+    for (file, source) in [
+        ("scope.rs", include_str!("../scope.rs")),
+        ("scope/native.rs", include_str!("native.rs")),
+        ("execution.rs", include_str!("../execution.rs")),
+    ] {
+        assert!(
+            !code(source).contains("stop_unit"),
+            "a stop by name in {file}"
+        );
+    }
+    let manager = code(include_str!("manager.rs"));
+    assert_eq!(
+        manager.matches("stop_unit(").count(),
+        2,
+        "the manager's StopUnit"
+    );
+    // Settling reaches it only past the authority check.
+    let reconcile = pending
+        .split("    pub(crate) fn reconcile(")
+        .nth(1)
+        .and_then(|rest| rest.split("\n    }\n").next())
+        .expect("reconcile");
+    let check = reconcile
+        .find("if !self.stop_authorized() {\n            return self.observe(&controller, helper, fault);\n        }")
+        .expect("the stop by name is not behind the operation's name authority");
+    let stop = reconcile
+        .find("controller.manager.stop_unit(&self.unit)")
+        .expect("the stop by name has moved");
+    assert!(
+        check < stop,
+        "the stop by name is not behind the operation's name authority"
+    );
+    assert_eq!(pending.matches("self.stop_authorized()").count(), 1);
+    // The authority is the recorded reply alone.
+    let authority = pending
+        .split("    fn stop_authorized(&self) -> bool {")
+        .nth(1)
+        .and_then(|rest| rest.split("\n    }\n").next())
+        .expect("stop_authorized");
+    assert_eq!(
+        authority.trim(),
+        "self.accepted",
+        "the name authority is not exactly the recorded start reply"
+    );
+    let accepted_arm = pending
+        .split("Started::Accepted => {")
+        .nth(1)
+        .and_then(|rest| rest.split('}').next())
+        .expect("the delivered reply's arm");
+    assert!(
+        accepted_arm.contains("self.accepted = true;"),
+        "a start is accepted other than in the delivered reply's arm"
+    );
+    assert_eq!(
+        pending.matches("self.accepted = true;").count(),
+        1,
+        "a start is accepted other than in the delivered reply's arm"
+    );
+    assert_eq!(
+        pending.matches("accepted = ").count(),
+        1,
+        "the recorded start reply is set elsewhere"
+    );
+    // Its reply is recorded only after the post-dispatch fault point: a
+    // panic before the reply is recorded grants no authority.
+    assert!(
+        pending.find("fault::at(fault, FaultPoint::AfterScopeStart);")
+            < pending.find("self.accepted = true;")
+    );
+    // A pending operation stays crate-private, uncopied and unserialized
+    // (and see `i4r1_05`, the accepted API guards and the normal-build
+    // probes).
+    assert!(!pending.contains("impl Clone for PendingScope"));
+    assert!(pending.contains("\npub(crate) struct PendingScope {"));
+    let declaration = pending
+        .split("\npub(crate) struct PendingScope {")
+        .next()
+        .unwrap_or_default();
+    assert!(
+        !declaration
+            .lines()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .unwrap_or_default()
+            .contains("derive"),
+        "a pending operation derives a capability"
+    );
 }

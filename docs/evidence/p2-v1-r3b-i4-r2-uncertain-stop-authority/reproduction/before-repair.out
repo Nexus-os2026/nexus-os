@@ -1,0 +1,212 @@
+the R2 tests against the unrepaired production code, 2026-10-03T06:26:14Z
+base: c3a12b2b54b50b5384c4a1d0cbb624615a4f4d27 (production code unchanged since ea475eac)
+test file from the candidate: crates/nexus-verifier-sandbox/src/scope/tests.rs sha256=a4acc7fe4a7ce2e1539ce628661f4b788f38f59505db38b7d7047228410b5929
+test file from the candidate: crates/nexus-verifier-sandbox/src/execution/tests.rs sha256=c0a87800c4be399f88cc0e6951482ac961c158fb5a3d2e87fd39b9094c2e7bc6
+production pending.rs: sha256=cc8438bdfbcca880a2eb1cc0895b8ccd985de849f722bc43647f5cb8c54f178b (the base's)
+changed files vs the base: 2 (crates/nexus-verifier-sandbox/src/execution/tests.rs crates/nexus-verifier-sandbox/src/scope/tests.rs )
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling libc v0.2.183
+   Compiling typenum v1.19.0
+   Compiling version_check v0.9.5
+   Compiling cfg-if v1.0.4
+   Compiling hashbrown v0.16.1
+   Compiling winnow v1.0.0
+   Compiling pin-project-lite v0.2.17
+   Compiling serde_core v1.0.228
+   Compiling equivalent v1.0.2
+   Compiling serde v1.0.228
+   Compiling generic-array v0.14.9
+   Compiling indexmap v2.13.0
+   Compiling toml_datetime v1.0.1+spec-1.1.0
+   Compiling zerocopy v0.8.42
+   Compiling cpufeatures v0.2.17
+   Compiling autocfg v1.5.0
+   Compiling syn v2.0.117
+   Compiling toml_parser v1.0.10+spec-1.1.0
+   Compiling parking v2.2.1
+   Compiling crypto-common v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling memoffset v0.9.1
+   Compiling digest v0.10.7
+   Compiling toml_edit v0.25.5+spec-1.1.0
+   Compiling cfg_aliases v0.2.1
+   Compiling getrandom v0.2.17
+   Compiling futures-core v0.3.32
+   Compiling nix v0.29.0
+   Compiling errno v0.3.14
+   Compiling rand_core v0.6.4
+   Compiling event-listener v5.4.2
+   Compiling once_cell v1.21.4
+   Compiling thiserror v2.0.18
+   Compiling endi v1.1.1
+   Compiling static_assertions v1.1.0
+   Compiling event-listener-strategy v0.5.4
+   Compiling tracing-core v0.1.36
+   Compiling proc-macro-crate v3.5.0
+   Compiling signal-hook-registry v1.4.8
+   Compiling sha2 v0.10.9
+   Compiling socket2 v0.6.3
+   Compiling mio v1.1.1
+   Compiling slab v0.4.12
+   Compiling futures-sink v0.3.32
+   Compiling bytes v1.11.1
+   Compiling bitflags v2.11.0
+   Compiling futures-task v0.3.32
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/before-repair/checkout/crates/nexus-verifier-sandbox)
+   Compiling futures-util v0.3.32
+   Compiling async-broadcast v0.7.2
+   Compiling ordered-stream v0.2.0
+   Compiling tokio v1.50.0
+   Compiling sha1 v0.10.6
+   Compiling xdg-home v1.3.0
+   Compiling hex v0.4.3
+   Compiling seccompiler v0.5.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling zvariant_utils v2.1.0
+   Compiling rand_chacha v0.3.1
+   Compiling rand v0.8.6
+   Compiling serde_derive v1.0.228
+   Compiling enumflags2_derive v0.7.12
+   Compiling zvariant_derive v4.2.0
+   Compiling tracing-attributes v0.1.31
+   Compiling thiserror-impl v2.0.18
+   Compiling zbus_macros v4.4.0
+   Compiling async-trait v0.1.89
+   Compiling serde_repr v0.1.20
+   Compiling tracing v0.1.44
+   Compiling enumflags2 v0.7.12
+   Compiling zvariant v4.2.0
+   Compiling landlock v0.4.4
+   Compiling zbus_names v3.0.0
+   Compiling zbus v4.4.0
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.60s
+     Running unittests src/lib.rs (/home/nexus/.claude/jobs/4a4dc130/tmp/r2/before-repair/target/debug/deps/nexus_verifier_sandbox-acf6ed7d47699137)
+
+running 12 tests
+test scope::tests::i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name ... FAILED
+test execution::tests::i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name ... FAILED
+test execution::tests::i4r2_06_a_definite_collision_is_never_stopped_or_claimed ... ok
+test execution::tests::i4r2_07_a_panic_before_the_start_reply_is_recorded_grants_no_name_authority ... FAILED
+test execution::tests::i4r2_03_an_uncertain_start_whose_helper_appears_later_is_ended_through_its_candidate ... FAILED
+test execution::tests::i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_reply ... FAILED
+test execution::tests::i4r2_01_a_lost_collision_reply_never_stops_the_foreign_unit ... FAILED
+test scope::tests::i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed ... FAILED
+test execution::tests::i4r2_05_only_a_recorded_start_reply_authorizes_a_stop_by_name ... FAILED
+test execution::tests::i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name ... FAILED
+test execution::tests::i4r2_08_a_retained_uncertain_operation_never_gains_name_authority_without_its_scope_manager ... FAILED
+test execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner ... FAILED
+
+failures:
+
+---- scope::tests::i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name stdout ----
+
+thread 'scope::tests::i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name' (2429650) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:1622:10:
+the stop by name is not behind the operation's name authority
+
+---- execution::tests::i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name stdout ----
+
+thread 'execution::tests::i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name' (2429644) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:2538:5:
+assertion `left == right` failed: an uncertain start's candidate was stopped by its name
+  left: 1
+ right: 0
+
+---- execution::tests::i4r2_07_a_panic_before_the_start_reply_is_recorded_grants_no_name_authority stdout ----
+
+thread 'execution::tests::i4r2_07_a_panic_before_the_start_reply_is_recorded_grants_no_name_authority' (2429647) panicked at crates/nexus-verifier-sandbox/src/fault.rs:74:50:
+injected verifier fault at AfterScopeStart
+
+thread 'execution::tests::i4r2_07_a_panic_before_the_start_reply_is_recorded_grants_no_name_authority' (2429647) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:2674:5:
+assertion `left == right` failed: a stop by name was asked without a recorded start reply
+  left: 1
+ right: 0
+
+---- execution::tests::i4r2_03_an_uncertain_start_whose_helper_appears_later_is_ended_through_its_candidate stdout ----
+
+thread 'execution::tests::i4r2_03_an_uncertain_start_whose_helper_appears_later_is_ended_through_its_candidate' (2429643) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:2462:5:
+assertion `left == right` failed: an uncertain start was stopped by its name
+  left: 1
+ right: 0
+
+---- execution::tests::i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_reply stdout ----
+
+thread 'execution::tests::i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_reply' (2429640) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:1714:5:
+assertion `left == right` failed: an uncertain start was stopped by its name
+  left: 1
+ right: 0
+
+---- execution::tests::i4r2_01_a_lost_collision_reply_never_stops_the_foreign_unit stdout ----
+
+thread 'execution::tests::i4r2_01_a_lost_collision_reply_never_stops_the_foreign_unit' (2429641) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:2311:5:
+assertion `left == right` failed: Timeout: the foreign unit was stopped by its name
+  left: 1
+ right: 0
+
+---- scope::tests::i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed stdout ----
+
+thread 'scope::tests::i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed' (2429649) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:1354:13:
+assertion `left == right` failed: Timeout, effect false: an uncertain first start was stopped by its name
+  left: 2
+ right: 0
+
+---- execution::tests::i4r2_05_only_a_recorded_start_reply_authorizes_a_stop_by_name stdout ----
+
+thread 'execution::tests::i4r2_05_only_a_recorded_start_reply_authorizes_a_stop_by_name' (2429645) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:2625:5:
+assertion `left == right` failed: a stop by name was asked without a recorded start reply
+  left: 1
+ right: 0
+
+---- execution::tests::i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name stdout ----
+
+thread 'execution::tests::i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name' (2429642) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:2429:9:
+assertion `left == right` failed: Timeout: an uncertain start was stopped by its name
+  left: 4
+ right: 0
+
+---- execution::tests::i4r2_08_a_retained_uncertain_operation_never_gains_name_authority_without_its_scope_manager stdout ----
+
+thread 'execution::tests::i4r2_08_a_retained_uncertain_operation_never_gains_name_authority_without_its_scope_manager' (2429648) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:2739:5:
+assertion `left == right` failed: a retained uncertain operation was stopped by its name
+  left: 4
+ right: 0
+
+---- execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner stdout ----
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (2429639) panicked at crates/nexus-verifier-sandbox/src/fault.rs:74:50:
+injected verifier fault at AfterScopeStart
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (2429639) panicked at crates/nexus-verifier-sandbox/src/fault.rs:74:50:
+injected verifier fault at ScopeReconcile
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (2429639) panicked at crates/nexus-verifier-sandbox/src/fault.rs:74:50:
+injected verifier fault at BeforeScopeStop
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (2429639) panicked at crates/nexus-verifier-sandbox/src/fault.rs:74:50:
+injected verifier fault at AfterScopeStop
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (2429639) panicked at crates/nexus-verifier-sandbox/src/scope/tests.rs:377:5:
+a panic inside the model's Start
+
+thread 'execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner' (2429639) panicked at crates/nexus-verifier-sandbox/src/execution/tests.rs:1362:5:
+the unit was stopped by its name
+
+
+failures:
+    execution::tests::i4r1_01_a_panic_after_an_uncertain_start_without_a_candidate_keeps_its_owner
+    execution::tests::i4r1_12_an_uncertain_start_without_a_candidate_is_not_released_by_a_stop_reply
+    execution::tests::i4r2_01_a_lost_collision_reply_never_stops_the_foreign_unit
+    execution::tests::i4r2_02_an_uncertain_start_that_did_nothing_is_never_stopped_by_name
+    execution::tests::i4r2_03_an_uncertain_start_whose_helper_appears_later_is_ended_through_its_candidate
+    execution::tests::i4r2_04_an_uncertain_start_s_candidate_is_ended_by_descriptor_never_by_name
+    execution::tests::i4r2_05_only_a_recorded_start_reply_authorizes_a_stop_by_name
+    execution::tests::i4r2_07_a_panic_before_the_start_reply_is_recorded_grants_no_name_authority
+    execution::tests::i4r2_08_a_retained_uncertain_operation_never_gains_name_authority_without_its_scope_manager
+    scope::tests::i4q1r1_nc2_an_uncertain_first_start_keeps_its_helper_unreaped_and_unconfirmed
+    scope::tests::i4r2_x_only_a_recorded_start_reply_authorizes_a_stop_by_name
+
+test result: FAILED. 1 passed; 11 failed; 0 ignored; 0 measured; 119 filtered out; finished in 1.36s
+
+error: test failed, to rerun pass `-p nexus-verifier-sandbox --lib`
+cargo test exit: 101

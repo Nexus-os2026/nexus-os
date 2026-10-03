@@ -1,0 +1,17 @@
+c0a87800c4be399f88cc0e6951482ac961c158fb5a3d2e87fd39b9094c2e7bc6  crates/nexus-verifier-sandbox/src/execution/tests.rs
+c472d455bdcc4f014909e7c520cb2fc0b4ea05cae7e85feb7603df997b64b4d4  crates/nexus-verifier-sandbox/src/scope/pending.rs
+a4acc7fe4a7ce2e1539ce628661f4b788f38f59505db38b7d7047228410b5929  crates/nexus-verifier-sandbox/src/scope/tests.rs
+e76d38d2f58a8e1a7f45cb1b6aab49cec9a69d9718ae246a6a9c10bbecace1cb  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/matrices/controls.md
+13ea75936aa5faf734ec9f3bbb467196fc5d8b617b7e150d6b1a915b835fe4bd  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/matrices/root-cause.md
+d1c139f0fa7a9110958ba53c240e818373640bf97b631fc9940ac0b5f238ca8b  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/matrices/state-machine.md
+bdc1ac0888f5434e9332d35c2dad864164f98d060593682c3a7478c30cf8a41f  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/primary/sources.md
+cb5f70cdcdc846ec281ada4d2292261a70cccf5c5f26ca51c2538ece4a1d94f6  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/scripts/accepted_r1_controls_r2.py
+d69ceba606412222ac7c8d085b743ed6fc7394e1500f3da048cba0e2dd70255f  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/scripts/accepted_reruns.sh
+4b7aacfc2c8c46d5bd83266540f9f5d42735b68633e30c7226a2d658b5f34fc2  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/scripts/accepted_scope_controls_r2.py
+bbd090170469c877c9da981bb0c9ec4c51254dc8dce9874bfa6c2444beaa3551  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/scripts/assemble.sh
+4142573405497b38f1309378b18b8d3868615f778800a72f860b418aeacf3745  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/scripts/make_snapshot.sh
+53d95af28ee7cbff20a777575180be971ac223946a731e2be2bae2db4d29d036  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/scripts/r2_controls.py
+1da06ffebee902b77da312989de2270abe65cdf66f7d2e8b369501337124b417  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/scripts/reproduce_before_repair.sh
+a35d5beb1e749c2c949470effcd8b644f3d6f1a8bab8b547ca29375c4f0eb510  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/scripts/run_controls.sh
+75cf233e702fa7d1933482912e01da4146832a483336a1e6c4bc02121afc4af2  docs/evidence/p2-v1-r3b-i4-r2-uncertain-stop-authority/scripts/validate.sh
+a8b355ec3bb8dbe9bc73971774e2e3246b59ed4c27c520ec974e2eda8d5f35ff  docs/security/phase2-governed-verification.md
