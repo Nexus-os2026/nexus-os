@@ -1,0 +1,29 @@
+
+running 1 test
+test phase0_surface::fg_reliability::tests::p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api ... FAILED
+
+failures:
+
+---- phase0_surface::fg_reliability::tests::p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api stdout ----
+
+thread 'phase0_surface::fg_reliability::tests::p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api' (1156999) panicked at app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:903:9:
+/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/app/src-tauri/../../sdk/src/module_cache.rs: ["component: wasmtime::component"] (Wasmtime's component module is not used)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    phase0_surface::fg_reliability::tests::p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 494 filtered out; finished in 2.12s
+
+   Compiling nexus-sdk v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/sdk)
+   Compiling coder-agent v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/agents/coder)
+   Compiling web-builder-agent v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/agents/web-builder)
+   Compiling social-poster-agent v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/agents/social-poster)
+   Compiling nexus-protocols v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/protocols)
+   Compiling nexus-swarm v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/crates/nexus-swarm)
+   Compiling nexus-conductor v0.1.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/agents/conductor)
+   Compiling nexus-desktop-backend v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/app/src-tauri)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.11s
+     Running unittests src/lib.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/nexus_desktop_backend-19dc1c7ea5a94095)
+error: test failed, to rerun pass `-p nexus-desktop-backend --lib`

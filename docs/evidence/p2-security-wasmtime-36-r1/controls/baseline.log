@@ -1,0 +1,9 @@
+
+running 1 test
+test phase0_surface::fg_reliability::tests::p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 494 filtered out; finished in 2.12s
+
+   Compiling nexus-desktop-backend v10.6.0 (/home/nexus/NEXUS/p2-security-wasmtime-36-work/snap/app/src-tauri)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.12s
+     Running unittests src/lib.rs (/home/nexus/NEXUS/p2-security-wasmtime-36-work/target-snap/debug/deps/nexus_desktop_backend-19dc1c7ea5a94095)
