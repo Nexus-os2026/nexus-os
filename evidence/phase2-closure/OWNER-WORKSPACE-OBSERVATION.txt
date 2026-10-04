@@ -1,0 +1,15 @@
+P2-CLOSE-A1 blocker-resolution observation
+
+Architect-specified command executed by the Owner on the Nexus PC.
+
+OBSERVED_AT_UTC=2026-10-04T16:07:28Z
+OBSERVER_UID=1001
+OBSERVER_USER=github-runner
+WORKSPACE_OWNER=1001:1001 WORKSPACE_MODE=700 WORKSPACE_TYPE=directory
+VERIFIER_WORKSPACE_ENTRY_COUNT=0
+VERIFIER_WORKSPACE_STATE=EMPTY
+
+Architect disposition:
+A1-BLOCKER-WORKSPACE-OBSERVATION = RESOLVED.
+
+This record is evidence, not authority.
