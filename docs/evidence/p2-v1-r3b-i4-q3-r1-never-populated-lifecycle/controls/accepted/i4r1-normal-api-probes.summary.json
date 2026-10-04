@@ -1,0 +1,197 @@
+{
+  "summary": {
+    "candidate": "/home/nexus/NEXUS/p2-v1-r3b-i4-q3-r1-work/snapshots/final-r",
+    "base": "/home/nexus/NEXUS/p2-v1-r3b-i4-q3-r1-work/targets/accepted/base-bb0dfec0",
+    "positive_control": true,
+    "guards": 9,
+    "guards_by_kind": {
+      "gated": 6,
+      "removed": 3
+    },
+    "harness_check": true,
+    "all_required": true,
+    "failures": []
+  },
+  "positive": {
+    "id": "N-I4R1-POSITIVE-CONTROL",
+    "kind": "positive",
+    "exit": 0,
+    "errors": [],
+    "features_default_only": true,
+    "ok": true
+  },
+  "guards": [
+    {
+      "id": "N-I4R1-CONNECT-AT",
+      "kind": "gated",
+      "attempt": "construct the verifier's manager over a caller-selected bus socket (A-R1-6)",
+      "why": "a normal build derives the bus from the real uid only (ScopeManager::connect)",
+      "expected": [
+        "error[E0599]: no function or associated item named `connect_at` found for struct `ScopeManager` in the current scope"
+      ],
+      "errors": [
+        "error[E0599]: no function or associated item named `connect_at` found for struct `ScopeManager` in the current scope"
+      ],
+      "exact": true,
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "self_check_harness_feature": true,
+      "ok": true
+    },
+    {
+      "id": "N-I4R1-DIRECT-START",
+      "kind": "removed",
+      "attempt": "start a scope directly, outside execution::run (A-R1-1)",
+      "why": "a normal build starts a scope only within execution::run",
+      "expected": [
+        "error[E0599]: no method named `start` found for reference `&ScopeManager` in the current scope"
+      ],
+      "errors": [
+        "error[E0599]: no method named `start` found for reference `&ScopeManager` in the current scope"
+      ],
+      "exact": true,
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "self_check_harness_feature": null,
+      "ok": true
+    },
+    {
+      "id": "N-I4R1-PENDING-SCOPE",
+      "kind": "removed",
+      "attempt": "hold a pending scope operation apart from its helper (A-R1-2)",
+      "why": "a pending operation is crate-private, owned only beside its helper",
+      "expected": [
+        "error[E0603]: struct `PendingScope` is private"
+      ],
+      "errors": [
+        "error[E0603]: struct `PendingScope` is private"
+      ],
+      "exact": true,
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "self_check_harness_feature": null,
+      "ok": true
+    },
+    {
+      "id": "N-I4R1-START-FAILED",
+      "kind": "removed",
+      "attempt": "receive a failed start that carries the operation without its helper (A-R1-2)",
+      "why": "no failure carries a pending operation apart from its helper",
+      "expected": [
+        "error[E0425]: cannot find type `StartFailed` in module `nexus_verifier_sandbox::scope`"
+      ],
+      "errors": [
+        "error[E0425]: cannot find type `StartFailed` in module `nexus_verifier_sandbox::scope`"
+      ],
+      "exact": true,
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "self_check_harness_feature": null,
+      "ok": true
+    },
+    {
+      "id": "N-I4R1-PLACE",
+      "kind": "gated",
+      "attempt": "use the live harness's direct scope start in a normal build",
+      "why": "the harness's direct owner exists only with the harness feature",
+      "expected": [
+        "error[E0425]: cannot find function `place` in module `execution`"
+      ],
+      "errors": [
+        "error[E0425]: cannot find function `place` in module `execution`"
+      ],
+      "exact": true,
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "self_check_harness_feature": true,
+      "ok": true
+    },
+    {
+      "id": "N-I4R1-SCOPED-HELPER",
+      "kind": "gated",
+      "attempt": "name the harness's direct owner in a normal build",
+      "why": "the harness's direct owner exists only with the harness feature",
+      "expected": [
+        "error[E0425]: cannot find type `ScopedHelper` in module `execution`"
+      ],
+      "errors": [
+        "error[E0425]: cannot find type `ScopedHelper` in module `execution`"
+      ],
+      "exact": true,
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "self_check_harness_feature": true,
+      "ok": true
+    },
+    {
+      "id": "N-I4R1-PLACEMENT-FAILED",
+      "kind": "gated",
+      "attempt": "name the harness's direct failure in a normal build",
+      "why": "the harness's direct owner exists only with the harness feature",
+      "expected": [
+        "error[E0425]: cannot find type `PlacementFailed` in module `execution`"
+      ],
+      "errors": [
+        "error[E0425]: cannot find type `PlacementFailed` in module `execution`"
+      ],
+      "exact": true,
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "self_check_harness_feature": true,
+      "ok": true
+    },
+    {
+      "id": "N-I4R1-RUN-WITH-FAULT",
+      "kind": "gated",
+      "attempt": "inject a fault into an execution in a normal build",
+      "why": "fault injection exists only with the harness feature",
+      "expected": [
+        "error[E0425]: cannot find value `run_with_fault` in module `execution`"
+      ],
+      "errors": [
+        "error[E0425]: cannot find value `run_with_fault` in module `execution`"
+      ],
+      "exact": true,
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "self_check_harness_feature": true,
+      "ok": true
+    },
+    {
+      "id": "N-I4R1-HOLDS",
+      "kind": "gated",
+      "attempt": "inspect a retained boundary's contents in a normal build",
+      "why": "a retained boundary is only retried (or, defense in depth, dropped)",
+      "expected": [
+        "error[E0599]: no method named `holds_helper` found for struct `RetainedBoundary` in the current scope",
+        "error[E0599]: no method named `holds_scope` found for struct `RetainedBoundary` in the current scope"
+      ],
+      "errors": [
+        "error[E0599]: no method named `holds_helper` found for struct `RetainedBoundary` in the current scope",
+        "error[E0599]: no method named `holds_scope` found for struct `RetainedBoundary` in the current scope"
+      ],
+      "exact": true,
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "self_check_harness_feature": true,
+      "ok": true
+    },
+    {
+      "id": "N-I4R1-HARNESS-CHECK",
+      "kind": "harness",
+      "attempt": "a deliberate type error",
+      "why": "proves that the harness sees build errors",
+      "expected": [
+        "error[E0308]: mismatched types"
+      ],
+      "errors": [
+        "error[E0308]: mismatched types"
+      ],
+      "exact": true,
+      "self_check_builds": true,
+      "self_check_errors": [],
+      "self_check_harness_feature": null,
+      "ok": true
+    }
+  ]
+}

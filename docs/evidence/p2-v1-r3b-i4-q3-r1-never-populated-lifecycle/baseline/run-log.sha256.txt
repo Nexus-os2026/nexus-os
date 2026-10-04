@@ -1,0 +1,2 @@
+run 37163435032 job log: 103679 bytes, sha256 14ddc0e7aaf365be57e08f14d34654b0c1208aa8b9950aca618abc018885a39a
+(the complete log stays in the Q2 work directory; the API serves it while GitHub retains it)

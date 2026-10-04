@@ -13,9 +13,26 @@
 //! is logged, so a test can assert what was and was not asked.
 //!
 //! The manager has nothing to stop or kill a unit with: the backend never
-//! acts on a unit by its name (P2-V1-R3B-I4-R3). A unit goes only when the
-//! manager unloads it by itself, and a test may then load a foreign unit
-//! under the same name ([`State::unload`], [`State::load_foreign`]).
+//! acts on a unit by its name (P2-V1-R3B-I4-R3). A unit goes only once its
+//! invocation has ended and the manager has collected it, as systemd 255 does
+//! (P2-V1-R3B-I4-Q3-R1; this backend's scopes are
+//! `CollectMode=inactive-or-failed`). A running scope ends only by:
+//!
+//! - the cgroup-empty notification ([`State::notify_empty`]): the kernel
+//!   notifies `cgroup.events` only when `populated` changes, so only a
+//!   cgroup that was populated and has run empty produces it. A cgroup that
+//!   was never populated produces none: a start whose process the kernel
+//!   never moved (an exiting, unreaped one: migration skips it, and the
+//!   start still succeeds) leaves a scope that stays loaded and running;
+//! - its runtime backstop, `RuntimeMaxUSec` ([`State::expire_backstop`]):
+//!   stopped, whatever it holds ended, failed with result 'timeout';
+//! - another client of the manager stopping it ([`State::stopped_by_another`]).
+//!
+//! Only an ended unit is collected ([`State::collect`]); a test may then load
+//! a foreign unit under the same name ([`State::load_foreign`]). A start that
+//! attached no process at all (a process id that no longer exists) is refused
+//! by the manager and its failed unit collected at once: the model's
+//! `unit_loaded = false`.
 //!
 //! Every unit invocation has its own random-like identity and every cgroup
 //! directory its own kernel ID, never reused (P2-V1-R3B-I4-R3-R1). An
@@ -244,6 +261,28 @@ pub(crate) enum Call {
     Kill(String),
 }
 
+/// How a unit's invocation ended (P2-V1-R3B-I4-Q3-R1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Ended {
+    /// Its cgroup ran empty after being populated: the cgroup-empty
+    /// notification ended the scope.
+    Emptied,
+    /// Its runtime backstop (`RuntimeMaxUSec`) expired: stopped, failed with
+    /// result 'timeout'.
+    Backstop,
+    /// Another client of the manager stopped it.
+    StoppedByAnother,
+}
+
+/// Where a unit is in its life (P2-V1-R3B-I4-Q3-R1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Lifecycle {
+    /// Loaded and running: a scope stays so while nothing ends it.
+    Running,
+    /// Ended; still loaded until the manager collects it.
+    Ended(Ended),
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Unit {
     /// Created by a request of this backend (not a foreign unit).
@@ -252,6 +291,7 @@ pub(crate) struct Unit {
     pub cgroup: Option<usize>,
     /// This invocation's identity.
     pub instance: UnitInstance,
+    pub lifecycle: Lifecycle,
 }
 
 #[derive(Debug, Clone)]
@@ -271,6 +311,13 @@ pub(crate) struct Cgroup {
     /// This limit file holds `max` instead of the requested value.
     pub limit_mismatch: Option<&'static str>,
     pub kills: u32,
+    /// A process was ever in it: only such a cgroup can run empty and
+    /// produce the manager's cgroup-empty notification
+    /// (P2-V1-R3B-I4-Q3-R1).
+    pub ever_populated: bool,
+    /// The manager stopped its unit (its backstop, or another client):
+    /// whatever it held is ended. Never the backend's doing.
+    pub stopped: bool,
 }
 
 impl Cgroup {
@@ -280,7 +327,7 @@ impl Cgroup {
             Phantom::UntilKill => !self.killed,
             Phantom::Forever => true,
         };
-        !self.removed && (phantom || (!self.killed && !self.members.is_empty()))
+        !self.removed && !self.stopped && (phantom || (!self.killed && !self.members.is_empty()))
     }
 }
 
@@ -411,6 +458,8 @@ impl State {
     /// index.
     pub(crate) fn add_cgroup(&mut self, mut cgroup: Cgroup) -> usize {
         cgroup.id = self.fresh();
+        // A process of its own from the start (a phantom) populated it.
+        cgroup.ever_populated = cgroup.populated();
         self.cgroups.push(cgroup);
         self.cgroups.len() - 1
     }
@@ -440,15 +489,101 @@ impl State {
     /// The kernel reports `pid` in the cgroup at `index`.
     pub(crate) fn place(&mut self, pid: u32, index: usize) {
         self.cgroups[index].members.insert(pid);
+        self.cgroups[index].ever_populated = true;
         self.membership
             .insert(pid, self.cgroups[index].path.clone());
     }
 
-    /// The manager unloads `unit` by itself, as systemd collects a unit
-    /// once nothing is left in it: its cgroup is removed, every member
-    /// reported in that removed cgroup, and the name is free again. Never a
-    /// request of the backend; the test arranges that nothing is left.
-    pub(crate) fn unload(&mut self, unit: &str) {
+    /// The manager's cgroup-empty notification for `unit`
+    /// (P2-V1-R3B-I4-Q3-R1). The kernel notifies `cgroup.events` only when
+    /// `populated` changes, so only a cgroup that was populated and has run
+    /// empty produces one, and only then does the running scope end. A
+    /// cgroup that was never populated produces none: the scope stays loaded
+    /// and running. Returns whether the unit ended.
+    pub(crate) fn notify_empty(&mut self, unit: &str) -> bool {
+        let Some(record) = self.units.get(unit) else {
+            return false;
+        };
+        let Some(index) = record.cgroup else {
+            return false;
+        };
+        let cgroup = &self.cgroups[index];
+        if record.lifecycle != Lifecycle::Running || !cgroup.ever_populated || cgroup.populated() {
+            return false;
+        }
+        self.end(unit, Ended::Emptied)
+    }
+
+    /// `unit`'s runtime backstop (`RuntimeMaxUSec`) expires: the manager
+    /// stops the running scope, ending whatever its cgroup holds, and it
+    /// fails with result 'timeout' (P2-V1-R3B-I4-Q3-R1). Only a unit
+    /// created with a nonzero backstop has one. Returns whether it ended.
+    pub(crate) fn expire_backstop(&mut self, unit: &str) -> bool {
+        let backstop = self
+            .units
+            .get(unit)
+            .and_then(|record| record.cgroup)
+            .map_or(0, |index| self.cgroups[index].limits.runtime_backstop_secs);
+        backstop > 0 && self.end(unit, Ended::Backstop)
+    }
+
+    /// Another client of the manager (the same uid) stops `unit`, ending
+    /// whatever its cgroup holds. Returns whether it ended.
+    pub(crate) fn stopped_by_another(&mut self, unit: &str) -> bool {
+        self.end(unit, Ended::StoppedByAnother)
+    }
+
+    /// End the running `unit` as `how` says: a stopped scope's cgroup holds
+    /// nothing any more; one that ran empty already held nothing.
+    fn end(&mut self, unit: &str, how: Ended) -> bool {
+        let Some(record) = self.units.get_mut(unit) else {
+            return false;
+        };
+        if record.lifecycle != Lifecycle::Running {
+            return false;
+        }
+        record.lifecycle = Lifecycle::Ended(how);
+        if let (Some(index), true) = (record.cgroup, how != Ended::Emptied) {
+            self.cgroups[index].stopped = true;
+        }
+        true
+    }
+
+    /// The manager collects `unit` once it has ended (this backend's scopes
+    /// are `CollectMode=inactive-or-failed`): see [`Self::unload`]. A running
+    /// unit is never collected. Returns whether it was.
+    pub(crate) fn collect(&mut self, unit: &str) -> bool {
+        if !self
+            .units
+            .get(unit)
+            .is_some_and(|record| matches!(record.lifecycle, Lifecycle::Ended(_)))
+        {
+            return false;
+        }
+        self.unload(unit);
+        true
+    }
+
+    /// The manager ends `unit` by itself, by the event that really ends it,
+    /// and collects it (P2-V1-R3B-I4-Q3-R1): the cgroup-empty notification
+    /// when its cgroup ran empty after being populated, otherwise its runtime
+    /// backstop. Never a request of the backend, which stops nothing
+    /// (P2-V1-R3B-I4-R3). Returns whether it was collected (`false`: no unit
+    /// of the name is loaded).
+    pub(crate) fn end_by_itself_and_collect(&mut self, unit: &str) -> bool {
+        let Some(record) = self.units.get(unit) else {
+            return false;
+        };
+        let ended = record.lifecycle != Lifecycle::Running
+            || self.notify_empty(unit)
+            || self.expire_backstop(unit);
+        assert!(ended, "{unit} cannot end by itself");
+        self.collect(unit)
+    }
+
+    /// A collected unit leaves the manager: its cgroup is removed, every
+    /// member reported in that removed cgroup, and the name is free again.
+    fn unload(&mut self, unit: &str) {
         let Some(unloaded) = self.units.remove(unit) else {
             return;
         };
@@ -481,6 +616,8 @@ impl State {
             limits: ResourcePolicy::RUST_OFFLINE_V1,
             limit_mismatch: None,
             kills: 0,
+            ever_populated: false,
+            stopped: false,
         });
         self.place(member, index);
         let instance = self.fresh_instance();
@@ -490,6 +627,7 @@ impl State {
                 ours: false,
                 cgroup: Some(index),
                 instance,
+                lifecycle: Lifecycle::Running,
             },
         );
         index
@@ -650,6 +788,8 @@ impl Manager for FakeManager {
                         limits: *request.limits,
                         limit_mismatch: None,
                         kills: 0,
+                        ever_populated: false,
+                        stopped: false,
                     });
                     if holds_helper {
                         state.place(request.helper_pid, index);
@@ -666,6 +806,7 @@ impl Manager for FakeManager {
                         ours: false,
                         cgroup,
                         instance,
+                        lifecycle: Lifecycle::Running,
                     },
                 );
             }
@@ -699,6 +840,8 @@ impl Manager for FakeManager {
                 limits: *request.limits,
                 limit_mismatch: state.limit_mismatch,
                 kills: 0,
+                ever_populated: false,
+                stopped: false,
             };
             let index = state.add_cgroup(cgroup);
             let instance = state.fresh_instance();
@@ -710,6 +853,7 @@ impl Manager for FakeManager {
                         ours: true,
                         cgroup: Some(index),
                         instance,
+                        lifecycle: Lifecycle::Running,
                     },
                 );
             }
@@ -745,7 +889,10 @@ impl Manager for FakeManager {
                 match state.interference {
                     Interference::None => {}
                     Interference::Replace(member) => {
-                        state.unload(request.unit);
+                        // The unit is running with the helper in it: only
+                        // another client's stop can end it now.
+                        state.stopped_by_another(request.unit);
+                        state.collect(request.unit);
                         let index = state.load_foreign(request.unit, member);
                         state.place(request.helper_pid, index);
                     }
@@ -1295,13 +1442,15 @@ fn i4_a_pending_operation_is_bound_to_its_own_helper() {
     };
     // As the finalizer settles: its bound helper killed, kept unreaped.
     let _ = bound.kill();
-    // The manager has unloaded the unit by itself (P2-V1-R3B-I4-R3: nothing
-    // stops it), so only the bound helper's position is left to observe;
-    // another helper's membership is no evidence for this operation.
+    // The manager has ended the unit by itself and collected it
+    // (P2-V1-R3B-I4-R3: nothing stops it; its cgroup was never populated, so
+    // only its runtime backstop ends it, P2-V1-R3B-I4-Q3-R1), so only the
+    // bound helper's position is left to observe; another helper's
+    // membership is no evidence for this operation.
     {
         let mut state = world.lock();
         let unit = state.requested().unwrap();
-        state.unload(&unit);
+        assert!(state.expire_backstop(&unit) && state.collect(&unit));
     }
     assert!(
         !pending.reconcile(Some(&other), None),

@@ -1,0 +1,137 @@
+== Run
+run_id: 37163435032
+attempt: 1
+event: workflow_dispatch
+branch: review/p2-v1-native-scope-host-qualification
+head_sha: d16d7ca30e9f6431c9399e6facd4bda26b4a1740
+workflow: .github/workflows/ci-phase2-linux-sandbox.yml (id 371750689)
+workflow_sha: not printed by the run; step 1 succeeds only if GITHUB_SHA and GITHUB_WORKFLOW_SHA equal the dispatched candidate input
+status/conclusion: completed/failure
+created/updated: 2026-10-03T23:58:10Z / 2026-10-04T00:01:54Z
+url: https://github.com/Nexus-os2026/nexus-os/actions/runs/37163435032
+triggering_actor: Nexus-os2026
+== Job and runner
+job: phase2-linux-sandbox id=111321444716 conclusion=failure
+runner: id=21 name=nexus-local-asus labels=self-hosted,Linux,X64,nexus-local
+step 1: Set up job: success
+step 2: Validate the candidate and the workflow identity: success
+step 3: Checkout the exact candidate: success
+step 4: Verify the exact candidate and a clean checkout: success
+step 5: Use the runner's installed Rust 1.94.0 (no rustup, nothing installed): success
+step 6: Use the persistent Cargo target cache (outside the checkout): success
+step 7: Required host layers (the job fails if any is missing): success
+step 8: Setup Node.js 24.21.0 (verifier toolchain assembly): success
+step 9: Assemble the packaged verifier toolchain (pinned Rust 1.94.0 components): success
+step 10: Verifier sandbox unit tests: success
+step 11: Cleanup observation controls (fixtures only): success
+step 12: Live Phase Two isolation, escape and cleanup suite (every layer required): failure
+step 13: Phase Two kernel and desktop controls: skipped
+step 25: Post Setup Node.js 24.21.0 (verifier toolchain assembly): skipped
+step 26: Post Checkout the exact candidate: success
+step 27: Complete job: success
+== Host layers (evidence only)
+runner_user_uid: github-runner (1001)
+runner_cgroup: 0::/user.slice/user-1001.slice/user@1001.service/app.slice/nexus-github-runner.service
+host: apparmor_restrict_unprivileged_userns=1
+host: landlock ABI: 7
+host: systemd: systemd 255 (255.4-1ubuntu8.17)
+host: dbus: D-Bus Message Bus Daemon 1.14.10
+host: os: Ubuntu 24.04.5 LTS
+host_layers_step: success
+== Live step
+pre_cleanup: verifier scopes loaded by the user manager: none | verification workspaces: none (nexus-verifier absent at observation time)
+cases_started: 17
+result_line: NOT FOUND
+case 01: PASS p2c_live_escape_attempts_are_all_denied
+case 02: PASS p2c_live_each_layer_is_necessary
+case 03: PASS p2c_live_descendants_do_not_survive_init_exit
+case 04: PASS p2c_live_parent_death_ends_the_sandbox
+case 05: PASS p2c_live_missing_namespace_fails_closed
+case 06: PASS p2c_live_malformed_launch_runs_nothing
+case 07: PASS p2i_live_unavailable_landlock_fails_closed
+case 08: PASS p2i_live_failed_seccomp_install_runs_nothing
+case 09: PASS p2d_live_missing_scope_fails_closed
+case 10: PASS p2f_live_packaged_toolchain_verifies
+case 11: PASS p2d_live_execution_runs_in_a_verified_scope
+case 12: PASS p2d_live_helper_holds_the_scope_until_released
+case 13: PASS p2d_live_deadline_kill_reaches_every_descendant
+case 14: PASS p2d_live_pids_limit_is_enforced
+case 15: PASS p2d_live_memory_limit_is_enforced
+case 16: PASS p2d_live_descendant_oom_is_never_a_pass
+case 17: PASS p2d_live_output_flood_is_bounded
+case 18: NOT RUN p2d_live_unmovable_process_fails_closed
+case 19: NOT RUN p2e_live_workspace_is_private_and_path_bound
+case 20: NOT RUN p2e_live_workspace_confines_the_verifier
+case 21: NOT RUN p2g_live_offline_rust_profile_runs_cargo_test
+case 22: NOT RUN p2r1_live_panic_after_helper_spawn_is_finalized
+case 23: NOT RUN p2r1_live_panic_while_proving_the_scope_stops_it
+case 24: NOT RUN p2r1_live_panic_after_the_scope_is_proven_is_finalized
+case 25: NOT RUN p2r1_live_panic_after_launch_ends_the_tree
+case 26: NOT RUN p2r1_live_panic_while_running_ends_every_descendant
+case 27: NOT RUN p2r1_live_panic_while_draining_output_ends_the_tree
+case 28: NOT RUN p2r1_live_output_thread_panic_is_never_a_result
+case 29: NOT RUN p2r1_live_panic_before_finalization_is_never_a_pass
+case 30: NOT RUN p2r1_live_panic_in_finalization_retains_the_live_boundary
+case 31: NOT RUN p2r1_live_failed_finalization_is_retried_to_confirmation
+case 32: NOT RUN p2q_live_h1_the_manager_is_the_real_uid_s_user_bus
+case 33: NOT RUN p2q_live_h2_the_helper_s_membership_is_one_unified_cgroup_v2_line
+case 34: NOT RUN p2q_live_h3_h4_the_manager_s_unit_binds_to_the_kernel_s_cgroup
+case 35: NOT RUN p2q_live_h5_a_fresh_name_is_exactly_no_such_unit
+case 36: NOT RUN p2q_live_h6_an_existing_name_is_exactly_unit_exists
+case 37: NOT RUN p2q_live_h7_a_killed_unreaped_helper_keeps_its_membership
+case 38: NOT RUN p2r1_live_panic_after_the_candidate_is_retained_settles_it
+case 39: NOT RUN p2r1_live_panic_during_the_binding_proof_settles_it
+evidence H1: NOT FOUND
+evidence H2: NOT FOUND
+evidence H3: NOT FOUND
+evidence H3 (R3-R1): NOT FOUND
+evidence H4: NOT FOUND
+evidence H5: NOT FOUND
+evidence H6: NOT FOUND
+evidence H7: NOT FOUND
+post_cleanup: verification workspaces: none (nexus-verifier absent at observation time)
+live_error: thread 'main' (438099) panicked at crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs:952:21:
+live_error: ##[error]a verifier scope was left behind: nexus-verifier-deb565108b334be56fbff5e9df044ead.scope
+live_error: ##[error]the live suite did not report 39 passed cases
+live_error: ##[error]the cleanup observation found something left, or could not answer, after the live suite (cargo exit 1)
+live_error: ##[error]the live suite failed (cargo exit 101)
+live_error: ##[error]Process completed with exit code 101.
+== H3/H4 identity fields (printed values are evidence, not authority)
+live_InvocationID (manager): NOT FOUND
+captured_InvocationID (production): NOT FOUND
+InvocationID_form: NOT FOUND
+InvocationID_hex_length_and_nonzero: NOT FOUND
+unit: NOT FOUND
+Id: NOT FOUND
+ControlGroup (manager): NOT FOUND
+membership (kernel): NOT FOUND
+ControlGroup_equal: NOT FOUND
+ControlGroupId (manager): NOT FOUND
+retained_descriptor_cgroup_id: NOT FOUND
+RuntimeMaxUSec: NOT FOUND
+OOMPolicy: NOT FOUND
+== Kernel and desktop controls
+controls: NOT FOUND
+unit tests: test result: ok. 153 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.21s
+cleanup controls: test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+cleanup controls: Ran 7 tests in 0.181s
+cleanup controls: OK
+== Mission section 20 requirements
+REQ 01 PASS | exact candidate identity validated | step 1 success, head d16d7ca30e9f6431c9399e6facd4bda26b4a1740, workflow_dispatch on review/p2-v1-native-scope-host-qualification
+REQ 02 PASS | exact candidate checkout clean | Tested commit: d16d7ca30e9f6431c9399e6facd4bda26b4a1740
+REQ 03 PASS | host layers step green | success
+REQ 04 PASS | pre-live cleanup observation clean | verifier scopes loaded by the user manager: none | verification workspaces: none (nexus-verifier absent at observation time)
+REQ 05 PASS | live suite actually ran | 17 cases started
+REQ 06 FAIL | exactly the 39 mandatory cases, all passed | no result line
+REQ 07 FAIL | no skipped or degraded mandatory case | degraded lines: 0
+REQ 08 FAIL | H1 passes | no H1 line
+REQ 09 FAIL | H2 passes | no H2 line
+REQ 10 FAIL | H3/H4 passes (InvocationID 16-byte non-null equal to production's; exact ControlGroup; ControlGroupId equal to the retained descriptor's; membership bound; RuntimeMaxUSec 120000000; OOMPolicy continue) | InvocationID=NOT FOUND ControlGroupId=NOT FOUND RuntimeMaxUSec=NOT FOUND OOMPolicy=NOT FOUND
+REQ 11 FAIL | H5 exact NoSuchUnit | no H5 line
+REQ 12 FAIL | H6 exact UnitExists | no H6 line
+REQ 13 FAIL | H7 killed-unreaped membership | no H7 line
+REQ 14 FAIL | real production execution::run path | p2d_live_execution_runs_in_a_verified_scope, p2g_live_offline_rust_profile_runs_cargo_test
+REQ 15 FAIL | panic/finalizer cases pass (12) | p2r1_live_panic_after_helper_spawn_is_finalized=NOT RUN, p2r1_live_panic_while_proving_the_scope_stops_it=NOT RUN, p2r1_live_panic_after_the_scope_is_proven_is_finalized=NOT RUN, p2r1_live_panic_after_launch_ends_the_tree=NOT RUN, p2r1_live_panic_while_running_ends_every_descendant=NOT RUN, p2r1_live_panic_while_draining_output_ends_the_tree=NOT RUN, p2r1_live_output_thread_panic_is_never_a_result=NOT RUN, p2r1_live_panic_before_finalization_is_never_a_pass=NOT RUN, p2r1_live_panic_in_finalization_retains_the_live_boundary=NOT RUN, p2r1_live_failed_finalization_is_retried_to_confirmation=NOT RUN, p2r1_live_panic_after_the_candidate_is_retained_settles_it=NOT RUN, p2r1_live_panic_during_the_binding_proof_settles_it=NOT RUN
+REQ 16 FAIL | post-live cleanup observation clean | verification workspaces: none (nexus-verifier absent at observation time)
+REQ 17 FAIL | kernel and desktop controls pass | step skipped, 0 result lines
+REQ 18 FAIL | overall workflow conclusion success | completed/failure

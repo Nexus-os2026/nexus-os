@@ -452,13 +452,15 @@ fn opens(world: &World) -> usize {
     world.lock().count(|call| matches!(call, Call::Open(_)))
 }
 
-/// The manager unloads the requested unit by itself, as systemd collects a
-/// unit once nothing is left in it (P2-V1-R3B-I4-R3: the backend never
-/// stops it).
+/// The manager ends the requested unit by itself and collects it
+/// (P2-V1-R3B-I4-R3: the backend never stops it), by the event that really
+/// ends it (P2-V1-R3B-I4-Q3-R1): the cgroup-empty notification when its
+/// cgroup ran empty after being populated, otherwise only its runtime
+/// backstop (a cgroup never populated produces no empty notification).
 fn unloaded(world: &World) {
     let mut state = world.lock();
     let unit = state.requested().unwrap();
-    state.unload(&unit);
+    state.end_by_itself_and_collect(&unit);
 }
 
 /// Every membership read happened while the helper was unreaped.
@@ -511,9 +513,12 @@ fn i4_04_a_property_timeout_after_placement_never_launches_and_keeps_the_candida
 
 #[test]
 fn i4_05_a_unit_the_helper_never_entered_is_confirmed_gone_before_the_failure() {
-    // The manager has unloaded the unit by itself (as systemd collects a
-    // scope whose start attached no process). P2-V1-R3B-I4-R3: nothing stops
-    // it, and while the manager keeps it nothing is confirmed (i4_06).
+    // The manager has unloaded the unit by itself (as systemd refuses a start
+    // that attached no process, its process id no longer existing, and
+    // collects the failed unit). P2-V1-R3B-I4-R3: nothing stops it, and while
+    // the manager keeps it nothing is confirmed (i4_06). A start whose
+    // process is exiting but unreaped is not refused: its scope runs, never
+    // populated, until its backstop (P2-V1-R3B-I4-Q3-R1, q3r1_01).
     let world = World::new(|state| {
         state.placement = Placement::Never;
         state.unit_loaded = false;
@@ -1577,13 +1582,14 @@ fn i4r1_06_a_cgroup_of_the_unit_s_name_in_another_place_is_never_proven() {
             );
             found
         };
-        // The manager unloads the unit by itself, and the cgroup the helper
-        // is in goes: the manager's absence with the helper outside confirms
-        // the accepted operation; nothing was ever ended.
+        // The unit's cgroup was never populated, so only its runtime backstop
+        // ends it (P2-V1-R3B-I4-Q3-R1); the manager collects it, and the
+        // cgroup the helper is in goes: the manager's absence with the helper
+        // outside confirms the accepted operation; the backend ended nothing.
         {
             let mut state = world.lock();
             let unit = state.requested().unwrap();
-            state.unload(&unit);
+            assert!(state.expire_backstop(&unit) && state.collect(&unit));
             let index = state
                 .cgroups
                 .iter()
@@ -2893,12 +2899,13 @@ fn i4r2_08_a_retained_uncertain_operation_never_gains_name_authority_without_its
 /// id: the model never signals a real process).
 const REUSER: u32 = 4_000_002;
 
-/// This request's unit is unloaded, and another client loads a unit of its
-/// own under the same name, holding `REUSER`: the foreign cgroup's index.
+/// This request's unit ends by itself and is collected (see [`unloaded`]),
+/// and another client loads a unit of its own under the same name, holding
+/// `REUSER`: the foreign cgroup's index.
 fn reloaded_by_another(world: &World) -> usize {
     let mut state = world.lock();
     let unit = state.requested().unwrap();
-    state.unload(&unit);
+    assert!(state.end_by_itself_and_collect(&unit));
     state.load_foreign(&unit, REUSER)
 }
 
@@ -3492,7 +3499,7 @@ fn r3r1_02_a_same_name_replacement_holding_the_helper_is_never_ended_proven_or_l
     {
         let mut state = world.lock();
         let unit = state.requested().unwrap();
-        state.unload(&unit);
+        assert!(state.end_by_itself_and_collect(&unit));
         let index = state.load_foreign(&unit, HOLDER);
         state.place(pid, index);
     }
@@ -4079,4 +4086,202 @@ fn r3r1_x_a_start_whose_signals_cannot_be_watched_is_never_sent() {
         state.calls
     );
     assert!(state.units.is_empty() && state.cgroups.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// P2-V1-R3B-I4-Q3-R1: the never-populated scope lifecycle (live run
+// 37163435032, case 18). A start whose helper is killed but unreaped is not
+// refused: systemd 255 still resolves the exiting process, the kernel's
+// migration skips it, and the start succeeds. The scope runs never populated:
+// no cgroup-empty notification ends it, so it stays loaded until its runtime
+// backstop expires and the manager collects it. Until then an accepted
+// operation without a candidate stays unconfirmed (its helper unreaped);
+// only once the manager has collected the unit does a retry confirm it gone,
+// and only then is the helper reaped. A scope that was populated and ran
+// empty still ends on its notification. Over the deterministic simulation
+// only.
+
+use crate::scope::tests::{unreaped, Ended, Lifecycle};
+
+/// A `cat` stand-in killed and observed exited but not reaped, as live case
+/// 18 makes its helper before the placement: its process id stays reserved.
+fn killed_unreaped() -> (Helper, u32) {
+    let mut helper = cat();
+    let pid = helper.pid();
+    helper.kill().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while is_running(pid) {
+        assert!(
+            Instant::now() < deadline,
+            "the killed stand-in did not exit"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert!(
+        is_child(pid) && unreaped(pid),
+        "the killed stand-in was reaped before its placement"
+    );
+    (helper, pid)
+}
+
+/// Place a killed, unreaped helper over a model whose kernel never moves it:
+/// no scope is proven, and the accepted operation is retained without a
+/// candidate (the retained boundary, the helper's process id, the unit).
+fn never_populated(world: &World) -> (RetainedBoundary, u32, String) {
+    let (helper, pid) = killed_unreaped();
+    let failed = match place(&world.scopes(), helper, &LIMITS) {
+        Ok(placed) => panic!("a scope was proven for an unmovable process: {placed:?}"),
+        Err(failed) => failed,
+    };
+    assert!(
+        matches!(failed.error, Some(ScopeError::NotPlaced)),
+        "{:?}",
+        failed.error
+    );
+    let Cleanup::Failed(boundary) = failed.cleanup else {
+        panic!("confirmed while the never-populated scope is loaded")
+    };
+    let observed = pending_state(&boundary);
+    assert!(
+        observed.issued
+            && observed.accepted
+            && observed.instance
+            && !observed.candidate
+            && !observed.owned
+            && !observed.settled,
+        "{observed:?}"
+    );
+    let unit = world.lock().requested().unwrap();
+    (boundary, pid, unit)
+}
+
+/// Nothing of the operation was opened or killed by the backend.
+fn nothing_opened_or_killed(world: &World) {
+    let state = world.lock();
+    assert!(
+        state
+            .calls
+            .iter()
+            .all(|call| !matches!(call, Call::Open(_) | Call::Kill(_))),
+        "{:?}",
+        state.calls
+    );
+}
+
+#[test]
+fn q3r1_01_a_never_populated_scope_stays_loaded_and_unconfirmed_before_its_backstop() {
+    let world = World::new(|state| state.placement = Placement::Never);
+    let (mut boundary, pid, unit) = never_populated(&world);
+    // A: its cgroup was never populated, so no cgroup-empty notification
+    // ends it, and a running unit is never collected.
+    {
+        let mut state = world.lock();
+        let index = state.units[&unit].cgroup.unwrap();
+        assert!(!state.cgroups[index].ever_populated && !state.cgroups[index].populated());
+        assert!(
+            !state.notify_empty(&unit),
+            "a never-populated scope ended on a cgroup-empty notification"
+        );
+        assert!(!state.collect(&unit), "a running scope was collected");
+        assert_eq!(state.units[&unit].lifecycle, Lifecycle::Running);
+    }
+    // B, E: every retry before the backstop leaves the operation unconfirmed
+    // and its helper unreaped; that is expected, never a failure.
+    for attempt in 1..=3 {
+        boundary = match boundary.retry() {
+            Ok(()) => panic!("confirmed before the runtime backstop (retry {attempt})"),
+            Err(boundary) => boundary,
+        };
+        assert!(boundary.holds_scope() && boundary.holds_helper());
+        assert!(
+            is_child(pid) && unreaped(pid),
+            "the helper was reaped before the operation was confirmed (retry {attempt})"
+        );
+        let observed = pending_state(&boundary);
+        assert!(!observed.candidate && !observed.settled, "{observed:?}");
+    }
+    assert!(world.lock().units.contains_key(&unit));
+    nothing_opened_or_killed(&world);
+    // Its backstop then ends it and the manager collects it (q3r1_02).
+    {
+        let mut state = world.lock();
+        assert!(state.expire_backstop(&unit) && state.collect(&unit));
+    }
+    boundary.retry().unwrap();
+    assert!(!is_child(pid));
+}
+
+#[test]
+fn q3r1_02_only_the_backstop_and_the_collection_let_a_retry_confirm_it() {
+    let world = World::new(|state| state.placement = Placement::Never);
+    let (boundary, pid, unit) = never_populated(&world);
+    // C: the backstop ends it (stopped, failed 'timeout'); until the manager
+    // collects it, it is still loaded and nothing is confirmed.
+    {
+        let mut state = world.lock();
+        assert!(state.expire_backstop(&unit), "the backstop did not end it");
+        assert_eq!(
+            state.units[&unit].lifecycle,
+            Lifecycle::Ended(Ended::Backstop)
+        );
+        assert!(state.units.contains_key(&unit));
+    }
+    let boundary = match boundary.retry() {
+        Ok(()) => panic!("confirmed before the manager collected the ended scope"),
+        Err(boundary) => boundary,
+    };
+    assert!(
+        is_child(pid) && unreaped(pid),
+        "the helper was reaped before the operation was confirmed"
+    );
+    // D: once collected, the manager answers it gone with the helper
+    // outside: a retry confirms the operation, and (E) only then is the
+    // helper reaped.
+    assert!(
+        world.lock().collect(&unit),
+        "the ended scope was not collected"
+    );
+    assert!(!world.lock().units.contains_key(&unit));
+    if let Err(boundary) = boundary.retry() {
+        panic!("the collected scope's operation was not confirmed: {boundary:?}");
+    }
+    assert!(!is_child(pid), "the helper was not reaped once confirmed");
+    nothing_opened_or_killed(&world);
+}
+
+#[test]
+fn q3r1_03_a_populated_scope_that_runs_empty_still_ends_on_its_notification() {
+    // F: the retained candidate's cgroup holds a process of its own until
+    // released. While populated nothing ends it; once it has run empty, the
+    // notification ends it and the manager collects it, as before.
+    let world = World::new(|state| {
+        failing_proof(state);
+        state.phantom = Phantom::Forever;
+    });
+    let boundary = boundary_of(run_in(&world, None));
+    let unit = world.lock().requested().unwrap();
+    {
+        let mut state = world.lock();
+        let index = state.units[&unit].cgroup.unwrap();
+        assert!(state.cgroups[index].ever_populated && state.cgroups[index].populated());
+        assert!(
+            !state.notify_empty(&unit),
+            "a populated scope ended on a notification"
+        );
+    }
+    world.release();
+    {
+        let mut state = world.lock();
+        assert!(
+            state.notify_empty(&unit),
+            "a populated scope that ran empty did not end on its notification"
+        );
+        assert_eq!(
+            state.units[&unit].lifecycle,
+            Lifecycle::Ended(Ended::Emptied)
+        );
+        assert!(state.collect(&unit));
+    }
+    boundary.retry().unwrap();
+    assert!(world.lock().created().unwrap().removed);
 }

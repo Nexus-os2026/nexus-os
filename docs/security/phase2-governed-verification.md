@@ -253,6 +253,23 @@ What the primary sources establish, and what they do not
   when it is not needed: not while it is starting, running or stopping, has
   a pending job or has running processes (`systemd.unit(5)`, "Unit garbage
   collection").
+- The never-populated scope (P2-V1-R3B-I4-Q3-R1; live run 37163435032;
+  systemd v255.4 and Linux v6.17 sources, excerpted in
+  `docs/evidence/p2-v1-r3b-i4-q3-r1-never-populated-lifecycle/`). A scope's
+  start attaches its processes once, as it enters `running`; it is refused
+  ("No PIDs left to attach") only if none is attached. A process killed but
+  not reaped is still resolved (`pidfd_get_pid` fails only once it is
+  reaped), and writing it to `cgroup.procs` succeeds while the kernel's
+  migration skips the exiting task (`cgroup_migrate_add_task`,
+  `PF_EXITING`): the start succeeds and its scope runs with a cgroup that
+  is never populated (an exited task never counts as populated, and
+  `/proc/<pid>/cgroup` keeps reporting its original cgroup). On cgroup v2
+  the manager ends a scope for emptiness only on an `IN_MODIFY` of its
+  `cgroup.events`, which the kernel sends only when `populated` changes:
+  a never-populated scope is never ended that way and stays loaded and
+  running until its `RuntimeMaxUSec` expires, then fails with result
+  'timeout' and, `CollectMode=inactive-or-failed`, is collected. Reaping
+  the helper does not end it either (it was never in it).
 - I4-R1 relies on no systemd-specific fence ordering a later call after an
   earlier, unanswered one. Whether one exists is a G-HOST/G-LIVE
   qualification question.
@@ -825,6 +842,7 @@ contacts a bus or creates a cgroup. Behavioural source-mutation controls
 | a confirmed start; a start without effect, its reply lost (never proven absent: P2-V1-R3B-I4-R1); with effect, its reply lost (P2-V1-R3B-I4-R3-R1: never proven or ended; until R3-R1 discovered and proven); a lost connection | `i4_01`–`i4_03` (`scope::tests`) |
 | a property or a manager query uncertain after the candidate is retained; mismatched limits, runtime backstop, out-of-memory policy, membership; a name never proves | `i4_04`, `i4_10`, `i4_12`–`i4_16` |
 | a unit the helper never entered, unloaded by the manager or still loaded (P2-V1-R3B-I4-R3: nothing stops it); a candidate still populated after its kill; a target observed gone; a timed-out observation | `i4_05`–`i4_09` |
+| a never-populated scope (its start attached a killed, unreaped helper the kernel never moved; P2-V1-R3B-I4-Q3-R1): no cgroup-empty notification ends it, so it stays loaded, its accepted operation unconfirmed and its helper unreaped through every retry, until its runtime backstop ends it and the manager collects it; only then does a retry confirm it and reap the helper; a scope that was populated and ran empty still ends on its notification. The model's manager ends a unit only by those events or another client's stop, and collects only an ended one | `q3r1_01`–`q3r1_03`; fixtures `np_01`–`np_18` (`tests/phase2_never_populated.rs`); live `p2d_live_unmovable_process_fails_closed` |
 | the manager's absence with the helper in a cgroup of the unit's name; a name collision | `i4_11`, `i4_17` |
 | no launch message before the proof | `i4_18` (a stand-in helper that shows any launch reaching it) |
 | finalization of a proven and of a pending scope; `CleanupFailed`; retry, also without the `ScopeManager`; drop | `i4_19`–`i4_24` |
@@ -1057,7 +1075,15 @@ build-output directories.
   long as it stays loaded and is never harmed. The request asks
   `CollectMode=inactive-or-failed`, so the manager may unload an inactive
   or failed scope by itself; when it does is host behaviour (G-HOST,
-  G-LIVE), never relied on for safety.
+  G-LIVE), never relied on for safety. A scope whose start attached a
+  helper the kernel never moved (killed, not reaped) is never populated, so
+  no emptiness ends it: it is collected only once its runtime backstop
+  (660 s in production) has expired (P2-V1-R3B-I4-Q3-R1). Until then its
+  accepted operation stays `CleanupFailed` and its helper unreaped, its
+  process id reserved; this bounds the confirmation's latency, an
+  availability cost only, and is what live case 18 qualifies with its own
+  45-second backstop. Production is unchanged: nothing ends that scope by
+  its name.
 - Candidate acquisition is unchanged (P2-V1-R3B-I4-R1): the cgroup of the
   unit's name the kernel reports the bound, unreaped helper in. Since
   P2-V1-R3B-I4-R3-R1 that is observation only: a party able to move this

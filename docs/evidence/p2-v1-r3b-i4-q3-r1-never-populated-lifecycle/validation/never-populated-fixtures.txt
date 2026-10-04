@@ -1,0 +1,25 @@
+   Compiling nexus-verifier-sandbox v0.1.0 (/home/nexus/NEXUS/p2-v1-r3b-i4-q3-r1-work/snapshots/final-v/crates/nexus-verifier-sandbox)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.67s
+     Running tests/phase2_never_populated.rs (/home/nexus/NEXUS/p2-v1-r3b-i4-q3-r1-work/targets/validate/debug/deps/phase2_never_populated-d2a05e4cb253d28a)
+
+running 18 tests
+test controls::np_03_a_confirmation_before_the_backstop_is_a_failure ... ok
+test controls::np_01_the_real_lifecycle_qualifies ... ok
+test controls::np_02_a_capture_failure_s_faster_refusal_qualifies_too ... ok
+test controls::np_05_a_proven_placement_is_a_failure ... ok
+test controls::np_04_a_scope_collected_before_its_backstop_is_a_failure ... ok
+test controls::np_06_a_cleanup_confirmed_at_once_is_a_failure ... ok
+test controls::np_07_a_helper_reaped_before_the_confirmation_is_a_failure ... ok
+test controls::np_08_a_helper_that_never_exits_fails_within_its_bound ... ok
+test controls::np_09_a_late_exit_is_waited_for_by_its_own_report ... ok
+test controls::np_11_scopes_not_back_to_the_baseline_are_a_failure ... ok
+test controls::np_10_a_scope_never_collected_fails_after_its_bound ... ok
+test controls::np_12_unconfirmed_after_the_collection_fails_and_releases ... ok
+test controls::np_13_an_unobservable_manager_is_never_no_scopes ... ok
+test controls::np_15_the_case_s_backstop_is_its_own_and_leaves_room_for_a_retry ... ok
+test controls::np_14_a_failure_reports_what_was_observed ... ok
+test controls::np_17_the_exit_observation_never_blocks_on_a_running_helper ... ok
+test controls::np_16_the_exit_observation_never_reaps ... ok
+test controls::np_18_live_case_18_drives_exactly_this_qualification ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

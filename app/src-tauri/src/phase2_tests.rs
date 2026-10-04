@@ -859,16 +859,21 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
     // use before anything is owned (`scopes_now`), one checked wait after
     // (`scopes_back`), and two more failing `unwrap_or_else` of the probe and
     // the checked bus; none reads a failed observation as "no scopes".
-    assert_eq!(harness.matches("loaded_scopes()").count(), 5);
+    // P2-V1-R3B-I4-Q3-R1: the unmovable process (case 18) no longer observes
+    // or waits itself (one `loaded_scopes()`, its `unwrap_or_else` and its
+    // `wait_for` are gone): its world observes only through
+    // `loaded_scopes_by`, and the qualification it drives reads a failed
+    // observation as a failure, never as "no scopes" (pinned below).
+    assert_eq!(harness.matches("loaded_scopes()").count(), 4);
     assert_eq!(
         harness.matches(".unwrap_or_else(|error| panic!(").count(),
-        5
+        4
     );
     assert_eq!(
         harness
             .matches("wait_for(Duration::from_secs(10), loaded_scopes_by, |now| {")
             .count(),
-        3
+        2
     );
     assert_eq!(
         harness
@@ -889,7 +894,8 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
     }
     // P2-V1-R3B-I4-R1: the live harness's direct scope owner hands a failed
     // placement's cleanup to a retained boundary, which is settled the same
-    // way: a failed scope-hold placement and the unmovable process.
+    // way: a failed scope-hold placement (and, until P2-V1-R3B-I4-Q3-R1, the
+    // unmovable process).
     assert_eq!(harness.matches("RetainedBoundary::retry").count(), 4);
     assert!(
         harness.contains("match settle(boundary, EXPLICIT_ATTEMPTS, RetainedBoundary::retry) {")
@@ -901,8 +907,41 @@ fn p2_g_09_cleanup_is_observed_only_through_the_checked_observations() {
                  execution::RetainedBoundary::retry,\n                )"
             )
             .count(),
+        1
+    );
+    // P2-V1-R3B-I4-Q3-R1: the unmovable process's retained boundary is
+    // retried only by the never-populated qualification its world drives
+    // (`support/never_populated.rs`), through production's retry; each
+    // failed retry's owner is kept, and one still unconfirmed is released
+    // explicitly once reported, never dropped as a confirmation.
+    let never_populated = code(&read(
+        "crates/nexus-verifier-sandbox/tests/support/never_populated.rs",
+    ));
+    assert_eq!(
+        harness
+            .matches("never_populated::qualify(&mut world, &plan)")
+            .count(),
+        1
+    );
+    assert_eq!(
+        harness
+            .matches("execution::RetainedBoundary::retry(boundary)")
+            .count(),
+        1
+    );
+    assert!(harness
+        .contains("let _ = release(boundary, \"unmovable_process\", &[report.to_string()]);"));
+    assert_eq!(
+        never_populated
+            .matches("Err(boundary) => boundary,")
+            .count(),
         2
     );
+    assert_eq!(never_populated.matches("world.retry(boundary)").count(), 2);
+    assert!(never_populated.contains("world.release(boundary, &failure.to_string());"));
+    for needle in ["StopUnit", "KillUnit", "systemctl", "waitpid", "Command"] {
+        assert!(!never_populated.contains(needle), "{needle}");
+    }
     // Whatever the report owns leaves it before any check, and nothing
     // between the execution and that can fail.
     let ran = harness

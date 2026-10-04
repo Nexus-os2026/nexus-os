@@ -1,0 +1,156 @@
+== run 37163435032, step 7 (required host layers) and step 12 (the live suite), as logged
+﻿2026-10-03T23:58:20.2403876Z ##[group]Run set -euo pipefail
+2026-10-03T23:58:20.2404151Z [36;1mset -euo pipefail[0m
+2026-10-03T23:58:20.2404338Z [36;1muid="$(id -u)"[0m
+2026-10-03T23:58:20.2404498Z [36;1mmissing=0[0m
+2026-10-03T23:58:20.2404677Z [36;1mneed() { echo "::error::$1"; missing=1; }[0m
+2026-10-03T23:58:20.2404970Z [36;1mecho "user: $(id -un) ($uid); kernel: $(uname -r); arch: $(uname -m)"[0m
+2026-10-03T23:58:20.2405329Z [36;1m[[ "$(uname -m)" == "x86_64" ]] || need "the verifier sandbox is x86_64 Linux only"[0m
+2026-10-03T23:58:20.2405698Z [36;1mif [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then[0m
+2026-10-03T23:58:20.2406157Z [36;1m  echo "apparmor_restrict_unprivileged_userns=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)"[0m
+2026-10-03T23:58:20.2406536Z [36;1mfi[0m
+2026-10-03T23:58:20.2407037Z [36;1mabi="$(python3 -c 'import ctypes; libc = ctypes.CDLL(None, use_errno=True); libc.syscall.restype = ctypes.c_long; print(max(libc.syscall(444, None, ctypes.c_size_t(0), ctypes.c_uint32(1)), 0))')"[0m
+2026-10-03T23:58:20.2407611Z [36;1mecho "landlock ABI: $abi"[0m
+2026-10-03T23:58:20.2407857Z [36;1m(( abi >= 6 )) || need "Landlock ABI $abi is below the required 6"[0m
+2026-10-03T23:58:20.2408122Z [36;1mruntime="/run/user/$uid"[0m
+2026-10-03T23:58:20.2408441Z [36;1m[[ -d "$runtime" && "$(stat -f -c %T "$runtime")" == "tmpfs" && "$(stat -c %u:%a "$runtime")" == "$uid:700" ]] \[0m
+2026-10-03T23:58:20.2408928Z [36;1m  || need "$runtime is missing or not a private tmpfs: the runner user needs a systemd user manager (lingering)"[0m
+2026-10-03T23:58:20.2409404Z [36;1m[[ -S "$runtime/bus" ]] || need "no systemd user manager bus at $runtime/bus for $(id -un)"[0m
+2026-10-03T23:58:20.2409769Z [36;1m# The unified cgroup v2 hierarchy (I4's membership model: one[0m
+2026-10-03T23:58:20.2410075Z [36;1m# `0::` line per process); hybrid or v1 fails closed here too.[0m
+2026-10-03T23:58:20.2410555Z [36;1m[[ "$(stat -f -c %T /sys/fs/cgroup)" == "cgroup2fs" ]] || need "/sys/fs/cgroup is not the unified cgroup v2 hierarchy ($(stat -f -c %T /sys/fs/cgroup))"[0m
+2026-10-03T23:58:20.2411070Z [36;1mecho "this job's cgroup membership: $(tr '\n' ' ' < /proc/self/cgroup)"[0m
+2026-10-03T23:58:20.2411479Z [36;1m# Version facts of the host (evidence only, never authority).[0m
+2026-10-03T23:58:20.2411861Z [36;1mecho "systemd: $(/usr/lib/systemd/systemd --version 2>/dev/null | head -1 || echo unknown)"[0m
+2026-10-03T23:58:20.2412268Z [36;1mecho "dbus: $(dbus-daemon --version 2>/dev/null | head -1 || echo unknown)"[0m
+2026-10-03T23:58:20.2412593Z [36;1mecho "os: $(. /etc/os-release && echo "$PRETTY_NAME")"[0m
+2026-10-03T23:58:20.2412817Z [36;1m{[0m
+2026-10-03T23:58:20.2413075Z [36;1m  echo "Host: $(id -un) ($uid), $(uname -r) $(uname -m), $(. /etc/os-release && echo "$PRETTY_NAME")"[0m
+2026-10-03T23:58:20.2413666Z [36;1m  echo "systemd: $(/usr/lib/systemd/systemd --version 2>/dev/null | head -1 || echo unknown)"[0m
+2026-10-03T23:58:20.2413989Z [36;1m} >> "$GITHUB_STEP_SUMMARY"[0m
+2026-10-03T23:58:20.2414325Z [36;1mdelegated="/sys/fs/cgroup/user.slice/user-$uid.slice/user@$uid.service/cgroup.controllers"[0m
+2026-10-03T23:58:20.2414673Z [36;1mfor controller in memory pids cpu; do[0m
+2026-10-03T23:58:20.2415087Z [36;1m  grep -qw "$controller" "$delegated" 2>/dev/null || need "the $controller controller is not delegated to $(id -un)'s user manager"[0m
+2026-10-03T23:58:20.2415480Z [36;1mdone[0m
+2026-10-03T23:58:20.2415626Z [36;1mif (( missing )); then[0m
+2026-10-03T23:58:20.2415955Z [36;1m  echo "::error::this host cannot provide every Phase Two layer; verification would be unavailable here"[0m
+2026-10-03T23:58:20.2416316Z [36;1m  exit 1[0m
+2026-10-03T23:58:20.2416508Z [36;1mfi[0m
+2026-10-03T23:58:20.2450338Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-03T23:58:20.2450644Z env:
+2026-10-03T23:58:20.2450798Z   CARGO_TERM_COLOR: always
+2026-10-03T23:58:20.2450977Z   CARGO_INCREMENTAL: 0
+2026-10-03T23:58:20.2451290Z   CARGO_TARGET_DIR: /home/github-runner/actions-runner/_work/nexus-os/.nexus-fast-cache/cargo-target
+2026-10-03T23:58:20.2452579Z ##[endgroup]
+2026-10-03T23:58:20.2543286Z user: github-runner (1001); kernel: 6.17.0-35-generic; arch: x86_64
+2026-10-03T23:58:20.2557952Z apparmor_restrict_unprivileged_userns=1
+2026-10-03T23:58:20.2731800Z landlock ABI: 7
+2026-10-03T23:58:20.2798758Z this job's cgroup membership: 0::/user.slice/user-1001.slice/user@1001.service/app.slice/nexus-github-runner.service
+2026-10-03T23:58:20.2842842Z systemd: systemd 255 (255.4-1ubuntu8.17)
+2026-10-03T23:58:20.2865843Z dbus: D-Bus Message Bus Daemon 1.14.10
+2026-10-03T23:58:20.2873541Z os: Ubuntu 24.04.5 LTS
+﻿2026-10-03T23:59:57.4800408Z ##[group]Run set -o pipefail
+2026-10-03T23:59:57.4800877Z [36;1mset -o pipefail[0m
+2026-10-03T23:59:57.4801394Z [36;1m# The cleanup observation is the live harness's own observation-only[0m
+2026-10-03T23:59:57.4802029Z [36;1m# mode, built from this checkout by the suite's own cargo command:[0m
+2026-10-03T23:59:57.4802597Z [36;1m# exactly one argument (no path, uid, bus or target) and no[0m
+2026-10-03T23:59:57.4803145Z [36;1m# authority (it stops, kills, creates and removes nothing). Both of[0m
+2026-10-03T23:59:57.4803749Z [36;1m# its observations (the loaded verifier scopes and the verification[0m
+2026-10-03T23:59:57.4804266Z [36;1m# workspaces) always run; it fails if either cannot answer or finds[0m
+2026-10-03T23:59:57.4804546Z [36;1m# anything.[0m
+2026-10-03T23:59:57.4804710Z [36;1mobserve_cleanup() {[0m
+2026-10-03T23:59:57.4805161Z [36;1m  cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox -- --cleanup-observation[0m
+2026-10-03T23:59:57.4805654Z [36;1m}[0m
+2026-10-03T23:59:57.4805877Z [36;1m# The gate: whatever is already loaded or present, or an observation[0m
+2026-10-03T23:59:57.4806228Z [36;1m# that cannot answer, blocks the suite. Nothing is cleaned up and[0m
+2026-10-03T23:59:57.4806509Z [36;1m# nothing is cleared.[0m
+2026-10-03T23:59:57.4806685Z [36;1mpreflight=0[0m
+2026-10-03T23:59:57.4806862Z [36;1mobserve_cleanup || preflight=$?[0m
+2026-10-03T23:59:57.4807080Z [36;1mif (( preflight != 0 )); then[0m
+2026-10-03T23:59:57.4807575Z [36;1m  echo "::error::the cleanup observation found something left, or could not answer, before the live suite (cargo exit $preflight): the live suite was not run"[0m
+2026-10-03T23:59:57.4808047Z [36;1m  exit 1[0m
+2026-10-03T23:59:57.4808190Z [36;1mfi[0m
+2026-10-03T23:59:57.4808406Z [36;1m# Every result is kept. Each command of the suite's pipeline keeps[0m
+2026-10-03T23:59:57.4808727Z [36;1m# its own status, taken at once (the next command replaces[0m
+2026-10-03T23:59:57.4809044Z [36;1m# PIPESTATUS); the cleanup observation runs whatever the suite[0m
+2026-10-03T23:59:57.4809381Z [36;1m# reported (both of its observations, neither failure suppressing[0m
+2026-10-03T23:59:57.4809716Z [36;1m# the other); and the step fails if the suite, the capture of its[0m
+2026-10-03T23:59:57.4810042Z [36;1m# output, its passed-case count or an observation failed. A failed[0m
+2026-10-03T23:59:57.4810358Z [36;1m# suite keeps its own exit status, whatever else failed.[0m
+2026-10-03T23:59:57.4810886Z [36;1mif cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox 2>&1 | tee phase2-live.log; then[0m
+2026-10-03T23:59:57.4811456Z [36;1m  statuses=("${PIPESTATUS[@]}")[0m
+2026-10-03T23:59:57.4811646Z [36;1melse[0m
+2026-10-03T23:59:57.4811802Z [36;1m  statuses=("${PIPESTATUS[@]}")[0m
+2026-10-03T23:59:57.4811986Z [36;1mfi[0m
+2026-10-03T23:59:57.4812133Z [36;1mlive=${statuses[0]:-255}[0m
+2026-10-03T23:59:57.4812318Z [36;1mcaptured=${statuses[1]:-255}[0m
+2026-10-03T23:59:57.4812507Z [36;1mpassed=0[0m
+2026-10-03T23:59:57.4812776Z [36;1mgrep -qx 'test result: ok. 39 live sandbox cases passed' phase2-live.log || passed=$?[0m
+2026-10-03T23:59:57.4813330Z [36;1mobserved=0[0m
+2026-10-03T23:59:57.4813492Z [36;1mobserve_cleanup || observed=$?[0m
+2026-10-03T23:59:57.4813698Z [36;1mif (( captured != 0 )); then[0m
+2026-10-03T23:59:57.4813987Z [36;1m  echo "::error::the live suite's output was not fully captured (tee exit $captured)"[0m
+2026-10-03T23:59:57.4814300Z [36;1mfi[0m
+2026-10-03T23:59:57.4814444Z [36;1mif (( passed != 0 )); then[0m
+2026-10-03T23:59:57.4814681Z [36;1m  echo "::error::the live suite did not report 39 passed cases"[0m
+2026-10-03T23:59:57.4814926Z [36;1mfi[0m
+2026-10-03T23:59:57.4815068Z [36;1mif (( observed != 0 )); then[0m
+2026-10-03T23:59:57.4815465Z [36;1m  echo "::error::the cleanup observation found something left, or could not answer, after the live suite (cargo exit $observed)"[0m
+2026-10-03T23:59:57.4816057Z [36;1mfi[0m
+2026-10-03T23:59:57.4816312Z [36;1mif (( live != 0 )); then[0m
+2026-10-03T23:59:57.4816541Z [36;1m  echo "::error::the live suite failed (cargo exit $live)"[0m
+2026-10-03T23:59:57.4816790Z [36;1m  exit "$live"[0m
+2026-10-03T23:59:57.4816944Z [36;1mfi[0m
+2026-10-03T23:59:57.4817125Z [36;1mif (( captured != 0 || passed != 0 || observed != 0 )); then[0m
+2026-10-03T23:59:57.4817361Z [36;1m  exit 1[0m
+2026-10-03T23:59:57.4817530Z [36;1mfi[0m
+2026-10-03T23:59:57.4848791Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-03T23:59:57.4849050Z env:
+2026-10-03T23:59:57.4849201Z   CARGO_TERM_COLOR: always
+2026-10-03T23:59:57.4849378Z   CARGO_INCREMENTAL: 0
+2026-10-03T23:59:57.4849687Z   CARGO_TARGET_DIR: /home/github-runner/actions-runner/_work/nexus-os/.nexus-fast-cache/cargo-target
+2026-10-03T23:59:57.4850054Z   NEXUS_PHASE2_REQUIRE_LIVE_SANDBOX: 1
+2026-10-03T23:59:57.4850257Z   NEXUS_VERIFIER_TOOLCHAIN: packaged
+2026-10-03T23:59:57.4850448Z ##[endgroup]
+2026-10-03T23:59:57.7457668Z [1m[92m   Compiling[0m nexus-verifier-sandbox v0.1.0 (/home/github-runner/actions-runner/_work/nexus-os/nexus-os/crates/nexus-verifier-sandbox)
+2026-10-04T00:00:13.1230750Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 15.62s
+2026-10-04T00:00:13.1355519Z [1m[92m     Running[0m tests/phase2_live_sandbox.rs (/home/github-runner/actions-runner/_work/nexus-os/.nexus-fast-cache/cargo-target/debug/deps/phase2_live_sandbox-2ef198db99e0096f)
+2026-10-04T00:00:13.1390021Z verifier scopes loaded by the user manager: none
+2026-10-04T00:00:13.1390517Z verification workspaces: none (nexus-verifier absent at observation time)
+2026-10-04T00:00:13.3979969Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+2026-10-04T00:00:13.4045144Z [1m[92m     Running[0m tests/phase2_live_sandbox.rs (/home/github-runner/actions-runner/_work/nexus-os/.nexus-fast-cache/cargo-target/debug/deps/phase2_live_sandbox-2ef198db99e0096f)
+2026-10-04T00:00:13.4520820Z test p2c_live_escape_attempts_are_all_denied ... ok
+2026-10-04T00:00:13.5296672Z test p2c_live_each_layer_is_necessary ... ok
+2026-10-04T00:00:13.8599592Z test p2c_live_descendants_do_not_survive_init_exit ... ok
+2026-10-04T00:00:13.8976071Z test p2c_live_parent_death_ends_the_sandbox ... ok
+2026-10-04T00:00:13.9163108Z test p2c_live_missing_namespace_fails_closed ... ok
+2026-10-04T00:00:13.9386839Z test p2c_live_malformed_launch_runs_nothing ... ok
+2026-10-04T00:00:13.9577945Z test p2i_live_unavailable_landlock_fails_closed ... ok
+2026-10-04T00:00:13.9777916Z test p2i_live_failed_seccomp_install_runs_nothing ... ok
+2026-10-04T00:00:13.9923223Z test p2d_live_missing_scope_fails_closed ... ok
+2026-10-04T00:00:51.7956467Z test p2f_live_packaged_toolchain_verifies ... ok
+2026-10-04T00:00:51.8428764Z test p2d_live_execution_runs_in_a_verified_scope ... ok
+2026-10-04T00:00:52.9062490Z test p2d_live_helper_holds_the_scope_until_released ... ok
+2026-10-04T00:00:55.9658315Z test p2d_live_deadline_kill_reaches_every_descendant ... ok
+2026-10-04T00:00:56.5174335Z test p2d_live_pids_limit_is_enforced ... ok
+2026-10-04T00:00:56.5969575Z test p2d_live_memory_limit_is_enforced ... ok
+2026-10-04T00:00:59.6795087Z test p2d_live_descendant_oom_is_never_a_pass ... ok
+2026-10-04T00:00:59.7456755Z test p2d_live_output_flood_is_bounded ... ok
+2026-10-04T00:01:49.7733258Z test p2d_live_unmovable_process_fails_closed ... unmovable_process: the refused scope is unconfirmed after 3 explicit attempts: releasing the unconfirmed owner to its drop backstop, never a confirmation
+2026-10-04T00:01:49.7735867Z
+2026-10-04T00:01:49.7736979Z thread 'main' (438099) panicked at crates/nexus-verifier-sandbox/tests/phase2_live_sandbox.rs:952:21:
+2026-10-04T00:01:49.7738474Z unmovable_process: the refused scope is unconfirmed after 3 explicit attempts
+2026-10-04T00:01:49.7739448Z note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+2026-10-04T00:01:49.7759087Z [1m[91merror[0m: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_live_sandbox`
+2026-10-04T00:01:50.0212004Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+2026-10-04T00:01:50.0271656Z [1m[92m     Running[0m tests/phase2_live_sandbox.rs (/home/github-runner/actions-runner/_work/nexus-os/.nexus-fast-cache/cargo-target/debug/deps/phase2_live_sandbox-2ef198db99e0096f)
+2026-10-04T00:01:50.0330643Z ##[error]a verifier scope was left behind: nexus-verifier-deb565108b334be56fbff5e9df044ead.scope
+2026-10-04T00:01:50.0336514Z verification workspaces: none (nexus-verifier absent at observation time)
+2026-10-04T00:01:50.0337329Z [1m[91merror[0m: test failed, to rerun pass `-p nexus-verifier-sandbox --test phase2_live_sandbox`
+2026-10-04T00:01:50.0337613Z
+2026-10-04T00:01:50.0337680Z Caused by:
+2026-10-04T00:01:50.0338347Z   process didn't exit successfully: `/home/github-runner/actions-runner/_work/nexus-os/.nexus-fast-cache/cargo-target/debug/deps/phase2_live_sandbox-2ef198db99e0096f --cleanup-observation` (exit status: 1)
+2026-10-04T00:01:50.0429119Z ##[error]the live suite did not report 39 passed cases
+2026-10-04T00:01:50.0430835Z ##[error]the cleanup observation found something left, or could not answer, after the live suite (cargo exit 1)
+2026-10-04T00:01:50.0431979Z ##[error]the live suite failed (cargo exit 101)
+2026-10-04T00:01:50.0434252Z ##[error]Process completed with exit code 101.

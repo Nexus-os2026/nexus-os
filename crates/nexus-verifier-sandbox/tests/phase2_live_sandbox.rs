@@ -43,6 +43,13 @@ mod cleanup_observation;
 #[path = "support/host_qualification.rs"]
 mod host_qualification;
 
+/// The never-populated scope lifecycle's qualification (P2-V1-R3B-I4-Q3-R1):
+/// case 18's procedure, with its deterministic fixture controls in
+/// `phase2_never_populated.rs`.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "support/never_populated.rs"]
+mod never_populated;
+
 /// Where the sandbox does not exist: the suite's own note only; the
 /// observation and every other mode fail.
 #[cfg_attr(all(target_os = "linux", target_arch = "x86_64"), allow(dead_code))]
@@ -712,8 +719,9 @@ mod live {
     mod p2d {
         use super::*;
         use crate::cleanup_observation::{
-            self, release, settle, wait_for, ObservationError, Scopes, Settled, EXPLICIT_ATTEMPTS,
+            self, release, settle, ObservationError, Scopes, Settled, EXPLICIT_ATTEMPTS,
         };
+        use crate::never_populated;
         pub use nexus_verifier_sandbox::execution::{self, EndedBy, ExitClass};
         pub use nexus_verifier_sandbox::policy::ResourcePolicy;
         pub use nexus_verifier_sandbox::scope::{Occupancy, ScopeError, ScopeManager};
@@ -926,38 +934,103 @@ mod live {
             cleanup_observation::observe_scopes_by(deadline)
         }
 
-        pub fn unmovable_process(scopes: &ScopeManager) {
-            // A helper that is no longer running cannot be placed in a
-            // scope: no scope is confirmed for it, and the empty unit made
-            // for it is not left behind.
-            let before =
-                loaded_scopes().unwrap_or_else(|error| panic!("the loaded scopes: {error}"));
-            let (mut helper, _output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
-            helper.kill().unwrap();
-            // The killed helper is owned with the scope operation: it is
-            // reaped only once that operation is confirmed gone.
-            let failed = match execution::place(scopes, helper, &limits()) {
-                Ok(placed) => panic!("a scope was proven for an unmovable process: {placed:?}"),
-                Err(failed) => failed,
-            };
-            if let execution::Cleanup::Failed(boundary) = failed.cleanup {
-                if let Settled::Unconfirmed(owner, attempts) = settle(
-                    boundary,
-                    EXPLICIT_ATTEMPTS,
-                    execution::RetainedBoundary::retry,
-                ) {
-                    let failures = [format!(
-                        "the refused scope is unconfirmed after {attempts} explicit attempts"
-                    )];
-                    panic!("{}", release(owner, "unmovable_process", &failures));
+        /// Case 18's world (P2-V1-R3B-I4-Q3-R1): the real helper, production's
+        /// placement and retry, the helper's exit observed without reaping it,
+        /// and the checked scope observation.
+        struct NeverPopulated<'a> {
+            scopes: &'a ScopeManager,
+            limits: ResourcePolicy,
+            helper: Option<Helper>,
+            pid: u32,
+            start: Instant,
+        }
+
+        impl never_populated::World for NeverPopulated<'_> {
+            type Boundary = execution::RetainedBoundary;
+            type Placed = execution::ScopedHelper;
+
+            fn now(&self) -> Duration {
+                self.start.elapsed()
+            }
+
+            fn pause(&mut self, interval: Duration) {
+                std::thread::sleep(interval);
+            }
+
+            fn kill(&mut self) -> Result<(), String> {
+                match self.helper.as_mut() {
+                    Some(helper) => helper.kill().map_err(|error| error.to_string()),
+                    None => Err("the helper is already placed".into()),
                 }
             }
-            match wait_for(Duration::from_secs(10), loaded_scopes_by, |now| {
-                now.len() <= before.len()
-            }) {
-                Ok(true) => {}
-                Ok(false) => panic!("the refused scope was not stopped"),
-                Err(error) => panic!("the refused scope was not observed: {error}"),
+
+            fn exit(&mut self) -> Result<Option<never_populated::Exit>, String> {
+                never_populated::exit_unreaped(self.pid).map_err(|error| error.to_string())
+            }
+
+            fn unreaped(&mut self) -> Result<bool, String> {
+                never_populated::unreaped(self.pid).map_err(|error| error.to_string())
+            }
+
+            fn place(&mut self) -> Result<Self::Placed, never_populated::Refused<Self::Boundary>> {
+                let Some(helper) = self.helper.take() else {
+                    return Err(never_populated::Refused {
+                        error: "the helper is already placed".into(),
+                        retained: None,
+                    });
+                };
+                match execution::place(self.scopes, helper, &self.limits) {
+                    Ok(placed) => Ok(placed),
+                    Err(failed) => Err(never_populated::Refused {
+                        error: format!("{:?}", failed.error),
+                        retained: match failed.cleanup {
+                            execution::Cleanup::Failed(boundary) => Some(boundary),
+                            execution::Cleanup::Confirmed => None,
+                        },
+                    }),
+                }
+            }
+
+            fn retry(&mut self, boundary: Self::Boundary) -> Result<(), Self::Boundary> {
+                execution::RetainedBoundary::retry(boundary)
+            }
+
+            fn describe(&self, boundary: &Self::Boundary) -> String {
+                format!("{boundary:?}")
+            }
+
+            fn scopes(&mut self, deadline: Duration) -> Result<never_populated::Scopes, String> {
+                loaded_scopes_by(self.start + deadline).map_err(|error| error.to_string())
+            }
+
+            fn release(&mut self, boundary: Self::Boundary, report: &str) {
+                let _ = release(boundary, "unmovable_process", &[report.to_string()]);
+            }
+        }
+
+        pub fn unmovable_process(scopes: &ScopeManager) {
+            // P2-V1-R3B-I4-Q3-R1 (live run 37163435032): a helper killed but
+            // not reaped is not refused by the manager: the kernel never moves
+            // it, the start succeeds, and its scope runs never populated until
+            // its runtime backstop. Production, which never acts on a unit by
+            // its name, confirms the operation only once the manager has
+            // collected that scope, and only then reaps the helper. The case
+            // proves that lifecycle with its own short backstop and
+            // production's own bounds (`support/never_populated.rs`): never a
+            // proven scope, the operation unconfirmed before the backstop and
+            // confirmed after the collection, the helper reaped only then, the
+            // loaded scopes back to the baseline.
+            let (helper, _output) = Helper::spawn(&HelperProgram::at(HELPER)).unwrap();
+            let plan = never_populated::Plan::live();
+            let mut world = NeverPopulated {
+                scopes,
+                limits: never_populated::limits(limits()),
+                pid: helper.pid(),
+                helper: Some(helper),
+                start: Instant::now(),
+            };
+            if let Err(failure) = never_populated::qualify(&mut world, &plan) {
+                panic!("unmovable_process: {failure}");
             }
         }
 

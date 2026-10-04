@@ -1,0 +1,18 @@
+fmt-check exit=0 started=2026-10-04T01:43:40Z :: cargo fmt --all -- --check
+diff-check exit=0 started=2026-10-04T01:43:45Z :: git diff --check
+clippy exit=0 started=2026-10-04T01:43:45Z :: cargo clippy --locked -p nexus-verifier-sandbox --lib --tests -- -D warnings
+lib-tests exit=0 started=2026-10-04T01:44:01Z :: cargo test --locked -p nexus-verifier-sandbox --lib
+store-tests exit=0 started=2026-10-04T01:44:38Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_store
+codec-tests exit=0 started=2026-10-04T01:45:10Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_codec
+core-tests exit=0 started=2026-10-04T01:45:14Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_custody_core
+cleanup-observation exit=0 started=2026-10-04T01:45:35Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_cleanup_observation
+package-layout exit=0 started=2026-10-04T01:45:37Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_package_layout
+live-harness-build-only exit=0 started=2026-10-04T01:45:38Z :: cargo test --locked -p nexus-verifier-sandbox --features development-toolchain --test phase2_live_sandbox --no-run
+never-populated-fixtures exit=0 started=2026-10-04T01:45:41Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_never_populated
+live-step-fixture-controls exit=0 started=2026-10-04T01:45:42Z :: python3 scripts/ci/test_phase2_cleanup_check.py
+desktop-check exit=0 started=2026-10-04T01:45:42Z :: cargo check --locked -p nexus-desktop-backend --lib --tests
+desktop-clippy exit=0 started=2026-10-04T01:49:20Z :: cargo clippy --locked -p nexus-desktop-backend --lib --tests -- -D warnings
+desktop-phase2-guards exit=0 started=2026-10-04T01:51:16Z :: cargo test --locked -p nexus-desktop-backend --lib -- phase2_tests::
+lib-test-list exit=0 started=2026-10-04T01:55:01Z :: cargo test --locked -p nexus-verifier-sandbox --lib -- --list
+desktop-guard-list exit=0 started=2026-10-04T01:55:01Z :: cargo test --locked -p nexus-desktop-backend --lib -- phase2_tests:: --list
+never-populated-fixture-list exit=0 started=2026-10-04T01:55:12Z :: cargo test --locked -p nexus-verifier-sandbox --test phase2_never_populated -- --list
