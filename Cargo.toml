@@ -81,11 +81,15 @@ license = "MIT"
 [workspace.dependencies]
 regex = "1.10"
 scraper = "0.20"
-# AK-13: pinned to 43.0.2 per RUSTSEC-2026-0114 and the
-# 43.0.0 Linker use-after-free fix (GHSA-hfr4-7c6c-48w2 /
-# CVE-2026-34983) shipped in 43.0.1. Re-bump via this
-# single workspace pin going forward.
-wasmtime = "43.0.2"
+# P2 security closure R1: pinned to Wasmtime's maintained 36.x
+# security line. RUSTSEC-2026-0327 (component async-lifted
+# callbacks, critical) affects 39.0.0 and later only; 36.0.17
+# carries the 36.x fixes for RUSTSEC-2026-0114, -0222, -0269 and
+# -0316, predates the 43.0.0 Linker use-after-free
+# (RUSTSEC-2026-0090), and needs Rust 1.86 (the workspace pins
+# 1.94). Nexus uses core Wasm only (no component model, async or
+# WASI). Re-bump via this single workspace pin going forward.
+wasmtime = "36.0.17"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
