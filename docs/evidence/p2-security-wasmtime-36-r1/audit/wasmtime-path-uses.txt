@@ -1,0 +1,110 @@
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:537:/// two identifier characters, so `wasmtime :: component`, multiline groups
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:538:/// and `use wasmtime\n    as w` compare in one spelling while `use wasmtime`
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:570:///   (`[pub] use wasmtime as w`, `[pub] use wasmtime::{self as w}`,
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:575:/// - `glob`: a glob import of the crate (`wasmtime::*`, `wasmtime::{*}`),
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:579:///   multiline, grouped or nested (`use wasmtime::{Engine, component::{Val}}`)
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:580:///   or renamed inside a group (`wasmtime::{component as c}`).
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:582:/// Direct core-Wasm use (`wasmtime::{Engine, Linker, Module, Store}`,
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:600:            found.push("alias: wasmtime::self as".to_string());
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:603:            found.push("component: wasmtime::component".to_string());
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:606:            found.push("glob: wasmtime::*".to_string());
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:626:                found.push("alias: wasmtime::{self as …}".to_string());
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:629:                found.push("glob: wasmtime::{*}".to_string());
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:632:                found.push("component: wasmtime::{…component…}".to_string());
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:657:        "use wasmtime as wt;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:658:        "pub use wasmtime as wt;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:659:        "pub(crate) use wasmtime as wt;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:660:        "use wasmtime::{self as wt};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:661:        "pub use wasmtime::{self as wt, Engine};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:665:        "pub use wasmtime as r#wt;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:668:        "pub use wasmtime\n    as\n    wt;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:669:        "#[cfg(any())]\npub use wasmtime as wt;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:670:        "use wasmtime as _;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:680:    for probe in ["pub use wasmtime::*;", "use wasmtime::{Engine, *};"] {
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:690:        "use wasmtime::component::Val;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:691:        "use wasmtime::{component::Val};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:692:        "use wasmtime::{component::{Val}};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:693:        "use wasmtime::{Engine, component::{Val, Func}};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:694:        "use wasmtime::{component as component_api};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:695:        "use wasmtime :: component :: Val;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:696:        "use wasmtime::{\n    Engine,\n    component::{\n        Val,\n    },\n};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:697:        "use wasmtime\n    ::\n    component\n    ::\n    Func;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:698:        "fn f() { let v: wasmtime::component::Val = todo!(); }",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:699:        "use wasmtime as wt; fn f() { let _ = wt::component::Linker::<()>::new; }",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:700:        "use wasmtime::{self as wt}; use wt::component::Val;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:702:        "use wasmtime::*; fn f(v: component::Val) {}",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:703:        "use wasmtime::{*}; use component::Func;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:704:        "#[cfg(any())]\nuse wasmtime::{component::{Val}};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:714:        "use wasmtime::r#component::Val;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:715:        "fn f() { let _: wasmtime::r#component::Val = todo!(); }",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:716:        "use ::wasmtime::r#component as component_api;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:717:        "use r#wasmtime::r#component::Func;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:718:        "use wasmtime :: r#component :: Val;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:719:        "use wasmtime\n    ::\n    r#component\n    ::\n    Val;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:720:        "#[cfg(any())]\nuse wasmtime::r#component::Val;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:721:        "use wasmtime::{r#component::Val};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:722:        "use wasmtime::{Engine, r#component as c};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:736:    let use_ = "#[cfg(any())]\nuse wasmtime::r#component::Val;\n";
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:737:    let tail = "const OPEN: &str = \"/*\";\n#[cfg(any())]\nuse wasmtime::r#component::Val;\nconst CLOSE: &str = \"*/\";";
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:788:        "use wasmtime::{Engine, Linker, Module, Store, StoreLimits, StoreLimitsBuilder};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:790:        "use wasmtime::Linker; let x = wasmtime::Val::I32(1);",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:791:        "// wasmtime::component::Val is not used here\nuse wasmtime::Engine;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:792:        "/* use wasmtime::{component::Val}; */ use wasmtime::Module;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:793:        "/* pub use wasmtime as wt; */ use wasmtime::Store;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:795:        "use wasmtime::{Engine as WasmEngine, Store};",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:796:        "extern crate wasmtime;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:797:        "let x = wasmtime::r#componentx;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:798:        "const X: &str = r#\"see // here\"#;\nuse wasmtime::Engine;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:799:        "const X: &str = r##\"a \"# // b\"##;\nuse wasmtime::Linker;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:800:        "const X: &str = r#\"/* not a comment */\"#;\nuse wasmtime::Store;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:801:        "const X: &[u8] = br#\"/* \" */\"#;\nuse wasmtime::Module;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:802:        "const X: &str = \"say \\\"hi\\\" // not a comment\";\nuse wasmtime::Module;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:803:        "const Q: char = '\"'; fn f<'a>(x: &'a str) {}\nuse wasmtime::Engine;",
+app/src-tauri/src/phase0_surface/fg_reliability/tests.rs:914:    assert!(sandbox.contains("use wasmtime::{Engine, Linker, Module, Store"));
+benchmarks/benches/phase67_bench.rs:20:use wasmtime::Engine;
+benchmarks/benches/phase67_bench.rs:54:    let mut config = wasmtime::Config::new();
+protocols/tests/web_api_integration_tests.rs:649:    let mut config = wasmtime::Config::new();
+protocols/tests/web_api_integration_tests.rs:651:    let engine = wasmtime::Engine::new(&config).unwrap();
+sdk/src/lib.rs:40:pub use wasmtime_host_functions::{SpeculativeDecision, SpeculativePolicy};
+sdk/src/lib.rs:41:pub use wasmtime_sandbox::{WasmAgentState, WasmtimeSandbox};
+sdk/src/module_cache.rs:10:use wasmtime::{Engine, Module};
+sdk/src/module_cache.rs:25:/// Thread-safe cache of compiled `wasmtime::Module` instances keyed by content hash.
+sdk/src/module_cache.rs:65:    ) -> Result<(Module, bool), wasmtime::Error> {
+sdk/src/module_cache.rs:140:        let mut config = wasmtime::Config::new();
+sdk/src/shadow_sandbox.rs:15:use wasmtime::Engine;
+sdk/src/shadow_sandbox.rs:712:        let mut config = wasmtime::Config::new();
+sdk/src/wasm_agent.rs:13:use wasmtime::Engine;
+sdk/src/wasm_agent.rs:69:        if wasmtime::Module::validate(&wasmtime::Engine::default(), &self.wasm_bytecode).is_err() {
+sdk/src/wasm_agent.rs:138:        if wasmtime::Module::validate(&wasmtime::Engine::default(), data).is_err() {
+sdk/src/wasmtime_host_functions.rs:25:use wasmtime::Linker;
+sdk/src/wasmtime_host_functions.rs:154:    caller: &wasmtime::Caller<'_, WasmAgentState>,
+sdk/src/wasmtime_host_functions.rs:155:    memory: &wasmtime::Memory,
+sdk/src/wasmtime_host_functions.rs:204:            |mut caller: wasmtime::Caller<'_, WasmAgentState>,
+sdk/src/wasmtime_host_functions.rs:209:                    Some(wasmtime::Extern::Memory(mem)) => mem,
+sdk/src/wasmtime_host_functions.rs:235:            |mut caller: wasmtime::Caller<'_, WasmAgentState>, msg_ptr: i32, msg_len: i32| {
+sdk/src/wasmtime_host_functions.rs:237:                    Some(wasmtime::Extern::Memory(mem)) => mem,
+sdk/src/wasmtime_host_functions.rs:257:            |mut caller: wasmtime::Caller<'_, WasmAgentState>,
+sdk/src/wasmtime_host_functions.rs:263:                    Some(wasmtime::Extern::Memory(mem)) => mem,
+sdk/src/wasmtime_host_functions.rs:378:            |mut caller: wasmtime::Caller<'_, WasmAgentState>,
+sdk/src/wasmtime_host_functions.rs:383:                    Some(wasmtime::Extern::Memory(mem)) => mem,
+sdk/src/wasmtime_host_functions.rs:487:            |mut caller: wasmtime::Caller<'_, WasmAgentState>,
+sdk/src/wasmtime_host_functions.rs:494:                    Some(wasmtime::Extern::Memory(mem)) => mem,
+sdk/src/wasmtime_host_functions.rs:610:            |mut caller: wasmtime::Caller<'_, WasmAgentState>,
+sdk/src/wasmtime_host_functions.rs:615:                    Some(wasmtime::Extern::Memory(mem)) => mem,
+sdk/src/wasmtime_host_functions.rs:775:            |mut caller: wasmtime::Caller<'_, WasmAgentState>,
+sdk/src/wasmtime_host_functions.rs:780:                    Some(wasmtime::Extern::Memory(mem)) => mem,
+sdk/src/wasmtime_host_functions.rs:921:            limiter: wasmtime::StoreLimitsBuilder::new().build(),
+sdk/src/wasmtime_host_functions.rs:944:            limiter: wasmtime::StoreLimitsBuilder::new().build(),
+sdk/src/wasmtime_host_functions.rs:1024:            limiter: wasmtime::StoreLimitsBuilder::new().build(),
+sdk/src/wasmtime_host_functions.rs:1057:            limiter: wasmtime::StoreLimitsBuilder::new().build(),
+sdk/src/wasmtime_host_functions.rs:1086:            limiter: wasmtime::StoreLimitsBuilder::new().build(),
+sdk/src/wasmtime_sandbox.rs:20:use wasmtime::{Engine, Linker, Module, Store, StoreLimits, StoreLimitsBuilder};
+sdk/src/wasmtime_sandbox.rs:131:        let mut wasm_config = wasmtime::Config::new();
+sdk/src/wasmtime_sandbox.rs:524:        if let Some(wasmtime::Extern::Memory(mem)) = instance.get_export(&mut store, "memory") {
+sdk/src/wasmtime_sandbox.rs:793:        let mut wasm_config = wasmtime::Config::new();
+sdk/src/wasmtime_sandbox.rs:827:        let mut config = wasmtime::Config::new();
+sdk/src/wasmtime_sandbox.rs:841:        let mut config = wasmtime::Config::new();
+sdk/tests/speculative_shadow_tests.rs:16:use wasmtime::Engine;
+sdk/tests/speculative_shadow_tests.rs:23:    let mut config = wasmtime::Config::new();
+sdk/tests/wasmtime_integration_tests.rs:613:    let mut wasm_config = wasmtime::Config::new();
+sdk/tests/wasmtime_integration_tests.rs:615:    let engine = Arc::new(wasmtime::Engine::new(&wasm_config).unwrap());

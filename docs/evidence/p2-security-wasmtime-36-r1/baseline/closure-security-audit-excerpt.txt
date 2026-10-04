@@ -1,0 +1,111 @@
+security-audit: cargo-audit 0.22.1, cargo-deny 0.19.6
+security-audit: accepted advisories (deny.toml): RUSTSEC-2026-0193 RUSTSEC-2026-0213 RUSTSEC-2026-0258 RUSTSEC-2026-0194 RUSTSEC-2026-0195 RUSTSEC-2026-0269 RUSTSEC-2026-0222 RUSTSEC-2026-0316 RUSTSEC-2026-0247 RUSTSEC-2026-0250 RUSTSEC-2026-0251
+security-audit: cargo audit --file Cargo.lock --ignore RUSTSEC-2026-0193 --ignore RUSTSEC-2026-0213 --ignore RUSTSEC-2026-0258 --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195 --ignore RUSTSEC-2026-0269 --ignore RUSTSEC-2026-0222 --ignore RUSTSEC-2026-0316 --ignore RUSTSEC-2026-0247 --ignore RUSTSEC-2026-0250 --ignore RUSTSEC-2026-0251
+    Fetching advisory database from `https://github.com/RustSec/advisory-db.git`
+      Loaded 1290 security advisories (from /home/runner/.cargo/advisory-db)
+    Updating crates.io index
+    Scanning Cargo.lock for vulnerabilities (1092 crate dependencies)
+Crate:     wasmtime
+Version:   43.0.2
+Title:     Wasmtime component async-lifted callback result count is unvalidated, causing a native stack buffer overflow
+Date:      2026-10-02
+ID:        RUSTSEC-2026-0327
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0327
+Severity:  9.3 (critical)
+Solution:  Upgrade to >=48.0.4, <49.0.0 OR >=49.0.2
+Dependency tree:
+wasmtime 43.0.2
+├── nexus-sdk 10.6.0
+│   ├── workflow-studio-agent 10.6.0
+│   │   └── nexus-integration 10.6.0
+│   ├── web-builder-agent 10.6.0
+│   │   ├── nexus-integration 10.6.0
+│   │   ├── nexus-desktop-backend 10.6.0
+│   │   │   └── nexus-integration 10.6.0
+│   │   └── nexus-conductor 0.1.0
+│   │       ├── nexus-integration 10.6.0
+│   │       ├── nexus-desktop-backend 10.6.0
+│   │       └── nexus-cli 10.6.0
+│   ├── social-poster-agent 10.6.0
+│   │   ├── nexus-swarm 10.6.0
+│   │   │   ├── nexus-integration 10.6.0
+│   │   │   └── nexus-desktop-backend 10.6.0
+│   │   ├── nexus-integration 10.6.0
+│   │   ├── nexus-desktop-backend 10.6.0
+│   │   └── nexus-cli 10.6.0
+│   ├── self-improve-agent 10.6.0
+│   │   ├── nexus-integration 10.6.0
+│   │   └── nexus-cli 10.6.0
+│   ├── screen-poster-agent 10.6.0
+│   │   └── nexus-integration 10.6.0
+│   ├── nexus-protocols 10.6.0
+│   │   ├── nexus-integration 10.6.0
+│   │   ├── nexus-desktop-backend 10.6.0
+│   │   └── nexus-benchmarks 10.6.0
+│   ├── nexus-integration 10.6.0
+│   ├── nexus-desktop-backend 10.6.0
+│   ├── nexus-connectors-llm 10.6.0
+│   │   ├── web-builder-agent 10.6.0
+│   │   ├── social-poster-agent 10.6.0
+│   │   ├── self-improve-agent 10.6.0
+│   │   ├── screen-poster-agent 10.6.0
+│   │   ├── nexus-swarm 10.6.0
+│   │   ├── nexus-self-update 10.6.0
+│   │   ├── nexus-research 10.6.0
+│   │   │   ├── nexus-workflows 10.6.0
+│   │   │   │   ├── nexus-marketplace 10.6.0
+│   │   │   │   │   ├── nexus-self-update 10.6.0
+│   │   │   │   │   ├── nexus-protocols 10.6.0
+│   │   │   │   │   ├── nexus-integration 10.6.0
+│   │   │   │   │   ├── nexus-desktop-backend 10.6.0
+│   │   │   │   │   └── nexus-cli 10.6.0
+│   │   │   │   └── nexus-integration 10.6.0
+│   │   │   ├── nexus-marketplace 10.6.0
+│   │   │   └── nexus-integration 10.6.0
+│   │   ├── nexus-protocols 10.6.0
+│   │   ├── nexus-marketplace 10.6.0
+│   │   ├── nexus-integration 10.6.0
+│   │   ├── nexus-factory 10.6.0
+│   │   │   ├── nexus-marketplace 10.6.0
+│   │   │   ├── nexus-integration 10.6.0
+│   │   │   ├── nexus-desktop-backend 10.6.0
+│   │   │   └── nexus-conductor 0.1.0
+│   │   ├── nexus-desktop-backend 10.6.0
+│   │   ├── nexus-control 10.6.0
+│   │   │   └── nexus-marketplace 10.6.0
+│   │   ├── nexus-content 10.6.0
+│   │   │   ├── social-poster-agent 10.6.0
+│   │   │   ├── nexus-workflows 10.6.0
+│   │   │   ├── nexus-marketplace 10.6.0
+│   │   │   └── nexus-integration 10.6.0
+│   │   ├── nexus-conductor 0.1.0
+│   │   ├── nexus-cli 10.6.0
+│   │   ├── nexus-benchmarks 10.6.0
+│   │   ├── nexus-adaptation 10.6.0
+│   │   │   ├── nexus-marketplace 10.6.0
+│   │   │   ├── nexus-integration 10.6.0
+│   │   │   └── nexus-desktop-backend 10.6.0
+│   │   ├── designer-agent 10.6.0
+│   │   └── coder-agent 10.6.0
+│   │       ├── nexus-swarm 10.6.0
+│   │       ├── nexus-integration 10.6.0
+│   │       └── nexus-conductor 0.1.0
+│   ├── nexus-conductor 0.1.0
+│   ├── nexus-cli 10.6.0
+│   ├── nexus-benchmarks 10.6.0
+│   ├── designer-agent 10.6.0
+│   ├── coding-agent 10.6.0
+│   │   ├── nexus-integration 10.6.0
+│   │   └── nexus-cli 10.6.0
+│   └── coder-agent 10.6.0
+├── nexus-protocols 10.6.0
+└── nexus-benchmarks 10.6.0
+
+Crate:     fxhash
+Version:   0.2.1
+Warning:   unmaintained
+Title:     fxhash - no longer maintained
+Date:      2025-09-05
+ID:        RUSTSEC-2025-0057
+URL:       https://rustsec.org/advisories/RUSTSEC-2025-0057
+error: 1 vulnerability found!

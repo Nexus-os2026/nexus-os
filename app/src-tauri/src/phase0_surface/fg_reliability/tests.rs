@@ -563,8 +563,8 @@ fn normalized_rust(src: &str) -> String {
     code
 }
 
-/// The Wasmtime spellings production Nexus may not use while
-/// RUSTSEC-2026-0316 is accepted, each tagged with its rule:
+/// The Wasmtime spellings production Nexus may not use (its Wasmtime use
+/// stays core Wasm only), each tagged with its rule:
 ///
 /// - `alias`: the crate renamed or re-exported under another name
 ///   (`[pub] use wasmtime as w`, `[pub] use wasmtime::{self as w}`,
@@ -582,8 +582,7 @@ fn normalized_rust(src: &str) -> String {
 /// Direct core-Wasm use (`wasmtime::{Engine, Linker, Module, Store}`,
 /// `get_typed_func`) stays allowed. This is a text check over comment-free
 /// source, not a name resolver: it pins Nexus's non-use of the component
-/// module on which the bounded exception depends, not that wasmtime 43.0.2
-/// is generally safe.
+/// module, not that the pinned Wasmtime is generally safe.
 fn wasmtime_forbidden_uses(src: &str) -> Vec<String> {
     let code = normalized_rust(src);
     let mut found = Vec::new();
@@ -636,18 +635,46 @@ fn wasmtime_forbidden_uses(src: &str) -> Vec<String> {
     found
 }
 
-/// DEP (Architect decision, P0-LINUX-FINAL-R1): RUSTSEC-2026-0316 (wasmtime
-/// 43.0.2, dynamic `Val` lifting into host allocations can exceed the
-/// hostcall fuel limit) is accepted only while its reasoning holds. The
-/// exception is the one deny.toml entry; no production source uses
-/// Wasmtime's component module (the affected dynamic `Val`/`Func` API lives
-/// there) through a path, group or glob (P0-LINUX-FINAL-R2); no production
-/// source aliases or re-exports the crate under another name, and no
-/// workspace package renames the wasmtime dependency in Cargo's effective
-/// metadata (P0-LINUX-FINAL-R2A); the SDK sandbox runs core-Wasm modules
-/// through typed entry functions; and the SDK sandbox stays a latent API the
-/// desktop must not call. Direct core-Wasm use stays allowed. This is a
-/// Nexus non-use and reachability invariant, not proof that wasmtime 43.0.2
+/// Wasmtime's async and component-model entry points (P2 security closure
+/// R1: RUSTSEC-2026-0327 is in component async-lifted callbacks) named in a
+/// source that uses Wasmtime. A text check over comment-free source, like
+/// `wasmtime_forbidden_uses`; the compiled API surface is the dependency
+/// evidence's.
+fn wasmtime_async_uses(src: &str) -> Vec<String> {
+    let code = normalized_rust(src);
+    if word_at(&code, "wasmtime").is_empty() {
+        return Vec::new();
+    }
+    [
+        "call_async",
+        "instantiate_async",
+        "func_wrap_async",
+        "func_new_async",
+        "async_support",
+        "wasm_component_model",
+        "wasm_component_model_async",
+    ]
+    .into_iter()
+    .filter(|name| !word_at(&code, name).is_empty())
+    .map(|name| format!("async/component: {name}"))
+    .collect()
+}
+
+/// DEP (Architect decision, P0-LINUX-FINAL-R1; P2 security closure R1):
+/// Nexus's Wasmtime use stays core Wasm only. Wasmtime is pinned to the
+/// 36.x security line (36.0.17), where RUSTSEC-2026-0316 (dynamic `Val`
+/// lifting, once accepted here narrowly) is patched and RUSTSEC-2026-0327
+/// (component async-lifted callbacks, 39.0.0 and later) does not apply, so
+/// deny.toml accepts no Wasmtime advisory. No production source uses
+/// Wasmtime's component module (the dynamic `Val`/`Func` API lives there)
+/// through a path, group or glob (P0-LINUX-FINAL-R2), or names Wasmtime's
+/// async or component-model entry points; no production source aliases or
+/// re-exports the crate under another name, and no workspace package
+/// renames the wasmtime dependency in Cargo's effective metadata
+/// (P0-LINUX-FINAL-R2A); the SDK sandbox runs core-Wasm modules through
+/// typed entry functions; and the SDK sandbox stays a latent API the desktop
+/// must not call. Direct core-Wasm use stays allowed. This is a Nexus
+/// non-use and reachability invariant, not proof that the pinned Wasmtime
 /// is generally safe.
 #[test]
 fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
@@ -809,6 +836,35 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
         );
     }
 
+    // ... and every async or component-model entry point in a source that
+    // uses Wasmtime, while the same names elsewhere, or only in comments,
+    // stay allowed.
+    for probe in [
+        "use wasmtime::Engine; fn f() { let _ = func.call_async(&mut store, ()); }",
+        "fn f(l: &wasmtime::Linker<()>) { let _ = l.instantiate_async; }",
+        "use wasmtime::Linker; fn f(l: &mut Linker<()>) { l.func_wrap_async(); }",
+        "use wasmtime::Func; fn f() { Func::new_async; func_new_async(); }",
+        "fn f(c: &mut wasmtime::Config) { c.async_support(true); }",
+        "fn f(c: &mut wasmtime::Config) { c.wasm_component_model(true); }",
+        "fn f(c: &mut wasmtime::Config) { c.wasm_component_model_async(true); }",
+    ] {
+        assert!(
+            !wasmtime_async_uses(probe).is_empty(),
+            "an async or component-model use was not detected: {probe:?}"
+        );
+    }
+    for safe in [
+        "fn f() { client.call_async().await; }",
+        "use wasmtime::Engine; // call_async is not used here",
+        "use wasmtime::{Engine, Linker, Module, Store}; fn f() { t.call(&mut s, ()); }",
+    ] {
+        assert_eq!(
+            wasmtime_async_uses(safe),
+            Vec::<String>::new(),
+            "a core-API or unrelated source was rejected: {safe:?}"
+        );
+    }
+
     fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
         let mut entries: Vec<_> = std::fs::read_dir(dir)
             .unwrap()
@@ -841,12 +897,18 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
         let aliases: Vec<&String> = uses.iter().filter(|u| u.starts_with("alias: ")).collect();
         assert!(
             aliases.is_empty(),
-            "{}: {aliases:?} (the wasmtime crate is not aliased or renamed while RUSTSEC-2026-0316 is accepted)",
+            "{}: {aliases:?} (the wasmtime crate is not aliased or renamed)",
             path.display()
         );
         assert!(
             uses.is_empty(),
-            "{}: {uses:?} (Wasmtime's component module is not used while RUSTSEC-2026-0316 is accepted)",
+            "{}: {uses:?} (Wasmtime's component module is not used)",
+            path.display()
+        );
+        let async_uses = wasmtime_async_uses(&text);
+        assert!(
+            async_uses.is_empty(),
+            "{}: {async_uses:?} (Wasmtime's async and component-model APIs are not used)",
             path.display()
         );
     }
@@ -900,7 +962,7 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
             let rename = dependency.get("rename").expect("dependency rename field");
             assert!(
                 rename.is_null(),
-                "{}: wasmtime dependency renamed to {rename} (the wasmtime crate is not aliased or renamed while RUSTSEC-2026-0316 is accepted)",
+                "{}: wasmtime dependency renamed to {rename} (the wasmtime crate is not aliased or renamed)",
                 package["name"]
             );
         }
@@ -922,21 +984,20 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
         );
     }
 
+    // No Wasmtime advisory is accepted (P2 security closure R1): none may
+    // return to the exception set without its own review.
     let deny = include_str!("../../../../../deny.toml").replace("\r\n", "\n");
     let entries: Vec<&str> = deny
         .lines()
-        .filter(|line| line.contains("RUSTSEC-2026-0316"))
+        .filter(|line| line.contains("id = \"RUSTSEC-"))
         .collect();
-    assert_eq!(entries.len(), 1, "exactly one RUSTSEC-2026-0316 exception");
-    for reason in [
-        "wasmtime 43.0.2",
-        "get_typed_func",
-        "p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api",
-        "latent",
-    ] {
-        assert!(
-            entries[0].contains(reason),
-            "exception reason lacks {reason}"
-        );
+    assert!(!entries.is_empty(), "deny.toml exception entries not found");
+    for entry in entries {
+        for wasmtime in ["wasmtime", "RUSTSEC-2026-0316", "RUSTSEC-2026-0327"] {
+            assert!(
+                !entry.contains(wasmtime),
+                "a Wasmtime advisory is accepted: {entry}"
+            );
+        }
     }
 }

@@ -1,0 +1,29 @@
+✔ trusted configuration is programmatic and discovers no project configuration (4.476883ms)
+✔ generated single-page project builds only from Nexus toolchain dependencies (258.41237ms)
+✔ generated multi-page project resolves react-router-dom from the toolchain (199.577373ms)
+✔ project and process environment never reach client code (131.732424ms)
+✔ project tsconfig and Babel configuration are never consulted (134.290493ms)
+✔ CSS @config and @plugin cannot make trusted tooling load JavaScript (153.708721ms)
+✔ CSS imports of local files are rejected; remote https imports pass through (178.21362ms)
+✔ CSS preprocessors are rejected before any preprocessor package is loaded (390.099889ms)
+✔ unprovided bare imports never resolve from ancestor node_modules (322.57347ms)
+✔ relative imports cannot escape the project (85.223115ms)
+✔ backend requests are strictly validated (2.42642ms)
+✔ module guard denies code outside the toolchain in this process (2.290074ms)
+✔ entry rejects an invalid request before serving (1371.722807ms)
+✔ entry serves the project on loopback under the permission model (720.055204ms)
+✔ readiness records are exactly one canonical line (0.32375ms)
+✔ launch requests are strict (2.500791ms)
+✔ the Nexus gate admits only same-origin loopback reads (0.629125ms)
+✔ the process guard creates no process and answers only the network-drive question (27.226687ms)
+✔ existence probes answer false for denied locations and grant nothing (31.808798ms)
+✔ Windows drive letters are restored to their canonical spelling, nothing else (0.814554ms)
+✔ the entry installs every guard before any third-party module is imported (0.375637ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4297.756281

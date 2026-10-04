@@ -1,0 +1,1905 @@
+# Excerpt of final-security-audit.raw.txt (SHA-256 a610b4172fa278dfa78dc4abf9442f10244e490b411292abddff4b9a99f2242a, 3171529 bytes, kept in the work
+# directory): everything up to and including cargo audit's section; from cargo deny, each diagnostic's
+# header and advisory lines (not its dependency-inclusion tree) and its summary.
+
+ Downloading crates ...
+  Downloaded cargo-audit v0.22.1
+     Ignored package `cargo-audit v0.22.1` is already installed, use --force to override
+ Downloading crates ...
+  Downloaded cargo-deny v0.19.6
+     Ignored package `cargo-deny v0.19.6` is already installed, use --force to override
+security-audit: cargo-audit 0.22.1, cargo-deny 0.19.6
+security-audit: accepted advisories (deny.toml): RUSTSEC-2026-0193 RUSTSEC-2026-0213 RUSTSEC-2026-0258 RUSTSEC-2026-0194 RUSTSEC-2026-0195
+security-audit: cargo audit --file Cargo.lock --ignore RUSTSEC-2026-0193 --ignore RUSTSEC-2026-0213 --ignore RUSTSEC-2026-0258 --ignore RUSTSEC-2026-0194 --ignore RUSTSEC-2026-0195 --db /home/nexus/NEXUS/p2-security-wasmtime-36-work/security/db-final/advisory-db
+    Fetching advisory database from `https://github.com/RustSec/advisory-db.git`
+      Loaded 1290 security advisories (from /home/nexus/NEXUS/p2-security-wasmtime-36-work/security/db-final/advisory-db)
+    Updating crates.io index
+    Scanning Cargo.lock for vulnerabilities (1092 crate dependencies)
+Crate:     fxhash
+Version:   0.2.1
+Warning:   unmaintained
+Title:     fxhash - no longer maintained
+Date:      2025-09-05
+ID:        RUSTSEC-2025-0057
+URL:       https://rustsec.org/advisories/RUSTSEC-2025-0057
+Dependency tree:
+fxhash 0.2.1
+├── selectors 0.31.0
+│   └── scraper 0.24.0
+│       └── nexus-connectors-web 10.6.0
+│           ├── social-poster-agent 10.6.0
+│           │   ├── nexus-swarm 10.6.0
+│           │   │   ├── nexus-integration 10.6.0
+│           │   │   └── nexus-desktop-backend 10.6.0
+│           │   │       └── nexus-integration 10.6.0
+│           │   ├── nexus-integration 10.6.0
+│           │   ├── nexus-desktop-backend 10.6.0
+│           │   └── nexus-cli 10.6.0
+│           ├── nexus-research 10.6.0
+│           │   ├── nexus-workflows 10.6.0
+│           │   │   ├── nexus-marketplace 10.6.0
+│           │   │   │   ├── nexus-self-update 10.6.0
+│           │   │   │   ├── nexus-protocols 10.6.0
+│           │   │   │   │   ├── nexus-integration 10.6.0
+│           │   │   │   │   ├── nexus-desktop-backend 10.6.0
+│           │   │   │   │   └── nexus-benchmarks 10.6.0
+│           │   │   │   ├── nexus-integration 10.6.0
+│           │   │   │   ├── nexus-desktop-backend 10.6.0
+│           │   │   │   └── nexus-cli 10.6.0
+│           │   │   └── nexus-integration 10.6.0
+│           │   ├── nexus-marketplace 10.6.0
+│           │   └── nexus-integration 10.6.0
+│           ├── nexus-marketplace 10.6.0
+│           ├── nexus-integration 10.6.0
+│           ├── nexus-factory 10.6.0
+│           │   ├── nexus-marketplace 10.6.0
+│           │   ├── nexus-integration 10.6.0
+│           │   ├── nexus-desktop-backend 10.6.0
+│           │   └── nexus-conductor 0.1.0
+│           │       ├── nexus-integration 10.6.0
+│           │       ├── nexus-desktop-backend 10.6.0
+│           │       └── nexus-cli 10.6.0
+│           ├── nexus-desktop-backend 10.6.0
+│           └── nexus-analytics 10.6.0
+│               ├── nexus-marketplace 10.6.0
+│               ├── nexus-integration 10.6.0
+│               └── nexus-adaptation 10.6.0
+│                   ├── nexus-marketplace 10.6.0
+│                   ├── nexus-integration 10.6.0
+│                   └── nexus-desktop-backend 10.6.0
+├── selectors 0.26.0
+│   └── scraper 0.22.0
+│       └── web-builder-agent 10.6.0
+│           ├── nexus-integration 10.6.0
+│           ├── nexus-desktop-backend 10.6.0
+│           └── nexus-conductor 0.1.0
+├── selectors 0.25.0
+│   └── scraper 0.20.0
+│       └── nexus-ui-repair 10.6.0
+├── selectors 0.24.0
+│   └── kuchikiki 0.8.8-speedreader
+│       └── tauri-utils 2.8.3
+│           ├── tauri-runtime-wry 2.10.1
+│           │   └── tauri 2.10.3
+│           │       ├── tauri-plugin-global-shortcut 2.3.1
+│           │       │   └── nexus-desktop-backend 10.6.0
+│           │       ├── tauri-plugin-fs 2.5.0
+│           │       │   └── tauri-plugin-dialog 2.7.0
+│           │       │       └── nexus-desktop-backend 10.6.0
+│           │       ├── tauri-plugin-dialog 2.7.0
+│           │       ├── nexus-integration 10.6.0
+│           │       └── nexus-desktop-backend 10.6.0
+│           ├── tauri-runtime 2.10.1
+│           │   ├── tauri-runtime-wry 2.10.1
+│           │   └── tauri 2.10.3
+│           ├── tauri-plugin-fs 2.5.0
+│           ├── tauri-plugin 2.5.4
+│           │   ├── tauri-plugin-global-shortcut 2.3.1
+│           │   ├── tauri-plugin-fs 2.5.0
+│           │   └── tauri-plugin-dialog 2.7.0
+│           ├── tauri-macros 2.5.5
+│           │   └── tauri 2.10.3
+│           ├── tauri-codegen 2.5.5
+│           │   └── tauri-macros 2.5.5
+│           ├── tauri-build 2.5.6
+│           │   ├── tauri 2.10.3
+│           │   └── nexus-desktop-backend 10.6.0
+│           └── tauri 2.10.3
+└── fxprof-processed-profile 0.6.0
+    └── wasmtime 36.0.17
+        ├── nexus-sdk 10.6.0
+        │   ├── workflow-studio-agent 10.6.0
+        │   │   └── nexus-integration 10.6.0
+        │   ├── web-builder-agent 10.6.0
+        │   ├── social-poster-agent 10.6.0
+        │   ├── self-improve-agent 10.6.0
+        │   │   ├── nexus-integration 10.6.0
+        │   │   └── nexus-cli 10.6.0
+        │   ├── screen-poster-agent 10.6.0
+        │   │   └── nexus-integration 10.6.0
+        │   ├── nexus-protocols 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   ├── nexus-desktop-backend 10.6.0
+        │   ├── nexus-connectors-llm 10.6.0
+        │   │   ├── web-builder-agent 10.6.0
+        │   │   ├── social-poster-agent 10.6.0
+        │   │   ├── self-improve-agent 10.6.0
+        │   │   ├── screen-poster-agent 10.6.0
+        │   │   ├── nexus-swarm 10.6.0
+        │   │   ├── nexus-self-update 10.6.0
+        │   │   ├── nexus-research 10.6.0
+        │   │   ├── nexus-protocols 10.6.0
+        │   │   ├── nexus-marketplace 10.6.0
+        │   │   ├── nexus-integration 10.6.0
+        │   │   ├── nexus-factory 10.6.0
+        │   │   ├── nexus-desktop-backend 10.6.0
+        │   │   ├── nexus-control 10.6.0
+        │   │   │   └── nexus-marketplace 10.6.0
+        │   │   ├── nexus-content 10.6.0
+        │   │   │   ├── social-poster-agent 10.6.0
+        │   │   │   ├── nexus-workflows 10.6.0
+        │   │   │   ├── nexus-marketplace 10.6.0
+        │   │   │   └── nexus-integration 10.6.0
+        │   │   ├── nexus-conductor 0.1.0
+        │   │   ├── nexus-cli 10.6.0
+        │   │   ├── nexus-benchmarks 10.6.0
+        │   │   ├── nexus-adaptation 10.6.0
+        │   │   ├── designer-agent 10.6.0
+        │   │   └── coder-agent 10.6.0
+        │   │       ├── nexus-swarm 10.6.0
+        │   │       ├── nexus-integration 10.6.0
+        │   │       └── nexus-conductor 0.1.0
+        │   ├── nexus-conductor 0.1.0
+        │   ├── nexus-cli 10.6.0
+        │   ├── nexus-benchmarks 10.6.0
+        │   ├── designer-agent 10.6.0
+        │   ├── coding-agent 10.6.0
+        │   │   ├── nexus-integration 10.6.0
+        │   │   └── nexus-cli 10.6.0
+        │   └── coder-agent 10.6.0
+        ├── nexus-protocols 10.6.0
+        └── nexus-benchmarks 10.6.0
+
+Crate:     number_prefix
+Version:   0.4.0
+Warning:   unmaintained
+Title:     number_prefix crate is unmaintained
+Date:      2025-11-17
+ID:        RUSTSEC-2025-0119
+URL:       https://rustsec.org/advisories/RUSTSEC-2025-0119
+Dependency tree:
+number_prefix 0.4.0
+└── indicatif 0.17.11
+    └── hf-hub 0.3.2
+        └── nexus-connectors-llm 10.6.0
+            ├── web-builder-agent 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   ├── nexus-desktop-backend 10.6.0
+            │   │   └── nexus-integration 10.6.0
+            │   └── nexus-conductor 0.1.0
+            │       ├── nexus-integration 10.6.0
+            │       ├── nexus-desktop-backend 10.6.0
+            │       └── nexus-cli 10.6.0
+            ├── social-poster-agent 10.6.0
+            │   ├── nexus-swarm 10.6.0
+            │   │   ├── nexus-integration 10.6.0
+            │   │   └── nexus-desktop-backend 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   ├── nexus-desktop-backend 10.6.0
+            │   └── nexus-cli 10.6.0
+            ├── self-improve-agent 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   └── nexus-cli 10.6.0
+            ├── screen-poster-agent 10.6.0
+            │   └── nexus-integration 10.6.0
+            ├── nexus-swarm 10.6.0
+            ├── nexus-self-update 10.6.0
+            ├── nexus-research 10.6.0
+            │   ├── nexus-workflows 10.6.0
+            │   │   ├── nexus-marketplace 10.6.0
+            │   │   │   ├── nexus-self-update 10.6.0
+            │   │   │   ├── nexus-protocols 10.6.0
+            │   │   │   │   ├── nexus-integration 10.6.0
+            │   │   │   │   ├── nexus-desktop-backend 10.6.0
+            │   │   │   │   └── nexus-benchmarks 10.6.0
+            │   │   │   ├── nexus-integration 10.6.0
+            │   │   │   ├── nexus-desktop-backend 10.6.0
+            │   │   │   └── nexus-cli 10.6.0
+            │   │   └── nexus-integration 10.6.0
+            │   ├── nexus-marketplace 10.6.0
+            │   └── nexus-integration 10.6.0
+            ├── nexus-protocols 10.6.0
+            ├── nexus-marketplace 10.6.0
+            ├── nexus-integration 10.6.0
+            ├── nexus-factory 10.6.0
+            │   ├── nexus-marketplace 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   ├── nexus-desktop-backend 10.6.0
+            │   └── nexus-conductor 0.1.0
+            ├── nexus-desktop-backend 10.6.0
+            ├── nexus-control 10.6.0
+            │   └── nexus-marketplace 10.6.0
+            ├── nexus-content 10.6.0
+            │   ├── social-poster-agent 10.6.0
+            │   ├── nexus-workflows 10.6.0
+            │   ├── nexus-marketplace 10.6.0
+            │   └── nexus-integration 10.6.0
+            ├── nexus-conductor 0.1.0
+            ├── nexus-cli 10.6.0
+            ├── nexus-benchmarks 10.6.0
+            ├── nexus-adaptation 10.6.0
+            │   ├── nexus-marketplace 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   └── nexus-desktop-backend 10.6.0
+            ├── designer-agent 10.6.0
+            └── coder-agent 10.6.0
+                ├── nexus-swarm 10.6.0
+                ├── nexus-integration 10.6.0
+                └── nexus-conductor 0.1.0
+
+Crate:     paste
+Version:   1.0.15
+Warning:   unmaintained
+Title:     paste - no longer maintained
+Date:      2024-10-07
+ID:        RUSTSEC-2024-0436
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0436
+Dependency tree:
+paste 1.0.15
+├── tokenizers 0.20.4
+│   └── nexus-connectors-llm 10.6.0
+│       ├── web-builder-agent 10.6.0
+│       │   ├── nexus-integration 10.6.0
+│       │   ├── nexus-desktop-backend 10.6.0
+│       │   │   └── nexus-integration 10.6.0
+│       │   └── nexus-conductor 0.1.0
+│       │       ├── nexus-integration 10.6.0
+│       │       ├── nexus-desktop-backend 10.6.0
+│       │       └── nexus-cli 10.6.0
+│       ├── social-poster-agent 10.6.0
+│       │   ├── nexus-swarm 10.6.0
+│       │   │   ├── nexus-integration 10.6.0
+│       │   │   └── nexus-desktop-backend 10.6.0
+│       │   ├── nexus-integration 10.6.0
+│       │   ├── nexus-desktop-backend 10.6.0
+│       │   └── nexus-cli 10.6.0
+│       ├── self-improve-agent 10.6.0
+│       │   ├── nexus-integration 10.6.0
+│       │   └── nexus-cli 10.6.0
+│       ├── screen-poster-agent 10.6.0
+│       │   └── nexus-integration 10.6.0
+│       ├── nexus-swarm 10.6.0
+│       ├── nexus-self-update 10.6.0
+│       ├── nexus-research 10.6.0
+│       │   ├── nexus-workflows 10.6.0
+│       │   │   ├── nexus-marketplace 10.6.0
+│       │   │   │   ├── nexus-self-update 10.6.0
+│       │   │   │   ├── nexus-protocols 10.6.0
+│       │   │   │   │   ├── nexus-integration 10.6.0
+│       │   │   │   │   ├── nexus-desktop-backend 10.6.0
+│       │   │   │   │   └── nexus-benchmarks 10.6.0
+│       │   │   │   ├── nexus-integration 10.6.0
+│       │   │   │   ├── nexus-desktop-backend 10.6.0
+│       │   │   │   └── nexus-cli 10.6.0
+│       │   │   └── nexus-integration 10.6.0
+│       │   ├── nexus-marketplace 10.6.0
+│       │   └── nexus-integration 10.6.0
+│       ├── nexus-protocols 10.6.0
+│       ├── nexus-marketplace 10.6.0
+│       ├── nexus-integration 10.6.0
+│       ├── nexus-factory 10.6.0
+│       │   ├── nexus-marketplace 10.6.0
+│       │   ├── nexus-integration 10.6.0
+│       │   ├── nexus-desktop-backend 10.6.0
+│       │   └── nexus-conductor 0.1.0
+│       ├── nexus-desktop-backend 10.6.0
+│       ├── nexus-control 10.6.0
+│       │   └── nexus-marketplace 10.6.0
+│       ├── nexus-content 10.6.0
+│       │   ├── social-poster-agent 10.6.0
+│       │   ├── nexus-workflows 10.6.0
+│       │   ├── nexus-marketplace 10.6.0
+│       │   └── nexus-integration 10.6.0
+│       ├── nexus-conductor 0.1.0
+│       ├── nexus-cli 10.6.0
+│       ├── nexus-benchmarks 10.6.0
+│       ├── nexus-adaptation 10.6.0
+│       │   ├── nexus-marketplace 10.6.0
+│       │   ├── nexus-integration 10.6.0
+│       │   └── nexus-desktop-backend 10.6.0
+│       ├── designer-agent 10.6.0
+│       └── coder-agent 10.6.0
+│           ├── nexus-swarm 10.6.0
+│           ├── nexus-integration 10.6.0
+│           └── nexus-conductor 0.1.0
+├── rav1e 0.8.1
+│   └── ravif 0.13.0
+│       └── image 0.25.10
+│           ├── web-builder-agent 10.6.0
+│           ├── qrcode 0.14.1
+│           │   └── web-builder-agent 10.6.0
+│           └── nexus-computer-use 0.1.0
+│               ├── nexus-ui-repair 10.6.0
+│               └── nexus-desktop-backend 10.6.0
+├── ratatui 0.29.0
+│   └── nexus-code 0.1.0
+│       └── nexus-desktop-backend 10.6.0
+├── macro_rules_attribute 0.2.2
+│   └── tokenizers 0.20.4
+├── gemm-f64 0.18.2
+│   └── gemm 0.18.2
+│       └── ug 0.1.0
+│           └── candle-core 0.8.4
+│               ├── nexus-connectors-llm 10.6.0
+│               ├── candle-transformers 0.8.4
+│               │   └── nexus-connectors-llm 10.6.0
+│               └── candle-nn 0.8.4
+│                   ├── nexus-connectors-llm 10.6.0
+│                   └── candle-transformers 0.8.4
+├── gemm-f64 0.17.1
+│   └── gemm 0.17.1
+│       └── candle-core 0.8.4
+├── gemm-f32 0.18.2
+│   ├── gemm-f16 0.18.2
+│   │   └── gemm 0.18.2
+│   └── gemm 0.18.2
+├── gemm-f32 0.17.1
+│   ├── gemm-f16 0.17.1
+│   │   └── gemm 0.17.1
+│   └── gemm 0.17.1
+├── gemm-f16 0.18.2
+├── gemm-f16 0.17.1
+├── gemm-common 0.18.2
+│   ├── gemm-f64 0.18.2
+│   ├── gemm-f32 0.18.2
+│   ├── gemm-f16 0.18.2
+│   ├── gemm-c64 0.18.2
+│   │   └── gemm 0.18.2
+│   ├── gemm-c32 0.18.2
+│   │   └── gemm 0.18.2
+│   └── gemm 0.18.2
+├── gemm-common 0.17.1
+│   ├── gemm-f64 0.17.1
+│   ├── gemm-f32 0.17.1
+│   ├── gemm-f16 0.17.1
+│   ├── gemm-c64 0.17.1
+│   │   └── gemm 0.17.1
+│   ├── gemm-c32 0.17.1
+│   │   └── gemm 0.17.1
+│   └── gemm 0.17.1
+├── gemm-c64 0.18.2
+├── gemm-c64 0.17.1
+├── gemm-c32 0.18.2
+├── gemm-c32 0.17.1
+├── gemm 0.18.2
+└── gemm 0.17.1
+
+Crate:     proc-macro-error
+Version:   1.0.4
+Warning:   unmaintained
+Title:     proc-macro-error is unmaintained
+Date:      2024-09-01
+ID:        RUSTSEC-2024-0370
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0370
+Dependency tree:
+proc-macro-error 1.0.4
+├── gtk3-macros 0.18.2
+│   └── gtk 0.18.2
+│       ├── wry 0.54.4
+│       │   └── tauri-runtime-wry 2.10.1
+│       │       └── tauri 2.10.3
+│       │           ├── tauri-plugin-global-shortcut 2.3.1
+│       │           │   └── nexus-desktop-backend 10.6.0
+│       │           │       └── nexus-integration 10.6.0
+│       │           ├── tauri-plugin-fs 2.5.0
+│       │           │   └── tauri-plugin-dialog 2.7.0
+│       │           │       └── nexus-desktop-backend 10.6.0
+│       │           ├── tauri-plugin-dialog 2.7.0
+│       │           ├── nexus-integration 10.6.0
+│       │           └── nexus-desktop-backend 10.6.0
+│       ├── webkit2gtk 2.0.2
+│       │   ├── wry 0.54.4
+│       │   ├── tauri-runtime-wry 2.10.1
+│       │   ├── tauri-runtime 2.10.1
+│       │   │   ├── tauri-runtime-wry 2.10.1
+│       │   │   └── tauri 2.10.3
+│       │   ├── tauri 2.10.3
+│       │   └── nexus-desktop-backend 10.6.0
+│       ├── tauri-runtime-wry 2.10.1
+│       ├── tauri-runtime 2.10.1
+│       ├── tauri 2.10.3
+│       ├── tao 0.34.6
+│       │   └── tauri-runtime-wry 2.10.1
+│       ├── muda 0.17.1
+│       │   ├── tray-icon 0.21.3
+│       │   │   └── tauri 2.10.3
+│       │   └── tauri 2.10.3
+│       └── libappindicator 0.9.0
+│           └── tray-icon 0.21.3
+└── glib-macros 0.18.5
+    └── glib 0.18.5
+        ├── webkit2gtk 2.0.2
+        ├── soup3 0.5.0
+        │   ├── wry 0.54.4
+        │   └── webkit2gtk 2.0.2
+        ├── pango 0.18.3
+        │   ├── gtk 0.18.2
+        │   └── gdk 0.18.2
+        │       ├── webkit2gtk 2.0.2
+        │       └── gtk 0.18.2
+        ├── libappindicator 0.9.0
+        ├── javascriptcore-rs 1.1.2
+        │   ├── wry 0.54.4
+        │   └── webkit2gtk 2.0.2
+        ├── gtk 0.18.2
+        ├── gio 0.18.4
+        │   ├── webkit2gtk 2.0.2
+        │   ├── soup3 0.5.0
+        │   ├── pango 0.18.3
+        │   ├── gtk 0.18.2
+        │   ├── gdk-pixbuf 0.18.5
+        │   │   ├── gtk 0.18.2
+        │   │   └── gdk 0.18.2
+        │   └── gdk 0.18.2
+        ├── gdk-pixbuf 0.18.5
+        ├── gdk 0.18.2
+        ├── cairo-rs 0.18.5
+        │   ├── webkit2gtk 2.0.2
+        │   ├── gtk 0.18.2
+        │   └── gdk 0.18.2
+        └── atk 0.18.2
+            └── gtk 0.18.2
+
+Crate:     rustls-pemfile
+Version:   1.0.4
+Warning:   unmaintained
+Title:     rustls-pemfile is unmaintained
+Date:      2025-11-28
+ID:        RUSTSEC-2025-0134
+URL:       https://rustsec.org/advisories/RUSTSEC-2025-0134
+Dependency tree:
+rustls-pemfile 1.0.4
+└── reqwest 0.11.27
+    └── readability 0.3.0
+        └── nexus-kernel 10.6.0
+            ├── web-builder-agent 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   ├── nexus-desktop-backend 10.6.0
+            │   │   └── nexus-integration 10.6.0
+            │   └── nexus-conductor 0.1.0
+            │       ├── nexus-integration 10.6.0
+            │       ├── nexus-desktop-backend 10.6.0
+            │       └── nexus-cli 10.6.0
+            ├── social-poster-agent 10.6.0
+            │   ├── nexus-swarm 10.6.0
+            │   │   ├── nexus-integration 10.6.0
+            │   │   └── nexus-desktop-backend 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   ├── nexus-desktop-backend 10.6.0
+            │   └── nexus-cli 10.6.0
+            ├── nexus-workflows 10.6.0
+            │   ├── nexus-marketplace 10.6.0
+            │   │   ├── nexus-self-update 10.6.0
+            │   │   ├── nexus-protocols 10.6.0
+            │   │   │   ├── nexus-integration 10.6.0
+            │   │   │   ├── nexus-desktop-backend 10.6.0
+            │   │   │   └── nexus-benchmarks 10.6.0
+            │   │   ├── nexus-integration 10.6.0
+            │   │   ├── nexus-desktop-backend 10.6.0
+            │   │   └── nexus-cli 10.6.0
+            │   └── nexus-integration 10.6.0
+            ├── nexus-swarm 10.6.0
+            ├── nexus-server 10.6.0
+            ├── nexus-self-update 10.6.0
+            ├── nexus-sdk 10.6.0
+            │   ├── workflow-studio-agent 10.6.0
+            │   │   └── nexus-integration 10.6.0
+            │   ├── web-builder-agent 10.6.0
+            │   ├── social-poster-agent 10.6.0
+            │   ├── self-improve-agent 10.6.0
+            │   │   ├── nexus-integration 10.6.0
+            │   │   └── nexus-cli 10.6.0
+            │   ├── screen-poster-agent 10.6.0
+            │   │   └── nexus-integration 10.6.0
+            │   ├── nexus-protocols 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   ├── nexus-desktop-backend 10.6.0
+            │   ├── nexus-connectors-llm 10.6.0
+            │   │   ├── web-builder-agent 10.6.0
+            │   │   ├── social-poster-agent 10.6.0
+            │   │   ├── self-improve-agent 10.6.0
+            │   │   ├── screen-poster-agent 10.6.0
+            │   │   ├── nexus-swarm 10.6.0
+            │   │   ├── nexus-self-update 10.6.0
+            │   │   ├── nexus-research 10.6.0
+            │   │   │   ├── nexus-workflows 10.6.0
+            │   │   │   ├── nexus-marketplace 10.6.0
+            │   │   │   └── nexus-integration 10.6.0
+            │   │   ├── nexus-protocols 10.6.0
+            │   │   ├── nexus-marketplace 10.6.0
+            │   │   ├── nexus-integration 10.6.0
+            │   │   ├── nexus-factory 10.6.0
+            │   │   │   ├── nexus-marketplace 10.6.0
+            │   │   │   ├── nexus-integration 10.6.0
+            │   │   │   ├── nexus-desktop-backend 10.6.0
+            │   │   │   └── nexus-conductor 0.1.0
+            │   │   ├── nexus-desktop-backend 10.6.0
+            │   │   ├── nexus-control 10.6.0
+            │   │   │   └── nexus-marketplace 10.6.0
+            │   │   ├── nexus-content 10.6.0
+            │   │   │   ├── social-poster-agent 10.6.0
+            │   │   │   ├── nexus-workflows 10.6.0
+            │   │   │   ├── nexus-marketplace 10.6.0
+            │   │   │   └── nexus-integration 10.6.0
+            │   │   ├── nexus-conductor 0.1.0
+            │   │   ├── nexus-cli 10.6.0
+            │   │   ├── nexus-benchmarks 10.6.0
+            │   │   ├── nexus-adaptation 10.6.0
+            │   │   │   ├── nexus-marketplace 10.6.0
+            │   │   │   ├── nexus-integration 10.6.0
+            │   │   │   └── nexus-desktop-backend 10.6.0
+            │   │   ├── designer-agent 10.6.0
+            │   │   └── coder-agent 10.6.0
+            │   │       ├── nexus-swarm 10.6.0
+            │   │       ├── nexus-integration 10.6.0
+            │   │       └── nexus-conductor 0.1.0
+            │   ├── nexus-conductor 0.1.0
+            │   ├── nexus-cli 10.6.0
+            │   ├── nexus-benchmarks 10.6.0
+            │   ├── designer-agent 10.6.0
+            │   ├── coding-agent 10.6.0
+            │   │   ├── nexus-integration 10.6.0
+            │   │   └── nexus-cli 10.6.0
+            │   └── coder-agent 10.6.0
+            ├── nexus-research 10.6.0
+            ├── nexus-protocols 10.6.0
+            ├── nexus-metering 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   └── nexus-desktop-backend 10.6.0
+            ├── nexus-marketplace 10.6.0
+            ├── nexus-kernel 10.6.0
+            ├── nexus-integrations 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   └── nexus-desktop-backend 10.6.0
+            ├── nexus-integration 10.6.0
+            ├── nexus-factory 10.6.0
+            ├── nexus-enterprise 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   └── nexus-desktop-backend 10.6.0
+            ├── nexus-distributed 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   └── nexus-desktop-backend 10.6.0
+            ├── nexus-desktop-backend 10.6.0
+            ├── nexus-control 10.6.0
+            ├── nexus-content 10.6.0
+            ├── nexus-connectors-web 10.6.0
+            │   ├── social-poster-agent 10.6.0
+            │   ├── nexus-research 10.6.0
+            │   ├── nexus-marketplace 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   ├── nexus-factory 10.6.0
+            │   ├── nexus-desktop-backend 10.6.0
+            │   └── nexus-analytics 10.6.0
+            │       ├── nexus-marketplace 10.6.0
+            │       ├── nexus-integration 10.6.0
+            │       └── nexus-adaptation 10.6.0
+            ├── nexus-connectors-social 10.6.0
+            │   ├── nexus-workflows 10.6.0
+            │   ├── nexus-marketplace 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   ├── nexus-factory 10.6.0
+            │   ├── nexus-desktop-backend 10.6.0
+            │   └── nexus-analytics 10.6.0
+            ├── nexus-connectors-messaging 10.6.0
+            │   ├── nexus-marketplace 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   ├── nexus-factory 10.6.0
+            │   └── nexus-desktop-backend 10.6.0
+            ├── nexus-connectors-llm 10.6.0
+            ├── nexus-connectors-core 10.6.0
+            │   ├── nexus-workflows 10.6.0
+            │   ├── nexus-self-update 10.6.0
+            │   ├── nexus-marketplace 10.6.0
+            │   ├── nexus-integrations 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   ├── nexus-factory 10.6.0
+            │   ├── nexus-desktop-backend 10.6.0
+            │   ├── nexus-control 10.6.0
+            │   ├── nexus-connectors-web 10.6.0
+            │   ├── nexus-connectors-social 10.6.0
+            │   ├── nexus-connectors-messaging 10.6.0
+            │   └── nexus-cli 10.6.0
+            ├── nexus-conductor-benchmark 10.6.0
+            ├── nexus-conductor 0.1.0
+            ├── nexus-code 0.1.0
+            │   └── nexus-desktop-backend 10.6.0
+            ├── nexus-cli 10.6.0
+            ├── nexus-benchmarks 10.6.0
+            ├── nexus-auth 10.6.0
+            │   ├── nexus-integration 10.6.0
+            │   └── nexus-desktop-backend 10.6.0
+            ├── nexus-analytics 10.6.0
+            ├── nexus-adaptation 10.6.0
+            └── nexus-a2a 10.6.0
+                ├── nexus-integration 10.6.0
+                └── nexus-desktop-backend 10.6.0
+
+Crate:     unic-char-property
+Version:   0.9.0
+Warning:   unmaintained
+Title:     `unic-char-property` is unmaintained
+Date:      2025-10-18
+ID:        RUSTSEC-2025-0081
+URL:       https://rustsec.org/advisories/RUSTSEC-2025-0081
+Dependency tree:
+unic-char-property 0.9.0
+└── unic-ucd-ident 0.9.0
+    └── urlpattern 0.3.0
+        └── tauri-utils 2.8.3
+            ├── tauri-runtime-wry 2.10.1
+            │   └── tauri 2.10.3
+            │       ├── tauri-plugin-global-shortcut 2.3.1
+            │       │   └── nexus-desktop-backend 10.6.0
+            │       │       └── nexus-integration 10.6.0
+            │       ├── tauri-plugin-fs 2.5.0
+            │       │   └── tauri-plugin-dialog 2.7.0
+            │       │       └── nexus-desktop-backend 10.6.0
+            │       ├── tauri-plugin-dialog 2.7.0
+            │       ├── nexus-integration 10.6.0
+            │       └── nexus-desktop-backend 10.6.0
+            ├── tauri-runtime 2.10.1
+            │   ├── tauri-runtime-wry 2.10.1
+            │   └── tauri 2.10.3
+            ├── tauri-plugin-fs 2.5.0
+            ├── tauri-plugin 2.5.4
+            │   ├── tauri-plugin-global-shortcut 2.3.1
+            │   ├── tauri-plugin-fs 2.5.0
+            │   └── tauri-plugin-dialog 2.7.0
+            ├── tauri-macros 2.5.5
+            │   └── tauri 2.10.3
+            ├── tauri-codegen 2.5.5
+            │   └── tauri-macros 2.5.5
+            ├── tauri-build 2.5.6
+            │   ├── tauri 2.10.3
+            │   └── nexus-desktop-backend 10.6.0
+            └── tauri 2.10.3
+
+Crate:     unic-char-range
+Version:   0.9.0
+Warning:   unmaintained
+Title:     `unic-char-range` is unmaintained
+Date:      2025-10-18
+ID:        RUSTSEC-2025-0075
+URL:       https://rustsec.org/advisories/RUSTSEC-2025-0075
+Dependency tree:
+unic-char-range 0.9.0
+├── unic-ucd-ident 0.9.0
+│   └── urlpattern 0.3.0
+│       └── tauri-utils 2.8.3
+│           ├── tauri-runtime-wry 2.10.1
+│           │   └── tauri 2.10.3
+│           │       ├── tauri-plugin-global-shortcut 2.3.1
+│           │       │   └── nexus-desktop-backend 10.6.0
+│           │       │       └── nexus-integration 10.6.0
+│           │       ├── tauri-plugin-fs 2.5.0
+│           │       │   └── tauri-plugin-dialog 2.7.0
+│           │       │       └── nexus-desktop-backend 10.6.0
+│           │       ├── tauri-plugin-dialog 2.7.0
+│           │       ├── nexus-integration 10.6.0
+│           │       └── nexus-desktop-backend 10.6.0
+│           ├── tauri-runtime 2.10.1
+│           │   ├── tauri-runtime-wry 2.10.1
+│           │   └── tauri 2.10.3
+│           ├── tauri-plugin-fs 2.5.0
+│           ├── tauri-plugin 2.5.4
+│           │   ├── tauri-plugin-global-shortcut 2.3.1
+│           │   ├── tauri-plugin-fs 2.5.0
+│           │   └── tauri-plugin-dialog 2.7.0
+│           ├── tauri-macros 2.5.5
+│           │   └── tauri 2.10.3
+│           ├── tauri-codegen 2.5.5
+│           │   └── tauri-macros 2.5.5
+│           ├── tauri-build 2.5.6
+│           │   ├── tauri 2.10.3
+│           │   └── nexus-desktop-backend 10.6.0
+│           └── tauri 2.10.3
+└── unic-char-property 0.9.0
+    └── unic-ucd-ident 0.9.0
+
+Crate:     unic-common
+Version:   0.9.0
+Warning:   unmaintained
+Title:     `unic-common` is unmaintained
+Date:      2025-10-18
+ID:        RUSTSEC-2025-0080
+URL:       https://rustsec.org/advisories/RUSTSEC-2025-0080
+Dependency tree:
+unic-common 0.9.0
+└── unic-ucd-version 0.9.0
+    └── unic-ucd-ident 0.9.0
+        └── urlpattern 0.3.0
+            └── tauri-utils 2.8.3
+                ├── tauri-runtime-wry 2.10.1
+                │   └── tauri 2.10.3
+                │       ├── tauri-plugin-global-shortcut 2.3.1
+                │       │   └── nexus-desktop-backend 10.6.0
+                │       │       └── nexus-integration 10.6.0
+                │       ├── tauri-plugin-fs 2.5.0
+                │       │   └── tauri-plugin-dialog 2.7.0
+                │       │       └── nexus-desktop-backend 10.6.0
+                │       ├── tauri-plugin-dialog 2.7.0
+                │       ├── nexus-integration 10.6.0
+                │       └── nexus-desktop-backend 10.6.0
+                ├── tauri-runtime 2.10.1
+                │   ├── tauri-runtime-wry 2.10.1
+                │   └── tauri 2.10.3
+                ├── tauri-plugin-fs 2.5.0
+                ├── tauri-plugin 2.5.4
+                │   ├── tauri-plugin-global-shortcut 2.3.1
+                │   ├── tauri-plugin-fs 2.5.0
+                │   └── tauri-plugin-dialog 2.7.0
+                ├── tauri-macros 2.5.5
+                │   └── tauri 2.10.3
+                ├── tauri-codegen 2.5.5
+                │   └── tauri-macros 2.5.5
+                ├── tauri-build 2.5.6
+                │   ├── tauri 2.10.3
+                │   └── nexus-desktop-backend 10.6.0
+                └── tauri 2.10.3
+
+Crate:     unic-ucd-ident
+Version:   0.9.0
+Warning:   unmaintained
+Title:     `unic-ucd-ident` is unmaintained
+Date:      2025-10-18
+ID:        RUSTSEC-2025-0100
+URL:       https://rustsec.org/advisories/RUSTSEC-2025-0100
+Dependency tree:
+unic-ucd-ident 0.9.0
+└── urlpattern 0.3.0
+    └── tauri-utils 2.8.3
+        ├── tauri-runtime-wry 2.10.1
+        │   └── tauri 2.10.3
+        │       ├── tauri-plugin-global-shortcut 2.3.1
+        │       │   └── nexus-desktop-backend 10.6.0
+        │       │       └── nexus-integration 10.6.0
+        │       ├── tauri-plugin-fs 2.5.0
+        │       │   └── tauri-plugin-dialog 2.7.0
+        │       │       └── nexus-desktop-backend 10.6.0
+        │       ├── tauri-plugin-dialog 2.7.0
+        │       ├── nexus-integration 10.6.0
+        │       └── nexus-desktop-backend 10.6.0
+        ├── tauri-runtime 2.10.1
+        │   ├── tauri-runtime-wry 2.10.1
+        │   └── tauri 2.10.3
+        ├── tauri-plugin-fs 2.5.0
+        ├── tauri-plugin 2.5.4
+        │   ├── tauri-plugin-global-shortcut 2.3.1
+        │   ├── tauri-plugin-fs 2.5.0
+        │   └── tauri-plugin-dialog 2.7.0
+        ├── tauri-macros 2.5.5
+        │   └── tauri 2.10.3
+        ├── tauri-codegen 2.5.5
+        │   └── tauri-macros 2.5.5
+        ├── tauri-build 2.5.6
+        │   ├── tauri 2.10.3
+        │   └── nexus-desktop-backend 10.6.0
+        └── tauri 2.10.3
+
+Crate:     unic-ucd-version
+Version:   0.9.0
+Warning:   unmaintained
+Title:     `unic-ucd-version` is unmaintained
+Date:      2025-10-18
+ID:        RUSTSEC-2025-0098
+URL:       https://rustsec.org/advisories/RUSTSEC-2025-0098
+Dependency tree:
+unic-ucd-version 0.9.0
+└── unic-ucd-ident 0.9.0
+    └── urlpattern 0.3.0
+        └── tauri-utils 2.8.3
+            ├── tauri-runtime-wry 2.10.1
+            │   └── tauri 2.10.3
+            │       ├── tauri-plugin-global-shortcut 2.3.1
+            │       │   └── nexus-desktop-backend 10.6.0
+            │       │       └── nexus-integration 10.6.0
+            │       ├── tauri-plugin-fs 2.5.0
+            │       │   └── tauri-plugin-dialog 2.7.0
+            │       │       └── nexus-desktop-backend 10.6.0
+            │       ├── tauri-plugin-dialog 2.7.0
+            │       ├── nexus-integration 10.6.0
+            │       └── nexus-desktop-backend 10.6.0
+            ├── tauri-runtime 2.10.1
+            │   ├── tauri-runtime-wry 2.10.1
+            │   └── tauri 2.10.3
+            ├── tauri-plugin-fs 2.5.0
+            ├── tauri-plugin 2.5.4
+            │   ├── tauri-plugin-global-shortcut 2.3.1
+            │   ├── tauri-plugin-fs 2.5.0
+            │   └── tauri-plugin-dialog 2.7.0
+            ├── tauri-macros 2.5.5
+            │   └── tauri 2.10.3
+            ├── tauri-codegen 2.5.5
+            │   └── tauri-macros 2.5.5
+            ├── tauri-build 2.5.6
+            │   ├── tauri 2.10.3
+            │   └── nexus-desktop-backend 10.6.0
+            └── tauri 2.10.3
+
+Crate:     glib
+Version:   0.18.5
+Warning:   unsound
+Title:     Unsoundness in `Iterator` and `DoubleEndedIterator` impls for `glib::VariantStrIter`
+Date:      2024-03-30
+ID:        RUSTSEC-2024-0429
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0429
+Dependency tree:
+glib 0.18.5
+├── webkit2gtk 2.0.2
+│   ├── wry 0.54.4
+│   │   └── tauri-runtime-wry 2.10.1
+│   │       └── tauri 2.10.3
+│   │           ├── tauri-plugin-global-shortcut 2.3.1
+│   │           │   └── nexus-desktop-backend 10.6.0
+│   │           │       └── nexus-integration 10.6.0
+│   │           ├── tauri-plugin-fs 2.5.0
+│   │           │   └── tauri-plugin-dialog 2.7.0
+│   │           │       └── nexus-desktop-backend 10.6.0
+│   │           ├── tauri-plugin-dialog 2.7.0
+│   │           ├── nexus-integration 10.6.0
+│   │           └── nexus-desktop-backend 10.6.0
+│   ├── tauri-runtime-wry 2.10.1
+│   ├── tauri-runtime 2.10.1
+│   │   ├── tauri-runtime-wry 2.10.1
+│   │   └── tauri 2.10.3
+│   ├── tauri 2.10.3
+│   └── nexus-desktop-backend 10.6.0
+├── soup3 0.5.0
+│   ├── wry 0.54.4
+│   └── webkit2gtk 2.0.2
+├── pango 0.18.3
+│   ├── gtk 0.18.2
+│   │   ├── wry 0.54.4
+│   │   ├── webkit2gtk 2.0.2
+│   │   ├── tauri-runtime-wry 2.10.1
+│   │   ├── tauri-runtime 2.10.1
+│   │   ├── tauri 2.10.3
+│   │   ├── tao 0.34.6
+│   │   │   └── tauri-runtime-wry 2.10.1
+│   │   ├── muda 0.17.1
+│   │   │   ├── tray-icon 0.21.3
+│   │   │   │   └── tauri 2.10.3
+│   │   │   └── tauri 2.10.3
+│   │   └── libappindicator 0.9.0
+│   │       └── tray-icon 0.21.3
+│   └── gdk 0.18.2
+│       ├── webkit2gtk 2.0.2
+│       └── gtk 0.18.2
+├── libappindicator 0.9.0
+├── javascriptcore-rs 1.1.2
+│   ├── wry 0.54.4
+│   └── webkit2gtk 2.0.2
+├── gtk 0.18.2
+├── gio 0.18.4
+│   ├── webkit2gtk 2.0.2
+│   ├── soup3 0.5.0
+│   ├── pango 0.18.3
+│   ├── gtk 0.18.2
+│   ├── gdk-pixbuf 0.18.5
+│   │   ├── gtk 0.18.2
+│   │   └── gdk 0.18.2
+│   └── gdk 0.18.2
+├── gdk-pixbuf 0.18.5
+├── gdk 0.18.2
+├── cairo-rs 0.18.5
+│   ├── webkit2gtk 2.0.2
+│   ├── gtk 0.18.2
+│   └── gdk 0.18.2
+└── atk 0.18.2
+    └── gtk 0.18.2
+
+Crate:     lru
+Version:   0.12.5
+Warning:   unsound
+Title:     `IterMut` violates Stacked Borrows by invalidating internal pointer
+Date:      2026-01-07
+ID:        RUSTSEC-2026-0002
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0002
+Dependency tree:
+lru 0.12.5
+└── ratatui 0.29.0
+    └── nexus-code 0.1.0
+        └── nexus-desktop-backend 10.6.0
+            └── nexus-integration 10.6.0
+
+Crate:     lru
+Version:   0.12.5
+Warning:   unsound
+Title:     Potential use-after-free due to lack of panic safety in `LruCache::pop()`
+Date:      2026-05-12
+ID:        RUSTSEC-2026-0253
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0253
+
+Crate:     rand
+Version:   0.7.3
+Warning:   unsound
+Title:     Rand is unsound with a custom logger using `rand::rng()`
+Date:      2026-04-09
+ID:        RUSTSEC-2026-0097
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0097
+Dependency tree:
+rand 0.7.3
+└── phf_generator 0.8.0
+    └── phf_codegen 0.8.0
+        └── selectors 0.24.0
+            └── kuchikiki 0.8.8-speedreader
+                └── tauri-utils 2.8.3
+                    ├── tauri-runtime-wry 2.10.1
+                    │   └── tauri 2.10.3
+                    │       ├── tauri-plugin-global-shortcut 2.3.1
+                    │       │   └── nexus-desktop-backend 10.6.0
+                    │       │       └── nexus-integration 10.6.0
+                    │       ├── tauri-plugin-fs 2.5.0
+                    │       │   └── tauri-plugin-dialog 2.7.0
+                    │       │       └── nexus-desktop-backend 10.6.0
+                    │       ├── tauri-plugin-dialog 2.7.0
+                    │       ├── nexus-integration 10.6.0
+                    │       └── nexus-desktop-backend 10.6.0
+                    ├── tauri-runtime 2.10.1
+                    │   ├── tauri-runtime-wry 2.10.1
+                    │   └── tauri 2.10.3
+                    ├── tauri-plugin-fs 2.5.0
+                    ├── tauri-plugin 2.5.4
+                    │   ├── tauri-plugin-global-shortcut 2.3.1
+                    │   ├── tauri-plugin-fs 2.5.0
+                    │   └── tauri-plugin-dialog 2.7.0
+                    ├── tauri-macros 2.5.5
+                    │   └── tauri 2.10.3
+                    ├── tauri-codegen 2.5.5
+                    │   └── tauri-macros 2.5.5
+                    ├── tauri-build 2.5.6
+                    │   ├── tauri 2.10.3
+                    │   └── nexus-desktop-backend 10.6.0
+                    └── tauri 2.10.3
+
+Crate:     scc
+Version:   2.4.0
+Warning:   unsound
+Title:     `Array::insert` violates exception safety if compare function panics, leading to potential Double-Free
+Date:      2026-07-06
+ID:        RUSTSEC-2026-0205
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0205
+Dependency tree:
+scc 2.4.0
+└── serial_test 3.4.0
+    └── nexus-kernel 10.6.0
+        ├── web-builder-agent 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   ├── nexus-desktop-backend 10.6.0
+        │   │   └── nexus-integration 10.6.0
+        │   └── nexus-conductor 0.1.0
+        │       ├── nexus-integration 10.6.0
+        │       ├── nexus-desktop-backend 10.6.0
+        │       └── nexus-cli 10.6.0
+        ├── social-poster-agent 10.6.0
+        │   ├── nexus-swarm 10.6.0
+        │   │   ├── nexus-integration 10.6.0
+        │   │   └── nexus-desktop-backend 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   ├── nexus-desktop-backend 10.6.0
+        │   └── nexus-cli 10.6.0
+        ├── nexus-workflows 10.6.0
+        │   ├── nexus-marketplace 10.6.0
+        │   │   ├── nexus-self-update 10.6.0
+        │   │   ├── nexus-protocols 10.6.0
+        │   │   │   ├── nexus-integration 10.6.0
+        │   │   │   ├── nexus-desktop-backend 10.6.0
+        │   │   │   └── nexus-benchmarks 10.6.0
+        │   │   ├── nexus-integration 10.6.0
+        │   │   ├── nexus-desktop-backend 10.6.0
+        │   │   └── nexus-cli 10.6.0
+        │   └── nexus-integration 10.6.0
+        ├── nexus-swarm 10.6.0
+        ├── nexus-server 10.6.0
+        ├── nexus-self-update 10.6.0
+        ├── nexus-sdk 10.6.0
+        │   ├── workflow-studio-agent 10.6.0
+        │   │   └── nexus-integration 10.6.0
+        │   ├── web-builder-agent 10.6.0
+        │   ├── social-poster-agent 10.6.0
+        │   ├── self-improve-agent 10.6.0
+        │   │   ├── nexus-integration 10.6.0
+        │   │   └── nexus-cli 10.6.0
+        │   ├── screen-poster-agent 10.6.0
+        │   │   └── nexus-integration 10.6.0
+        │   ├── nexus-protocols 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   ├── nexus-desktop-backend 10.6.0
+        │   ├── nexus-connectors-llm 10.6.0
+        │   │   ├── web-builder-agent 10.6.0
+        │   │   ├── social-poster-agent 10.6.0
+        │   │   ├── self-improve-agent 10.6.0
+        │   │   ├── screen-poster-agent 10.6.0
+        │   │   ├── nexus-swarm 10.6.0
+        │   │   ├── nexus-self-update 10.6.0
+        │   │   ├── nexus-research 10.6.0
+        │   │   │   ├── nexus-workflows 10.6.0
+        │   │   │   ├── nexus-marketplace 10.6.0
+        │   │   │   └── nexus-integration 10.6.0
+        │   │   ├── nexus-protocols 10.6.0
+        │   │   ├── nexus-marketplace 10.6.0
+        │   │   ├── nexus-integration 10.6.0
+        │   │   ├── nexus-factory 10.6.0
+        │   │   │   ├── nexus-marketplace 10.6.0
+        │   │   │   ├── nexus-integration 10.6.0
+        │   │   │   ├── nexus-desktop-backend 10.6.0
+        │   │   │   └── nexus-conductor 0.1.0
+        │   │   ├── nexus-desktop-backend 10.6.0
+        │   │   ├── nexus-control 10.6.0
+        │   │   │   └── nexus-marketplace 10.6.0
+        │   │   ├── nexus-content 10.6.0
+        │   │   │   ├── social-poster-agent 10.6.0
+        │   │   │   ├── nexus-workflows 10.6.0
+        │   │   │   ├── nexus-marketplace 10.6.0
+        │   │   │   └── nexus-integration 10.6.0
+        │   │   ├── nexus-conductor 0.1.0
+        │   │   ├── nexus-cli 10.6.0
+        │   │   ├── nexus-benchmarks 10.6.0
+        │   │   ├── nexus-adaptation 10.6.0
+        │   │   │   ├── nexus-marketplace 10.6.0
+        │   │   │   ├── nexus-integration 10.6.0
+        │   │   │   └── nexus-desktop-backend 10.6.0
+        │   │   ├── designer-agent 10.6.0
+        │   │   └── coder-agent 10.6.0
+        │   │       ├── nexus-swarm 10.6.0
+        │   │       ├── nexus-integration 10.6.0
+        │   │       └── nexus-conductor 0.1.0
+        │   ├── nexus-conductor 0.1.0
+        │   ├── nexus-cli 10.6.0
+        │   ├── nexus-benchmarks 10.6.0
+        │   ├── designer-agent 10.6.0
+        │   ├── coding-agent 10.6.0
+        │   │   ├── nexus-integration 10.6.0
+        │   │   └── nexus-cli 10.6.0
+        │   └── coder-agent 10.6.0
+        ├── nexus-research 10.6.0
+        ├── nexus-protocols 10.6.0
+        ├── nexus-metering 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   └── nexus-desktop-backend 10.6.0
+        ├── nexus-marketplace 10.6.0
+        ├── nexus-kernel 10.6.0
+        ├── nexus-integrations 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   └── nexus-desktop-backend 10.6.0
+        ├── nexus-integration 10.6.0
+        ├── nexus-factory 10.6.0
+        ├── nexus-enterprise 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   └── nexus-desktop-backend 10.6.0
+        ├── nexus-distributed 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   └── nexus-desktop-backend 10.6.0
+        ├── nexus-desktop-backend 10.6.0
+        ├── nexus-control 10.6.0
+        ├── nexus-content 10.6.0
+        ├── nexus-connectors-web 10.6.0
+        │   ├── social-poster-agent 10.6.0
+        │   ├── nexus-research 10.6.0
+        │   ├── nexus-marketplace 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   ├── nexus-factory 10.6.0
+        │   ├── nexus-desktop-backend 10.6.0
+        │   └── nexus-analytics 10.6.0
+        │       ├── nexus-marketplace 10.6.0
+        │       ├── nexus-integration 10.6.0
+        │       └── nexus-adaptation 10.6.0
+        ├── nexus-connectors-social 10.6.0
+        │   ├── nexus-workflows 10.6.0
+        │   ├── nexus-marketplace 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   ├── nexus-factory 10.6.0
+        │   ├── nexus-desktop-backend 10.6.0
+        │   └── nexus-analytics 10.6.0
+        ├── nexus-connectors-messaging 10.6.0
+        │   ├── nexus-marketplace 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   ├── nexus-factory 10.6.0
+        │   └── nexus-desktop-backend 10.6.0
+        ├── nexus-connectors-llm 10.6.0
+        ├── nexus-connectors-core 10.6.0
+        │   ├── nexus-workflows 10.6.0
+        │   ├── nexus-self-update 10.6.0
+        │   ├── nexus-marketplace 10.6.0
+        │   ├── nexus-integrations 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   ├── nexus-factory 10.6.0
+        │   ├── nexus-desktop-backend 10.6.0
+        │   ├── nexus-control 10.6.0
+        │   ├── nexus-connectors-web 10.6.0
+        │   ├── nexus-connectors-social 10.6.0
+        │   ├── nexus-connectors-messaging 10.6.0
+        │   └── nexus-cli 10.6.0
+        ├── nexus-conductor-benchmark 10.6.0
+        ├── nexus-conductor 0.1.0
+        ├── nexus-code 0.1.0
+        │   └── nexus-desktop-backend 10.6.0
+        ├── nexus-cli 10.6.0
+        ├── nexus-benchmarks 10.6.0
+        ├── nexus-auth 10.6.0
+        │   ├── nexus-integration 10.6.0
+        │   └── nexus-desktop-backend 10.6.0
+        ├── nexus-analytics 10.6.0
+        ├── nexus-adaptation 10.6.0
+        └── nexus-a2a 10.6.0
+            ├── nexus-integration 10.6.0
+            └── nexus-desktop-backend 10.6.0
+
+warning: 15 allowed warnings found
+security-audit: cargo deny --locked check --config /tmp/tmp.zWPjh9NUKh
+
+# --- cargo deny (diagnostics and summary) ---
+warning[duplicate]: found 3 duplicate entries for crate 'base64'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:51:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'bit-set'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:55:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'bit-vec'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:57:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'bitflags'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:60:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'cfg_aliases'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:93:1
+
+warning[wildcard]: found 3 wildcard dependencies for crate 'coder-agent'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/agents/coder/Cargo.toml:12:13
+12 │ nexus-sdk = { path = "../../sdk" }
+13 │ nexus-connectors-llm = { path = "../../connectors/llm" }
+14 │ nexus-swarm-core = { path = "../../crates/nexus-swarm-core" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'coding-agent'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/agents/coding-agent/Cargo.toml:16:13
+16 │ nexus-sdk = { path = "../../sdk" }
+
+warning[duplicate]: found 2 duplicate entries for crate 'core-foundation'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:118:1
+
+warning[duplicate]: found 5 duplicate entries for crate 'cssparser'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:152:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'darling'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:162:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'darling_core'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:164:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'darling_macro'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:166:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'derive_more'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:178:1
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'designer-agent'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/agents/designer/Cargo.toml:12:13
+12 │ nexus-sdk = { path = "../../sdk" }
+13 │ nexus-connectors-llm = { path = "../../connectors/llm" }
+
+warning[duplicate]: found 2 duplicate entries for crate 'dirs'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:184:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'dirs-sys'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:186:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'dyn-stack'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:199:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'ego-tree'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:204:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'foldhash'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:241:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'foreign-types'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:243:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'foreign-types-shared'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:246:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'gemm'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:270:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'gemm-c32'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:272:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'gemm-c64'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:274:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'gemm-common'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:276:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'gemm-f16'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:278:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'gemm-f32'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:280:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'gemm-f64'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:282:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'getrandom'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:287:1
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/tmp.zWPjh9NUKh:53:6
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/tmp.zWPjh9NUKh:52:6
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/tmp.zWPjh9NUKh:47:6
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /tmp/tmp.zWPjh9NUKh:48:6
+
+warning[duplicate]: found 2 duplicate entries for crate 'h2'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:308:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'hashbrown'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:311:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'heck'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:316:1
+
+warning[duplicate]: found 5 duplicate entries for crate 'html5ever'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:325:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'http'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:330:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'http-body'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:332:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'hyper'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:338:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'hyper-tls'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:341:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'indexmap'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:362:1
+
+warning[duplicate]: found 5 duplicate entries for crate 'itertools'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:376:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'libloading'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:404:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'linux-raw-sys'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:410:1
+
+warning[duplicate]: found 5 duplicate entries for crate 'markup5ever'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:422:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'markup5ever_rcdom'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:427:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'match_token'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:429:1
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-a2a'
+  ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-a2a/Cargo.toml:9:16
+9 │ nexus-kernel = { path = "../../kernel" }
+
+warning[wildcard]: found 3 wildcard dependencies for crate 'nexus-adaptation'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/adaptation/Cargo.toml:12:13
+12 │ analytics = { package = "nexus-analytics", path = "../analytics" }
+13 │ nexus-kernel = { path = "../kernel" }
+14 │ nexus-connectors-llm = { path = "../connectors/llm" }
+
+warning[wildcard]: found 3 wildcard dependencies for crate 'nexus-analytics'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/analytics/Cargo.toml:12:27
+12 │ nexus-connectors-social = { path = "../connectors/social" }
+13 │ nexus-connectors-web = { path = "../connectors/web" }
+14 │ nexus-kernel = { path = "../kernel" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-auth'
+  ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/auth/Cargo.toml:9:16
+9 │ nexus-kernel = { path = "../kernel" }
+
+warning[wildcard]: found 4 wildcard dependencies for crate 'nexus-benchmarks'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/benchmarks/Cargo.toml:10:16
+10 │ nexus-kernel = { path = "../kernel" }
+11 │ nexus-sdk = { path = "../sdk" }
+12 │ nexus-connectors-llm = { path = "../connectors/llm" }
+13 │ nexus-protocols = { path = "../protocols" }
+
+warning[wildcard]: found 10 wildcard dependencies for crate 'nexus-cli'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/cli/Cargo.toml:13:16
+13 │ nexus-kernel = { path = "../kernel" }
+14 │ nexus-connectors-core = { path = "../connectors/core" }
+15 │ nexus-connectors-llm = { path = "../connectors/llm" }
+16 │ coding-agent = { path = "../agents/coding-agent" }
+17 │ social-poster-agent = { path = "../agents/social-poster" }
+18 │ self-improve-agent = { path = "../agents/self-improve" }
+19 │ nexus-conductor = { path = "../agents/conductor" }
+20 │ chrono = "0.4"
+21 │ nexus-sdk = { path = "../sdk" }
+22 │ nexus-marketplace = { path = "../marketplace" }
+23 │ nexus-crypto = { path = "../crates/nexus-crypto" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-code'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/nexus-code/Cargo.toml:18:16
+18 │ nexus-kernel = { path = "../kernel" }
+
+warning[wildcard]: found 6 wildcard dependencies for crate 'nexus-conductor'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/agents/conductor/Cargo.toml:9:16
+ 9 │ nexus-kernel = { path = "../../kernel" }
+10 │ nexus-sdk = { path = "../../sdk" }
+11 │ nexus-connectors-llm = { path = "../../connectors/llm" }
+12 │ nexus-factory = { path = "../../factory" }
+13 │ web-builder-agent = { path = "../web-builder" }
+14 │ coder-agent = { path = "../coder" }
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'nexus-conductor-benchmark'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/benchmarks/conductor-bench/Cargo.toml:62:16
+62 │ nexus-kernel = { path = "../../kernel" }
+63 │ nexus-capability-measurement = { path = "../../crates/nexus-capability-measurement" }
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'nexus-connectors-core'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/connectors/core/Cargo.toml:13:16
+13 │ nexus-kernel = { path = "../../kernel" }
+14 │ nexus-persistence = { path = "../../persistence" }
+
+warning[wildcard]: found 4 wildcard dependencies for crate 'nexus-connectors-llm'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/connectors/llm/Cargo.toml:26:16
+26 │ nexus-kernel = { path = "../../kernel" }
+45 │ nexus-flash-infer = { path = "../../crates/nexus-flash-infer", features = ["real-llama"], optional = true }
+46 │ nexus-llama-bridge = { path = "../../llama-bridge", features = ["real-llama"], optional = true }
+49 │ nexus-sdk = { path = "../../sdk" }
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'nexus-connectors-messaging'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/connectors/messaging/Cargo.toml:12:25
+12 │ nexus-connectors-core = { path = "../core" }
+13 │ nexus-kernel = { path = "../../kernel" }
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'nexus-connectors-social'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/connectors/social/Cargo.toml:12:25
+12 │ nexus-connectors-core = { path = "../core" }
+13 │ nexus-kernel = { path = "../../kernel" }
+
+warning[wildcard]: found 3 wildcard dependencies for crate 'nexus-connectors-web'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/connectors/web/Cargo.toml:12:25
+12 │ nexus-connectors-core = { path = "../core" }
+13 │ nexus-kernel = { path = "../../kernel" }
+14 │ nexus-persistence = { path = "../../persistence" }
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'nexus-content'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/content/Cargo.toml:12:24
+12 │ nexus-connectors-llm = { path = "../connectors/llm" }
+13 │ nexus-kernel = { path = "../kernel" }
+
+warning[wildcard]: found 3 wildcard dependencies for crate 'nexus-control'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/control/Cargo.toml:19:25
+19 │ nexus-connectors-core = { path = "../connectors/core" }
+20 │ nexus-connectors-llm = { path = "../connectors/llm" }
+21 │ nexus-kernel = { path = "../kernel" }
+
+warning[wildcard]: found 48 wildcard dependencies for crate 'nexus-desktop-backend'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/app/src-tauri/Cargo.toml:16:16
+ 16 │ nexus-kernel = { path = "../../kernel" }
+ 17 │ nexus-connectors-core = { path = "../../connectors/core" }
+ 18 │ nexus-connectors-web = { path = "../../connectors/web" }
+ 19 │ nexus-connectors-social = { path = "../../connectors/social" }
+ 20 │ nexus-connectors-messaging = { path = "../../connectors/messaging" }
+ 21 │ nexus-connectors-llm = { path = "../../connectors/llm", features = ["flash-infer"] }
+ 22 │ nexus-adaptation = { path = "../../adaptation" }
+ 23 │ nexus-protocols = { path = "../../protocols" }
+ 24 │ nexus-distributed = { path = "../../distributed" }
+ 25 │ nexus-factory = { path = "../../factory" }
+ 26 │ nexus-marketplace = { path = "../../marketplace" }
+ 27 │ nexus-sdk = { path = "../../sdk" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-distributed'
+  ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/distributed/Cargo.toml:9:16
+9 │ nexus-kernel = { path = "../kernel" }
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'nexus-enterprise'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/enterprise/Cargo.toml:9:16
+ 9 │ nexus-kernel = { path = "../kernel" }
+15 │ nexus-kernel = { path = "../kernel", features = ["test-utils"] }
+
+warning[wildcard]: found 6 wildcard dependencies for crate 'nexus-factory'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/factory/Cargo.toml:12:16
+12 │ nexus-kernel = { path = "../kernel" }
+13 │ nexus-connectors-core = { path = "../connectors/core" }
+14 │ nexus-connectors-web = { path = "../connectors/web" }
+15 │ nexus-connectors-social = { path = "../connectors/social" }
+16 │ nexus-connectors-messaging = { path = "../connectors/messaging" }
+17 │ nexus-connectors-llm = { path = "../connectors/llm" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-flash-infer'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-flash-infer/Cargo.toml:14:22
+14 │ nexus-llama-bridge = { path = "../../llama-bridge" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-governance-engine'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-governance-engine/Cargo.toml:15:27
+15 │ nexus-governance-oracle = { path = "../nexus-governance-oracle" }
+
+warning[wildcard]: found 3 wildcard dependencies for crate 'nexus-governance-evolution'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-governance-evolution/Cargo.toml:16:27
+16 │ nexus-governance-oracle = { path = "../nexus-governance-oracle" }
+17 │ nexus-governance-engine = { path = "../nexus-governance-engine" }
+20 │ nexus-crypto = { path = "../nexus-crypto" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-governance-oracle'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-governance-oracle/Cargo.toml:13:16
+13 │ nexus-crypto = { path = "../nexus-crypto" }
+
+warning[wildcard]: found 55 wildcard dependencies for crate 'nexus-integration'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/tests/integration/Cargo.toml:17:16
+17 │ nexus-kernel = { path = "../../kernel" }
+18 │ nexus-connectors-core = { path = "../../connectors/core" }
+19 │ nexus-factory = { path = "../../factory" }
+20 │ nexus-research = { path = "../../research" }
+21 │ nexus-content = { path = "../../content" }
+22 │ nexus-workflows = { path = "../../workflows" }
+23 │ nexus-analytics = { path = "../../analytics" }
+24 │ nexus-adaptation = { path = "../../adaptation" }
+25 │ nexus-connectors-web = { path = "../../connectors/web" }
+26 │ nexus-connectors-social = { path = "../../connectors/social" }
+27 │ nexus-connectors-messaging = { path = "../../connectors/messaging" }
+28 │ nexus-connectors-llm = { path = "../../connectors/llm", features = ["flash-infer"] }
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'nexus-integrations'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/integrations/Cargo.toml:12:16
+12 │ nexus-kernel = { path = "../kernel" }
+13 │ nexus-connectors-core = { path = "../connectors/core" }
+
+warning[wildcard]: found 4 wildcard dependencies for crate 'nexus-kernel'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/kernel/Cargo.toml:28:16
+28 │ nexus-crypto = { path = "../crates/nexus-crypto" }
+51 │ nexus-persistence = { path = "../persistence" }
+74 │ nexus-kernel = { path = ".", features = ["test-utils"] }
+75 │ nexus-persistence = { path = "../persistence", features = ["testing"] }
+
+warning[wildcard]: found 14 wildcard dependencies for crate 'nexus-marketplace'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/marketplace/Cargo.toml:12:16
+12 │ nexus-kernel = { path = "../kernel" }
+13 │ nexus-connectors-core = { path = "../connectors/core" }
+14 │ nexus-connectors-web = { path = "../connectors/web" }
+15 │ nexus-connectors-social = { path = "../connectors/social" }
+16 │ nexus-connectors-messaging = { path = "../connectors/messaging" }
+17 │ nexus-connectors-llm = { path = "../connectors/llm" }
+18 │ nexus-workflows = { path = "../workflows" }
+19 │ nexus-research = { path = "../research" }
+20 │ nexus-content = { path = "../content" }
+21 │ nexus-analytics = { path = "../analytics" }
+22 │ nexus-adaptation = { path = "../adaptation" }
+23 │ nexus-control = { path = "../control" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-metering'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/metering/Cargo.toml:15:16
+15 │ nexus-kernel = { path = "../kernel" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-predictive-router'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-predictive-router/Cargo.toml:13:32
+13 │ nexus-capability-measurement = { path = "../nexus-capability-measurement" }
+
+warning[wildcard]: found 6 wildcard dependencies for crate 'nexus-protocols'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/protocols/Cargo.toml:20:16
+20 │ nexus-kernel = { path = "../kernel" }
+28 │ nexus-marketplace = { path = "../marketplace" }
+29 │ nexus-sdk = { path = "../sdk" }
+30 │ nexus-connectors-llm = { path = "../connectors/llm" }
+37 │ nexus-sdk = { path = "../sdk" }
+38 │ nexus-kernel = { path = "../kernel", features = ["test-utils"] }
+
+warning[wildcard]: found 3 wildcard dependencies for crate 'nexus-research'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/research/Cargo.toml:12:24
+12 │ nexus-connectors-llm = { path = "../connectors/llm" }
+13 │ nexus-connectors-web = { path = "../connectors/web" }
+14 │ nexus-kernel = { path = "../kernel" }
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'nexus-sdk'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/sdk/Cargo.toml:9:16
+ 9 │ nexus-kernel = { path = "../kernel" }
+10 │ nexus-crypto = { path = "../crates/nexus-crypto" }
+
+warning[wildcard]: found 5 wildcard dependencies for crate 'nexus-self-update'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/self-update/Cargo.toml:12:16
+12 │ nexus-kernel = { path = "../kernel" }
+13 │ nexus-marketplace = { path = "../marketplace" }
+14 │ nexus-connectors-llm = { path = "../connectors/llm" }
+15 │ nexus-connectors-core = { path = "../connectors/core" }
+20 │ nexus-crypto = { path = "../crates/nexus-crypto" }
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'nexus-server'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-server/Cargo.toml:13:16
+13 │ nexus-kernel = { path = "../../kernel" }
+14 │ nexus-mcp = { path = "../nexus-mcp" }
+
+warning[wildcard]: found 9 wildcard dependencies for crate 'nexus-swarm'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-swarm/Cargo.toml:16:16
+16 │ nexus-kernel = { path = "../../kernel" }
+17 │ nexus-crypto = { path = "../nexus-crypto" }
+18 │ nexus-governance-oracle = { path = "../nexus-governance-oracle" }
+19 │ nexus-memory = { path = "../nexus-memory" }
+20 │ nexus-persistence = { path = "../../persistence" }
+21 │ nexus-connectors-llm = { path = "../../connectors/llm" }
+22 │ nexus-swarm-core = { path = "../nexus-swarm-core" }
+23 │ coder-agent = { path = "../../agents/coder" }
+24 │ social-poster-agent = { path = "../../agents/social-poster" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-token-economy'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-token-economy/Cargo.toml:13:16
+13 │ nexus-crypto = { path = "../nexus-crypto" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-ui-repair'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-ui-repair/Cargo.toml:18:22
+18 │ nexus-computer-use = { path = "../nexus-computer-use" }
+
+warning[wildcard]: found 1 wildcard dependency for crate 'nexus-verifier-sandbox'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/crates/nexus-verifier-sandbox/Cargo.toml:29:26
+29 │ nexus-verifier-sandbox = { path = ".", features = ["live-sandbox-harness"] }
+
+warning[wildcard]: found 5 wildcard dependencies for crate 'nexus-workflows'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/workflows/Cargo.toml:12:11
+12 │ content = { package = "nexus-content", path = "../content" }
+13 │ nexus-connectors-core = { path = "../connectors/core" }
+14 │ nexus-connectors-social = { path = "../connectors/social" }
+15 │ nexus-kernel = { path = "../kernel" }
+16 │ nexus-research = { path = "../research" }
+
+warning[duplicate]: found 2 duplicate entries for crate 'nix'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:520:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'nom'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:525:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'phf'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:580:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'phf_codegen'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:584:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'phf_generator'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:588:1
+
+warning[duplicate]: found 3 duplicate entries for crate 'phf_macros'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:592:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'phf_shared'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:595:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'png'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:608:1
+
+warning[duplicate]: found 3 duplicate entries for crate 'proc-macro-crate'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:618:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'pulp'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:630:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'quick-xml'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:638:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'r-efi'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:641:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'rand'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:644:1
+
+warning[duplicate]: found 3 duplicate entries for crate 'rand_chacha'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:648:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'rand_core'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:651:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'rand_distr'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:655:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'raw-cpuid'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:664:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'redox_syscall'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:672:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'redox_users'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:674:1
+
+warning[duplicate]: found 3 duplicate entries for crate 'reqwest'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:680:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'rustix'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:690:1
+
+warning[duplicate]: found 3 duplicate entries for crate 'scraper'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:708:1
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'screen-poster-agent'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/agents/screen-poster/Cargo.toml:12:13
+12 │ nexus-sdk = { path = "../../sdk" }
+13 │ nexus-connectors-llm = { path = "../../connectors/llm" }
+
+warning[duplicate]: found 2 duplicate entries for crate 'security-framework'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:714:1
+
+warning[duplicate]: found 5 duplicate entries for crate 'selectors'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:717:1
+
+warning[wildcard]: found 2 wildcard dependencies for crate 'self-improve-agent'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/agents/self-improve/Cargo.toml:12:13
+12 │ nexus-sdk = { path = "../../sdk" }
+13 │ nexus-connectors-llm = { path = "../../connectors/llm" }
+
+warning[duplicate]: found 2 duplicate entries for crate 'serde_spanned'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:734:1
+
+warning[duplicate]: found 3 duplicate entries for crate 'servo_arc'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:744:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'siphasher'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:758:1
+
+warning[wildcard]: found 7 wildcard dependencies for crate 'social-poster-agent'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/agents/social-poster/Cargo.toml:16:24
+16 │ nexus-connectors-llm = { path = "../../connectors/llm" }
+17 │ nexus-connectors-web = { path = "../../connectors/web" }
+18 │ nexus-content = { path = "../../content" }
+19 │ nexus-kernel = { path = "../../kernel" }
+20 │ nexus-persistence = { path = "../../persistence" }
+21 │ nexus-sdk = { path = "../../sdk" }
+22 │ nexus-swarm-core = { path = "../../crates/nexus-swarm-core" }
+
+warning[duplicate]: found 2 duplicate entries for crate 'socket2'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:764:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'string_cache'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:773:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'string_cache_codegen'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:775:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'syn'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:782:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'sync_wrapper'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:784:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'sysctl'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:787:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'system-configuration'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:790:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'system-configuration-sys'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:792:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'target-lexicon'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:798:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'tendril'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:813:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:816:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:818:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'toml'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:836:1
+
+warning[duplicate]: found 3 duplicate entries for crate 'toml_datetime'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:838:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'toml_edit'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:841:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'unicode-width'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:876:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'wasi'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:900:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'wasm-encoder'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:909:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'wasm-streams'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:911:1
+
+warning[wildcard]: found 4 wildcard dependencies for crate 'web-builder-agent'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/agents/web-builder/Cargo.toml:12:16
+12 │ nexus-kernel = { path = "../../kernel" }
+13 │ nexus-sdk = { path = "../../sdk" }
+14 │ nexus-connectors-llm = { path = "../../connectors/llm" }
+15 │ nexus-crypto = { path = "../../crates/nexus-crypto" }
+
+warning[duplicate]: found 2 duplicate entries for crate 'web_atoms'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:935:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'webpki-roots'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:939:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'windows'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:950:1
+
+warning[duplicate]: found 3 duplicate entries for crate 'windows-core'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:953:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'windows-implement'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:957:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'windows-interface'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:959:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'windows-link'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:961:1
+
+warning[duplicate]: found 3 duplicate entries for crate 'windows-result'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:965:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'windows-strings'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:968:1
+
+warning[duplicate]: found 6 duplicate entries for crate 'windows-sys'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:970:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'windows-targets'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:976:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'windows_aarch64_gnullvm'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:982:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'windows_aarch64_msvc'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:986:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'windows_i686_gnu'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:990:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'windows_i686_gnullvm'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:994:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'windows_i686_msvc'
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:996:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'windows_x86_64_gnu'
+     ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:1000:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'windows_x86_64_gnullvm'
+     ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:1004:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'windows_x86_64_msvc'
+     ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:1008:1
+
+warning[duplicate]: found 4 duplicate entries for crate 'winnow'
+     ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:1012:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'winreg'
+     ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:1016:1
+
+warning[wildcard]: found 1 wildcard dependency for crate 'workflow-studio-agent'
+   ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/agents/workflow-studio/Cargo.toml:12:13
+12 │ nexus-sdk = { path = "../../sdk" }
+
+warning[duplicate]: found 2 duplicate entries for crate 'xml5ever'
+     ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:1030:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'yoke'
+     ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:1033:1
+
+warning[duplicate]: found 2 duplicate entries for crate 'yoke-derive'
+     ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:1035:1
+
+warning[unmaintained]: fxhash - no longer maintained
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:263:1
+    ├ ID: RUSTSEC-2025-0057
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0057
+    ├ Announcement: https://github.com/cbreeden/fxhash/issues/20
+    ├ Solution: No safe upgrade is available!
+
+warning[unsound]: Unsoundness in `Iterator` and `DoubleEndedIterator` impls for `glib::VariantStrIter`
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:296:1
+    ├ ID: RUSTSEC-2024-0429
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2024-0429
+    ├ Announcement: https://github.com/gtk-rs/gtk-rs-core/pull/1343
+    ├ Solution: Upgrade to >=0.20.0 (try `cargo update -p glib`)
+
+warning[unsound]: `IterMut` violates Stacked Borrows by invalidating internal pointer
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:416:1
+    ├ ID: RUSTSEC-2026-0002
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0002
+    ├ Announcement: https://github.com/jeromefroe/lru-rs/pull/224
+    ├ Solution: Upgrade to >=0.16.3 (try `cargo update -p lru`)
+
+warning[unsound]: Potential use-after-free due to lack of panic safety in `LruCache::pop()`
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:416:1
+    ├ ID: RUSTSEC-2026-0253
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0253
+    ├ Announcement: https://github.com/jeromefroe/lru-rs/pull/238
+    ├ Solution: Upgrade to >=0.18.2 (try `cargo update -p lru`)
+
+warning[unmaintained]: number_prefix crate is unmaintained
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:543:1
+    ├ ID: RUSTSEC-2025-0119
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0119
+    ├ Announcement: https://github.com/ogham/rust-number-prefix/pull/8
+    ├ Solution: No safe upgrade is available!
+
+warning[unmaintained]: paste - no longer maintained
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:574:1
+    ├ ID: RUSTSEC-2024-0436
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2024-0436
+    ├ Announcement: https://github.com/dtolnay/paste
+    ├ Solution: No safe upgrade is available!
+
+warning[unmaintained]: proc-macro-error is unmaintained
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:621:1
+    ├ ID: RUSTSEC-2024-0370
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2024-0370
+    ├ Announcement: https://gitlab.com/CreepySkeleton/proc-macro-error/-/issues/20
+    ├ Solution: No safe upgrade is available!
+
+warning[unsound]: Rand is unsound with a custom logger using `rand::rng()`
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:644:1
+    ├ ID: RUSTSEC-2026-0097
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0097
+    ├ Announcement: https://github.com/rust-random/rand/pull/1763
+    ├ Solution: Upgrade to >=0.10.1 OR <0.10.0, >=0.9.3 OR <0.9.0, >=0.8.6 (try `cargo update -p rand`)
+
+warning[unmaintained]: rustls-pemfile is unmaintained
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:694:1
+    ├ ID: RUSTSEC-2025-0134
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0134
+    ├ Announcement: https://github.com/rustls/pemfile/issues/61
+    ├ Solution: No safe upgrade is available!
+
+warning[unsound]: `Array::insert` violates exception safety if compare function panics, leading to potential Double-Free
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:703:1
+    ├ ID: RUSTSEC-2026-0205
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0205
+      The soundness issue was fixed in version `3.8.4` by using `ManuallyDrop` instead of `mem::forget`, and separating fallible code from infallible code during a node split - insert = insert_try -> insert_unchecked.
+    ├ Announcement: https://codeberg.org/wvwwvwwv/scalable-concurrent-containers/issues/232
+    ├ Solution: Upgrade to >=3.8.4 (try `cargo update -p scc`)
+
+warning[unmaintained]: `unic-char-property` is unmaintained
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:866:1
+    ├ ID: RUSTSEC-2025-0081
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0081
+    ├ Announcement: https://github.com/rustsec/advisory-db/issues/2414
+    ├ Solution: No safe upgrade is available!
+
+warning[unmaintained]: `unic-char-range` is unmaintained
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:867:1
+    ├ ID: RUSTSEC-2025-0075
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0075
+    ├ Announcement: https://github.com/rustsec/advisory-db/issues/2414
+    ├ Solution: No safe upgrade is available!
+
+warning[unmaintained]: `unic-common` is unmaintained
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:868:1
+    ├ ID: RUSTSEC-2025-0080
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0080
+    ├ Announcement: https://github.com/rustsec/advisory-db/issues/2414
+    ├ Solution: No safe upgrade is available!
+
+warning[unmaintained]: `unic-ucd-ident` is unmaintained
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:869:1
+    ├ ID: RUSTSEC-2025-0100
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0100
+    ├ Announcement: https://github.com/rustsec/advisory-db/issues/2414
+    ├ Solution: No safe upgrade is available!
+
+warning[unmaintained]: `unic-ucd-version` is unmaintained
+    ┌─ /home/nexus/NEXUS/nexus-os-p2-security-wasmtime-36/Cargo.lock:870:1
+    ├ ID: RUSTSEC-2025-0098
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2025-0098
+    ├ Announcement: https://github.com/rustsec/advisory-db/issues/2414
+    ├ Solution: No safe upgrade is available!
+
+advisories ok, bans ok, licenses ok, sources ok
+security-audit: passed
+exit=0

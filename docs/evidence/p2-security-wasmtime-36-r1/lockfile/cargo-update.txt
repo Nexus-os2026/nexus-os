@@ -1,0 +1,55 @@
+    Updating crates.io index
+ Downgrading addr2line v0.26.0 -> v0.25.1
+    Removing bitmaps v2.1.0
+ Downgrading cranelift-assembler-x64 v0.130.2 -> v0.123.17
+ Downgrading cranelift-assembler-x64-meta v0.130.2 -> v0.123.17
+ Downgrading cranelift-bforest v0.130.2 -> v0.123.17
+ Downgrading cranelift-bitset v0.130.2 -> v0.123.17
+ Downgrading cranelift-codegen v0.130.2 -> v0.123.17
+ Downgrading cranelift-codegen-meta v0.130.2 -> v0.123.17
+ Downgrading cranelift-codegen-shared v0.130.2 -> v0.123.17
+ Downgrading cranelift-control v0.130.2 -> v0.123.17
+ Downgrading cranelift-entity v0.130.2 -> v0.123.17
+ Downgrading cranelift-frontend v0.130.2 -> v0.123.17
+ Downgrading cranelift-isle v0.130.2 -> v0.123.17
+ Downgrading cranelift-native v0.130.2 -> v0.123.17
+ Downgrading cranelift-srcgen v0.130.2 -> v0.123.17
+ Downgrading fxprof-processed-profile v0.8.1 -> v0.6.0
+ Downgrading gimli v0.33.0 -> v0.32.3
+    Removing hashbrown v0.17.1
+    Removing im-rc v15.1.0
+ Downgrading object v0.38.1 -> v0.37.3
+ Downgrading proc-macro-crate v2.0.2 -> v2.0.0 (available: v2.0.2)
+ Downgrading pulley-interpreter v43.0.2 -> v36.0.17
+ Downgrading pulley-macros v43.0.2 -> v36.0.17
+    Removing rand_xoshiro v0.6.0
+ Downgrading regalloc2 v0.15.1 -> v0.12.2
+    Removing sized-chunks v0.6.5
+    Updating toml v0.8.2 -> v0.8.23 (available: v1.1.6+spec-1.1.0)
+    Updating toml_datetime v0.6.3 -> v0.6.11
+      Adding toml_edit v0.22.27
+      Adding toml_write v0.1.2
+    Removing wasm-compose v0.245.1
+      Adding wasm-encoder v0.236.1
+      Adding wasmparser v0.236.1
+ Downgrading wasmprinter v0.245.1 -> v0.236.1
+ Downgrading wasmtime v43.0.2 -> v36.0.17
+ Downgrading wasmtime-environ v43.0.2 -> v36.0.17
+      Adding wasmtime-internal-asm-macros v36.0.17
+ Downgrading wasmtime-internal-cache v43.0.2 -> v36.0.17
+ Downgrading wasmtime-internal-component-macro v43.0.2 -> v36.0.17
+ Downgrading wasmtime-internal-component-util v43.0.2 -> v36.0.17
+    Removing wasmtime-internal-core v43.0.2
+ Downgrading wasmtime-internal-cranelift v43.0.2 -> v36.0.17
+ Downgrading wasmtime-internal-fiber v43.0.2 -> v36.0.17
+ Downgrading wasmtime-internal-jit-debug v43.0.2 -> v36.0.17
+ Downgrading wasmtime-internal-jit-icache-coherence v43.0.2 -> v36.0.17
+      Adding wasmtime-internal-math v36.0.17
+      Adding wasmtime-internal-slab v36.0.17
+ Downgrading wasmtime-internal-unwinder v43.0.2 -> v36.0.17
+ Downgrading wasmtime-internal-versioned-export-macros v43.0.2 -> v36.0.17
+ Downgrading wasmtime-internal-winch v43.0.2 -> v36.0.17
+ Downgrading wasmtime-internal-wit-bindgen v43.0.2 -> v36.0.17
+ Downgrading winch-codegen v43.0.2 -> v36.0.17
+ Downgrading wit-parser v0.245.1 -> v0.236.1
+note: pass `--verbose` to see 277 unchanged dependencies behind latest

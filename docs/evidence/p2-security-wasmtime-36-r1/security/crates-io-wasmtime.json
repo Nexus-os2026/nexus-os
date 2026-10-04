@@ -1,0 +1,45 @@
+{
+ "source": "https://crates.io/api/v1/crates/wasmtime/versions",
+ "fetched": "2026-10-04",
+ "versions": [
+  {
+   "num": "43.0.2",
+   "rust_version": "1.91.0",
+   "yanked": false,
+   "created_at": "2026-04-30T16:08:31.348951Z",
+   "checksum": "efb1ed5899dde98357cfdcf647a4614498798719793898245b4b34e663addabf",
+   "license": "Apache-2.0 WITH LLVM-exception",
+   "crate_size": 989573
+  },
+  {
+   "num": "36.0.17",
+   "rust_version": "1.86.0",
+   "yanked": false,
+   "created_at": "2026-10-02T16:48:19.932196Z",
+   "checksum": "0707f327a5821aa76c254fa661bd582d6e209c3176b6cca1d87484b2338d2dbb",
+   "license": "Apache-2.0 WITH LLVM-exception",
+   "crate_size": 888953
+  }
+ ],
+ "all_36x": [
+  "36.0.0",
+  "36.0.1",
+  "36.0.2",
+  "36.0.3",
+  "36.0.4",
+  "36.0.5",
+  "36.0.6",
+  "36.0.7",
+  "36.0.8",
+  "36.0.9",
+  "36.0.10",
+  "36.0.11",
+  "36.0.12",
+  "36.0.13",
+  "36.0.14",
+  "36.0.15",
+  "36.0.16",
+  "36.0.17"
+ ],
+ "newest_overall": "49.0.2"
+}

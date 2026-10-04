@@ -1,0 +1,813 @@
+{
+ "crate": "wasmtime",
+ "version": "43.0.2",
+ "advisories": 49,
+ "affected": [
+  "RUSTSEC-2026-0222",
+  "RUSTSEC-2026-0269",
+  "RUSTSEC-2026-0316",
+  "RUSTSEC-2026-0327"
+ ],
+ "rows": [
+  {
+   "id": "RUSTSEC-2021-0110",
+   "date": "2021-09-17",
+   "cvss": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:H/A:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 0.30.0"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Multiple Vulnerabilities in Wasmtime"
+  },
+  {
+   "id": "RUSTSEC-2022-0016",
+   "date": "2022-03-31",
+   "cvss": null,
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 0.35.2",
+    ">= 0.34.2, < 0.35.0"
+   ],
+   "unaffected": [
+    "< 0.34.0"
+   ],
+   "why": "patched",
+   "affected": false,
+   "title": "Use after free with `externref`s and epoch interruption in Wasmtime"
+  },
+  {
+   "id": "RUSTSEC-2022-0075",
+   "date": "2022-11-10",
+   "cvss": null,
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 1.0.2, < 2.0.0",
+    ">= 2.0.2"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Bug in pooling instance allocator"
+  },
+  {
+   "id": "RUSTSEC-2022-0076",
+   "date": "2022-11-10",
+   "cvss": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 1.0.2, < 2.0.0",
+    ">= 2.0.2"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Bug in Wasmtime implementation of pooling instance allocator"
+  },
+  {
+   "id": "RUSTSEC-2022-0095",
+   "date": "2022-06-27",
+   "cvss": null,
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 0.38.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Miscompilation of `i8x16.swizzle` and `select` with v128 inputs"
+  },
+  {
+   "id": "RUSTSEC-2022-0096",
+   "date": "2022-02-17",
+   "cvss": null,
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 0.33.1, < 0.34.0",
+    ">= 0.34.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Invalid drop of VMExternRef from partially-initialized instances in the pooling instance allocator"
+  },
+  {
+   "id": "RUSTSEC-2022-0097",
+   "date": "2022-11-07",
+   "cvss": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:L",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 1.0.2, < 2.0.0",
+    ">= 2.0.2"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Out of bounds write in `wasmtime_trap_code` C API function"
+  },
+  {
+   "id": "RUSTSEC-2022-0098",
+   "date": "2022-11-05",
+   "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 1.0.2, < 2.0.0",
+    ">= 2.0.2"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Data leakage between instances in the pooling allocator"
+  },
+  {
+   "id": "RUSTSEC-2022-0099",
+   "date": "2022-03-28",
+   "cvss": null,
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 0.35.2",
+    ">= 0.34.2, < 0.35.0"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": " Use after free with `externref`s and epoch interruption in Wasmtime"
+  },
+  {
+   "id": "RUSTSEC-2022-0100",
+   "date": "2022-07-12",
+   "cvss": null,
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 0.38.2"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Use After Free with `externref`s in Wasmtime"
+  },
+  {
+   "id": "RUSTSEC-2022-0101",
+   "date": "2022-07-05",
+   "cvss": null,
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 0.38.2"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Miscompilation of constant values in division on AArch64"
+  },
+  {
+   "id": "RUSTSEC-2022-0102",
+   "date": "2022-11-05",
+   "cvss": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 1.0.2, < 2.0.0",
+    ">= 2.0.2"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Out of bounds read/write with zero-memory-pages configuration"
+  },
+  {
+   "id": "RUSTSEC-2023-0090",
+   "date": "2023-03-02",
+   "cvss": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 4.0.1, < 5.0.0",
+    ">= 5.0.1, < 6.0.0",
+    ">= 6.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Guest-controlled out-of-bounds read/write on x86\\_64"
+  },
+  {
+   "id": "RUSTSEC-2023-0091",
+   "date": "2023-09-05",
+   "cvss": "CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:L/A:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 10.0.2, < 11.0.0",
+    ">= 11.0.2, < 12.0.0",
+    ">= 12.0.2"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Miscompilation of wasm `i64x2.shr_s` instruction with constant input on x86\\_64"
+  },
+  {
+   "id": "RUSTSEC-2023-0092",
+   "date": "2023-04-21",
+   "cvss": "CVSS:3.1/AV:N/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:L",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 6.0.2, < 7.0.0",
+    ">= 7.0.1, < 8.0.0",
+    ">= 8.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Undefined Behavior in Rust runtime functions"
+  },
+  {
+   "id": "RUSTSEC-2023-0093",
+   "date": "2023-03-03",
+   "cvss": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:N/I:L/A:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 4.0.1, < 5.0.0",
+    ">= 5.0.1, < 6.0.0",
+    ">= 6.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Miscompilation of `i8x16.select` with the same inputs on x86\\_64"
+  },
+  {
+   "id": "RUSTSEC-2024-0438",
+   "date": "2024-11-02",
+   "cvss": null,
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 24.0.2, < 25.0.0",
+    ">= 25.0.3, < 26.0.0",
+    ">= 26.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Wasmtime doesn't fully sandbox all the Windows device filenames"
+  },
+  {
+   "id": "RUSTSEC-2024-0439",
+   "date": "2024-10-03",
+   "cvss": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:N/I:L/A:L",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 21.0.2, < 22.0.0",
+    ">= 22.0.1, < 23.0.0",
+    ">= 23.0.3, < 24.0.0",
+    ">= 24.0.1, < 25.0.0",
+    ">= 25.0.2"
+   ],
+   "unaffected": [
+    "< 19.0.0"
+   ],
+   "why": "patched",
+   "affected": false,
+   "title": "Race condition could lead to WebAssembly control-flow integrity and type safety violations"
+  },
+  {
+   "id": "RUSTSEC-2024-0440",
+   "date": "2024-10-02",
+   "cvss": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 21.0.2, < 22.0.0",
+    ">= 22.0.1, < 23.0.0",
+    ">= 23.0.3, < 24.0.0",
+    ">= 24.0.1, < 25.0.0",
+    ">= 25.0.2"
+   ],
+   "unaffected": [
+    "< 21.0.0"
+   ],
+   "why": "patched",
+   "affected": false,
+   "title": "Runtime crash when combining tail calls with stack traces"
+  },
+  {
+   "id": "RUSTSEC-2024-0441",
+   "date": "2024-04-02",
+   "cvss": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:L",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 19.0.1"
+   ],
+   "unaffected": [
+    "< 19.0.0"
+   ],
+   "why": "patched",
+   "affected": false,
+   "title": "Panic when using a dropped extenref-typed element segment"
+  },
+  {
+   "id": "RUSTSEC-2025-0046",
+   "date": "2025-07-18",
+   "cvss": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:L",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 34.0.2",
+    ">= 33.0.2, < 34.0.0",
+    ">= 24.0.4, < 25.0.0"
+   ],
+   "unaffected": [
+    "< 10.0.0"
+   ],
+   "why": "patched",
+   "affected": false,
+   "title": "Host panic with `fd_renumber` WASIp1 function"
+  },
+  {
+   "id": "RUSTSEC-2025-0112",
+   "date": "2025-07-18",
+   "cvss": null,
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 38.0.3"
+   ],
+   "unaffected": [
+    "< 38.0.0"
+   ],
+   "why": "patched",
+   "affected": false,
+   "title": "Possible host crash with host-to-wasm component intrinsics"
+  },
+  {
+   "id": "RUSTSEC-2025-0118",
+   "date": "2025-11-11",
+   "cvss": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:N/I:L/A:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 38.0.4",
+    ">= 37.0.3, < 38.0.0",
+    ">= 36.0.3, < 37.0.0",
+    ">= 24.0.5, < 25.0.0"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Unsound API access to a WebAssembly shared linear memory"
+  },
+  {
+   "id": "RUSTSEC-2026-0006",
+   "date": "2026-01-26",
+   "cvss": "CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:A/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 41.0.1",
+    ">= 40.0.3, < 41.0.0",
+    ">= 36.0.5, < 37.0.0",
+    "< 29.0.0"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Wasmtime segfault or unused out-of-sandbox load with `f64.copysign` operator on x86-64 "
+  },
+  {
+   "id": "RUSTSEC-2026-0020",
+   "date": "2026-02-24",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:P/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 24.0.6, < 25.0.0",
+    ">= 36.0.6, < 37.0.0",
+    ">= 40.0.4, < 41.0.0",
+    ">= 41.0.4"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Guest-controlled resource exhaustion in WASI implementations"
+  },
+  {
+   "id": "RUSTSEC-2026-0021",
+   "date": "2026-02-24",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:P/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 24.0.6, < 25.0.0",
+    ">= 36.0.6, < 37.0.0",
+    ">= 40.0.4, < 41.0.0",
+    ">= 41.0.4"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Panic adding excessive fields to a `wasi:http/types.fields` instance"
+  },
+  {
+   "id": "RUSTSEC-2026-0022",
+   "date": "2026-02-24",
+   "cvss": "CVSS:4.0/AV:N/AC:H/AT:P/PR:L/UI:P/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 40.0.4, < 41.0.0",
+    ">= 41.0.4"
+   ],
+   "unaffected": [
+    "< 39.0.0"
+   ],
+   "why": "patched",
+   "affected": false,
+   "title": "Panic when dropping a `[Typed]Func::call_async` future"
+  },
+  {
+   "id": "RUSTSEC-2026-0085",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:N/AC:H/AT:P/PR:H/UI:A/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 24.0.7, < 25.0.0",
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Panic when lifting `flags` component value"
+  },
+  {
+   "id": "RUSTSEC-2026-0086",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:N/VC:L/VI:N/VA:N/SC:L/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Host data leakage with 64-bit tables and Winch"
+  },
+  {
+   "id": "RUSTSEC-2026-0087",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:A/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 24.0.7, < 25.0.0",
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Wasmtime segfault or unused out-of-sandbox load with `f64x2.splat` operator on Cranelift x86-64"
+  },
+  {
+   "id": "RUSTSEC-2026-0088",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:N/AC:H/AT:P/PR:L/UI:N/VC:L/VI:N/VA:N/SC:L/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Data leakage between pooling allocator instances"
+  },
+  {
+   "id": "RUSTSEC-2026-0089",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:P/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Host panic when Winch compiler executes `table.fill`"
+  },
+  {
+   "id": "RUSTSEC-2026-0090",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:P/AC:H/AT:P/PR:H/UI:A/VC:L/VI:L/VA:L/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 43.0.1"
+   ],
+   "unaffected": [
+    "< 43.0.0"
+   ],
+   "why": "patched",
+   "affected": false,
+   "title": "Use-after-free bug after cloning `wasmtime::Linker`"
+  },
+  {
+   "id": "RUSTSEC-2026-0091",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:N/VC:L/VI:L/VA:H/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 24.0.7, < 25.0.0",
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Out-of-bounds write or crash when transcoding component model strings"
+  },
+  {
+   "id": "RUSTSEC-2026-0092",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:P/VC:N/VI:N/VA:H/SC:N/SI:N/SA:L",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 24.0.7, < 25.0.0",
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Panic when transcoding misaligned component model UTF-16 strings"
+  },
+  {
+   "id": "RUSTSEC-2026-0093",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:P/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 24.0.7, < 25.0.0",
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Heap OOB read in component model UTF-16 to latin1+utf16 string transcoding"
+  },
+  {
+   "id": "RUSTSEC-2026-0094",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:N/AC:H/AT:P/PR:L/UI:N/VC:L/VI:L/VA:H/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Improperly masked return value from `table.grow` with Winch compiler backend"
+  },
+  {
+   "id": "RUSTSEC-2026-0095",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Wasmtime with Winch compiler backend may allow a sandbox-escaping memory access"
+  },
+  {
+   "id": "RUSTSEC-2026-0096",
+   "date": "2026-04-09",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 36.0.7, < 37.0.0",
+    ">= 42.0.2, < 43.0.0",
+    ">= 43.0.1"
+   ],
+   "unaffected": [],
+   "why": "patched",
+   "affected": false,
+   "title": "Miscompiled guest heap access enables sandbox escape on aarch64 Cranelift"
+  },
+  {
+   "id": "RUSTSEC-2026-0114",
+   "date": "2026-04-30",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:P/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 36.0.8, < 37.0.0",
+    ">= 43.0.2, < 44.0.0",
+    ">= 44.0.1"
+   ],
+   "unaffected": [
+    "< 30.0.0"
+   ],
+   "why": "patched",
+   "affected": false,
+   "title": "Panic when allocating a table exceeding the size of the host's address space"
+  },
+  {
+   "id": "RUSTSEC-2026-0222",
+   "date": "2026-07-31",
+   "cvss": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:L",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 24.0.12, < 25.0.0",
+    ">= 36.0.13, < 37.0.0",
+    ">= 46.0.2, < 47.0.0",
+    ">= 47.0.3"
+   ],
+   "unaffected": [],
+   "why": "",
+   "affected": true,
+   "title": "Stores can mix up type indices between engines"
+  },
+  {
+   "id": "RUSTSEC-2026-0223",
+   "date": "2026-07-31",
+   "cvss": "CVSS:4.0/AV:N/AC:H/AT:P/PR:H/UI:P/VC:N/VI:L/VA:L/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 46.0.2, < 47.0.0",
+    ">= 47.0.3"
+   ],
+   "unaffected": [
+    "< 46.0.0"
+   ],
+   "why": "unaffected",
+   "affected": false,
+   "title": "Preemption and traps during bulk operations enable breaking internal VM state"
+  },
+  {
+   "id": "RUSTSEC-2026-0268",
+   "date": "2026-08-20",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:P/VC:N/VI:N/VA:H/SC:N/SI:N/SA:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 46.0.3, < 47.0.0",
+    ">= 47.0.4"
+   ],
+   "unaffected": [
+    "< 46.0.0"
+   ],
+   "why": "unaffected",
+   "affected": false,
+   "title": "Guest controlled-size host heap allocation through WASIp3 streams"
+  },
+  {
+   "id": "RUSTSEC-2026-0269",
+   "date": "2026-08-20",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:P/VC:H/VI:H/VA:L/SC:H/SI:H/SA:L",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 24.0.13, < 25.0.0",
+    ">= 36.0.14, < 37.0.0",
+    ">= 46.0.3, < 47.0.0",
+    ">= 47.0.4"
+   ],
+   "unaffected": [],
+   "why": "",
+   "affected": true,
+   "title": "Filesystem sandbox escape when paths or symlinks contain trailing slashes"
+  },
+  {
+   "id": "RUSTSEC-2026-0315",
+   "date": "2026-09-24",
+   "cvss": "CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:N/A:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 48.0.3, < 49.0.0",
+    ">= 49.0.1"
+   ],
+   "unaffected": [
+    "< 47.0.0"
+   ],
+   "why": "unaffected",
+   "affected": false,
+   "title": "`call_ref` and exception `catch` can drop some fuel accounting, leading to exponential fuel amplification"
+  },
+  {
+   "id": "RUSTSEC-2026-0316",
+   "date": "2026-09-24",
+   "cvss": "CVSS:4.0/AV:A/AC:H/AT:P/PR:L/UI:P/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 36.0.16, < 37.0.0",
+    ">= 48.0.3, < 49.0.0",
+    ">= 49.0.1"
+   ],
+   "unaffected": [],
+   "why": "",
+   "affected": true,
+   "title": "Dynamic record lifting can allocate beyond the hostcall fuel limit"
+  },
+  {
+   "id": "RUSTSEC-2026-0325",
+   "date": "2026-10-02",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:P/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 48.0.4, < 49.0.0",
+    ">= 49.0.2"
+   ],
+   "unaffected": [
+    "< 47.0.0"
+   ],
+   "why": "unaffected",
+   "affected": false,
+   "title": "Mis-typed WebAssembly tag imports can lead to GC heap corruption"
+  },
+  {
+   "id": "RUSTSEC-2026-0326",
+   "date": "2026-10-02",
+   "cvss": "CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:N/I:N/A:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 48.0.4, < 49.0.0",
+    ">= 49.0.2"
+   ],
+   "unaffected": [
+    "< 47.0.0"
+   ],
+   "why": "unaffected",
+   "affected": false,
+   "title": "Rooting for GC values live across `try_call` may be missing, causing GC heap corruption"
+  },
+  {
+   "id": "RUSTSEC-2026-0327",
+   "date": "2026-10-02",
+   "cvss": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:H/VA:H/SC:L/SI:H/SA:H",
+   "informational": null,
+   "withdrawn": null,
+   "patched": [
+    ">= 48.0.4, < 49.0.0",
+    ">= 49.0.2"
+   ],
+   "unaffected": [
+    "< 39.0.0"
+   ],
+   "why": "",
+   "affected": true,
+   "title": "Wasmtime component async-lifted callback result count is unvalidated, causing a native stack buffer overflow"
+  }
+ ]
+}

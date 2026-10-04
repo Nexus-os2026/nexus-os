@@ -1,0 +1,23 @@
+toolchain exit=0 started=2026-10-04T10:07:29Z :: bash -c rustc --version; cargo --version; cargo fmt --version; cargo clippy --version
+fmt-check exit=0 started=2026-10-04T10:07:30Z :: cargo fmt --all -- --check
+clippy exit=0 started=2026-10-04T10:07:34Z :: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+workspace-tests exit=0 started=2026-10-04T10:10:23Z :: cargo test --workspace --locked --exclude nexus-verifier-sandbox
+verifier-sandbox-non-live exit=0 started=2026-10-04T10:17:34Z :: cargo test -p nexus-verifier-sandbox --locked --lib --bins --test phase2_cleanup_observation --test phase2_custody_codec --test phase2_custody_core --test phase2_custody_store --test phase2_never_populated --test phase2_package_layout
+verifier-live-harness-build-only exit=0 started=2026-10-04T10:18:56Z :: cargo test -p nexus-verifier-sandbox --locked --features development-toolchain --test phase2_live_sandbox --no-run
+sdk-tests-all-features exit=0 started=2026-10-04T10:19:00Z :: cargo test -p nexus-sdk --locked --all-features
+protocols-tests exit=0 started=2026-10-04T10:19:58Z :: cargo test -p nexus-protocols --locked
+benchmarks-build exit=0 started=2026-10-04T10:20:53Z :: cargo bench -p nexus-benchmarks --locked --no-run
+wasmtime-guard exit=0 started=2026-10-04T10:23:33Z :: cargo test -p nexus-desktop-backend --locked --lib -- phase0_surface::fg_reliability::tests::p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api --exact
+phase-guards exit=0 started=2026-10-04T10:25:25Z :: cargo test -p nexus-desktop-backend --locked --lib -- phase0_surface phase1_tests phase2_tests coding_flow::verification
+kernel-phase2 exit=0 started=2026-10-04T10:25:37Z :: cargo test -p nexus-kernel --locked --lib -- p2b_ p2e_input p2h_
+webview-live-dev exit=0 started=2026-10-04T10:26:48Z :: bash -c set -o pipefail; xvfb-run -a -s "-screen 0 1280x1024x24" cargo test -p nexus-desktop-backend --locked --test webview_boundary_live -- --ignored 2>&1 | tee "$0/webview-live-dev.log"; rc=$?; grep -q "^test webview_boundary_live ... ok$" "$0/webview-live-dev.log" && exit $rc; exit 1 /home/nexus/NEXUS/p2-security-wasmtime-36-work/validation-run
+builder-assemble exit=0 started=2026-10-04T10:28:25Z :: env PATH=/home/nexus/NEXUS/p2-security-wasmtime-36-work/node24/node-v24.21.0-linux-x64/bin:/home/nexus/.local/bin:/home/nexus/.bun/bin:/home/nexus/.npm-global/bin:/home/nexus/.npm-global/bin:/home/nexus/NEXUS/nexus-os/target/release:/home/nexus/.npm-global/bin:/home/nexus/.cargo/bin:/home/nexus/.cargo/bin:/home/nexus/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/nexus/.claude/plugins/cache/thedotmack/claude-mem/12.1.0/bin node packaging/builder-toolchain/scripts/assemble.mjs --target x86_64-unknown-linux-gnu --out app/src-tauri/builder-toolchain
+builder-entry-tests exit=0 started=2026-10-04T10:28:36Z :: app/src-tauri/builder-toolchain/node/node --test packaging/builder-toolchain/test/entry.test.mjs
+builder-packaged-toolchain exit=0 started=2026-10-04T10:28:40Z :: cargo test -p nexus-desktop-backend --locked --lib -- p0_002c4d2_assembled_ p0_002c4c3_packaged_
+frontend-install exit=0 started=2026-10-04T10:28:50Z :: bash -c cd app && npm ci
+frontend-tsc exit=0 started=2026-10-04T10:28:53Z :: bash -c cd app && npx tsc --noEmit
+frontend-tests exit=0 started=2026-10-04T10:29:07Z :: bash -c cd app && npm test
+frontend-build exit=0 started=2026-10-04T10:29:24Z :: bash -c cd app && npx vite build
+webview-live-release exit=0 started=2026-10-04T10:29:32Z :: bash -c set -o pipefail; (cd app && npm run build) || exit 1; xvfb-run -a -s "-screen 0 1280x1024x24" cargo test -p nexus-desktop-backend --locked --features tauri/custom-protocol --test webview_boundary_live -- --ignored 2>&1 | tee "$0/webview-live-release.log"; rc=$?; grep -q "^\[live\] tauri profile: release" "$0/webview-live-release.log" && grep -q "^test webview_boundary_live ... ok$" "$0/webview-live-release.log" && exit $rc; exit 1 /home/nexus/NEXUS/p2-security-wasmtime-36-work/validation-run
+python-voice exit=1 started=2026-10-04T10:31:07Z :: bash -c set -euo pipefail; python3 --version; python3 -m venv "$0/py" && "$0/py/bin/python" -m pip install -q pip==26.2.1 && "$0/py/bin/python" -m pip install -q --require-hashes --no-deps -r voice/requirements-linux-py311.lock && "$0/py/bin/python" -m pip check && cd voice && "$0/py/bin/python" -m pytest -v /home/nexus/NEXUS/p2-security-wasmtime-36-work/validation-run
+builder-packaged-toolchain (rerun with NEXUS_BUILDER_TOOLCHAIN=packaged, as CI) exit=0 started=2026-10-04T10:36:20Z

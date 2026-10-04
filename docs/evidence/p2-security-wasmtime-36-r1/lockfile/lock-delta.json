@@ -1,0 +1,879 @@
+[
+ {
+  "kind": "removed",
+  "name": "addr2line",
+  "version": "0.26.0",
+  "dependents_before": [
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "addr2line",
+  "version": "0.25.1",
+  "dependents_after": [
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "bitmaps",
+  "version": "2.1.0",
+  "dependents_before": [
+   "im-rc@15.1.0",
+   "sized-chunks@0.6.5"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-assembler-x64",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-codegen@0.130.2",
+   "winch-codegen@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-assembler-x64",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-codegen@0.123.17",
+   "winch-codegen@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-assembler-x64-meta",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-assembler-x64@0.130.2",
+   "cranelift-codegen-meta@0.130.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-assembler-x64-meta",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-assembler-x64@0.123.17",
+   "cranelift-codegen-meta@0.123.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-bforest",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-codegen@0.130.2",
+   "wasmtime-environ@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-bforest",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-codegen@0.123.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-bitset",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-codegen@0.130.2",
+   "cranelift-entity@0.130.2",
+   "pulley-interpreter@43.0.2",
+   "wasmtime-environ@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-bitset",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-codegen@0.123.17",
+   "cranelift-entity@0.123.17",
+   "pulley-interpreter@36.0.17",
+   "wasmtime-environ@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-codegen",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-frontend@0.130.2",
+   "cranelift-native@0.130.2",
+   "wasmtime-internal-cranelift@43.0.2",
+   "wasmtime-internal-unwinder@43.0.2",
+   "wasmtime-internal-winch@43.0.2",
+   "winch-codegen@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-codegen",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-frontend@0.123.17",
+   "cranelift-native@0.123.17",
+   "wasmtime-internal-cranelift@36.0.17",
+   "wasmtime-internal-unwinder@36.0.17",
+   "wasmtime-internal-winch@36.0.17",
+   "winch-codegen@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-codegen-meta",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-codegen@0.130.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-codegen-meta",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-codegen@0.123.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-codegen-shared",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-codegen-meta@0.130.2",
+   "cranelift-codegen@0.130.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-codegen-shared",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-codegen-meta@0.123.17",
+   "cranelift-codegen@0.123.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-control",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-codegen@0.130.2",
+   "wasmtime-internal-cranelift@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-control",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-codegen@0.123.17",
+   "wasmtime-internal-cranelift@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-entity",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-bforest@0.130.2",
+   "cranelift-codegen@0.130.2",
+   "wasmtime-environ@43.0.2",
+   "wasmtime-internal-cranelift@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-entity",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-bforest@0.123.17",
+   "cranelift-codegen@0.123.17",
+   "wasmtime-environ@36.0.17",
+   "wasmtime-internal-cranelift@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-frontend",
+  "version": "0.130.2",
+  "dependents_before": [
+   "wasmtime-internal-cranelift@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-frontend",
+  "version": "0.123.17",
+  "dependents_after": [
+   "wasmtime-internal-cranelift@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-isle",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-codegen@0.130.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-isle",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-codegen@0.123.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-native",
+  "version": "0.130.2",
+  "dependents_before": [
+   "wasmtime-internal-cranelift@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-native",
+  "version": "0.123.17",
+  "dependents_after": [
+   "wasmtime-internal-cranelift@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "cranelift-srcgen",
+  "version": "0.130.2",
+  "dependents_before": [
+   "cranelift-assembler-x64-meta@0.130.2",
+   "cranelift-codegen-meta@0.130.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "cranelift-srcgen",
+  "version": "0.123.17",
+  "dependents_after": [
+   "cranelift-assembler-x64-meta@0.123.17",
+   "cranelift-codegen-meta@0.123.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "fxprof-processed-profile",
+  "version": "0.8.1",
+  "dependents_before": [
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "fxprof-processed-profile",
+  "version": "0.6.0",
+  "dependents_after": [
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "gimli",
+  "version": "0.33.0",
+  "dependents_before": [
+   "addr2line@0.26.0",
+   "cranelift-codegen@0.130.2",
+   "wasmtime-environ@43.0.2",
+   "wasmtime-internal-cranelift@43.0.2",
+   "wasmtime-internal-winch@43.0.2",
+   "wasmtime@43.0.2",
+   "winch-codegen@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "gimli",
+  "version": "0.32.3",
+  "dependents_after": [
+   "addr2line@0.25.1",
+   "cranelift-codegen@0.123.17",
+   "wasmtime-environ@36.0.17",
+   "wasmtime-internal-cranelift@36.0.17",
+   "wasmtime-internal-winch@36.0.17",
+   "wasmtime@36.0.17",
+   "winch-codegen@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "hashbrown",
+  "version": "0.17.1",
+  "dependents_before": [
+   "regalloc2@0.15.1"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "im-rc",
+  "version": "15.1.0",
+  "dependents_before": [
+   "wasm-compose@0.245.1"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "object",
+  "version": "0.38.1",
+  "dependents_before": [
+   "wasmtime-environ@43.0.2",
+   "wasmtime-internal-cranelift@43.0.2",
+   "wasmtime-internal-jit-debug@43.0.2",
+   "wasmtime-internal-unwinder@43.0.2",
+   "wasmtime-internal-winch@43.0.2",
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "object",
+  "version": "0.37.3",
+  "dependents_after": [
+   "wasmtime-environ@36.0.17",
+   "wasmtime-internal-cranelift@36.0.17",
+   "wasmtime-internal-jit-debug@36.0.17",
+   "wasmtime-internal-unwinder@36.0.17",
+   "wasmtime-internal-winch@36.0.17",
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "proc-macro-crate",
+  "version": "2.0.2",
+  "dependents_before": [
+   "glib-macros@0.18.5"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "proc-macro-crate",
+  "version": "2.0.0",
+  "dependents_after": [
+   "glib-macros@0.18.5"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "pulley-interpreter",
+  "version": "43.0.2",
+  "dependents_before": [
+   "cranelift-codegen-meta@0.130.2",
+   "cranelift-codegen@0.130.2",
+   "wasmtime-internal-cranelift@43.0.2",
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "pulley-interpreter",
+  "version": "36.0.17",
+  "dependents_after": [
+   "cranelift-codegen-meta@0.123.17",
+   "cranelift-codegen@0.123.17",
+   "wasmtime-internal-cranelift@36.0.17",
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "pulley-macros",
+  "version": "43.0.2",
+  "dependents_before": [
+   "pulley-interpreter@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "pulley-macros",
+  "version": "36.0.17",
+  "dependents_after": [
+   "pulley-interpreter@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "rand_xoshiro",
+  "version": "0.6.0",
+  "dependents_before": [
+   "im-rc@15.1.0"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "regalloc2",
+  "version": "0.15.1",
+  "dependents_before": [
+   "cranelift-codegen@0.130.2",
+   "winch-codegen@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "regalloc2",
+  "version": "0.12.2",
+  "dependents_after": [
+   "cranelift-codegen@0.123.17",
+   "winch-codegen@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "sized-chunks",
+  "version": "0.6.5",
+  "dependents_before": [
+   "im-rc@15.1.0"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "toml",
+  "version": "0.8.2",
+  "dependents_before": [
+   "coding-agent@10.6.0",
+   "nexus-cli@10.6.0",
+   "nexus-code@0.1.0",
+   "nexus-desktop-backend@10.6.0",
+   "nexus-factory@10.6.0",
+   "nexus-integration@10.6.0",
+   "nexus-kernel@10.6.0",
+   "nexus-swarm@10.6.0",
+   "social-poster-agent@10.6.0",
+   "system-deps@6.2.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "toml",
+  "version": "0.8.23",
+  "dependents_after": [
+   "coding-agent@10.6.0",
+   "nexus-cli@10.6.0",
+   "nexus-code@0.1.0",
+   "nexus-desktop-backend@10.6.0",
+   "nexus-factory@10.6.0",
+   "nexus-integration@10.6.0",
+   "nexus-kernel@10.6.0",
+   "nexus-swarm@10.6.0",
+   "social-poster-agent@10.6.0",
+   "system-deps@6.2.2",
+   "wasmtime-internal-cache@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "toml_datetime",
+  "version": "0.6.3",
+  "dependents_before": [
+   "proc-macro-crate@2.0.2",
+   "toml@0.8.2",
+   "toml_edit@0.19.15",
+   "toml_edit@0.20.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "toml_datetime",
+  "version": "0.6.11",
+  "dependents_after": [
+   "toml@0.8.23",
+   "toml_edit@0.19.15",
+   "toml_edit@0.20.2",
+   "toml_edit@0.22.27"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "toml_edit",
+  "version": "0.22.27",
+  "dependents_after": [
+   "toml@0.8.23"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "toml_write",
+  "version": "0.1.2",
+  "dependents_after": [
+   "toml_edit@0.22.27"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasm-compose",
+  "version": "0.245.1",
+  "dependents_before": [
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasm-encoder",
+  "version": "0.236.1",
+  "dependents_after": [
+   "wasmtime-environ@36.0.17",
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmparser",
+  "version": "0.236.1",
+  "dependents_after": [
+   "wasm-encoder@0.236.1",
+   "wasmprinter@0.236.1",
+   "wasmtime-environ@36.0.17",
+   "wasmtime-internal-cranelift@36.0.17",
+   "wasmtime-internal-winch@36.0.17",
+   "wasmtime@36.0.17",
+   "winch-codegen@36.0.17",
+   "wit-parser@0.236.1"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmprinter",
+  "version": "0.245.1",
+  "dependents_before": [
+   "wasmtime-environ@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmprinter",
+  "version": "0.236.1",
+  "dependents_after": [
+   "wasmtime-environ@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime",
+  "version": "43.0.2",
+  "dependents_before": [
+   "nexus-benchmarks@10.6.0",
+   "nexus-protocols@10.6.0",
+   "nexus-sdk@10.6.0"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime",
+  "version": "36.0.17",
+  "dependents_after": [
+   "nexus-benchmarks@10.6.0",
+   "nexus-protocols@10.6.0",
+   "nexus-sdk@10.6.0"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-environ",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime-internal-cache@43.0.2",
+   "wasmtime-internal-cranelift@43.0.2",
+   "wasmtime-internal-fiber@43.0.2",
+   "wasmtime-internal-unwinder@43.0.2",
+   "wasmtime-internal-winch@43.0.2",
+   "wasmtime@43.0.2",
+   "winch-codegen@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-environ",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime-internal-cranelift@36.0.17",
+   "wasmtime-internal-winch@36.0.17",
+   "wasmtime@36.0.17",
+   "winch-codegen@36.0.17"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-asm-macros",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime-internal-fiber@36.0.17",
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-cache",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-cache",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-component-macro",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-component-macro",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-component-util",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime-environ@43.0.2",
+   "wasmtime-internal-component-macro@43.0.2",
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-component-util",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime-environ@36.0.17",
+   "wasmtime-internal-component-macro@36.0.17",
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-core",
+  "version": "43.0.2",
+  "dependents_before": [
+   "cranelift-bforest@0.130.2",
+   "cranelift-bitset@0.130.2",
+   "cranelift-codegen@0.130.2",
+   "cranelift-entity@0.130.2",
+   "pulley-interpreter@43.0.2",
+   "wasmtime-environ@43.0.2",
+   "wasmtime-internal-cranelift@43.0.2",
+   "wasmtime-internal-jit-icache-coherence@43.0.2",
+   "wasmtime@43.0.2",
+   "winch-codegen@43.0.2"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-cranelift",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime-internal-winch@43.0.2",
+   "wasmtime@43.0.2",
+   "winch-codegen@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-cranelift",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime-internal-winch@36.0.17",
+   "wasmtime@36.0.17",
+   "winch-codegen@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-fiber",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-fiber",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-jit-debug",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-jit-debug",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-jit-icache-coherence",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-jit-icache-coherence",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-math",
+  "version": "36.0.17",
+  "dependents_after": [
+   "cranelift-codegen@0.123.17",
+   "pulley-interpreter@36.0.17",
+   "wasmtime-internal-cranelift@36.0.17",
+   "wasmtime@36.0.17",
+   "winch-codegen@36.0.17"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-slab",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-unwinder",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime-internal-cranelift@43.0.2",
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-unwinder",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-versioned-export-macros",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime-internal-cranelift@43.0.2",
+   "wasmtime-internal-fiber@43.0.2",
+   "wasmtime-internal-jit-debug@43.0.2",
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-versioned-export-macros",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime-internal-cranelift@36.0.17",
+   "wasmtime-internal-fiber@36.0.17",
+   "wasmtime-internal-jit-debug@36.0.17",
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-winch",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-winch",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wasmtime-internal-wit-bindgen",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime-internal-component-macro@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wasmtime-internal-wit-bindgen",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime-internal-component-macro@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "winch-codegen",
+  "version": "43.0.2",
+  "dependents_before": [
+   "wasmtime-internal-winch@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "winch-codegen",
+  "version": "36.0.17",
+  "dependents_after": [
+   "wasmtime-internal-winch@36.0.17"
+  ]
+ },
+ {
+  "kind": "removed",
+  "name": "wit-parser",
+  "version": "0.245.1",
+  "dependents_before": [
+   "wasmtime-internal-component-macro@43.0.2",
+   "wasmtime-internal-wit-bindgen@43.0.2"
+  ]
+ },
+ {
+  "kind": "added",
+  "name": "wit-parser",
+  "version": "0.236.1",
+  "dependents_after": [
+   "wasmtime-internal-component-macro@36.0.17",
+   "wasmtime-internal-wit-bindgen@36.0.17"
+  ]
+ }
+]
