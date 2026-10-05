@@ -104,7 +104,10 @@ pub mod control;
 pub mod display;
 pub mod egress;
 pub mod executable;
+pub mod governed;
+pub mod ingress;
 mod launcher;
+pub mod planned;
 pub mod runtime_root;
 pub mod tool;
 
