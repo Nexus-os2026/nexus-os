@@ -330,8 +330,7 @@ jobs:
         with:
           fail_on_unmatched_files: true
           files: |
-            NexusOS-Windows/*.msi
-            NexusOS-Windows/*.exe
+            NexusOS-Windows/*.{msi,exe}
             NexusOS-Linux/*.deb
             NexusOS-macOS/*.dmg
           body: |
