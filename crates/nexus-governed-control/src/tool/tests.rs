@@ -8,24 +8,10 @@ use crate::authority::effect::EffectClass;
 use crate::authority::AuthorityError;
 use crate::control::EffectOutput;
 use crate::executable::Trust;
-use crate::harness_tests::{harness, Harness, Yes};
-use crate::runtime_root::RuntimeRoot;
+use crate::harness_tests::{harness, temp_root, Harness, TempRoot, Yes};
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
-
-static NEXT_ROOT: AtomicU32 = AtomicU32::new(0);
-
-/// A fresh private runtime root for one test.
-fn root() -> RuntimeRoot {
-    let path = std::env::temp_dir().join(format!(
-        "nexus-p3-tools-{}-{}",
-        std::process::id(),
-        NEXT_ROOT.fetch_add(1, Ordering::SeqCst)
-    ));
-    RuntimeRoot::open(&path).unwrap()
-}
 
 fn no_args(input: &Value) -> Result<ToolInvocation, AuthorityError> {
     crate::connector::only_fields(input, &[])?;
@@ -142,15 +128,21 @@ fn last_failure(h: &Harness) -> Option<&'static str> {
         .and_then(|r| r.failure)
 }
 
-fn entries(root: &RuntimeRoot) -> usize {
-    std::fs::read_dir(root.path()).unwrap().count()
+fn entries(root: &TempRoot) -> usize {
+    std::fs::read_dir(root.0.path()).unwrap().count()
+}
+
+/// A temporary root kept alive by `roots` for the rest of the test.
+fn root_guard(roots: &mut Vec<TempRoot>) -> crate::runtime_root::RuntimeRoot {
+    roots.push(temp_root("tools"));
+    roots.last().unwrap().0.clone()
 }
 
 #[test]
 fn a_tool_runs_end_to_end_in_a_sealed_process_and_leaves_nothing_behind() {
     let h = harness();
-    let root = root();
-    let tools = Tools::new(fixtures(), root.clone());
+    let root = temp_root("tools");
+    let tools = Tools::new(fixtures(), root.0.clone());
     grant(&h, &tools, "text.sha256");
     let out = run(&h, &tools, "text.sha256", json!({ "text": "hello" })).unwrap();
     assert_eq!(
@@ -166,8 +158,8 @@ fn a_tool_runs_end_to_end_in_a_sealed_process_and_leaves_nothing_behind() {
 #[test]
 fn the_environment_is_sealed() {
     let h = harness();
-    let root = root();
-    let tools = Tools::new(fixtures(), root.clone());
+    let root = temp_root("tools");
+    let tools = Tools::new(fixtures(), root.0.clone());
     grant(&h, &tools, "fixture.environment");
     let out = run(&h, &tools, "fixture.environment", json!({})).unwrap();
     let text = out.text.unwrap();
@@ -179,7 +171,7 @@ fn the_environment_is_sealed() {
             .strip_prefix("HOME=")
             .or_else(|| line.strip_prefix("TMPDIR="))
         {
-            assert!(PathBuf::from(dir).starts_with(root.path()), "{line}");
+            assert!(PathBuf::from(dir).starts_with(root.0.path()), "{line}");
         }
     }
 }
@@ -187,7 +179,8 @@ fn the_environment_is_sealed() {
 #[test]
 fn nothing_runs_without_a_grant_or_with_untyped_input() {
     let h = harness();
-    let tools = Tools::new(fixtures(), root());
+    let mut _roots = Vec::new();
+    let tools = Tools::new(fixtures(), root_guard(&mut _roots));
     assert_eq!(
         run(&h, &tools, "text.sha256", json!({ "text": "x" })).unwrap_err(),
         AuthorityError::NoCoveringGrant
@@ -223,6 +216,7 @@ fn copied_true(dir: &std::path::Path) -> &'static str {
 #[test]
 fn a_changed_executable_needs_a_new_grant_and_fails_a_pending_run() {
     let h = harness();
+    let mut _roots = Vec::new();
     let dir = std::env::temp_dir().join(format!("nexus-p3-tool-change-{}", std::process::id()));
     let executable = copied_true(&dir);
     let definition = ToolDefinition {
@@ -235,7 +229,7 @@ fn a_changed_executable_needs_a_new_grant_and_fails_a_pending_run() {
             1024,
         )
     };
-    let tools = Tools::new(vec![definition], root());
+    let tools = Tools::new(vec![definition], root_guard(&mut _roots));
     grant(&h, &tools, "fixture.true");
     run(&h, &tools, "fixture.true", json!({})).unwrap();
     // Prepared and authorized, then the executable changes before launch.
@@ -277,7 +271,8 @@ fn a_changed_executable_needs_a_new_grant_and_fails_a_pending_run() {
 #[test]
 fn the_deadline_ends_the_whole_process_group() {
     let h = harness();
-    let tools = Tools::new(fixtures(), root());
+    let mut _roots = Vec::new();
+    let tools = Tools::new(fixtures(), root_guard(&mut _roots));
     grant(&h, &tools, "fixture.sleep.short");
     let started = Instant::now();
     assert!(run(&h, &tools, "fixture.sleep.short", json!({})).is_err());
@@ -288,7 +283,8 @@ fn the_deadline_ends_the_whole_process_group() {
 #[test]
 fn cancelling_the_run_ends_a_running_tool() {
     let h = harness();
-    let tools = std::sync::Arc::new(Tools::new(fixtures(), root()));
+    let mut _roots = Vec::new();
+    let tools = std::sync::Arc::new(Tools::new(fixtures(), root_guard(&mut _roots)));
     grant(&h, &tools, "fixture.sleep.long");
     let preparation = tools
         .prepare(
@@ -328,7 +324,8 @@ fn cancelling_the_run_ends_a_running_tool() {
 #[test]
 fn output_is_bounded_and_failures_are_recorded() {
     let h = harness();
-    let tools = Tools::new(fixtures(), root());
+    let mut _roots = Vec::new();
+    let tools = Tools::new(fixtures(), root_guard(&mut _roots));
     grant(&h, &tools, "fixture.noisy");
     grant(&h, &tools, "fixture.false");
     assert!(run(&h, &tools, "fixture.noisy", json!({})).is_err());
@@ -395,7 +392,8 @@ fn speech_is_synthesized_when_the_local_engine_is_installed() {
         return;
     }
     let h = harness();
-    let tools = Tools::new(fixtures(), root());
+    let mut _roots = Vec::new();
+    let tools = Tools::new(fixtures(), root_guard(&mut _roots));
     grant(&h, &tools, "speech.synthesize");
     let out = run(
         &h,

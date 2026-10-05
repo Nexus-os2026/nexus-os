@@ -1,0 +1,789 @@
+//! P3-C: the governed browser, below egress authority.
+//!
+//! A browser session is one commitment: a start URL and a bounded list of
+//! typed steps (navigate, click, fill, press, wait, extract text). It runs
+//! only under the owner's browser grant, which names the origins sessions
+//! may reach and pins the browser executable's identity. The session is a
+//! fresh, run-owned browser: the system Chrome (identity checked again
+//! immediately before launch), headless, with a new profile in a private
+//! scratch directory deleted when the session ends, driven over its
+//! DevTools pipe (no debugging port), launched in its own process group
+//! and killed with it. Every connection it makes goes through the session's
+//! proxy ([`proxy`]), which admits only the granted origins and applies the
+//! egress address policy, so pages, subresources, redirects and
+//! page-initiated navigations cannot reach anything else; `file:` and
+//! other local schemes are refused before launch; new windows are blocked
+//! and closed; downloads are refused, or kept inside the session when the
+//! grant allows them. Steps run fixed scripts with their arguments passed
+//! as JSON data: no model-written script ever runs. Password and file
+//! inputs are never filled. Navigation and reading are R1; clicking,
+//! filling and pressing are R2.
+
+#[cfg(target_os = "linux")]
+mod cdp;
+#[cfg(target_os = "linux")]
+mod proxy;
+
+use crate::authority::commitment::{ExecutionGuard, FailureClass, PreparedAction, TargetIdentity};
+use crate::authority::effect::{CapabilityKind, EffectClass};
+use crate::authority::evidence::escaped;
+use crate::authority::ids::{Digest, GrantId};
+use crate::authority::policy::GrantScope;
+use crate::authority::{Authority, AuthorityError};
+use crate::control::{EffectOutput, PendingEffect, Preparation};
+use crate::egress::destination::{Destination, Resolver, SystemResolver};
+use crate::executable::{inspect, Trust};
+use crate::runtime_root::RuntimeRoot;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+
+/// The browser Phase Three drives.
+pub const CHROME: &str = "/opt/google/chrome/chrome";
+const MAX_STEPS: usize = 32;
+const MAX_SELECTOR: usize = 512;
+const MAX_TEXT: usize = 4096;
+const MAX_EXTRACT: usize = 64 * 1024;
+const MAX_ORIGINS: usize = 16;
+const SESSION_LIMIT: Duration = Duration::from_secs(120);
+const STEP_TIMEOUT: Duration = Duration::from_secs(20);
+const SESSION_TTL: Duration = Duration::from_secs(10 * 60);
+
+/// One step, as data.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum BrowserStep {
+    Navigate {
+        url: String,
+    },
+    Click {
+        selector: String,
+    },
+    Fill {
+        selector: String,
+        text: String,
+    },
+    Press {
+        selector: String,
+        key: String,
+    },
+    WaitFor {
+        #[serde(default)]
+        selector: Option<String>,
+        #[serde(default)]
+        timeout_ms: Option<u64>,
+    },
+    ExtractText {
+        selector: String,
+    },
+}
+
+impl BrowserStep {
+    fn interacts(&self) -> bool {
+        matches!(
+            self,
+            BrowserStep::Click { .. } | BrowserStep::Fill { .. } | BrowserStep::Press { .. }
+        )
+    }
+}
+
+/// A browser session request, as data.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserIntent {
+    pub start_url: String,
+    #[serde(default)]
+    pub steps: Vec<BrowserStep>,
+}
+
+/// The browser actuator.
+pub struct Browser {
+    root: RuntimeRoot,
+    resolver: Arc<dyn Resolver>,
+    executable: &'static str,
+    trust: Trust,
+    allow_private: bool,
+}
+
+/// Keys a step may press: (name, DOM key, virtual key code).
+const KEYS: [(&str, &str, u32); 13] = [
+    ("enter", "Enter", 13),
+    ("tab", "Tab", 9),
+    ("escape", "Escape", 27),
+    ("backspace", "Backspace", 8),
+    ("delete", "Delete", 46),
+    ("space", " ", 32),
+    ("arrowup", "ArrowUp", 38),
+    ("arrowdown", "ArrowDown", 40),
+    ("arrowleft", "ArrowLeft", 37),
+    ("arrowright", "ArrowRight", 39),
+    ("home", "Home", 36),
+    ("end", "End", 35),
+    ("pagedown", "PageDown", 34),
+];
+
+fn key(name: &str) -> Option<(&'static str, u32)> {
+    let lower = name.to_ascii_lowercase();
+    KEYS.iter()
+        .find(|(n, _, _)| *n == lower)
+        .map(|(_, key, code)| (*key, *code))
+}
+
+fn plain(text: &str, max: usize) -> bool {
+    !text.is_empty()
+        && text.chars().count() <= max
+        && !text
+            .chars()
+            .any(|c| c.is_control() && c != '\n' && c != '\t')
+}
+
+fn origin_of(url: &str) -> Result<Destination, AuthorityError> {
+    Destination::parse(url).map_err(|e| AuthorityError::InvalidAction(e.as_str()))
+}
+
+impl Browser {
+    pub fn new(root: RuntimeRoot) -> Self {
+        Self {
+            root,
+            resolver: Arc::new(SystemResolver),
+            executable: CHROME,
+            trust: Trust::System,
+            allow_private: false,
+        }
+    }
+
+    /// Tests only: a resolver of fixtures and loopback test servers.
+    #[cfg(test)]
+    pub(crate) fn for_tests(root: RuntimeRoot, resolver: Arc<dyn Resolver>) -> Self {
+        Self {
+            resolver,
+            allow_private: true,
+            ..Self::new(root)
+        }
+    }
+
+    /// The scope the owner may grant: sessions limited to `origins`, with
+    /// the browser pinned as it is now.
+    pub fn grant_scope(
+        &self,
+        origins: &[String],
+        downloads: bool,
+    ) -> Result<GrantScope, AuthorityError> {
+        if origins.is_empty() || origins.len() > MAX_ORIGINS {
+            return Err(AuthorityError::InvalidAction("1 to 16 origins"));
+        }
+        let mut granted: Vec<String> = Vec::new();
+        for origin in origins {
+            let destination = origin_of(origin)?;
+            if destination.url().path() != "/" || destination.url().query().is_some() {
+                return Err(AuthorityError::InvalidAction(
+                    "an origin has no path or query",
+                ));
+            }
+            let text = destination.origin_text();
+            if !granted.contains(&text) {
+                granted.push(text);
+            }
+        }
+        granted.sort();
+        let identity = inspect(Path::new(self.executable), self.trust)?;
+        Ok(GrantScope::Browser {
+            origins: granted,
+            downloads,
+            executable: identity.path.display().to_string(),
+            identity: identity.digest,
+        })
+    }
+
+    /// Prepare a browser session.
+    pub fn prepare(
+        &self,
+        authority: &Authority,
+        intent: &BrowserIntent,
+    ) -> Result<Preparation, AuthorityError> {
+        if intent.steps.len() > MAX_STEPS {
+            return Err(AuthorityError::InvalidAction("at most 32 browser steps"));
+        }
+        let start = origin_of(&intent.start_url)?;
+        let mut needed = vec![start.origin_text()];
+        for step in &intent.steps {
+            match step {
+                BrowserStep::Navigate { url } => needed.push(origin_of(url)?.origin_text()),
+                BrowserStep::Click { selector } | BrowserStep::ExtractText { selector } => {
+                    if !plain(selector, MAX_SELECTOR) {
+                        return Err(AuthorityError::InvalidAction(
+                            "a selector is plain bounded text",
+                        ));
+                    }
+                }
+                BrowserStep::Fill { selector, text } => {
+                    if !plain(selector, MAX_SELECTOR) || !plain(text, MAX_TEXT) {
+                        return Err(AuthorityError::InvalidAction(
+                            "fill takes plain bounded text",
+                        ));
+                    }
+                }
+                BrowserStep::Press {
+                    selector,
+                    key: name,
+                } => {
+                    if !plain(selector, MAX_SELECTOR) || key(name).is_none() {
+                        return Err(AuthorityError::InvalidAction(
+                            "press takes a selector and a known key",
+                        ));
+                    }
+                }
+                BrowserStep::WaitFor {
+                    selector,
+                    timeout_ms,
+                } => {
+                    if selector.as_deref().is_some_and(|s| !plain(s, MAX_SELECTOR))
+                        || timeout_ms.is_some_and(|t| t > 10_000)
+                    {
+                        return Err(AuthorityError::InvalidAction(
+                            "wait for a plain selector, at most 10 s",
+                        ));
+                    }
+                }
+            }
+        }
+        let identity = inspect(Path::new(self.executable), self.trust)?;
+        let (grant, origins, downloads) = covering_grant(authority, &needed, &identity.digest)?;
+        let class = if intent.steps.iter().any(BrowserStep::interacts) {
+            EffectClass::R2
+        } else {
+            EffectClass::R1
+        };
+        let target = Digest::of(
+            "nexus.p3.browser.target.v1",
+            &[identity.digest.as_bytes(), origins.join(" ").as_bytes()],
+        );
+        let canonical =
+            serde_json::to_vec(intent).map_err(|_| AuthorityError::InvalidAction("intent"))?;
+        let parameters = Digest::of("nexus.p3.browser.session.v1", &[&canonical]);
+        let mut summary = vec![
+            escaped(&format!(
+                "Browse {} ({} steps)",
+                start.url(),
+                intent.steps.len()
+            )),
+            escaped(&format!("Reachable: {}", origins.join(", "))),
+        ];
+        for (index, step) in intent.steps.iter().enumerate() {
+            if summary.len() == 11 {
+                summary.push(format!("... and {} more steps", intent.steps.len() - index));
+                break;
+            }
+            let line = match step {
+                BrowserStep::Navigate { url } => format!("{}. Go to {url}", index + 1),
+                BrowserStep::Click { selector } => format!("{}. Click {selector}", index + 1),
+                BrowserStep::Fill { selector, text } => {
+                    format!("{}. Fill {selector} with: {text}", index + 1)
+                }
+                BrowserStep::Press { selector, key } => {
+                    format!("{}. Press {key} in {selector}", index + 1)
+                }
+                BrowserStep::WaitFor { selector, .. } => format!(
+                    "{}. Wait for {}",
+                    index + 1,
+                    selector.as_deref().unwrap_or("the page to load")
+                ),
+                BrowserStep::ExtractText { selector } => {
+                    format!("{}. Read the text of {selector}", index + 1)
+                }
+            };
+            summary.push(escaped(&line));
+        }
+        let action = PreparedAction {
+            kind: CapabilityKind::Browser,
+            class,
+            operation: "browser.session",
+            target: TargetIdentity {
+                display: escaped(&format!("Browser session to {}", origins.join(", "))),
+                digest: target,
+            },
+            parameters,
+            grants: vec![grant],
+            leases: vec![],
+            summary,
+        };
+        let effect = Session {
+            executable: identity.path,
+            identity: identity.digest,
+            trust: self.trust,
+            start: start.url().to_string(),
+            steps: intent.steps.clone(),
+            origins,
+            downloads,
+            allow_private: self.allow_private,
+            resolver: self.resolver.clone(),
+            root: self.root.clone(),
+            target,
+            parameters,
+        };
+        Ok(Preparation {
+            action,
+            effect: Box::new(effect),
+            ttl: SESSION_TTL,
+        })
+    }
+}
+
+/// The live browser grant covering every needed origin with the browser's
+/// identity as it is now.
+fn covering_grant(
+    authority: &Authority,
+    needed: &[String],
+    identity: &Digest,
+) -> Result<(GrantId, Vec<String>, bool), AuthorityError> {
+    let mut stale = false;
+    for grant in authority.grants().live_of(CapabilityKind::Browser) {
+        if let GrantScope::Browser {
+            origins,
+            downloads,
+            identity: pinned,
+            ..
+        } = &grant.scope
+        {
+            if needed.iter().all(|origin| origins.contains(origin)) {
+                if pinned == identity {
+                    return Ok((grant.id, origins.clone(), *downloads));
+                }
+                stale = true;
+            }
+        }
+    }
+    Err(if stale {
+        AuthorityError::Closed("the browser changed since it was granted; grant it again")
+    } else {
+        AuthorityError::NoCoveringGrant
+    })
+}
+
+struct Session {
+    executable: PathBuf,
+    identity: Digest,
+    trust: Trust,
+    start: String,
+    steps: Vec<BrowserStep>,
+    origins: Vec<String>,
+    downloads: bool,
+    allow_private: bool,
+    resolver: Arc<dyn Resolver>,
+    root: RuntimeRoot,
+    target: Digest,
+    parameters: Digest,
+}
+
+impl PendingEffect for Session {
+    fn revalidate(&self) -> Result<Digest, AuthorityError> {
+        let now =
+            inspect(&self.executable, self.trust).map_err(|_| AuthorityError::TargetChanged)?;
+        if now.digest != self.identity {
+            return Err(AuthorityError::TargetChanged);
+        }
+        Ok(self.target)
+    }
+
+    fn parameters(&self) -> Digest {
+        self.parameters
+    }
+
+    fn execute(
+        self: Box<Self>,
+        guard: &ExecutionGuard,
+    ) -> Result<EffectOutput, (FailureClass, String)> {
+        live::run(&self, guard)
+    }
+}
+
+/// Fixed page scripts; their arguments are passed as JSON data.
+#[cfg(target_os = "linux")]
+mod scripts {
+    pub const READY: &str = "()=>document.readyState";
+    pub const LOCATION: &str = "()=>location.origin";
+    pub const EXISTS: &str = "(s)=>document.querySelector(s)!==null";
+    pub const CLICK: &str = "(s)=>{const e=document.querySelector(s);if(!e)return'missing';e.scrollIntoView({block:'center'});e.click();return'ok'}";
+    pub const FILL: &str = "(s,t)=>{const e=document.querySelector(s);if(!e)return'missing';const k=(e.type||'').toLowerCase();if(k==='password'||k==='file')return'refused';e.focus();e.value=t;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return'ok'}";
+    pub const FOCUS: &str =
+        "(s)=>{const e=document.querySelector(s);if(!e)return'missing';e.focus();return'ok'}";
+    pub const TEXT: &str =
+        "(s,n)=>{const e=document.querySelector(s);return e?String(e.innerText).slice(0,n):null}";
+}
+
+#[cfg(target_os = "linux")]
+mod live {
+    use super::cdp::{Cdp, CdpError};
+    use super::proxy::{BrowserProxy, OriginPolicy};
+    use super::{key, scripts, BrowserStep, Session, MAX_EXTRACT, SESSION_LIMIT, STEP_TIMEOUT};
+    use crate::authority::commitment::{ExecutionGuard, FailureClass};
+    use crate::authority::run::CancelToken;
+    use crate::control::EffectOutput;
+    use crate::launcher::{SessionProcess, SessionSpec};
+    use serde_json::{json, Value};
+    use std::time::{Duration, Instant};
+
+    type Failure = (FailureClass, String);
+
+    fn failure(error: CdpError) -> Failure {
+        match error {
+            CdpError::Cancelled => (FailureClass::Actuator, "cancelled".into()),
+            CdpError::Timeout => (
+                FailureClass::Timeout,
+                "the browser did not answer in time".into(),
+            ),
+            CdpError::Closed => (FailureClass::Unavailable, "the browser ended".into()),
+            CdpError::Protocol(why) => (FailureClass::Actuator, why),
+        }
+    }
+
+    struct Page<'a> {
+        cdp: &'a Cdp,
+        session: String,
+        target: String,
+        cancel: &'a CancelToken,
+        popups_closed: u32,
+    }
+
+    impl Page<'_> {
+        fn call(&self, method: &str, params: Value) -> Result<Value, Failure> {
+            self.cdp
+                .call(
+                    method,
+                    params,
+                    Some(&self.session),
+                    STEP_TIMEOUT,
+                    self.cancel,
+                )
+                .map_err(failure)
+        }
+
+        /// Run a fixed script with JSON arguments; its value.
+        fn script(&self, function: &str, args: &[Value]) -> Result<Value, Failure> {
+            let args: Vec<String> = args.iter().map(Value::to_string).collect();
+            let result = self.call(
+                "Runtime.evaluate",
+                json!({
+                    "expression": format!("({function})({})", args.join(",")),
+                    "returnByValue": true,
+                }),
+            )?;
+            if result.get("exceptionDetails").is_some() {
+                return Err((FailureClass::Actuator, "a page script failed".into()));
+            }
+            Ok(result["result"]["value"].clone())
+        }
+
+        fn wait(
+            &self,
+            until: impl Fn(&Self) -> Result<bool, Failure>,
+            limit: Duration,
+        ) -> Result<bool, Failure> {
+            let deadline = Instant::now() + limit;
+            loop {
+                if self.cancel.is_cancelled() {
+                    return Err((FailureClass::Actuator, "cancelled".into()));
+                }
+                if until(self)? {
+                    return Ok(true);
+                }
+                if Instant::now() >= deadline {
+                    return Ok(false);
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+
+        fn navigate(&self, url: &str) -> Result<Value, Failure> {
+            let result = self.call("Page.navigate", json!({ "url": url }))?;
+            if let Some(error) = result.get("errorText").and_then(Value::as_str) {
+                return Ok(json!({ "navigate": url, "refused": error }));
+            }
+            let loaded = self.wait(
+                |page| Ok(page.script(scripts::READY, &[])? == json!("complete")),
+                STEP_TIMEOUT,
+            )?;
+            Ok(json!({ "navigate": url, "loaded": loaded }))
+        }
+
+        /// Close any page this session did not open.
+        fn close_popups(&mut self) -> Result<(), Failure> {
+            for event in self.cdp.drain_events() {
+                if event["method"] == "Target.targetCreated"
+                    && event["params"]["targetInfo"]["type"] == "page"
+                    && event["params"]["targetInfo"]["targetId"] != json!(self.target)
+                {
+                    let id = event["params"]["targetInfo"]["targetId"].clone();
+                    let _ = self.cdp.call(
+                        "Target.closeTarget",
+                        json!({ "targetId": id }),
+                        None,
+                        STEP_TIMEOUT,
+                        self.cancel,
+                    );
+                    self.popups_closed += 1;
+                }
+            }
+            Ok(())
+        }
+
+        fn step(&self, step: &BrowserStep) -> Result<(Value, bool), Failure> {
+            Ok(match step {
+                BrowserStep::Navigate { url } => {
+                    let result = self.navigate(url)?;
+                    let ok = result.get("refused").is_none();
+                    (result, ok)
+                }
+                BrowserStep::Click { selector } => {
+                    let result = self.script(scripts::CLICK, &[json!(selector)])?;
+                    (
+                        json!({ "click": selector, "result": result }),
+                        result == json!("ok"),
+                    )
+                }
+                BrowserStep::Fill { selector, text } => {
+                    let result = self.script(scripts::FILL, &[json!(selector), json!(text)])?;
+                    (
+                        json!({ "fill": selector, "result": result }),
+                        result == json!("ok"),
+                    )
+                }
+                BrowserStep::Press {
+                    selector,
+                    key: name,
+                } => {
+                    let focused = self.script(scripts::FOCUS, &[json!(selector)])?;
+                    if focused != json!("ok") {
+                        return Ok((json!({ "press": name, "result": focused }), false));
+                    }
+                    let (dom_key, code) = key(name).expect("validated");
+                    for kind in ["keyDown", "keyUp"] {
+                        let mut event = json!({
+                            "type": kind,
+                            "key": dom_key,
+                            "windowsVirtualKeyCode": code,
+                        });
+                        if kind == "keyDown" && dom_key == "Enter" {
+                            event["text"] = json!("\r");
+                        }
+                        self.call("Input.dispatchKeyEvent", event)?;
+                    }
+                    (json!({ "press": name, "result": "ok" }), true)
+                }
+                BrowserStep::WaitFor {
+                    selector,
+                    timeout_ms,
+                } => {
+                    let limit = Duration::from_millis(timeout_ms.unwrap_or(5_000));
+                    let found =
+                        match selector {
+                            Some(selector) => self.wait(
+                                |page| {
+                                    Ok(page.script(scripts::EXISTS, &[json!(selector)])?
+                                        == json!(true))
+                                },
+                                limit,
+                            )?,
+                            None => self.wait(
+                                |page| Ok(page.script(scripts::READY, &[])? == json!("complete")),
+                                limit,
+                            )?,
+                        };
+                    (json!({ "wait": selector, "found": found }), found)
+                }
+                BrowserStep::ExtractText { selector } => {
+                    let text =
+                        self.script(scripts::TEXT, &[json!(selector), json!(MAX_EXTRACT)])?;
+                    (json!({ "text": text, "selector": selector }), true)
+                }
+            })
+        }
+    }
+
+    pub(super) fn run(session: &Session, guard: &ExecutionGuard) -> Result<EffectOutput, Failure> {
+        let unavailable = |what: &str| (FailureClass::Unavailable, what.to_string());
+        let started = Instant::now();
+        let scratch = session
+            .root
+            .scratch("browser")
+            .map_err(|_| unavailable("no session directory"))?;
+        let profile = scratch
+            .subdir("profile")
+            .map_err(|_| unavailable("no profile directory"))?;
+        let home = scratch
+            .subdir("home")
+            .map_err(|_| unavailable("no home directory"))?;
+        let downloads = if session.downloads {
+            Some(
+                scratch
+                    .subdir("downloads")
+                    .map_err(|_| unavailable("no download directory"))?,
+            )
+        } else {
+            None
+        };
+        let proxy = BrowserProxy::start(OriginPolicy {
+            origins: session.origins.clone(),
+            allow_private: session.allow_private,
+            resolver: session.resolver.clone(),
+        })
+        .map_err(|_| unavailable("the browser proxy did not start"))?;
+        let (command_reader, command_writer) =
+            std::io::pipe().map_err(|_| unavailable("no pipe"))?;
+        let (reply_reader, reply_writer) = std::io::pipe().map_err(|_| unavailable("no pipe"))?;
+        let args: Vec<String> = vec![
+            "--headless".into(),
+            "--remote-debugging-pipe".into(),
+            format!("--user-data-dir={}", profile.display()),
+            format!("--proxy-server=http://127.0.0.1:{}", proxy.port()),
+            "--proxy-bypass-list=<-loopback>".into(),
+            "--no-first-run".into(),
+            "--no-default-browser-check".into(),
+            "--disable-background-networking".into(),
+            "--disable-component-update".into(),
+            "--disable-default-apps".into(),
+            "--disable-extensions".into(),
+            "--disable-sync".into(),
+            "--disable-client-side-phishing-detection".into(),
+            "--disable-domain-reliability".into(),
+            "--disable-breakpad".into(),
+            "--no-pings".into(),
+            "--mute-audio".into(),
+            "--disable-gpu".into(),
+            "--block-new-web-contents".into(),
+            "--force-webrtc-ip-handling-policy=disable_non_proxied_udp".into(),
+            "--dns-prefetch-disable".into(),
+            "--password-store=basic".into(),
+            "--use-mock-keychain".into(),
+            "--deny-permission-prompts".into(),
+            "--disable-features=Translate,MediaRouter,OptimizationHints,AutofillServerCommunication".into(),
+            "about:blank".into(),
+        ];
+        let _process = SessionProcess::launch(SessionSpec {
+            program: session.executable.clone(),
+            args: args.into_iter().map(Into::into).collect(),
+            env: vec![
+                ("HOME".into(), home.into_os_string()),
+                ("LANG".into(), "C.UTF-8".into()),
+            ],
+            current_dir: scratch.path().to_path_buf(),
+            inherit: vec![(command_reader.into(), 3), (reply_writer.into(), 4)],
+        })
+        .map_err(|_| unavailable("the browser could not start"))?;
+        let cdp = Cdp::new(command_writer, reply_reader);
+        let cancel = guard.cancel_token();
+        let browser = |method: &str, params: Value| {
+            cdp.call(method, params, None, Duration::from_secs(30), cancel)
+                .map_err(failure)
+        };
+        browser("Browser.getVersion", json!({}))?;
+        browser("Target.setDiscoverTargets", json!({ "discover": true }))?;
+        let target = browser("Target.createTarget", json!({ "url": "about:blank" }))?["targetId"]
+            .as_str()
+            .ok_or((FailureClass::Actuator, "no page".to_string()))?
+            .to_string();
+        let attached = browser(
+            "Target.attachToTarget",
+            json!({ "targetId": target, "flatten": true }),
+        )?;
+        let page_session = attached["sessionId"]
+            .as_str()
+            .ok_or((FailureClass::Actuator, "no page session".to_string()))?
+            .to_string();
+        match &downloads {
+            Some(dir) => browser(
+                "Browser.setDownloadBehavior",
+                json!({ "behavior": "allow", "downloadPath": dir.display().to_string() }),
+            )?,
+            None => browser("Browser.setDownloadBehavior", json!({ "behavior": "deny" }))?,
+        };
+        let mut page = Page {
+            cdp: &cdp,
+            session: page_session,
+            target,
+            cancel,
+            popups_closed: 0,
+        };
+        page.call("Page.enable", json!({}))?;
+        page.call("Runtime.enable", json!({}))?;
+        let mut results = Vec::new();
+        let mut completed = true;
+        let start = page.navigate(&session.start)?;
+        let started_ok = start.get("refused").is_none();
+        results.push(start);
+        if started_ok {
+            for step in &session.steps {
+                if started.elapsed() > SESSION_LIMIT {
+                    return Err((FailureClass::Timeout, "the session ran out of time".into()));
+                }
+                page.close_popups()?;
+                let (result, ok) = page.step(step)?;
+                results.push(result);
+                if !ok {
+                    completed = false;
+                    break;
+                }
+            }
+        } else {
+            completed = false;
+        }
+        page.close_popups()?;
+        let origin = page.script(scripts::LOCATION, &[]).unwrap_or(Value::Null);
+        let mut downloaded = Vec::new();
+        if let Some(dir) = &downloads {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten().take(32) {
+                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                    downloaded.push(json!({
+                        "name": entry.file_name().to_string_lossy(),
+                        "bytes": size,
+                    }));
+                }
+            }
+        }
+        let report = json!({
+            "steps": results,
+            "completed": completed,
+            "final_origin": origin,
+            "popups_closed": page.popups_closed,
+            "downloads": downloaded,
+        });
+        let mut text = report.to_string();
+        if text.len() > 256 * 1024 {
+            text.truncate(256 * 1024);
+        }
+        Ok(EffectOutput {
+            text: Some(text),
+            bytes: None,
+            meta: vec![
+                ("steps".into(), session.steps.len().to_string()),
+                ("completed".into(), completed.to_string()),
+                ("connections_admitted".into(), proxy.admitted().to_string()),
+                ("connections_refused".into(), proxy.refused().to_string()),
+                ("popups_closed".into(), page.popups_closed.to_string()),
+                ("downloads".into(), downloaded.len().to_string()),
+            ],
+        })
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+mod live {
+    use super::Session;
+    use crate::authority::commitment::{ExecutionGuard, FailureClass};
+    use crate::control::EffectOutput;
+
+    pub(super) fn run(
+        _session: &Session,
+        _guard: &ExecutionGuard,
+    ) -> Result<EffectOutput, (FailureClass, String)> {
+        Err((
+            FailureClass::Unavailable,
+            "the governed browser is available on Linux only".into(),
+        ))
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests;

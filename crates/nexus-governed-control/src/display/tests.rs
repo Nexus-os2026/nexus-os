@@ -8,9 +8,7 @@ use crate::authority::commitment::CommitmentState;
 use crate::authority::effect::EffectClass;
 use crate::authority::AuthorityError;
 use crate::control::EffectOutput;
-use crate::harness_tests::{harness, Harness, Yes};
-use crate::runtime_root::RuntimeRoot;
-use std::sync::atomic::{AtomicU32, Ordering};
+use crate::harness_tests::{harness, temp_root, Harness, TempRoot, Yes};
 use std::time::{Duration, Instant};
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{
@@ -22,22 +20,17 @@ use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
 use x11rb::COPY_DEPTH_FROM_PARENT;
 
-static NEXT: AtomicU32 = AtomicU32::new(0);
-
-/// A started agent display, or `None` where Xvfb is not installed.
-fn display() -> Option<AgentDisplay> {
+/// A started agent display (kept with its temporary root), or `None` where
+/// Xvfb is not installed.
+fn display() -> Option<(AgentDisplay, TempRoot)> {
     if !std::path::Path::new("/usr/bin/Xvfb").exists() {
         eprintln!("Xvfb is not installed: live agent-display tests are skipped");
         return None;
     }
-    let path = std::env::temp_dir().join(format!(
-        "nexus-p3-display-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::SeqCst)
-    ));
-    let display = AgentDisplay::new(RuntimeRoot::open(&path).unwrap());
+    let root = temp_root("display");
+    let display = AgentDisplay::new(root.0.clone());
     display.start(640, 480).unwrap();
-    Some(display)
+    Some((display, root))
 }
 
 fn grant_perception(h: &Harness) {
@@ -138,7 +131,9 @@ fn events(conn: &RustConnection) -> Vec<Event> {
 
 #[test]
 fn the_agent_display_is_private_and_is_not_the_owners() {
-    let Some(display) = display() else { return };
+    let Some((display, _root)) = display() else {
+        return;
+    };
     let status = display.status().unwrap();
     assert!((200..1000).contains(&status.number));
     if let Ok(owner) = std::env::var("DISPLAY") {
@@ -165,7 +160,9 @@ fn the_agent_display_is_private_and_is_not_the_owners() {
 
 #[test]
 fn observations_need_a_grant_and_leave_only_a_digest_in_evidence() {
-    let Some(display) = display() else { return };
+    let Some((display, _root)) = display() else {
+        return;
+    };
     let h = harness();
     assert_eq!(
         observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap_err(),
@@ -213,7 +210,9 @@ fn observations_need_a_grant_and_leave_only_a_digest_in_evidence() {
 
 #[test]
 fn a_window_is_bound_by_identity_and_a_title_only_selects_it() {
-    let Some(display) = display() else { return };
+    let Some((display, _root)) = display() else {
+        return;
+    };
     let h = harness();
     grant_perception(&h);
     let client = display.test_client();
@@ -279,7 +278,9 @@ fn a_window_is_bound_by_identity_and_a_title_only_selects_it() {
 
 #[test]
 fn a_click_needs_an_observation_and_approval_and_lands_on_the_bound_window() {
-    let Some(display) = display() else { return };
+    let Some((display, _root)) = display() else {
+        return;
+    };
     let h = harness();
     grant_perception(&h);
     grant_input(&h, 10, false);
@@ -330,7 +331,9 @@ fn a_click_needs_an_observation_and_approval_and_lands_on_the_bound_window() {
 
 #[test]
 fn a_window_appearing_over_the_point_fails_the_click() {
-    let Some(display) = display() else { return };
+    let Some((display, _root)) = display() else {
+        return;
+    };
     let h = harness();
     grant_perception(&h);
     grant_input(&h, 10, true);
@@ -399,7 +402,9 @@ fn a_window_appearing_over_the_point_fails_the_click() {
 
 #[test]
 fn typing_sends_exactly_the_text_to_the_window_under_the_pointer() {
-    let Some(display) = display() else { return };
+    let Some((display, _root)) = display() else {
+        return;
+    };
     let h = harness();
     grant_perception(&h);
     grant_input(&h, 10, true);
@@ -457,7 +462,9 @@ fn typing_sends_exactly_the_text_to_the_window_under_the_pointer() {
 
 #[test]
 fn input_steps_are_bounded_by_the_grant() {
-    let Some(display) = display() else { return };
+    let Some((display, _root)) = display() else {
+        return;
+    };
     let h = harness();
     grant_perception(&h);
     grant_input(&h, 2, true);
@@ -472,7 +479,9 @@ fn input_steps_are_bounded_by_the_grant() {
 
 #[test]
 fn a_restarted_display_fails_everything_bound_to_the_old_one() {
-    let Some(display) = display() else { return };
+    let Some((display, _root)) = display() else {
+        return;
+    };
     let h = harness();
     grant_perception(&h);
     let preparation = display

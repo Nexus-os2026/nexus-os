@@ -98,6 +98,7 @@
 
 pub mod authority;
 pub mod broker;
+pub mod browser;
 pub mod connector;
 pub mod control;
 pub mod display;

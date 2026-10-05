@@ -548,7 +548,18 @@ impl CommitmentRegistry {
             .get_mut(&id)
             .ok_or(AuthorityError::UnknownCommitment)?;
         if entry.state != CommitmentState::Authorized {
-            return Err(AuthorityError::NotAuthorized);
+            // Say why it cannot start: a cancelled run or a stop is not a
+            // missing authorization.
+            return Err(match entry.state {
+                CommitmentState::Revoked => self
+                    .0
+                    .runs
+                    .check(entry.run, &entry.agent)
+                    .err()
+                    .unwrap_or(AuthorityError::Stale),
+                CommitmentState::Expired => AuthorityError::Expired,
+                _ => AuthorityError::NotAuthorized,
+            });
         }
         let token = self.live_check(id, entry, agent, run)?;
         let changed = if &entry.prepared.target.digest != revalidated {

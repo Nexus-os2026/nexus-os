@@ -45,6 +45,27 @@ impl ControlConfirmer for Yes {
     }
 }
 
+/// A private runtime root under the system temporary directory, removed
+/// with everything in it when the test ends.
+pub struct TempRoot(pub crate::runtime_root::RuntimeRoot);
+
+static NEXT_ROOT: AtomicU32 = AtomicU32::new(0);
+
+pub fn temp_root(label: &str) -> TempRoot {
+    let path = std::env::temp_dir().join(format!(
+        "nexus-p3-{label}-{}-{}",
+        std::process::id(),
+        NEXT_ROOT.fetch_add(1, Ordering::SeqCst)
+    ));
+    TempRoot(crate::runtime_root::RuntimeRoot::open(&path).unwrap())
+}
+
+impl Drop for TempRoot {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(self.0.path());
+    }
+}
+
 /// A pipeline with in-memory evidence and the system clock, one agent and
 /// one open run.
 pub struct Harness {

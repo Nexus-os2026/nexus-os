@@ -55,11 +55,14 @@ pub enum GrantScope {
         /// (never granted in production except by explicit owner policy).
         allow_private: bool,
     },
-    /// P3-C: browser sessions limited to these origins.
+    /// P3-C: browser sessions limited to these origins, with the browser
+    /// at `executable` pinned to `identity` when the owner granted it.
     Browser {
         /// `scheme://host:port`, canonical.
         origins: Vec<String>,
         downloads: bool,
+        executable: String,
+        identity: Digest,
     },
     /// P3-D: observing the agent display.
     Perception { display: String },
@@ -117,12 +120,22 @@ impl GrantScope {
                     "Private, local or loopback addresses: refused".to_string()
                 },
             ],
-            GrantScope::Browser { origins, downloads } => vec![
+            GrantScope::Browser {
+                origins,
+                downloads,
+                executable,
+                identity,
+            } => vec![
                 format!("Browser sessions limited to: {}", origins.join(", ")),
                 format!(
                     "Downloads: {}",
-                    if *downloads { "allowed" } else { "refused" }
+                    if *downloads {
+                        "kept inside the session, deleted when it ends"
+                    } else {
+                        "refused"
+                    }
                 ),
+                format!("Browser: {executable} (identity {})", identity.short()),
             ],
             GrantScope::Perception { display } => {
                 vec![format!("Observe the isolated agent display {display}")]
