@@ -5464,13 +5464,16 @@ dependencies = [
  "base64 0.22.1",
  "getrandom 0.2.17",
  "hex",
+ "libc",
  "nexus-kernel",
+ "png 0.18.1",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha2",
  "tokio",
  "url",
+ "x11rb",
  "zeroize",
 ]
 

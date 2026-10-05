@@ -94,12 +94,16 @@
 //! }
 //! ```
 
+#![deny(unsafe_code)]
+
 pub mod authority;
 pub mod broker;
 pub mod connector;
 pub mod control;
+pub mod display;
 pub mod egress;
 pub mod executable;
+mod launcher;
 pub mod runtime_root;
 pub mod tool;
 
