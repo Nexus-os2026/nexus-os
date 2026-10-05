@@ -1062,11 +1062,12 @@ fn closure_gate(closure: Closure) -> &'static str {
         Closure::SecretStorage => "Final Gate A and H: a secret outside an approved store",
         Closure::SimulationReplay => "Phase One charter 12: time-machine what-if",
         Closure::CheckpointReplay => "P2-ENTRY-H1: checkpoint replay",
+        Closure::GovernedRoute => "Phase Three G-INV: a legacy direct real-world route",
     }
 }
 
 /// Every `Closure` variant (`p3e_g3_05` proves the list complete).
-const ALL_CLOSURES: [Closure; 16] = [
+const ALL_CLOSURES: [Closure; 17] = [
     Closure::FileSelection,
     Closure::LegacyBuilder,
     Closure::ProcessExecution,
@@ -1083,6 +1084,7 @@ const ALL_CLOSURES: [Closure; 16] = [
     Closure::SecretStorage,
     Closure::SimulationReplay,
     Closure::CheckpointReplay,
+    Closure::GovernedRoute,
 ];
 
 /// The Phase Three entry inventory of canonical closed commands, as
@@ -1091,6 +1093,37 @@ const ALL_CLOSURES: [Closure; 16] = [
 /// Reopening one fails `p3e_g3_02` until it leaves this inventory with an
 /// Architect-approved authority mechanism.
 const CANONICAL_CLOSED: &[(&str, Closure, &[&str])] = &[
+    // Phase Three G-INV-1..4.
+    (
+        "lib.rs",
+        Closure::GovernedRoute,
+        &[
+            "email_fetch_messages",
+            "email_search_messages",
+            "email_send_message",
+            "messaging_connect_platform",
+            "messaging_poll_messages",
+            "messaging_send",
+        ],
+    ),
+    (
+        "commands/crate_bridges.rs",
+        Closure::GovernedRoute,
+        &[
+            "browser_close_session",
+            "browser_create_session",
+            "browser_execute_task",
+            "browser_get_content",
+            "browser_get_policy",
+            "browser_navigate",
+            "browser_session_count",
+        ],
+    ),
+    (
+        "nx_bridge/commands.rs",
+        Closure::GovernedRoute,
+        &["nx_computer_use_status"],
+    ),
     (
         "lib.rs",
         Closure::AmbientResource,

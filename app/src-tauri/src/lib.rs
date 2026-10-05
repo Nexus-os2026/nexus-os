@@ -130,7 +130,6 @@ use nexus_capability_measurement::tauri_commands::MeasurementState;
 use nexus_predictive_router::tauri_commands::RouterState;
 
 // Browser agent imports
-use nexus_browser_agent::BrowserState;
 
 // Token economy imports
 use nexus_token_economy::tauri_commands as token_cmds;
@@ -1000,7 +999,6 @@ pub struct AppState {
         Arc<Mutex<nexus_kernel::cognitive::algorithms::adversarial::AdversarialArena>>,
     capability_measurement: Arc<MeasurementState>,
     predictive_router: Arc<RouterState>,
-    browser_agent: Arc<BrowserState>,
     token_economy: Arc<token_cmds::EconomyState>,
     governed_control: Arc<cc_cmds::ControlState>,
     world_simulation: Arc<sim_cmds::SimulationState>,
@@ -1513,7 +1511,6 @@ impl AppState {
             // process working directory.
             capability_measurement: Arc::new(MeasurementState::with_batteries(Vec::new())),
             predictive_router: Arc::new(RouterState::new()),
-            browser_agent: Arc::new(BrowserState::default()),
             token_economy: Arc::new(token_cmds::EconomyState::new()),
             governed_control: Arc::new(cc_cmds::ControlState::default()),
             world_simulation: Arc::new(sim_cmds::SimulationState::new()),
@@ -1826,7 +1823,6 @@ impl AppState {
             // process working directory.
             capability_measurement: Arc::new(MeasurementState::with_batteries(Vec::new())),
             predictive_router: Arc::new(RouterState::new()),
-            browser_agent: Arc::new(BrowserState::default()),
             token_economy: Arc::new(token_cmds::EconomyState::new()),
             governed_control: Arc::new(cc_cmds::ControlState::default()),
             world_simulation: Arc::new(sim_cmds::SimulationState::new()),
@@ -6142,34 +6138,33 @@ pub mod runtime {
         super::email_oauth_status(state.inner())
     }
 
+    /// Phase Three G-INV-4: Gmail and Outlook reads run only as governed
+    /// connector operations (R1, under a connector grant, vault credentials).
     #[tauri::command]
-    fn email_fetch_messages(
-        state: tauri::State<'_, AppState>,
-        provider: String,
-        folder: String,
-        page: u32,
-    ) -> Result<String, String> {
-        super::email_fetch_messages(state.inner(), provider, folder, page)
+    pub(crate) fn email_fetch_messages() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "email_fetch_messages",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
+    /// Phase Three G-INV-1: an email send is R2: a governed connector operation
+    /// with the exact recipient, subject and body approved natively.
     #[tauri::command]
-    fn email_send_message(
-        state: tauri::State<'_, AppState>,
-        provider: String,
-        to: String,
-        subject: String,
-        body: String,
-    ) -> Result<String, String> {
-        super::email_send_message(state.inner(), provider, to, subject, body)
+    pub(crate) fn email_send_message() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "email_send_message",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
+    /// Phase Three G-INV-4: a governed connector operation (R1).
     #[tauri::command]
-    fn email_search_messages(
-        state: tauri::State<'_, AppState>,
-        provider: String,
-        query: String,
-    ) -> Result<String, String> {
-        super::email_search_messages(state.inner(), provider, query)
+    pub(crate) fn email_search_messages() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "email_search_messages",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
     #[tauri::command]
@@ -6181,33 +6176,34 @@ pub mod runtime {
     }
 
     // ── Messaging Platform commands ──
+    /// Phase Three G-INV-4: connection checks are governed connector
+    /// operations (Slack and Discord); Telegram stays closed (its token is in
+    /// the URL).
     #[tauri::command]
-    fn messaging_connect_platform(
-        state: tauri::State<'_, AppState>,
-        platform: String,
-        token_value: String,
-    ) -> Result<String, String> {
-        super::messaging_connect_platform(state.inner(), platform, token_value)
+    pub(crate) fn messaging_connect_platform() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "messaging_connect_platform",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
+    /// Phase Three G-INV-1: a message send is R2: a governed connector
+    /// operation approved natively.
     #[tauri::command]
-    fn messaging_send(
-        state: tauri::State<'_, AppState>,
-        platform: String,
-        channel: String,
-        text: String,
-    ) -> Result<String, String> {
-        super::messaging_send(state.inner(), platform, channel, text)
+    pub(crate) fn messaging_send() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "messaging_send",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
+    /// Phase Three G-INV-4: a governed connector operation (R1).
     #[tauri::command]
-    fn messaging_poll_messages(
-        state: tauri::State<'_, AppState>,
-        platform: String,
-        channel: String,
-        last_id: String,
-    ) -> Result<String, String> {
-        super::messaging_poll_messages(state.inner(), platform, channel, last_id)
+    pub(crate) fn messaging_poll_messages() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "messaging_poll_messages",
+            crate::phase0_surface::Closure::GovernedRoute,
+        ))
     }
 
     // ── Integration OAuth commands ──

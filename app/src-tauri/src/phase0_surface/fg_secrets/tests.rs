@@ -560,94 +560,46 @@ fn p0_fg_h_sign_in_flows_persist_no_token() {
     }
     for reader in [
         "pub(crate) fn email_oauth_status(",
-        "pub(crate) fn get_email_access_token(",
         "pub(crate) fn email_disconnect(",
     ] {
         assert!(apps.contains(reader), "{reader}");
     }
+    // Phase Three: the closed email transport's token reader is gone.
+    assert!(!apps.contains("fn get_email_access_token("));
 }
 
-/// Final Gate item H: messaging tokens live in the configuration. Connect
-/// accepts only the stored token and writes no token or socket-URL file;
-/// the reader prefers the configuration and still reads a legacy file.
+/// Final Gate item H, Phase Three G-INV-1 and G-INV-4: the legacy messaging
+/// connect, send and poll transport and its token readers are gone (the
+/// commands are canonically closed), nothing in the module writes a token
+/// or socket-URL file, and the governed connector operations that replaced
+/// them read credentials only from the vault's verified HTTP-connector
+/// scope, through broker leases.
 #[test]
 fn p0_fg_h_messaging_tokens_are_never_copied_to_plaintext_files() {
     let apps = normalized(include_str!("../../commands/apps.rs"));
-    // The command reads the configuration's token and the platforms' real
-    // endpoints only through its one call to the injected seam.
-    assert_eq!(
-        compact(&body(&apps, "pub(crate) fn messaging_connect_platform(")),
-        "messaging_connect_with(state,platform,token_value,stored_messaging_token,&MESSAGING_ENDPOINTS,)"
-    );
-    let connect = compact(&body(&apps, "fn messaging_connect_with("));
-    assert!(
-        in_order(
-            &connect,
-            &[
-                "messaging_platform(state,\"messaging_connect\",&platform)?;",
-                "iftoken_value!=STORED_SECRET{returnErr(deny(state,\"messaging_connect\",\"token_must_be_saved_first\"",
-                "stored_token(known)?",
-                "check_messaging_connectivity(known,&token_value,endpoints)",
-            ],
-        ),
-        "{connect}"
-    );
     for gone in [
-        "fs::write(",
-        "create_dir_all(",
+        "fn messaging_connect_platform(",
+        "fn messaging_connect_with(",
+        "fn read_messaging_token(",
+        "fn stored_messaging_token(",
+        "fn check_messaging_connectivity(",
+        "fn capped_body(",
         "messaging_tokens",
         "slack_ws_url",
+        "apps.connections.open",
     ] {
-        assert!(!connect.contains(gone), "{gone}");
+        assert!(!apps.contains(gone), "{gone}");
     }
-    assert!(!apps.contains("slack_ws_url"));
-    assert!(!apps.contains("apps.connections.open"));
-    let read = compact(&body(&apps, "pub(crate) fn read_messaging_token("));
-    assert!(
-        in_order(
-            &read,
-            &[
-                "stored_messaging_token(platform)",
-                ".join(\"messaging_tokens\")"
-            ]
-        ),
-        "{read}"
-    );
-    assert!(!read.contains("fs::write("), "{read}");
-    // A connectivity error never carries the request URL, which holds the
-    // Telegram token. The request is bounded in time (one client, built with
-    // the endpoints' timeout) and every body is read through the size cap.
-    let check = body(&apps, "async fn check_messaging_connectivity(");
-    assert!(!check.contains("{e}"), "{check}");
-    assert_eq!(check.matches("e.without_url()").count(), 4, "{check}");
-    // Comment lines are dropped; the client follows no redirect and sends no
-    // Referer (a redirect would otherwise carry the token-bearing URL).
-    let compact_check = compact(
-        &check
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n"),
-    );
-    assert!(
-        compact_check.starts_with(concat!(
-            "letclient=reqwest::Client::builder().timeout(endpoints.timeout)",
-            ".redirect(reqwest::redirect::Policy::none()).referer(false).build()"
-        )),
-        "{check}"
-    );
-    assert_eq!(check.matches("reqwest::Client").count(), 1, "{check}");
     assert_eq!(
-        compact_check.matches("capped_body(resp,max,").count(),
-        3,
-        "{check}"
+        nexus_governed_control::connector::catalog::CONNECTOR_SCOPE,
+        "http"
     );
-    for unbounded in [".text()", ".bytes()", ".json("] {
-        assert!(!check.contains(unbounded), "{unbounded}");
+    for connector in nexus_governed_control::connector::catalog::production() {
+        for operation in &connector.operations {
+            let credential = operation.credential.expect("credentialed");
+            assert_eq!(credential.scope, "http", "{}", operation.id);
+        }
     }
-    let capped = body(&apps, "async fn capped_body(");
-    assert!(!capped.contains("{e}"), "{capped}");
-    assert_eq!(capped.matches("e.without_url()").count(), 1, "{capped}");
 }
 
 /// Final Gate item H: API Client collections are checked for authentication

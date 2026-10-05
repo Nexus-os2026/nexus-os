@@ -921,291 +921,130 @@ fn assert_model_registration_is_authorized(lib_rs: &str, model_hub: &str) {
     )));
 }
 
-/// Final Gate item C (redaction): a messaging transport error names no
-/// request URL, so a stored Telegram bot token, which travels in the URL
-/// path, never reaches the interface through an error. The failing request
-/// here goes to a closed loopback port.
+/// Phase Three G-INV-1 and G-INV-4: the legacy email and messaging
+/// transport is gone. Its commands are canonically closed, `apps.rs` keeps
+/// no request code for Telegram, Slack, Discord, Gmail or Outlook, and the
+/// governed connector catalog that replaced it never puts a credential in a
+/// URL: Telegram, whose Bot API carries the token in the URL path, was not
+/// migrated and stays closed.
 #[test]
 fn p0_fg_messaging_errors_never_carry_the_bot_token() {
-    let closed_port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap();
-    let url = format!("http://{closed_port}/bot123456:fg-secret-token/sendMessage");
-    let error = crate::block_on_async(async { reqwest::Client::new().post(&url).send().await })
-        .unwrap_err();
-    assert!(
-        error.to_string().contains("fg-secret-token"),
-        "precondition: reqwest names the URL in its errors"
-    );
-    let reported = crate::commands::apps::messaging_transport_error("telegram send", error);
-    assert!(reported.starts_with("telegram send: "), "{reported}");
-    assert!(!reported.contains("fg-secret-token"), "{reported}");
-    assert!(!reported.contains("sendMessage"), "{reported}");
-
-    let apps = include_str!("../../commands/apps.rs");
-    assert_messaging_errors_are_redacted(apps);
-    assert_messaging_errors_are_redacted(&crlf(apps));
-}
-
-/// The source side of the guard above, for either line ending: every
-/// request error goes through `messaging_transport_error`, and every client
-/// and body read through the bounded helpers, which redact the same way.
-fn assert_messaging_errors_are_redacted(apps: &str) {
-    let apps = lf(apps);
-    let helpers = apps
-        .find("pub(crate) fn messaging_transport_error(")
-        .unwrap();
-    let start = apps.find("pub(crate) fn messaging_send(").unwrap();
-    let end = apps[start..]
-        .find("pub(crate) fn messaging_poll_messages(")
-        .map(|at| start + at)
-        .unwrap();
-    let poll_end = apps[end..].find("\n}\n").map(|at| end + at).unwrap();
-    let helper_text = &apps[helpers..start];
-    assert_eq!(
-        helper_text.matches("messaging_transport_error(").count(),
-        3,
-        "the definition, the client and the body read"
-    );
-    assert!(
-        !helper_text.contains("{e}\"))"),
-        "a helper formats a raw error"
-    );
-    for (name, body) in [
-        ("messaging_send", &apps[start..end]),
-        ("messaging_poll_messages", &apps[end..poll_end]),
+    for apps in [
+        lf(include_str!("../../commands/apps.rs")),
+        lf(&crlf(include_str!("../../commands/apps.rs"))),
     ] {
-        assert_eq!(
-            body.matches("messaging_transport_error(").count(),
-            3,
-            "{name}"
-        );
-        assert_eq!(body.matches("messaging_client()?").count(), 3, "{name}");
-        assert_eq!(
-            body.matches("messaging_body(resp).await").count(),
-            3,
-            "{name}"
-        );
-        for unbounded in ["reqwest::Client::new()", ".text()"] {
-            assert!(!body.contains(unbounded), "{name}: {unbounded}");
+        for host in [
+            "api.telegram.org",
+            "slack.com/api",
+            "discord.com/api",
+            "gmail.googleapis.com",
+            "graph.microsoft.com",
+        ] {
+            assert!(!apps.contains(host), "{host}");
         }
-        assert!(!body.contains("{e}\"))"), "{name} formats a raw error");
+        for gone in [
+            "messaging_transport_error",
+            "messaging_client",
+            "read_messaging_token",
+            "/bot{",
+        ] {
+            assert!(!apps.contains(gone), "{gone}");
+        }
+    }
+    let operations: Vec<&str> = nexus_governed_control::connector::catalog::production()
+        .iter()
+        .flat_map(|c| c.operations.iter().map(|op| op.id).collect::<Vec<_>>())
+        .collect();
+    assert!(!operations.is_empty());
+    assert!(
+        operations.iter().all(|op| !op.starts_with("telegram")),
+        "{operations:?}"
+    );
+    for (command, call) in [
+        (
+            "messaging_connect_platform",
+            crate::runtime::messaging_connect_platform as fn() -> Result<String, String>,
+        ),
+        ("messaging_send", crate::runtime::messaging_send),
+        (
+            "messaging_poll_messages",
+            crate::runtime::messaging_poll_messages,
+        ),
+    ] {
+        assert_eq!(call(), Err(closed(command, Closure::GovernedRoute)));
     }
 }
 
-/// Answer one loopback request with `head` and then `body`, all at once or,
-/// with `drip`, one byte per interval until the client gives up.
-fn serve_answer(
-    head: String,
-    body: Vec<u8>,
-    drip: Option<std::time::Duration>,
-) -> (String, std::thread::JoinHandle<()>) {
-    use std::io::{Read, Write};
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    let server = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(30)))
-            .unwrap();
-        let mut request = Vec::new();
-        let mut byte = [0u8; 1];
-        while !request.ends_with(b"\r\n\r\n") && matches!(stream.read(&mut byte), Ok(1)) {
-            request.push(byte[0]);
-        }
-        if stream.write_all(head.as_bytes()).is_err() {
-            return;
-        }
-        match drip {
-            None => {
-                let _ = stream.write_all(&body);
-            }
-            Some(interval) => {
-                for byte in body {
-                    std::thread::sleep(interval);
-                    if stream.write_all(&[byte]).is_err() {
-                        return;
-                    }
-                }
-            }
-        }
-    });
-    (base, server)
-}
-
-/// Final Gate resource bound: messaging sends and polls are bounded in total
-/// time and in the response they read, and a timeout says so without naming
-/// the URL. (Loopback stand-ins answer; no platform is contacted.)
+/// Phase Three: messaging requests run only as governed connector
+/// operations through governed egress, which bounds every request in time
+/// and size and follows no redirect for a credentialed one.
 #[test]
 fn p0_fg_messaging_requests_are_bounded_in_time_and_size() {
-    use crate::commands::apps::{
-        messaging_body_bounded, messaging_client, messaging_client_with, messaging_transport_error,
-        MAX_MESSAGING_RESPONSE_BYTES, MESSAGING_REQUEST_TIMEOUT,
-    };
-    assert_eq!(
-        MESSAGING_REQUEST_TIMEOUT,
-        std::time::Duration::from_secs(30)
-    );
-    assert_eq!(MAX_MESSAGING_RESPONSE_BYTES, 4 * 1024 * 1024);
-
-    let chunk = "b".repeat(1000);
-    for (head, body) in [
-        (
-            "HTTP/1.1 200 OK\r\nContent-Length: 2048\r\nConnection: close\r\n\r\n".to_string(),
-            "a".repeat(2048),
-        ),
-        (
-            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
-                .to_string(),
-            format!("3e8\r\n{chunk}\r\n3e8\r\n{chunk}\r\n0\r\n\r\n"),
-        ),
-    ] {
-        let (base, server) = serve_answer(head, body.into_bytes(), None);
-        let result = crate::block_on_async(async {
-            let response = messaging_client()?
-                .get(format!("{base}/bot1:fg-secret/getUpdates"))
-                .send()
-                .await
-                .map_err(|e| messaging_transport_error("poll", e))?;
-            messaging_body_bounded(response, 1024).await
-        });
-        assert_eq!(
-            result,
-            Err("body: the response is larger than 1024 bytes".to_string())
-        );
-        server.join().unwrap();
+    let limits = nexus_governed_control::egress::EgressLimits::default();
+    assert_eq!(limits.timeout, std::time::Duration::from_secs(20));
+    assert_eq!(limits.max_response, 2 * 1024 * 1024);
+    assert_eq!(limits.max_request_body, 64 * 1024);
+    assert_eq!(limits.max_redirects, 5);
+    for connector in nexus_governed_control::connector::catalog::production() {
+        if matches!(connector.id, "slack" | "discord") {
+            assert!(
+                connector.origin.starts_with("https://"),
+                "{}",
+                connector.origin
+            );
+            assert!(!connector.allow_private, "{}", connector.id);
+        }
     }
-
-    // An answer that drips its 18-byte body over 5.4 s is abandoned at a
-    // 1 s timeout.
-    let body = br#"{"ok":true,"r":[]}"#.to_vec();
-    let head = format!(
-        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
-    let (base, server) = serve_answer(head, body, Some(std::time::Duration::from_millis(300)));
-    let result = crate::block_on_async(async {
-        let response = messaging_client_with(std::time::Duration::from_secs(1))?
-            .get(format!("{base}/bot1:fg-secret/getUpdates"))
-            .send()
-            .await
-            .map_err(|e| messaging_transport_error("poll", e))?;
-        messaging_body_bounded(response, 1024).await
-    });
-    let error = result.expect_err("a 5.4 s body must not be read within a 1 s timeout");
-    assert!(error.contains("timed out"), "{error}");
-    assert!(!error.contains("fg-secret"), "{error}");
-    server.join().unwrap();
 }
 
-/// Final Gate decisions C and E: the Gmail and Outlook commands build every
-/// client with `email_client` (no redirect, no Referer, 30 s total) and read
-/// every body through the capped readers; no default client and no
-/// unbounded `text()` remain, on LF and CRLF sources.
+/// Phase Three: email requests run only as governed connector operations:
+/// Gmail and Outlook reads are R1 under the owner's connector grant, sends
+/// are R2 and approved natively, every one bounded by governed egress. The
+/// legacy email client and token reader are gone.
 #[test]
 fn p0_r1_email_requests_are_bounded_and_follow_no_redirect() {
-    use crate::commands::apps::{
-        email_body, email_client, messaging_transport_error, EMAIL_REQUEST_TIMEOUT,
-        MAX_EMAIL_RESPONSE_BYTES,
-    };
-    assert_eq!(EMAIL_REQUEST_TIMEOUT, std::time::Duration::from_secs(30));
-    assert_eq!(MAX_EMAIL_RESPONSE_BYTES, 16 * 1024 * 1024);
-
-    // A redirect is returned as its status; the target is never contacted.
-    let (target, target_url) = quiet_listener();
-    for code in [
-        "301 Moved Permanently",
-        "307 Temporary Redirect",
-        "308 Permanent Redirect",
+    use nexus_governed_control::authority::effect::EffectClass;
+    use nexus_governed_control::egress::transport::Method;
+    let apps = lf(include_str!("../../commands/apps.rs"));
+    for gone in [
+        "fn email_client(",
+        "fn email_body(",
+        "fn get_email_access_token(",
+        "EMAIL_REQUEST_TIMEOUT",
     ] {
-        let (base, server) = serve_answer(
-            format!("HTTP/1.1 {code}\r\nLocation: {target_url}/collect\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
-            Vec::new(),
-            None,
-        );
-        let status = crate::block_on_async(async {
-            email_client()
-                .unwrap()
-                .post(format!("{base}/gmail/v1/users/me/messages/send"))
-                .bearer_auth("fg-email-token")
-                .body("raw message")
-                .send()
-                .await
-                .map(|response| response.status().as_u16())
-                .map_err(|e| messaging_transport_error("send", e))
-        });
-        assert_eq!(status.map(|s| s.to_string()), Ok(code[..3].to_string()));
-        server.join().unwrap();
+        assert!(!apps.contains(gone), "{gone}");
     }
-    assert_never_contacted(&target);
-
-    // A body declared past the cap is refused without being read.
-    let (base, server) = serve_answer(
-        format!(
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            MAX_EMAIL_RESPONSE_BYTES + 1
+    let mut seen = 0;
+    for connector in nexus_governed_control::connector::catalog::production() {
+        if !matches!(connector.id, "gmail" | "outlook") {
+            continue;
+        }
+        for operation in &connector.operations {
+            seen += 1;
+            let expected = match operation.method {
+                Method::Get => EffectClass::R1,
+                _ => EffectClass::R2,
+            };
+            assert_eq!(operation.class, expected, "{}", operation.id);
+        }
+    }
+    assert_eq!(
+        seen, 7,
+        "gmail list/search/get/send and outlook list/search/send"
+    );
+    for (command, call) in [
+        (
+            "email_fetch_messages",
+            crate::runtime::email_fetch_messages as fn() -> Result<String, String>,
         ),
-        Vec::new(),
-        None,
-    );
-    let result = crate::block_on_async(async {
-        let response = email_client()
-            .unwrap()
-            .get(format!("{base}/gmail/v1/users/me/messages"))
-            .send()
-            .await
-            .map_err(|e| messaging_transport_error("list", e))?;
-        email_body(response).await
-    });
-    assert_eq!(
-        result,
-        Err(format!(
-            "body: the response is larger than {MAX_EMAIL_RESPONSE_BYTES} bytes"
-        ))
-    );
-    server.join().unwrap();
-
-    let apps = include_str!("../../commands/apps.rs");
-    assert_email_clients_are_bounded(apps);
-    assert_email_clients_are_bounded(&crlf(apps));
-}
-
-/// The source side of the guard above, for either line ending.
-fn assert_email_clients_are_bounded(apps: &str) {
-    let apps = lf(apps);
-    let start = apps.find("pub(crate) fn email_fetch_messages(").unwrap();
-    let end = apps.find("pub(crate) fn email_disconnect(").unwrap();
-    let email = &apps[start..end];
-    assert_eq!(
-        email.matches("email_client()?").count(),
-        7,
-        "every email request"
-    );
-    for unbounded in [
-        "reqwest::Client::new()",
-        "Client::builder()",
-        ".text()",
-        ".json()",
-        ".bytes()",
+        ("email_send_message", crate::runtime::email_send_message),
+        (
+            "email_search_messages",
+            crate::runtime::email_search_messages,
+        ),
     ] {
-        assert!(!email.contains(unbounded), "email: {unbounded}");
+        assert_eq!(call(), Err(closed(command, Closure::GovernedRoute)));
     }
-    // Only JSON parse and serialize errors are formatted as they are; request
-    // errors go through `messaging_transport_error`, which drops the URL.
-    for (at, _) in email.match_indices("{e}\"))") {
-        let before = &email[at.saturating_sub(24)..at];
-        assert!(
-            before.ends_with("parse: ") || before.ends_with("serialize: "),
-            "email formats a raw request error: {before}"
-        );
-    }
-    let helper = apps.find("pub(crate) fn email_client(").unwrap();
-    let body = &apps[helper..apps[helper..].find("\n}\n").map(|at| helper + at).unwrap()];
-    assert!(
-        body.contains("messaging_client_with(EMAIL_REQUEST_TIMEOUT)"),
-        "{body}"
-    );
 }
 
 /// Final Gate decisions C and E: the open deploy commands that send the

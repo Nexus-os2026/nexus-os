@@ -216,6 +216,23 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("builder_backend_connect", Closure::SecretStorage),
     ("email_start_oauth", Closure::SecretStorage),
     ("integration_start_oauth", Closure::SecretStorage),
+    // Phase Three G-INV-1..4: legacy direct real-world routes. Their effects
+    // run only through Phase Three governed control (connector operations,
+    // governed browser sessions, the agent display's own status).
+    ("email_fetch_messages", Closure::GovernedRoute),
+    ("email_send_message", Closure::GovernedRoute),
+    ("email_search_messages", Closure::GovernedRoute),
+    ("messaging_connect_platform", Closure::GovernedRoute),
+    ("messaging_send", Closure::GovernedRoute),
+    ("messaging_poll_messages", Closure::GovernedRoute),
+    ("browser_create_session", Closure::GovernedRoute),
+    ("browser_execute_task", Closure::GovernedRoute),
+    ("browser_navigate", Closure::GovernedRoute),
+    ("browser_get_content", Closure::GovernedRoute),
+    ("browser_close_session", Closure::GovernedRoute),
+    ("browser_get_policy", Closure::GovernedRoute),
+    ("browser_session_count", Closure::GovernedRoute),
+    ("nx_computer_use_status", Closure::GovernedRoute),
 ];
 
 const LIB_RS: &str = include_str!("../lib.rs");
@@ -396,6 +413,8 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             builder_deploy_store_credentials, builder_backend_connect, email_start_oauth,
             integration_start_oauth, self_rewrite_apply_patch, time_machine_what_if,
             time_machine_undo, time_machine_redo, time_machine_undo_checkpoint,
+            email_fetch_messages, email_send_message, email_search_messages,
+            messaging_connect_platform, messaging_send, messaging_poll_messages,
         ],
         crate::commands::flash => [
             flash_profile_model, flash_auto_configure, flash_create_session,
@@ -407,6 +426,9 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             cm_three_way_comparison, memory_save, memory_load, memory_list_agents,
             mcp2_server_handle, browser_screenshot, a2a_crate_send_task, a2a_crate_get_task,
             a2a_crate_discover_agent, perception_init, cm_run_ab_validation,
+            browser_create_session, browser_execute_task, browser_navigate,
+            browser_get_content, browser_close_session, browser_get_policy,
+            browser_session_count,
         ],
         crate::nx_bridge::commands => [
             nx_agent_run, nx_chat, nx_tool, nx_consent_respond, nx_agent_approve,
@@ -419,6 +441,13 @@ fn closed_handlers() -> Vec<ClosedHandler> {
         "nx_computer_use_screenshot",
         (|| {
             tauri::async_runtime::block_on(crate::nx_bridge::commands::nx_computer_use_screenshot())
+                .map(|_| ())
+        }) as fn() -> Result<(), String>,
+    ));
+    handlers.push((
+        "nx_computer_use_status",
+        (|| {
+            tauri::async_runtime::block_on(crate::nx_bridge::commands::nx_computer_use_status())
                 .map(|_| ())
         }) as fn() -> Result<(), String>,
     ));
@@ -2345,17 +2374,19 @@ fn p0_002c5b_identifier_joins_stay_behind_their_grammars() {
             0,
         ),
         ("app/src-tauri/src/commands/apps.rs", "dir.join(name)", 1),
-        // read_messaging_token: an allowlisted &'static str platform.
+        // Phase Three: the messaging token reader is gone with the closed
+        // messaging transport.
         (
             "app/src-tauri/src/commands/apps.rs",
             "join(format!(\"{platform}.json\"))",
-            1,
+            0,
         ),
-        // gmail/outlook only: an allowlist match or a &'static str.
+        // gmail/outlook only: an allowlist match (the status and disconnect
+        // readers; the closed email transport's reader is gone).
         (
             "app/src-tauri/src/commands/apps.rs",
             "join(format!(\"{provider}_tokens.json\"))",
-            2,
+            1,
         ),
         // nx_session_file: the name's storage stem, never the raw name, and
         // never a stored file that differs only by case (C5C).
@@ -4007,6 +4038,9 @@ fn p0_002c5c_no_desktop_route_observes_the_screen() {
             "{command} must stay closed as screen observation"
         );
     }
+    // Phase Three G-INV-2: the PATH-probing readiness check is closed; the
+    // agent display's own status replaces it.
+    assert!(CLOSED_COMMANDS.contains(&("nx_computer_use_status", Closure::GovernedRoute)));
     let handlers = registered_handlers();
     for available in [
         "computer_control_toggle",
@@ -4014,7 +4048,6 @@ fn p0_002c5c_no_desktop_route_observes_the_screen() {
         "computer_control_get_history",
         "stop_computer_action",
         "get_input_control_status",
-        "nx_computer_use_status",
     ] {
         let registered = handlers
             .iter()
