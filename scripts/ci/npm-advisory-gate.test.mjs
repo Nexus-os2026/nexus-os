@@ -1,6 +1,7 @@
-// XA-R4C: tests of the npm advisory gate, without npm or the network: the
-// gate's evaluation runs over fixture policies, tracked-file lists, lockfiles
-// and audit results shaped like npm 10's `npm audit --json` (report v2).
+// XA-R4C and XA-R4C-R1: tests of the npm advisory gate, without npm or the
+// network: the gate's evaluation runs over fixture policies, tracked-file
+// lists, lockfiles and audit results shaped like npm 10's `npm audit --json`
+// (report v2).
 //
 //   node --test scripts/ci/npm-advisory-gate.test.mjs
 import assert from 'node:assert/strict';
@@ -15,6 +16,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const TODAY = '2026-10-05';
 const BRACES = 'GHSA-vfj7-8cjw-p6xm';
 const REASON = 'A reviewed reason long enough for the schema.';
+// npm's remediation signal for braces that the policy records as reviewed.
+const REVIEWED_FIX = { name: 'tailwindcss', version: '4.3.3', isSemVerMajor: true };
+const ABSENT = Symbol('absent');
 
 function policy(edit = (p) => p) {
   return edit({
@@ -32,6 +36,10 @@ function policy(edit = (p) => p) {
         severity: 'high',
         range: '<=3.0.3',
         roots: ['app', 'packaging/builder-toolchain'],
+        npmFixAvailable: [
+          { root: 'app', value: { ...REVIEWED_FIX } },
+          { root: 'packaging/builder-toolchain', value: { ...REVIEWED_FIX } },
+        ],
         reason: REASON,
         threatModel: 'A reviewed threat model long enough for the schema.',
         reviewBy: '2026-11-30',
@@ -59,16 +67,143 @@ function lockfile(extra = {}, bracesVersion = '3.0.3') {
   };
 }
 
-// The real shape of the braces report (npm 10.8.2, 2026-10-05), chain included.
-function bracesVulns(severity = 'high', url = `https://github.com/advisories/${BRACES}`, range = '<=3.0.3', name = 'braces') {
-  const via = { source: 1240992, name, dependency: name, title: 'braces vulnerable to stack-exhaustion denial of service through deeply nested patterns', url, severity, cwe: ['CWE-674'], cvss: { score: 7.5, vectorString: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H' }, range };
-  return {
-    [name]: { name, severity, isDirect: false, via: [via], effects: ['chokidar', 'micromatch'], range: '*', nodes: [`node_modules/${name}`], fixAvailable: { name: 'tailwindcss', version: '4.3.3', isSemVerMajor: true } },
-    chokidar: { name: 'chokidar', severity, isDirect: false, via: [name], effects: ['tailwindcss'], range: '2.0.0 - 3.6.0', nodes: ['node_modules/chokidar'], fixAvailable: true },
-    micromatch: { name: 'micromatch', severity, isDirect: false, via: [name], effects: ['fast-glob', 'tailwindcss'], range: '>=0.2.0', nodes: ['node_modules/micromatch'], fixAvailable: true },
-    'fast-glob': { name: 'fast-glob', severity, isDirect: false, via: ['micromatch'], effects: ['tailwindcss'], range: '*', nodes: ['node_modules/fast-glob'], fixAvailable: true },
-    tailwindcss: { name: 'tailwindcss', severity, isDirect: true, via: ['chokidar', 'fast-glob', 'micromatch'], effects: [], range: '2.1.0-canary.1 - 3.4.19', nodes: ['node_modules/tailwindcss'], fixAvailable: true },
-  };
+// The live braces chain: the `vulnerabilities` of `npm audit --package-lock-only
+// --json` for app and packaging/builder-toolchain alike, npm's remediation
+// signal (`fixAvailable`) of every entry included (XA-R4C-R1, 2026-10-05:
+// npm 10.8.2 and 10.9.9 returned byte-identical reports).
+const LIVE_BRACES_CHAIN = {
+  "braces": {
+    "name": "braces",
+    "severity": "high",
+    "isDirect": false,
+    "via": [
+      {
+        "source": 1240992,
+        "name": "braces",
+        "dependency": "braces",
+        "title": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
+        "url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+        "severity": "high",
+        "cwe": [
+          "CWE-674"
+        ],
+        "cvss": {
+          "score": 7.5,
+          "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+        },
+        "range": "<=3.0.3"
+      }
+    ],
+    "effects": [
+      "chokidar",
+      "micromatch"
+    ],
+    "range": "*",
+    "nodes": [
+      "node_modules/braces"
+    ],
+    "fixAvailable": {
+      "name": "tailwindcss",
+      "version": "4.3.3",
+      "isSemVerMajor": true
+    }
+  },
+  "chokidar": {
+    "name": "chokidar",
+    "severity": "high",
+    "isDirect": false,
+    "via": [
+      "braces"
+    ],
+    "effects": [
+      "tailwindcss"
+    ],
+    "range": "2.0.0 - 3.6.0",
+    "nodes": [
+      "node_modules/chokidar"
+    ],
+    "fixAvailable": {
+      "name": "tailwindcss",
+      "version": "4.3.3",
+      "isSemVerMajor": true
+    }
+  },
+  "fast-glob": {
+    "name": "fast-glob",
+    "severity": "high",
+    "isDirect": false,
+    "via": [
+      "micromatch"
+    ],
+    "effects": [],
+    "range": "*",
+    "nodes": [
+      "node_modules/fast-glob"
+    ],
+    "fixAvailable": true
+  },
+  "micromatch": {
+    "name": "micromatch",
+    "severity": "high",
+    "isDirect": false,
+    "via": [
+      "braces"
+    ],
+    "effects": [
+      "fast-glob",
+      "tailwindcss"
+    ],
+    "range": ">=0.2.0",
+    "nodes": [
+      "node_modules/micromatch"
+    ],
+    "fixAvailable": {
+      "name": "tailwindcss",
+      "version": "4.3.3",
+      "isSemVerMajor": true
+    }
+  },
+  "tailwindcss": {
+    "name": "tailwindcss",
+    "severity": "high",
+    "isDirect": true,
+    "via": [
+      "chokidar",
+      "fast-glob",
+      "micromatch"
+    ],
+    "effects": [],
+    "range": "<=0.0.0-oxide-insiders.ff2c25f || 2.1.0-canary.1 - 3.4.19",
+    "nodes": [
+      "node_modules/tailwindcss"
+    ],
+    "fixAvailable": {
+      "name": "tailwindcss",
+      "version": "4.3.3",
+      "isSemVerMajor": true
+    }
+  }
+};
+
+// The live chain at `severity`, with the advisory's URL and affected range,
+// its package renamed to `name`, and braces' `fixAvailable` replaced by `fix`
+// (ABSENT removes it).
+function bracesVulns(severity = 'high', url = `https://github.com/advisories/${BRACES}`, range = '<=3.0.3', name = 'braces', fix = REVIEWED_FIX) {
+  const vulns = structuredClone(LIVE_BRACES_CHAIN);
+  for (const vuln of Object.values(vulns)) {
+    vuln.severity = severity;
+    vuln.via = vuln.via.map((via) => (via === 'braces' ? name : via));
+  }
+  const braces = vulns.braces;
+  Object.assign(braces.via[0], { name, dependency: name, url, severity, range });
+  if (fix === ABSENT) delete braces.fixAvailable;
+  else braces.fixAvailable = structuredClone(fix);
+  if (name !== 'braces') {
+    delete vulns.braces;
+    Object.assign(braces, { name, nodes: [`node_modules/${name}`] });
+    vulns[name] = braces;
+  }
+  return vulns;
 }
 
 function advisory(name, id, severity, range = '<9.9.9') {
@@ -205,7 +340,8 @@ test('an exception no root reports any more (stale) fails', () => {
 });
 
 test('an exception reported in a root it does not name fails', () => {
-  const pol = policy((p) => ({ ...p, exceptions: [{ ...p.exceptions[0], roots: ['packaging/builder-toolchain'] }] }));
+  const builderOnly = (records) => records.filter((record) => record.root === 'packaging/builder-toolchain');
+  const pol = policy((p) => ({ ...p, exceptions: [{ ...p.exceptions[0], roots: ['packaging/builder-toolchain'], npmFixAvailable: builderOnly(p.exceptions[0].npmFixAvailable) }] }));
   fails(gate({ pol }), /the exception does not cover app/);
 });
 
@@ -328,6 +464,10 @@ test('the committed policy is valid and excepts exactly the braces advisory', ()
     committed.exceptions.map(({ id, package: name, version, severity, range, roots, reviewBy }) => ({ id, name, version, severity, range, roots, reviewBy })),
     [{ id: BRACES, name: 'braces', version: '3.0.3', severity: 'high', range: '<=3.0.3', roots: ['app', 'packaging/builder-toolchain'], reviewBy: '2026-11-30' }],
   );
+  assert.deepEqual(committed.exceptions[0].npmFixAvailable, [
+    { root: 'app', value: REVIEWED_FIX },
+    { root: 'packaging/builder-toolchain', value: REVIEWED_FIX },
+  ]);
 });
 
 test('credentials never reach the output', () => {
@@ -359,4 +499,116 @@ test('the gate claims no more than its finding and takes no arguments', () => {
   const run = spawnSync(process.execPath, [path.join(here, 'npm-advisory-gate.mjs'), '--skip'], { encoding: 'utf8', timeout: 30_000 });
   assert.equal(run.status, 2);
   assert.match(run.stdout, /takes no arguments/);
+});
+
+// XA-R4C-R1: npm's remediation signal for the excepted braces vulnerability
+// must be exactly the one reviewed for each root. Any change fails and asks
+// for security review; nothing is accepted silently.
+const DRIFT = "npm's remediation signal for excepted GHSA-vfj7-8cjw-p6xm \\(braces\\) changed and requires security review";
+const withFix = (fix) => ok(report(bracesVulns('high', undefined, undefined, 'braces', fix)));
+const driftIn = (root, fix) => gate({ audits: { [root]: withFix(fix) } });
+const accepted = (root) => `${root}: npm remediation signal for ${BRACES} matches the reviewed value: fixAvailable {"name":"tailwindcss","version":"4.3.3","isSemVerMajor":true}`;
+
+test('R1-T1 the exact reviewed braces remediation signal passes in both roots', () => {
+  const r = gate();
+  passes(r);
+  for (const root of ['app', 'packaging/builder-toolchain']) assert.ok(r.lines.includes(accepted(root)), r.text);
+});
+
+test('R1-T2 fixAvailable true fails and requires review', () => {
+  fails(driftIn('app', true), new RegExp(`^FAIL app: ${DRIFT}: fixAvailable is now true, reviewed tailwindcss@4\\.3\\.3 \\(major\\)$`, 'm'));
+});
+
+test('R1-T3 fixAvailable false fails and requires review', () => {
+  fails(driftIn('app', false), new RegExp(`^FAIL app: ${DRIFT}: fixAvailable is now false, reviewed tailwindcss@4\\.3\\.3 \\(major\\)$`, 'm'));
+});
+
+test('R1-T4 a missing or null fixAvailable fails', () => {
+  fails(driftIn('app', ABSENT), new RegExp(`${DRIFT}: fixAvailable is now absent, reviewed tailwindcss@4\\.3\\.3 \\(major\\)$`, 'm'));
+  fails(driftIn('app', null), new RegExp(`${DRIFT}: fixAvailable is now null, reviewed`));
+});
+
+test('R1-T5 a direct patched braces remediation fails and requires review', () => {
+  fails(driftIn('app', { name: 'braces', version: '3.0.4', isSemVerMajor: false }), new RegExp(`${DRIFT}: fixAvailable is now braces@3\\.0\\.4 \\(not major\\), reviewed tailwindcss@4\\.3\\.3 \\(major\\)`));
+});
+
+test('R1-T6 a Tailwind remediation version drift fails', () => {
+  const r = driftIn('packaging/builder-toolchain', { ...REVIEWED_FIX, version: '4.3.4' });
+  fails(r, new RegExp(`^FAIL packaging/builder-toolchain: ${DRIFT}: fixAvailable is now tailwindcss@4\\.3\\.4 \\(major\\), reviewed tailwindcss@4\\.3\\.3 \\(major\\)$`, 'm'));
+  assert.doesNotMatch(r.text, /stale exception/, 'a drifted root is not misreported as stale');
+});
+
+test('R1-T7 a Tailwind isSemVerMajor drift fails', () => {
+  fails(driftIn('app', { ...REVIEWED_FIX, isSemVerMajor: false }), new RegExp(`${DRIFT}: fixAvailable is now tailwindcss@4\\.3\\.3 \\(not major\\), reviewed tailwindcss@4\\.3\\.3 \\(major\\)`));
+});
+
+test('R1-T8 a remediation package-name or shape drift fails', () => {
+  fails(driftIn('app', { ...REVIEWED_FIX, name: '@tailwindcss/postcss' }), new RegExp(`${DRIFT}: fixAvailable is now @tailwindcss/postcss@4\\.3\\.3 \\(major\\)`));
+  fails(driftIn('app', { ...REVIEWED_FIX, isDirect: true }), new RegExp(`${DRIFT}: fixAvailable is now an object with keys isDirect,isSemVerMajor,name,version, reviewed`));
+  fails(driftIn('app', { name: 'tailwindcss', version: '4.3.3' }), new RegExp(`${DRIFT}: fixAvailable is now an object with keys name,version, reviewed`));
+  fails(driftIn('app', 'tailwindcss@4.3.3'), new RegExp(`${DRIFT}: fixAvailable is now a string, reviewed`));
+  fails(driftIn('app', [REVIEWED_FIX]), new RegExp(`${DRIFT}: fixAvailable is now a list, reviewed`));
+});
+
+test("R1-T9 a policy without one root's remediation expectation fails schema validation", () => {
+  const pol = policy((p) => ({ ...p, exceptions: [{ ...p.exceptions[0], npmFixAvailable: [p.exceptions[0].npmFixAvailable[0]] }] }));
+  assert.match(validatePolicy(pol).join('\n'), /npmFixAvailable must hold exactly one reviewed remediation signal for each of the exception's roots/);
+  const r = gate({ pol });
+  fails(r, /npmFixAvailable must hold exactly one reviewed remediation signal/);
+  assert.deepEqual(r.calls, [], 'no audit runs under an invalid policy');
+  const { npmFixAvailable, ...without } = policy().exceptions[0];
+  fails(gate({ pol: policy((p) => ({ ...p, exceptions: [without] })) }), /must have exactly the keys/);
+});
+
+test('R1-T10 a remediation expectation for a root the exception does not name fails schema validation', () => {
+  const records = policy().exceptions[0].npmFixAvailable;
+  for (const [extra, pattern] of [
+    [[...records, { root: 'nexus-website', value: { ...REVIEWED_FIX } }], /npmFixAvailable must hold exactly one reviewed remediation signal for each of the exception's roots/],
+    [[records[0], { root: 'scripts/page-audit', value: { ...REVIEWED_FIX } }], /npmFixAvailable must hold exactly one reviewed remediation signal/],
+    [[records[0], records[0]], /npmFixAvailable names a root twice/],
+  ]) {
+    const pol = policy((p) => ({ ...p, exceptions: [{ ...p.exceptions[0], npmFixAvailable: extra }] }));
+    assert.match(validatePolicy(pol).join('\n'), pattern);
+    const r = gate({ pol });
+    fails(r, pattern);
+    assert.deepEqual(r.calls, [], 'no audit runs under an invalid policy');
+  }
+});
+
+test('R1-T11 roots whose remediation differs from the policy fail independently', () => {
+  const drifted = withFix({ ...REVIEWED_FIX, version: '4.3.4' });
+  const onlyBuilder = gate({ audits: { 'packaging/builder-toolchain': drifted } });
+  fails(onlyBuilder, new RegExp(`^FAIL packaging/builder-toolchain: ${DRIFT}`, 'm'));
+  assert.ok(onlyBuilder.lines.includes(accepted('app')), 'app is accepted on its own');
+  assert.equal(onlyBuilder.lines.at(-1), 'npm advisory gate: FAIL (1 finding)');
+  const onlyApp = gate({ audits: { app: drifted } });
+  fails(onlyApp, new RegExp(`^FAIL app: ${DRIFT}`, 'm'));
+  assert.ok(onlyApp.lines.includes(accepted('packaging/builder-toolchain')), 'the Builder root is accepted on its own');
+  assert.equal(onlyApp.lines.at(-1), 'npm advisory gate: FAIL (1 finding)');
+  const both = gate({ audits: { app: drifted, 'packaging/builder-toolchain': withFix(false) } });
+  fails(both, /fixAvailable is now false/);
+  assert.equal(both.lines.at(-1), 'npm advisory gate: FAIL (2 findings)');
+  // The expectation is per root: each root is held to its own reviewed value.
+  const perRoot = policy((p) => ({ ...p, exceptions: [{ ...p.exceptions[0], npmFixAvailable: [{ root: 'app', value: true }, p.exceptions[0].npmFixAvailable[1]] }] }));
+  const r = gate({ pol: perRoot });
+  fails(r, new RegExp(`^FAIL app: ${DRIFT}: fixAvailable is now tailwindcss@4\\.3\\.3 \\(major\\), reviewed true$`, 'm'));
+  assert.ok(!r.lines.some((line) => line.startsWith('FAIL packaging/builder-toolchain')), r.text);
+  passes(gate({ pol: perRoot, audits: { app: withFix(true) } }));
+});
+
+test('R1 remediation expectations are exact: no wildcard and no "any fix"', () => {
+  const records = policy().exceptions[0].npmFixAvailable;
+  const pattern = /npmFixAvailable must be a list of exact \{root, value\} records/;
+  const variants = [[], 'tailwindcss', true, [{ root: 'app' }, records[1]], [{ root: 'app', value: true, note: 'any fix' }, records[1]], [{ value: true }, records[1]], [{ root: 1, value: true }, records[1]]];
+  for (const value of ['*', 'any', null, 1, [], {}, { ...REVIEWED_FIX, name: '*' }, { ...REVIEWED_FIX, version: '4.x' }, { ...REVIEWED_FIX, version: '^4.3.3' },
+    { ...REVIEWED_FIX, isSemVerMajor: 'true' }, { ...REVIEWED_FIX, extra: 1 }, { name: 'tailwindcss', version: '4.3.3' }]) {
+    variants.push([{ root: 'app', value }, records[1]]);
+  }
+  for (const npmFixAvailable of variants) {
+    const pol = policy((p) => ({ ...p, exceptions: [{ ...p.exceptions[0], npmFixAvailable }] }));
+    assert.match(validatePolicy(pol).join('\n'), pattern, JSON.stringify(npmFixAvailable));
+    const r = gate({ pol });
+    fails(r, pattern);
+    assert.deepEqual(r.calls, [], 'no audit runs under an invalid policy');
+  }
 });

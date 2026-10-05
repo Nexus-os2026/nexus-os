@@ -20,6 +20,10 @@
 // - any advisory, at any severity, is reported that the one exact exception
 //   (id, package, installed version, severity, affected range, root) does
 //   not match;
+// - npm's remediation signal (`fixAvailable`) for an excepted vulnerability
+//   is not exactly the one reviewed for that root: a changed remediation
+//   (a patched release, another upgrade, another version or major flag, or
+//   none at all) needs security review and is never accepted silently;
 // - an exception is past its review date, or is stale (a root it names no
 //   longer reports it).
 // The audit's exit status is checked against its report but never trusted
@@ -59,7 +63,9 @@ const AUDIT_TIMEOUT_MS = 300_000;
 
 const POLICY_KEYS = ['auditedRoots', 'exceptions', 'excludedRoots', 'schemaVersion'];
 const EXCLUDED_KEYS = ['path', 'rationale'];
-const EXCEPTION_KEYS = ['id', 'package', 'range', 'reason', 'reviewBy', 'roots', 'severity', 'threatModel', 'version'];
+const EXCEPTION_KEYS = ['id', 'npmFixAvailable', 'package', 'range', 'reason', 'reviewBy', 'roots', 'severity', 'threatModel', 'version'];
+const FIX_RECORD_KEYS = ['root', 'value'];
+const FIX_VALUE_KEYS = ['isSemVerMajor', 'name', 'version'];
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const exactKeys = (value, keys) => isObject(value) && Object.keys(value).sort().join(',') === keys.join(',');
@@ -73,6 +79,42 @@ function calendarDate(value) {
   const [y, m, d] = value.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
+// npm's remediation signal for a vulnerability (`fixAvailable`): true, false,
+// or the upgrade npm proposes, {name, version, isSemVerMajor}.
+function remediationValue(value) {
+  return (
+    typeof value === 'boolean' ||
+    (exactKeys(value, FIX_VALUE_KEYS) &&
+      typeof value.name === 'string' &&
+      PACKAGE_NAME.test(value.name) &&
+      typeof value.version === 'string' &&
+      EXACT_VERSION.test(value.version) &&
+      typeof value.isSemVerMajor === 'boolean')
+  );
+}
+
+// Exactly the reviewed signal: the same boolean, or an object with exactly
+// the reviewed name, version and major flag and no other key.
+function sameRemediation(actual, reviewed) {
+  if (typeof reviewed === 'boolean') return actual === reviewed;
+  return (
+    exactKeys(actual, FIX_VALUE_KEYS) &&
+    actual.name === reviewed.name &&
+    actual.version === reviewed.version &&
+    actual.isSemVerMajor === reviewed.isSemVerMajor
+  );
+}
+
+function remediation(value) {
+  if (value === undefined) return 'absent';
+  if (typeof value === 'boolean') return String(value);
+  if (exactKeys(value, FIX_VALUE_KEYS) && typeof value.name === 'string' && typeof value.version === 'string' && typeof value.isSemVerMajor === 'boolean') {
+    return `${value.name.slice(0, 80)}@${value.version.slice(0, 40)} (${value.isSemVerMajor ? 'major' : 'not major'})`;
+  }
+  if (isObject(value)) return `an object with keys ${Object.keys(value).sort().join(',').slice(0, 60)}`;
+  return value === null ? 'null' : `a ${Array.isArray(value) ? 'list' : typeof value}`;
 }
 
 // Anything derived from npm output is redacted before it is printed.
@@ -141,6 +183,16 @@ export function validatePolicy(policy) {
       }
       if (!Array.isArray(entry.roots) || entry.roots.length === 0 || new Set(entry.roots).size !== entry.roots.length || !entry.roots.every((r) => auditedSet.has(r))) {
         errors.push(`${where}.roots must be distinct audited roots`);
+      }
+      const records = entry.npmFixAvailable;
+      if (!Array.isArray(records) || records.length === 0 || !records.every((r) => exactKeys(r, FIX_RECORD_KEYS) && typeof r.root === 'string' && remediationValue(r.value))) {
+        errors.push(`${where}.npmFixAvailable must be a list of exact {root, value} records, each value true, false or {name, version, isSemVerMajor}`);
+      } else {
+        const named = records.map((r) => r.root);
+        if (new Set(named).size !== named.length) errors.push(`${where}.npmFixAvailable names a root twice`);
+        if (Array.isArray(entry.roots) && (named.length !== entry.roots.length || !entry.roots.every((r) => named.includes(r)) || !named.every((r) => entry.roots.includes(r)))) {
+          errors.push(`${where}.npmFixAvailable must hold exactly one reviewed remediation signal for each of the exception's roots`);
+        }
       }
       if (!longText(entry.reason)) errors.push(`${where}.reason is required`);
       if (!longText(entry.threatModel)) errors.push(`${where}.threatModel is required`);
@@ -275,12 +327,21 @@ function checkAudit(root, result, lock, policy, today, used, fail, note) {
       if (via.severity !== exception.severity) problems.push(`severity is now ${via.severity}, excepted ${exception.severity}`);
       if (via.range !== exception.range) problems.push(`affected range is now ${via.range}, excepted ${exception.range}`);
       if (today > exception.reviewBy) problems.push(`the exception expired after ${exception.reviewBy}`);
-      if (problems.length > 0) {
-        show(`${root}: exception ${exception.id} does not match ${label}: ${problems.join('; ')}`);
-        continue;
+      // npm's remediation advice for the excepted vulnerability must be
+      // exactly the one reviewed for this root; any change needs review.
+      const reviewed = exception.npmFixAvailable.find((record) => record.root === root);
+      const drifted = reviewed === undefined ? problems.length === 0 : !sameRemediation(vuln.fixAvailable, reviewed.value);
+      if (problems.length > 0) show(`${root}: exception ${exception.id} does not match ${label}: ${problems.join('; ')}`);
+      if (drifted) {
+        show(
+          `${root}: npm's remediation signal for excepted ${exception.id} (${name}) changed and requires security review: ` +
+            `fixAvailable is now ${remediation(vuln.fixAvailable)}, reviewed ${reviewed ? remediation(reviewed.value) : 'nothing'}`,
+        );
       }
+      if (problems.length > 0 || drifted) continue;
       used.add(`${exception.id} ${exception.package} ${root}`);
       note(`${root}: excepted ${label}; review by ${exception.reviewBy}`);
+      note(`${root}: npm remediation signal for ${exception.id} matches the reviewed value: fixAvailable ${JSON.stringify(reviewed.value)}`);
     }
     if (worst !== rank(vuln.severity)) show(`${root}: ${name} is reported as ${vuln.severity}, inconsistent with its advisories`);
   }
