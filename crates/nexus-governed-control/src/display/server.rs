@@ -4,13 +4,18 @@
 //! no network and no abstract socket, admits only clients that present the
 //! private MIT-MAGIC-COOKIE written for it, and dies with Nexus. Nexus talks
 //! to it over the filesystem socket with that cookie, explicitly: nothing
-//! here reads `DISPLAY` or `XAUTHORITY`.
+//! here reads `DISPLAY` or `XAUTHORITY`. It connects only to a socket that
+//! this user owns in a socket directory no other user can replace entries
+//! of, and only while its own server runs, so another local user cannot
+//! stand in for the agent display. The server is stopped with `SIGTERM`
+//! first, so it removes its lock file and socket.
 
 use super::{Rect, WindowInfo};
 use crate::authority::AuthorityError;
 use crate::executable::{inspect, Trust};
 use crate::launcher::{SessionProcess, SessionSpec};
 use crate::runtime_root::{RuntimeRoot, Scratch};
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -22,6 +27,10 @@ use x11rb::rust_connection::{DefaultStream, RustConnection};
 
 /// Where X servers put their sockets.
 const SOCKET_DIR: &str = "/tmp/.X11-unix/X";
+/// How long the server may take to remove its lock and socket when stopped.
+const STOP_GRACE: Duration = Duration::from_secs(1);
+/// The X input focus value meaning "the window under the pointer".
+const POINTER_ROOT: u32 = 1;
 const XVFB: &str = "/usr/bin/Xvfb";
 const COOKIE: &[u8] = b"MIT-MAGIC-COOKIE-1";
 
@@ -44,6 +53,17 @@ struct Keymap {
     min: u8,
     per: usize,
     syms: Vec<u32>,
+}
+
+/// The server held by Nexus (no other client is served) until this drops.
+pub(crate) struct Hold<'a>(&'a AgentServer);
+
+impl Drop for Hold<'_> {
+    fn drop(&mut self) {
+        let conn = self.0.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = conn.ungrab_server();
+        let _ = AgentServer::sync(&conn);
+    }
 }
 
 fn unavailable(what: &'static str) -> AuthorityError {
@@ -75,7 +95,29 @@ fn socket(number: u32) -> PathBuf {
     PathBuf::from(format!("{SOCKET_DIR}{number}"))
 }
 
-fn connect(number: u32, cookie: &[u8; 16]) -> Option<RustConnection> {
+fn socket_is_ours(number: u32, uid: u32) -> bool {
+    socket_trusted(Path::new("/tmp/.X11-unix"), &socket(number), uid)
+}
+
+/// Whether `entry` in `dir` can only be this user's (`uid`): `dir` is a real
+/// directory owned by root or this user, and either sticky or writable by no
+/// one else (so no other user can remove or replace an entry they do not
+/// own), and `entry` is a socket (not a link) owned by this user.
+pub(super) fn socket_trusted(dir: &Path, entry: &Path, uid: u32) -> bool {
+    let trusted_dir = std::fs::symlink_metadata(dir).is_ok_and(|dir| {
+        dir.is_dir()
+            && (dir.uid() == 0 || dir.uid() == uid)
+            && (dir.mode() & 0o1000 != 0 || dir.mode() & 0o022 == 0)
+    });
+    trusted_dir
+        && std::fs::symlink_metadata(entry)
+            .is_ok_and(|entry| entry.file_type().is_socket() && entry.uid() == uid)
+}
+
+fn connect(number: u32, cookie: &[u8; 16], uid: u32) -> Option<RustConnection> {
+    if !socket_is_ours(number, uid) {
+        return None;
+    }
     let stream = UnixStream::connect(socket(number)).ok()?;
     let (stream, _) = DefaultStream::from_unix_stream(stream).ok()?;
     RustConnection::connect_to_stream_with_auth_info(stream, 0, COOKIE.to_vec(), cookie.to_vec())
@@ -98,6 +140,10 @@ impl AgentServer {
             }
             let cookie = random_bytes::<16>()?;
             let scratch = root.scratch("display")?;
+            // This user's id: the owner of the directory just created.
+            let uid = std::fs::metadata(scratch.path())
+                .map_err(|_| unavailable("no display directory"))?
+                .uid();
             let auth = scratch.write_new("authority", &authority_entry(number, &cookie))?;
             let process = SessionProcess::launch(SessionSpec {
                 program: program.path.clone(),
@@ -116,12 +162,15 @@ impl AgentServer {
                 ],
                 env: vec![],
                 current_dir: scratch.path().to_path_buf(),
+                stop_grace: Some(STOP_GRACE),
                 inherit: vec![],
             })?;
             let mut process = process;
             let deadline = Instant::now() + Duration::from_secs(10);
             let conn = loop {
-                if let Some(conn) = connect(number, &cookie) {
+                // Only while our own server runs: a server that failed to
+                // start leaves the number to whoever holds it.
+                if let Some(conn) = connect(number, &cookie, uid).filter(|_| process.running()) {
                     break Some(conn);
                 }
                 if !process.running() || Instant::now() >= deadline {
@@ -179,7 +228,10 @@ impl AgentServer {
     /// A connection for a test client of this display (tests only).
     #[cfg(test)]
     pub(crate) fn client(&self) -> RustConnection {
-        connect(self.number, &self.cookie).expect("a test client connects")
+        let uid = std::fs::metadata(self._scratch.path())
+            .expect("the display directory")
+            .uid();
+        connect(self.number, &self.cookie, uid).expect("a test client connects")
     }
 
     /// Whether the server still answers.
@@ -299,6 +351,50 @@ impl AgentServer {
             .into_iter()
             .rev()
             .find(|w| w.rect.contains(x, y))
+    }
+
+    /// Hold the server: until the guard drops, the X server serves no
+    /// other client, so what Nexus checks stays true for the event it sends
+    /// next.
+    pub(crate) fn hold(&self) -> Result<Hold<'_>, AuthorityError> {
+        let conn = self.conn.lock().expect("display");
+        conn.grab_server()
+            .map_err(|_| unavailable("the agent display does not answer"))?;
+        Self::sync(&conn)?;
+        Ok(Hold(self))
+    }
+
+    /// Whether keyboard events now reach `window` (0: the display
+    /// background): the focus follows the pointer (which the caller has
+    /// checked is over `window`), or it is `window` or a window inside it.
+    pub(crate) fn keys_reach(&self, window: u32) -> bool {
+        let conn = self.conn.lock().expect("display");
+        let Some(focus) = conn
+            .get_input_focus()
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .map(|r| r.focus)
+        else {
+            return false;
+        };
+        if focus == POINTER_ROOT {
+            return true;
+        }
+        let target = if window == 0 { self.root } else { window };
+        let mut current = focus;
+        for _ in 0..64 {
+            if current == target {
+                return true;
+            }
+            if current == x11rb::NONE || current == self.root {
+                return false;
+            }
+            match conn.query_tree(current).ok().and_then(|c| c.reply().ok()) {
+                Some(tree) => current = tree.parent,
+                None => return false,
+            }
+        }
+        false
     }
 
     fn sync(conn: &RustConnection) -> Result<(), AuthorityError> {

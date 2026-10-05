@@ -7,7 +7,9 @@
 //! launcher adds only those, under the same discipline: an identity-pinned
 //! canonical program, a cleared environment with explicit variables, a
 //! private working directory, its own process group, no standard input and
-//! no output, and an end that kills the whole group and reaps the leader.
+//! no output, and an end that kills the whole group and reaps the leader
+//! (after a short `SIGTERM` grace only for a process that must clean up
+//! after itself and has no external effect, like the X server).
 //!
 //! Launches happen on one thread that lives as long as the process,
 //! because the parent-death signal follows the thread that forked.
@@ -27,6 +29,11 @@ pub(crate) struct SessionSpec {
     /// The whole environment; nothing is inherited.
     pub env: Vec<(String, OsString)>,
     pub current_dir: PathBuf,
+    /// How long the leader may take to exit after `SIGTERM` before the
+    /// group is killed; `None` kills at once. An X server removes its lock
+    /// and socket on `SIGTERM`; a browser gets no grace, since nothing it
+    /// does may run after a stop.
+    pub stop_grace: Option<std::time::Duration>,
     /// Descriptors the child receives: (descriptor in Nexus, number in the
     /// child). Every other descriptor is closed by `exec`.
     #[cfg(target_os = "linux")]
@@ -38,6 +45,8 @@ pub(crate) struct SessionSpec {
 pub(crate) struct SessionProcess {
     #[cfg(target_os = "linux")]
     child: std::process::Child,
+    #[cfg(target_os = "linux")]
+    stop_grace: Option<std::time::Duration>,
     ended: bool,
 }
 
@@ -94,6 +103,17 @@ mod linux {
             .iter()
             .map(|(fd, target)| (fd.as_raw_fd(), *target))
             .collect();
+        // The inherited descriptors are exactly 3, 4, ...; every descriptor
+        // above them closes at exec, whether or not it was opened
+        // close-on-exec.
+        if pairs
+            .iter()
+            .enumerate()
+            .any(|(index, &(_, target))| target != 3 + index as i32)
+        {
+            return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput));
+        }
+        let first_free = 3 + pairs.len() as libc::c_long;
         let parent = std::process::id() as libc::pid_t;
         let mut command = Command::new(&spec.program);
         command
@@ -125,6 +145,15 @@ mod linux {
                         return Err(std::io::Error::last_os_error());
                     }
                 }
+                if libc::syscall(
+                    libc::SYS_close_range,
+                    first_free,
+                    libc::c_long::from(libc::c_uint::MAX),
+                    libc::c_long::from(libc::CLOSE_RANGE_CLOEXEC),
+                ) != 0
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
                 Ok(())
             });
         }
@@ -135,6 +164,7 @@ mod linux {
 
     impl SessionProcess {
         pub(crate) fn launch(spec: SessionSpec) -> Result<Self, AuthorityError> {
+            let stop_grace = spec.stop_grace;
             let (reply, answer) = mpsc::channel();
             launcher()
                 .lock()
@@ -147,23 +177,41 @@ mod linux {
                 .map_err(|_| AuthorityError::Unavailable("the session process could not start"))?;
             Ok(Self {
                 child,
+                stop_grace,
                 ended: false,
             })
         }
 
-        /// Whether the process is still running.
+        /// Whether the process is still running, observed without reaping
+        /// it, so the group id stays reserved until `end`.
         pub(crate) fn running(&mut self) -> bool {
-            !self.ended && matches!(self.child.try_wait(), Ok(None))
+            !self.ended && !exited(self.child.id() as libc::pid_t)
         }
 
-        /// Kill the whole process group and reap the leader.
+        /// End the whole process group and reap the leader. With a grace,
+        /// the group is first asked to stop and the leader given that long
+        /// to exit; then whatever remains is killed. The group is signalled
+        /// only while the leader is unreaped, so its id cannot have been
+        /// reused.
         pub(crate) fn end(&mut self) {
             if self.ended {
                 return;
             }
             self.ended = true;
             let group = self.child.id() as libc::pid_t;
-            // SAFETY: killpg on the group this launcher created.
+            if let Some(grace) = self.stop_grace {
+                // SAFETY: killpg on the group this launcher created; its
+                // leader is not reaped.
+                unsafe {
+                    libc::killpg(group, libc::SIGTERM);
+                }
+                let until = Instant::now() + grace;
+                while Instant::now() < until && !exited(group) {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }
+            // SAFETY: killpg on the group this launcher created; `exited`
+            // observes the leader without reaping it.
             unsafe {
                 libc::killpg(group, libc::SIGKILL);
             }
@@ -176,7 +224,28 @@ mod linux {
             }
         }
     }
+
+    /// Whether the child `pid` has exited, observed without reaping it (it
+    /// stays waitable, so its id is not reused).
+    fn exited(pid: libc::pid_t) -> bool {
+        // SAFETY: an all-zero siginfo_t is valid; waitid with WNOWAIT only
+        // reports the child's state, and with WNOHANG leaves si_pid zero
+        // when it has not exited.
+        unsafe {
+            let mut info: libc::siginfo_t = std::mem::zeroed();
+            libc::waitid(
+                libc::P_PID,
+                pid as libc::id_t,
+                &mut info,
+                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+            ) == 0
+                && info.si_pid() != 0
+        }
+    }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests;
 
 #[cfg(not(target_os = "linux"))]
 impl SessionProcess {
@@ -203,5 +272,20 @@ impl Drop for SessionProcess {
 
 /// Unused fields on other platforms.
 #[cfg(not(target_os = "linux"))]
-const _: fn(&SessionSpec) -> (&PathBuf, &Vec<OsString>, &Vec<(String, OsString)>, &PathBuf) =
-    |spec| (&spec.program, &spec.args, &spec.env, &spec.current_dir);
+type Fields<'a> = (
+    &'a PathBuf,
+    &'a Vec<OsString>,
+    &'a Vec<(String, OsString)>,
+    &'a PathBuf,
+    &'a Option<std::time::Duration>,
+);
+#[cfg(not(target_os = "linux"))]
+const _: fn(&SessionSpec) -> Fields<'_> = |spec| {
+    (
+        &spec.program,
+        &spec.args,
+        &spec.env,
+        &spec.current_dir,
+        &spec.stop_grace,
+    )
+};

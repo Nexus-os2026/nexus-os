@@ -2303,10 +2303,16 @@ const APPROVED_STATE_ROOTS: &[(&str, &str, usize, &str)] = &[
         "the nexus CLI, outside the desktop",
     ),
     (
-        "crates/nexus-governed-control/src/display/server.rs",
+        "crates/nexus-governed-control/src/browser/mod.rs",
         "\"/tmp",
         1,
-        "the X11 socket directory of the agent display (a fixed protocol path, not a state root); Nexus writes nothing there",
+        "one governed browser session's private temporary directory (Chrome's singleton socket path must stay short): created exclusively, 0700, random name, removed when the session ends; not a state root",
+    ),
+    (
+        "crates/nexus-governed-control/src/display/server.rs",
+        "\"/tmp",
+        2,
+        "the X11 socket directory of the agent display and its ownership check (a fixed protocol path, not a state root); Nexus writes nothing there",
     ),
     (
         "crates/nexus-ui-repair/src/driver/loop_.rs",

@@ -332,3 +332,24 @@ fn the_browser_is_identity_pinned() {
         ))
     );
 }
+
+/// The browser inherits nothing of Nexus's environment: a home and a
+/// temporary directory of the session's own and a fixed locale. Chrome keeps
+/// its process-singleton socket in the temporary directory, which ends with
+/// the session instead of staying in the system's.
+#[test]
+fn the_browser_environment_is_the_sessions_own() {
+    let env = super::live::environment("/session/home".into(), "/session/tmp".into());
+    let env: Vec<(&str, &str)> = env
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.to_str().unwrap()))
+        .collect();
+    assert_eq!(
+        env,
+        [
+            ("HOME", "/session/home"),
+            ("LANG", "C.UTF-8"),
+            ("TMPDIR", "/session/tmp"),
+        ]
+    );
+}

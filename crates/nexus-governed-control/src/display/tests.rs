@@ -151,11 +151,66 @@ fn the_agent_display_is_private_and_is_not_the_owners() {
         RustConnection::connect_to_stream(stream, 0).is_err(),
         "an unauthenticated client is refused"
     );
-    // No TCP listener.
+    // No TCP listener, and no abstract socket.
     assert!(std::net::TcpStream::connect(("127.0.0.1", 6000 + status.number as u16)).is_err());
-    // Stopping ends it.
+    {
+        use std::os::linux::net::SocketAddrExt;
+        let name = format!("/tmp/.X11-unix/X{}", status.number);
+        let address = std::os::unix::net::SocketAddr::from_abstract_name(name.as_bytes()).unwrap();
+        assert!(
+            std::os::unix::net::UnixStream::connect_addr(&address).is_err(),
+            "an abstract socket answers"
+        );
+    }
+    // Stopping ends it, and the server removes its lock file and socket.
     display.stop();
     assert!(display.status().is_none());
+    let lock = format!("/tmp/.X{}-lock", status.number);
+    let socket = format!("/tmp/.X11-unix/X{}", status.number);
+    assert!(
+        !std::path::Path::new(&lock).exists(),
+        "{lock} is left behind"
+    );
+    assert!(
+        !std::path::Path::new(&socket).exists(),
+        "{socket} is left behind"
+    );
+}
+
+/// Nexus connects to the agent display only through a socket this user owns
+/// (not a link) in a directory no other user can replace entries of.
+#[test]
+fn only_this_users_socket_in_a_safe_directory_is_trusted() {
+    use super::server::socket_trusted;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let root = temp_root("socket");
+    let dir = root.0.path().join("x11");
+    std::fs::create_dir(&dir).unwrap();
+    let uid = std::fs::metadata(&dir).unwrap().uid();
+    let socket = dir.join("X7");
+    let _listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    let file = dir.join("X8");
+    std::fs::write(&file, b"").unwrap();
+    let link = dir.join("X9");
+    std::os::unix::fs::symlink(&socket, &link).unwrap();
+    let linked_dir = root.0.path().join("x11-link");
+    std::os::unix::fs::symlink(&dir, &linked_dir).unwrap();
+    let mode =
+        |mode| std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(mode)).unwrap();
+    mode(0o700);
+    assert!(socket_trusted(&dir, &socket, uid));
+    assert!(!socket_trusted(&dir, &socket, uid + 1), "another user's");
+    assert!(!socket_trusted(&dir, &file, uid), "not a socket");
+    assert!(!socket_trusted(&dir, &link, uid), "a link to a socket");
+    assert!(
+        !socket_trusted(&linked_dir, &linked_dir.join("X7"), uid),
+        "a linked directory"
+    );
+    mode(0o1777);
+    assert!(socket_trusted(&dir, &socket, uid), "a sticky directory");
+    mode(0o777);
+    assert!(!socket_trusted(&dir, &socket, uid), "anyone may replace it");
+    mode(0o700);
 }
 
 #[test]
@@ -504,4 +559,128 @@ fn a_restarted_display_fails_everything_bound_to_the_old_one() {
         h.control.execute(view.id, &h.agent, h.run).unwrap_err(),
         AuthorityError::TargetChanged
     );
+}
+
+/// Keys go to the keyboard focus, not to the pointer: typing for the window
+/// under the pointer fails while another window holds the focus, and
+/// nothing is typed anywhere; with the focus on the bound window it types.
+#[test]
+fn typing_fails_while_another_window_holds_the_focus() {
+    use x11rb::protocol::xproto::InputFocus;
+    let Some((display, _root)) = display() else {
+        return;
+    };
+    let h = harness();
+    grant_perception(&h);
+    grant_input(&h, 10, true);
+    let client = display.test_client();
+    let rect = |x| Rect {
+        x,
+        y: 10,
+        width: 200,
+        height: 200,
+    };
+    let editor = window(&client, "Editor", rect(10));
+    let thief = window(&client, "Thief", rect(300));
+    observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
+    act(&h, &display, InputIntent::Move { x: 50, y: 50 }, true).unwrap();
+    let typing = |text: &str| {
+        let preparation = display
+            .prepare_input(
+                h.control.authority(),
+                h.run,
+                &InputIntent::Type { text: text.into() },
+            )
+            .unwrap();
+        let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+        h.control
+            .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+            .unwrap();
+        view.id
+    };
+    let focus = |window| {
+        client
+            .set_input_focus(InputFocus::PARENT, window, x11rb::CURRENT_TIME)
+            .unwrap();
+        client.sync().unwrap();
+    };
+    let stolen = typing("1234");
+    focus(thief);
+    assert!(h.control.execute(stolen, &h.agent, h.run).is_err());
+    assert!(
+        events(&client)
+            .into_iter()
+            .all(|e| !matches!(e, Event::KeyPress(_))),
+        "nothing was typed"
+    );
+    assert_eq!(
+        h.control
+            .authority()
+            .commitments()
+            .view(stolen)
+            .unwrap()
+            .state,
+        CommitmentState::Failed
+    );
+    let bound = typing("ok");
+    focus(editor);
+    h.control.execute(bound, &h.agent, h.run).unwrap();
+    assert_eq!(
+        events(&client)
+            .into_iter()
+            .filter(|e| matches!(e, Event::KeyPress(k) if k.event == editor))
+            .count(),
+        2
+    );
+}
+
+/// The step budget is spent when an action happens: actions prepared and
+/// approved together cannot exceed it.
+#[test]
+fn prepared_actions_cannot_exceed_the_step_budget() {
+    let Some((display, _root)) = display() else {
+        return;
+    };
+    let h = harness();
+    grant_perception(&h);
+    grant_input(&h, 2, true);
+    observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
+    let moves: Vec<_> = (1..=3)
+        .map(|i| {
+            let preparation = display
+                .prepare_input(
+                    h.control.authority(),
+                    h.run,
+                    &InputIntent::Move { x: i, y: i },
+                )
+                .unwrap();
+            let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+            h.control
+                .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+                .unwrap();
+            view.id
+        })
+        .collect();
+    h.control.execute(moves[0], &h.agent, h.run).unwrap();
+    h.control.execute(moves[1], &h.agent, h.run).unwrap();
+    assert!(h.control.execute(moves[2], &h.agent, h.run).is_err());
+    assert_eq!(
+        h.control
+            .authority()
+            .commitments()
+            .view(moves[2])
+            .unwrap()
+            .state,
+        CommitmentState::Failed
+    );
+    assert!(matches!(
+        display.prepare_input(
+            h.control.authority(),
+            h.run,
+            &InputIntent::Move { x: 4, y: 4 }
+        ),
+        Err(AuthorityError::Closed(
+            "the input grant's steps are used up"
+        ))
+    ));
 }

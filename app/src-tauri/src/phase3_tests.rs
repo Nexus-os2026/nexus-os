@@ -4014,11 +4014,11 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
         ("broker.rs", "vault", 3),
         ("browser/proxy.rs", "network", 9),
         ("display/server.rs", "network", 1),
-        ("display/server.rs", "x11", 18),
+        ("display/server.rs", "x11", 19),
         ("egress/mod.rs", "network", 8), // header types
         ("egress/transport.rs", "network", 19),
-        ("launcher.rs", "ends", 1),
-        ("launcher.rs", "libc", 13),
+        ("launcher.rs", "ends", 2), // SIGTERM with a grace, then SIGKILL
+        ("launcher.rs", "libc", 31),
         ("launcher.rs", "process", 1),
         ("tool/mod.rs", "sealed", 6),
     ]
@@ -4410,7 +4410,7 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     (
         "crates/nexus-governed-control/src/display/server.rs",
         "x11",
-        18,
+        19,
     ),
     (
         "crates/nexus-governed-control/src/egress/mod.rs",
@@ -4422,7 +4422,7 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
         "network",
         19,
     ),
-    ("crates/nexus-governed-control/src/launcher.rs", "ends", 1),
+    ("crates/nexus-governed-control/src/launcher.rs", "ends", 2),
     (
         "crates/nexus-governed-control/src/launcher.rs",
         "process",

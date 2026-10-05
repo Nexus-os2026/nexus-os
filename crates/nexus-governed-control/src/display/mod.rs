@@ -708,6 +708,7 @@ impl AgentDisplay {
                 observation,
                 run,
                 grant,
+                max_steps,
                 steps,
                 target,
                 parameters,
@@ -965,6 +966,8 @@ struct Input {
     observation: String,
     run: RunId,
     grant: GrantId,
+    /// The grant's step budget, spent at the effect.
+    max_steps: u32,
     steps: Vec<Step>,
     target: Digest,
     parameters: Digest,
@@ -1020,6 +1023,19 @@ impl PendingEffect for Input {
         self: Box<Self>,
         guard: &ExecutionGuard,
     ) -> Result<EffectOutput, (FailureClass, String)> {
+        // The grant's step budget is spent here, at the effect, under its
+        // lock: actions prepared together cannot exceed it.
+        {
+            let mut steps = self.shared.steps.lock().expect("steps");
+            let used = steps.entry(self.grant).or_insert(0);
+            if *used >= self.max_steps {
+                return Err((
+                    FailureClass::Bounds,
+                    "the input grant's steps are used up".into(),
+                ));
+            }
+            *used += 1;
+        }
         // Paced: never faster than one action per PACE.
         {
             let mut last = self.shared.last_input.lock().expect("pace");
@@ -1047,14 +1063,32 @@ impl PendingEffect for Input {
             let server = self.shared.server(self.generation).map_err(|_| changed())?;
             match *step {
                 Step::Pointer(x, y) => server.pointer(x, y).map_err(failed)?,
+                // A press is checked and sent while the server is held, so
+                // nothing can appear over the point or take the keyboard
+                // focus between the check and the event.
                 Step::Button(code, press) => {
+                    let _held = if press {
+                        Some(server.hold().map_err(failed)?)
+                    } else {
+                        None
+                    };
                     if press && self.current_target(&server) != self.target {
                         return Err(changed());
                     }
                     server.button(code, press).map_err(failed)?
                 }
+                // Keys go to the keyboard focus: it must still deliver to
+                // the bound window.
                 Step::Key(code, press) => {
-                    if press && self.current_target(&server) != self.target {
+                    let _held = if press {
+                        Some(server.hold().map_err(failed)?)
+                    } else {
+                        None
+                    };
+                    if press
+                        && (self.current_target(&server) != self.target
+                            || !server.keys_reach(self.window_id))
+                    {
                         return Err(changed());
                     }
                     server.key(code, press).map_err(failed)?
@@ -1063,13 +1097,6 @@ impl PendingEffect for Input {
             }
             sent += 1;
         }
-        *self
-            .shared
-            .steps
-            .lock()
-            .expect("steps")
-            .entry(self.grant)
-            .or_insert(0) += 1;
         Ok(EffectOutput {
             text: None,
             bytes: None,

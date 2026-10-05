@@ -601,6 +601,43 @@ mod live {
         }
     }
 
+    /// A private directory for one session's temporary files, under the
+    /// system's temporary directory so that socket paths in it stay short:
+    /// created exclusively (mode 0700, random name), removed when dropped.
+    struct SessionTemp(std::path::PathBuf);
+
+    impl SessionTemp {
+        fn create() -> std::io::Result<Self> {
+            use std::os::unix::fs::DirBuilderExt;
+            let mut bytes = [0u8; 8];
+            getrandom::getrandom(&mut bytes).map_err(|_| std::io::Error::other("no randomness"))?;
+            let path =
+                std::path::PathBuf::from(format!("/tmp/nexus-browser-{}", hex::encode(bytes)));
+            std::fs::DirBuilder::new().mode(0o700).create(&path)?;
+            Ok(Self(path))
+        }
+    }
+
+    impl Drop for SessionTemp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// The browser's whole environment: a home and a temporary directory
+    /// of the session's own (Chrome keeps its process-singleton socket in
+    /// the temporary one), and a fixed locale.
+    pub(super) fn environment(
+        home: std::path::PathBuf,
+        temp: std::path::PathBuf,
+    ) -> Vec<(String, std::ffi::OsString)> {
+        vec![
+            ("HOME".into(), home.into_os_string()),
+            ("LANG".into(), "C.UTF-8".into()),
+            ("TMPDIR".into(), temp.into_os_string()),
+        ]
+    }
+
     pub(super) fn run(session: &Session, guard: &ExecutionGuard) -> Result<EffectOutput, Failure> {
         let unavailable = |what: &str| (FailureClass::Unavailable, what.to_string());
         let started = Instant::now();
@@ -614,6 +651,10 @@ mod live {
         let home = scratch
             .subdir("home")
             .map_err(|_| unavailable("no home directory"))?;
+        // Chrome's own temporary files (its process-singleton socket, whose
+        // path must stay short) go in a private directory of this session,
+        // removed when it ends (declared before the process, dropped after).
+        let temp = SessionTemp::create().map_err(|_| unavailable("no temporary directory"))?;
         let downloads = if session.downloads {
             Some(
                 scratch
@@ -663,11 +704,9 @@ mod live {
         let _process = SessionProcess::launch(SessionSpec {
             program: session.executable.clone(),
             args: args.into_iter().map(Into::into).collect(),
-            env: vec![
-                ("HOME".into(), home.into_os_string()),
-                ("LANG".into(), "C.UTF-8".into()),
-            ],
+            env: environment(home, temp.0.clone()),
             current_dir: scratch.path().to_path_buf(),
+            stop_grace: None,
             inherit: vec![(command_reader.into(), 3), (reply_writer.into(), 4)],
         })
         .map_err(|_| unavailable("the browser could not start"))?;
