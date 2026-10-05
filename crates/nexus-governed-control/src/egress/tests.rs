@@ -250,7 +250,12 @@ fn same_origin_redirects_are_followed_and_checked_others_are_returned() {
     .unwrap();
     assert_eq!(out.text.as_deref(), Some("arrived"));
     assert_eq!(meta(&out, "redirects"), Some("1"));
-    assert_eq!(meta(&out, "path"), Some("/next"));
+    // Paths reach the (permanent) record only as digests.
+    let digest = |path: &str| {
+        crate::authority::ids::Digest::of("nexus.p3.egress.path.v1", &[path.as_bytes()]).short()
+    };
+    assert_eq!(meta(&out, "path_digest"), Some(digest("/next").as_str()));
+    assert!(meta(&out, "path").is_none());
     let out = run(
         &h,
         &egress(),
@@ -261,8 +266,14 @@ fn same_origin_redirects_are_followed_and_checked_others_are_returned() {
     assert_eq!(meta(&out, "status"), Some("302"));
     assert_eq!(
         meta(&out, "redirect_not_followed"),
-        Some("https://elsewhere.example:443/landing"),
-        "the query is not kept in evidence"
+        Some(
+            format!(
+                "https://elsewhere.example:443 (path digest {})",
+                digest("/landing?code=secret")
+            )
+            .as_str()
+        ),
+        "neither the path nor its query is kept in evidence"
     );
     assert_eq!(server.received().len(), 3);
 }
@@ -483,4 +494,26 @@ fn the_owner_sees_the_whole_request() {
     assert_eq!(unwrapped(summary, 0), format!("POST {url}"));
     assert_eq!(unquoted(summary, "Body"), body);
     assert!(summary.contains(&"│ Target: https://safe.example".to_string()));
+}
+
+/// Every address of an answer is classified before any is set aside: a
+/// refused address past the sixteenth still refuses the answer.
+#[test]
+fn a_refused_address_anywhere_in_an_answer_refuses_it() {
+    use super::destination::{resolve_checked, Destination, DestinationError};
+    struct Many;
+    impl Resolver for Many {
+        fn resolve(&self, _: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
+            let mut answer: Vec<SocketAddr> = (1..=16)
+                .map(|i| SocketAddr::from(([93, 184, 216, i], port)))
+                .collect();
+            answer.push(SocketAddr::from(([192, 168, 1, 1], port)));
+            Ok(answer)
+        }
+    }
+    let destination = Destination::parse("https://many.example/").unwrap();
+    assert_eq!(
+        resolve_checked(&destination, false, &Many).unwrap_err(),
+        DestinationError::NotPermitted
+    );
 }

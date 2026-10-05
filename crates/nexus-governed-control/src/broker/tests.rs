@@ -365,3 +365,28 @@ fn a_commitment_cannot_release_a_lease_it_does_not_list() {
     assert!(broker.is_live(other), "the unlisted lease was not consumed");
     assert_eq!(vault.0.load(Ordering::SeqCst), 0, "the vault was not read");
 }
+
+/// Governed credentials come from the vault: one the facade would resolve
+/// from the process environment is refused.
+#[test]
+fn a_credential_from_the_environment_is_refused() {
+    use nexus_kernel::secrets::{ResolvedFrom, ResolvedSecret};
+    let resolved = |source| ResolvedSecret {
+        value: Zeroizing::new("tok-vault-1234".to_string()),
+        source,
+    };
+    assert!(matches!(
+        super::from_vault(resolved(ResolvedFrom::Env)),
+        Err(SecretUnavailable::Ambient)
+    ));
+    for source in [
+        ResolvedFrom::Keyring,
+        ResolvedFrom::Sqlite,
+        ResolvedFrom::Memory,
+    ] {
+        assert_eq!(
+            super::from_vault(resolved(source)).unwrap().as_str(),
+            "tok-vault-1234"
+        );
+    }
+}

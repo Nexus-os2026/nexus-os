@@ -82,6 +82,53 @@ impl Method {
 pub struct SecretHeader {
     pub name: HeaderName,
     pub value: Zeroizing<String>,
+    /// The token itself (in `value`, after any scheme word), so that it is
+    /// redacted wherever it comes back alone.
+    pub token: Zeroizing<String>,
+}
+
+/// Every form in which a released credential could come back: the header
+/// value, the bare token, and the token JSON-escaped and percent-encoded
+/// (upper- and lower-case hex). Forms shorter than four bytes are skipped.
+fn needles(secret: &SecretHeader) -> Vec<Zeroizing<String>> {
+    let token = secret.token.as_str();
+    let json: String = token
+        .chars()
+        .flat_map(|c| match c {
+            '"' => vec!['\\', '"'],
+            '\\' => vec!['\\', '\\'],
+            '/' => vec!['\\', '/'],
+            c => vec![c],
+        })
+        .collect();
+    let percent = |upper: bool| -> String {
+        token
+            .bytes()
+            .map(|b| {
+                if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+                    (b as char).to_string()
+                } else if upper {
+                    format!("%{b:02X}")
+                } else {
+                    format!("%{b:02x}")
+                }
+            })
+            .collect()
+    };
+    let mut forms: Vec<String> = vec![
+        secret.value.to_string(),
+        token.to_string(),
+        json,
+        percent(true),
+        percent(false),
+    ];
+    forms.sort();
+    forms.dedup();
+    forms
+        .into_iter()
+        .filter(|form| form.len() >= 4)
+        .map(Zeroizing::new)
+        .collect()
 }
 
 impl std::fmt::Debug for SecretHeader {
@@ -227,7 +274,7 @@ async fn exchange(
     for (name, value) in headers {
         header_map.append(name, value);
     }
-    let redact_with = secret.as_ref().map(|s| s.value.clone());
+    let redact_with = secret.as_ref().map(needles);
     if let Some(secret) = secret {
         let mut value =
             HeaderValue::from_str(&secret.value).map_err(|_| TransportError::Protocol)?;
@@ -302,8 +349,16 @@ fn header_text(value: Option<&HeaderValue>, max: usize) -> Option<String> {
     (text.len() <= max).then(|| text.to_string())
 }
 
-/// Remove every occurrence of a released credential from what came back.
-fn redact(response: &mut HttpResponse, secret: &str) {
+/// Remove every occurrence of a released credential, in any of its forms,
+/// from everything that came back: the body, the location and the content
+/// type.
+fn redact(response: &mut HttpResponse, forms: &[Zeroizing<String>]) {
+    for form in forms {
+        redact_one(response, form);
+    }
+}
+
+fn redact_one(response: &mut HttpResponse, secret: &str) {
     const MARK: &[u8] = b"[redacted]";
     if secret.len() < 4 {
         return;
@@ -328,9 +383,9 @@ fn redact(response: &mut HttpResponse, secret: &str) {
         response.body = out;
         response.redacted = true;
     }
-    if let Some(location) = &response.location {
-        if location.contains(secret) {
-            response.location = Some(location.replace(secret, "[redacted]"));
+    for field in [&mut response.location, &mut response.content_type] {
+        if let Some(text) = field.as_deref().filter(|text| text.contains(secret)) {
+            *field = Some(text.replace(secret, "[redacted]"));
             response.redacted = true;
         }
     }
@@ -354,27 +409,41 @@ mod tests {
         }
     }
 
+    /// A released credential is redacted from everything that comes back,
+    /// in every form: the header value, the bare token, and the token
+    /// JSON-escaped or percent-encoded.
     #[test]
     fn released_credentials_are_redacted_from_responses() {
+        let header = SecretHeader {
+            name: HeaderName::from_static("authorization"),
+            value: Zeroizing::new("Bearer tok/SECRET+123".into()),
+            token: Zeroizing::new("tok/SECRET+123".into()),
+        };
+        assert!(!format!("{header:?}").contains("SECRET"));
         let mut response = HttpResponse {
             status: 302,
             peer: None,
-            content_type: None,
-            location: Some("https://x.example/?t=tok-SECRET-123".into()),
-            body: b"echo tok-SECRET-123 and tok-SECRET-123!".to_vec(),
+            content_type: Some("text/plain; token=tok/SECRET+123".into()),
+            location: Some("https://x.example/?t=tok%2FSECRET%2B123&u=tok%2fSECRET%2b123".into()),
+            body: b"{\"auth\": \"Bearer tok/SECRET+123\", \"token\": \"tok\\/SECRET+123\", \"raw\": \"tok/SECRET+123\"}"
+                .to_vec(),
             redacted: false,
         };
-        redact(&mut response, "tok-SECRET-123");
+        redact(&mut response, &needles(&header));
         assert!(response.redacted);
-        assert_eq!(response.body, b"echo [redacted] and [redacted]!");
+        let body = String::from_utf8(response.body.clone()).unwrap();
+        assert!(!body.contains("SECRET"), "{body}");
+        assert_eq!(
+            body,
+            "{\"auth\": \"[redacted]\", \"token\": \"[redacted]\", \"raw\": \"[redacted]\"}"
+        );
         assert_eq!(
             response.location.as_deref(),
-            Some("https://x.example/?t=[redacted]")
+            Some("https://x.example/?t=[redacted]&u=[redacted]")
         );
-        let header = SecretHeader {
-            name: HeaderName::from_static("authorization"),
-            value: Zeroizing::new("Bearer tok-SECRET-123".into()),
-        };
-        assert!(!format!("{header:?}").contains("SECRET"));
+        assert_eq!(
+            response.content_type.as_deref(),
+            Some("text/plain; token=[redacted]")
+        );
     }
 }

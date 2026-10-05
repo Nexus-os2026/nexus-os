@@ -14,7 +14,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const MAX_MESSAGE: usize = 16 * 1024 * 1024;
+/// Events kept: only `Target.*` events (the session closes pages it did not
+/// open), at most this many and this many bytes, the oldest dropped first.
 const MAX_EVENTS: usize = 1024;
+const MAX_EVENT_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum CdpError {
@@ -30,7 +33,7 @@ pub(crate) struct Cdp {
     writer: Mutex<std::io::PipeWriter>,
     next: AtomicU64,
     pending: Pending,
-    events: Arc<Mutex<VecDeque<Value>>>,
+    events: Arc<Mutex<VecDeque<(usize, Value)>>>,
 }
 
 impl Cdp {
@@ -43,6 +46,8 @@ impl Cdp {
                 .name("nexus-p3-cdp".into())
                 .spawn(move || {
                     let mut buffer: Vec<u8> = Vec::new();
+                    // Bytes already searched for a terminator.
+                    let mut scanned = 0;
                     let mut chunk = vec![0u8; 64 * 1024];
                     loop {
                         let n = match reader.read(&mut chunk) {
@@ -50,7 +55,9 @@ impl Cdp {
                             Ok(n) => n,
                         };
                         buffer.extend_from_slice(&chunk[..n]);
-                        while let Some(end) = buffer.iter().position(|b| *b == 0) {
+                        while let Some(found) = buffer[scanned..].iter().position(|b| *b == 0) {
+                            let end = scanned + found;
+                            scanned = 0;
                             let message: Vec<u8> = buffer.drain(..=end).collect();
                             let Ok(value) = serde_json::from_slice::<Value>(&message[..end]) else {
                                 continue;
@@ -64,14 +71,26 @@ impl Cdp {
                                     }
                                 }
                                 None => {
-                                    let mut queue = events.lock().expect("events");
-                                    if queue.len() >= MAX_EVENTS {
-                                        queue.pop_front();
+                                    let target = value
+                                        .get("method")
+                                        .and_then(Value::as_str)
+                                        .is_some_and(|method| method.starts_with("Target."));
+                                    if !target {
+                                        continue;
                                     }
-                                    queue.push_back(value);
+                                    let mut queue = events.lock().expect("events");
+                                    queue.push_back((end, value));
+                                    let mut bytes: usize = queue.iter().map(|(size, _)| size).sum();
+                                    while queue.len() > MAX_EVENTS || bytes > MAX_EVENT_BYTES {
+                                        match queue.pop_front() {
+                                            Some((size, _)) => bytes -= size,
+                                            None => break,
+                                        }
+                                    }
                                 }
                             }
                         }
+                        scanned = buffer.len();
                         if buffer.len() > MAX_MESSAGE {
                             break;
                         }
@@ -146,8 +165,16 @@ impl Cdp {
         }
     }
 
-    /// Take the events received so far.
+    /// Take the events received so far (only `Target.*` events are kept).
     pub(crate) fn drain_events(&self) -> Vec<Value> {
-        self.events.lock().expect("events").drain(..).collect()
+        self.events
+            .lock()
+            .expect("events")
+            .drain(..)
+            .map(|(_, event)| event)
+            .collect()
     }
 }
+
+#[cfg(test)]
+mod tests;

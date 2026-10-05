@@ -168,6 +168,11 @@ struct Entry {
     deadline_ms: u64,
     created_wall_ms: u64,
     expires_wall_ms: u64,
+    /// The parameters digest salted with a nonce kept only in memory: what
+    /// the binding and the evidence carry, so that no record lets
+    /// low-entropy content (typed text, a short message) be recovered by
+    /// guessing.
+    salted: Digest,
     binding: Digest,
     state: CommitmentState,
     approval: Option<Digest>,
@@ -227,6 +232,7 @@ fn binding_of(
     agent: &AgentId,
     run: RunId,
     prepared: &PreparedAction,
+    salted: &Digest,
     generation: u64,
     deadline_ms: u64,
 ) -> Digest {
@@ -246,7 +252,7 @@ fn binding_of(
             prepared.class.as_str().as_bytes(),
             prepared.operation.as_bytes(),
             prepared.target.digest.as_bytes(),
-            prepared.parameters.as_bytes(),
+            salted.as_bytes(),
             &grants,
             &leases,
             &generation.to_be_bytes(),
@@ -297,7 +303,7 @@ impl CommitmentRegistry {
         record.operation = Some(entry.prepared.operation);
         record.target = Some(bounded(&entry.prepared.target.display));
         record.target_digest = Some(entry.prepared.target.digest.to_hex());
-        record.parameters_digest = Some(entry.prepared.parameters.to_hex());
+        record.parameters_digest = Some(entry.salted.to_hex());
         record.approval = entry.approval.map(|a| a.short());
         record
     }
@@ -334,10 +340,18 @@ impl CommitmentRegistry {
         let deadline_ms = now.saturating_add(ttl_ms);
         let generation = self.0.generation.current();
         let created_wall_ms = self.0.clock.wall_ms();
+        let mut nonce = [0u8; 16];
+        getrandom::getrandom(&mut nonce)
+            .map_err(|_| AuthorityError::Unavailable("no randomness for a commitment"))?;
+        let salted = Digest::of(
+            "nexus.p3.commitment.parameters.v1",
+            &[&nonce, prepared.parameters.as_bytes()],
+        );
         let entry = Entry {
             agent: agent.clone(),
             run,
-            binding: binding_of(id, agent, run, &prepared, generation, deadline_ms),
+            binding: binding_of(id, agent, run, &prepared, &salted, generation, deadline_ms),
+            salted,
             prepared,
             generation,
             deadline_ms,

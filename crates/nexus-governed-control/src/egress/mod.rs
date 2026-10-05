@@ -446,6 +446,10 @@ impl PendingEffect for EgressEffect {
             "the destination was not revalidated".to_string(),
         ))?;
         let mut destination = self.destination.clone();
+        // A cancelled run releases nothing.
+        if guard.is_cancelled() {
+            return Err((FailureClass::Actuator, "cancelled".into()));
+        }
         let mut secret = match &self.credential {
             Some(plan) => Some(
                 plan.release
@@ -499,6 +503,15 @@ impl PendingEffect for EgressEffect {
     }
 }
 
+fn path_digest(destination: &Destination) -> String {
+    let url = destination.url();
+    let path = match url.query() {
+        Some(query) => format!("{}?{query}", url.path()),
+        None => url.path().to_string(),
+    };
+    Digest::of("nexus.p3.egress.path.v1", &[path.as_bytes()]).short()
+}
+
 fn output(destination: &Destination, response: HttpResponse, redirects: u8) -> EffectOutput {
     let textual = response.content_type.as_deref().is_none_or(|kind| {
         let kind = kind.to_ascii_lowercase();
@@ -510,7 +523,9 @@ fn output(destination: &Destination, response: HttpResponse, redirects: u8) -> E
     let mut meta = vec![
         ("status".to_string(), response.status.to_string()),
         ("origin".to_string(), destination.origin_text()),
-        ("path".to_string(), escaped(destination.url().path())),
+        // The path and query only as a digest: a URL may carry a token, and
+        // this record is permanent.
+        ("path_digest".to_string(), path_digest(destination)),
         ("bytes".to_string(), response.body.len().to_string()),
         ("redirects".to_string(), redirects.to_string()),
     ];
@@ -526,7 +541,11 @@ fn output(destination: &Destination, response: HttpResponse, redirects: u8) -> E
         {
             meta.push((
                 "redirect_not_followed".to_string(),
-                escaped(&format!("{}{}", next.origin_text(), next.url().path())),
+                format!(
+                    "{} (path digest {})",
+                    next.origin_text(),
+                    path_digest(&next)
+                ),
             ));
         }
     }

@@ -43,6 +43,21 @@ const PAGE: &str = r#"<!doctype html><html><head><title>Fixture</title></head><b
 <input id="name"><input id="secret" type="password">
 </body></html>"#;
 
+/// A page that redefines what its scripts would see: every input claims to
+/// be text, and `querySelector` always answers the password field.
+const HOSTILE: &str = r#"<!doctype html><html><body>
+<input id="name"><input id="secret" type="password"><div id="log"></div>
+<script>
+Object.defineProperty(HTMLInputElement.prototype, 'type', { get() { return 'text'; } });
+const real = Document.prototype.querySelector;
+document.querySelector = function () { return real.call(this, '#secret'); };
+for (const id of ['name', 'secret']) {
+  document.getElementById(id).addEventListener('input', (e) => {
+    document.getElementById('log').innerText += ' ' + id + '=' + e.target.value;
+  });
+}
+</script></body></html>"#;
+
 fn server() -> TestServer {
     TestServer::start(|request| {
         // The page names other origins on the server's own port.
@@ -57,6 +72,7 @@ fn server() -> TestServer {
         };
         match request.path.as_str() {
             "/" => html(PAGE),
+            "/hostile" => html(HOSTILE),
             "/escape" => html("<script>location='http://evil.nexus.invalid:PORT/steal'</script>"),
             "/slow" => Reply {
                 delay: Duration::from_secs(20),
@@ -433,4 +449,53 @@ fn every_step_is_shown_in_full_and_selector_lists_are_refused() {
             "{single}"
         );
     }
+}
+
+/// The fixed scripts run in an isolated world: a page that redefines what
+/// an input's type is, or what `querySelector` answers, neither gets its
+/// password field filled nor turns a fill toward another field.
+#[test]
+fn a_page_cannot_redefine_what_the_fixed_scripts_see() {
+    let Some((browser, _root)) = browser() else {
+        return;
+    };
+    let server = server();
+    let h = harness();
+    grant(&h, &browser, &[origin(&server)]);
+    let out = run(
+        &h,
+        &browser,
+        BrowserIntent {
+            start_url: format!("{}/hostile", origin(&server)),
+            steps: vec![
+                BrowserStep::Fill {
+                    selector: "#name".into(),
+                    text: "hello".into(),
+                },
+                BrowserStep::ExtractText {
+                    selector: "#log".into(),
+                },
+                BrowserStep::Fill {
+                    selector: "#secret".into(),
+                    text: "pw".into(),
+                },
+            ],
+        },
+        true,
+    )
+    .unwrap();
+    let report = report(&out);
+    let steps = report["steps"].as_array().unwrap();
+    assert_eq!(steps[1]["result"], "ok");
+    assert_eq!(steps[2]["text"].as_str().unwrap().trim(), "name=hello");
+    assert_eq!(steps[3]["result"], "refused");
+}
+
+/// A long report is cut on a character boundary, whatever the page text.
+#[test]
+fn a_report_is_cut_on_a_character_boundary() {
+    let text = "語".repeat(100_000);
+    let out = super::bounded_report(text);
+    assert!(out.len() <= 256 * 1024);
+    assert!(out.chars().all(|c| c == '語'));
 }

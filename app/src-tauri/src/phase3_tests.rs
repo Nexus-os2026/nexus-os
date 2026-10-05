@@ -4017,7 +4017,7 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
     }
     let allowed: BTreeMap<(String, &str), usize> = [
         ("broker.rs", "network", 2), // header types for the released credential
-        ("broker.rs", "vault", 3),
+        ("broker.rs", "vault", 5),   // the facade read and the refusal of environment secrets
         ("browser/proxy.rs", "network", 9),
         ("display/server.rs", "network", 1),
         ("display/server.rs", "x11", 19),

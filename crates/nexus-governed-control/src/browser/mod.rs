@@ -45,6 +45,21 @@ const MAX_STEPS: usize = 32;
 const MAX_SELECTOR: usize = 512;
 const MAX_TEXT: usize = 4096;
 const MAX_EXTRACT: usize = 64 * 1024;
+/// The longest report a session returns.
+const MAX_REPORT: usize = 256 * 1024;
+
+/// A report cut to `MAX_REPORT` bytes on a character boundary (page text
+/// is any UTF-8).
+fn bounded_report(mut text: String) -> String {
+    if text.len() > MAX_REPORT {
+        let mut end = MAX_REPORT;
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        text.truncate(end);
+    }
+    text
+}
 const MAX_ORIGINS: usize = 16;
 const SESSION_LIMIT: Duration = Duration::from_secs(120);
 const STEP_TIMEOUT: Duration = Duration::from_secs(20);
@@ -493,13 +508,30 @@ mod live {
                 .map_err(failure)
         }
 
-        /// Run a fixed script with JSON arguments; its value.
+        /// Run a fixed script with JSON arguments; its value. It runs in a
+        /// fresh isolated world of the page's main frame: it shares the DOM,
+        /// but nothing the page's own scripts redefine (prototypes,
+        /// `document.querySelector`) changes what it sees or does.
         fn script(&self, function: &str, args: &[Value]) -> Result<Value, Failure> {
+            let missing = |what: &str| (FailureClass::Actuator, what.to_string());
+            let tree = self.call("Page.getFrameTree", json!({}))?;
+            let frame = tree["frameTree"]["frame"]["id"]
+                .as_str()
+                .ok_or_else(|| missing("no page frame"))?
+                .to_string();
+            let world = self.call(
+                "Page.createIsolatedWorld",
+                json!({ "frameId": frame, "worldName": "nexus-governed" }),
+            )?;
+            let context = world["executionContextId"]
+                .as_i64()
+                .ok_or_else(|| missing("no isolated world"))?;
             let args: Vec<String> = args.iter().map(Value::to_string).collect();
             let result = self.call(
                 "Runtime.evaluate",
                 json!({
                     "expression": format!("({function})({})", args.join(",")),
+                    "contextId": context,
                     "returnByValue": true,
                 }),
             )?;
@@ -726,6 +758,7 @@ mod live {
             "--no-pings".into(),
             "--mute-audio".into(),
             "--disable-gpu".into(),
+            "--disable-quic".into(),
             "--block-new-web-contents".into(),
             "--force-webrtc-ip-handling-policy=disable_non_proxied_udp".into(),
             "--dns-prefetch-disable".into(),
@@ -779,7 +812,6 @@ mod live {
             popups_closed: 0,
         };
         page.call("Page.enable", json!({}))?;
-        page.call("Runtime.enable", json!({}))?;
         let mut results = Vec::new();
         let mut completed = true;
         let start = page.navigate(&session.start)?;
@@ -822,10 +854,7 @@ mod live {
             "popups_closed": page.popups_closed,
             "downloads": downloaded,
         });
-        let mut text = report.to_string();
-        if text.len() > 256 * 1024 {
-            text.truncate(256 * 1024);
-        }
+        let text = super::bounded_report(report.to_string());
         Ok(EffectOutput {
             text: Some(text),
             bytes: None,

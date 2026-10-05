@@ -979,3 +979,28 @@ fn nothing_the_owner_approves_is_cut_or_disguised() {
         .message()
         .contains("Any agent may use it until it expires or you revoke it"));
 }
+
+/// The evidence carries a commitment's parameters only salted with a nonce
+/// kept in memory: two commitments with the same parameters cannot be
+/// linked, and the parameters cannot be guessed from the record.
+#[test]
+fn evidence_carries_parameters_only_salted() {
+    let f = fixture();
+    let plain = prepared(EffectClass::R1, f.grant).parameters.to_hex();
+    for _ in 0..2 {
+        f.auth
+            .commitments()
+            .prepare(&f.agent, f.run, prepared(EffectClass::R1, f.grant), TTL)
+            .unwrap();
+    }
+    let digests: Vec<String> = f
+        .evidence
+        .records()
+        .iter()
+        .filter(|r| r.phase == EvidencePhase::Prepared)
+        .map(|r| r.parameters_digest.clone().unwrap())
+        .collect();
+    assert_eq!(digests.len(), 2);
+    assert_ne!(digests[0], digests[1]);
+    assert!(!digests.contains(&plain));
+}

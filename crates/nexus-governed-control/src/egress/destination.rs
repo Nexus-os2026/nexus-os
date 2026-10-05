@@ -342,13 +342,15 @@ pub fn resolve_checked(
     if addresses.is_empty() {
         return Err(DestinationError::Unresolvable);
     }
-    addresses.truncate(MAX_ADDRESSES);
+    // Every address is classified before any is set aside: a refused one
+    // anywhere in the answer refuses it.
     if addresses
         .iter()
         .any(|address| !classify(address.ip()).permitted(allow_private))
     {
         return Err(DestinationError::NotPermitted);
     }
+    addresses.truncate(MAX_ADDRESSES);
     Ok(addresses)
 }
 

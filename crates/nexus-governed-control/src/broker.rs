@@ -12,7 +12,10 @@
 //! No secret ever reaches a model prompt, a model-visible argument, a
 //! frontend payload, the evidence, a URL, a shell string or a process
 //! environment: it exists in memory between the vault read and the request
-//! header, zeroized on drop.
+//! header. Nexus's own copies are zeroized on drop; the copies the HTTP and
+//! TLS stack makes while sending (the header value, its buffers) are not
+//! under its control. A secret the vault would resolve from the process
+//! environment is refused: governed credentials come from the vault.
 
 use crate::authority::clock::Clock;
 use crate::authority::commitment::{CommitmentRegistry, ExecutionGuard, LeaseEnd};
@@ -36,6 +39,8 @@ pub enum SecretUnavailable {
     /// No vault is configured.
     NotConfigured,
     NotFound,
+    /// The vault would resolve it from the process environment.
+    Ambient,
     Failed,
 }
 
@@ -67,10 +72,21 @@ impl SecretSource for KernelVault {
             scope,
             name,
         ) {
-            Ok(resolved) => Ok(resolved.value),
+            Ok(resolved) => from_vault(resolved),
             Err(nexus_kernel::secrets::SecretError::NotFound) => Err(SecretUnavailable::NotFound),
             Err(_) => Err(SecretUnavailable::Failed),
         }
+    }
+}
+
+/// A resolved secret, only if it came from the owner's vault: one the
+/// facade found in the process environment is ambient and refused.
+pub(crate) fn from_vault(
+    resolved: nexus_kernel::secrets::ResolvedSecret,
+) -> Result<Zeroizing<String>, SecretUnavailable> {
+    match resolved.source {
+        nexus_kernel::secrets::ResolvedFrom::Env => Err(SecretUnavailable::Ambient),
+        _ => Ok(resolved.value),
     }
 }
 
@@ -299,7 +315,11 @@ impl ReleaseCredential for CredentialBroker {
                 Zeroizing::new(secret.to_string()),
             ),
         };
-        Ok(SecretHeader { name, value })
+        Ok(SecretHeader {
+            name,
+            value,
+            token: Zeroizing::new(secret.to_string()),
+        })
     }
 }
 
