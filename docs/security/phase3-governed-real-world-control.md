@@ -273,8 +273,11 @@ stated):
 
 ## 4. Non-claims
 
-- **Linux only.** Windows and macOS compile and fail closed; no security
-  claim is made for them.
+- **Linux only.** Windows and macOS compile and fail closed: on Windows
+  the runtime root cannot be made private, so no control is built; on
+  macOS no program can be pinned; and off Linux the owner's grant and
+  approval dialogs refuse. The desktop's end-to-end Phase Three tests run
+  on Linux only. No security claim is made for either platform.
 - **No owner-desktop observation or input.** Perception and input act only
   on the agent display; capturing or driving the owner's own session stays
   closed.
@@ -304,7 +307,10 @@ stated):
   its group (`setsid`) is not contained by Phase Three. Chrome keeps its own
   sandbox.
 - **Root is trusted.** Executable identity relies on root-owned, non-writable
-  locations; an attacker with root is out of scope.
+  locations; an attacker with root is out of scope. A host where anyone
+  else could replace a pinned program cannot use it: the GitHub-hosted
+  runner image makes `/opt` world-writable, so CI restores Chrome's
+  packaged modes, and checks them, before the live browser tests.
 - **The loopback proxy is unauthenticated.** It admits only the session's
   granted public origins, which any local process could reach directly.
 - **Telegram is not migrated** and stays closed.
