@@ -1285,20 +1285,44 @@ fn declares_include(yaml: &str) -> bool {
 }
 
 /// The `uses:` references CI configurations may make: the actions the
-/// existing workflows use, by exact reference. Any other action (or a
-/// reference in any other spelling) fails the workflow guard until reviewed.
+/// existing workflows use, each by its exact immutable reference, a full
+/// commit SHA (see [`immutable_action_reference`]). Any other action, commit
+/// or spelling (a tag or a branch included) fails the workflow guard until
+/// reviewed, and so does an entry no workflow uses.
 const ALLOWED_ACTIONS: &[&str] = &[
-    "actions/checkout@v4",
-    "actions/download-artifact@v4",
-    "actions/setup-node@v4",
-    "actions/setup-python@v5",
-    "actions/upload-artifact@v4",
-    "dtolnay/rust-toolchain@1.94.0",
-    "dtolnay/rust-toolchain@stable",
-    "peaceiris/actions-gh-pages@v4",
-    "softprops/action-gh-release@v2",
-    "Swatinem/rust-cache@v2",
+    "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+    "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+    "dtolnay/rust-toolchain@4be4450ce7d4f1b9d3d643f42e0fe4124db1d31d",
+    "softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65",
+    "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6",
 ];
+
+/// Whether an action reference names an immutable commit: `owner/action`
+/// (more path segments allowed, none empty), exactly one `@`, and a ref of
+/// exactly 40 lowercase hexadecimal characters, a full commit SHA. A tag, a
+/// branch, a short SHA or any other spelling is not immutable.
+fn immutable_action_reference(reference: &str) -> bool {
+    let Some((action, commit)) = reference.split_once('@') else {
+        return false;
+    };
+    let mut segments = action.split('/');
+    let owner = segments.next().unwrap_or_default();
+    let name = segments.next().unwrap_or_default();
+    reference.matches('@').count() == 1
+        && !owner.is_empty()
+        && !name.is_empty()
+        && segments.all(|segment| !segment.is_empty())
+        && action
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'/'))
+        && commit.len() == 40
+        && commit
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
 
 /// The build outputs under a `release` or `debug` profile directory that CI
 /// configurations may name: the desktop bundle and its bundled toolchain.
@@ -1637,6 +1661,12 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
         ["actions/checkout@v4"]
     );
     assert_eq!(
+        action_references(
+            "        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0"
+        ),
+        ["actions/checkout@11d5960a326750d5838078e36cf38b85af677262"]
+    );
+    assert_eq!(
         action_references("  \"uses\": 'evil/x@v1' # c"),
         ["evil/x@v1"]
     );
@@ -1646,6 +1676,44 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
     );
     assert_eq!(action_references("uses:"), [""]);
     assert!(action_references("run: echo causes: x").is_empty());
+    for reference in [
+        "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+        "owner/action/sub-path@0123456789abcdef0123456789abcdef01234567",
+    ] {
+        assert!(
+            immutable_action_reference(reference),
+            "not recognized as immutable: {reference}"
+        );
+    }
+    for reference in [
+        "actions/checkout@v4",
+        "dtolnay/rust-toolchain@stable",
+        "dtolnay/rust-toolchain@1.94.0",
+        "actions/checkout@main",
+        "actions/checkout@11d5960",
+        "actions/checkout@11D5960A326750D5838078E36CF38B85AF677262",
+        "actions/checkout@11d5960a326750d5838078e36cf38b85af6772620",
+        "actions/checkout@11d5960a326750d5838078e36cf38b85af67726",
+        "actions/checkout@11d5960a326750d5838078e36cf38b85af67726g",
+        "actions/checkout@ 11d5960a326750d5838078e36cf38b85af677262",
+        "actions/checkout@@11d5960a326750d5838078e36cf38b85af677262",
+        "actions/checkout@11d5960a326750d5838078e36cf38b85af677262@v4",
+        "actions/checkout",
+        "actions/checkout@",
+        "@11d5960a326750d5838078e36cf38b85af677262",
+        "checkout@11d5960a326750d5838078e36cf38b85af677262",
+        "/checkout@11d5960a326750d5838078e36cf38b85af677262",
+        "actions/@11d5960a326750d5838078e36cf38b85af677262",
+        "actions//checkout@11d5960a326750d5838078e36cf38b85af677262",
+        "./.github/actions/local",
+        "docker://alpine@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "",
+    ] {
+        assert!(
+            !immutable_action_reference(reference),
+            "wrongly recognized as immutable: {reference}"
+        );
+    }
 }
 
 /// No workflow builds, installs, uploads or publishes a withdrawn binary, a
@@ -1654,7 +1722,9 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
 /// A withdrawn package is selected only by a non-shipping cargo subcommand,
 /// no path names build output under a profile directory other than the
 /// desktop bundle (nor the profile or target directory itself, nor a glob
-/// there), and every action referenced is in [`ALLOWED_ACTIONS`].
+/// there), and every action referenced is in [`ALLOWED_ACTIONS`], whose
+/// entries are each an immutable commit some workflow uses. The release
+/// fails when one of its installer patterns matches no file.
 /// Every CI configuration in the repository, dot directories included, is
 /// one this guard reads: the GitHub workflows and `.gitlab-ci.yml`, which
 /// includes no other file. A pipeline file of any other kind or place fails
@@ -1667,6 +1737,19 @@ fn p0_fg_standalone_shipping_recognizers_catch_probes() {
 /// [`is_ci_config`]) is not seen.
 #[test]
 fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
+    // The approvals themselves are immutable: each names one full commit, so
+    // no workflow can follow a moving tag or branch through this list.
+    for action in ALLOWED_ACTIONS {
+        assert!(
+            immutable_action_reference(action),
+            "ALLOWED_ACTIONS entry {action} is not owner/action@<40 lowercase hex commit>"
+        );
+    }
+    assert_eq!(
+        ALLOWED_ACTIONS.iter().collect::<BTreeSet<_>>().len(),
+        ALLOWED_ACTIONS.len(),
+        "ALLOWED_ACTIONS repeats an entry"
+    );
     let root = workspace_root();
     let configs: Vec<String> = repository_files()
         .into_iter()
@@ -1712,6 +1795,7 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
         })
         .collect();
     assert_eq!(withdrawn_packages.len(), 8, "{withdrawn_packages:?}");
+    let mut used_actions = BTreeSet::new();
     for config in &configs {
         let workflow = root.join(config);
         let text = read(&workflow);
@@ -1766,6 +1850,7 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
                     ALLOWED_ACTIONS.contains(&action),
                     "{name}: action `{action}` is not allowlisted in {line}"
                 );
+                used_actions.insert(action.to_string());
             }
         }
         let shipped = shipped_withdrawn_packages(
@@ -1779,8 +1864,21 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
             "{name}: a withdrawn package is built for shipping by {shipped:?}"
         );
     }
+    // Every approval is in use: an action no CI configuration references
+    // (one a removed workflow used, say) is approved no longer.
+    let unused: Vec<&str> = ALLOWED_ACTIONS
+        .iter()
+        .copied()
+        .filter(|action| !used_actions.contains(*action))
+        .collect();
+    assert!(
+        unused.is_empty(),
+        "ALLOWED_ACTIONS approves actions no CI configuration uses: {unused:?}"
+    );
 
-    // The release publishes the desktop installers and nothing else.
+    // The release publishes the desktop installers and nothing else: one
+    // Windows installer (the NSIS `.exe`, or the `.msi` fallback, so the one
+    // pattern names both), the Debian package and the macOS disk image.
     let release = read(&root.join(".github").join("workflows").join("release.yml"));
     let lines: Vec<&str> = release.lines().collect();
     let files = lines
@@ -1795,11 +1893,22 @@ fn p0_fg_standalone_no_workflow_ships_a_standalone_binary() {
     assert_eq!(
         published,
         [
-            "NexusOS-Windows/*.msi",
-            "NexusOS-Windows/*.exe",
+            "NexusOS-Windows/*.{msi,exe}",
             "NexusOS-Linux/*.deb",
             "NexusOS-macOS/*.dmg",
         ],
         "the release publishes only the desktop installers"
+    );
+    // A pattern that matches no file fails the publication before any release
+    // is created or changed, so a missing installer is never skipped quietly.
+    let unmatched: Vec<&str> = lines
+        .iter()
+        .map(|line| line.trim())
+        .filter(|line| line.starts_with("fail_on_unmatched_files"))
+        .collect();
+    assert_eq!(
+        unmatched,
+        ["fail_on_unmatched_files: true"],
+        "the release must fail when an installer pattern matches nothing"
     );
 }
