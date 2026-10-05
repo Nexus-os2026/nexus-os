@@ -1,0 +1,416 @@
+//! Governed tools, launched for real through the kernel's sealed spawn,
+//! with harmless system binaries as fixtures.
+
+use super::catalog;
+use super::{ToolDefinition, ToolIntent, ToolInvocation, ToolOutput, Tools};
+use crate::authority::commitment::CommitmentState;
+use crate::authority::effect::EffectClass;
+use crate::authority::AuthorityError;
+use crate::control::EffectOutput;
+use crate::executable::Trust;
+use crate::harness_tests::{harness, Harness, Yes};
+use crate::runtime_root::RuntimeRoot;
+use serde_json::{json, Value};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::{Duration, Instant};
+
+static NEXT_ROOT: AtomicU32 = AtomicU32::new(0);
+
+/// A fresh private runtime root for one test.
+fn root() -> RuntimeRoot {
+    let path = std::env::temp_dir().join(format!(
+        "nexus-p3-tools-{}-{}",
+        std::process::id(),
+        NEXT_ROOT.fetch_add(1, Ordering::SeqCst)
+    ));
+    RuntimeRoot::open(&path).unwrap()
+}
+
+fn no_args(input: &Value) -> Result<ToolInvocation, AuthorityError> {
+    crate::connector::only_fields(input, &[])?;
+    Ok(ToolInvocation {
+        args: vec![],
+        files: vec![],
+        summary: vec![],
+    })
+}
+
+fn sleep_long(input: &Value) -> Result<ToolInvocation, AuthorityError> {
+    crate::connector::only_fields(input, &[])?;
+    Ok(ToolInvocation {
+        args: vec!["30".into()],
+        files: vec![],
+        summary: vec![],
+    })
+}
+
+fn fixture(
+    key: &'static str,
+    executable: &'static str,
+    build: fn(&Value) -> Result<ToolInvocation, AuthorityError>,
+    timeout: Duration,
+    max_output: usize,
+) -> ToolDefinition {
+    ToolDefinition {
+        key,
+        executable,
+        class: EffectClass::R0,
+        build,
+        env: &[("LC_ALL", "C")],
+        timeout,
+        max_output,
+        output: ToolOutput::Text,
+        trust: Trust::System,
+    }
+}
+
+fn fixtures() -> Vec<ToolDefinition> {
+    let mut all = catalog::production();
+    all.push(fixture(
+        "fixture.environment",
+        "/usr/bin/env",
+        no_args,
+        Duration::from_secs(10),
+        64 * 1024,
+    ));
+    all.push(fixture(
+        "fixture.sleep.short",
+        "/usr/bin/sleep",
+        sleep_long,
+        Duration::from_millis(300),
+        1024,
+    ));
+    all.push(fixture(
+        "fixture.sleep.long",
+        "/usr/bin/sleep",
+        sleep_long,
+        Duration::from_secs(60),
+        1024,
+    ));
+    all.push(fixture(
+        "fixture.noisy",
+        "/usr/bin/yes",
+        no_args,
+        Duration::from_secs(10),
+        1024,
+    ));
+    all.push(fixture(
+        "fixture.false",
+        "/usr/bin/false",
+        no_args,
+        Duration::from_secs(10),
+        1024,
+    ));
+    all
+}
+
+fn grant(h: &Harness, tools: &Tools, key: &str) {
+    let scope = tools.grant_scope(key).unwrap();
+    h.control
+        .authority()
+        .grants()
+        .request(scope, Duration::from_secs(600), &Yes::new(true))
+        .unwrap();
+}
+
+fn run(
+    h: &Harness,
+    tools: &Tools,
+    key: &str,
+    input: Value,
+) -> Result<EffectOutput, AuthorityError> {
+    let preparation = tools.prepare(
+        h.control.authority(),
+        &ToolIntent {
+            tool: key.into(),
+            input,
+        },
+    )?;
+    let view = h.control.propose(&h.agent, h.run, preparation)?;
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))?;
+    h.control.execute(view.id, &h.agent, h.run)
+}
+
+fn last_failure(h: &Harness) -> Option<&'static str> {
+    h.evidence
+        .records()
+        .into_iter()
+        .rev()
+        .find(|r| r.outcome.is_some())
+        .and_then(|r| r.failure)
+}
+
+fn entries(root: &RuntimeRoot) -> usize {
+    std::fs::read_dir(root.path()).unwrap().count()
+}
+
+#[test]
+fn a_tool_runs_end_to_end_in_a_sealed_process_and_leaves_nothing_behind() {
+    let h = harness();
+    let root = root();
+    let tools = Tools::new(fixtures(), root.clone());
+    grant(&h, &tools, "text.sha256");
+    let out = run(&h, &tools, "text.sha256", json!({ "text": "hello" })).unwrap();
+    assert_eq!(
+        out.text.as_deref(),
+        Some("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824  input.txt\n")
+    );
+    assert_eq!(entries(&root), 0, "the working directory was removed");
+    let views = h.control.authority().commitments().views_of_run(h.run);
+    assert_eq!(views[0].class, EffectClass::R0);
+    assert_eq!(views[0].state, CommitmentState::Succeeded);
+}
+
+#[test]
+fn the_environment_is_sealed() {
+    let h = harness();
+    let root = root();
+    let tools = Tools::new(fixtures(), root.clone());
+    grant(&h, &tools, "fixture.environment");
+    let out = run(&h, &tools, "fixture.environment", json!({})).unwrap();
+    let text = out.text.unwrap();
+    let mut names: Vec<&str> = text.lines().filter_map(|l| l.split('=').next()).collect();
+    names.sort();
+    assert_eq!(names, vec!["HOME", "LC_ALL", "TMPDIR"], "{text}");
+    for line in text.lines() {
+        if let Some(dir) = line
+            .strip_prefix("HOME=")
+            .or_else(|| line.strip_prefix("TMPDIR="))
+        {
+            assert!(PathBuf::from(dir).starts_with(root.path()), "{line}");
+        }
+    }
+}
+
+#[test]
+fn nothing_runs_without_a_grant_or_with_untyped_input() {
+    let h = harness();
+    let tools = Tools::new(fixtures(), root());
+    assert_eq!(
+        run(&h, &tools, "text.sha256", json!({ "text": "x" })).unwrap_err(),
+        AuthorityError::NoCoveringGrant
+    );
+    grant(&h, &tools, "text.sha256");
+    assert!(matches!(
+        run(
+            &h,
+            &tools,
+            "text.sha256",
+            json!({ "text": "x", "command": "ls" })
+        )
+        .unwrap_err(),
+        AuthorityError::InvalidAction(_)
+    ));
+    for missing in ["shell", "bash", "docker", "code.execute", "/bin/sh"] {
+        assert_eq!(
+            run(&h, &tools, missing, json!({})).unwrap_err(),
+            AuthorityError::Closed("no such tool"),
+            "{missing}"
+        );
+    }
+}
+
+/// A user-owned copy of `/usr/bin/true`, pinned as a test fixture.
+fn copied_true(dir: &std::path::Path) -> &'static str {
+    std::fs::create_dir_all(dir).unwrap();
+    let path = std::fs::canonicalize(dir).unwrap().join("fixture-true");
+    std::fs::copy("/usr/bin/true", &path).unwrap();
+    Box::leak(path.to_string_lossy().into_owned().into_boxed_str())
+}
+
+#[test]
+fn a_changed_executable_needs_a_new_grant_and_fails_a_pending_run() {
+    let h = harness();
+    let dir = std::env::temp_dir().join(format!("nexus-p3-tool-change-{}", std::process::id()));
+    let executable = copied_true(&dir);
+    let definition = ToolDefinition {
+        trust: Trust::Fixture,
+        ..fixture(
+            "fixture.true",
+            executable,
+            no_args,
+            Duration::from_secs(10),
+            1024,
+        )
+    };
+    let tools = Tools::new(vec![definition], root());
+    grant(&h, &tools, "fixture.true");
+    run(&h, &tools, "fixture.true", json!({})).unwrap();
+    // Prepared and authorized, then the executable changes before launch.
+    let preparation = tools
+        .prepare(
+            h.control.authority(),
+            &ToolIntent {
+                tool: "fixture.true".into(),
+                input: json!({}),
+            },
+        )
+        .unwrap();
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    std::fs::copy("/usr/bin/false", executable).unwrap();
+    assert_eq!(
+        h.control.execute(view.id, &h.agent, h.run).unwrap_err(),
+        AuthorityError::TargetChanged
+    );
+    assert_eq!(
+        h.control
+            .authority()
+            .commitments()
+            .view(view.id)
+            .unwrap()
+            .state,
+        CommitmentState::Failed
+    );
+    // A new preparation is refused until the owner grants the new identity.
+    assert_eq!(
+        run(&h, &tools, "fixture.true", json!({})).unwrap_err(),
+        AuthorityError::Closed("the tool changed since it was granted; grant it again")
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn the_deadline_ends_the_whole_process_group() {
+    let h = harness();
+    let tools = Tools::new(fixtures(), root());
+    grant(&h, &tools, "fixture.sleep.short");
+    let started = Instant::now();
+    assert!(run(&h, &tools, "fixture.sleep.short", json!({})).is_err());
+    assert!(started.elapsed() < Duration::from_secs(5));
+    assert_eq!(last_failure(&h), Some("timeout"));
+}
+
+#[test]
+fn cancelling_the_run_ends_a_running_tool() {
+    let h = harness();
+    let tools = std::sync::Arc::new(Tools::new(fixtures(), root()));
+    grant(&h, &tools, "fixture.sleep.long");
+    let preparation = tools
+        .prepare(
+            h.control.authority(),
+            &ToolIntent {
+                tool: "fixture.sleep.long".into(),
+                input: json!({}),
+            },
+        )
+        .unwrap();
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    let control = h.control.clone();
+    let (agent, run) = (h.agent.clone(), h.run);
+    let started = Instant::now();
+    let worker = std::thread::spawn(move || control.execute(view.id, &agent, run));
+    std::thread::sleep(Duration::from_millis(200));
+    h.control.cancel_run(h.run).unwrap();
+    assert_eq!(
+        worker.join().unwrap().unwrap_err(),
+        AuthorityError::RunCancelled
+    );
+    assert!(started.elapsed() < Duration::from_secs(5));
+    assert_eq!(
+        h.control
+            .authority()
+            .commitments()
+            .view(view.id)
+            .unwrap()
+            .state,
+        CommitmentState::Cancelled
+    );
+}
+
+#[test]
+fn output_is_bounded_and_failures_are_recorded() {
+    let h = harness();
+    let tools = Tools::new(fixtures(), root());
+    grant(&h, &tools, "fixture.noisy");
+    grant(&h, &tools, "fixture.false");
+    assert!(run(&h, &tools, "fixture.noisy", json!({})).is_err());
+    assert_eq!(last_failure(&h), Some("bounds"));
+    assert!(run(&h, &tools, "fixture.false", json!({})).is_err());
+    assert_eq!(last_failure(&h), Some("actuator"));
+}
+
+#[test]
+fn the_production_catalog_has_no_shell_interpreter_or_runner() {
+    const NEVER: [&str; 27] = [
+        "sh",
+        "bash",
+        "dash",
+        "zsh",
+        "fish",
+        "ksh",
+        "csh",
+        "tcsh",
+        "pwsh",
+        "powershell",
+        "cmd",
+        "python",
+        "python3",
+        "perl",
+        "ruby",
+        "node",
+        "env",
+        "busybox",
+        "docker",
+        "podman",
+        "sudo",
+        "su",
+        "xargs",
+        "find",
+        "ssh",
+        "curl",
+        "wget",
+    ];
+    for definition in catalog::production() {
+        let name = std::path::Path::new(definition.executable)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        assert!(!NEVER.contains(&name.as_str()), "{}", definition.executable);
+        assert!(definition.executable.starts_with('/'));
+        assert_eq!(definition.trust, Trust::System);
+        // No builder accepts a free-form command, script or argument list.
+        for field in ["command", "script", "args", "argv", "program", "path"] {
+            assert!(
+                (definition.build)(&json!({ field: "x" })).is_err(),
+                "{} {field}",
+                definition.key
+            );
+        }
+    }
+}
+
+#[test]
+fn speech_is_synthesized_when_the_local_engine_is_installed() {
+    if !std::path::Path::new("/usr/bin/espeak-ng").exists() {
+        eprintln!("espeak-ng is not installed: speech synthesis is not exercised here");
+        return;
+    }
+    let h = harness();
+    let tools = Tools::new(fixtures(), root());
+    grant(&h, &tools, "speech.synthesize");
+    let out = run(
+        &h,
+        &tools,
+        "speech.synthesize",
+        json!({ "text": "governed", "voice": "en" }),
+    )
+    .unwrap();
+    let audio = out.bytes.unwrap();
+    assert!(audio.starts_with(b"RIFF"), "a WAV stream");
+    assert!(run(
+        &h,
+        &tools,
+        "speech.synthesize",
+        json!({ "text": "x", "voice": "../../etc" })
+    )
+    .is_err());
+}

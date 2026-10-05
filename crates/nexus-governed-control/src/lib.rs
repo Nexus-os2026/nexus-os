@@ -99,6 +99,9 @@ pub mod broker;
 pub mod connector;
 pub mod control;
 pub mod egress;
+pub mod executable;
+pub mod runtime_root;
+pub mod tool;
 
 #[cfg(test)]
 mod harness_tests;

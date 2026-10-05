@@ -37,9 +37,13 @@ impl PolicyGeneration {
 /// core only tracks liveness.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GrantScope {
-    /// P3-A: run the catalog tool `tool` whose executable identity, pinned
-    /// when the owner granted it, is `identity`.
-    Tool { tool: String, identity: Digest },
+    /// P3-A: run the catalog tool `tool`, whose executable at `executable`
+    /// had the identity `identity` when the owner granted it.
+    Tool {
+        tool: String,
+        executable: String,
+        identity: Digest,
+    },
     /// P3-B: requests to exactly one destination.
     Egress {
         scheme: String,
@@ -90,9 +94,13 @@ impl GrantScope {
     /// The lines the owner reads before granting it.
     pub fn describe(&self) -> Vec<String> {
         match self {
-            GrantScope::Tool { tool, identity } => vec![
+            GrantScope::Tool {
+                tool,
+                executable,
+                identity,
+            } => vec![
                 format!("Run the tool \"{tool}\""),
-                format!("Executable identity: {}", identity.short()),
+                format!("Executable: {executable} (identity {})", identity.short()),
             ],
             GrantScope::Egress {
                 scheme,
