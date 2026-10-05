@@ -1535,7 +1535,7 @@ impl<E: nexus_kernel::cognitive::loop_runtime::ActionExecutor>
                 }
                 self.inner.execute(agent_id, action, audit, hitl_approved)
             }
-            Disposition::Governed(intent) => bridge.act(agent_id, &intent),
+            Disposition::Governed(intent) => bridge.act(agent_id, &intent, warden_reviews(action)),
             Disposition::Orchestrated { max_steps } => Ok(orchestration_guidance(max_steps)),
             Disposition::Closed(_) => Err(crate::phase0_surface::closed(
                 action.action_type(),
@@ -1546,14 +1546,33 @@ impl<E: nexus_kernel::cognitive::loop_runtime::ActionExecutor>
     }
 }
 
-/// Tests: the production executor with an isolated Phase Three control.
+/// Whether the Warden review covers `action`: every action but the reads
+/// the kernel registry exempts (`should_apply_governance_review`), of which
+/// only `WebFetch` is governed.
+fn warden_reviews(action: &nexus_kernel::cognitive::PlannedAction) -> bool {
+    !matches!(
+        action,
+        nexus_kernel::cognitive::PlannedAction::FileRead { .. }
+            | nexus_kernel::cognitive::PlannedAction::WebSearch { .. }
+            | nexus_kernel::cognitive::PlannedAction::WebFetch { .. }
+            | nexus_kernel::cognitive::PlannedAction::MemoryRecall { .. }
+            | nexus_kernel::cognitive::PlannedAction::KnowledgeGraphQuery { .. }
+            | nexus_kernel::cognitive::PlannedAction::Noop
+    )
+}
+
+/// Tests: the production executor with an isolated Phase Three control and
+/// a fixed Warden setting.
 #[cfg(test)]
 impl<E> Phase0AgentExecutor<E> {
     pub(crate) fn with_real_world(
         mut self,
         world: Arc<crate::governed_real_world::RealWorld>,
     ) -> Self {
-        self.governed = Some(crate::governed_real_world::AgentBridge::new(world));
+        self.governed = Some(crate::governed_real_world::AgentBridge::with_warden(
+            world,
+            || false,
+        ));
         self
     }
 }
@@ -2150,6 +2169,10 @@ pub(crate) fn stop_agent_goal(state: &AppState, agent_id: String) -> Result<(), 
         .cognitive_runtime
         .stop_agent_loop(&agent_id)
         .map_err(|e| e.to_string())?;
+    // Phase Three: what the agent left running or waiting ends with it.
+    if let Ok(world) = state.real_world() {
+        world.cancel_agent(&agent_id);
+    }
     state.wake_and_clear_blocked_consent_wait(&agent_id);
     state.log_event(
         Uuid::parse_str(&agent_id).unwrap_or_default(),

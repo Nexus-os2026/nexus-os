@@ -26,6 +26,7 @@ use nexus_governed_control::ingress::{understand, Attachments, CommandEnvelope, 
 use nexus_kernel::audit::{AuditTrail, EventType};
 use nexus_persistence::NexusDatabase;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 /// The most output text one effect returns to the interface or an agent.
@@ -36,6 +37,9 @@ pub(crate) struct RealWorld {
     control: GovernedControl,
     recent: Arc<MemoryEvidence>,
     attachments: Attachments,
+    /// Each agent's runs (ended ones forgotten as new ones arrive), so that
+    /// the owner's stop of an agent cancels what it left running or waiting.
+    agent_runs: Mutex<HashMap<String, Vec<RunId>>>,
 }
 
 /// Evidence into the shared hash-chained audit trail (and its persisted
@@ -84,6 +88,7 @@ impl RealWorld {
             control,
             recent,
             attachments: Attachments::default(),
+            agent_runs: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -111,6 +116,7 @@ impl RealWorld {
             control,
             recent,
             attachments: Attachments::default(),
+            agent_runs: Mutex::new(HashMap::new()),
         })
     }
 
@@ -133,7 +139,12 @@ impl RealWorld {
             )
             .map_err(|e| e.to_string())?;
         match self.control.propose(&agent, run, &intent) {
-            Ok(view) => Ok(json!({ "understood": true, "commitment": view_json(&view) })),
+            Ok(view) => {
+                // The command's run ends with its commitment: approved and
+                // run, denied, or expired if the owner never answers.
+                self.control.finish_when_settled(run);
+                Ok(json!({ "understood": true, "commitment": view_json(&view) }))
+            }
             Err(error) => {
                 self.control.finish_run(run);
                 Err(error.to_string())
@@ -179,6 +190,36 @@ impl RealWorld {
     fn settle(&self, view: &CommitmentView) {
         if view.agent == AgentId::owner_session() {
             self.control.finish_run(view.run);
+        }
+    }
+
+    /// Remember `run` as one of `agent`'s (ended runs are forgotten here).
+    fn track_agent_run(&self, agent: &str, run: RunId) {
+        let registry = self.control.authority().runs();
+        let mut map = self.agent_runs.lock().unwrap_or_else(|p| p.into_inner());
+        for runs in map.values_mut() {
+            runs.retain(|r| {
+                registry
+                    .view(*r)
+                    .is_some_and(|view| !view.cancelled && !view.finished)
+            });
+        }
+        map.retain(|_, runs| !runs.is_empty());
+        map.entry(agent.to_string()).or_default().push(run);
+    }
+
+    /// The owner stopped `agent`: its Phase Three runs are cancelled, so
+    /// whatever of them still runs sees the cancellation and nothing it left
+    /// waiting can still be approved.
+    pub(crate) fn cancel_agent(&self, agent: &str) {
+        let runs = self
+            .agent_runs
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(agent)
+            .unwrap_or_default();
+        for run in runs {
+            let _ = self.control.cancel_run(run);
         }
     }
 
@@ -320,11 +361,21 @@ fn output_json(output: &EffectOutput) -> Value {
 }
 
 /// The agent executor's way into Phase Three: one run per agent loop,
-/// opened on the first governed action, finished when the loop ends unless
-/// a commitment still waits for the owner (it then ends with its expiry).
+/// opened on the first governed action. When the loop ends its run finishes
+/// as soon as nothing of it waits (what waits ends approved, denied or
+/// expired); the owner's stop of the agent cancels it at once.
 pub(crate) struct AgentBridge {
     world: Arc<RealWorld>,
     run: Mutex<Option<(AgentId, RunId)>>,
+    /// Whether the owner's Warden review is enabled (it then denies every
+    /// action it reviews, as it does for the kernel registry).
+    warden: fn() -> bool,
+}
+
+/// The owner's Warden setting; unreadable, it counts as enabled.
+fn warden_enabled() -> bool {
+    nexus_kernel::config::load_config()
+        .map_or(true, |config| config.governance.enable_warden_review)
 }
 
 impl AgentBridge {
@@ -332,11 +383,35 @@ impl AgentBridge {
         Self {
             world,
             run: Mutex::new(None),
+            warden: warden_enabled,
         }
     }
 
-    /// Run a governed intent for `agent_id`: data back to the agent.
-    pub(crate) fn act(&self, agent_id: &str, intent: &Intent) -> Result<String, String> {
+    /// A bridge whose Warden setting is fixed (tests).
+    #[cfg(test)]
+    pub(crate) fn with_warden(world: Arc<RealWorld>, warden: fn() -> bool) -> Self {
+        Self {
+            world,
+            run: Mutex::new(None),
+            warden,
+        }
+    }
+
+    /// Run a governed intent for `agent_id`: data back to the agent. A
+    /// `reviewed` action is refused while the owner's Warden review is
+    /// enabled.
+    pub(crate) fn act(
+        &self,
+        agent_id: &str,
+        intent: &Intent,
+        reviewed: bool,
+    ) -> Result<String, String> {
+        if reviewed && (self.warden)() {
+            return Err(format!(
+                "Warden blocked action: {}",
+                crate::commands::cognitive::WARDEN_REVIEW_UNAVAILABLE
+            ));
+        }
         let agent = AgentId::new(agent_id).ok_or("governed control: invalid agent identity")?;
         let run = {
             let mut current = self.run.lock().unwrap_or_else(|p| p.into_inner());
@@ -349,6 +424,7 @@ impl AgentBridge {
                         .control
                         .open_run(agent.clone(), RunOrigin::AgentGoal)
                         .map_err(|e| e.to_string())?;
+                    self.world.track_agent_run(agent_id, run);
                     *current = Some((agent.clone(), run));
                     run
                 }
@@ -374,22 +450,7 @@ impl Drop for AgentBridge {
     fn drop(&mut self) {
         let current = self.run.lock().unwrap_or_else(|p| p.into_inner()).take();
         if let Some((_, run)) = current {
-            let waiting = self
-                .world
-                .control
-                .authority()
-                .commitments()
-                .views_of_run(run)
-                .iter()
-                .any(|v| {
-                    matches!(
-                        v.state,
-                        CommitmentState::Prepared | CommitmentState::Authorized
-                    )
-                });
-            if !waiting {
-                self.world.control.finish_run(run);
-            }
+            self.world.control.finish_when_settled(run);
         }
     }
 }

@@ -11,7 +11,7 @@ use nexus_governed_control::ingress::CommandEnvelope;
 use nexus_governed_control::tool::ToolIntent;
 use nexus_kernel::audit::AuditTrail;
 use nexus_persistence::NexusDatabase;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -172,22 +172,102 @@ fn an_agent_runs_granted_r0_and_never_raises_the_owners_dialog() {
         )
         .unwrap();
     let asked = owner.1.load(Ordering::SeqCst);
-    let bridge = AgentBridge::new(t.world.clone());
+    let bridge = AgentBridge::with_warden(t.world.clone(), || false);
     let agent = uuid::Uuid::new_v4().to_string();
     let intent = Intent::Tool(ToolIntent {
         tool: "text.sha256".into(),
         input: json!({ "text": "abc" }),
     });
-    let out = bridge.act(&agent, &intent).unwrap();
+    let out = bridge.act(&agent, &intent, true).unwrap();
     assert!(out.contains("ba7816bf"), "{out}");
     assert_eq!(owner.1.load(Ordering::SeqCst), asked);
     // Another agent cannot use this loop's run.
     assert!(bridge
-        .act(&uuid::Uuid::new_v4().to_string(), &intent)
+        .act(&uuid::Uuid::new_v4().to_string(), &intent, true)
         .is_err());
     // Emergency stop: the agent's next action is refused.
     t.world.emergency_stop();
-    assert!(bridge.act(&agent, &intent).is_err());
+    assert!(bridge.act(&agent, &intent, true).is_err());
+}
+
+/// The owner's Warden setting reviews governed actions as it reviews the
+/// registry's: enabled, it refuses every action it reviews, before anything
+/// is prepared.
+#[test]
+fn an_enabled_warden_review_refuses_a_reviewed_agent_action() {
+    let t = isolated();
+    let owner = Owner(true, AtomicU32::new(0));
+    t.world
+        .request_grant(
+            &GrantRequest::Tool {
+                tool: "text.sha256".into(),
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let bridge = AgentBridge::with_warden(t.world.clone(), || true);
+    let agent = uuid::Uuid::new_v4().to_string();
+    let intent = Intent::Tool(ToolIntent {
+        tool: "text.sha256".into(),
+        input: json!({ "text": "abc" }),
+    });
+    let refused = bridge.act(&agent, &intent, true).unwrap_err();
+    assert!(refused.starts_with("Warden blocked action"), "{refused}");
+    assert!(
+        t.world.status()["commitments"]
+            .as_array()
+            .is_none_or(|c| c.is_empty()),
+        "nothing was prepared"
+    );
+    // An action the review does not cover (a page read) is not refused by it.
+    assert!(bridge.act(&agent, &intent, false).is_ok());
+}
+
+/// The owner's stop of an agent cancels its Phase Three run: what it left
+/// waiting for approval can no longer be approved.
+#[test]
+fn stopping_an_agent_cancels_what_it_left_waiting() {
+    let t = isolated();
+    let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", server.local_addr().unwrap());
+    let owner = Owner(true, AtomicU32::new(0));
+    t.world
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: origin.clone(),
+                methods: vec!["POST".into()],
+                allow_private: true,
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let bridge = AgentBridge::with_warden(t.world.clone(), || false);
+    let agent = uuid::Uuid::new_v4().to_string();
+    let post = Intent::Request(nexus_governed_control::egress::EgressIntent {
+        method: "POST".into(),
+        url: format!("{origin}/x"),
+        headers: vec![],
+        body: Some("{}".into()),
+    });
+    let waiting: Value = serde_json::from_str(&bridge.act(&agent, &post, true).unwrap()).unwrap();
+    let commitment = waiting["awaiting_owner_approval"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    t.world.cancel_agent(&agent);
+    assert!(t.world.approve(&commitment, &owner).is_err());
+    let state = t.world.status()["commitments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == commitment)
+        .map(|c| c["state"].clone())
+        .unwrap();
+    assert_eq!(state, "revoked");
+    server.set_nonblocking(true).unwrap();
+    assert!(server.accept().is_err(), "nothing was sent");
 }
 
 #[test]

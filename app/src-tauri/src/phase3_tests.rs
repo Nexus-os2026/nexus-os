@@ -502,7 +502,7 @@ fn wire_tag(action: &PlannedAction) -> String {
 /// With it, the Phase Three classification decides: only inert actions
 /// reach the closure and then `self.inner`, governed actions reach only the
 /// Phase Three bridge, and closed actions keep their Phase Zero refusal.
-const EXECUTOR_BODY: &str = "use{classify,Disposition};letSome(bridge)=&self.governedelse{ifletSome(closure)=phase0_agent_action_closure(action){returnErr(closed(action.action_type(),closure));}returnself.inner.execute(agent_id,action,audit,hitl_approved);};matchclassify(action){Disposition::Inert=>{ifletSome(closure)=phase0_agent_action_closure(action){returnErr(closed(action.action_type(),closure));}self.inner.execute(agent_id,action,audit,hitl_approved)}Disposition::Governed(intent)=>bridge.act(agent_id,&intent),Disposition::Orchestrated{max_steps}=>Ok(orchestration_guidance(max_steps)),Disposition::Closed(_)=>Err(closed(action.action_type(),phase0_agent_action_closure(action).unwrap_or(Closure::AgentExecution)))}";
+const EXECUTOR_BODY: &str = "use{classify,Disposition};letSome(bridge)=&self.governedelse{ifletSome(closure)=phase0_agent_action_closure(action){returnErr(closed(action.action_type(),closure));}returnself.inner.execute(agent_id,action,audit,hitl_approved);};matchclassify(action){Disposition::Inert=>{ifletSome(closure)=phase0_agent_action_closure(action){returnErr(closed(action.action_type(),closure));}self.inner.execute(agent_id,action,audit,hitl_approved)}Disposition::Governed(intent)=>bridge.act(agent_id,&intent,warden_reviews(action)),Disposition::Orchestrated{max_steps}=>Ok(orchestration_guidance(max_steps)),Disposition::Closed(_)=>Err(closed(action.action_type(),phase0_agent_action_closure(action).unwrap_or(Closure::AgentExecution)))}";
 
 #[test]
 fn p3e_g1_01_every_planned_action_is_classified_without_a_wildcard() {
@@ -5653,4 +5653,25 @@ fn p3_g6_10_no_foreign_declaration_escapes_the_mechanism_predicates() {
         }
     }
     assert_eq!(declaring, BTreeSet::from(FFI_FILES));
+}
+
+/// The owner's stops reach Phase Three: the global emergency key stops it
+/// with the legacy engines, and stopping an agent cancels its runs (what
+/// they still run sees it; nothing they left waiting can be approved).
+#[test]
+fn p3_g6_11_the_owners_stops_reach_phase_three() {
+    let lib = production_source("app/src-tauri/src/lib.rs");
+    let stop = lib.find("activate_emergency_kill_switch();").unwrap();
+    let upto = lib[stop..].find("log_event(").unwrap();
+    let handler = without_whitespace(&lib[stop..stop + upto]);
+    assert!(
+        handler.contains("ifletOk(world)=state.real_world(){world.emergency_stop();}"),
+        "{handler}"
+    );
+    let cognitive = production_source("app/src-tauri/src/commands/cognitive.rs");
+    let body = without_whitespace(one_fn(cognitive, "stop_agent_goal").body_text(cognitive));
+    assert!(
+        body.contains("ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}"),
+        "{body}"
+    );
 }

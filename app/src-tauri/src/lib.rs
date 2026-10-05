@@ -7887,6 +7887,12 @@ pub mod runtime {
                                 .unwrap_or_else(|p| p.into_inner());
                             engine.disable();
                         }
+                        // Phase Three stops with the same key: every run and
+                        // unconsumed commitment ends, the agent display
+                        // stops, until the owner resumes natively.
+                        if let Ok(world) = state.real_world() {
+                            world.emergency_stop();
+                        }
 
                         state.log_event(
                             SYSTEM_UUID,
