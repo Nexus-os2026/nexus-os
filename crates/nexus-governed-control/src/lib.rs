@@ -96,3 +96,7 @@
 
 pub mod authority;
 pub mod control;
+pub mod egress;
+
+#[cfg(test)]
+mod test_support;

@@ -5463,9 +5463,13 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.2.17",
  "hex",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha2",
+ "tokio",
+ "url",
+ "zeroize",
 ]
 
 [[package]]
