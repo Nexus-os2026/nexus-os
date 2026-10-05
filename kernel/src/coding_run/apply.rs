@@ -77,6 +77,9 @@ pub struct ConfirmationRequest {
     pub creates: usize,
     pub replaces: usize,
     pub deletes: usize,
+    /// The identity of the review being approved, as the app shows it beside
+    /// the reviewed changes ([`ReviewBinding::short`]).
+    pub review_short: String,
     pub candidate_short: String,
     pub base_short: String,
     pub paths: Vec<String>,
@@ -103,13 +106,14 @@ impl ConfirmationRequest {
         };
         let mut text = format!(
             "{action} the project \"{}\".\n\nRun: {}\nFiles: {} ({} created, {} replaced, {} deleted)\n\
-             Candidate: {}\nBase: {}\n",
+             Review: {}\nCandidate: {}\nBase: {}\n",
             self.project_name,
             self.run_id,
             self.files(),
             self.creates,
             self.replaces,
             self.deletes,
+            self.review_short,
             self.candidate_short,
             self.base_short
         );
@@ -134,6 +138,7 @@ impl ConfirmationRequest {
             creates: 0,
             replaces: 0,
             deletes: 0,
+            review_short: binding.short(),
             candidate_short: binding.candidate_manifest_hash.to_hex()[..12].to_string(),
             base_short: binding.base_manifest_hash.to_hex()[..12].to_string(),
             paths: Vec::new(),

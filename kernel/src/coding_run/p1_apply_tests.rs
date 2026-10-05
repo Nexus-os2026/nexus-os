@@ -812,3 +812,70 @@ fn p1_a_nc_19_an_apply_with_an_unclosed_write_grant_is_not_success() {
     );
     assert_eq!(other.apply_state(), ApplyState::RecoveryRequired);
 }
+
+/// XA-W-03: the owner's native confirmation and the approval it produces
+/// bind the reviewed identity. The confirmation is computed from the review
+/// it approves: it names that review's identity (the one the app shows
+/// beside the reviewed changes) and its candidate and base, and the approval
+/// carries exactly that binding, whose full hash the ledger records. Two
+/// candidates with the same paths, kinds and counts differ in that identity,
+/// and the approval of one never applies the other. The diff itself is
+/// display data rendered by the privileged webview: approval binds the exact
+/// candidate, while content review is not native (the documented claim
+/// boundary).
+#[test]
+fn p1_a_nc_20_the_native_confirmation_binds_the_reviewed_identity() {
+    let e = env();
+    let before = digest(&e.f.project);
+    let (mut a, _) = verified(&e, vec![replace("src/lib.rs", "// A\n")]);
+    let (mut b, binding_b) = verified(&e, vec![replace("src/lib.rs", "// B\n")]);
+    let reviewed_a = a.review().unwrap().binding;
+    let reviewed_b = b.review().unwrap().binding;
+    let (confirm_a, confirm_b) = (Confirm::yes(), Confirm::yes());
+    let approval_a = a.request_approval(&e.info.name, &confirm_a).unwrap();
+    let approval_b = b.request_approval(&e.info.name, &confirm_b).unwrap();
+    let shown_a = confirm_a.shown.borrow()[0].clone();
+    let shown_b = confirm_b.shown.borrow()[0].clone();
+
+    // The native identity is the reviewed one, and the approval carries it.
+    assert_eq!(*approval_a.binding(), reviewed_a);
+    assert_eq!(shown_a.review_short, reviewed_a.short());
+    assert_eq!(shown_a.review_short, hex::encode(reviewed_a.hash())[..12]);
+    assert!(reviewed_a
+        .candidate_manifest_hash
+        .to_hex()
+        .starts_with(&shown_a.candidate_short));
+    assert!(reviewed_a
+        .base_manifest_hash
+        .to_hex()
+        .starts_with(&shown_a.base_short));
+    let message = shown_a.message();
+    assert!(message.contains(&format!("Review: {}\n", reviewed_a.short())));
+    let granted =
+        e.f.ledger
+            .verify_run(a.id().ledger_key())
+            .unwrap()
+            .into_iter()
+            .rfind(|r| r.event_kind == "approval.granted")
+            .unwrap();
+    assert!(granted
+        .payload
+        .contains(&hex::encode(approval_a.binding().hash())));
+
+    // Same paths, kinds and counts: only the identity tells them apart
+    // natively, and the backend binds the whole of it.
+    assert_eq!(
+        (shown_a.paths.clone(), shown_a.files()),
+        (shown_b.paths.clone(), shown_b.files())
+    );
+    assert_ne!(reviewed_a, reviewed_b);
+    assert_ne!(shown_a.review_short, shown_b.review_short);
+    assert_ne!(shown_a.candidate_short, shown_b.candidate_short);
+    assert_eq!(*approval_b.binding(), reviewed_b);
+    let grant_b = e.projects.grant_for_apply(e.info.id, binding_b).unwrap();
+    assert_eq!(
+        b.apply(approval_a, grant_b, &parent(&e.f)).unwrap_err(),
+        ApplyError::Refused(Refusal::ApprovalMismatch)
+    );
+    assert_eq!(digest(&e.f.project), before);
+}

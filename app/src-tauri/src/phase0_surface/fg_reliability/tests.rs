@@ -5,6 +5,9 @@
 //! requests and check that they are refused before any work, and they pin
 //! the approved limits so a bound cannot be loosened silently.
 
+use crate::phase0_surface::rust_paths::{
+    constructs_process, contains_sequence, ends_process, lex, starts_with, Analysis, Declaration,
+};
 use crate::AppState;
 use nexus_kernel::cognitive::ScheduledGoalExecutor as _;
 use std::sync::atomic::AtomicBool;
@@ -636,27 +639,35 @@ fn wasmtime_forbidden_uses(src: &str) -> Vec<String> {
 }
 
 /// Wasmtime's async and component-model entry points (P2 security closure
-/// R1: RUSTSEC-2026-0327 is in component async-lifted callbacks) named in a
-/// source that uses Wasmtime. A text check over comment-free source, like
-/// `wasmtime_forbidden_uses`; the compiled API surface is the dependency
-/// evidence's.
+/// R1: RUSTSEC-2026-0327 is in component async-lifted callbacks), in two
+/// tiers (XA-L-03). The engine switches and entry points only Wasmtime's API
+/// has are refused in every source, whether or not it names Wasmtime: a
+/// source can hold a Wasmtime type through an alias or a re-export without
+/// ever naming the crate, and no async or component execution is possible
+/// without `async_support` or the component-model switches. The generic
+/// names (`call_async`, `new_async`, …), which other libraries share, are
+/// refused in a source that names Wasmtime; that no Wasmtime item leaves its
+/// file under another name is `p0_fg_dep_wasmtime_items_do_not_escape_their_file`.
+/// A text check over comment-free source, like `wasmtime_forbidden_uses`;
+/// the compiled API surface is the dependency evidence's.
 fn wasmtime_async_uses(src: &str) -> Vec<String> {
     let code = normalized_rust(src);
-    if word_at(&code, "wasmtime").is_empty() {
-        return Vec::new();
-    }
+    let names_wasmtime = !word_at(&code, "wasmtime").is_empty();
     [
-        "call_async",
-        "instantiate_async",
-        "func_wrap_async",
-        "func_new_async",
-        "async_support",
-        "wasm_component_model",
-        "wasm_component_model_async",
+        ("async_support", true),
+        ("wasm_component_model", true),
+        ("wasm_component_model_async", true),
+        ("instantiate_async", true),
+        ("func_wrap_async", true),
+        ("func_new_async", true),
+        ("module_async", true),
+        ("call_async", false),
+        ("new_async", false),
+        ("wrap_async", false),
     ]
     .into_iter()
-    .filter(|name| !word_at(&code, name).is_empty())
-    .map(|name| format!("async/component: {name}"))
+    .filter(|(name, anywhere)| (*anywhere || names_wasmtime) && !word_at(&code, name).is_empty())
+    .map(|(name, _)| format!("async/component: {name}"))
     .collect()
 }
 
@@ -853,8 +864,32 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
             "an async or component-model use was not detected: {probe:?}"
         );
     }
+    // The engine switches are refused even where the source never names
+    // Wasmtime (the K16b shape: a core-type alias defined elsewhere).
+    for probe in [
+        "pub(crate) fn f(c: &mut crate::wasmtime_sandbox::XaCfg) { c.async_support(true); }",
+        "fn f(c: &mut Cfg) { c.wasm_component_model(true); }",
+        "fn f(c: &mut Cfg) { c.wasm_component_model_async(true); }",
+        "fn f(l: &L) { let _ = l.instantiate_async; let _ = l.module_async; }",
+        "fn f(l: &mut L) { l.func_wrap_async(); l.func_new_async(); }",
+    ] {
+        assert!(
+            !wasmtime_async_uses(probe).is_empty(),
+            "an engine switch outside a Wasmtime-naming source was not detected: {probe:?}"
+        );
+    }
+    for probe in [
+        "use wasmtime::Func; fn f() { let _ = Func::new_async; }",
+        "use wasmtime::Func; fn f() { let _ = Func::wrap_async; }",
+    ] {
+        assert!(
+            !wasmtime_async_uses(probe).is_empty(),
+            "an async entry point in a Wasmtime-naming source was not detected: {probe:?}"
+        );
+    }
     for safe in [
         "fn f() { client.call_async().await; }",
+        "fn f() { let _ = Task::new_async(); let _ = Layer::wrap_async(); }",
         "use wasmtime::Engine; // call_async is not used here",
         "use wasmtime::{Engine, Linker, Module, Store}; fn f() { t.call(&mut s, ()); }",
     ] {
@@ -1000,4 +1035,521 @@ fn p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api() {
             );
         }
     }
+}
+
+// ── XA-R4-FINAL structural guards (the shared resolver, `rust_paths`) ──────
+
+fn repo_root() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// Every production `.rs` file of the workspace: no `target`, `tests`,
+/// `benches`, `dist`, `node_modules` or hidden directory, and no file named
+/// `*tests.rs`.
+fn workspace_production_sources() -> Vec<std::path::PathBuf> {
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !name.starts_with('.')
+                    && !matches!(
+                        name.as_str(),
+                        "target" | "node_modules" | "tests" | "benches" | "dist"
+                    )
+                {
+                    walk(&path, out);
+                }
+            } else if name.ends_with(".rs") && !name.ends_with("tests.rs") {
+                out.push(path);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&repo_root(), &mut out);
+    assert!(out.len() > 100, "workspace sources not found");
+    out
+}
+
+/// The kernel resource limiter's sources, each by its file name.
+const LIMITER_FILES: &[(&str, &str)] = &[
+    ("resource_limiter.rs", "kernel/src/resource_limiter.rs"),
+    ("unix.rs", "kernel/src/resource_limiter/unix.rs"),
+    ("windows.rs", "kernel/src/resource_limiter/windows.rs"),
+    (
+        "darwin_group.rs",
+        "kernel/src/resource_limiter/darwin_group.rs",
+    ),
+];
+
+/// The only functions of the limiter that construct a process: the platform
+/// spawns.
+const LIMITER_SPAWN_SITES: &[(&str, &str)] = &[
+    ("unix.rs", "Child::spawn"),
+    ("unix.rs", "Child::spawn_sealed"),
+    ("unix.rs", "spawn_contained"),
+    ("windows.rs", "Child::create"),
+];
+
+/// The only way the limiter ends a process: its owned group, or its private
+/// job, from `request_termination`, called on the retained identity and
+/// resolved to the native call.
+const LIMITER_TERMINATION: &[(&str, &str, &str, &str)] = &[
+    (
+        "unix.rs",
+        "Child::request_termination",
+        "nix::sys::signal::killpg",
+        "match killpg ( Pid :: from_raw ( self . id ( ) as i32 ) , Signal :: SIGKILL ) {",
+    ),
+    (
+        "windows.rs",
+        "Child::request_termination",
+        "windows_sys::Win32::System::JobObjects::TerminateJobObject",
+        "TerminateJobObject ( self . job . as_raw_handle ( ) , 1 )",
+    ),
+];
+
+/// Process-killing tools no limiter literal may name.
+const PROCESS_KILLING_TOOLS: &[&str] = &[
+    "pkill", "killall", "taskkill", "tskill", "kill", "xkill", "skill",
+];
+
+/// Violations of the limiter's process rules in `files` (file name, source).
+fn limiter_violations(files: &[(&str, String)]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (name, src) in files {
+        let analysis = Analysis::new(src, &["crate", "resource_limiter", "platform"]);
+        for o in analysis.production() {
+            // A private module-level import only binds a name; its uses are
+            // what the rules judge.
+            let binding = o.declaration == Some(Declaration::Use) && !o.public && o.item.is_none();
+            let item = o.item.as_deref().unwrap_or("<module>");
+            for path in &o.resolved {
+                let shown = path.join("::");
+                if constructs_process(path)
+                    && !binding
+                    && !LIMITER_SPAWN_SITES.contains(&(*name, item))
+                {
+                    out.push(format!(
+                        "{name}:{} {item}: constructs a process outside the spawn functions ({shown})",
+                        o.line
+                    ));
+                }
+                if ends_process(path)
+                    && !binding
+                    && !LIMITER_TERMINATION.iter().any(|(file, site, call, _)| {
+                        file == name && *site == item && *call == shown
+                    })
+                {
+                    out.push(format!(
+                        "{name}:{} {item}: signals or ends a process other than through its owned group or job ({shown})",
+                        o.line
+                    ));
+                }
+            }
+        }
+        for (text, item, line) in analysis.literals() {
+            let lower = text.to_lowercase();
+            let first = lower.split_whitespace().next().unwrap_or("");
+            let tool = first.rsplit(['/', '\\']).next().unwrap_or("");
+            let tool = tool.strip_suffix(".exe").unwrap_or(tool);
+            if PROCESS_KILLING_TOOLS.contains(&tool) || lower.contains("stop-process") {
+                out.push(format!(
+                    "{name}:{line} {}: names a process-killing tool ({text:?})",
+                    item.unwrap_or("<module>")
+                ));
+            }
+        }
+        for (file, site, call, shape) in LIMITER_TERMINATION {
+            if file != name {
+                continue;
+            }
+            let body = analysis.function(site);
+            if !contains_sequence(&body, shape) {
+                out.push(format!(
+                    "{name} {site}: the native termination call is missing ({shape})"
+                ));
+            }
+            let native = call.rsplit("::").next().unwrap();
+            let resolved: Vec<String> = analysis
+                .production()
+                .filter(|o| o.item.as_deref() == Some(site) && o.written.segs == [native])
+                .flat_map(|o| o.resolved.iter().map(|path| path.join("::")))
+                .collect();
+            if resolved.is_empty() || resolved.iter().any(|path| path != call) {
+                out.push(format!(
+                    "{name} {site}: {native} does not resolve to {call} alone ({resolved:?})"
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// XA-L-02 (AGENTS.md §6.5): the kernel resource limiter constructs a
+/// process only in its platform spawn functions, and ends a governed tree
+/// only through its owned group (`killpg` on the retained, unreaped leader,
+/// Unix) or its private job (`TerminateJobObject`, Windows), called from
+/// `request_termination` and resolved to the native call. Nothing else in
+/// the limiter signals, opens or ends a process by an identifier, and no
+/// literal names a process-killing tool. Paths are resolved structurally, so
+/// an alias, a grouped or nested import, a glob, `extern crate` or a type
+/// alias cannot hide a construction or a signal. The negative controls inject
+/// the XA-001 K02b mutant (a shell `pkill -g` in place of `killpg`) and its
+/// variants into the real sources.
+#[test]
+fn p0_fg_k_the_resource_limiter_ends_trees_only_through_its_owned_group_or_job() {
+    // A Windows checkout may carry CRLF line endings; the controls below
+    // match multi-line anchors.
+    let real: Vec<(&str, String)> = LIMITER_FILES
+        .iter()
+        .map(|(name, path)| {
+            let text = std::fs::read_to_string(repo_root().join(path)).unwrap();
+            (*name, text.replace("\r\n", "\n"))
+        })
+        .collect();
+    assert_eq!(limiter_violations(&real), Vec::<String>::new());
+
+    let unix_call = "        match killpg(Pid::from_raw(self.id() as i32), Signal::SIGKILL) {\n";
+    let windows_call = "TerminateJobObject(self.job.as_raw_handle(), 1)";
+    let with = |file: &str, from: &str, to: &str| -> Vec<(&str, String)> {
+        real.iter()
+            .map(|(name, src)| {
+                if *name == file {
+                    assert!(src.contains(from), "{file} no longer contains {from:?}");
+                    (*name, src.replacen(from, to, 1))
+                } else {
+                    (*name, src.clone())
+                }
+            })
+            .collect()
+    };
+    let appended = |file: &str, text: &str| -> Vec<(&str, String)> {
+        real.iter()
+            .map(|(name, src)| {
+                if *name == file {
+                    (*name, format!("{src}\n{text}\n"))
+                } else {
+                    (*name, src.clone())
+                }
+            })
+            .collect()
+    };
+    for (control, files) in [
+        (
+            "K02b: a shell pkill -g in place of killpg",
+            with(
+                "unix.rs",
+                unix_call,
+                "        let _ = |p: Pid| killpg(p, Signal::SIGKILL);\n        let _ = std::process::Command::new(\"pkill\").args([\"-KILL\", \"-g\", &self.id().to_string()]).status();\n        match Ok::<(), Errno>(()) {\n",
+            ),
+        ),
+        (
+            "the pkill spawn through a grouped-import alias",
+            with(
+                "unix.rs",
+                unix_call,
+                "        let _ = Reaper::new(\"/usr/bin/pkill\").arg(self.id().to_string()).status();\n        match killpg(Pid::from_raw(self.id() as i32), Signal::SIGKILL) {\n",
+            )
+            .into_iter()
+            .map(|(name, src)| {
+                if name == "unix.rs" {
+                    (name, format!("use std::{{process::{{Command as Reaper}}}};\n{src}"))
+                } else {
+                    (name, src)
+                }
+            })
+            .collect(),
+        ),
+        (
+            "a signal to the negated group id through libc",
+            with(
+                "unix.rs",
+                unix_call,
+                "        match Errno::result(unsafe { libc::kill(-(self.id() as i32), libc::SIGKILL) }).map(drop) {\n",
+            ),
+        ),
+        (
+            "a second, aliased signal outside request_termination",
+            appended(
+                "unix.rs",
+                "use nix::sys::signal as sig;\nfn reap(pid: i32) { let _ = sig::kill(nix::unistd::Pid::from_raw(pid), sig::Signal::SIGKILL); }",
+            ),
+        ),
+        (
+            "a construction through a type alias",
+            appended(
+                "resource_limiter.rs",
+                "type Tool = std::process::Command;\nfn stop_all() { let _ = Tool::new(\"killall\").status(); }",
+            ),
+        ),
+        (
+            "a construction through a glob import in a termination helper",
+            appended(
+                "unix.rs",
+                "fn stop_group(id: u32) { use std::process::*; let _ = Command::new(\"kill\").arg(format!(\"-{id}\")).status(); }",
+            ),
+        ),
+        (
+            "TerminateProcess on the process handle instead of the job",
+            with(
+                "windows.rs",
+                windows_call,
+                "TerminateProcess(self.process.as_raw_handle(), 1)",
+            ),
+        ),
+        (
+            "taskkill by process id",
+            appended(
+                "windows.rs",
+                "fn stop(id: u32) { let _ = std::process::Command::new(\"taskkill\").args([\"/F\", \"/T\", \"/PID\", &id.to_string()]).status(); }",
+            ),
+        ),
+        (
+            "a process-killing tool named in a literal",
+            appended("darwin_group.rs", "const STOP: &str = \"/usr/bin/pkill -g\";"),
+        ),
+    ] {
+        let found = limiter_violations(&files);
+        assert!(
+            !found.is_empty(),
+            "the negative control was not detected: {control}"
+        );
+    }
+    // Test-only code is not production: a test module may spawn helpers.
+    let tested = appended(
+        "unix.rs",
+        "#[cfg(test)]\nmod more_tests { fn helper() { let _ = std::process::Command::new(\"true\").status(); } }",
+    );
+    assert_eq!(limiter_violations(&tested), Vec::<String>::new());
+}
+
+/// XA-L-03: no Wasmtime item leaves the file that names Wasmtime under
+/// another name. Resolved structurally, no production source declares a
+/// `type` alias of a Wasmtime path, or re-exports one (`pub use`,
+/// `pub(…) use`, renamed or not); a private renamed import stays inside its
+/// file, which names `wasmtime` itself. Every source that can touch a
+/// Wasmtime type by name therefore names `wasmtime` and falls under the
+/// generic async rule, while the engine switches are refused everywhere
+/// (`wasmtime_async_uses`).
+#[test]
+fn p0_fg_dep_wasmtime_items_do_not_escape_their_file() {
+    fn escapes(src: &str) -> Vec<String> {
+        let analysis = Analysis::new(src, &["crate"]);
+        let mut out = Vec::new();
+        for binding in &analysis.bindings {
+            if binding.test || binding.name == "_" {
+                continue;
+            }
+            let reexport = binding.public && binding.name != "*";
+            let alias = binding.declaration == Declaration::TypeAlias;
+            if !(reexport || alias) {
+                continue;
+            }
+            let written = binding.target.to_string();
+            let wasmtime = binding
+                .target
+                .segs
+                .first()
+                .is_some_and(|root| root == "wasmtime")
+                || analysis
+                    .production()
+                    .filter(|o| o.line == binding.line && o.declaration.is_some())
+                    .any(|o| o.resolved.iter().any(|path| starts_with(path, "wasmtime")));
+            if wasmtime {
+                out.push(format!("{}: {} = {written}", binding.line, binding.name));
+            }
+        }
+        out
+    }
+    for probe in [
+        "pub type XaCfg = wasmtime::Config;",
+        "type Cfg = wasmtime::Config;",
+        "pub(crate) type Store<T> = wasmtime::Store<T>;",
+        "pub use wasmtime::Config;",
+        "pub(crate) use wasmtime::{Config as Cfg};",
+        "pub(super) use wasmtime::{Engine, Linker};",
+        "use wasmtime as w;\npub use w::Func as F;",
+        "pub type F = ::wasmtime::Func;",
+    ] {
+        assert!(
+            !escapes(probe).is_empty(),
+            "a Wasmtime item escaping its file was not detected: {probe:?}"
+        );
+    }
+    for safe in [
+        "use wasmtime::{Engine, Linker, Module, Store, StoreLimits, StoreLimitsBuilder};",
+        "use wasmtime::{Engine as WasmEngine, Store};",
+        "type Result<T> = std::result::Result<T, Error>;",
+        "pub use crate::wasmtime_sandbox::WasmtimeSandbox;",
+        "#[cfg(test)]\nmod tests { pub type Cfg = wasmtime::Config; }",
+        "// pub type Cfg = wasmtime::Config;",
+    ] {
+        assert_eq!(
+            escapes(safe),
+            Vec::<String>::new(),
+            "an allowed source was rejected: {safe:?}"
+        );
+    }
+    for path in workspace_production_sources() {
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        let found = escapes(&text);
+        assert!(
+            found.is_empty(),
+            "{}: {found:?} (no Wasmtime item leaves its file under another name)",
+            path.display()
+        );
+    }
+}
+
+/// The shared structural resolver (`rust_paths`) the XA-R4-FINAL guards
+/// depend on: comments never hide or fake code and literals stay whole;
+/// every import spelling (grouped and nested aliases, a crate alias, a
+/// chained import, `self`, a glob, `extern crate`, a type alias, an absolute
+/// or qualified path, a turbofish) resolves to its target; only test-only
+/// items are left out; and each path belongs to the function, qualified by
+/// its type, whose signature or body holds it.
+#[test]
+fn p0_fg_rust_paths_resolve_every_import_spelling() {
+    let resolved = |src: &str, written: &str| -> Vec<String> {
+        let analysis = Analysis::new(src, &["crate", "m"]);
+        let mut out: Vec<String> = analysis
+            .occurrences
+            .iter()
+            .filter(|o| o.written.to_string() == written)
+            .flat_map(|o| o.resolved.iter().map(|path| path.join("::")))
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    };
+    let spawn = "std::process::Command::new".to_string();
+    for (src, written) in [
+        ("use std::{process::Command as Spawn}; fn f() { Spawn::new(\"sh\"); }", "Spawn::new"),
+        ("use std::{os::unix::{process::{CommandExt as X}}, process::{self as p}}; fn f() { p::Command::new(\"sh\"); }", "p::Command::new"),
+        ("use std as s; fn f() { s::process::Command::new(\"sh\"); }", "s::process::Command::new"),
+        ("use std::process; use process::Command as C; fn f() { C::new(\"sh\"); }", "C::new"),
+        ("extern crate std as q; fn f() { q::process::Command::new(\"sh\"); }", "q::process::Command::new"),
+        ("type Tool = std::process::Command; fn f() { Tool::new(\"sh\"); }", "Tool::new"),
+        ("use std::process::*; fn f() { Command::new(\"sh\"); }", "Command::new"),
+        ("fn f() { ::std::process::Command::new(\"sh\"); }", "::std::process::Command::new"),
+        ("use r#std::r#process::Command; fn f() { Command::new(\"sh\"); }", "Command::new"),
+        ("use std::process::Command;\n/* use other::Command; */\nfn f() { Command::new(\"sh\"); }", "Command::new"),
+    ] {
+        assert!(
+            resolved(src, written).contains(&spawn),
+            "{written} in {src:?} resolved to {:?}",
+            resolved(src, written)
+        );
+    }
+    // Qualified and turbofish paths, and `self`, `super` and `crate`.
+    for (src, written, target) in [
+        (
+            "fn f() { <std::process::Command>::new(\"sh\"); }",
+            "std::process::Command",
+            "std::process::Command",
+        ),
+        (
+            "fn f() { Vec::<std::process::Command>::new(); }",
+            "std::process::Command",
+            "std::process::Command",
+        ),
+        (
+            "mod inner { fn f() { super::g(); self::h(); crate::k::l(); } }",
+            "super::g",
+            "crate::m::g",
+        ),
+        (
+            "mod inner { fn f() { self::h(); } }",
+            "self::h",
+            "crate::m::inner::h",
+        ),
+        ("fn f() { crate::k::l(); }", "crate::k::l", "crate::k::l"),
+    ] {
+        assert_eq!(resolved(src, written), vec![target.to_string()], "{src:?}");
+    }
+    // Comments and literals neither hide nor fake a path.
+    let quiet = "const X: &str = r#\"use std::process::Command; \"#;\n// use std::process::Command;\n/* nested /* comment */ std::process::exit(1); */ fn f() {}";
+    assert!(Analysis::new(quiet, &["crate"])
+        .occurrences
+        .iter()
+        .all(|o| !o.resolved.iter().any(|p| starts_with(p, "std::process"))));
+    let tokens =
+        lex("let c = '\"'; let s = b\"x\\\"y\"; fn f<'a>(x: &'a str) {} let r = r##\"a\"# b\"##;");
+    assert!(tokens.iter().any(|t| t.is("f")) && tokens.iter().any(|t| t.is("r")));
+    // Only test-only items are left out.
+    for (src, test) in [
+        (
+            "#[cfg(test)]\nmod t { fn f() { std::process::Command::new(\"x\"); } }",
+            true,
+        ),
+        (
+            "#[test]\nfn t() { std::process::Command::new(\"x\"); }",
+            true,
+        ),
+        (
+            "#[cfg(all(test, unix))]\nfn t() { std::process::Command::new(\"x\"); }",
+            true,
+        ),
+        (
+            "#[tokio::test]\nasync fn t() { std::process::Command::new(\"x\"); }",
+            true,
+        ),
+        (
+            "#[cfg(not(test))]\nfn p() { std::process::Command::new(\"x\"); }",
+            false,
+        ),
+        (
+            "#[cfg(any(test, feature = \"x\"))]\nfn p() { std::process::Command::new(\"x\"); }",
+            false,
+        ),
+        (
+            "#[cfg_attr(test, allow(unused))]\nfn p() { std::process::Command::new(\"x\"); }",
+            false,
+        ),
+        ("fn p() { std::process::Command::new(\"x\"); }", false),
+    ] {
+        let analysis = Analysis::new(src, &["crate"]);
+        let o = analysis
+            .occurrences
+            .iter()
+            .find(|o| o.written.to_string() == "std::process::Command::new")
+            .unwrap();
+        assert_eq!(o.test, test, "{src:?}");
+    }
+    // Each path belongs to its function, qualified by its type.
+    let src = "impl Child { fn spawn() { std::process::Command::new(\"a\"); }\n fn stop(&self, c: std::process::Command) { let f = || nix::sys::signal::killpg(p, s); } }\nimpl Drop for Child { fn drop(&mut self) { Reaper::go(); } }\nfn free() { other::x(); }";
+    let analysis = Analysis::new(src, &["crate"]);
+    for (written, item) in [
+        ("std::process::Command::new", "Child::spawn"),
+        ("std::process::Command", "Child::stop"),
+        ("nix::sys::signal::killpg", "Child::stop"),
+        ("Reaper::go", "Child::drop"),
+        ("other::x", "free"),
+    ] {
+        let o = analysis
+            .occurrences
+            .iter()
+            .find(|o| o.written.to_string() == written)
+            .unwrap();
+        assert_eq!(o.item.as_deref(), Some(item), "{written}");
+    }
+    // Visibility of declarations.
+    let analysis = Analysis::new(
+        "pub(crate) use a::B;\nuse c::D;\npub type E = f::G;\ntype H = i::J;",
+        &["crate"],
+    );
+    let public: Vec<(&str, bool)> = analysis
+        .bindings
+        .iter()
+        .map(|b| (b.name.as_str(), b.public))
+        .collect();
+    assert_eq!(
+        public,
+        vec![("B", true), ("D", false), ("E", true), ("H", false)]
+    );
 }

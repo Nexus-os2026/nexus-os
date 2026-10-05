@@ -3319,6 +3319,17 @@ fn p0_002c5c_final_trust_surface_guard_is_complete() {
             &[
                 "p0_fg_k_an_in_memory_state_loop_writes_no_identity_home_database",
                 "p0_fg_dep_wasmtime_uses_no_dynamic_component_val_api",
+                "p0_fg_dep_wasmtime_items_do_not_escape_their_file",
+            ][..],
+        ),
+        // XA-R4-FINAL (XA-L-02): the resource limiter's process
+        // construction and termination, resolved structurally.
+        (
+            "a governed process constructed outside the limiter's spawn functions, or ended by a shell tool, a name or an identifier instead of its owned group or job",
+            fg_reliability,
+            &[
+                "p0_fg_k_the_resource_limiter_ends_trees_only_through_its_owned_group_or_job",
+                "p0_fg_rust_paths_resolve_every_import_spelling",
             ][..],
         ),
     ] {

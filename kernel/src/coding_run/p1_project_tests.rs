@@ -290,3 +290,52 @@ fn p1_p_nc_07_system_and_nexus_state_roots_are_forbidden() {
         Err(ProjectError::Forbidden)
     );
 }
+
+/// XA-L-01: a reserved backend location (such as the verifier's workspaces)
+/// is refused like the state directory: the location itself, anything inside
+/// it and anything containing it. It is compared by path components, not by
+/// string prefix, and its canonical spelling is reserved as well. Without the
+/// reservation the same directory registers, which is the gap the desktop
+/// closes by reserving the verifier workspaces.
+#[test]
+fn p1_p_nc_08_reserved_backend_locations_are_forbidden() {
+    let p = projects();
+    let base = p.state.parent().unwrap().to_path_buf();
+    let runtime = base.join("runtime");
+    let workspaces = runtime.join("nexus-verifier");
+    std::fs::create_dir_all(workspaces.join("ws-1").join("input")).unwrap();
+    let registry = ProjectRegistry::reserving(Arc::clone(&p.f.registry), &[&p.state, &workspaces]);
+    for forbidden in [
+        workspaces.clone(),
+        workspaces.join("ws-1"),
+        workspaces.join("ws-1").join("input"),
+        runtime.clone(),
+        p.state.clone(),
+    ] {
+        assert_eq!(
+            registry.select(&Picker::choose(&forbidden)),
+            Err(ProjectError::Forbidden),
+            "{}",
+            forbidden.display()
+        );
+    }
+    for allowed in [runtime.join("nexus-verifier-other"), runtime.join("other")] {
+        std::fs::create_dir(&allowed).unwrap();
+        assert!(
+            registry.select(&Picker::choose(&allowed)).is_ok(),
+            "{}",
+            allowed.display()
+        );
+    }
+    let link = base.join("runtime-link");
+    std::os::unix::fs::symlink(&runtime, &link).unwrap();
+    let by_link = ProjectRegistry::reserving(
+        Arc::clone(&p.f.registry),
+        &[&p.state, &link.join("nexus-verifier")],
+    );
+    assert_eq!(
+        by_link.select(&Picker::choose(&workspaces.join("ws-1"))),
+        Err(ProjectError::Forbidden)
+    );
+    assert!(p.registry.select(&Picker::choose(&workspaces)).is_ok());
+}

@@ -166,3 +166,10 @@ mod fg_secrets;
 mod fg_standalone;
 #[cfg(test)]
 mod fg_webview;
+
+// XA-R4-FINAL: the structural Rust path resolver the guards share. Like the
+// guards it lives in a file named `tests.rs`, so the production-source
+// scanners never read its tables and fixtures as production code.
+#[cfg(test)]
+#[path = "phase0_surface/rust_paths/tests.rs"]
+pub(crate) mod rust_paths;

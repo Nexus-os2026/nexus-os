@@ -1354,3 +1354,50 @@ fn p2_g_11_the_host_qualification_owns_no_native_effect_by_a_unit_name() {
         "released() reaps the helper before its scope is ended"
     );
 }
+
+/// XA-L-01: the desktop's coding flow reserves the verifier's workspaces
+/// against project registration. Through the registry `CodingFlow::new`
+/// builds (not a test copy), the workspaces directory and every directory
+/// containing it, down to `/run`, which every Linux host has, are refused
+/// as projects, so an approved apply can never write into a live
+/// verification workspace. The reserved location is the one the sandbox
+/// derives.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn p2_xa_l01_project_selection_refuses_the_verifier_workspaces() {
+    use nexus_kernel::coding_run::{FolderPicker, ProjectError};
+    use nexus_kernel::workspace_authority::WorkspaceAuthorityRegistry;
+
+    struct Picked(PathBuf);
+    impl FolderPicker for Picked {
+        fn pick_folder(&self) -> Option<PathBuf> {
+            Some(self.0.clone())
+        }
+    }
+    let flow =
+        crate::coding_flow::CodingFlow::new(std::sync::Arc::new(WorkspaceAuthorityRegistry::new()))
+            .unwrap();
+    let workspaces = nexus_verifier_sandbox::workspace::workspaces_path();
+    assert!(
+        workspaces.starts_with("/run/user") && workspaces.ends_with("nexus-verifier"),
+        "{}",
+        workspaces.display()
+    );
+    let mut refused = Vec::new();
+    for path in workspaces
+        .ancestors()
+        .filter(|path| path.parent().is_some())
+    {
+        if path.is_dir() && std::fs::canonicalize(path).ok().as_deref() == Some(path) {
+            assert_eq!(
+                flow.select_project(&Picked(path.to_path_buf())),
+                Err(ProjectError::Forbidden.to_string()),
+                "{}",
+                path.display()
+            );
+            refused.push(path.to_path_buf());
+        }
+    }
+    assert!(refused.contains(&PathBuf::from("/run")), "{refused:?}");
+    assert!(flow.list_projects().is_empty());
+}

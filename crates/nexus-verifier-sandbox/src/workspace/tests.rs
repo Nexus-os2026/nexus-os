@@ -191,3 +191,23 @@ fn p2e_a_listing_is_complete_across_buffers() {
     empty(&tree.area, &tree.ws).unwrap();
     assert!(sys::directory_is_empty(tree.area.fd()).unwrap());
 }
+
+/// XA-L-01: the location the desktop reserves against project registration
+/// is exactly where the workspaces live, derived once from the real uid. The
+/// retained root is compared only where it already exists, so the test
+/// creates nothing in the runtime directory.
+#[test]
+fn p2e_the_reserved_workspaces_path_is_the_derived_root() {
+    assert_eq!(
+        workspaces_path_of(1000),
+        PathBuf::from("/run/user/1000/nexus-verifier")
+    );
+    // SAFETY: getuid has no preconditions.
+    let uid = unsafe { libc::getuid() };
+    assert_eq!(workspaces_path(), workspaces_path_of(uid));
+    if workspaces_path().is_dir() {
+        if let Ok(root) = WorkspaceRoot::derive() {
+            assert_eq!(root.path, workspaces_path());
+        }
+    }
+}

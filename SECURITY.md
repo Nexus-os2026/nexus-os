@@ -174,6 +174,31 @@ Two mission. They do not redefine the checkpoint.
   "what if", they only deny, and no Time Machine path can force an agent's
   state past the lifecycle state machine.
 
+### Hardening after the Phase Two checkpoint (XA-R4)
+
+These changes are on the post-Phase-Two forward line. They do not redefine
+the frozen checkpoints.
+
+- **Verifier workspaces reserved.** A folder that contains or lies within
+  the verifier's workspaces (`/run/user/<uid>/nexus-verifier`) cannot be
+  selected as a project, just as the Nexus state directory cannot, so an
+  approved apply can never write into a live verification workspace.
+- **Approval names the reviewed identity.** The native confirmation names
+  the review identity the app shows beside the reviewed changes, with the
+  candidate and base identities, and the approval binds that exact review.
+  The native confirmation is a bounded summary the backend computes: the
+  counts, up to twelve paths, and those identities. The diff itself is
+  display data, rendered in the app's privileged webview. Approval binds the
+  exact candidate; reviewing the diff's content relies on that webview.
+- **Release authority.** No one can create, move or delete a `v*` release
+  tag: a server-side ruleset blocks it, with no bypass. The release workflow
+  is disabled, every workflow run must use actions pinned by full commit SHA,
+  and a published release is immutable. A release needs a governed release
+  mission in which the Owner re-enables the release workflow and permits that
+  one tag through a recorded ruleset change, read back before and after. The
+  tag is then pushed on the approved commit, and both changes are reverted
+  afterwards.
+
 ### Dependencies
 
 The Linux security gate runs pinned `cargo-audit` and `cargo-deny` with one

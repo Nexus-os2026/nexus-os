@@ -374,8 +374,17 @@ mod linux {
         pub(crate) fn new(authority: Arc<WorkspaceAuthorityRegistry>) -> Result<Self, String> {
             let state_dir =
                 nexus_kernel::identity_home::nexus_state_dir().map_err(|_| unavailable())?;
+            // No project may contain or lie within the Nexus state directory
+            // or, where sandboxed verification exists, the verifier's
+            // workspaces (XA-L-01).
+            #[cfg(target_arch = "x86_64")]
+            let workspaces = nexus_verifier_sandbox::workspace::workspaces_path();
+            #[cfg(target_arch = "x86_64")]
+            let reserved = [state_dir.as_path(), workspaces.as_path()];
+            #[cfg(not(target_arch = "x86_64"))]
+            let reserved = [state_dir.as_path()];
             Ok(Self {
-                projects: ProjectRegistry::new(authority, &state_dir),
+                projects: ProjectRegistry::reserving(authority, &reserved),
                 ledger: OnceLock::new(),
                 runs: Mutex::new(HashMap::new()),
                 #[cfg(target_arch = "x86_64")]
@@ -955,7 +964,7 @@ mod linux {
                 VerifierMarker::NoResult => None,
                 VerifierMarker::Result(hash) => Some(hex::encode(hash)[..12].to_string()),
             },
-            binding_short: hex::encode(review.binding.hash())[..12].to_string(),
+            binding_short: review.binding.short(),
             changes: review
                 .changes
                 .iter()
