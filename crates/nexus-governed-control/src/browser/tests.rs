@@ -159,7 +159,43 @@ fn run(
     let view = h.control.propose(&h.agent, h.run, preparation)?;
     h.control
         .authorize(view.id, &h.agent, h.run, &Yes::new(approve))?;
-    h.control.execute(view.id, &h.agent, h.run)
+    let result = h.control.execute(view.id, &h.agent, h.run);
+    if result.is_err() {
+        // A failing test shows why the effect failed, as evidence has it.
+        for record in h.evidence.records() {
+            if record.failure.is_some() {
+                eprintln!("failed: {:?} {:?}", record.failure, record.detail);
+            }
+        }
+    }
+    result
+}
+
+/// A read that fails while the page is changing is asked again; the end of
+/// the browser, its silence and cancellation still end the wait.
+#[test]
+fn a_probe_failing_while_the_page_changes_is_asked_again() {
+    use super::live::probed;
+    use crate::authority::commitment::FailureClass;
+    let changing = || {
+        Err((
+            FailureClass::Actuator,
+            "Inspected target navigated or closed".to_string(),
+        ))
+    };
+    assert_eq!(probed(changing(), false), Ok(false));
+    assert_eq!(probed(Ok(true), false), Ok(true));
+    assert_eq!(probed(Ok(false), false), Ok(false));
+    assert!(probed(changing(), true).is_err(), "cancelled");
+    for (class, why) in [
+        (FailureClass::Unavailable, "the browser ended"),
+        (FailureClass::Timeout, "the browser did not answer in time"),
+    ] {
+        assert_eq!(
+            probed(Err((class, why.to_string())), false),
+            Err((class, why.to_string()))
+        );
+    }
 }
 
 fn report(out: &EffectOutput) -> Value {

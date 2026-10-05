@@ -487,6 +487,21 @@ mod live {
         }
     }
 
+    /// One answer of a read-only probe in a wait. A probe that failed
+    /// while the page was changing is no answer yet and is asked again: when
+    /// the page navigates (by itself too), its document and the world the
+    /// probe ran in go away, or the page moves to another process (a failed
+    /// navigation's error page does), and the browser answers a call in
+    /// flight with an error. The end of the browser, its silence and
+    /// cancellation still end the wait. Only reads are asked again: an
+    /// action is never repeated.
+    pub(super) fn probed(answer: Result<bool, Failure>, cancelled: bool) -> Result<bool, Failure> {
+        match answer {
+            Err((FailureClass::Actuator, _)) if !cancelled => Ok(false),
+            other => other,
+        }
+    }
+
     struct Page<'a> {
         cdp: &'a Cdp,
         session: String,
@@ -541,9 +556,10 @@ mod live {
             Ok(result["result"]["value"].clone())
         }
 
+        /// Ask a read-only `probe` until it answers yes or `limit` passes.
         fn wait(
             &self,
-            until: impl Fn(&Self) -> Result<bool, Failure>,
+            probe: impl Fn(&Self) -> Result<bool, Failure>,
             limit: Duration,
         ) -> Result<bool, Failure> {
             let deadline = Instant::now() + limit;
@@ -551,7 +567,7 @@ mod live {
                 if self.cancel.is_cancelled() {
                     return Err((FailureClass::Actuator, "cancelled".into()));
                 }
-                if until(self)? {
+                if probed(probe(self), self.cancel.is_cancelled())? {
                     return Ok(true);
                 }
                 if Instant::now() >= deadline {
