@@ -1,0 +1,9 @@
+# The pip that installs voice/requirements-linux-py311.lock in ci.yml
+# test-python and ci-fast-local.yml fast-python, pinned by hash. Install with:
+#   python -m pip install --require-hashes --no-deps -r voice/pip-bootstrap.lock
+#
+# Hashes are PyPI's sha256 digests of both published files of pip 26.2.1
+# (wheel and sdist).
+pip==26.2.1 \
+    --hash=sha256:71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e \
+    --hash=sha256:f6ad667e89a1fe78046c8f13232b247200f5258d7828f3f7883d660878e0813f
