@@ -211,6 +211,67 @@ fn only_this_users_socket_in_a_safe_directory_is_trusted() {
     mode(0o777);
     assert!(!socket_trusted(&dir, &socket, uid), "anyone may replace it");
     mode(0o700);
+    // The decision itself, for owners a test cannot create files as.
+    use super::server::{trusted, Seen};
+    let own_dir = Seen {
+        dir: true,
+        socket: false,
+        uid: 1000,
+        mode: 0o40700,
+    };
+    let own_socket = Seen {
+        dir: false,
+        socket: true,
+        uid: 1000,
+        mode: 0o140755,
+    };
+    assert!(trusted(own_dir, own_socket, 1000));
+    assert!(
+        !trusted(
+            own_dir,
+            Seen {
+                uid: 1001,
+                ..own_socket
+            },
+            1000
+        ),
+        "another user's socket in this user's directory"
+    );
+    let root_dir = |mode| Seen {
+        uid: 0,
+        mode,
+        ..own_dir
+    };
+    assert!(
+        trusted(root_dir(0o41777), own_socket, 1000),
+        "root's sticky directory"
+    );
+    assert!(
+        !trusted(root_dir(0o40777), own_socket, 1000),
+        "root's directory anyone may change"
+    );
+    assert!(
+        !trusted(
+            Seen {
+                uid: 1001,
+                ..own_dir
+            },
+            own_socket,
+            1000
+        ),
+        "another user's directory"
+    );
+    assert!(
+        !trusted(
+            own_dir,
+            Seen {
+                socket: false,
+                ..own_socket
+            },
+            1000
+        ),
+        "not a socket"
+    );
 }
 
 #[test]

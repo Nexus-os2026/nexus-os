@@ -99,19 +99,43 @@ fn socket_is_ours(number: u32, uid: u32) -> bool {
     socket_trusted(Path::new("/tmp/.X11-unix"), &socket(number), uid)
 }
 
-/// Whether `entry` in `dir` can only be this user's (`uid`): `dir` is a real
-/// directory owned by root or this user, and either sticky or writable by no
-/// one else (so no other user can remove or replace an entry they do not
-/// own), and `entry` is a socket (not a link) owned by this user.
+/// Whether `entry` in `dir` can only be this user's (`uid`), as the files
+/// are now (links are not followed).
 pub(super) fn socket_trusted(dir: &Path, entry: &Path, uid: u32) -> bool {
-    let trusted_dir = std::fs::symlink_metadata(dir).is_ok_and(|dir| {
-        dir.is_dir()
-            && (dir.uid() == 0 || dir.uid() == uid)
-            && (dir.mode() & 0o1000 != 0 || dir.mode() & 0o022 == 0)
-    });
-    trusted_dir
-        && std::fs::symlink_metadata(entry)
-            .is_ok_and(|entry| entry.file_type().is_socket() && entry.uid() == uid)
+    let seen = |path: &Path| {
+        std::fs::symlink_metadata(path).ok().map(|meta| Seen {
+            dir: meta.is_dir(),
+            socket: meta.file_type().is_socket(),
+            uid: meta.uid(),
+            mode: meta.mode(),
+        })
+    };
+    match (seen(dir), seen(entry)) {
+        (Some(dir), Some(entry)) => trusted(dir, entry, uid),
+        _ => false,
+    }
+}
+
+/// What the trust decision reads of a file (a link is neither a directory
+/// nor a socket).
+#[derive(Clone, Copy)]
+pub(super) struct Seen {
+    pub(super) dir: bool,
+    pub(super) socket: bool,
+    pub(super) uid: u32,
+    pub(super) mode: u32,
+}
+
+/// The decision: `dir` is a directory owned by root or this user, and
+/// either sticky or writable by no one else (so no other user can remove or
+/// replace an entry they do not own), and `entry` is a socket owned by this
+/// user.
+pub(super) fn trusted(dir: Seen, entry: Seen, uid: u32) -> bool {
+    dir.dir
+        && (dir.uid == 0 || dir.uid == uid)
+        && (dir.mode & 0o1000 != 0 || dir.mode & 0o022 == 0)
+        && entry.socket
+        && entry.uid == uid
 }
 
 fn connect(number: u32, cookie: &[u8; 16], uid: u32) -> Option<RustConnection> {
