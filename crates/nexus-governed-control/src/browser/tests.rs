@@ -27,13 +27,66 @@ impl Resolver for Fixtures {
     }
 }
 
+/// A browser to drive live, when this host has a Chrome it may launch.
+///
+/// A Chrome that someone other than root could replace is refused before
+/// any session: the hosted CI runner image makes `/opt` world-writable.
+/// There the refusal is checked, exactly, along with the reason for it,
+/// and the live sessions are skipped.
 fn browser() -> Option<(Browser, TempRoot)> {
     if !std::path::Path::new(super::CHROME).exists() {
         eprintln!("Chrome is not installed: live browser tests are skipped");
         return None;
     }
     let root = temp_root("browser");
-    Some((Browser::for_tests(root.0.clone(), Arc::new(Fixtures)), root))
+    let browser = Browser::for_tests(root.0.clone(), Arc::new(Fixtures));
+    match browser.grant_scope(&["https://example.com".into()], false) {
+        Ok(_) => Some((browser, root)),
+        Err(refused) => {
+            let Some(replaceable) = replaceable_by_others(super::CHROME) else {
+                panic!("Chrome was refused although only root can change it: {refused:?}");
+            };
+            assert_eq!(
+                refused,
+                AuthorityError::Closed("the executable is not in a trusted location")
+            );
+            eprintln!(
+                "Chrome is refused, as it must be ({replaceable}): live browser tests are skipped"
+            );
+            None
+        }
+    }
+}
+
+/// The first of `path` and the directories above it that someone other than
+/// root owns or may write, if any.
+fn replaceable_by_others(path: &str) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    std::path::Path::new(path).ancestors().find_map(|current| {
+        let meta = std::fs::symlink_metadata(current).ok()?;
+        (meta.uid() != 0 || meta.mode() & 0o022 != 0).then(|| {
+            format!(
+                "{} has owner {} and mode {:o}",
+                current.display(),
+                meta.uid(),
+                meta.mode() & 0o7777
+            )
+        })
+    })
+}
+
+/// Why a refused Chrome is refused: a path someone other than root could
+/// change is named, a root-only one is not.
+#[test]
+fn a_path_others_could_replace_is_named() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = temp_root("replaceable");
+    let file = root.0.path().join("chrome");
+    std::fs::write(&file, b"").unwrap();
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o766)).unwrap();
+    let named = replaceable_by_others(file.to_str().unwrap()).expect("writable by others");
+    assert!(named.ends_with("mode 766"), "{named}");
+    assert_eq!(replaceable_by_others("/usr/bin"), None);
 }
 
 const PAGE: &str = r#"<!doctype html><html><head><title>Fixture</title></head><body>
