@@ -368,6 +368,18 @@ jobs:
         with:
           node-version: "22"
 
+      # XA-R4C: the npm advisory gate runs before any frontend dependency is
+      # installed: its own tests, then a fresh `npm audit` of every audited
+      # npm root against security/npm-advisory-policy.json. An advisory the
+      # policy's one exact exception does not match, a stale or expired
+      # exception, an unknown or reactivated npm root, or any audit failure
+      # fails the job.
+      - name: npm advisory gate tests
+        run: node --test scripts/ci/npm-advisory-gate.test.mjs
+
+      - name: npm advisory gate (audited npm roots)
+        run: node scripts/ci/npm-advisory-gate.mjs
+
       - name: Install frontend dependencies
         run: cd app && npm ci
 

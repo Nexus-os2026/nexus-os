@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "auditedRoots": [
+    "app",
+    "packaging/builder-toolchain"
+  ],
+  "excludedRoots": [
+    {
+      "path": "nexus-website",
+      "rationale": "Marketing website sources (Vite, React). No workflow, build, release or packaged runtime installs, builds or loads it, and no tracked file outside nexus-website/ other than documentation names it, so none of its dependencies reaches a Nexus OS artifact."
+    },
+    {
+      "path": "scripts/page-audit",
+      "rationale": "Developer-run page audit utility (Puppeteer). No workflow, build, release or packaged runtime installs or runs it, and no tracked file outside scripts/page-audit/ other than documentation names it."
+    },
+    {
+      "path": "sdk/typescript",
+      "rationale": "TypeScript SDK sources without a lockfile. No workflow, build, release or packaged runtime installs, builds, publishes or loads it, and no tracked file outside sdk/typescript/ other than documentation names it."
+    }
+  ],
+  "exceptions": [
+    {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "version": "3.0.3",
+      "severity": "high",
+      "range": "<=3.0.3",
+      "roots": [
+        "app",
+        "packaging/builder-toolchain"
+      ],
+      "reason": "GHSA-vfj7-8cjw-p6xm (CVE-2026-93687: uncontrolled recursion, a stack-exhaustion denial of service through deeply nested brace patterns) affects every braces release through 3.0.3, the latest, and names no patched version. In both audited roots braces is present only through tailwindcss 3.4.19 (its fast-glob and micromatch, and the chokidar of its CLI watcher). npm's suggested fix is tailwindcss 4, a semver-major change this exception does not make.",
+      "threatModel": "Only glob pattern strings reach braces, never file names or file contents. Packaged Builder runtime: the one call is Tailwind's content expansion of the Nexus-owned patterns <react>/index.html and <react>/src/**/*.{js,jsx,ts,tsx} (packaging/builder-toolchain/entry/tailwind-theme.mjs), where <react> is the backend-derived canonical project root <identity home>/.nexus/builds/<backend-generated UUID v4>/react; no frontend, model or project value is part of it. The chokidar and braces copies bundled in Vite run with disableGlobbing: true and expand nothing. Project file names, CSS, class strings and import.meta.glob patterns never reach braces. app: development and test tooling only; its patterns come from the committed app/tailwind.config.ts, and nothing of braces ships in app/dist. Residual: an operator identity home whose own path contains brace syntax is expanded as part of the pattern; that is operator configuration, not attacker input.",
+      "reviewBy": "2026-11-30"
+    }
+  ]
+}
