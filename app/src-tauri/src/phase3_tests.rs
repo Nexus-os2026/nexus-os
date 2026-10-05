@@ -3914,6 +3914,12 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
             ),
         ]
     );
+    // No file names the trait under another name (an alias would escape the
+    // implementation scan above).
+    assert!(
+        renaming("PendingEffect").is_empty(),
+        "PendingEffect is renamed"
+    );
     let control = production_source("crates/nexus-governed-control/src/control.rs");
     let execute = compact(one_fn(control, "Control::execute").body_text(control));
     assert_in_order(
@@ -4192,9 +4198,12 @@ enum Route {
 
 /// The kinds of real-world mechanism a resolved path names. Phase Zero's
 /// process, termination and network predicates, extended with WebSocket
-/// clients; the X server; the credential vault (its global facade and the
-/// OS keyring); sealed spawns; launching the OS's opener or browser; and
-/// direct screen, input, clipboard, audio and browser-driver crates.
+/// clients; raw system calls (`syscall` can start or replace a process
+/// outside every predicate); the X server; the desktop bus (D-Bus, and
+/// AT-SPI, which reads and drives other applications); loading a shared
+/// library; the credential vault (its global facade and the OS keyring);
+/// sealed spawns; launching the OS's opener or browser; and direct screen,
+/// input, clipboard, audio and browser-driver crates.
 fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     use crate::phase0_surface::rust_paths::{
         constructs_process, ends_process, opens_network, starts_with,
@@ -4226,8 +4235,17 @@ fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     if opens_network(path) || any(&["tokio_tungstenite", "tungstenite", "async_tungstenite"]) {
         kinds.insert("network");
     }
+    if any(&["libc::syscall", "nix::libc::syscall"]) {
+        kinds.insert("syscall");
+    }
     if starts_with(path, "x11rb") {
         kinds.insert("x11");
+    }
+    if any(&["zbus", "atspi", "dbus"]) {
+        kinds.insert("bus");
+    }
+    if any(&["libloading", "dlopen2", "libc::dlopen", "nix::libc::dlopen"]) {
+        kinds.insert("dynload");
     }
     if shown.contains("secrets::global::try_facade")
         || shown.contains("secrets::global::facade")
@@ -4270,13 +4288,144 @@ fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     kinds
 }
 
+/// Production modules named like test files (`*tests.rs`, `*_test.rs`), which
+/// the production scanner skips by name: every `mod` declaring them, up to
+/// their crate root, carries no `test` cfg. Their mechanisms are measured
+/// with the rest.
+const NAME_SKIPPED_MODULES: &[&str] = &[
+    "crates/nexus-computer-use/src/bin/agent_test.rs",
+    "crates/nexus-computer-use/src/bin/governance_test.rs",
+    "crates/nexus-computer-use/src/bin/input_test.rs",
+    "crates/nexus-computer-use/src/bin/learn_test.rs",
+    "crates/nexus-computer-use/src/bin/screen_test.rs",
+    "kernel/src/autopilot/stress_test.rs",
+];
+
+/// Workspace sources whose names look like tests but which production
+/// compiles (see `NAME_SKIPPED_MODULES`).
+fn production_modules_named_like_tests() -> Vec<String> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !name.starts_with('.') && !NOT_PRODUCTION_DIRS.contains(&name.as_str()) {
+                    walk(root, &path, out);
+                }
+                continue;
+            }
+            let relative = path
+                .strip_prefix(root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            let in_src = relative.split('/').any(|component| component == "src");
+            if in_src && (name.ends_with("tests.rs") || name.ends_with("_test.rs")) {
+                out.push(relative);
+            }
+        }
+    }
+    let mut candidates = Vec::new();
+    walk(&root, &root, &mut candidates);
+    candidates
+        .into_iter()
+        .filter(|file| compiled_in_production(file, 0))
+        .collect()
+}
+
+/// Whether `file` is a crate root, or is declared by a `mod` without a `test`
+/// cfg in a parent module that is itself compiled in production.
+fn compiled_in_production(file: &str, depth: usize) -> bool {
+    let path = std::path::Path::new(file);
+    let dir = path.parent().unwrap();
+    let file_name = path.file_name().unwrap().to_str().unwrap();
+    if matches!(file_name, "lib.rs" | "main.rs") || dir.ends_with("src/bin") {
+        return true;
+    }
+    if depth > 16 {
+        return false;
+    }
+    let (name, parent_dir) = if file_name == "mod.rs" {
+        (
+            dir.file_name().unwrap().to_str().unwrap(),
+            dir.parent().unwrap(),
+        )
+    } else {
+        (path.file_stem().unwrap().to_str().unwrap(), dir)
+    };
+    let mut parents: Vec<String> = ["mod.rs", "lib.rs", "main.rs"]
+        .iter()
+        .map(|candidate| parent_dir.join(candidate).to_string_lossy().into_owned())
+        .collect();
+    if let (Some(up), Some(dir_name)) = (parent_dir.parent(), parent_dir.file_name()) {
+        parents.push(
+            up.join(format!("{}.rs", dir_name.to_str().unwrap()))
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+    parents.into_iter().any(|parent| {
+        let full = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(&parent);
+        let Ok(text) = std::fs::read_to_string(full) else {
+            return false;
+        };
+        let text = without_comments(&text);
+        let declared = text.match_indices("mod ").any(|(at, _)| {
+            let rest = text[at + 4..].trim_start();
+            let Some(after) = rest.strip_prefix(name) else {
+                return false;
+            };
+            if !after.trim_start().starts_with(';') {
+                return false;
+            }
+            // The attributes of this item: after the previous item's end.
+            let start = text[..at].rfind([';', '}', '{']).map_or(0, |end| end + 1);
+            let attributes: String = text[start..at].split_whitespace().collect();
+            !(attributes.contains("#[cfg(test)]") || attributes.contains("#[cfg(all(test"))
+        });
+        declared && compiled_in_production(&parent, depth + 1)
+    })
+}
+
+/// `text` without `//` line comments and `/* */` block comments.
+fn without_comments(text: &str) -> String {
+    let b = text.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if let Some(end) = literal_end(b, i) {
+            out.extend_from_slice(&b[i..end]);
+            i = end;
+        } else if let Some(end) = comment_end(b, i) {
+            out.push(b' ');
+            i = end;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).expect("cuts fall on ASCII boundaries")
+}
+
 /// (file, kind) -> occurrences, over every workspace production source: each
 /// production occurrence that resolves to a mechanism counts once per kind
 /// (a private `use` only binds a name, so its uses count instead).
 fn measured_effect_sites() -> BTreeMap<(String, &'static str), usize> {
     use crate::phase0_surface::rust_paths::{Analysis, Declaration};
     let mut sites = BTreeMap::new();
-    for (file, _) in workspace_sources() {
+    let files = workspace_sources()
+        .iter()
+        .map(|(file, _)| file.clone())
+        .chain(NAME_SKIPPED_MODULES.iter().map(|file| file.to_string()));
+    for file in files {
+        let file = &file;
         let src = workspace_file(file);
         let analysis = Analysis::new(&src, &["crate"]);
         for o in analysis.production() {
@@ -4428,6 +4577,11 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
         "process",
         1,
     ),
+    (
+        "crates/nexus-governed-control/src/launcher.rs",
+        "syscall",
+        1,
+    ),
     ("crates/nexus-governed-control/src/tool/mod.rs", "sealed", 1),
     ("crates/nexus-mcp/src/client.rs", "process", 1),
     ("crates/nexus-mcp/src/tools.rs", "process", 2),
@@ -4465,10 +4619,16 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
         4,
     ),
     ("crates/nexus-swarm/src/providers/openrouter.rs", "vault", 1),
+    ("crates/nexus-ui-repair/src/bin/sg5_probe.rs", "bus", 5),
     (
         "crates/nexus-ui-repair/src/governance/xvfb_session.rs",
         "process",
         1,
+    ),
+    (
+        "crates/nexus-ui-repair/src/specialists/live_enumerator.rs",
+        "bus",
+        44,
     ),
     (
         "crates/nexus-ui-repair/src/specialists/vision_judge.rs",
@@ -4481,12 +4641,23 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
         1,
     ),
     (
+        "crates/nexus-verifier-sandbox/src/landlock_rules.rs",
+        "syscall",
+        1,
+    ),
+    (
         "crates/nexus-verifier-sandbox/src/launcher.rs",
         "process",
         1,
     ),
+    (
+        "crates/nexus-verifier-sandbox/src/scope/manager.rs",
+        "bus",
+        55,
+    ),
     ("crates/nexus-verifier-sandbox/src/sys.rs", "network", 4),
     ("crates/nexus-verifier-sandbox/src/sys.rs", "process", 1),
+    ("crates/nexus-verifier-sandbox/src/sys.rs", "syscall", 6),
     ("distributed/src/tcp_transport.rs", "network", 6),
     ("factory/src/pipeline.rs", "process", 1),
     ("integrations/src/providers/discord.rs", "network", 2),
@@ -4913,9 +5084,19 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "operator-configured provider: fixed host, vault key, no redirects (S7)",
     ),
     (
+        "crates/nexus-ui-repair/src/bin/sg5_probe.rs",
+        Route::NonProduction,
+        "developer QA probe binary (decision M): AT-SPI over D-Bus; not shipped, not in the desktop's dependency closure",
+    ),
+    (
         "crates/nexus-ui-repair/src/governance/xvfb_session.rs",
         Route::NonProduction,
         "developer QA scout (decision M): not in the desktop's dependency closure",
+    ),
+    (
+        "crates/nexus-ui-repair/src/specialists/live_enumerator.rs",
+        Route::NonProduction,
+        "developer QA scout (decision M): AT-SPI over D-Bus; not in the desktop's dependency closure",
     ),
     (
         "crates/nexus-ui-repair/src/specialists/vision_judge.rs",
@@ -4923,14 +5104,24 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "developer QA scout (decision M): not in the desktop's dependency closure",
     ),
     (
+        "crates/nexus-verifier-sandbox/src/landlock_rules.rs",
+        Route::Governed,
+        "Phase Two verifier: the sandbox's Landlock ruleset system calls (no launch, no connection)",
+    ),
+    (
         "crates/nexus-verifier-sandbox/src/launcher.rs",
         Route::Governed,
         "Phase Two verifier: native launch approval, verified packaged helper and toolchain",
     ),
     (
+        "crates/nexus-verifier-sandbox/src/scope/manager.rs",
+        Route::Governed,
+        "Phase Two verifier: the owner's systemd user manager over D-Bus, only for the verifier's own cgroup scope",
+    ),
+    (
         "crates/nexus-verifier-sandbox/src/sys.rs",
         Route::Governed,
-        "Phase Two verifier sandbox (seqpacket control socket; an interface-flags ioctl, no connection)",
+        "Phase Two verifier sandbox: the helper's fork and execveat, close_range, Landlock and a seqpacket control socket, after native launch approval",
     ),
     (
         "distributed/src/tcp_transport.rs",
@@ -5203,6 +5394,7 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
 /// classified.
 #[test]
 fn p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified() {
+    assert_eq!(production_modules_named_like_tests(), NAME_SKIPPED_MODULES);
     let measured = measured_effect_sites();
     let pinned: BTreeMap<(String, &str), usize> = EFFECT_SITES
         .iter()
@@ -5364,3 +5556,101 @@ const NEXUS_CODE_APP_FIELDS: &[(&str, &str, usize)] = &[
     ("nx_bridge/commands.rs", "tool_registry.list", 4),
     ("nx_bridge/mod.rs", "tool_registry.list", 1),
 ];
+
+/// The production files that declare foreign functions (`extern` blocks).
+const FFI_FILES: [&str; 3] = [
+    "app/src-tauri/src/commands/flash.rs",
+    "kernel/src/resource_limiter/darwin_group.rs",
+    "llama-bridge/src/ffi.rs",
+];
+
+/// C names of process, network, signal, raw-syscall and loader functions: a
+/// local `extern` declaration of one would reach the system without any path
+/// the mechanism predicates resolve.
+const FFI_DENIED: &[&str] = &[
+    "fork",
+    "vfork",
+    "clone",
+    "clone3",
+    "execv",
+    "execve",
+    "execvp",
+    "execvpe",
+    "execveat",
+    "fexecve",
+    "execl",
+    "execle",
+    "execlp",
+    "posix_spawn",
+    "posix_spawnp",
+    "system",
+    "popen",
+    "socket",
+    "socketpair",
+    "connect",
+    "bind",
+    "listen",
+    "accept",
+    "accept4",
+    "sendto",
+    "sendmsg",
+    "kill",
+    "killpg",
+    "tgkill",
+    "tkill",
+    "pidfd_send_signal",
+    "ptrace",
+    "syscall",
+    "dlopen",
+    "dlsym",
+    "CreateProcessW",
+    "CreateProcessA",
+    "ShellExecuteW",
+    "ShellExecuteA",
+    "ShellExecuteExW",
+    "WinExec",
+    "LoadLibraryW",
+    "LoadLibraryA",
+    "LoadLibraryExW",
+];
+
+/// §22 and §34 (alternate imports): a foreign declaration escapes the
+/// structural resolver, so the files allowed to declare one are pinned and
+/// none may declare a process, network, signal, raw-syscall or loader
+/// function.
+#[test]
+fn p3_g6_10_no_foreign_declaration_escapes_the_mechanism_predicates() {
+    let mut declaring = BTreeSet::new();
+    for (file, text) in workspace_sources() {
+        // Literals are blanked, so neither an ABI string's content nor a
+        // literal that spells `extern "C" {` can mislead the scan.
+        let m = masked(text);
+        let flat = String::from_utf8(m.clone()).expect("masking keeps UTF-8");
+        let mut from = 0;
+        while let Some(found) = flat[from..].find("extern \"") {
+            let quote = from + found + "extern ".len();
+            let abi_end = quote + 1 + flat[quote + 1..].find('"').expect("a closed ABI string");
+            from = abi_end + 1;
+            let open = from + (flat[from..].len() - flat[from..].trim_start().len());
+            if flat.as_bytes().get(open) != Some(&b'{') {
+                continue; // an `extern "C" fn` item or type
+            }
+            let close = close_of(&m, open);
+            declaring.insert(file.as_str());
+            let block = &flat[open..close];
+            for (index, _) in block.match_indices("fn ") {
+                let name: String = block[index + 3..]
+                    .trim_start()
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                assert!(
+                    !FFI_DENIED.contains(&name.as_str()),
+                    "{file}: a foreign declaration of {name}"
+                );
+            }
+            from = close;
+        }
+    }
+    assert_eq!(declaring, BTreeSet::from(FFI_FILES));
+}
