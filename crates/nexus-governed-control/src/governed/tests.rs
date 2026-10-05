@@ -525,7 +525,7 @@ fn an_agent_r2_action_waits_for_the_owner_and_r1_runs_under_the_grant() {
         body: None,
     });
     assert!(matches!(
-        control.agent_action(&agent, run, &read, &never).unwrap(),
+        control.agent_action(&agent, run, &read).unwrap(),
         AgentOutcome::Done(_)
     ));
     assert_eq!(never.asked(), 0, "R1 under a grant asks nothing");
@@ -535,8 +535,7 @@ fn an_agent_r2_action_waits_for_the_owner_and_r1_runs_under_the_grant() {
         headers: vec![],
         body: Some(s("x")),
     });
-    let AgentOutcome::AwaitingApproval(view) =
-        control.agent_action(&agent, run, &write, &never).unwrap()
+    let AgentOutcome::AwaitingApproval(view) = control.agent_action(&agent, run, &write).unwrap()
     else {
         panic!("R2 waits")
     };

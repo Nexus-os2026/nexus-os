@@ -497,9 +497,12 @@ fn wire_tag(action: &PlannedAction) -> String {
         .to_string()
 }
 
-/// The normalized body of `Phase0AgentExecutor::execute`: the closure is
-/// consulted, and a refusal returned, before `self.inner` is touched.
-const EXECUTOR_BODY: &str = "ifletSome(closure)=phase0_agent_action_closure(action){returnErr(closed(action.action_type(),closure));}self.inner.execute(agent_id,action,audit,hitl_approved)";
+/// The normalized body of `Phase0AgentExecutor::execute`. Without Phase
+/// Three it is the Phase Zero executor (closure first, then `self.inner`).
+/// With it, the Phase Three classification decides: only inert actions
+/// reach the closure and then `self.inner`, governed actions reach only the
+/// Phase Three bridge, and closed actions keep their Phase Zero refusal.
+const EXECUTOR_BODY: &str = "use{classify,Disposition};letSome(bridge)=&self.governedelse{ifletSome(closure)=phase0_agent_action_closure(action){returnErr(closed(action.action_type(),closure));}returnself.inner.execute(agent_id,action,audit,hitl_approved);};matchclassify(action){Disposition::Inert=>{ifletSome(closure)=phase0_agent_action_closure(action){returnErr(closed(action.action_type(),closure));}self.inner.execute(agent_id,action,audit,hitl_approved)}Disposition::Governed(intent)=>bridge.act(agent_id,&intent),Disposition::Orchestrated{max_steps}=>Ok(orchestration_guidance(max_steps)),Disposition::Closed(_)=>Err(closed(action.action_type(),phase0_agent_action_closure(action).unwrap_or(Closure::AgentExecution)))}";
 
 #[test]
 fn p3e_g1_01_every_planned_action_is_classified_without_a_wildcard() {
@@ -635,23 +638,100 @@ fn p3e_g1_02_production_decides_every_variant_as_classified() {
     }
 }
 
-/// Before Phase Three opens an actuator, every governed and every still-closed
-/// variant has no direct path: production refuses each of them, so nothing
-/// reaches the kernel action registry.
+/// Governed variants whose content keeps them closed in Phase Three: speech
+/// written to a file or by a non-local provider, browser screenshots to a
+/// directory (file writes stay closed).
+fn closed_by_content(action: &PlannedAction) -> bool {
+    match action {
+        PlannedAction::TextToSpeech {
+            output_path,
+            provider,
+            ..
+        } => {
+            !output_path.trim().is_empty()
+                || provider
+                    .as_deref()
+                    .is_some_and(|p| !matches!(p.trim(), "" | "local" | "espeak" | "espeak-ng"))
+        }
+        PlannedAction::BrowserAutomate { screenshot_dir, .. } => screenshot_dir
+            .as_deref()
+            .is_some_and(|dir| !dir.trim().is_empty()),
+        _ => false,
+    }
+}
+
+/// Phase Three routes every governed variant to its pipeline and nothing
+/// else: the crate's final classification agrees with this independent
+/// table for every variant, and the Phase Zero closure still refuses every
+/// governed and every closed variant, so even a routing slip could not
+/// reach the kernel action registry.
 #[test]
 fn p3e_g1_07_no_governed_or_closed_variant_has_a_direct_path() {
+    use nexus_governed_control::planned::{classify, Disposition as Routed};
     for action in every_action() {
         let disposition = expected_disposition(&action);
         let production = crate::phase0_agent_action_closure(&action);
+        let routed = classify(&action);
         match disposition {
-            Disposition::Inert => assert_eq!(production, None, "{}", action.action_type()),
-            Disposition::Governed(_) | Disposition::StillClosed => assert!(
-                production.is_some(),
-                "{} has a direct path",
-                action.action_type()
-            ),
+            Disposition::Inert => {
+                assert_eq!(production, None, "{}", action.action_type());
+                assert_eq!(routed, Routed::Inert, "{}", action.action_type());
+            }
+            Disposition::Governed(_) => {
+                assert!(
+                    production.is_some(),
+                    "{} has a direct path",
+                    action.action_type()
+                );
+                if closed_by_content(&action) {
+                    assert!(
+                        matches!(routed, Routed::Closed(_)),
+                        "{} stays closed with this content: {routed:?}",
+                        action.action_type()
+                    );
+                } else {
+                    assert!(
+                        matches!(routed, Routed::Governed(_) | Routed::Orchestrated { .. }),
+                        "{} is governed: {routed:?}",
+                        action.action_type()
+                    );
+                }
+            }
+            Disposition::StillClosed => {
+                assert!(
+                    production.is_some(),
+                    "{} has a direct path",
+                    action.action_type()
+                );
+                assert!(
+                    matches!(routed, Routed::Closed(_)),
+                    "{} stays closed: {routed:?}",
+                    action.action_type()
+                );
+            }
         }
     }
+    // Speech is governed only as audio returned as data.
+    let speech = |output_path: &str, provider: Option<&str>| PlannedAction::TextToSpeech {
+        text: probe(),
+        output_path: output_path.into(),
+        provider: provider.map(Into::into),
+        voice: None,
+        model: None,
+    };
+    assert!(matches!(classify(&speech("", None)), Routed::Governed(_)));
+    assert!(matches!(
+        classify(&speech("", Some("local"))),
+        Routed::Governed(_)
+    ));
+    assert!(matches!(
+        classify(&speech(&probe(), None)),
+        Routed::Closed(_)
+    ));
+    assert!(matches!(
+        classify(&speech("", Some("cloud"))),
+        Routed::Closed(_)
+    ));
     // Content-dependent classes.
     use nexus_kernel::cognitive::types::BrowserAction;
     assert_eq!(api_call_effect("get"), Effect::R1);
@@ -717,14 +797,13 @@ fn p3e_g1_03_the_wire_form_round_trips_to_the_same_variant_and_decision() {
     }
 }
 
-/// The real production executor refuses with exactly the classified closure,
-/// even when the step is marked approved, so the refusal is the wrapper's
-/// and not the registry's. Every fixture here is inert even if it reached
-/// the registry: the read targets an absent file for an agent the supervisor
-/// does not know (the registry stops at that lookup, before any actuator),
-/// and the registry routes none of the governance actions. Input, screen,
-/// shell, browser, network and write actions are never executed here; the
-/// classification and structure tests cover them.
+/// The real production executor never lets a closed or governed action
+/// reach its registry, even when the step is marked approved. Without the
+/// Phase Three control (a test state has none) it is exactly the Phase Zero
+/// executor: every such action is refused with its Phase Zero closure. Every fixture here is inert even if it reached
+/// the registry: the read targets an absent file for an agent the
+/// supervisor does not know, and the registry routes none of the
+/// governance actions.
 #[test]
 fn p3e_g1_04_the_executor_refuses_before_its_registry_even_when_approved() {
     use nexus_kernel::cognitive::loop_runtime::ActionExecutor;
@@ -783,6 +862,33 @@ fn p3e_g1_04_the_executor_refuses_before_its_registry_even_when_approved() {
             );
         }
     }
+    // Governed actions never fall back to the registry: without Phase Three
+    // (a test state has none) the Phase Zero closure stands, approved or not.
+    let governed = [
+        PlannedAction::WebFetch {
+            url: "https://example.invalid/".into(),
+        },
+        PlannedAction::CaptureScreen { region: None },
+        PlannedAction::MouseClick {
+            x: 1,
+            y: 1,
+            button: "left".into(),
+        },
+        PlannedAction::KeyboardType { text: probe() },
+    ];
+    for action in &governed {
+        let Decision::Refused(closure) = expected_decision(action) else {
+            panic!("{} is refused without Phase Three", action.action_type());
+        };
+        for approved in [true, false] {
+            assert_eq!(
+                executor.execute(&agent, action, &mut audit, approved),
+                Err(closed(action.action_type(), closure)),
+                "{} (approved: {approved})",
+                action.action_type()
+            );
+        }
+    }
     assert!(!absent_dir.exists(), "nothing was created");
 
     // Permitted actions still run (none reaches outside the in-memory state).
@@ -823,7 +929,7 @@ fn p3e_g1_04_the_executor_refuses_before_its_registry_even_when_approved() {
 }
 
 #[test]
-fn p3e_g1_05_the_executor_consults_the_closure_before_its_inner_registry() {
+fn p3e_g1_05_the_executor_classifies_before_any_route() {
     let path = "app/src-tauri/src/commands/cognitive.rs";
     let cognitive = production_source(path);
     let methods: Vec<FnItem> = fn_items(cognitive)
@@ -838,9 +944,27 @@ fn p3e_g1_05_the_executor_consults_the_closure_before_its_inner_registry() {
     assert_eq!(methods[0].path, "Phase0AgentExecutor::execute");
     assert_eq!(methods[0].trait_name, "ActionExecutor");
     assert_eq!(compact(methods[0].body_text(cognitive)), EXECUTOR_BODY);
+    // The classification it calls is the Phase Three one.
+    assert_eq!(
+        cognitive
+            .matches("use nexus_governed_control::planned::{classify, Disposition};")
+            .count(),
+        1
+    );
 
-    // Its only state is the inner executor, and it has one impl block.
-    assert_eq!(struct_parts(cognitive, "Phase0AgentExecutor").1, "inner:E");
+    // Its only state is the inner executor and the Phase Three bridge, and
+    // it has one impl block.
+    assert_eq!(
+        struct_parts(cognitive, "Phase0AgentExecutor").1,
+        "inner:E,governed:Option<AgentBridge>"
+    );
+    assert_eq!(
+        cognitive
+            .matches("governed: Option<crate::governed_real_world::AgentBridge>,")
+            .count(),
+        1,
+        "the bridge is the Phase Three one"
+    );
     let mut blocks = Vec::new();
     for file in files_naming("Phase0AgentExecutor") {
         for block in impl_blocks(&masked(production_source(file))) {
@@ -1281,11 +1405,25 @@ const CONDITIONAL_CLOSED: &[(&str, &str, &str, &str)] = &[
         "\"flash model\"",
         "Closure::FileSelection",
     ),
+    // Phase Three: the Phase Zero closure stands without Phase Three, still
+    // gates inert actions with it, and is the refusal of closed actions.
     (
         "commands/cognitive.rs",
         "Phase0AgentExecutor::execute",
         "action.action_type()",
         "closure",
+    ),
+    (
+        "commands/cognitive.rs",
+        "Phase0AgentExecutor::execute",
+        "action.action_type()",
+        "closure",
+    ),
+    (
+        "commands/cognitive.rs",
+        "Phase0AgentExecutor::execute",
+        "action.action_type()",
+        "phase0_agent_action_closure(action).unwrap_or(Closure::AgentExecution)",
     ),
     (
         "commands/cognitive.rs",

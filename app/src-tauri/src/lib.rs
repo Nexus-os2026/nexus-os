@@ -5,6 +5,9 @@ mod builder_workspace;
 // the coding-run primitive.
 mod coding_flow;
 mod commands;
+// Phase Three: governed real-world control (the one front door to every
+// governed process, network, browser, display, input and connector effect).
+mod governed_real_world;
 mod nx_bridge;
 pub mod oracle_runtime;
 mod phase0_surface;
@@ -901,6 +904,8 @@ pub struct AppState {
     /// runs of this process). Shares the backend authority registry.
     #[cfg(target_os = "linux")]
     coding: Result<Arc<coding_flow::CodingFlow>, String>,
+    /// Phase Three governed real-world control (the one front door).
+    real_world: Result<Arc<governed_real_world::RealWorld>, String>,
     /// Lock invariant: audit and supervisor guards must never overlap. Do not
     /// hold audit across routing, secrets, Warden, models, tools or callbacks.
     /// Execution passes an AuditWriter; readers snapshot before downstream work.
@@ -1061,13 +1066,28 @@ fn append_audit_event(
     event_type: EventType,
     payload: serde_json::Value,
 ) {
+    if let Err(e) = append_audit_event_checked(audit, db, agent_id, event_type, payload) {
+        eprintln!("{e}");
+    }
+}
+
+/// [`append_audit_event`], reporting failure: Phase Three evidence must be
+/// recorded before its effect, so its sink needs to know.
+fn append_audit_event_checked(
+    audit: &Mutex<AuditTrail>,
+    db: &NexusDatabase,
+    agent_id: AgentId,
+    event_type: EventType,
+    payload: serde_json::Value,
+) -> Result<(), String> {
     let event_type_str = format!("{event_type:?}");
+    let mut failures = Vec::new();
     let mut guard = match audit.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
     if let Err(e) = guard.append_event(agent_id, event_type, payload.clone()) {
-        eprintln!("audit append failed: {e}");
+        failures.push(format!("audit append failed: {e}"));
     }
 
     // Leaf critical section: serialize the DB chain's read/count/append as
@@ -1090,7 +1110,12 @@ fn append_audit_event(
         &current_hash,
         sequence,
     ) {
-        eprintln!("persistence: audit append failed: {e}");
+        failures.push(format!("persistence: audit append failed: {e}"));
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("\n"))
     }
 }
 
@@ -1263,6 +1288,10 @@ impl AppState {
         }
         #[cfg(target_os = "linux")]
         let coding = coding_flow::CodingFlow::new(Arc::clone(&workspace_authority)).map(Arc::new);
+        let real_world = governed_real_world::RealWorld::setup(audit.clone(), db.clone());
+        if let Err(error) = &real_world {
+            eprintln!("{error}; governed real-world control is unavailable");
+        }
 
         let state = Self {
             supervisor: supervisor.clone(),
@@ -1270,6 +1299,7 @@ impl AppState {
             builder_workspace,
             #[cfg(target_os = "linux")]
             coding,
+            real_world,
             audit,
             meta: Arc::new(Mutex::new(HashMap::new())),
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
@@ -1622,6 +1652,9 @@ impl AppState {
             ),
             #[cfg(target_os = "linux")]
             coding: Err("governed coding is not configured for this test AppState".into()),
+            real_world: Err(
+                "governed real-world control is not configured for this test AppState".into(),
+            ),
             audit: Arc::new(Mutex::new(AuditTrail::new())),
             meta: Arc::new(Mutex::new(HashMap::new())),
             voice: Arc::new(Mutex::new(VoiceRuntimeState {
@@ -1915,6 +1948,11 @@ impl AppState {
         } else {
             false
         }
+    }
+
+    /// Phase Three governed real-world control.
+    pub(crate) fn real_world(&self) -> Result<Arc<governed_real_world::RealWorld>, String> {
+        self.real_world.clone()
     }
 
     /// The governed coding session (Phase One).
@@ -8855,6 +8893,19 @@ pub mod runtime {
                 commands::swarm::swarm_refresh_provider_health,
                 commands::swarm::swarm_audit_tail,
                 commands::oracle_runtime::oracle_runtime_status,
+                crate::governed_real_world::ipc::p3_approve,
+                crate::governed_real_world::ipc::p3_cancel_run,
+                crate::governed_real_world::ipc::p3_deny,
+                crate::governed_real_world::ipc::p3_display_start,
+                crate::governed_real_world::ipc::p3_display_stop,
+                crate::governed_real_world::ipc::p3_emergency_stop,
+                crate::governed_real_world::ipc::p3_evidence,
+                crate::governed_real_world::ipc::p3_import_attachment,
+                crate::governed_real_world::ipc::p3_request_grant,
+                crate::governed_real_world::ipc::p3_resume,
+                crate::governed_real_world::ipc::p3_revoke_grant,
+                crate::governed_real_world::ipc::p3_status,
+                crate::governed_real_world::ipc::p3_submit,
             ])
             .build(tauri::generate_context!())
             .unwrap_or_else(|e| {

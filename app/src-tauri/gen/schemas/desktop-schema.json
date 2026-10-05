@@ -3681,6 +3681,84 @@
           "markdownDescription": "Enables the override_security_block command without any pre-configured scope."
         },
         {
+          "description": "Enables the p3_approve command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-approve",
+          "markdownDescription": "Enables the p3_approve command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_cancel_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-cancel-run",
+          "markdownDescription": "Enables the p3_cancel_run command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_deny command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-deny",
+          "markdownDescription": "Enables the p3_deny command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_display_start command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-display-start",
+          "markdownDescription": "Enables the p3_display_start command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_display_stop command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-display-stop",
+          "markdownDescription": "Enables the p3_display_stop command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_emergency_stop command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-emergency-stop",
+          "markdownDescription": "Enables the p3_emergency_stop command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_evidence command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-evidence",
+          "markdownDescription": "Enables the p3_evidence command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_import_attachment command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-import-attachment",
+          "markdownDescription": "Enables the p3_import_attachment command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_request_grant command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-request-grant",
+          "markdownDescription": "Enables the p3_request_grant command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_resume command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-resume",
+          "markdownDescription": "Enables the p3_resume command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_revoke_grant command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-revoke-grant",
+          "markdownDescription": "Enables the p3_revoke_grant command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-status",
+          "markdownDescription": "Enables the p3_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the p3_submit command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-p3-submit",
+          "markdownDescription": "Enables the p3_submit command without any pre-configured scope."
+        },
+        {
           "description": "Enables the pause_agent command without any pre-configured scope.",
           "type": "string",
           "const": "allow-pause-agent",
@@ -8575,6 +8653,84 @@
           "type": "string",
           "const": "deny-override-security-block",
           "markdownDescription": "Denies the override_security_block command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_approve command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-approve",
+          "markdownDescription": "Denies the p3_approve command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_cancel_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-cancel-run",
+          "markdownDescription": "Denies the p3_cancel_run command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_deny command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-deny",
+          "markdownDescription": "Denies the p3_deny command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_display_start command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-display-start",
+          "markdownDescription": "Denies the p3_display_start command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_display_stop command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-display-stop",
+          "markdownDescription": "Denies the p3_display_stop command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_emergency_stop command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-emergency-stop",
+          "markdownDescription": "Denies the p3_emergency_stop command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_evidence command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-evidence",
+          "markdownDescription": "Denies the p3_evidence command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_import_attachment command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-import-attachment",
+          "markdownDescription": "Denies the p3_import_attachment command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_request_grant command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-request-grant",
+          "markdownDescription": "Denies the p3_request_grant command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_resume command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-resume",
+          "markdownDescription": "Denies the p3_resume command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_revoke_grant command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-revoke-grant",
+          "markdownDescription": "Denies the p3_revoke_grant command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-status",
+          "markdownDescription": "Denies the p3_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the p3_submit command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-p3-submit",
+          "markdownDescription": "Denies the p3_submit command without any pre-configured scope."
         },
         {
           "description": "Denies the pause_agent command without any pre-configured scope.",

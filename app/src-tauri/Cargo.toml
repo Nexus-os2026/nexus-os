@@ -13,6 +13,7 @@ real-llama = ["nexus-flash-infer/real-llama"]
 test-support = []
 
 [dependencies]
+nexus-governed-control = { path = "../../crates/nexus-governed-control" }
 nexus-kernel = { path = "../../kernel" }
 nexus-connectors-core = { path = "../../connectors/core" }
 nexus-connectors-web = { path = "../../connectors/web" }

@@ -1495,16 +1495,19 @@ pub(crate) fn phase0_agent_action_closure(
     }
 }
 
-/// P0-002C5A: the production agent executor.
+/// P0-002C5A, Phase Three: the production agent executor.
 ///
-/// Agents hold no approved filesystem, process or OS-input authority in Phase
-/// Zero. The process working directory is not a workspace; a WorkspaceGrant
-/// would not contain shell, code or Docker execution; and the file, image,
-/// speech, browser, computer-control and cognitive actuators kept their state
-/// under that directory. Those actions fail closed before reaching the kernel
-/// registry, which is given no workspace root at all.
+/// Every action is classified by the Phase Three classification first.
+/// Inert actions keep their Phase Zero route: the closure above, then the
+/// kernel registry, which is given no workspace root at all. Governed
+/// actions (network, browser, observation and input on the agent display,
+/// governed tools) go only to the Phase Three pipeline, never to the
+/// registry: they are committed, authorized by the owner's standing grants
+/// (R2 waits for the owner's native approval) and executed once. Everything
+/// else stays closed. A kernel approval allowance is not authority here.
 pub(crate) struct Phase0AgentExecutor<E> {
     inner: E,
+    governed: Option<crate::governed_real_world::AgentBridge>,
 }
 
 impl<E: nexus_kernel::cognitive::loop_runtime::ActionExecutor>
@@ -1517,11 +1520,52 @@ impl<E: nexus_kernel::cognitive::loop_runtime::ActionExecutor>
         audit: &mut dyn nexus_kernel::audit::AuditWriter,
         hitl_approved: bool,
     ) -> Result<String, String> {
-        if let Some(closure) = phase0_agent_action_closure(action) {
-            return Err(crate::phase0_surface::closed(action.action_type(), closure));
+        use nexus_governed_control::planned::{classify, Disposition};
+        let Some(bridge) = &self.governed else {
+            // Without Phase Three, the Phase Zero closure stands.
+            if let Some(closure) = phase0_agent_action_closure(action) {
+                return Err(crate::phase0_surface::closed(action.action_type(), closure));
+            }
+            return self.inner.execute(agent_id, action, audit, hitl_approved);
+        };
+        match classify(action) {
+            Disposition::Inert => {
+                if let Some(closure) = phase0_agent_action_closure(action) {
+                    return Err(crate::phase0_surface::closed(action.action_type(), closure));
+                }
+                self.inner.execute(agent_id, action, audit, hitl_approved)
+            }
+            Disposition::Governed(intent) => bridge.act(agent_id, &intent),
+            Disposition::Orchestrated { max_steps } => Ok(orchestration_guidance(max_steps)),
+            Disposition::Closed(_) => Err(crate::phase0_surface::closed(
+                action.action_type(),
+                phase0_agent_action_closure(action)
+                    .unwrap_or(crate::phase0_surface::Closure::AgentExecution),
+            )),
         }
-        self.inner.execute(agent_id, action, audit, hitl_approved)
     }
+}
+
+/// Tests: the production executor with an isolated Phase Three control.
+#[cfg(test)]
+impl<E> Phase0AgentExecutor<E> {
+    pub(crate) fn with_real_world(
+        mut self,
+        world: Arc<crate::governed_real_world::RealWorld>,
+    ) -> Self {
+        self.governed = Some(crate::governed_real_world::AgentBridge::new(world));
+        self
+    }
+}
+
+/// What a `ComputerAction` returns: the agent takes it one governed step at
+/// a time.
+fn orchestration_guidance(max_steps: u32) -> String {
+    format!(
+        "computer actions are taken one governed step at a time on the agent display: \
+         observe it, then issue at most {max_steps} single input actions, each \
+         committed and authorized on its own"
+    )
 }
 
 /// The executor every production cognitive loop runs with.
@@ -1541,6 +1585,10 @@ pub(crate) fn phase0_agent_executor(
         )
         .with_llm_handler(Arc::new(BridgeLlmQueryHandler))
         .with_memory_manager(memory),
+        governed: state
+            .real_world()
+            .ok()
+            .map(crate::governed_real_world::AgentBridge::new),
     }
 }
 

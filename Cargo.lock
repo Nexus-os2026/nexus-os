@@ -5302,6 +5302,7 @@ dependencies = [
  "nexus-governance-engine",
  "nexus-governance-evolution",
  "nexus-governance-oracle",
+ "nexus-governed-control",
  "nexus-integrations",
  "nexus-kernel",
  "nexus-marketplace",

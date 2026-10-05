@@ -2270,6 +2270,12 @@ const APPROVED_STATE_ROOTS: &[(&str, &str, usize, &str)] = &[
         "the nexus CLI, outside the desktop",
     ),
     (
+        "crates/nexus-governed-control/src/display/server.rs",
+        "\"/tmp",
+        1,
+        "the X11 socket directory of the agent display (a fixed protocol path, not a state root); Nexus writes nothing there",
+    ),
+    (
         "crates/nexus-ui-repair/src/driver/loop_.rs",
         "var(\"HOME\")",
         1,

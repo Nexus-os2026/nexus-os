@@ -207,7 +207,7 @@ fn p0_fg_webview_app_manifest_lists_every_registered_command() {
     // Matches the recorded desktop surface (inventory: 804 registered commands,
     // plus the 9 Phase One governed coding commands).
     // Phase Two added the three governed verification commands (reviewed).
-    assert_eq!(APP_COMMANDS.len(), 816, "registered command count changed");
+    assert_eq!(APP_COMMANDS.len(), 829, "registered command count changed");
 }
 
 /// build.rs must actually feed APP_COMMANDS into the app manifest, or the ACL
@@ -897,7 +897,7 @@ fn p0_fg_webview_app_command_ipc_is_local_main_only() {
     // at the local origin on the main window, and the handler/closure decides
     // the rest. A command missing from the manifest would be refused here
     // even at the local origin.
-    assert_eq!(APP_COMMANDS.len(), 816);
+    assert_eq!(APP_COMMANDS.len(), 829);
     for &cmd in APP_COMMANDS {
         // Allowed: local origin, main window/webview.
         assert!(

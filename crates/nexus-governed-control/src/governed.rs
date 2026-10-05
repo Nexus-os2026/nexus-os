@@ -202,19 +202,20 @@ impl GovernedControl {
     }
 
     /// An agent's action under the owner's standing grants: R0 and R1 run
-    /// now; an R2 action is left pending for the owner's native approval.
+    /// now; an R2 action is committed and left for the owner's native
+    /// approval from the interface. An agent's path never raises the
+    /// owner's dialog itself.
     pub fn agent_action(
         &self,
         agent: &AgentId,
         run: RunId,
         intent: &Intent,
-        confirmer: &dyn ControlConfirmer,
     ) -> Result<AgentOutcome, AuthorityError> {
         let view = self.propose(agent, run, intent)?;
         if view.class == EffectClass::R2 {
             return Ok(AgentOutcome::AwaitingApproval(view));
         }
-        self.authorize(view.id, agent, run, confirmer)?;
+        self.authorize(view.id, agent, run, &NeverAsk)?;
         self.execute(view.id, agent, run).map(AgentOutcome::Done)
     }
 
@@ -313,6 +314,22 @@ impl GovernedControl {
                 .map(|(connector, op, class, method)| (connector, op, class.as_str(), method))
                 .collect(),
         }
+    }
+}
+
+/// Declines everything: R0 and R1 authorization never asks, and nothing on
+/// an agent's path may ask the owner.
+struct NeverAsk;
+
+impl ControlConfirmer for NeverAsk {
+    fn confirm_action(&self, _: &crate::authority::approval::ActionConfirmation) -> bool {
+        false
+    }
+    fn confirm_grant(&self, _: &crate::authority::approval::GrantConfirmation) -> bool {
+        false
+    }
+    fn confirm_resume(&self, _: &crate::authority::approval::ResumeConfirmation) -> bool {
+        false
     }
 }
 
