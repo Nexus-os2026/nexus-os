@@ -82,6 +82,13 @@ pub struct ReviewBinding {
 }
 
 impl ReviewBinding {
+    /// The review identity owners see: the first 12 hex characters of
+    /// [`Self::hash`], shown both beside the reviewed changes in the app and
+    /// in the native confirmation that approves them (XA-W-03).
+    pub fn short(&self) -> String {
+        hex::encode(self.hash())[..12].to_string()
+    }
+
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
         put_bytes(&mut hasher, BINDING_DOMAIN);

@@ -964,7 +964,7 @@ mod linux {
                 VerifierMarker::NoResult => None,
                 VerifierMarker::Result(hash) => Some(hex::encode(hash)[..12].to_string()),
             },
-            binding_short: hex::encode(review.binding.hash())[..12].to_string(),
+            binding_short: review.binding.short(),
             changes: review
                 .changes
                 .iter()
