@@ -179,6 +179,20 @@ fn check_private(dir: &Dir, uid: u32, dev: u64) -> io::Result<()> {
     Ok(())
 }
 
+/// Where this process's real uid keeps its workspaces,
+/// `/run/user/<uid>/nexus-verifier`, derived without touching the
+/// filesystem. Naming the location grants nothing: [`WorkspaceRoot::derive`]
+/// still checks every component before any use. The desktop reserves it
+/// against project registration (XA-L-01).
+pub fn workspaces_path() -> PathBuf {
+    // SAFETY: getuid has no preconditions.
+    workspaces_path_of(unsafe { libc::getuid() })
+}
+
+fn workspaces_path_of(uid: u32) -> PathBuf {
+    PathBuf::from(format!("/run/user/{uid}/{WORKSPACES}"))
+}
+
 /// `/run/user/<uid>/nexus-verifier`, retained.
 #[derive(Debug)]
 pub struct WorkspaceRoot {
@@ -227,7 +241,7 @@ impl WorkspaceRoot {
             .map_err(|_| Unavailable("workspaces directory is not private"))?;
         Ok(Self {
             uid,
-            path: PathBuf::from(format!("/run/user/{uid}/{WORKSPACES}")),
+            path: workspaces_path_of(uid),
             dir,
         })
     }
