@@ -169,11 +169,8 @@ impl Connectors {
             .ok_or(AuthorityError::Closed("no such connector operation"))?;
         let (grant, account) = covering_grant(authority, connector.id, operation.id)?;
         let request = (operation.build)(&intent.input)?;
-        if !request.path.starts_with('/') || request.path.starts_with("//") {
-            return Err(AuthorityError::InvalidAction(
-                "operation path is not a path",
-            ));
-        }
+        // The one authoritative check: the request parses to the
+        // connector's own origin, whatever its path says.
         let origin = Destination::parse(&connector.origin)
             .map_err(|_| AuthorityError::Unavailable("connector origin is not valid"))?;
         let url = format!("{}{}", connector.origin.trim_end_matches('/'), request.path);

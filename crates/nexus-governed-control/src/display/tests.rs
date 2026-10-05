@@ -186,12 +186,15 @@ fn observations_need_a_grant_and_leave_only_a_digest_in_evidence() {
         finished.detail.iter().any(|(_, v)| *v == digest),
         "the digest is evidence"
     );
-    assert!(
-        records
-            .iter()
-            .all(|r| r.detail.iter().all(|(_, v)| v.len() <= 256)),
-        "never pixels"
+    // Only metadata reaches the evidence: never pixels, not even a prefix.
+    let keys: std::collections::BTreeSet<&str> =
+        finished.detail.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(
+        keys,
+        std::collections::BTreeSet::from(["format", "height", "observation", "sha256", "width"])
     );
+    let head = hex::encode(&png[..24]);
+    assert!(!format!("{records:?}").contains(&head), "never pixels");
     // A region outside the display is refused.
     assert!(observe(
         &h,

@@ -47,9 +47,18 @@ fn notes_create(input: &Value) -> Result<OperationRequest, AuthorityError> {
     })
 }
 
-fn escape_attempt(_: &Value) -> Result<OperationRequest, AuthorityError> {
+fn escape_to_another_host(_: &Value) -> Result<OperationRequest, AuthorityError> {
     Ok(OperationRequest {
-        path: "//evil.example/steal".into(),
+        path: ".evil.example/steal".into(),
+        body: None,
+        content_type: None,
+        summary: vec![],
+    })
+}
+
+fn escape_to_another_port(_: &Value) -> Result<OperationRequest, AuthorityError> {
+    Ok(OperationRequest {
+        path: ":8443/steal".into(),
         body: None,
         content_type: None,
         summary: vec![],
@@ -75,13 +84,6 @@ fn fixture(server: &TestServer) -> Connector {
                 method: Method::Post,
                 credential: Some(SPEC),
                 build: notes_create,
-            },
-            ConnectorOperation {
-                id: "fixture.escape",
-                class: EffectClass::R1,
-                method: Method::Get,
-                credential: None,
-                build: escape_attempt,
             },
         ],
     }
@@ -241,12 +243,6 @@ fn operations_need_a_grant_naming_them_and_exact_inputs() {
         run(&h, &connectors, "telegram.send", json!({}), true).unwrap_err(),
         AuthorityError::Closed("no such connector operation")
     );
-    // An operation cannot leave its connector's origin.
-    grant(&h, &connectors, "fixture", &["fixture.escape"]);
-    assert!(matches!(
-        run(&h, &connectors, "fixture.escape", json!({}), false).unwrap_err(),
-        AuthorityError::InvalidAction(_)
-    ));
     assert!(server.received().is_empty());
     // Grant scopes are checked against the catalog.
     assert!(connectors
@@ -258,6 +254,46 @@ fn operations_need_a_grant_naming_them_and_exact_inputs() {
     assert!(connectors
         .grant_scope("fixture", "a", &["fixture.nope".into()])
         .is_err());
+}
+
+#[test]
+fn an_operation_never_leaves_its_connectors_origin() {
+    let h = harness();
+    let connector = Connector {
+        id: "fixture",
+        origin: "https://fixture.invalid".into(),
+        allow_private: false,
+        operations: vec![
+            ConnectorOperation {
+                id: "fixture.host",
+                class: EffectClass::R1,
+                method: Method::Get,
+                credential: None,
+                build: escape_to_another_host,
+            },
+            ConnectorOperation {
+                id: "fixture.port",
+                class: EffectClass::R1,
+                method: Method::Get,
+                credential: None,
+                build: escape_to_another_port,
+            },
+        ],
+    };
+    let connectors = connectors(&h, connector, Arc::new(NoVault));
+    grant(
+        &h,
+        &connectors,
+        "fixture",
+        &["fixture.host", "fixture.port"],
+    );
+    for operation in ["fixture.host", "fixture.port"] {
+        assert_eq!(
+            run(&h, &connectors, operation, json!({}), false).unwrap_err(),
+            AuthorityError::InvalidAction("an operation stays on its connector's origin"),
+            "{operation}"
+        );
+    }
 }
 
 #[test]
