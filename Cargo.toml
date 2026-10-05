@@ -71,6 +71,7 @@ members = [
   "crates/nexus-swarm",
   "crates/nexus-swarm-core",
   "crates/nexus-verifier-sandbox",
+  "crates/nexus-governed-control",
   "nexus-code",
 ]
 

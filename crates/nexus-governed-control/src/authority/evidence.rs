@@ -1,0 +1,280 @@
+//! The real-world action evidence contract.
+//!
+//! Every attempted governed action produces records: when it is prepared,
+//! denied, approved or declined, started, finished (success, failure or
+//! cancellation), expired or revoked. A record carries identities, classes,
+//! digests and bounded display text, never a secret, a payload body, raw
+//! pixels or audio. If the sink cannot record, the action does not start:
+//! evidence comes first.
+
+use super::effect::{CapabilityKind, EffectClass};
+use serde_json::{json, Value};
+use std::sync::Mutex;
+
+/// The point in an action's life a record describes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EvidencePhase {
+    RunOpened,
+    RunCancelled,
+    EmergencyStop,
+    Resumed,
+    GrantIssued,
+    GrantDeclined,
+    GrantRevoked,
+    Prepared,
+    Denied,
+    ApprovalDeclined,
+    Approved,
+    Authorized,
+    Started,
+    Finished,
+    Expired,
+    Revoked,
+}
+
+impl EvidencePhase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EvidencePhase::RunOpened => "run_opened",
+            EvidencePhase::RunCancelled => "run_cancelled",
+            EvidencePhase::EmergencyStop => "emergency_stop",
+            EvidencePhase::Resumed => "resumed",
+            EvidencePhase::GrantIssued => "grant_issued",
+            EvidencePhase::GrantDeclined => "grant_declined",
+            EvidencePhase::GrantRevoked => "grant_revoked",
+            EvidencePhase::Prepared => "prepared",
+            EvidencePhase::Denied => "denied",
+            EvidencePhase::ApprovalDeclined => "approval_declined",
+            EvidencePhase::Approved => "approved",
+            EvidencePhase::Authorized => "authorized",
+            EvidencePhase::Started => "started",
+            EvidencePhase::Finished => "finished",
+            EvidencePhase::Expired => "expired",
+            EvidencePhase::Revoked => "revoked",
+        }
+    }
+}
+
+/// One evidence record. Every text field is bounded by `bounded`.
+#[derive(Clone, Debug)]
+pub struct EvidenceRecord {
+    pub phase: EvidencePhase,
+    pub at_wall_ms: u64,
+    pub policy_generation: u64,
+    pub commitment: Option<String>,
+    pub agent: Option<String>,
+    pub run: Option<String>,
+    pub kind: Option<CapabilityKind>,
+    pub class: Option<EffectClass>,
+    pub operation: Option<&'static str>,
+    pub target: Option<String>,
+    pub target_digest: Option<String>,
+    pub parameters_digest: Option<String>,
+    pub approval: Option<String>,
+    pub started_wall_ms: Option<u64>,
+    pub finished_wall_ms: Option<u64>,
+    pub outcome: Option<&'static str>,
+    pub failure: Option<&'static str>,
+    pub cancelled: bool,
+    pub detail: Vec<(String, String)>,
+}
+
+/// Longest text a record keeps for one field.
+pub const MAX_FIELD: usize = 256;
+/// Most detail entries a record keeps.
+pub const MAX_DETAIL: usize = 16;
+
+/// Whether `c` is shown as itself: not a control character, and not an
+/// invisible formatting or direction-changing character that would make a
+/// line read differently from what it is (`U+202E` reverses what follows).
+pub fn shown(c: char) -> bool {
+    !c.is_control()
+        && !matches!(
+            c,
+            '\u{00AD}'
+                | '\u{034F}'
+                | '\u{061C}'
+                | '\u{115F}'..='\u{1160}'
+                | '\u{17B4}'..='\u{17B5}'
+                | '\u{180B}'..='\u{180F}'
+                | '\u{200B}'..='\u{200F}'
+                | '\u{2028}'..='\u{202E}'
+                | '\u{2060}'..='\u{206F}'
+                | '\u{3164}'
+                | '\u{FE00}'..='\u{FE0F}'
+                | '\u{FEFF}'
+                | '\u{FFA0}'
+                | '\u{FFF0}'..='\u{FFFB}'
+                | '\u{E0000}'..='\u{E0FFF}'
+        )
+}
+
+/// Whether `text` can be shown to the owner exactly as it is: at most
+/// `MAX_FIELD` characters, each shown as itself. Everything a native
+/// confirmation displays must be plain.
+pub fn is_plain(text: &str) -> bool {
+    text.chars().count() <= MAX_FIELD && text.chars().all(shown)
+}
+
+/// `text` made plain for display: hidden characters escaped (`\n`,
+/// `\u{202e}`), at most `MAX_FIELD` characters. Domains use it for any data
+/// they put in front of the owner.
+pub fn escaped(text: &str) -> String {
+    let mut out = String::new();
+    for c in text.chars() {
+        if shown(c) {
+            out.push(c);
+        } else {
+            out.extend(c.escape_default());
+        }
+    }
+    truncated(out)
+}
+
+/// `text` for evidence: control characters become spaces, hidden ones
+/// `U+FFFD`, at most `MAX_FIELD` characters.
+pub fn bounded(text: &str) -> String {
+    truncated(
+        text.chars()
+            .map(|c| {
+                if c.is_control() {
+                    ' '
+                } else if shown(c) {
+                    c
+                } else {
+                    '\u{FFFD}'
+                }
+            })
+            .collect(),
+    )
+}
+
+fn truncated(text: String) -> String {
+    if text.chars().count() <= MAX_FIELD {
+        return text;
+    }
+    let mut out: String = text.chars().take(MAX_FIELD - 1).collect();
+    out.push('…');
+    out
+}
+
+impl EvidenceRecord {
+    pub fn new(phase: EvidencePhase, at_wall_ms: u64, policy_generation: u64) -> Self {
+        Self {
+            phase,
+            at_wall_ms,
+            policy_generation,
+            commitment: None,
+            agent: None,
+            run: None,
+            kind: None,
+            class: None,
+            operation: None,
+            target: None,
+            target_digest: None,
+            parameters_digest: None,
+            approval: None,
+            started_wall_ms: None,
+            finished_wall_ms: None,
+            outcome: None,
+            failure: None,
+            cancelled: false,
+            detail: Vec::new(),
+        }
+    }
+
+    /// The record as bounded JSON, as the audit chain stores it.
+    pub fn to_json(&self) -> Value {
+        let detail: serde_json::Map<String, Value> = self
+            .detail
+            .iter()
+            .take(MAX_DETAIL)
+            .map(|(k, v)| (bounded(k), Value::String(bounded(v))))
+            .collect();
+        json!({
+            "event_kind": "p3.action.evidence",
+            "phase": self.phase.as_str(),
+            "at_ms": self.at_wall_ms,
+            "policy_generation": self.policy_generation,
+            "commitment": self.commitment,
+            "agent": self.agent.as_deref().map(bounded),
+            "run": self.run,
+            "kind": self.kind.map(|k| k.as_str()),
+            "class": self.class.map(|c| c.as_str()),
+            "operation": self.operation,
+            "target": self.target.as_deref().map(bounded),
+            "target_digest": self.target_digest,
+            "parameters_digest": self.parameters_digest,
+            "approval": self.approval,
+            "started_ms": self.started_wall_ms,
+            "finished_ms": self.finished_wall_ms,
+            "outcome": self.outcome,
+            "failure": self.failure,
+            "cancelled": self.cancelled,
+            "detail": detail,
+        })
+    }
+}
+
+/// The sink could not record; the action must not proceed.
+#[derive(Debug)]
+pub struct EvidenceUnavailable;
+
+/// Where evidence goes: the desktop appends to the hash-chained audit trail.
+pub trait EvidenceSink: Send + Sync {
+    fn record(&self, record: &EvidenceRecord) -> Result<(), EvidenceUnavailable>;
+}
+
+/// An in-memory sink: the bounded recent history the interface shows, and
+/// the sink tests use.
+pub struct MemoryEvidence {
+    records: Mutex<Vec<EvidenceRecord>>,
+    capacity: usize,
+    failing: std::sync::atomic::AtomicBool,
+}
+
+impl MemoryEvidence {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            records: Mutex::new(Vec::new()),
+            capacity: capacity.max(1),
+            failing: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    pub fn records(&self) -> Vec<EvidenceRecord> {
+        self.records.lock().expect("evidence").clone()
+    }
+
+    /// Make every later `record` fail (tests of the evidence-first rule).
+    pub fn fail_from_now(&self) {
+        self.failing
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl EvidenceSink for MemoryEvidence {
+    fn record(&self, record: &EvidenceRecord) -> Result<(), EvidenceUnavailable> {
+        if self.failing.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(EvidenceUnavailable);
+        }
+        let mut records = self.records.lock().expect("evidence");
+        if records.len() == self.capacity {
+            records.remove(0);
+        }
+        records.push(record.clone());
+        Ok(())
+    }
+}
+
+/// Fan one record out to several sinks; it fails if any of them fails.
+pub struct TeeEvidence(pub Vec<std::sync::Arc<dyn EvidenceSink>>);
+
+impl EvidenceSink for TeeEvidence {
+    fn record(&self, record: &EvidenceRecord) -> Result<(), EvidenceUnavailable> {
+        for sink in &self.0 {
+            sink.record(record)?;
+        }
+        Ok(())
+    }
+}

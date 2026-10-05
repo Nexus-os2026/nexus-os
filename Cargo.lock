@@ -5458,6 +5458,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-governed-control"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.2.17",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "nexus-integration"
 version = "10.6.0"
 dependencies = [
