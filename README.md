@@ -13,6 +13,7 @@ It is not production-ready.
 | Phase Zero — trust-boundary foundation | **PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-29 | `rebuild/phase0-trust-boundary` at `f727f5c39fab8d5c729a55eb28ad576d3d56ce47` |
 | Phase One — governed coding workflow | **PHASE ONE COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-30 | `rebuild/phase1-governed-coding` at `14270a9a38770ac84456c1f812042d2967edec42` |
 | Phase Two — governed verification execution | In progress: implementation candidate under Architect review, not complete | — |
+| Phase Three — governed real-world control | Implementation candidate under Architect review, not complete | — |
 
 - Both phases are complete for the Linux support profile only. Windows and
   macOS portability validation remains deferred.
@@ -32,6 +33,11 @@ It is not production-ready.
   implemented on the `implement/phase2-governed-verification` branch under an
   Architect-approved mission. It is not integrated and not complete; see
   [Governed verification](#governed-verification-phase-two-in-progress).
+- Phase Three (governed real-world control, Linux support profile) is an
+  implementation candidate on `implement/p3-governed-real-world-control` for
+  the `phase3/governed-real-world-control` line. It is not integrated into
+  `main` and not complete; see
+  [Governed real-world control](#governed-real-world-control-phase-three-candidate).
 
 Phase Zero rebuilt the project's trust boundary around one rule: a string is
 never authority. It replaced ambient, caller-asserted and path-based
@@ -122,6 +128,22 @@ explicit non-claims are in
 [docs/security/phase2-governed-verification.md](docs/security/phase2-governed-verification.md).
 This is an implementation candidate, not a completed phase.
 
+## Governed real-world control (Phase Three, candidate)
+
+On a supported Linux host, agents and the owner can act in the world only
+through one governed pipeline: contained tools with pinned executables (no
+shell), network requests to granted origins, headless browser sessions
+confined to granted origins, observation of and input to a separate agent
+display (never the owner's own), and connector operations whose credentials
+stay in the vault. Each effect is an action commitment bound to its exact
+target and parameters, under a grant the owner confirmed natively; sensitive
+or irreversible (R2) effects also need the owner's native approval of that
+exact commitment. Every step is recorded in the audit trail, and the owner's
+emergency stop ends everything until the owner resumes. The design and its
+explicit non-claims are in
+[docs/security/phase3-governed-real-world-control.md](docs/security/phase3-governed-real-world-control.md).
+This is an implementation candidate, not a completed phase.
+
 ## Local-first is not local-only
 
 Nexus can use local model providers, and cloud model providers are
@@ -188,6 +210,9 @@ deployment guide linked below.
 - [Phase Zero authority inventory](docs/security/phase0-c5-authority-inventory.md):
   current engineering evidence on authority surfaces and closures. It is
   not a certification.
+- [Phase Three governed real-world control](docs/security/phase3-governed-real-world-control.md):
+  the candidate's design record, bypass-closure inventory and non-claims. It
+  is not a certification.
 - [Security policy](SECURITY.md): how to report a vulnerability.
 - [Deployment status](docs/DEPLOYMENT.md): what is and is not deployable.
   Phase One adds no server deployment.

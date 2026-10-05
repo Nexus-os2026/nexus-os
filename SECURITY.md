@@ -47,6 +47,13 @@ grant, for example:
   `implement/phase2-governed-verification` under Architect review. It is not
   integrated or complete and makes no claim yet; see
   [Governed verification (Phase Two, in progress)](#governed-verification-phase-two-in-progress).
+- Phase Three, governed real-world control for the Linux support profile, is
+  an implementation candidate developed on
+  `implement/p3-governed-real-world-control` for the pull-request-governed
+  `phase3/governed-real-world-control` line, under Architect review. It is
+  not integrated into `main`, is not complete and makes no claim beyond its
+  candidate evidence; see
+  [Governed real-world control (Phase Three, candidate)](#governed-real-world-control-phase-three-candidate).
 - That checkpoint stays frozen on `rebuild/phase1-governed-coding`. Its
   completion evidence is the `evidence/phase1-closure` branch at
   `c237937189b5977eaad01acad6a4c52bcce796cc`. Later commits do not redefine
@@ -84,6 +91,25 @@ the owner's review. If any required layer is missing, verification is
 unavailable; there is no fallback. It does not claim a private mount view,
 metadata confidentiality, a private `/proc`, or protection against kernel
 vulnerabilities, root, or malicious same-uid processes.
+
+## Governed real-world control (Phase Three, candidate)
+
+The candidate's design record, bypass-closure inventory and non-claims are in
+[docs/security/phase3-governed-real-world-control.md](docs/security/phase3-governed-real-world-control.md).
+In short: every real-world effect a Phase Three route can cause (contained
+tool processes, network requests, browser sessions, observation of and input
+to an isolated agent display, connector operations with brokered vault
+credentials) is an action commitment bound to its agent, run, target and
+exact parameters. It needs the owner's natively confirmed grant, and an R2
+(sensitive or irreversible) effect also needs the owner's native approval of
+that exact commitment. It is revalidated immediately before it happens, runs
+once, is cancellable, and is recorded in the hash-chained audit trail before
+and after. Credentials stay in the vault and reach a request only through a
+lease bound to that commitment and origin. Every production real-world
+mechanism in the workspace is pinned by a structural guard to one of four
+classes (Phase Three governed, existing stronger governed, intentionally
+closed, non-production). Microphone capture, the owner's own desktop,
+Windows and macOS stay outside it.
 
 ## Security model (as far as Phase Zero establishes it)
 
