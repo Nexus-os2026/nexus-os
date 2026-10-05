@@ -26,7 +26,7 @@ mod proxy;
 
 use crate::authority::commitment::{ExecutionGuard, FailureClass, PreparedAction, TargetIdentity};
 use crate::authority::effect::{CapabilityKind, EffectClass};
-use crate::authority::evidence::escaped;
+use crate::authority::evidence::{escaped, is_plain, quoted, wrapped};
 use crate::authority::ids::{Digest, GrantId};
 use crate::authority::policy::GrantScope;
 use crate::authority::{Authority, AuthorityError};
@@ -138,6 +138,32 @@ fn plain(text: &str, max: usize) -> bool {
             .any(|c| c.is_control() && c != '\n' && c != '\t')
 }
 
+/// A selector naming one thing: plain, bounded, and not a list. A top-level
+/// `,` makes a selector list, and `querySelector` takes the first element
+/// matching any part of it, which the owner may not read as the target.
+fn selector(text: &str) -> bool {
+    let mut depth = 0i32;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for c in text.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match (quote, c) {
+            (_, '\\') => escaped = true,
+            (Some(q), c) if c == q => quote = None,
+            (Some(_), _) => {}
+            (None, '"' | '\'') => quote = Some(c),
+            (None, '(' | '[') => depth += 1,
+            (None, ')' | ']') => depth -= 1,
+            (None, ',') if depth == 0 => return false,
+            _ => {}
+        }
+    }
+    plain(text, MAX_SELECTOR) && !text.contains('\n')
+}
+
 fn origin_of(url: &str) -> Result<Destination, AuthorityError> {
     Destination::parse(url).map_err(|e| AuthorityError::InvalidAction(e.as_str()))
 }
@@ -210,35 +236,35 @@ impl Browser {
         for step in &intent.steps {
             match step {
                 BrowserStep::Navigate { url } => needed.push(origin_of(url)?.origin_text()),
-                BrowserStep::Click { selector } | BrowserStep::ExtractText { selector } => {
-                    if !plain(selector, MAX_SELECTOR) {
+                BrowserStep::Click { selector: s } | BrowserStep::ExtractText { selector: s } => {
+                    if !selector(s) {
                         return Err(AuthorityError::InvalidAction(
                             "a selector is plain bounded text",
                         ));
                     }
                 }
-                BrowserStep::Fill { selector, text } => {
-                    if !plain(selector, MAX_SELECTOR) || !plain(text, MAX_TEXT) {
+                BrowserStep::Fill { selector: s, text } => {
+                    if !selector(s) || !plain(text, MAX_TEXT) {
                         return Err(AuthorityError::InvalidAction(
                             "fill takes plain bounded text",
                         ));
                     }
                 }
                 BrowserStep::Press {
-                    selector,
+                    selector: s,
                     key: name,
                 } => {
-                    if !plain(selector, MAX_SELECTOR) || key(name).is_none() {
+                    if !selector(s) || key(name).is_none() {
                         return Err(AuthorityError::InvalidAction(
                             "press takes a selector and a known key",
                         ));
                     }
                 }
                 BrowserStep::WaitFor {
-                    selector,
+                    selector: s,
                     timeout_ms,
                 } => {
-                    if selector.as_deref().is_some_and(|s| !plain(s, MAX_SELECTOR))
+                    if s.as_deref().is_some_and(|s| !selector(s))
                         || timeout_ms.is_some_and(|t| t > 10_000)
                     {
                         return Err(AuthorityError::InvalidAction(
@@ -262,45 +288,53 @@ impl Browser {
         let canonical =
             serde_json::to_vec(intent).map_err(|_| AuthorityError::InvalidAction("intent"))?;
         let parameters = Digest::of("nexus.p3.browser.session.v1", &[&canonical]);
-        let mut summary = vec![
-            escaped(&format!(
-                "Browse {} ({} steps)",
-                start.url(),
-                intent.steps.len()
-            )),
-            escaped(&format!("Reachable: {}", origins.join(", "))),
-        ];
+        // Every step, in full: an approval covers exactly what is listed.
+        let mut summary = wrapped(&format!(
+            "Browse {} ({} steps)",
+            start.url(),
+            intent.steps.len()
+        ));
+        summary.extend(wrapped(&format!("Reachable: {}", origins.join(", "))));
         for (index, step) in intent.steps.iter().enumerate() {
-            if summary.len() == 11 {
-                summary.push(format!("... and {} more steps", intent.steps.len() - index));
-                break;
-            }
-            let line = match step {
-                BrowserStep::Navigate { url } => format!("{}. Go to {url}", index + 1),
-                BrowserStep::Click { selector } => format!("{}. Click {selector}", index + 1),
+            let number = index + 1;
+            match step {
+                BrowserStep::Navigate { url } => {
+                    summary.extend(wrapped(&format!("{number}. Go to {url}")))
+                }
+                BrowserStep::Click { selector } => {
+                    summary.extend(wrapped(&format!("{number}. Click {selector}")))
+                }
                 BrowserStep::Fill { selector, text } => {
-                    format!("{}. Fill {selector} with: {text}", index + 1)
+                    summary.extend(wrapped(&format!("{number}. Fill {selector}")));
+                    summary.extend(quoted("with the text", text));
                 }
                 BrowserStep::Press { selector, key } => {
-                    format!("{}. Press {key} in {selector}", index + 1)
+                    summary.extend(wrapped(&format!("{number}. Press {key} in {selector}")))
                 }
-                BrowserStep::WaitFor { selector, .. } => format!(
-                    "{}. Wait for {}",
-                    index + 1,
+                BrowserStep::WaitFor { selector, .. } => summary.extend(wrapped(&format!(
+                    "{number}. Wait for {}",
                     selector.as_deref().unwrap_or("the page to load")
-                ),
+                ))),
                 BrowserStep::ExtractText { selector } => {
-                    format!("{}. Read the text of {selector}", index + 1)
+                    summary.extend(wrapped(&format!("{number}. Read the text of {selector}")))
                 }
-            };
-            summary.push(escaped(&line));
+            }
         }
+        let shown_target = escaped(&format!("Browser session to {}", origins.join(", ")));
+        let display = if is_plain(&shown_target) {
+            shown_target
+        } else {
+            format!(
+                "Browser session to {} origins (listed below)",
+                origins.len()
+            )
+        };
         let action = PreparedAction {
             kind: CapabilityKind::Browser,
             class,
             operation: "browser.session",
             target: TargetIdentity {
-                display: escaped(&format!("Browser session to {}", origins.join(", "))),
+                display,
                 digest: target,
             },
             parameters,

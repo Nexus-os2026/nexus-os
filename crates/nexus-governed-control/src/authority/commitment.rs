@@ -138,6 +138,10 @@ pub enum Outcome {
     Cancelled,
 }
 
+/// The most summary lines an action may show; one that needs more is
+/// refused rather than shortened.
+pub const MAX_SUMMARY_LINES: usize = 64;
+
 /// A commitment, for display (holds no authority).
 #[derive(Clone, Debug)]
 pub struct CommitmentView {
@@ -313,9 +317,12 @@ impl CommitmentRegistry {
                 return Err(AuthorityError::GrantNotLive);
             }
         }
-        // What the owner may be shown must read as exactly what it is.
-        if prepared.summary.len() > 12 {
-            return Err(AuthorityError::InvalidAction("summary out of bounds"));
+        // What the owner may be shown must read as exactly what it is, in
+        // full: an action that cannot be shown whole is refused, never cut.
+        if prepared.summary.len() > MAX_SUMMARY_LINES {
+            return Err(AuthorityError::InvalidAction(
+                "too much to show the owner in full",
+            ));
         }
         if !is_plain(&prepared.target.display) || !prepared.summary.iter().all(|l| is_plain(l)) {
             return Err(AuthorityError::InvalidAction("display text is not plain"));

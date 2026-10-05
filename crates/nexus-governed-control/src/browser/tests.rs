@@ -353,3 +353,84 @@ fn the_browser_environment_is_the_sessions_own() {
         ]
     );
 }
+
+/// Every step of a session is shown, in full, however many there are (the
+/// approval covers exactly what is listed); a selector list, which would
+/// click whatever matches first, is refused.
+#[test]
+fn every_step_is_shown_in_full_and_selector_lists_are_refused() {
+    use crate::authority::evidence::is_plain;
+    let Some((browser, _root)) = browser() else {
+        return;
+    };
+    let h = harness();
+    let site = "http://page.nexus.invalid:8080".to_string();
+    grant(&h, &browser, std::slice::from_ref(&site));
+    let fill = format!("Dear owner\n{}", "w".repeat(600));
+    let mut steps: Vec<BrowserStep> = (0..10)
+        .map(|_| BrowserStep::WaitFor {
+            selector: None,
+            timeout_ms: None,
+        })
+        .collect();
+    steps.push(BrowserStep::Fill {
+        selector: "#to".into(),
+        text: fill.clone(),
+    });
+    steps.push(BrowserStep::Click {
+        selector: "#confirm".into(),
+    });
+    let intent = |steps: Vec<BrowserStep>| BrowserIntent {
+        start_url: format!("{site}/"),
+        steps,
+    };
+    let preparation = browser
+        .prepare(h.control.authority(), &intent(steps))
+        .unwrap();
+    let summary = &preparation.action.summary;
+    assert!(summary.iter().all(|l| is_plain(l)), "{summary:?}");
+    assert!(summary.contains(&"11. Fill #to".to_string()), "{summary:?}");
+    assert!(
+        summary.contains(&"12. Click #confirm".to_string()),
+        "{summary:?}"
+    );
+    let at = summary.iter().position(|l| l == "with the text:").unwrap();
+    let mut rebuilt: Vec<String> = Vec::new();
+    for line in &summary[at + 1..] {
+        if let Some(more) = line.strip_prefix("│↳ ") {
+            rebuilt.last_mut().unwrap().push_str(more);
+        } else if let Some(text) = line.strip_prefix("│ ") {
+            rebuilt.push(text.to_string());
+        } else {
+            break;
+        }
+    }
+    assert_eq!(rebuilt.join("\n"), fill);
+    for list in ["#safe, #delete-account", "a,b", "#x , #y"] {
+        assert!(
+            matches!(
+                browser.prepare(
+                    h.control.authority(),
+                    &intent(vec![BrowserStep::Click {
+                        selector: list.into()
+                    }])
+                ),
+                Err(AuthorityError::InvalidAction(_))
+            ),
+            "{list}"
+        );
+    }
+    for single in [":is(#a, #b)", "[data-x=\"a,b\"]", "a[title='x,y'] > b"] {
+        assert!(
+            browser
+                .prepare(
+                    h.control.authority(),
+                    &intent(vec![BrowserStep::Click {
+                        selector: single.into()
+                    }])
+                )
+                .is_ok(),
+            "{single}"
+        );
+    }
+}

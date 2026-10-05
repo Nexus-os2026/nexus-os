@@ -211,14 +211,15 @@ impl Connectors {
                 operation: operation.id,
             },
         )?;
-        // What the owner reads: the operation, the account, then its lines.
+        // What the owner reads: the operation and the connector (the
+        // account is only the owner's label: the connector always uses its
+        // one stored credential), its content in full, then the request.
         let mut summary = vec![escaped(&format!(
-            "{} for {} ({})",
-            operation.id, account, connector.id
+            "{} via {} (your label \"{}\")",
+            operation.id, connector.id, account
         ))];
-        summary.extend(request.summary.iter().map(|line| escaped(line)));
+        summary.extend(request.summary.iter().cloned());
         summary.extend(preparation.action.summary.iter().cloned());
-        summary.truncate(12);
         preparation.action.summary = summary;
         preparation.ttl = OPERATION_TTL;
         Ok(preparation)

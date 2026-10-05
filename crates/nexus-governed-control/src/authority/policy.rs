@@ -148,9 +148,9 @@ impl GrantScope {
                 format!("Mouse and keyboard on the isolated agent display {display}"),
                 format!("At most {max_steps} steps"),
                 if *session_r1 {
-                    "Clicks and keys in an approved session: without asking again".to_string()
+                    "Clicks, drags and keys: without asking you each time (R1)".to_string()
                 } else {
-                    "Every click and key: asks again".to_string()
+                    "Every click, drag and key: asks for your approval (R2)".to_string()
                 },
             ],
             GrantScope::Connector {
@@ -158,7 +158,9 @@ impl GrantScope {
                 account,
                 operations,
             } => vec![
-                format!("Connector \"{connector}\" for account \"{account}\""),
+                format!(
+                    "Connector \"{connector}\" (your label \"{account}\"), with its one stored credential"
+                ),
                 format!("Operations: {}", operations.join(", ")),
             ],
         }

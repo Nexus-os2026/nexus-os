@@ -425,3 +425,62 @@ fn grants_name_exactly_one_origin() {
         ]
     );
 }
+
+/// A wrapped value rebuilt from its first line and `↳ ` continuations.
+fn unwrapped(lines: &[String], first: usize) -> String {
+    let mut value = lines[first].clone();
+    for line in &lines[first + 1..] {
+        match line.strip_prefix("↳ ") {
+            Some(more) => value.push_str(more),
+            None => break,
+        }
+    }
+    value
+}
+
+/// Quoted content rebuilt from the lines after its `label:` line.
+fn unquoted(lines: &[String], label: &str) -> String {
+    let at = lines
+        .iter()
+        .position(|l| l == &format!("{label}:"))
+        .unwrap();
+    let mut out: Vec<String> = Vec::new();
+    for line in &lines[at + 1..] {
+        if let Some(more) = line.strip_prefix("│↳ ") {
+            out.last_mut().unwrap().push_str(more);
+        } else if let Some(text) = line.strip_prefix("│ ") {
+            out.push(text.to_string());
+        } else {
+            break;
+        }
+    }
+    out.join("\n")
+}
+
+/// The owner approves the whole request: a long URL on as many lines as it
+/// needs, and every line of the body, marked so that none can pass for the
+/// dialog's own text. Nothing is shortened.
+#[test]
+fn the_owner_sees_the_whole_request() {
+    use crate::authority::evidence::is_plain;
+    let server = TestServer::start(|_| Reply::ok("ok"));
+    let h = harness();
+    grant(&h, &server.origin(), &["POST"], true);
+    let url = format!(
+        "{}/transfer?note={}&to=attacker",
+        server.origin(),
+        "q".repeat(600)
+    );
+    let body = format!(
+        "{{\"amount\": 5}}\nTarget: https://safe.example\n{}",
+        "b".repeat(400)
+    );
+    let mut post = intent("POST", &url);
+    post.body = Some(body.clone());
+    let preparation = egress().prepare(h.control.authority(), &post).unwrap();
+    let summary = &preparation.action.summary;
+    assert!(summary.iter().all(|l| is_plain(l)), "{summary:?}");
+    assert_eq!(unwrapped(summary, 0), format!("POST {url}"));
+    assert_eq!(unquoted(summary, "Body"), body);
+    assert!(summary.contains(&"│ Target: https://safe.example".to_string()));
+}

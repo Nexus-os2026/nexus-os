@@ -811,13 +811,24 @@ fn bounded_summaries_and_bounded_evidence() {
         .commitments()
         .prepare(&f.agent, f.run, action, TTL)
         .is_err());
+    // An action that cannot be shown whole is refused, never shortened.
+    let lines = super::commitment::MAX_SUMMARY_LINES;
     let mut action = prepared(EffectClass::R1, f.grant);
-    action.summary = vec!["ok".into(); 13];
+    action.summary = vec!["ok".into(); lines + 1];
+    assert_eq!(
+        f.auth
+            .commitments()
+            .prepare(&f.agent, f.run, action, TTL)
+            .unwrap_err(),
+        AuthorityError::InvalidAction("too much to show the owner in full")
+    );
+    let mut action = prepared(EffectClass::R1, f.grant);
+    action.summary = vec!["ok".into(); lines];
     assert!(f
         .auth
         .commitments()
         .prepare(&f.agent, f.run, action, TTL)
-        .is_err());
+        .is_ok());
     // Evidence text is bounded and shows no hidden characters.
     let bounded = super::evidence::bounded(&format!("a\u{202E}b\u{0}\n{}", "c".repeat(400)));
     assert!(bounded.chars().count() <= super::evidence::MAX_FIELD);
@@ -866,8 +877,27 @@ fn what_the_owner_is_shown_reads_as_exactly_what_it_is() {
             .is_ok());
     }
     assert_eq!(super::evidence::escaped("a\u{202E}b\n"), "a\\u{202e}b\\n");
+    // Escaping never cuts; a long value is shown whole across lines.
     let long = super::evidence::escaped(&"\u{202E}".repeat(200));
-    assert!(super::evidence::is_plain(&long));
+    assert_eq!(long, "\\u{202e}".repeat(200));
+    assert!(
+        !super::evidence::is_plain(&long),
+        "one line would be too long"
+    );
+    let lines = super::evidence::wrapped(&"\u{202E}".repeat(200));
+    assert!(lines.iter().all(|l| super::evidence::is_plain(l)));
+    let rebuilt: String = lines
+        .iter()
+        .enumerate()
+        .map(|(i, l)| {
+            if i == 0 {
+                l.as_str()
+            } else {
+                l.strip_prefix("↳ ").unwrap()
+            }
+        })
+        .collect();
+    assert_eq!(rebuilt, long);
     // A grant whose text is not plain is refused before the owner is asked.
     let asked = Confirmer::new(true);
     assert_eq!(
@@ -898,4 +928,54 @@ fn identities_are_opaque_and_validated() {
     // Domain-separated, length-prefixed digests.
     assert_ne!(Digest::of("a", &[b"bc"]), Digest::of("a", &[b"b", b"c"]));
     assert_ne!(Digest::of("a", &[b"x"]), Digest::of("b", &[b"x"]));
+}
+
+/// What the owner approves is shown whole: content keeps every line, each
+/// line marked so that none can pass for the dialog's own text; a hint that
+/// only selects is visibly shortened; every invisible format character is
+/// escaped; a grant says who may use it.
+#[test]
+fn nothing_the_owner_approves_is_cut_or_disguised() {
+    use super::evidence::{hint, is_plain, quoted, shown, MAX_FIELD};
+    let text = format!("Target: https://safe.example\n{}\n\nend", "x".repeat(600));
+    let lines = quoted("Body", &text);
+    assert_eq!(lines[0], "Body:");
+    assert!(lines.iter().all(|l| is_plain(l)), "{lines:?}");
+    assert_eq!(lines[1], "│ Target: https://safe.example");
+    assert!(lines[1..].iter().all(|l| l.starts_with('│')));
+    // The lines rebuild the text exactly.
+    let mut rebuilt: Vec<String> = Vec::new();
+    for line in &lines[1..] {
+        if let Some(more) = line.strip_prefix("│↳ ") {
+            rebuilt.last_mut().unwrap().push_str(more);
+        } else {
+            rebuilt.push(line.strip_prefix("│ ").unwrap().to_string());
+        }
+    }
+    assert_eq!(rebuilt.join("\n"), text);
+    assert!(lines.iter().all(|l| l.chars().count() <= MAX_FIELD));
+    assert_eq!(hint(&"t".repeat(64)), "t".repeat(64));
+    assert_eq!(hint(&"t".repeat(65)), format!("{}…", "t".repeat(63)));
+    for c in [
+        '\u{0600}',
+        '\u{06DD}',
+        '\u{070F}',
+        '\u{0890}',
+        '\u{08E2}',
+        '\u{110BD}',
+        '\u{110CD}',
+        '\u{13430}',
+        '\u{1BCA0}',
+        '\u{1D173}',
+    ] {
+        assert!(!shown(c), "{c:?}");
+    }
+    let grant = super::approval::GrantConfirmation {
+        kind: CapabilityKind::Perception,
+        lines: vec!["Observe the isolated agent display :200".into()],
+        expires_in_secs: 60,
+    };
+    assert!(grant
+        .message()
+        .contains("Any agent may use it until it expires or you revoke it"));
 }

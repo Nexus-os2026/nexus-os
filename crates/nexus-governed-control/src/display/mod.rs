@@ -25,7 +25,7 @@ mod server;
 
 use crate::authority::commitment::{ExecutionGuard, FailureClass, PreparedAction, TargetIdentity};
 use crate::authority::effect::{CapabilityKind, EffectClass};
-use crate::authority::evidence::escaped;
+use crate::authority::evidence::{escaped, hint, quoted};
 use crate::authority::ids::{Digest, GrantId, RunId};
 use crate::authority::policy::GrantScope;
 use crate::authority::{Authority, AuthorityError};
@@ -403,7 +403,7 @@ impl AgentDisplay {
                 (
                     rect,
                     Some(window.id),
-                    format!("window \"{}\"", window.title),
+                    format!("window \"{}\"", hint(&window.title)),
                 )
             }
         };
@@ -514,7 +514,7 @@ impl AgentDisplay {
                     (*x, *y),
                     vec![Step::Pointer(*x, *y)],
                     false,
-                    format!("Move the pointer to ({x}, {y})"),
+                    vec![format!("Move the pointer to ({x}, {y})")],
                 )
             }
             InputIntent::Click { x, y, button } => {
@@ -528,7 +528,7 @@ impl AgentDisplay {
                         Step::Button(code, false),
                     ],
                     true,
-                    format!("Click {name} at ({x}, {y})"),
+                    vec![format!("Click {name} at ({x}, {y})")],
                 )
             }
             InputIntent::DoubleClick { x, y } => {
@@ -544,7 +544,7 @@ impl AgentDisplay {
                         Step::Button(1, false),
                     ],
                     true,
-                    format!("Double-click at ({x}, {y})"),
+                    vec![format!("Double-click at ({x}, {y})")],
                 )
             }
             InputIntent::Drag {
@@ -569,7 +569,9 @@ impl AgentDisplay {
                     (*from_x, *from_y),
                     steps,
                     true,
-                    format!("Drag from ({from_x}, {from_y}) to ({to_x}, {to_y})"),
+                    vec![format!(
+                        "Drag from ({from_x}, {from_y}) to ({to_x}, {to_y})"
+                    )],
                 )
             }
             InputIntent::Type { text } => {
@@ -595,11 +597,7 @@ impl AgentDisplay {
                     server_pointer(&server),
                     steps,
                     true,
-                    format!(
-                        "Type {} characters: {}",
-                        text.chars().count(),
-                        escaped(text)
-                    ),
+                    quoted(&format!("Type {} characters", text.chars().count()), text),
                 )
             }
             InputIntent::Press { key: name } => {
@@ -608,7 +606,7 @@ impl AgentDisplay {
                     server_pointer(&server),
                     vec![Step::Key(code, true), Step::Key(code, false)],
                     true,
-                    format!("Press {}", escaped(name)),
+                    vec![format!("Press {}", escaped(name))],
                 )
             }
             InputIntent::Shortcut { keys } => {
@@ -633,7 +631,7 @@ impl AgentDisplay {
                     server_pointer(&server),
                     steps,
                     true,
-                    format!("Shortcut {}", escaped(&keys.join("+"))),
+                    vec![format!("Shortcut {}", escaped(&keys.join("+")))],
                 )
             }
             InputIntent::Scroll { direction, amount } => {
@@ -656,7 +654,7 @@ impl AgentDisplay {
                     server_pointer(&server),
                     steps,
                     false,
-                    format!("Scroll {direction:?} {amount} notches").to_lowercase(),
+                    vec![format!("Scroll {direction:?} {amount} notches").to_lowercase()],
                 )
             }
         };
@@ -679,7 +677,7 @@ impl AgentDisplay {
         let parameters = Digest::of("nexus.p3.display.input.v1", &[&canonical]);
         let place = window
             .as_ref()
-            .map(|w| format!("window \"{}\" (id {})", w.title, w.id))
+            .map(|w| format!("window \"{}\" (id {})", hint(&w.title), w.id))
             .unwrap_or_else(|| "the display background".into());
         let action = PreparedAction {
             kind: CapabilityKind::Input,
@@ -692,10 +690,14 @@ impl AgentDisplay {
             parameters,
             grants: vec![grant],
             leases: vec![],
-            summary: vec![
-                escaped(&summary),
-                format!("Step {} of {max_steps} under the input grant", used + 1),
-            ],
+            summary: {
+                let mut lines = summary;
+                lines.push(format!(
+                    "Step {} of {max_steps} under the input grant",
+                    used + 1
+                ));
+                lines
+            },
         };
         Ok(Preparation {
             action,

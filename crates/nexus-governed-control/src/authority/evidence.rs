@@ -97,7 +97,12 @@ pub fn shown(c: char) -> bool {
             c,
             '\u{00AD}'
                 | '\u{034F}'
+                | '\u{0600}'..='\u{0605}'
                 | '\u{061C}'
+                | '\u{06DD}'
+                | '\u{070F}'
+                | '\u{0890}'..='\u{0891}'
+                | '\u{08E2}'
                 | '\u{115F}'..='\u{1160}'
                 | '\u{17B4}'..='\u{17B5}'
                 | '\u{180B}'..='\u{180F}'
@@ -109,6 +114,11 @@ pub fn shown(c: char) -> bool {
                 | '\u{FEFF}'
                 | '\u{FFA0}'
                 | '\u{FFF0}'..='\u{FFFB}'
+                | '\u{110BD}'
+                | '\u{110CD}'
+                | '\u{13430}'..='\u{1345F}'
+                | '\u{1BCA0}'..='\u{1BCA3}'
+                | '\u{1D173}'..='\u{1D17A}'
                 | '\u{E0000}'..='\u{E0FFF}'
         )
 }
@@ -120,9 +130,11 @@ pub fn is_plain(text: &str) -> bool {
     text.chars().count() <= MAX_FIELD && text.chars().all(shown)
 }
 
-/// `text` made plain for display: hidden characters escaped (`\n`,
-/// `\u{202e}`), at most `MAX_FIELD` characters. Domains use it for any data
-/// they put in front of the owner.
+/// `text` made plain for display, in full: hidden characters escaped (`\n`,
+/// `\u{202e}`). Nothing is cut: the authority refuses a line longer than
+/// `MAX_FIELD`, so domains put long values through [`wrapped`] and content
+/// the owner must read through [`quoted`]. What the owner is shown is
+/// never shortened.
 pub fn escaped(text: &str) -> String {
     let mut out = String::new();
     for c in text.chars() {
@@ -132,7 +144,49 @@ pub fn escaped(text: &str) -> String {
             out.extend(c.escape_default());
         }
     }
-    truncated(out)
+    out
+}
+
+/// One long value (a URL, a selector) on as many lines as it needs, never
+/// cut: its first line, then continuations marked `↳ `; every line at most
+/// `MAX_FIELD` characters.
+pub fn wrapped(text: &str) -> Vec<String> {
+    let chars: Vec<char> = escaped(text).chars().collect();
+    let first = chars.len().min(MAX_FIELD);
+    let mut lines = vec![chars[..first].iter().collect::<String>()];
+    for chunk in chars[first..].chunks(MAX_FIELD - 2) {
+        lines.push(format!("↳ {}", chunk.iter().collect::<String>()));
+    }
+    lines
+}
+
+/// Content the owner must read in full (a body, filled or typed text):
+/// `label:`, then each of its lines marked `│ ` (continued `│↳ `), so no
+/// line of it can pass for the dialog's own text. Hidden characters are
+/// escaped; nothing is cut.
+pub fn quoted(label: &str, text: &str) -> Vec<String> {
+    let mut lines = vec![format!("{label}:")];
+    for line in text.split('\n') {
+        let chars: Vec<char> = escaped(line).chars().collect();
+        let first = chars.len().min(MAX_FIELD - 2);
+        lines.push(format!("│ {}", chars[..first].iter().collect::<String>()));
+        for chunk in chars[first..].chunks(MAX_FIELD - 3) {
+            lines.push(format!("│↳ {}", chunk.iter().collect::<String>()));
+        }
+    }
+    lines
+}
+
+/// A hint that only selects (a window title): at most 64 characters,
+/// shortened visibly with `…`.
+pub fn hint(text: &str) -> String {
+    let chars: Vec<char> = escaped(text).chars().collect();
+    if chars.len() <= 64 {
+        return chars.into_iter().collect();
+    }
+    let mut out: String = chars[..63].iter().collect();
+    out.push('…');
+    out
 }
 
 /// `text` for evidence: control characters become spaces, hidden ones

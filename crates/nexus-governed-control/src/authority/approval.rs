@@ -69,6 +69,7 @@ impl GrantConfirmation {
 
     pub fn message(&self) -> String {
         let mut lines = self.lines.clone();
+        lines.push("Any agent may use it until it expires or you revoke it".to_string());
         lines.push(format!("Expires in {} s", self.expires_in_secs));
         lines.join("\n")
     }

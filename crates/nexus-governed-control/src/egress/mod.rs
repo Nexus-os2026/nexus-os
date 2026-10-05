@@ -17,7 +17,7 @@ pub mod transport;
 
 use crate::authority::commitment::{ExecutionGuard, FailureClass, PreparedAction, TargetIdentity};
 use crate::authority::effect::{CapabilityKind, EffectClass};
-use crate::authority::evidence::{bounded, escaped};
+use crate::authority::evidence::{bounded, escaped, quoted, wrapped};
 use crate::authority::ids::{Digest, GrantId, LeaseId};
 use crate::authority::policy::GrantScope;
 use crate::authority::{Authority, AuthorityError};
@@ -230,6 +230,9 @@ impl Egress {
         } else {
             EffectClass::R2
         };
+        // A connector shows its own content (recipient, subject, text); the
+        // body it sends is an encoding of exactly that.
+        let from_connector = matches!(coverage, Coverage::Connector { .. });
         let (grant, allow_private, kind, class, operation) = match coverage {
             Coverage::EgressGrant => {
                 let (grant, allow_private) = covering_grant(authority, &destination, method)?;
@@ -276,21 +279,21 @@ impl Egress {
                 service.as_bytes(),
             ],
         );
-        let mut summary = vec![escaped(&format!(
-            "{} {}",
-            method.as_str(),
-            destination.url()
-        ))];
+        let mut summary = wrapped(&format!("{} {}", method.as_str(), destination.url()));
         if !headers.is_empty() {
             let names: Vec<&str> = headers.iter().map(|(name, _)| name.as_str()).collect();
             summary.push(format!("Headers: {}", names.join(", ")));
         }
-        if let Some(body) = &body {
-            summary.push(format!(
-                "Body: {} bytes (digest {})",
-                body.len(),
-                Digest::of("nexus.p3.egress.body.v1", &[body]).short()
-            ));
+        if let Some(text) = &intent.body {
+            if from_connector {
+                summary.push(format!(
+                    "Request body: {} bytes encoding the content above (digest {})",
+                    text.len(),
+                    Digest::of("nexus.p3.egress.body.v1", &[text.as_bytes()]).short()
+                ));
+            } else {
+                summary.extend(quoted("Body", text));
+            }
         }
         if let Some(plan) = &credential {
             summary.push(escaped(&format!(

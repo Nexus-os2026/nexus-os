@@ -476,3 +476,68 @@ fn migrated_sends_are_exact_and_refuse_header_injection() {
     // The resolver and transport used above are the real ones elsewhere.
     let _ = (SystemResolver, HttpTransport);
 }
+
+/// A send names one bare recipient, shown whole on its own line, and shows
+/// the message's every line; nothing can hide where it goes.
+#[test]
+fn a_send_shows_one_bare_recipient_and_its_whole_text() {
+    use crate::authority::evidence::is_plain;
+    let catalog: Vec<Connector> = catalog::production();
+    let text = format!(
+        "Hello\nTo: someone-else@example.com\n{}\nBye",
+        "z".repeat(700)
+    );
+    let domain = format!(
+        "{}.{}.{}.example",
+        "b".repeat(63),
+        "c".repeat(63),
+        "d".repeat(49)
+    );
+    let longest = format!("{}@{domain}", "a".repeat(64));
+    assert_eq!(longest.len(), 250);
+    for id in ["gmail.messages.send", "outlook.messages.send"] {
+        let send = catalog
+            .iter()
+            .flat_map(|c| c.operations.iter())
+            .find(|op| op.id == id)
+            .unwrap();
+        for bad in [
+            "\"Accounts Payable\" <a@evil.example>".to_string(),
+            "<a@evil.example>".into(),
+            "a@ok.example, b@evil.example".into(),
+            "a@ok.example;b@evil.example".into(),
+            "a b@ok.example".into(),
+            "a@ok.example (note)".into(),
+            "\"a\"@ok.example".into(),
+            "a@[127.0.0.1]".into(),
+            "a..b@ok.example".into(),
+            "a@-ok.example".into(),
+            "a@localhost".into(),
+            format!("{}@ok.example", "a".repeat(65)),
+            format!("{longest}x"),
+        ] {
+            assert!(
+                (send.build)(&json!({ "to": bad, "subject": "s", "body": "b" })).is_err(),
+                "{id}: {bad}"
+            );
+        }
+        let request =
+            (send.build)(&json!({ "to": longest, "subject": "Hi", "body": text })).unwrap();
+        let summary = &request.summary;
+        assert!(summary.iter().all(|l| is_plain(l)), "{id}: {summary:?}");
+        assert!(summary.contains(&format!("To: {longest}")), "{id}");
+        let at = summary
+            .iter()
+            .position(|l| l.starts_with("Message ("))
+            .unwrap();
+        let mut rebuilt: Vec<String> = Vec::new();
+        for line in &summary[at + 1..] {
+            if let Some(more) = line.strip_prefix("│↳ ") {
+                rebuilt.last_mut().unwrap().push_str(more);
+            } else {
+                rebuilt.push(line.strip_prefix("│ ").unwrap().to_string());
+            }
+        }
+        assert_eq!(rebuilt.join("\n"), text, "{id}");
+    }
+}

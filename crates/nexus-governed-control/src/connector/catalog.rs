@@ -10,6 +10,7 @@
 
 use super::{only_fields, text_field, Connector, ConnectorOperation, OperationRequest};
 use crate::authority::effect::EffectClass;
+use crate::authority::evidence::{quoted, wrapped};
 use crate::authority::AuthorityError;
 use crate::broker::{CredentialSpec, Placement};
 use crate::egress::transport::Method;
@@ -249,17 +250,31 @@ fn identifier<'a>(
     Ok(value)
 }
 
-/// One recipient address: no line breaks, one `@`, plain.
+/// One bare recipient address, `local@domain` and nothing else: no display
+/// name, quotes, brackets, comments, lists or spaces (any of those could
+/// make the address that receives the mail differ from the one the owner
+/// reads). At most 64 characters before the `@` and 250 in all, so the
+/// approval shows it whole.
 fn address<'a>(input: &'a Value, name: &'static str) -> Result<&'a str, AuthorityError> {
-    let value = text_field(input, name, 254)?;
-    let ok = value.matches('@').count() == 1
-        && !value.starts_with('@')
-        && !value.ends_with('@')
-        && value.chars().all(|c| c.is_ascii_graphic());
-    if !ok {
-        return Err(AuthorityError::InvalidAction(
-            "a recipient address is malformed",
-        ));
+    let value = text_field(input, name, 250)?;
+    let malformed = || AuthorityError::InvalidAction("a recipient is one bare address");
+    let (local, domain) = value.split_once('@').ok_or_else(malformed)?;
+    let atom = |c: char| c.is_ascii_alphanumeric() || "!#$%&'*+-/=?^_`{|}~".contains(c);
+    let local_ok = !local.is_empty()
+        && local.len() <= 64
+        && local
+            .split('.')
+            .all(|part| !part.is_empty() && part.chars().all(atom));
+    let domain_ok = domain.contains('.')
+        && domain.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        });
+    if !local_ok || !domain_ok {
+        return Err(malformed());
     }
     Ok(value)
 }
@@ -275,15 +290,12 @@ fn line<'a>(input: &'a Value, name: &'static str, max: usize) -> Result<&'a str,
     Ok(value)
 }
 
-fn body_lines(body: &str) -> Vec<String> {
-    let first = body.lines().next().unwrap_or_default();
-    vec![
-        format!("Body: {} characters", body.chars().count()),
-        format!(
-            "Body begins: {}",
-            first.chars().take(120).collect::<String>()
-        ),
-    ]
+/// A message's text for the owner, in full.
+fn body_lines(label: &str, body: &str) -> Vec<String> {
+    quoted(
+        &format!("{label} ({} characters)", body.chars().count()),
+        body,
+    )
 }
 
 fn gmail_list(input: &Value) -> Result<OperationRequest, AuthorityError> {
@@ -339,11 +351,9 @@ fn gmail_send(input: &Value) -> Result<OperationRequest, AuthorityError> {
         "To: {to}\r\nSubject: {subject}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{body}"
     );
     let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw.as_bytes());
-    let mut summary = vec![
-        format!("Send an email to: {to}"),
-        format!("Subject: {subject}"),
-    ];
-    summary.extend(body_lines(body));
+    let mut summary = vec!["Send an email".to_string(), format!("To: {to}")];
+    summary.extend(wrapped(&format!("Subject: {subject}")));
+    summary.extend(body_lines("Message", body));
     post_json(
         "/gmail/v1/users/me/messages/send".into(),
         json!({ "raw": raw }),
@@ -390,11 +400,9 @@ fn outlook_send(input: &Value) -> Result<OperationRequest, AuthorityError> {
     let to = address(input, "to")?;
     let subject = line(input, "subject", 200)?;
     let body = text_field(input, "body", 32 * 1024)?;
-    let mut summary = vec![
-        format!("Send an email to: {to}"),
-        format!("Subject: {subject}"),
-    ];
-    summary.extend(body_lines(body));
+    let mut summary = vec!["Send an email".to_string(), format!("To: {to}")];
+    summary.extend(wrapped(&format!("Subject: {subject}")));
+    summary.extend(body_lines("Message", body));
     post_json(
         "/v1.0/me/sendMail".into(),
         json!({
@@ -431,7 +439,7 @@ fn slack_post(input: &Value) -> Result<OperationRequest, AuthorityError> {
     let channel = identifier(input, "channel", 24, &[])?;
     let text = text_field(input, "text", 4000)?;
     let mut summary = vec![format!("Post to Slack channel {channel}")];
-    summary.extend(body_lines(text));
+    summary.extend(body_lines("Text", text));
     post_json(
         "/api/chat.postMessage".into(),
         json!({ "channel": channel, "text": text }),
@@ -469,7 +477,7 @@ fn discord_post(input: &Value) -> Result<OperationRequest, AuthorityError> {
     let channel = snowflake(input, "channel")?;
     let text = text_field(input, "text", 2000)?;
     let mut summary = vec![format!("Post to Discord channel {channel}")];
-    summary.extend(body_lines(text));
+    summary.extend(body_lines("Text", text));
     post_json(
         format!("/api/v10/channels/{channel}/messages"),
         json!({ "content": text }),

@@ -168,7 +168,6 @@ impl Tools {
             definition.key, definition.executable
         ))];
         summary.extend(invocation.summary.iter().map(|line| escaped(line)));
-        summary.truncate(12);
         let action = PreparedAction {
             kind: CapabilityKind::Tool,
             class: definition.class,
