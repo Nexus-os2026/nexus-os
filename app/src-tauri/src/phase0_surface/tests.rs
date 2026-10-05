@@ -233,6 +233,9 @@ const CLOSED_COMMANDS: &[(&str, Closure)] = &[
     ("browser_get_policy", Closure::GovernedRoute),
     ("browser_session_count", Closure::GovernedRoute),
     ("nx_computer_use_status", Closure::GovernedRoute),
+    // Phase Three G-INV-5: a status probe that ran a helper found on `PATH`
+    // (and a local service probe) only to report on closed generators.
+    ("builder_image_gen_status", Closure::HelperLaunch),
 ];
 
 const LIB_RS: &str = include_str!("../lib.rs");
@@ -391,7 +394,8 @@ fn closed_handlers() -> Vec<ClosedHandler> {
             builder_collab_get_comments, builder_collab_resolve_comment,
             builder_import_design, builder_generate_variants,
             builder_generate_section_variants, builder_theme_apply, builder_theme_get_current,
-            builder_theme_export, builder_generate_image, builder_generate_all_images,
+            builder_theme_export, builder_image_gen_status, builder_generate_image,
+            builder_generate_all_images,
             builder_generate_trust_pack, builder_get_audit_trail, builder_export_audit_trail,
             builder_deploy_history, builder_deploy_diff, builder_deploy_rollback_to,
             builder_deploy_share_info, builder_deploy_drift, terminal_execute,

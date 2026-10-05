@@ -1205,7 +1205,11 @@ const CANONICAL_CLOSED: &[(&str, Closure, &[&str])] = &[
             "voice_load_whisper_model",
         ],
     ),
-    ("lib.rs", Closure::HelperLaunch, &["is_ollama_installed"]),
+    (
+        "lib.rs",
+        Closure::HelperLaunch,
+        &["builder_image_gen_status", "is_ollama_installed"],
+    ),
     (
         "lib.rs",
         Closure::LegacyBuilder,

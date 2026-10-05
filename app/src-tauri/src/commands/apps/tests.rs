@@ -548,3 +548,103 @@ fn p0_fg_h_api_client_collections_keep_no_auth_secret() {
     assert_eq!(resolved.get(), 1);
     assert_eq!(std::fs::read_to_string(&target.0).unwrap(), clean);
 }
+
+/// Serves one connection: reads the request head, answers `reply` and ends.
+/// Returns the endpoint's URL and, from the thread, the request head.
+fn serve_once(reply: Vec<u8>) -> (String, std::thread::JoinHandle<String>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/api/v4/projects", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).unwrap_or(0) == 1 {
+            head.push(byte[0]);
+        }
+        // Best effort: a client that refused the answer may have gone.
+        let _ = stream.write_all(&reply);
+        String::from_utf8_lossy(&head).into_owned()
+    });
+    (url, server)
+}
+
+/// Phase Three G-INV-6: the marketplace search follows no redirect, reads a
+/// bounded answer, carries the caller's text only as a query value and
+/// returns only the projects' public fields.
+#[test]
+fn p3_the_marketplace_search_follows_no_redirect_and_reads_a_bounded_answer() {
+    // A redirect is answered, never followed: its target sees no connection.
+    let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    target.set_nonblocking(true).unwrap();
+    let target_url = format!("http://{}/collect", target.local_addr().unwrap());
+    for code in [
+        "301 Moved Permanently",
+        "302 Found",
+        "303 See Other",
+        "307 Temporary Redirect",
+        "308 Permanent Redirect",
+    ] {
+        let (url, server) = serve_once(
+            format!(
+                "HTTP/1.1 {code}\r\nLocation: {target_url}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .into_bytes(),
+        );
+        let found = block_on_async(search_gitlab(&url, "agent"));
+        server.join().unwrap();
+        assert_eq!(found.as_deref(), Ok("[]"), "{code}");
+    }
+    assert!(matches!(
+        target.accept(),
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+    ));
+
+    // An answer past the bound, declared or streamed, is refused.
+    let refused = Err(format!(
+        "gitlab search: the answer is larger than {MAX_GITLAB_SEARCH_BYTES} bytes"
+    ));
+    let declared = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        MAX_GITLAB_SEARCH_BYTES + 1
+    );
+    let (url, server) = serve_once(declared.into_bytes());
+    assert_eq!(block_on_async(search_gitlab(&url, "agent")), refused);
+    server.join().unwrap();
+    let mut streamed = b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".to_vec();
+    streamed.resize(streamed.len() + MAX_GITLAB_SEARCH_BYTES + 1, b' ');
+    let (url, server) = serve_once(streamed);
+    assert_eq!(block_on_async(search_gitlab(&url, "agent")), refused);
+    server.join().unwrap();
+
+    // A bounded answer is read; only the public fields leave.
+    let body = br#"[{"id":7,"name":"Scout","description":"d","namespace":{"name":"ns"},"web_url":"https://gitlab.com/ns/scout","star_count":3,"runners_token":"x"}]"#;
+    let mut reply = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    reply.extend_from_slice(body);
+    let (url, server) = serve_once(reply);
+    let found = block_on_async(search_gitlab(&url, "a&b=c#d")).unwrap();
+    let head = server.join().unwrap();
+    let request = head.lines().next().unwrap();
+    assert!(
+        request.starts_with("GET /api/v4/projects?search=a%26b%3Dc%23d&topic=nexus-agent&"),
+        "{request}"
+    );
+    assert!(!head.to_ascii_lowercase().contains("referer"), "{head}");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&found).unwrap(),
+        json!([{
+            "id": "7",
+            "name": "Scout",
+            "description": "d",
+            "author": "ns",
+            "url": "https://gitlab.com/ns/scout",
+            "stars": 3,
+            "source": "gitlab",
+            "autonomy_level": "L2",
+        }])
+    );
+}

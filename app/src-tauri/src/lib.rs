@@ -4982,12 +4982,16 @@ pub mod runtime {
 
     // ── Phase 13: Image Generation Commands ────────────────────────────
 
-    /// Check which image generation tiers are available.
+    /// Phase Three G-INV-5: answering this sent a request to an unowned local
+    /// service (following any redirect it answered) and ran `which` from
+    /// `PATH`, only to report on image generators that are stubs behind
+    /// closed commands. Nexus runs no helper for it (`Closure::HelperLaunch`).
     #[tauri::command]
-    async fn builder_image_gen_status() -> Result<String, String> {
-        let config = web_builder_agent::image_gen::ImageGenConfig::default();
-        let status = web_builder_agent::image_gen::check_status(&config).await;
-        serde_json::to_string(&status).map_err(|e| format!("serialize: {e}"))
+    pub(crate) fn builder_image_gen_status() -> Result<String, String> {
+        Err(crate::phase0_surface::closed(
+            "builder_image_gen_status",
+            crate::phase0_surface::Closure::HelperLaunch,
+        ))
     }
 
     #[tauri::command]

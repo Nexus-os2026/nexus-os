@@ -827,41 +827,76 @@ pub(crate) fn email_disconnect(state: &AppState, provider: String) -> Result<Str
 
 // ── App Store: GitLab API search ─────────────────────────────────────
 
-pub(crate) fn marketplace_search_gitlab(query: String) -> Result<String, String> {
-    let result = block_on_async(async {
-        let url = "https://gitlab.com/api/v4/projects";
-        let resp = reqwest::Client::new()
-            .get(url)
-            .query(&[
-                ("search", query.as_str()),
-                ("topic", "nexus-agent"),
-                ("per_page", "20"),
-                ("order_by", "last_activity_at"),
-            ])
-            .send()
-            .await
-            .map_err(|e| format!("gitlab search: {e}"))?;
-        let body = resp.text().await.map_err(|e| format!("body: {e}"))?;
-        let projects: Vec<serde_json::Value> = serde_json::from_str(&body).unwrap_or_default();
+/// The marketplace search's one fixed endpoint.
+const GITLAB_PROJECTS_URL: &str = "https://gitlab.com/api/v4/projects";
 
-        let agents: Vec<serde_json::Value> = projects
-            .iter()
-            .map(|p| {
-                json!({
-                    "id": p.get("id").and_then(|v| v.as_i64()).unwrap_or(0).to_string(),
-                    "name": p.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown"),
-                    "description": p.get("description").and_then(|v| v.as_str()).unwrap_or("Community agent"),
-                    "author": p.get("namespace").and_then(|n| n.get("name")).and_then(|v| v.as_str()).unwrap_or("community"),
-                    "url": p.get("web_url").and_then(|v| v.as_str()).unwrap_or(""),
-                    "stars": p.get("star_count").and_then(|v| v.as_i64()).unwrap_or(0),
-                    "source": "gitlab",
-                    "autonomy_level": "L2",
-                })
+/// The longest one marketplace search may take, from connecting until its
+/// whole answer is read.
+const GITLAB_SEARCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// The most bytes of a marketplace search answer read into memory.
+const MAX_GITLAB_SEARCH_BYTES: usize = 4 * 1024 * 1024;
+
+pub(crate) fn marketplace_search_gitlab(query: String) -> Result<String, String> {
+    block_on_async(search_gitlab(GITLAB_PROJECTS_URL, &query))
+}
+
+/// Phase Three G-INV-6: the marketplace search is a fixed-host read with no
+/// credential. It follows no redirect (a redirect could name any
+/// destination), sends no Referer, ends within `GITLAB_SEARCH_TIMEOUT` and
+/// reads at most `MAX_GITLAB_SEARCH_BYTES`; the caller's text is only a
+/// query value.
+async fn search_gitlab(url: &str, query: &str) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(GITLAB_SEARCH_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .referer(false)
+        .build()
+        .map_err(|e| format!("gitlab search: {}", e.without_url()))?;
+    let mut resp = client
+        .get(url)
+        .query(&[
+            ("search", query),
+            ("topic", "nexus-agent"),
+            ("per_page", "20"),
+            ("order_by", "last_activity_at"),
+        ])
+        .send()
+        .await
+        .map_err(|e| format!("gitlab search: {e}"))?;
+    let too_large =
+        || format!("gitlab search: the answer is larger than {MAX_GITLAB_SEARCH_BYTES} bytes");
+    if resp
+        .content_length()
+        .is_some_and(|length| length > MAX_GITLAB_SEARCH_BYTES as u64)
+    {
+        return Err(too_large());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|e| format!("body: {e}"))? {
+        if chunk.len() > MAX_GITLAB_SEARCH_BYTES - body.len() {
+            return Err(too_large());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let projects: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap_or_default();
+
+    let agents: Vec<serde_json::Value> = projects
+        .iter()
+        .map(|p| {
+            json!({
+                "id": p.get("id").and_then(|v| v.as_i64()).unwrap_or(0).to_string(),
+                "name": p.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown"),
+                "description": p.get("description").and_then(|v| v.as_str()).unwrap_or("Community agent"),
+                "author": p.get("namespace").and_then(|n| n.get("name")).and_then(|v| v.as_str()).unwrap_or("community"),
+                "url": p.get("web_url").and_then(|v| v.as_str()).unwrap_or(""),
+                "stars": p.get("star_count").and_then(|v| v.as_i64()).unwrap_or(0),
+                "source": "gitlab",
+                "autonomy_level": "L2",
             })
-            .collect();
-        serde_json::to_string(&agents).map_err(|e| format!("json: {e}"))
-    })?;
-    Ok(result)
+        })
+        .collect();
+    serde_json::to_string(&agents).map_err(|e| format!("json: {e}"))
 }
 
 // ── Agent Output Panel ───────────────────────────────────────────────
