@@ -4167,3 +4167,1200 @@ fn p3_g6_07_the_final_classification_names_every_variant() {
     .collect();
     assert_eq!(named, declared);
 }
+
+// ---------------------------------------------------------------------------
+// §22 direct-bypass closure: every production real-world mechanism in the
+// workspace has exactly one of four classes.
+// ---------------------------------------------------------------------------
+
+/// The four classes of PHASE-THREE-FINAL §22. There is no fifth.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Route {
+    /// Phase Three governed control: `crates/nexus-governed-control`, and
+    /// nothing else.
+    Phase3,
+    /// An existing, stronger governed route: Phase Zero, One or Two
+    /// governance or an Architect decision, named in the reason.
+    Governed,
+    /// Intentionally closed: every desktop route to it is closed, or it has
+    /// no production caller (latent, kept so by a needle or a closed
+    /// command).
+    Closed,
+    /// Outside the shipped product: a withdrawn binary or a developer tool.
+    NonProduction,
+}
+
+/// The kinds of real-world mechanism a resolved path names. Phase Zero's
+/// process, termination and network predicates, extended with WebSocket
+/// clients; the X server; the credential vault (its global facade and the
+/// OS keyring); sealed spawns; launching the OS's opener or browser; and
+/// direct screen, input, clipboard, audio and browser-driver crates.
+fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
+    use crate::phase0_surface::rust_paths::{
+        constructs_process, ends_process, opens_network, starts_with,
+    };
+    // A crate's item has at least two segments; a lone name is a local.
+    let any = |prefixes: &[&str]| {
+        path.len() > 1 && prefixes.iter().any(|prefix| starts_with(path, prefix))
+    };
+    let shown = path.join("::");
+    let mut kinds = BTreeSet::new();
+    if constructs_process(path)
+        || any(&[
+            "open::that",
+            "open::that_detached",
+            "open::that_in_background",
+            "open::with",
+            "open::with_detached",
+            "open::with_in_background",
+            "open::commands",
+            "opener",
+            "webbrowser",
+        ])
+    {
+        kinds.insert("process");
+    }
+    if ends_process(path) {
+        kinds.insert("ends");
+    }
+    if opens_network(path) || any(&["tokio_tungstenite", "tungstenite", "async_tungstenite"]) {
+        kinds.insert("network");
+    }
+    if starts_with(path, "x11rb") {
+        kinds.insert("x11");
+    }
+    if shown.contains("secrets::global::try_facade")
+        || shown.contains("secrets::global::facade")
+        || any(&["keyring"])
+    {
+        kinds.insert("vault");
+    }
+    if shown.ends_with("SealedSpawnSpec") {
+        kinds.insert("sealed");
+    }
+    if any(&[
+        "xcap",
+        "screenshots",
+        "scrap",
+        "enigo",
+        "rdev",
+        "device_query",
+        "inputbot",
+        "autopilot",
+        "mouse_rs",
+        "uinput",
+        "evdev",
+        "arboard",
+        "copypasta",
+        "cli_clipboard",
+        "cpal",
+        "rodio",
+        "portaudio",
+    ]) {
+        kinds.insert("device");
+    }
+    if any(&[
+        "headless_chrome",
+        "chromiumoxide",
+        "fantoccini",
+        "thirtyfour",
+    ]) {
+        kinds.insert("browser");
+    }
+    kinds
+}
+
+/// (file, kind) -> occurrences, over every workspace production source: each
+/// production occurrence that resolves to a mechanism counts once per kind
+/// (a private `use` only binds a name, so its uses count instead).
+fn measured_effect_sites() -> BTreeMap<(String, &'static str), usize> {
+    use crate::phase0_surface::rust_paths::{Analysis, Declaration};
+    let mut sites = BTreeMap::new();
+    for (file, _) in workspace_sources() {
+        let src = workspace_file(file);
+        let analysis = Analysis::new(&src, &["crate"]);
+        for o in analysis.production() {
+            if o.declaration == Some(Declaration::Use) && !o.public && o.item.is_none() {
+                continue;
+            }
+            let kinds: BTreeSet<&str> = o.resolved.iter().flat_map(|p| effect_kinds(p)).collect();
+            for kind in kinds {
+                *sites.entry((file.clone(), kind)).or_insert(0) += 1;
+            }
+        }
+    }
+    sites
+}
+
+/// Every production real-world mechanism in the workspace, resolved
+/// structurally: (file, kind, count). A new occurrence anywhere fails.
+const EFFECT_SITES: &[(&str, &str, usize)] = &[
+    ("agents/coder/src/context.rs", "process", 1),
+    ("agents/coder/src/git.rs", "process", 1),
+    ("agents/coder/src/scanner.rs", "process", 1),
+    ("agents/coder/src/test_runner.rs", "process", 2),
+    ("agents/coding-agent/src/lib.rs", "process", 2),
+    ("agents/web-builder/src/deploy/cloudflare.rs", "network", 7),
+    ("agents/web-builder/src/deploy/mod.rs", "network", 6),
+    ("agents/web-builder/src/deploy/netlify.rs", "network", 5),
+    ("agents/web-builder/src/deploy/vercel.rs", "network", 4),
+    ("agents/web-builder/src/dev_server.rs", "ends", 3),
+    ("agents/web-builder/src/dev_server.rs", "network", 2),
+    ("agents/web-builder/src/dev_server.rs", "process", 3),
+    ("agents/web-builder/src/image_gen/api.rs", "network", 1),
+    ("agents/web-builder/src/image_gen/local.rs", "network", 1),
+    ("agents/web-builder/src/image_gen/local.rs", "process", 1),
+    ("agents/web-builder/src/theme_extract.rs", "network", 4),
+    (
+        "app/src-tauri/src/builder_workspace/dev_server_launch.rs",
+        "network",
+        1,
+    ),
+    (
+        "app/src-tauri/src/builder_workspace/dev_server_launch.rs",
+        "sealed",
+        2,
+    ),
+    ("app/src-tauri/src/commands/agents.rs", "vault", 1),
+    ("app/src-tauri/src/commands/apps.rs", "network", 2),
+    ("app/src-tauri/src/commands/chat_llm.rs", "process", 2),
+    ("app/src-tauri/src/commands/chat_llm.rs", "vault", 2),
+    ("app/src-tauri/src/commands/flash.rs", "process", 1),
+    ("app/src-tauri/src/commands/trust_security.rs", "process", 1),
+    ("auth/src/config.rs", "vault", 1),
+    ("auth/src/error.rs", "network", 2),
+    ("auth/src/oidc.rs", "network", 2),
+    ("cli/src/lib.rs", "process", 1),
+    ("connectors/core/src/http_connector.rs", "vault", 1),
+    ("connectors/core/src/validation.rs", "process", 2),
+    ("connectors/llm/src/model_hub.rs", "process", 4),
+    ("connectors/llm/src/nexus_link.rs", "network", 2),
+    ("connectors/llm/src/providers/claude.rs", "network", 2),
+    ("connectors/llm/src/providers/mod.rs", "network", 13),
+    ("connectors/llm/src/providers/mod.rs", "process", 3),
+    ("connectors/llm/src/providers/ollama.rs", "network", 1),
+    ("connectors/llm/src/providers/ollama.rs", "process", 3),
+    ("connectors/messaging/src/discord.rs", "network", 3),
+    ("connectors/messaging/src/matrix.rs", "network", 3),
+    ("connectors/messaging/src/matrix.rs", "vault", 1),
+    ("connectors/messaging/src/slack.rs", "network", 3),
+    ("connectors/messaging/src/telegram.rs", "network", 3),
+    ("connectors/messaging/src/webhook.rs", "network", 3),
+    ("connectors/messaging/src/whatsapp.rs", "network", 3),
+    ("connectors/messaging/src/whatsapp.rs", "vault", 2),
+    ("connectors/web/src/reader.rs", "process", 1),
+    ("connectors/web/src/search.rs", "process", 2),
+    ("connectors/web/src/twitter.rs", "network", 9),
+    ("connectors/web/src/twitter.rs", "vault", 1),
+    ("crates/nexus-browser-agent/src/bridge.rs", "process", 1),
+    (
+        "crates/nexus-capability-measurement/src/evaluation/nim_client.rs",
+        "process",
+        1,
+    ),
+    (
+        "crates/nexus-capability-measurement/src/evaluation/openrouter_client.rs",
+        "process",
+        1,
+    ),
+    ("crates/nexus-computer-control/src/engine.rs", "process", 1),
+    (
+        "crates/nexus-computer-use/src/agent/vision.rs",
+        "process",
+        1,
+    ),
+    ("crates/nexus-computer-use/src/capability.rs", "process", 2),
+    (
+        "crates/nexus-computer-use/src/capture/backend.rs",
+        "process",
+        7,
+    ),
+    (
+        "crates/nexus-computer-use/src/governance/app_registry.rs",
+        "process",
+        2,
+    ),
+    (
+        "crates/nexus-computer-use/src/input/backend.rs",
+        "process",
+        3,
+    ),
+    (
+        "crates/nexus-computer-use/src/input/keyboard.rs",
+        "process",
+        1,
+    ),
+    ("crates/nexus-computer-use/src/input/mouse.rs", "process", 1),
+    ("crates/nexus-external-tools/src/adapter.rs", "process", 1),
+    ("crates/nexus-flash-infer/src/downloader.rs", "network", 4),
+    ("crates/nexus-flash-infer/src/downloader.rs", "process", 2),
+    ("crates/nexus-flash-infer/src/hardware.rs", "process", 2),
+    ("crates/nexus-governed-control/src/broker.rs", "network", 2),
+    ("crates/nexus-governed-control/src/broker.rs", "vault", 1),
+    (
+        "crates/nexus-governed-control/src/browser/proxy.rs",
+        "network",
+        9,
+    ),
+    (
+        "crates/nexus-governed-control/src/display/server.rs",
+        "network",
+        1,
+    ),
+    (
+        "crates/nexus-governed-control/src/display/server.rs",
+        "x11",
+        18,
+    ),
+    (
+        "crates/nexus-governed-control/src/egress/mod.rs",
+        "network",
+        8,
+    ),
+    (
+        "crates/nexus-governed-control/src/egress/transport.rs",
+        "network",
+        19,
+    ),
+    ("crates/nexus-governed-control/src/launcher.rs", "ends", 1),
+    (
+        "crates/nexus-governed-control/src/launcher.rs",
+        "process",
+        1,
+    ),
+    ("crates/nexus-governed-control/src/tool/mod.rs", "sealed", 1),
+    ("crates/nexus-mcp/src/client.rs", "process", 1),
+    ("crates/nexus-mcp/src/tools.rs", "process", 2),
+    ("crates/nexus-memory/src/embedding.rs", "process", 1),
+    ("crates/nexus-perception/src/vision.rs", "process", 1),
+    ("crates/nexus-swarm/src/adapters/herald.rs", "vault", 1),
+    (
+        "crates/nexus-swarm/src/providers/anthropic.rs",
+        "network",
+        3,
+    ),
+    ("crates/nexus-swarm/src/providers/anthropic.rs", "vault", 1),
+    (
+        "crates/nexus-swarm/src/providers/codex_cli.rs",
+        "process",
+        2,
+    ),
+    (
+        "crates/nexus-swarm/src/providers/huggingface.rs",
+        "network",
+        4,
+    ),
+    (
+        "crates/nexus-swarm/src/providers/huggingface.rs",
+        "vault",
+        1,
+    ),
+    ("crates/nexus-swarm/src/providers/mod.rs", "network", 2),
+    ("crates/nexus-swarm/src/providers/ollama.rs", "network", 3),
+    ("crates/nexus-swarm/src/providers/openai.rs", "network", 4),
+    ("crates/nexus-swarm/src/providers/openai.rs", "vault", 1),
+    (
+        "crates/nexus-swarm/src/providers/openrouter.rs",
+        "network",
+        4,
+    ),
+    ("crates/nexus-swarm/src/providers/openrouter.rs", "vault", 1),
+    (
+        "crates/nexus-ui-repair/src/governance/xvfb_session.rs",
+        "process",
+        1,
+    ),
+    (
+        "crates/nexus-ui-repair/src/specialists/vision_judge.rs",
+        "network",
+        2,
+    ),
+    (
+        "crates/nexus-ui-repair/src/specialists/vision_judge.rs",
+        "process",
+        1,
+    ),
+    (
+        "crates/nexus-verifier-sandbox/src/launcher.rs",
+        "process",
+        1,
+    ),
+    ("crates/nexus-verifier-sandbox/src/sys.rs", "network", 4),
+    ("crates/nexus-verifier-sandbox/src/sys.rs", "process", 1),
+    ("distributed/src/tcp_transport.rs", "network", 6),
+    ("factory/src/pipeline.rs", "process", 1),
+    ("integrations/src/providers/discord.rs", "network", 2),
+    ("integrations/src/providers/github.rs", "network", 2),
+    ("integrations/src/providers/gitlab.rs", "network", 2),
+    ("integrations/src/providers/jira.rs", "network", 2),
+    ("integrations/src/providers/servicenow.rs", "network", 2),
+    ("integrations/src/providers/slack.rs", "network", 2),
+    ("integrations/src/providers/teams.rs", "network", 4),
+    ("integrations/src/providers/telegram.rs", "network", 2),
+    ("integrations/src/providers/webhook.rs", "network", 2),
+    ("kernel/src/actuators/api.rs", "process", 1),
+    ("kernel/src/actuators/browser.rs", "process", 1),
+    ("kernel/src/actuators/code_exec.rs", "process", 1),
+    ("kernel/src/actuators/docker.rs", "process", 1),
+    ("kernel/src/actuators/image_gen.rs", "process", 3),
+    ("kernel/src/actuators/shell.rs", "process", 1),
+    ("kernel/src/actuators/tts.rs", "process", 3),
+    ("kernel/src/actuators/web.rs", "process", 2),
+    ("kernel/src/coding_run/local_model.rs", "network", 6),
+    ("kernel/src/computer_control.rs", "process", 5),
+    ("kernel/src/hardware.rs", "process", 5),
+    ("kernel/src/protocols/a2a_client.rs", "process", 2),
+    ("kernel/src/resource_limiter.rs", "sealed", 1),
+    ("kernel/src/resource_limiter/unix.rs", "ends", 1),
+    ("kernel/src/resource_limiter/unix.rs", "process", 4),
+    ("kernel/src/resource_limiter/unix.rs", "sealed", 1),
+    ("kernel/src/resource_limiter/windows.rs", "ends", 1),
+    ("kernel/src/resource_limiter/windows.rs", "process", 1),
+    ("kernel/src/resource_limiter/windows.rs", "sealed", 1),
+    ("kernel/src/secrets/backend_keyring.rs", "vault", 4),
+    ("kernel/src/typed_tools.rs", "process", 1),
+    ("llama-bridge/src/model.rs", "process", 1),
+    ("nexus-code/src/bench/swe_bench.rs", "process", 5),
+    ("nexus-code/src/commands/diff.rs", "process", 1),
+    ("nexus-code/src/error.rs", "network", 3),
+    ("nexus-code/src/llm/provider.rs", "network", 1),
+    ("nexus-code/src/llm/providers/anthropic.rs", "network", 4),
+    ("nexus-code/src/llm/providers/claude_cli.rs", "process", 3),
+    ("nexus-code/src/llm/providers/google.rs", "network", 2),
+    (
+        "nexus-code/src/llm/providers/openai_compat.rs",
+        "network",
+        6,
+    ),
+    ("nexus-code/src/llm/router.rs", "network", 1),
+    ("nexus-code/src/llm/streaming.rs", "network", 5),
+    ("nexus-code/src/mcp/transport.rs", "network", 2),
+    ("nexus-code/src/mcp/transport.rs", "process", 4),
+    ("nexus-code/src/setup.rs", "process", 2),
+    ("nexus-code/src/tools/bash.rs", "process", 1),
+    ("nexus-code/src/tools/git.rs", "process", 1),
+    ("nexus-code/src/tools/screen_analyze.rs", "process", 1),
+    ("nexus-code/src/tools/screen_capture.rs", "process", 3),
+    ("nexus-code/src/tools/screen_interact.rs", "process", 6),
+    ("nexus-code/src/tools/search.rs", "process", 2),
+    ("nexus-code/src/tools/test_runner.rs", "process", 1),
+    ("nexus-code/src/tools/web_fetch.rs", "network", 1),
+    ("protocols/src/mcp_client.rs", "process", 3),
+    ("protocols/src/server_runtime.rs", "network", 1),
+    ("sdk/src/typed_tools.rs", "process", 13),
+];
+
+/// The class of every file holding a mechanism, and why (no fifth class).
+const EFFECT_FILES: &[(&str, Route, &str)] = &[
+    (
+        "agents/coder/src/context.rs",
+        Route::Closed,
+        "latent: the coder conductor is never constructed by the desktop (only the withdrawn CLI and tests)",
+    ),
+    (
+        "agents/coder/src/git.rs",
+        Route::Closed,
+        "latent: no production caller (agents/coder tests only)",
+    ),
+    (
+        "agents/coder/src/scanner.rs",
+        Route::Closed,
+        "latent: reached only from the coder conductor, which the desktop never constructs",
+    ),
+    (
+        "agents/coder/src/test_runner.rs",
+        Route::Closed,
+        "latent: reached only from the coder conductor, which the desktop never constructs",
+    ),
+    (
+        "agents/coding-agent/src/lib.rs",
+        Route::NonProduction,
+        "not in the desktop dependency closure (withdrawn CLI and integration tests only)",
+    ),
+    (
+        "agents/web-builder/src/deploy/cloudflare.rs",
+        Route::Governed,
+        "Builder deploy reads only (check token, list sites): fixed host, bounded no-redirect api_client; uploads closed (LegacyBuilder)",
+    ),
+    (
+        "agents/web-builder/src/deploy/mod.rs",
+        Route::Governed,
+        "the Builder deploy api_client (no redirect, no referer, 30 s, 8 MiB) for the fixed-host reads; uploads closed",
+    ),
+    (
+        "agents/web-builder/src/deploy/netlify.rs",
+        Route::Governed,
+        "Builder deploy reads only: fixed host, bounded no-redirect api_client; uploads closed",
+    ),
+    (
+        "agents/web-builder/src/deploy/vercel.rs",
+        Route::Governed,
+        "Builder deploy reads only: fixed host, bounded no-redirect api_client; deploy closed",
+    ),
+    (
+        "agents/web-builder/src/dev_server.rs",
+        Route::Closed,
+        "latent legacy launcher: no caller; the desktop launches dev servers only through its sealed Builder lifecycle",
+    ),
+    (
+        "agents/web-builder/src/image_gen/api.rs",
+        Route::Closed,
+        "image generation commands closed (LegacyBuilder)",
+    ),
+    (
+        "agents/web-builder/src/image_gen/local.rs",
+        Route::Closed,
+        "its only route, builder_image_gen_status, is closed (HelperLaunch, Phase Three G-INV-5)",
+    ),
+    (
+        "agents/web-builder/src/theme_extract.rs",
+        Route::Closed,
+        "builder_theme_extract_from_url closed (NetworkDestination)",
+    ),
+    (
+        "app/src-tauri/src/builder_workspace/dev_server_launch.rs",
+        Route::Governed,
+        "Phase Zero C4C3 Builder lifecycle: revalidated reservation, verified packaged toolchain, sealed Node spawn, loopback readiness probe, no redirect",
+    ),
+    (
+        "app/src-tauri/src/commands/agents.rs",
+        Route::Governed,
+        "LLM provider keys read from the vault for operator-configured provider endpoints (S7)",
+    ),
+    (
+        "app/src-tauri/src/commands/apps.rs",
+        Route::Governed,
+        "the fixed-host GitLab marketplace read: no credential, no redirect, bounded time and size (S17; Phase Three G-INV-6)",
+    ),
+    (
+        "app/src-tauri/src/commands/chat_llm.rs",
+        Route::Governed,
+        "governed curl to the authorized Ollama address only (Final Gate item B, Architect decision F; CURL_SITES); the vault reads are the Phase Zero provider keys",
+    ),
+    (
+        "app/src-tauri/src/commands/flash.rs",
+        Route::Governed,
+        "the fixed nvidia-smi metrics probe (Architect decision A: fixed name and arguments, read-only)",
+    ),
+    (
+        "app/src-tauri/src/commands/trust_security.rs",
+        Route::Governed,
+        "the C5C notification: fixed program, the message only as data after --; its only caller is the emergency-stop shortcut",
+    ),
+    (
+        "auth/src/config.rs",
+        Route::Closed,
+        "latent: the OIDC client-secret read; its only caller, OidcClient, has no production caller (needle OidcClient)",
+    ),
+    (
+        "auth/src/error.rs",
+        Route::Closed,
+        "an error conversion only (no connection); its producer, OidcClient, has no production caller",
+    ),
+    (
+        "auth/src/oidc.rs",
+        Route::Closed,
+        "latent: OidcClient has no production caller (needle OidcClient)",
+    ),
+    (
+        "cli/src/lib.rs",
+        Route::NonProduction,
+        "only the withdrawn nexus binary depends on nexus-cli",
+    ),
+    (
+        "connectors/core/src/http_connector.rs",
+        Route::Closed,
+        "latent: no caller outside connectors/core (other crates use only its rate limiter)",
+    ),
+    (
+        "connectors/core/src/validation.rs",
+        Route::Closed,
+        "latent: only the withdrawn nexus-cli setup calls it",
+    ),
+    (
+        "connectors/llm/src/model_hub.rs",
+        Route::Governed,
+        "model catalog downloads: fixed host, HTTPS-only governed curl, owned and reaped downloads (S8)",
+    ),
+    (
+        "connectors/llm/src/nexus_link.rs",
+        Route::Closed,
+        "peer transfer closed (PeerTransfer); open nexus_link commands are state-only",
+    ),
+    (
+        "connectors/llm/src/providers/claude.rs",
+        Route::Governed,
+        "operator-configured provider: fixed endpoint, vault key, bounded no-redirect client (S7)",
+    ),
+    (
+        "connectors/llm/src/providers/mod.rs",
+        Route::Governed,
+        "Phase Zero governed curl and in-process client for operator-configured providers (S7, C5B)",
+    ),
+    (
+        "connectors/llm/src/providers/ollama.rs",
+        Route::Governed,
+        "the authorized Ollama address only (decision F); governed curl, children reaped (S7)",
+    ),
+    (
+        "connectors/messaging/src/discord.rs",
+        Route::Closed,
+        "the messaging gateway never sends or polls; the messaging commands are closed (GovernedRoute)",
+    ),
+    (
+        "connectors/messaging/src/matrix.rs",
+        Route::Closed,
+        "never constructed in production",
+    ),
+    (
+        "connectors/messaging/src/slack.rs",
+        Route::Closed,
+        "the messaging gateway never sends or polls; the messaging commands are closed (GovernedRoute)",
+    ),
+    (
+        "connectors/messaging/src/telegram.rs",
+        Route::Closed,
+        "the messaging gateway never sends or polls; the messaging commands are closed (GovernedRoute)",
+    ),
+    (
+        "connectors/messaging/src/webhook.rs",
+        Route::Closed,
+        "never constructed in production",
+    ),
+    (
+        "connectors/messaging/src/whatsapp.rs",
+        Route::Closed,
+        "the messaging gateway never sends or polls; the messaging commands are closed (GovernedRoute)",
+    ),
+    (
+        "connectors/web/src/reader.rs",
+        Route::Closed,
+        "latent: reached only from the social-poster manifest runner of the withdrawn CLI",
+    ),
+    (
+        "connectors/web/src/search.rs",
+        Route::Closed,
+        "latent: reached only from the social-poster manifest runner of the withdrawn CLI",
+    ),
+    (
+        "connectors/web/src/twitter.rs",
+        Route::Closed,
+        "posting only when not dry-run; the desktop's Herald runs drafts-only (P0-002C5C), the manifest runner only from the withdrawn CLI",
+    ),
+    (
+        "crates/nexus-browser-agent/src/bridge.rs",
+        Route::Closed,
+        "the bridge is never started; the legacy browser commands are closed (GovernedRoute, G-INV-3)",
+    ),
+    (
+        "crates/nexus-capability-measurement/src/evaluation/nim_client.rs",
+        Route::Closed,
+        "its validation runs are closed (AmbientResource)",
+    ),
+    (
+        "crates/nexus-capability-measurement/src/evaluation/openrouter_client.rs",
+        Route::Closed,
+        "latent: no production constructor",
+    ),
+    (
+        "crates/nexus-computer-control/src/engine.rs",
+        Route::Closed,
+        "cc_execute_action is closed (ProcessExecution)",
+    ),
+    (
+        "crates/nexus-computer-use/src/agent/vision.rs",
+        Route::Closed,
+        "the computer-use agent loop has no production caller; its desktop routes are closed (ScreenObservation, GovernedRoute)",
+    ),
+    (
+        "crates/nexus-computer-use/src/capability.rs",
+        Route::Closed,
+        "its only route, nx_computer_use_status, is closed (GovernedRoute, G-INV-2)",
+    ),
+    (
+        "crates/nexus-computer-use/src/capture/backend.rs",
+        Route::Closed,
+        "the computer-use agent loop has no production caller; its desktop routes are closed (ScreenObservation, GovernedRoute)",
+    ),
+    (
+        "crates/nexus-computer-use/src/governance/app_registry.rs",
+        Route::Closed,
+        "the computer-use agent loop has no production caller; its desktop routes are closed (ScreenObservation, GovernedRoute)",
+    ),
+    (
+        "crates/nexus-computer-use/src/input/backend.rs",
+        Route::Closed,
+        "the computer-use agent loop has no production caller; its desktop routes are closed (ScreenObservation, GovernedRoute)",
+    ),
+    (
+        "crates/nexus-computer-use/src/input/keyboard.rs",
+        Route::Closed,
+        "the computer-use agent loop has no production caller; its desktop routes are closed (ScreenObservation, GovernedRoute)",
+    ),
+    (
+        "crates/nexus-computer-use/src/input/mouse.rs",
+        Route::Closed,
+        "the computer-use agent loop has no production caller; its desktop routes are closed (ScreenObservation, GovernedRoute)",
+    ),
+    (
+        "crates/nexus-external-tools/src/adapter.rs",
+        Route::Governed,
+        "tools_execute reaches only the fixed-host web search (Phase Zero refusal set, C5B curl bounds, autonomy floor; PATH curl under decision A)",
+    ),
+    (
+        "crates/nexus-flash-infer/src/downloader.rs",
+        Route::Governed,
+        "model downloads from the fixed Hugging Face host with identifier grammar and bounds (S8); df under decision A",
+    ),
+    (
+        "crates/nexus-flash-infer/src/hardware.rs",
+        Route::Governed,
+        "fixed-name, fixed-argument hardware probes (Architect decision A, P0-LINUX-FINAL-R1)",
+    ),
+    (
+        "crates/nexus-governed-control/src/broker.rs",
+        Route::Phase3,
+        "the credential broker: vault reads under executing commitments, header types",
+    ),
+    (
+        "crates/nexus-governed-control/src/browser/proxy.rs",
+        Route::Phase3,
+        "the governed browser's session proxy (granted origins, egress address policy, pinned)",
+    ),
+    (
+        "crates/nexus-governed-control/src/display/server.rs",
+        Route::Phase3,
+        "the agent display: backend-owned Xvfb, cookie-authorized X11 socket",
+    ),
+    (
+        "crates/nexus-governed-control/src/egress/mod.rs",
+        Route::Phase3,
+        "governed egress (header types)",
+    ),
+    (
+        "crates/nexus-governed-control/src/egress/transport.rs",
+        Route::Phase3,
+        "the pinned governed transport",
+    ),
+    (
+        "crates/nexus-governed-control/src/launcher.rs",
+        Route::Phase3,
+        "the governed session launcher (own process group, parent-death signal, kill-group-and-reap)",
+    ),
+    (
+        "crates/nexus-governed-control/src/tool/mod.rs",
+        Route::Phase3,
+        "governed tools through the kernel's sealed spawn",
+    ),
+    (
+        "crates/nexus-mcp/src/client.rs",
+        Route::Closed,
+        "the MCP client commands are closed (ProcessExecution)",
+    ),
+    (
+        "crates/nexus-mcp/src/tools.rs",
+        Route::Closed,
+        "mcp2_server_handle is closed (AmbientResource)",
+    ),
+    (
+        "crates/nexus-memory/src/embedding.rs",
+        Route::Closed,
+        "latent: the embedder is never constructed in production",
+    ),
+    (
+        "crates/nexus-perception/src/vision.rs",
+        Route::Closed,
+        "perception_init is closed (CredentialTransport)",
+    ),
+    (
+        "crates/nexus-swarm/src/adapters/herald.rs",
+        Route::Governed,
+        "swarm Herald runs drafts-only (forced dry run, P0-002C5C); the credential lookup runs only when not dry-run, never from the desktop",
+    ),
+    (
+        "crates/nexus-swarm/src/providers/anthropic.rs",
+        Route::Governed,
+        "operator-configured provider: fixed host, vault key, no redirects, capped reads (S7)",
+    ),
+    (
+        "crates/nexus-swarm/src/providers/codex_cli.rs",
+        Route::Closed,
+        "external CLI agents are closed (ExternalCliAgent); not registered by the desktop",
+    ),
+    (
+        "crates/nexus-swarm/src/providers/huggingface.rs",
+        Route::Governed,
+        "operator-configured provider: fixed host, vault token, no redirects (S7)",
+    ),
+    (
+        "crates/nexus-swarm/src/providers/mod.rs",
+        Route::Governed,
+        "the bounded body readers of the governed providers (S7)",
+    ),
+    (
+        "crates/nexus-swarm/src/providers/ollama.rs",
+        Route::Governed,
+        "the operator-configured Ollama address (decision F), no credential (S7)",
+    ),
+    (
+        "crates/nexus-swarm/src/providers/openai.rs",
+        Route::Governed,
+        "operator-configured provider: fixed host, vault key, no redirects (S7)",
+    ),
+    (
+        "crates/nexus-swarm/src/providers/openrouter.rs",
+        Route::Governed,
+        "operator-configured provider: fixed host, vault key, no redirects (S7)",
+    ),
+    (
+        "crates/nexus-ui-repair/src/governance/xvfb_session.rs",
+        Route::NonProduction,
+        "developer QA scout (decision M): not in the desktop's dependency closure",
+    ),
+    (
+        "crates/nexus-ui-repair/src/specialists/vision_judge.rs",
+        Route::NonProduction,
+        "developer QA scout (decision M): not in the desktop's dependency closure",
+    ),
+    (
+        "crates/nexus-verifier-sandbox/src/launcher.rs",
+        Route::Governed,
+        "Phase Two verifier: native launch approval, verified packaged helper and toolchain",
+    ),
+    (
+        "crates/nexus-verifier-sandbox/src/sys.rs",
+        Route::Governed,
+        "Phase Two verifier sandbox (seqpacket control socket; an interface-flags ioctl, no connection)",
+    ),
+    (
+        "distributed/src/tcp_transport.rs",
+        Route::Closed,
+        "latent: TcpTransportManager has no production caller (needle)",
+    ),
+    (
+        "factory/src/pipeline.rs",
+        Route::Closed,
+        "the factory build, test and pipeline commands are closed (ProcessExecution, FileSelection)",
+    ),
+    (
+        "integrations/src/providers/discord.rs",
+        Route::Closed,
+        "latent (S13): the desktop's integration router has no provider configured and no send caller",
+    ),
+    (
+        "integrations/src/providers/github.rs",
+        Route::Closed,
+        "latent (S13): never constructed",
+    ),
+    (
+        "integrations/src/providers/gitlab.rs",
+        Route::Closed,
+        "latent (S13): never constructed",
+    ),
+    (
+        "integrations/src/providers/jira.rs",
+        Route::Closed,
+        "latent (S13): never constructed",
+    ),
+    (
+        "integrations/src/providers/servicenow.rs",
+        Route::Closed,
+        "latent (S13): never constructed",
+    ),
+    (
+        "integrations/src/providers/slack.rs",
+        Route::Closed,
+        "latent (S13): the desktop's integration router has no provider configured and no send caller",
+    ),
+    (
+        "integrations/src/providers/teams.rs",
+        Route::Closed,
+        "latent (S13): the desktop's integration router has no provider configured and no send caller",
+    ),
+    (
+        "integrations/src/providers/telegram.rs",
+        Route::Closed,
+        "latent (S13): the desktop's integration router has no provider configured and no send caller",
+    ),
+    (
+        "integrations/src/providers/webhook.rs",
+        Route::Closed,
+        "latent (S13): the desktop's integration router has no provider configured and no send caller",
+    ),
+    (
+        "kernel/src/actuators/api.rs",
+        Route::Closed,
+        "ApiCall is governed egress in Phase Three and never reaches the registry; the Phase Zero fallback closes it (AgentExecution)",
+    ),
+    (
+        "kernel/src/actuators/browser.rs",
+        Route::Closed,
+        "BrowserAutomate is a governed browser session in Phase Three (closed with a screenshot directory); the kernel actuator is never reached",
+    ),
+    (
+        "kernel/src/actuators/code_exec.rs",
+        Route::Closed,
+        "CodeExecute stays closed",
+    ),
+    (
+        "kernel/src/actuators/docker.rs",
+        Route::Closed,
+        "DockerCommand stays closed",
+    ),
+    (
+        "kernel/src/actuators/image_gen.rs",
+        Route::Closed,
+        "ImageGenerate stays closed",
+    ),
+    (
+        "kernel/src/actuators/shell.rs",
+        Route::Closed,
+        "ShellCommand stays closed",
+    ),
+    (
+        "kernel/src/actuators/tts.rs",
+        Route::Closed,
+        "TextToSpeech runs as the governed speech.synthesize tool (or is closed); the kernel actuator is never reached",
+    ),
+    (
+        "kernel/src/actuators/web.rs",
+        Route::Governed,
+        "fixed-host WebSearch (Phase Zero class A; governed curl, CURL_SITES); its WebFetch arm is Phase Three egress or closed",
+    ),
+    (
+        "kernel/src/coding_run/local_model.rs",
+        Route::Governed,
+        "Phase One coding run: the authorized loopback Ollama, in-process, no proxy, no redirect, bounded",
+    ),
+    (
+        "kernel/src/computer_control.rs",
+        Route::Closed,
+        "capture, vision and input commands are closed (ScreenObservation, OsInput); the engine is never enabled",
+    ),
+    (
+        "kernel/src/hardware.rs",
+        Route::Governed,
+        "fixed-name, fixed-argument hardware probes (Architect decision A, read-only)",
+    ),
+    (
+        "kernel/src/protocols/a2a_client.rs",
+        Route::Closed,
+        "every network A2A command is closed (NetworkDestination); A2aDelegation stays closed",
+    ),
+    (
+        "kernel/src/resource_limiter.rs",
+        Route::Governed,
+        "the sealed-spawn specification (P0-002C4C2), used by the Builder lifecycle and the Phase Three tool launcher",
+    ),
+    (
+        "kernel/src/resource_limiter/unix.rs",
+        Route::Governed,
+        "the sealed-spawn substrate: absolute program, cleared environment, own process group and limits, owner-held killpg",
+    ),
+    (
+        "kernel/src/resource_limiter/windows.rs",
+        Route::Governed,
+        "the Windows sealed-spawn substrate (kill-on-close job); Windows makes no Phase Three claim",
+    ),
+    (
+        "kernel/src/secrets/backend_keyring.rs",
+        Route::Governed,
+        "the kernel vault's OS keyring backend, reached only through the secrets facade",
+    ),
+    (
+        "kernel/src/typed_tools.rs",
+        Route::Closed,
+        "execute_tool is closed (ProcessExecution, ApprovalRequired); needle execute_typed_tool",
+    ),
+    (
+        "llama-bridge/src/model.rs",
+        Route::Closed,
+        "no open route loads a model (flash sessions closed, FileSelection)",
+    ),
+    (
+        "nexus-code/src/bench/swe_bench.rs",
+        Route::NonProduction,
+        "benchmark code, unreferenced outside itself",
+    ),
+    (
+        "nexus-code/src/commands/diff.rs",
+        Route::NonProduction,
+        "CLI-only slash command (the TUI and REPL entry points have no caller)",
+    ),
+    (
+        "nexus-code/src/error.rs",
+        Route::Closed,
+        "an error type only, no effect site of its own",
+    ),
+    (
+        "nexus-code/src/llm/provider.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/llm/providers/anthropic.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/llm/providers/claude_cli.rs",
+        Route::Closed,
+        "external CLI agents are closed (ExternalCliAgent); the desktop never constructs it",
+    ),
+    (
+        "nexus-code/src/llm/providers/google.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/llm/providers/openai_compat.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/llm/router.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/llm/streaming.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/mcp/transport.rs",
+        Route::Closed,
+        "latent: no caller of the MCP connect paths",
+    ),
+    (
+        "nexus-code/src/setup.rs",
+        Route::Closed,
+        "its process probes are CLI-only; the desktop diagnostic runs no program (Final Gate item I)",
+    ),
+    (
+        "nexus-code/src/tools/bash.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/tools/git.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/tools/screen_analyze.rs",
+        Route::Closed,
+        "computer-use tools are not even registered in the desktop; executor routes closed",
+    ),
+    (
+        "nexus-code/src/tools/screen_capture.rs",
+        Route::Closed,
+        "computer-use tools are not even registered in the desktop; executor routes closed",
+    ),
+    (
+        "nexus-code/src/tools/screen_interact.rs",
+        Route::Closed,
+        "computer-use tools are not even registered in the desktop; executor routes closed",
+    ),
+    (
+        "nexus-code/src/tools/search.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/tools/test_runner.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/tools/web_fetch.rs",
+        Route::Closed,
+        "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "protocols/src/mcp_client.rs",
+        Route::Closed,
+        "mcp_host_connect and mcp_host_call_tool are closed (NetworkDestination); the clients have no caller",
+    ),
+    (
+        "protocols/src/server_runtime.rs",
+        Route::Closed,
+        "latent: the server binaries are withdrawn and not bundled",
+    ),
+    (
+        "sdk/src/typed_tools.rs",
+        Route::Closed,
+        "latent: execute_typed_tool has no caller (needles)",
+    ),
+];
+
+/// §22: every production route able to launch a process, reach the network,
+/// drive a browser, capture the screen, move the mouse or press keys, use a
+/// credential or run a connector effect is resolved structurally (aliases and
+/// module indirection resolve to the real path) and pinned per file; every
+/// file holding one has exactly one of the four classes, with its reason.
+/// A new mechanism anywhere in the workspace fails here until it is
+/// classified.
+#[test]
+fn p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified() {
+    let measured = measured_effect_sites();
+    let pinned: BTreeMap<(String, &str), usize> = EFFECT_SITES
+        .iter()
+        .map(|(file, kind, count)| ((file.to_string(), *kind), *count))
+        .collect();
+    assert_eq!(pinned.len(), EFFECT_SITES.len(), "a site is pinned twice");
+    if measured != pinned {
+        let rows: Vec<String> = measured
+            .iter()
+            .map(|((file, kind), count)| format!("SITE {file} {kind} {count}"))
+            .collect();
+        panic!(
+            "the workspace's real-world mechanisms changed; classify them. Measured:\n{}",
+            rows.join("\n")
+        );
+    }
+    let holding: BTreeSet<&str> = EFFECT_SITES.iter().map(|(file, _, _)| *file).collect();
+    let classified: BTreeSet<&str> = EFFECT_FILES.iter().map(|(file, _, _)| *file).collect();
+    assert_eq!(
+        classified.len(),
+        EFFECT_FILES.len(),
+        "a file is classified twice"
+    );
+    assert_eq!(classified, holding);
+    for (file, route, reason) in EFFECT_FILES {
+        // Phase Three is exactly its crate.
+        assert_eq!(
+            *route == Route::Phase3,
+            file.starts_with(P3_CRATE),
+            "{file}"
+        );
+        assert!(
+            !reason.trim().is_empty() && reason.len() <= 160,
+            "{file}: {reason}"
+        );
+    }
+    // The crate's own mechanisms are the ones `p3_g6_04` confines.
+    let own: BTreeSet<&str> = holding
+        .iter()
+        .filter_map(|file| file.strip_prefix(P3_CRATE))
+        .collect();
+    assert_eq!(
+        own,
+        BTreeSet::from([
+            "broker.rs",
+            "browser/proxy.rs",
+            "display/server.rs",
+            "egress/mod.rs",
+            "egress/transport.rs",
+            "launcher.rs",
+            "tool/mod.rs",
+        ])
+    );
+}
+
+/// §22 (classification flag F4): the desktop embeds Nexus Code's `App`, whose
+/// LLM router, tool registry, MCP manager and self-improvement engine reach
+/// processes, the network and the agent's own prompt. Those effects run only
+/// through the closed `nx_*` commands: the desktop names exactly these Nexus
+/// Code items (resolved structurally, so an alias still counts), and touches
+/// the App's effect-bearing fields only to list tools and configure a router
+/// slot (whitespace-insensitively, so a call split across lines still counts).
+#[test]
+fn p3_g6_09_the_embedded_nexus_code_app_only_lists_and_configures() {
+    use crate::phase0_surface::rust_paths::{starts_with, Analysis};
+    let mut named: BTreeSet<(String, String)> = BTreeSet::new();
+    let mut fields: BTreeMap<(String, String), usize> = BTreeMap::new();
+    for (file, text) in desktop_sources() {
+        let analysis = Analysis::new(&workspace_file(&format!("{DESKTOP_SRC}{file}")), &["crate"]);
+        for o in analysis.production() {
+            for path in &o.resolved {
+                if path.len() > 1 && starts_with(path, "nexus_code") {
+                    named.insert((file.to_string(), path.join("::")));
+                }
+            }
+        }
+        let flat = without_whitespace(text);
+        for field in [
+            "router",
+            "tool_registry",
+            "mcp_manager",
+            "self_improve",
+            "envelope",
+        ] {
+            let dotted = format!(".{field}");
+            for (at, _) in flat.match_indices(&dotted) {
+                let rest = &flat[at + dotted.len()..];
+                if rest.starts_with(|c: char| c.is_alphanumeric() || c == '_') {
+                    continue; // a longer name
+                }
+                let method: String = rest
+                    .strip_prefix('.')
+                    .unwrap_or_default()
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                *fields
+                    .entry((file.to_string(), format!("{field}.{method}")))
+                    .or_insert(0) += 1;
+            }
+        }
+    }
+    let expected_named: BTreeSet<(String, String)> = NEXUS_CODE_NAMED
+        .iter()
+        .map(|(file, path)| (file.to_string(), path.to_string()))
+        .collect();
+    let expected_fields: BTreeMap<(String, String), usize> = NEXUS_CODE_APP_FIELDS
+        .iter()
+        .map(|(file, field, count)| ((file.to_string(), field.to_string()), *count))
+        .collect();
+    assert!(
+        named == expected_named && fields == expected_fields,
+        "the desktop's reach into Nexus Code changed:\n{named:#?}\n{fields:#?}"
+    );
+    // The one use of the registry's tool objects reads their names and
+    // descriptions, nothing else.
+    let commands = production_source("app/src-tauri/src/nx_bridge/commands.rs");
+    assert_eq!(
+        compact(one_fn(commands, "nx_tools").body_text(commands)),
+        "letapp=state.app.lock().await;lettools:Vec<Value>=app.tool_registry.all().iter().map(|t|{json!({\"name\":t.name(),\"description\":t.description()})}).collect();Ok(tools)"
+    );
+}
+
+/// (desktop file, resolved Nexus Code path) for every Nexus Code item the
+/// desktop names in production.
+const NEXUS_CODE_NAMED: &[(&str, &str)] = &[
+    (
+        "nx_bridge/commands.rs",
+        "nexus_code::llm::router::ModelSlot::Execution",
+    ),
+    (
+        "nx_bridge/commands.rs",
+        "nexus_code::llm::router::SlotConfig",
+    ),
+    (
+        "nx_bridge/commands.rs",
+        "nexus_code::setup::diagnose_for_desktop",
+    ),
+    ("nx_bridge/mod.rs", "nexus_code::app::App"),
+    ("nx_bridge/mod.rs", "nexus_code::app::App::new_for_desktop"),
+    (
+        "nx_bridge/mod.rs",
+        "nexus_code::config::NxConfig::load_for_desktop",
+    ),
+    (
+        "nx_bridge/mod.rs",
+        "nexus_code::setup::diagnose_for_desktop",
+    ),
+];
+
+/// (desktop file, "field.method", count) for every use of an effect-bearing
+/// field of the embedded App (and of fields that share their names).
+const NEXUS_CODE_APP_FIELDS: &[(&str, &str, usize)] = &[
+    // The swarm's own router (`Arc::clone(&s.router)`), not the App's.
+    ("commands/swarm.rs", "router.", 1),
+    ("nx_bridge/commands.rs", "router.set_slot", 1),
+    // `nx_tools`: names and descriptions only (its body is pinned).
+    ("nx_bridge/commands.rs", "tool_registry.all", 1),
+    ("nx_bridge/commands.rs", "tool_registry.list", 4),
+    ("nx_bridge/mod.rs", "tool_registry.list", 1),
+];
