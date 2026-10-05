@@ -1,21 +1,34 @@
-# Deployment Status (Phase Zero)
+# Deployment Status
 
-> **The Phase Zero Linux support profile is complete, and there is still no
-> supported server deployment.** This page records what the completed Phase
-> Zero Linux support profile does and does not support. It is not an
-> installation guide.
+> **The Phase Zero, Phase One and Phase Two engineering checkpoints are
+> complete and frozen for the Linux support profile, and there is still no
+> supported server deployment.** None of these phase closures by itself
+> authorizes a general production deployment of Nexus. This page records what
+> is and is not supported. It is not an installation guide.
 >
-> Phase One (the governed coding workflow, also Linux only) adds no server
-> deployment and changes nothing on this page.
+> Phase One (the governed coding workflow) and Phase Two (governed
+> verification execution) are also Linux only. They add no server deployment
+> and change nothing on this page. The server and deployment surfaces
+> withdrawn during Phase Zero remain withdrawn unless a later approved phase
+> explicitly reopens them.
 
 ## Platform scope
 
-- Linux is the active Phase Zero validation profile.
-- Windows and macOS portability validation is deferred. No Phase Zero
-  support or validation claim is made for them here.
-- This document claims no Phase Zero production installer or release asset.
-  Installers or assets published earlier, including historical releases,
-  predate the Phase Zero rebuild.
+- Linux is the active validation profile for Phase Zero, Phase One and Phase
+  Two.
+- Windows and macOS portability validation is deferred. No support or
+  validation claim for any phase is made for them here.
+- This document claims no production installer or release asset for any
+  phase. Installers or assets published earlier, including historical
+  releases, predate the Phase Zero rebuild.
+
+## Historical checkpoints are not release candidates
+
+The frozen Phase Zero and Phase One snapshots are historical engineering
+evidence, not current release candidates: their lockfiles resolve Wasmtime
+43.0.2, which RUSTSEC-2026-0327 affects (see the
+[security policy](../SECURITY.md)). Current release or deployment work must
+use a current, governed forward baseline, not those historical snapshots.
 
 ## Withdrawn during Phase Zero
 

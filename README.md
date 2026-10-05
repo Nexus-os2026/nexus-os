@@ -6,28 +6,37 @@ through backend-owned, explicitly granted authority.
 
 It is not production-ready.
 
-## Status: Phase One complete — Linux support profile
+## Status: Phases Zero, One and Two complete — Linux support profile
 
 | Phase | Status | Frozen checkpoint |
 |---|---|---|
 | Phase Zero — trust-boundary foundation | **PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-29 | `rebuild/phase0-trust-boundary` at `f727f5c39fab8d5c729a55eb28ad576d3d56ce47` |
 | Phase One — governed coding workflow | **PHASE ONE COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-09-30 | `rebuild/phase1-governed-coding` at `14270a9a38770ac84456c1f812042d2967edec42` |
-| Phase Two | Not started | — |
+| Phase Two — governed verification execution | **PHASE TWO COMPLETE — LINUX SUPPORT PROFILE**, declared by the project Architect on 2026-10-04 | `rebuild/phase2-governed-verification` at `dc52fadba078f2cddd6b51e26dd1a38db1ffedcc` |
+| Phase Three | Not current; not integrated | — |
 
-- Both phases are complete for the Linux support profile only. Windows and
-  macOS portability validation remains deferred.
+- Phase Zero, Phase One and Phase Two are complete and frozen, for the Linux
+  support profile only. Windows and macOS portability validation remains
+  deferred.
 - This is not a production-readiness declaration.
 - This is not an external certification or audit.
 - The frozen checkpoints are the validated bytes. Later commits on `main` do
-  not redefine them.
-- Phase One's completion evidence is the `evidence/phase1-closure` branch at
-  `c237937189b5977eaad01acad6a4c52bcce796cc`.
-- `main` after Phase One completion is
-  `6f3d64360dd21aa8d717c3995c46e48f396148b9`: the frozen Phase One
-  checkpoint plus status documentation and a generated ACL schema and test
-  hygiene commit. Pre-Phase-Two entry hardening follows it (see
-  [SECURITY.md](SECURITY.md)). None of these redefines the frozen Phase One
-  checkpoint, and Phase Two has not started.
+  not reopen or redefine them.
+- Completion evidence: for Phase Zero, the `evidence/phase0-closure` branch
+  at `e33cf1ff1b8de0d0c6c8751e24d85ed98b3cf9b1`; for Phase One, the
+  `evidence/phase1-closure` branch at
+  `c237937189b5977eaad01acad6a4c52bcce796cc`; for Phase Two, the
+  `evidence/phase2-closure` branch at
+  `4966a295e395703fc8ff823413b63a32f3d069e0`.
+- `main` contains the frozen Phase Zero and Phase One checkpoints, followed
+  by later status documentation and security and CI hardening, including the
+  current forward dependency remediation. It does not contain the Phase Two
+  implementation, and it does not redefine any frozen checkpoint.
+- The frozen Phase Zero and Phase One checkpoints remain valid historical
+  engineering checkpoints, but they are not current release candidates:
+  their lockfiles contain Wasmtime 43.0.2, which RUSTSEC-2026-0327 affects.
+  The frozen Phase Two checkpoint and current `main` use Wasmtime 36.0.17
+  (see [SECURITY.md](SECURITY.md)).
 
 Phase Zero rebuilt the project's trust boundary around one rule: a string is
 never authority. It replaced ambient, caller-asserted and path-based
@@ -38,10 +47,15 @@ Phase One builds one governed coding workflow on that foundation (see
 [Governed coding](#governed-coding-phase-one) below). It does not make Nexus a
 complete, general-purpose autonomous coding system.
 
-The public default branch (`main`) was fast-forwarded to each completed
-checkpoint after its hosted validation passed. Older releases and tags
-predate the rebuild. They remain historical and are explicitly labelled as
-such.
+Phase Two adds governed, sandboxed verification of a verified coding
+candidate, for the same Linux support profile. It is complete on its frozen
+checkpoint, which `main` does not contain.
+
+The public default branch (`main`) was fast-forwarded to the Phase Zero and
+Phase One checkpoints after their hosted validation passed. Changes now reach
+`main` only through pull requests merged with a merge commit. Older releases
+and tags predate the rebuild. They remain historical and are explicitly
+labelled as such.
 
 ## Platform scope
 
@@ -151,8 +165,8 @@ deployment guide linked below.
   external audit.
 - No general operating-system or WebAssembly sandbox is claimed for agents
   in Phase Zero or Phase One.
-- The Phase One evidence is internal engineering evidence. It is not an
-  external audit.
+- The Phase One and Phase Two evidence is internal engineering evidence. It
+  is not an external audit.
 - Governed coding has no general shell, process or git authority. Its
   structural verification is not a guarantee that the code is correct.
 - The dependency and security checks in CI pass with a reviewed set of
@@ -169,9 +183,12 @@ deployment guide linked below.
   not a certification.
 - [Security policy](SECURITY.md): how to report a vulnerability.
 - [Deployment status](docs/DEPLOYMENT.md): what is and is not deployable.
-  Phase One adds no server deployment.
+  Phase One and Phase Two add no server deployment.
 - Phase One completion evidence: the `evidence/phase1-closure` branch
   (declaration, completion record, validation runs, non-claims). It is not a
+  certification.
+- Phase Two completion evidence: the `evidence/phase2-closure` branch
+  (declaration, completion record, run ledger, deep local audit). It is not a
   certification.
 
 ## Vision
