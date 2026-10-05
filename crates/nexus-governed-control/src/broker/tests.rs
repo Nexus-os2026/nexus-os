@@ -298,3 +298,70 @@ fn without_a_vault_every_credential_is_unavailable() {
         AuthorityError::Unavailable("the credential is not available")
     );
 }
+
+/// A commitment releases only leases it lists: a lease issued for the same
+/// agent, run and origin but bound to no commitment stays sealed.
+#[test]
+fn a_commitment_cannot_release_a_lease_it_does_not_list() {
+    let (h, broker, vault, destination) = setup();
+    let listed = broker
+        .lease(&h.agent, h.run, SPEC, &destination, Duration::from_secs(60))
+        .unwrap();
+    let other = broker
+        .lease(&h.agent, h.run, SPEC, &destination, Duration::from_secs(60))
+        .unwrap();
+    let grant = h
+        .control
+        .authority()
+        .grants()
+        .request(
+            GrantScope::Perception {
+                display: "test".into(),
+            },
+            Duration::from_secs(60),
+            &Yes::new(true),
+        )
+        .unwrap();
+    let got = Arc::new(Mutex::new(None));
+    let view = h
+        .control
+        .propose(
+            &h.agent,
+            h.run,
+            Preparation {
+                action: PreparedAction {
+                    kind: CapabilityKind::Connector,
+                    class: EffectClass::R1,
+                    operation: "broker.test",
+                    target: TargetIdentity {
+                        display: destination.origin_text(),
+                        digest: destination.origin_digest(),
+                    },
+                    parameters: Digest::of("broker.test", &[]),
+                    grants: vec![grant],
+                    // The commitment lists one lease ...
+                    leases: vec![listed],
+                    summary: vec![],
+                },
+                // ... and its effect asks for the other.
+                effect: Box::new(Releasing {
+                    broker: broker.clone(),
+                    lease: other,
+                    destination: destination.clone(),
+                    got: got.clone(),
+                }),
+                ttl: Duration::from_secs(60),
+            },
+        )
+        .unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    let _ = h.control.execute(view.id, &h.agent, h.run);
+    assert_eq!(
+        got.lock().unwrap().take().unwrap().unwrap_err(),
+        AuthorityError::Closed("the lease is not bound to this commitment")
+    );
+    assert!(broker.is_live(other), "the unlisted lease was not consumed");
+    assert_eq!(vault.0.load(Ordering::SeqCst), 0, "the vault was not read");
+}
