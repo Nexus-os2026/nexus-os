@@ -1564,6 +1564,7 @@ fn warden_reviews(action: &nexus_kernel::cognitive::PlannedAction) -> bool {
 /// Tests: the production executor with an isolated Phase Three control and
 /// a fixed Warden setting.
 #[cfg(test)]
+#[cfg(target_os = "linux")]
 impl<E> Phase0AgentExecutor<E> {
     pub(crate) fn with_real_world(
         mut self,

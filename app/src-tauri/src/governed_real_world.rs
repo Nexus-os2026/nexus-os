@@ -95,6 +95,7 @@ impl RealWorld {
     /// An isolated control for tests: a temporary root, the given (in
     /// memory) audit trail and database, no vault.
     #[cfg(test)]
+    #[cfg(target_os = "linux")]
     pub(crate) fn for_tests(
         root: &std::path::Path,
         audit: Arc<Mutex<AuditTrail>>,
@@ -389,6 +390,7 @@ impl AgentBridge {
 
     /// A bridge whose Warden setting is fixed (tests).
     #[cfg(test)]
+    #[cfg(target_os = "linux")]
     pub(crate) fn with_warden(world: Arc<RealWorld>, warden: fn() -> bool) -> Self {
         Self {
             world,
@@ -713,6 +715,10 @@ pub(crate) mod ipc {
     }
 }
 
+// End to end on Linux only, where Phase Three is qualified: elsewhere the
+// runtime root cannot be made private (Windows) and no program can be
+// pinned (macOS), so these effects fail closed before they could run.
 #[cfg(test)]
+#[cfg(target_os = "linux")]
 #[path = "governed_real_world/tests.rs"]
 mod tests;
