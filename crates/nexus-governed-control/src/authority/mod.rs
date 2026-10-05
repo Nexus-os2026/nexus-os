@@ -176,8 +176,25 @@ impl Authority {
             .map_err(|_| AuthorityError::EvidenceUnavailable)
     }
 
+    /// Record that the agent display started or stopped (it is a process
+    /// Phase Three owns; its start needs a grant and no emergency stop).
+    pub(crate) fn record_display(
+        &self,
+        phase: EvidencePhase,
+        detail: Vec<(String, String)>,
+    ) -> Result<(), AuthorityError> {
+        let mut record =
+            EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
+        record.detail = detail;
+        self.record(&record)
+    }
+
     /// Open a run for `agent`. Refused while an emergency stop is in force.
-    pub fn open_run(&self, agent: AgentId, origin: RunOrigin) -> Result<RunId, AuthorityError> {
+    pub(crate) fn open_run(
+        &self,
+        agent: AgentId,
+        origin: RunOrigin,
+    ) -> Result<RunId, AuthorityError> {
         if self.runs.is_stopped() {
             return Err(AuthorityError::EmergencyStopped);
         }
@@ -244,7 +261,7 @@ impl Authority {
     }
 
     /// Lift an emergency stop: only after the owner's native confirmation.
-    pub fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
+    pub(crate) fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
         if !self.runs.is_stopped() {
             return Ok(());
         }

@@ -282,7 +282,7 @@ impl RealWorld {
     }
 
     pub(crate) fn display_stop(&self) {
-        self.control.display().stop();
+        self.control.stop_display();
     }
 }
 

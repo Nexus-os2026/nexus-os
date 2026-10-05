@@ -11,7 +11,7 @@ use crate::authority::approval::ControlConfirmer;
 use crate::authority::clock::Clock;
 use crate::authority::commitment::CommitmentView;
 use crate::authority::effect::EffectClass;
-use crate::authority::evidence::EvidenceSink;
+use crate::authority::evidence::{EvidencePhase, EvidenceSink};
 use crate::authority::ids::{AgentId, CommitmentId, GrantId, RunId};
 use crate::authority::policy::{Grant, GrantScope};
 use crate::authority::run::RunOrigin;
@@ -25,8 +25,9 @@ use crate::egress::{Egress, EgressIntent};
 use crate::runtime_root::RuntimeRoot;
 use crate::tool::{ToolIntent, Tools};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// Every governed intent, as data.
@@ -101,6 +102,9 @@ pub struct GovernedControl {
     tools: Tools,
     display: AgentDisplay,
     browser: Browser,
+    /// Runs whose agent or command has ended while something of theirs
+    /// still waits: each finishes once nothing in it can start any more.
+    detached: Mutex<HashSet<RunId>>,
 }
 
 impl GovernedControl {
@@ -123,22 +127,49 @@ impl GovernedControl {
             browser: Browser::new(root),
             control,
             egress,
+            detached: Mutex::new(HashSet::new()),
         })
     }
 
-    pub fn control(&self) -> &Arc<Control> {
-        &self.control
+    /// End whatever can no longer start (expired, stale, its run or a grant
+    /// ended), recording each, and finish every detached run nothing of
+    /// which can start any more.
+    pub fn settle(&self) {
+        self.control.prune();
+        let detached: Vec<RunId> = self
+            .detached
+            .lock()
+            .expect("detached")
+            .iter()
+            .copied()
+            .collect();
+        for run in detached {
+            let live = self
+                .authority()
+                .commitments()
+                .views_of_run(run)
+                .iter()
+                .any(|view| !view.state.is_final());
+            if !live {
+                self.finish_run(run);
+                self.detached.lock().expect("detached").remove(&run);
+            }
+        }
+    }
+
+    /// The agent or command of `run` has ended: finish it now if nothing of
+    /// it waits, or as soon as what waits is approved, denied or expires.
+    pub fn finish_when_settled(&self, run: RunId) {
+        self.detached.lock().expect("detached").insert(run);
+        self.settle();
     }
 
     pub fn authority(&self) -> &Authority {
         self.control.authority()
     }
 
-    pub fn display(&self) -> &AgentDisplay {
-        &self.display
-    }
-
     pub fn open_run(&self, agent: AgentId, origin: RunOrigin) -> Result<RunId, AuthorityError> {
+        self.settle();
         self.authority().open_run(agent, origin)
     }
 
@@ -198,7 +229,9 @@ impl GovernedControl {
         agent: &AgentId,
         run: RunId,
     ) -> Result<(), AuthorityError> {
-        self.control.deny(id, agent, run)
+        let denied = self.control.deny(id, agent, run);
+        self.settle();
+        denied
     }
 
     /// An agent's action under the owner's standing grants: R0 and R1 run
@@ -281,15 +314,54 @@ impl GovernedControl {
     }
 
     pub fn revoke_grant(&self, id: GrantId) -> Result<(), AuthorityError> {
-        self.authority().grants().revoke(id)
+        let revoked = self.authority().grants().revoke(id);
+        // What relied on it ends now, recorded, not when next touched.
+        self.settle();
+        revoked
     }
 
     pub fn grants(&self) -> Vec<Grant> {
         self.authority().grants().all()
     }
 
+    /// Start the agent display: a process Phase Three owns, so it needs a
+    /// live perception or input grant and no emergency stop, and its start
+    /// and stop are recorded.
     pub fn start_display(&self) -> Result<DisplayStatus, AuthorityError> {
-        self.display.start(1280, 800)
+        if self.authority().runs().is_stopped() {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        let grants = self.authority().grants();
+        if grants
+            .live_of(crate::authority::effect::CapabilityKind::Perception)
+            .is_empty()
+            && grants
+                .live_of(crate::authority::effect::CapabilityKind::Input)
+                .is_empty()
+        {
+            return Err(AuthorityError::NoCoveringGrant);
+        }
+        let status = self.display.start(1280, 800)?;
+        if let Err(error) = self.authority().record_display(
+            EvidencePhase::DisplayStarted,
+            vec![("display".into(), status.number.to_string())],
+        ) {
+            // Nothing unrecorded keeps running.
+            self.display.stop();
+            return Err(error);
+        }
+        Ok(status)
+    }
+
+    /// Stop the agent display (recorded).
+    pub fn stop_display(&self) {
+        if let Some(status) = self.display.status() {
+            self.display.stop();
+            let _ = self.authority().record_display(
+                EvidencePhase::DisplayStopped,
+                vec![("display".into(), status.number.to_string())],
+            );
+        }
     }
 
     pub fn status(&self) -> ControlStatus {

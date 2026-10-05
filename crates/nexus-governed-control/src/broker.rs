@@ -158,7 +158,7 @@ pub struct CredentialBroker {
 impl CredentialBroker {
     /// A broker over `source`, wired so the authority's commitments end
     /// their leases.
-    pub fn new(authority: &Authority, source: Arc<dyn SecretSource>) -> Arc<Self> {
+    pub(crate) fn new(authority: &Authority, source: Arc<dyn SecretSource>) -> Arc<Self> {
         let table = Arc::new(LeaseTable::default());
         authority.commitments().set_lease_end(table.clone());
         Arc::new(Self {
@@ -225,6 +225,23 @@ impl CredentialBroker {
     }
 
     /// Whether a lease could still be released (for display and tests).
+    /// End a lease no commitment will list (its preparation failed).
+    pub(crate) fn end_lease(&self, lease: LeaseId) {
+        self.table.end(lease);
+    }
+
+    /// Every lease issued so far (tests).
+    #[cfg(test)]
+    pub(crate) fn issued(&self) -> Vec<LeaseId> {
+        self.table
+            .leases
+            .lock()
+            .expect("leases")
+            .keys()
+            .copied()
+            .collect()
+    }
+
     pub fn is_live(&self, lease: LeaseId) -> bool {
         let now = self.clock.monotonic_ms();
         self.table

@@ -87,8 +87,10 @@ fn use_lease(
         .authority()
         .grants()
         .request(
-            GrantScope::Perception {
-                display: "test".into(),
+            GrantScope::Connector {
+                connector: "fixture".into(),
+                account: "test".into(),
+                operations: vec!["broker.test".into()],
             },
             Duration::from_secs(60),
             &Yes::new(true),
@@ -221,8 +223,10 @@ fn a_lease_ends_with_its_commitment_its_run_or_its_expiry() {
         .authority()
         .grants()
         .request(
-            GrantScope::Perception {
-                display: "test".into(),
+            GrantScope::Connector {
+                connector: "fixture".into(),
+                account: "test".into(),
+                operations: vec!["broker.test".into()],
             },
             Duration::from_secs(60),
             &Yes::new(true),
@@ -315,8 +319,10 @@ fn a_commitment_cannot_release_a_lease_it_does_not_list() {
         .authority()
         .grants()
         .request(
-            GrantScope::Perception {
-                display: "test".into(),
+            GrantScope::Connector {
+                connector: "fixture".into(),
+                account: "test".into(),
+                operations: vec!["broker.test".into()],
             },
             Duration::from_secs(60),
             &Yes::new(true),
@@ -389,4 +395,52 @@ fn a_credential_from_the_environment_is_refused() {
             "tok-vault-1234"
         );
     }
+}
+
+/// A preparation the authority refuses leaves no lease behind.
+#[test]
+fn a_refused_preparation_ends_its_lease() {
+    let (h, broker, _vault, destination) = setup();
+    let lease = broker
+        .lease(&h.agent, h.run, SPEC, &destination, Duration::from_secs(60))
+        .unwrap();
+    let grant = h
+        .control
+        .authority()
+        .grants()
+        .request(
+            GrantScope::Connector {
+                connector: "fixture".into(),
+                account: "test".into(),
+                operations: vec!["broker.test".into()],
+            },
+            Duration::from_secs(60),
+            &Yes::new(true),
+        )
+        .unwrap();
+    let preparation = Preparation {
+        action: PreparedAction {
+            kind: CapabilityKind::Connector,
+            class: EffectClass::R1,
+            operation: "broker.test",
+            target: TargetIdentity {
+                display: destination.origin_text(),
+                digest: destination.origin_digest(),
+            },
+            parameters: Digest::of("broker.test", &[]),
+            grants: vec![grant],
+            leases: vec![lease],
+            // More than an approval may show: refused.
+            summary: vec!["x".into(); crate::authority::commitment::MAX_SUMMARY_LINES + 1],
+        },
+        effect: Box::new(Releasing {
+            broker: broker.clone(),
+            lease,
+            destination: destination.clone(),
+            got: Arc::new(Mutex::new(None)),
+        }),
+        ttl: Duration::from_secs(60),
+    };
+    assert!(h.control.propose(&h.agent, h.run, preparation).is_err());
+    assert!(!broker.is_live(lease));
 }

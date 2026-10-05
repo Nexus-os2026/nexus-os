@@ -157,7 +157,7 @@ impl Connectors {
     }
 
     /// Prepare an operation for `agent` in `run`.
-    pub fn prepare(
+    pub(crate) fn prepare(
         &self,
         authority: &Authority,
         agent: &AgentId,
@@ -195,7 +195,8 @@ impl Connectors {
             .content_type
             .map(|kind| vec![("content-type".to_string(), kind.to_string())])
             .unwrap_or_default();
-        let mut preparation = self.egress.prepare_with(
+        let leased = credential.as_ref().map(|plan| plan.lease);
+        let prepared = self.egress.prepare_with(
             authority,
             &EgressIntent {
                 method: operation.method.as_str().to_string(),
@@ -210,7 +211,17 @@ impl Connectors {
                 class: operation.class,
                 operation: operation.id,
             },
-        )?;
+        );
+        let mut preparation = match prepared {
+            Ok(preparation) => preparation,
+            Err(error) => {
+                // The lease was issued for this preparation only.
+                if let Some(lease) = leased {
+                    self.broker.end_lease(lease);
+                }
+                return Err(error);
+            }
+        };
         // What the owner reads: the operation and the connector (the
         // account is only the owner's label: the connector always uses its
         // one stored credential), its content in full, then the request.

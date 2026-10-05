@@ -1,10 +1,12 @@
 //! Governed runs and cancellation.
 //!
 //! A run is the scope of one command (or agent goal): every commitment
-//! belongs to exactly one run and one agent. Cancelling a run sets its token,
-//! which every actuator observes, and fires the hooks of the resources it
-//! owns (a contained process, a browser session, a credential lease), so
-//! nothing it started keeps acting. An emergency stop cancels every run.
+//! belongs to exactly one run and one agent. Cancelling or finishing a run
+//! sets its token, which every executing effect observes between its bounded
+//! steps (a contained process, a browser session and an input action end
+//! their own resources when they see it), and ends its unconsumed
+//! commitments with their credential leases. An emergency stop cancels every
+//! run. Hooks registered with `on_cancel` fire as well.
 
 use super::ids::{AgentId, RunId};
 use super::AuthorityError;
@@ -99,6 +101,11 @@ impl RunRegistry {
             hooks: Vec::new(),
         };
         let mut runs = self.runs.lock().expect("runs");
+        // Checked under the lock an emergency stop takes to cancel every
+        // run: a run cannot slip in between the stop and its sweep.
+        if self.stopped.load(Ordering::SeqCst) {
+            return Err(AuthorityError::EmergencyStopped);
+        }
         if runs.len() >= RUN_CAPACITY {
             runs.retain(|_, e| !e.view.cancelled && !e.view.finished);
             if runs.len() >= RUN_CAPACITY {
@@ -120,11 +127,11 @@ impl RunRegistry {
         if &entry.view.agent != agent {
             return Err(AuthorityError::WrongAgent);
         }
-        if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
-            return Err(AuthorityError::RunCancelled);
-        }
         if entry.view.finished {
             return Err(AuthorityError::RunNotActive);
+        }
+        if entry.view.cancelled || entry.cancelled.load(Ordering::SeqCst) {
+            return Err(AuthorityError::RunCancelled);
         }
         Ok(CancelToken(entry.cancelled.clone()))
     }
@@ -206,6 +213,8 @@ impl RunRegistry {
         let hooks = match self.runs.lock().expect("runs").get_mut(&run) {
             Some(entry) if !entry.view.finished && !entry.view.cancelled => {
                 entry.view.finished = true;
+                // Whatever of it still runs sees the end.
+                entry.cancelled.store(true, Ordering::SeqCst);
                 std::mem::take(&mut entry.hooks)
             }
             _ => return,

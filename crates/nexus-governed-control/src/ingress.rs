@@ -21,7 +21,6 @@ use crate::governed::Intent;
 use crate::tool::ToolIntent;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::sync::Mutex;
 
 /// The most text one command carries.
@@ -78,7 +77,8 @@ pub struct Attachment {
 /// Attachments imported through the native picker, kept in memory.
 #[derive(Default)]
 pub struct Attachments {
-    items: Mutex<HashMap<String, Attachment>>,
+    /// Oldest first.
+    items: Mutex<Vec<Attachment>>,
 }
 
 impl Attachments {
@@ -102,19 +102,19 @@ impl Attachments {
             bytes,
         };
         let mut items = self.items.lock().expect("attachments");
+        // Bounded: a new import lets the oldest unused one go.
         if items.len() >= MAX_ATTACHMENTS {
-            return Err(AuthorityError::Capacity);
+            items.remove(0);
         }
-        items.insert(attachment.id.clone(), attachment.clone());
+        items.push(attachment.clone());
         Ok(attachment)
     }
 
-    pub fn get(&self, id: &str) -> Option<Attachment> {
-        self.items.lock().expect("attachments").get(id).cloned()
-    }
-
-    pub fn remove(&self, id: &str) {
-        self.items.lock().expect("attachments").remove(id);
+    /// The attachment, taken: a command uses an attachment once.
+    pub fn take(&self, id: &str) -> Option<Attachment> {
+        let mut items = self.items.lock().expect("attachments");
+        let at = items.iter().position(|item| item.id == id)?;
+        Some(items.remove(at))
     }
 }
 
@@ -195,7 +195,7 @@ pub fn understand(
             Understood::Intent(Intent::Observe(PerceptionIntent::Screen { region: None }))
         }
         "hash" => match rest.split_once(char::is_whitespace) {
-            Some(("attachment", id)) => match attachments.get(id.trim()) {
+            Some(("attachment", id)) => match attachments.take(id.trim()) {
                 Some(attachment) => match String::from_utf8(attachment.bytes) {
                     Ok(text) => Understood::Intent(Intent::Tool(ToolIntent {
                         tool: "text.sha256".into(),
@@ -316,6 +316,21 @@ mod tests {
             &Attachments::default()
         )
         .is_err());
+    }
+
+    /// An attachment is used once; a full store lets its oldest unused
+    /// import go to admit a new one.
+    #[test]
+    fn an_attachment_is_used_once_and_the_oldest_goes_first() {
+        let attachments = Attachments::default();
+        let first = attachments.import("a.txt", b"a".to_vec()).unwrap();
+        for i in 0..31 {
+            attachments.import(&format!("{i}.txt"), vec![1]).unwrap();
+        }
+        let newest = attachments.import("z.txt", b"z".to_vec()).unwrap();
+        assert!(attachments.take(&first.id).is_none(), "the oldest went");
+        assert!(attachments.take(&newest.id).is_some());
+        assert!(attachments.take(&newest.id).is_none(), "used once");
     }
 
     #[test]

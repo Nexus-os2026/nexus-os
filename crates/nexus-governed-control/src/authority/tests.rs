@@ -1004,3 +1004,82 @@ fn evidence_carries_parameters_only_salted() {
     assert_ne!(digests[0], digests[1]);
     assert!(!digests.contains(&plain));
 }
+
+/// Every commitment rests on a live grant of its own kind: none, or one of
+/// another kind, covers nothing.
+#[test]
+fn a_commitment_rests_on_a_live_grant_of_its_own_kind() {
+    let f = fixture();
+    let mut action = prepared(EffectClass::R1, f.grant);
+    action.grants.clear();
+    assert_eq!(
+        f.auth
+            .commitments()
+            .prepare(&f.agent, f.run, action, TTL)
+            .unwrap_err(),
+        AuthorityError::NoCoveringGrant
+    );
+    let mut action = prepared(EffectClass::R1, f.grant);
+    action.kind = CapabilityKind::Connector;
+    assert_eq!(
+        f.auth
+            .commitments()
+            .prepare(&f.agent, f.run, action, TTL)
+            .unwrap_err(),
+        AuthorityError::NoCoveringGrant,
+        "an egress grant does not cover a connector action"
+    );
+}
+
+/// Authorization is evidence-first: when its record cannot be written, the
+/// commitment stays prepared and cannot start.
+#[test]
+fn an_unrecorded_authorization_authorizes_nothing() {
+    let f = fixture();
+    let id = f.prepare(EffectClass::R1);
+    f.evidence.fail_from_now();
+    assert_eq!(
+        f.auth
+            .commitments()
+            .authorize(id, &f.agent, f.run, None)
+            .unwrap_err(),
+        AuthorityError::EvidenceUnavailable
+    );
+    assert_eq!(f.state(id), CommitmentState::Prepared);
+}
+
+/// Finishing a run ends it for whatever of it still runs (its token is
+/// set), and nothing more starts in it.
+#[test]
+fn finishing_a_run_sets_its_token() {
+    let f = fixture();
+    let token = f.auth.runs().check(f.run, &f.agent).unwrap();
+    f.auth.finish_run(f.run);
+    assert!(token.is_cancelled());
+    assert_eq!(
+        f.auth.runs().check(f.run, &f.agent).unwrap_err(),
+        AuthorityError::RunNotActive
+    );
+}
+
+/// Grants are bounded: ended ones are pruned before a new one is refused.
+#[test]
+fn ended_grants_make_room_for_new_ones() {
+    let f = fixture();
+    for _ in 0..1023 {
+        f.auth
+            .grants()
+            .request(egress_scope(), Duration::from_secs(1), &f.yes)
+            .unwrap();
+    }
+    assert_eq!(
+        f.auth
+            .grants()
+            .request(egress_scope(), TTL, &f.yes)
+            .unwrap_err(),
+        AuthorityError::Capacity
+    );
+    f.clock.advance(Duration::from_secs(2));
+    assert!(f.auth.grants().request(egress_scope(), TTL, &f.yes).is_ok());
+    assert!(f.auth.grants().live(f.grant).is_some(), "live grants stay");
+}

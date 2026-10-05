@@ -17,8 +17,10 @@
 //!    performs the bounded effect while observing cancellation, and the
 //!    commitment is finalized and evidenced whatever happens.
 //!
-//! The authority is used through the [`control::Control`] pipeline; every
-//! path the negative examples below use is public:
+//! Outside the crate the authority is reached only through
+//! [`governed::GovernedControl`]: the pipeline, the preparations and the
+//! commitment lifecycle are crate-private. Every path the negative examples
+//! below use is public:
 //!
 //! ```
 //! use nexus_governed_control::authority::approval::R2Approval;
@@ -27,15 +29,14 @@
 //! use nexus_governed_control::authority::evidence::MemoryEvidence;
 //! use nexus_governed_control::authority::ids::{AgentId, CommitmentId, Digest, RunId};
 //! use nexus_governed_control::authority::Authority;
-//! use nexus_governed_control::control::Control;
 //! use std::sync::Arc;
 //!
-//! let control = Control::new(Authority::new(
+//! let authority = Authority::new(
 //!     Arc::new(MemoryEvidence::new(16)),
 //!     Arc::new(SystemClock::default()),
-//! ));
+//! );
 //! let unknown = CommitmentId::parse("cmt-00000000000000000000000000000000").unwrap();
-//! assert!(control.authority().commitments().view(unknown).is_none());
+//! assert!(authority.commitments().view(unknown).is_none());
 //! fn names(approval: &R2Approval, guard: &ExecutionGuard) -> (CommitmentId, CommitmentId) {
 //!     (approval.commitment(), guard.commitment())
 //! }

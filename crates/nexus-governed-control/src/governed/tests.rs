@@ -594,3 +594,81 @@ fn the_emergency_stop_ends_everything_until_the_owner_resumes() {
     control.resume(&owner).unwrap();
     assert!(control.open_run(agent, RunOrigin::AgentGoal).is_ok());
 }
+
+/// A run whose agent has ended finishes as soon as nothing of it waits: here
+/// once the owner denies what waited. Nothing was sent.
+#[test]
+fn a_detached_run_finishes_when_nothing_of_it_waits() {
+    let (control, _evidence, _root) = control();
+    let server = TestServer::start(|_| Reply::ok("ok"));
+    control
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: server.origin(),
+                methods: vec!["POST".into()],
+                allow_private: true,
+            },
+            Duration::from_secs(600),
+            &Yes::new(true),
+        )
+        .unwrap();
+    let agent = AgentId::new("agent-detached").unwrap();
+    let run = control
+        .open_run(agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    let post = Intent::Request(EgressIntent {
+        method: "POST".into(),
+        url: format!("{}/x", server.origin()),
+        headers: vec![],
+        body: Some("{}".into()),
+    });
+    let AgentOutcome::AwaitingApproval(view) = control.agent_action(&agent, run, &post).unwrap()
+    else {
+        panic!("an R2 request waits for the owner");
+    };
+    control.finish_when_settled(run);
+    assert!(
+        control.authority().runs().check(run, &agent).is_ok(),
+        "the run stays while the owner can still approve"
+    );
+    control.deny(view.id, &agent, run).unwrap();
+    assert_eq!(
+        control.authority().runs().check(run, &agent).unwrap_err(),
+        AuthorityError::RunNotActive
+    );
+    assert!(server.received().is_empty());
+}
+
+/// The agent display is a process Phase Three owns: starting it needs a
+/// live perception or input grant and no emergency stop, and its start and
+/// stop are recorded.
+#[test]
+fn starting_the_agent_display_needs_a_grant_and_is_recorded() {
+    use crate::authority::evidence::EvidencePhase;
+    let (control, evidence, _root) = control();
+    assert_eq!(
+        control.start_display().unwrap_err(),
+        AuthorityError::NoCoveringGrant
+    );
+    control
+        .request_grant(
+            &GrantRequest::Perception,
+            Duration::from_secs(600),
+            &Yes::new(true),
+        )
+        .unwrap();
+    control.emergency_stop();
+    assert_eq!(
+        control.start_display().unwrap_err(),
+        AuthorityError::EmergencyStopped
+    );
+    control.resume(&Yes::new(true)).unwrap();
+    if !std::path::Path::new("/usr/bin/Xvfb").exists() {
+        return;
+    }
+    control.start_display().unwrap();
+    control.stop_display();
+    let phases: Vec<EvidencePhase> = evidence.records().iter().map(|r| r.phase).collect();
+    assert!(phases.contains(&EvidencePhase::DisplayStarted));
+    assert!(phases.contains(&EvidencePhase::DisplayStopped));
+}

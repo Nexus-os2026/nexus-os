@@ -188,6 +188,9 @@ pub struct GrantStore {
 /// Grants last at most a day; the owner grants again for longer work.
 pub const MAX_GRANT_TTL: Duration = Duration::from_secs(24 * 3600);
 
+/// Most grants kept (ended ones are pruned first).
+const GRANT_CAPACITY: usize = 1024;
+
 impl GrantStore {
     pub(crate) fn new(
         generation: Arc<PolicyGeneration>,
@@ -204,7 +207,7 @@ impl GrantStore {
 
     /// Ask the owner, natively, to grant `scope` for `ttl` (at most a day).
     /// Only a confirmed request creates a grant.
-    pub fn request(
+    pub(crate) fn request(
         &self,
         scope: GrantScope,
         ttl: Duration,
@@ -234,8 +237,16 @@ impl GrantStore {
             expires_ms: now.saturating_add(u64::try_from(ttl.as_millis()).unwrap_or(u64::MAX)),
             revoked: false,
         };
+        let mut grants = self.grants.lock().expect("grant store");
+        if grants.len() >= GRANT_CAPACITY {
+            let now = self.clock.monotonic_ms();
+            grants.retain(|_, grant| !grant.revoked && grant.expires_ms > now);
+            if grants.len() >= GRANT_CAPACITY {
+                return Err(AuthorityError::Capacity);
+            }
+        }
         self.record(EvidencePhase::GrantIssued, Some(id), &scope)?;
-        self.grants.lock().expect("grant store").insert(id, grant);
+        grants.insert(id, grant);
         Ok(id)
     }
 

@@ -238,7 +238,7 @@ impl Browser {
     }
 
     /// Prepare a browser session.
-    pub fn prepare(
+    pub(crate) fn prepare(
         &self,
         authority: &Authority,
         intent: &BrowserIntent,

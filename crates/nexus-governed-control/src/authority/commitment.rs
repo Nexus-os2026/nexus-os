@@ -79,7 +79,7 @@ impl CommitmentState {
         }
     }
 
-    fn is_final(self) -> bool {
+    pub(crate) fn is_final(self) -> bool {
         !matches!(
             self,
             CommitmentState::Prepared | CommitmentState::Authorized | CommitmentState::Executing
@@ -317,10 +317,34 @@ impl CommitmentRegistry {
         prepared: PreparedAction,
         ttl: Duration,
     ) -> Result<CommitmentView, AuthorityError> {
+        let leases = prepared.leases.clone();
+        let result = self.prepare_leased(agent, run, prepared, ttl);
+        if result.is_err() {
+            // A refused preparation leaves no credential lease behind.
+            self.end_leases(&leases);
+        }
+        result
+    }
+
+    fn prepare_leased(
+        &self,
+        agent: &AgentId,
+        run: RunId,
+        prepared: PreparedAction,
+        ttl: Duration,
+    ) -> Result<CommitmentView, AuthorityError> {
         self.0.runs.check(run, agent)?;
+        // Every commitment rests on at least one live grant of its own kind.
+        if prepared.grants.is_empty() {
+            return Err(AuthorityError::NoCoveringGrant);
+        }
         for grant in &prepared.grants {
-            if self.0.grants.live(*grant).is_none() {
-                return Err(AuthorityError::GrantNotLive);
+            match self.0.grants.live(*grant) {
+                None => return Err(AuthorityError::GrantNotLive),
+                Some(live) if live.scope.kind() != prepared.kind => {
+                    return Err(AuthorityError::NoCoveringGrant)
+                }
+                Some(_) => {}
             }
         }
         // What the owner may be shown must read as exactly what it is, in
@@ -370,9 +394,19 @@ impl CommitmentRegistry {
         let mut entries = self.0.entries.lock().expect("commitments");
         if entries.len() >= CAPACITY {
             entries.retain(|_, e| !e.state.is_final());
-            if entries.len() >= CAPACITY {
-                return Err(AuthorityError::Capacity);
-            }
+        }
+        // The run is checked again under the lock that cancelling and
+        // stopping take, so a run ended meanwhile gets no live commitment:
+        // its recorded preparation ends as revoked.
+        let refused = if entries.len() >= CAPACITY {
+            Some(AuthorityError::Capacity)
+        } else {
+            self.0.runs.check(run, agent).err()
+        };
+        if let Some(error) = refused {
+            let mut entry = entry;
+            self.end_unconsumed(id, &mut entry, CommitmentState::Revoked, &error);
+            return Err(error);
         }
         entries.insert(id, entry);
         Ok(view)
@@ -450,9 +484,13 @@ impl CommitmentRegistry {
     }
 
     fn release_leases(&self, entry: &Entry) {
-        let leases = self.0.leases.lock().expect("leases").clone();
-        for lease in &entry.prepared.leases {
-            leases.end(*lease);
+        self.end_leases(&entry.prepared.leases);
+    }
+
+    fn end_leases(&self, leases: &[LeaseId]) {
+        let table = self.0.leases.lock().expect("leases").clone();
+        for lease in leases {
+            table.end(*lease);
         }
     }
 
@@ -535,20 +573,27 @@ impl CommitmentRegistry {
             return Err(AuthorityError::NotPending);
         }
         self.live_check(id, entry, agent, run)?;
-        match (entry.prepared.class.requires_native_approval(), approval) {
+        let approved = match (entry.prepared.class.requires_native_approval(), approval) {
             (true, None) => return Err(AuthorityError::ApprovalRequired),
             (false, Some(_)) => return Err(AuthorityError::ApprovalNotApplicable),
             (true, Some(approval)) => {
                 if approval.commitment() != id || approval.binding() != &entry.binding {
                     return Err(AuthorityError::ApprovalMismatch);
                 }
-                entry.approval = Some(*approval.binding());
+                Some(*approval.binding())
             }
-            (false, None) => {}
+            (false, None) => None,
+        };
+        // Evidence first: the commitment is authorized only once that is
+        // recorded (the approval, consumed, is not kept otherwise).
+        let previous = entry.approval;
+        entry.approval = approved.or(previous);
+        let record = self.base_record(EvidencePhase::Authorized, id, entry);
+        if let Err(error) = self.record(&record) {
+            entry.approval = previous;
+            return Err(error);
         }
         entry.state = CommitmentState::Authorized;
-        let record = self.base_record(EvidencePhase::Authorized, id, entry);
-        self.record(&record)?;
         Ok(())
     }
 

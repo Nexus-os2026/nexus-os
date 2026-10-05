@@ -36,7 +36,7 @@ pub struct EffectOutput {
 }
 
 /// An effect prepared by a domain actuator, waiting for its commitment.
-pub trait PendingEffect: Send {
+pub(crate) trait PendingEffect: Send {
     /// Resolve the target again, immediately before the effect, and return
     /// its identity digest (it must equal the committed one).
     fn revalidate(&self) -> Result<Digest, AuthorityError>;
@@ -50,12 +50,13 @@ pub trait PendingEffect: Send {
     ) -> Result<EffectOutput, (FailureClass, String)>;
 }
 
-/// A domain's preparation: the action to commit to, and the effect.
-pub struct Preparation {
-    pub action: PreparedAction,
-    pub effect: Box<dyn PendingEffect>,
+/// A domain's preparation: the action to commit to, and the effect. Only
+/// the crate's own actuators build one, and only the pipeline consumes it.
+pub(crate) struct Preparation {
+    pub(crate) action: PreparedAction,
+    pub(crate) effect: Box<dyn PendingEffect>,
     /// How long the commitment may wait to start.
-    pub ttl: Duration,
+    pub(crate) ttl: Duration,
 }
 
 /// A proposed effect, held for its owner until it is executed or ends.
@@ -66,7 +67,7 @@ struct Pending {
 }
 
 /// The pipeline.
-pub struct Control {
+pub(crate) struct Control {
     authority: Authority,
     pending: Mutex<HashMap<CommitmentId, Pending>>,
 }
@@ -75,19 +76,19 @@ pub struct Control {
 const MAX_PENDING: usize = 1024;
 
 impl Control {
-    pub fn new(authority: Authority) -> Self {
+    pub(crate) fn new(authority: Authority) -> Self {
         Self {
             authority,
             pending: Mutex::new(HashMap::new()),
         }
     }
 
-    pub fn authority(&self) -> &Authority {
+    pub(crate) fn authority(&self) -> &Authority {
         &self.authority
     }
 
     /// Commit to a prepared effect for `agent` in `run`. Nothing happens yet.
-    pub fn propose(
+    pub(crate) fn propose(
         &self,
         agent: &AgentId,
         run: RunId,
@@ -127,7 +128,7 @@ impl Control {
     /// Authorize a commitment: R0 and R1 directly (their grants were checked
     /// when they were prepared and are checked again here), R2 only after the
     /// owner's native approval of exactly this commitment.
-    pub fn authorize(
+    pub(crate) fn authorize(
         &self,
         id: CommitmentId,
         agent: &AgentId,
@@ -152,7 +153,7 @@ impl Control {
     }
 
     /// Perform an authorized commitment, once.
-    pub fn execute(
+    pub(crate) fn execute(
         &self,
         id: CommitmentId,
         agent: &AgentId,
@@ -221,7 +222,7 @@ impl Control {
     }
 
     /// Deny a pending commitment and drop its effect.
-    pub fn deny(
+    pub(crate) fn deny(
         &self,
         id: CommitmentId,
         agent: &AgentId,
@@ -233,7 +234,7 @@ impl Control {
     }
 
     /// Cancel a run and drop every pending effect it had.
-    pub fn cancel_run(&self, run: RunId) -> Result<(), AuthorityError> {
+    pub(crate) fn cancel_run(&self, run: RunId) -> Result<(), AuthorityError> {
         let result = self.authority.cancel_run(run);
         self.pending
             .lock()
@@ -243,7 +244,7 @@ impl Control {
     }
 
     /// The owner's emergency stop.
-    pub fn emergency_stop(&self) -> usize {
+    pub(crate) fn emergency_stop(&self) -> usize {
         let cancelled = self.authority.emergency_stop();
         self.pending.lock().expect("pending").clear();
         cancelled
@@ -251,7 +252,7 @@ impl Control {
 
     /// A run is done: nothing more can be proposed for it, and what it left
     /// pending ends.
-    pub fn finish_run(&self, run: RunId) {
+    pub(crate) fn finish_run(&self, run: RunId) {
         self.authority.finish_run(run);
         self.pending
             .lock()
@@ -267,7 +268,7 @@ impl Control {
 
     /// End what can no longer start, and drop the effects of every
     /// commitment that has ended.
-    fn prune(&self) {
+    pub(crate) fn prune(&self) {
         let commitments = self.authority.commitments();
         commitments.sweep();
         self.pending

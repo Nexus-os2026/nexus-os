@@ -196,7 +196,7 @@ impl Egress {
     }
 
     /// Prepare a request from an intent.
-    pub fn prepare(
+    pub(crate) fn prepare(
         &self,
         authority: &Authority,
         intent: &EgressIntent,

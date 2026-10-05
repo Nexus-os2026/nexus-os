@@ -65,6 +65,17 @@ fn escape_to_another_port(_: &Value) -> Result<OperationRequest, AuthorityError>
     })
 }
 
+/// A request over the egress body bound (it builds, then fails to prepare).
+fn notes_import(input: &Value) -> Result<OperationRequest, AuthorityError> {
+    only_fields(input, &[])?;
+    Ok(OperationRequest {
+        path: "/notes/import".into(),
+        body: Some("x".repeat(70 * 1024)),
+        content_type: Some("text/plain"),
+        summary: vec!["Import notes".into()],
+    })
+}
+
 fn fixture(server: &TestServer) -> Connector {
     Connector {
         id: "fixture",
@@ -84,6 +95,13 @@ fn fixture(server: &TestServer) -> Connector {
                 method: Method::Post,
                 credential: Some(SPEC),
                 build: notes_create,
+            },
+            ConnectorOperation {
+                id: "fixture.notes.import",
+                class: EffectClass::R2,
+                method: Method::Post,
+                credential: Some(SPEC),
+                build: notes_import,
             },
         ],
     }
@@ -540,4 +558,35 @@ fn a_send_shows_one_bare_recipient_and_its_whole_text() {
         }
         assert_eq!(rebuilt.join("\n"), text, "{id}");
     }
+}
+
+/// An operation whose preparation fails after its lease was issued (here a
+/// body over the request bound) ends that lease: nothing is left to hold.
+#[test]
+fn a_failed_preparation_ends_its_lease() {
+    let server = TestServer::start(|_| Reply::ok("{}"));
+    let h = harness();
+    let broker = CredentialBroker::new(
+        h.control.authority(),
+        Arc::new(FakeVault(AtomicU32::new(0))),
+    );
+    let connectors = Connectors::new(
+        vec![fixture(&server)],
+        Arc::new(Egress::system()),
+        broker.clone(),
+    );
+    grant(&h, &connectors, "fixture", &["fixture.notes.import"]);
+    let issued_before = broker.issued();
+    assert_eq!(
+        run(&h, &connectors, "fixture.notes.import", json!({}), true).unwrap_err(),
+        AuthorityError::InvalidAction("request body too large")
+    );
+    let issued = broker.issued();
+    assert_eq!(
+        issued.len(),
+        issued_before.len() + 1,
+        "one lease was issued"
+    );
+    assert!(issued.iter().all(|lease| !broker.is_live(*lease)));
+    assert!(server.received().is_empty());
 }

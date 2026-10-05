@@ -10,9 +10,9 @@ use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::evidence::MemoryEvidence;
 use nexus_governed_control::authority::ids::AgentId;
 use nexus_governed_control::authority::run::RunOrigin;
-use nexus_governed_control::authority::Authority;
-use nexus_governed_control::control::Control;
-use nexus_governed_control::egress::{Egress, EgressIntent};
+use nexus_governed_control::broker::NoVault;
+use nexus_governed_control::egress::EgressIntent;
+use nexus_governed_control::governed::{GovernedControl, GrantRequest, Intent};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
@@ -65,36 +65,40 @@ fn proxy_variables_in_the_environment_are_ignored() {
         String::from_utf8_lossy(&request[..n]).into_owned()
     });
 
-    let control = Control::new(Authority::new(
+    // Through the one front door, as the desktop drives it.
+    let root = std::env::temp_dir().join(format!("nexus-p3-proxy-test-{}", std::process::id()));
+    let control = GovernedControl::new(
+        &root,
+        Arc::new(NoVault),
         Arc::new(MemoryEvidence::new(64)),
         Arc::new(SystemClock::default()),
-    ));
+    )
+    .unwrap();
     let agent = AgentId::new("agent-proxy-test").unwrap();
     let run = control
-        .authority()
         .open_run(agent.clone(), RunOrigin::AgentGoal)
         .unwrap();
-    let scope = Egress::grant_scope(&origin, &["GET".into()], true).unwrap();
     control
-        .authority()
-        .grants()
-        .request(scope, Duration::from_secs(60), &Owner)
-        .unwrap();
-    let egress = Egress::system();
-    let preparation = egress
-        .prepare(
-            control.authority(),
-            &EgressIntent {
-                method: "GET".into(),
-                url: format!("{origin}/through"),
-                headers: vec![],
-                body: None,
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: origin.clone(),
+                methods: vec!["GET".into()],
+                allow_private: true,
             },
+            Duration::from_secs(60),
+            &Owner,
         )
         .unwrap();
-    let view = control.propose(&agent, run, preparation).unwrap();
+    let intent = Intent::Request(EgressIntent {
+        method: "GET".into(),
+        url: format!("{origin}/through"),
+        headers: vec![],
+        body: None,
+    });
+    let view = control.propose(&agent, run, &intent).unwrap();
     control.authorize(view.id, &agent, run, &Owner).unwrap();
     let out = control.execute(view.id, &agent, run).unwrap();
+    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(out.text.as_deref(), Some("direct"));
     let request = served.join().unwrap();
     assert!(request.starts_with("GET /through HTTP/1.1"), "{request}");

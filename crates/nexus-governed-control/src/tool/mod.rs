@@ -119,7 +119,7 @@ impl Tools {
     }
 
     /// Prepare a tool run.
-    pub fn prepare(
+    pub(crate) fn prepare(
         &self,
         authority: &Authority,
         intent: &ToolIntent,

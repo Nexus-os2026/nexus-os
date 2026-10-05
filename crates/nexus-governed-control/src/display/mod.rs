@@ -266,7 +266,7 @@ impl Shared {
 }
 
 impl AgentDisplay {
-    pub fn new(root: RuntimeRoot) -> Self {
+    pub(crate) fn new(root: RuntimeRoot) -> Self {
         Self {
             root,
             generation: Mutex::new(0),
@@ -359,7 +359,7 @@ impl AgentDisplay {
     }
 
     /// Prepare an observation for `run`.
-    pub fn prepare_observation(
+    pub(crate) fn prepare_observation(
         &self,
         authority: &Authority,
         run: RunId,
@@ -452,7 +452,7 @@ impl AgentDisplay {
     }
 
     /// Prepare an input action for `run`.
-    pub fn prepare_input(
+    pub(crate) fn prepare_input(
         &self,
         authority: &Authority,
         run: RunId,
