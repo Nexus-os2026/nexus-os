@@ -189,14 +189,14 @@ impl Entry {
     }
 }
 
-/// Releases credential leases when their commitment ends (the broker).
-pub trait LeaseRelease: Send + Sync {
-    fn release(&self, lease: LeaseId);
+/// Ends credential leases when their commitment ends (the broker).
+pub trait LeaseEnd: Send + Sync {
+    fn end(&self, lease: LeaseId);
 }
 
 struct NoLeases;
-impl LeaseRelease for NoLeases {
-    fn release(&self, _lease: LeaseId) {}
+impl LeaseEnd for NoLeases {
+    fn end(&self, _lease: LeaseId) {}
 }
 
 pub(crate) struct Inner {
@@ -206,7 +206,7 @@ pub(crate) struct Inner {
     runs: Arc<RunRegistry>,
     evidence: Arc<dyn EvidenceSink>,
     clock: Arc<dyn Clock>,
-    leases: Mutex<Arc<dyn LeaseRelease>>,
+    leases: Mutex<Arc<dyn LeaseEnd>>,
 }
 
 /// The backend's commitments.
@@ -268,6 +268,11 @@ impl CommitmentRegistry {
             clock,
             leases: Mutex::new(Arc::new(NoLeases)),
         }))
+    }
+
+    /// Install the credential broker's lease table.
+    pub(crate) fn set_lease_end(&self, leases: Arc<dyn LeaseEnd>) {
+        *self.0.leases.lock().expect("leases") = leases;
     }
 
     fn record(&self, record: &EvidenceRecord) -> Result<(), AuthorityError> {
@@ -335,7 +340,11 @@ impl CommitmentRegistry {
             approval: None,
         };
         // Evidence first: an unrecorded commitment is never created.
-        self.record(&self.base_record(EvidencePhase::Prepared, id, &entry))?;
+        let mut record = self.base_record(EvidencePhase::Prepared, id, &entry);
+        for lease in entry.prepared.leases.iter().take(4) {
+            record.detail.push(("lease".into(), lease.to_string()));
+        }
+        self.record(&record)?;
         let view = entry.view(id);
         let mut entries = self.0.entries.lock().expect("commitments");
         if entries.len() >= CAPACITY {
@@ -422,7 +431,7 @@ impl CommitmentRegistry {
     fn release_leases(&self, entry: &Entry) {
         let leases = self.0.leases.lock().expect("leases").clone();
         for lease in &entry.prepared.leases {
-            leases.release(*lease);
+            leases.end(*lease);
         }
     }
 

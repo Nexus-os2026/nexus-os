@@ -5461,8 +5461,10 @@ dependencies = [
 name = "nexus-governed-control"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "getrandom 0.2.17",
  "hex",
+ "nexus-kernel",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

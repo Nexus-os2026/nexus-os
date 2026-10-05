@@ -101,6 +101,20 @@ pub(crate) struct CredentialPlan {
     pub release: Arc<dyn ReleaseCredential>,
 }
 
+/// What authorizes a request.
+pub(crate) enum Coverage {
+    /// An owner egress grant for exactly the origin and method.
+    EgressGrant,
+    /// A connector operation: the owner's connector grant covers requests
+    /// to the connector's own (code-defined) origin.
+    Connector {
+        grant: GrantId,
+        allow_private: bool,
+        class: EffectClass,
+        operation: &'static str,
+    },
+}
+
 /// The egress actuator.
 pub struct Egress {
     resolver: Arc<dyn Resolver>,
@@ -187,7 +201,7 @@ impl Egress {
         authority: &Authority,
         intent: &EgressIntent,
     ) -> Result<Preparation, AuthorityError> {
-        self.prepare_with(authority, intent, None)
+        self.prepare_with(authority, intent, None, Coverage::EgressGrant)
     }
 
     pub(crate) fn prepare_with(
@@ -195,6 +209,7 @@ impl Egress {
         authority: &Authority,
         intent: &EgressIntent,
         credential: Option<CredentialPlan>,
+        coverage: Coverage,
     ) -> Result<Preparation, AuthorityError> {
         let method =
             Method::parse(&intent.method).ok_or(AuthorityError::InvalidAction("unknown method"))?;
@@ -210,7 +225,36 @@ impl Egress {
             Some(body) => Some(body.as_bytes().to_vec()),
             None => None,
         };
-        let (grant, allow_private) = covering_grant(authority, &destination, method)?;
+        let method_class = if method.is_safe() {
+            EffectClass::R1
+        } else {
+            EffectClass::R2
+        };
+        let (grant, allow_private, kind, class, operation) = match coverage {
+            Coverage::EgressGrant => {
+                let (grant, allow_private) = covering_grant(authority, &destination, method)?;
+                (
+                    grant,
+                    allow_private,
+                    CapabilityKind::Egress,
+                    method_class,
+                    "egress.request",
+                )
+            }
+            // A connector operation is never classed below its method.
+            Coverage::Connector {
+                grant,
+                allow_private,
+                class,
+                operation,
+            } => (
+                grant,
+                allow_private,
+                CapabilityKind::Connector,
+                class.max(method_class),
+                operation,
+            ),
+        };
         // Checked now so a refused destination fails early; checked again
         // immediately before the request.
         resolve_checked(&destination, allow_private, &*self.resolver).map_err(destination_error)?;
@@ -256,13 +300,9 @@ impl Egress {
         }
         let leases = credential.iter().map(|c| c.lease).collect();
         let action = PreparedAction {
-            kind: CapabilityKind::Egress,
-            class: if method.is_safe() {
-                EffectClass::R1
-            } else {
-                EffectClass::R2
-            },
-            operation: "egress.request",
+            kind,
+            class,
+            operation,
             target: TargetIdentity {
                 display: destination.origin_text(),
                 digest: destination.origin_digest(),

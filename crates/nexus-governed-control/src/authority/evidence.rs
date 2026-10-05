@@ -30,6 +30,8 @@ pub enum EvidencePhase {
     Finished,
     Expired,
     Revoked,
+    LeaseIssued,
+    CredentialReleased,
 }
 
 impl EvidencePhase {
@@ -51,6 +53,8 @@ impl EvidencePhase {
             EvidencePhase::Finished => "finished",
             EvidencePhase::Expired => "expired",
             EvidencePhase::Revoked => "revoked",
+            EvidencePhase::LeaseIssued => "lease_issued",
+            EvidencePhase::CredentialReleased => "credential_released",
         }
     }
 }

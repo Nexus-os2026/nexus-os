@@ -95,8 +95,10 @@
 //! ```
 
 pub mod authority;
+pub mod broker;
+pub mod connector;
 pub mod control;
 pub mod egress;
 
 #[cfg(test)]
-mod test_support;
+mod harness_tests;

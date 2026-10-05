@@ -16,6 +16,8 @@ url = "2"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 tokio = { version = "1", features = ["rt", "time", "macros"] }
 zeroize = "1"
+base64 = "0.22"
+nexus-kernel = { path = "../../kernel" }
 
 [dev-dependencies]
 serde_json = "1.0"

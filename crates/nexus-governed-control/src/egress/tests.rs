@@ -9,7 +9,7 @@ use crate::authority::effect::EffectClass;
 use crate::authority::run::CancelToken;
 use crate::authority::AuthorityError;
 use crate::control::EffectOutput;
-use crate::test_support::{harness, Harness, Reply, TestServer, Yes};
+use crate::harness_tests::{harness, Harness, Reply, TestServer, Yes};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;

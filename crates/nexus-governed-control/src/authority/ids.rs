@@ -133,7 +133,7 @@ macro_rules! minted {
     };
 }
 
-minted!(CommitmentId, RunId, GrantId);
+minted!(CommitmentId, RunId, GrantId, LeaseId);
 
 /// The identity of the agent (or the owner's own command session) a run
 /// acts for: a bounded identifier, compared exactly.

@@ -31,6 +31,7 @@ pub enum AuthorityError {
     UnknownCommitment,
     UnknownRun,
     UnknownGrant,
+    UnknownLease,
     WrongAgent,
     WrongRun,
     NotPending,
@@ -62,6 +63,7 @@ impl AuthorityError {
             AuthorityError::UnknownCommitment => "unknown_commitment",
             AuthorityError::UnknownRun => "unknown_run",
             AuthorityError::UnknownGrant => "unknown_grant",
+            AuthorityError::UnknownLease => "unknown_lease",
             AuthorityError::WrongAgent => "wrong_agent",
             AuthorityError::WrongRun => "wrong_run",
             AuthorityError::NotPending => "not_pending",
@@ -158,6 +160,14 @@ impl Authority {
 
     pub fn policy_generation(&self) -> u64 {
         self.generation.current()
+    }
+
+    pub(crate) fn evidence(&self) -> &Arc<dyn EvidenceSink> {
+        &self.evidence
+    }
+
+    pub(crate) fn generation(&self) -> &Arc<PolicyGeneration> {
+        &self.generation
     }
 
     fn record(&self, record: &EvidenceRecord) -> Result<(), AuthorityError> {
