@@ -26,6 +26,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -75,9 +78,10 @@ jobs:
           echo "Validated candidate: $candidate"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ steps.candidate.outputs.candidate_sha }}
+          persist-credentials: false
 
       - name: Verify the exact candidate commit
         shell: bash
@@ -104,10 +108,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Rust 1.94.0
-        uses: dtolnay/rust-toolchain@1.94.0
+        uses: dtolnay/rust-toolchain@4be4450ce7d4f1b9d3d643f42e0fe4124db1d31d # 1.94.0
 
       - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Install ripgrep 14.1.1 and verify search backends
         shell: bash
@@ -137,7 +141,7 @@ jobs:
       # end to end (assembled Node, embedded manifest, Nexus entry, permission
       # model, sealed spawn, lifecycle ownership and the loopback preview).
       - name: Setup Node.js 24.21.0 (Builder toolchain assembly)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24.21.0
 
@@ -214,9 +218,10 @@ jobs:
           echo "Validated candidate: $candidate"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ steps.candidate.outputs.candidate_sha }}
+          persist-credentials: false
 
       - name: Verify the exact candidate commit
         shell: bash
@@ -243,10 +248,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Rust 1.94.0
-        uses: dtolnay/rust-toolchain@1.94.0
+        uses: dtolnay/rust-toolchain@4be4450ce7d4f1b9d3d643f42e0fe4124db1d31d # 1.94.0
 
       - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Install ripgrep 14.1.1 and verify search backends
         shell: bash
@@ -278,7 +283,7 @@ jobs:
       # end to end (assembled Node, embedded manifest, Nexus entry, permission
       # model, sealed spawn, lifecycle ownership and the loopback preview).
       - name: Setup Node.js 24.21.0 (Builder toolchain assembly)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24.21.0
 

@@ -22,10 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Install rustup (rust-toolchain.toml selects the toolchain)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be4450ce7d4f1b9d3d643f42e0fe4124db1d31d # 1.94.0
 
       - name: Fetch fresh advisory databases
         run: rm -rf ~/.cargo/advisory-db ~/.cargo/advisory-dbs
@@ -36,3 +38,23 @@ jobs:
       # exception or any scanner failure fails the job.
       - name: Security gate (cargo-audit and cargo-deny)
         run: scripts/security-audit.sh --install
+
+  # XA-R4C: the npm advisory gate beside the Rust audit, on the same pushes
+  # and schedule (new advisories appear without code changes); ci.yml's
+  # test-frontend job runs the same gate on candidates.
+  npm-advisory-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+
+      - name: npm advisory gate (audited npm roots)
+        run: node scripts/ci/npm-advisory-gate.mjs
