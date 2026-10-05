@@ -29,7 +29,7 @@ grant, for example:
 
 ---
 
-## Current status: Phase One complete — Linux support profile
+## Current status: Phases Zero, One and Two complete — Linux support profile
 
 - The Phase Zero trust-boundary rebuild is complete for the validated Linux
   support profile ("PHASE ZERO COMPLETE — LINUX SUPPORT PROFILE", declared
@@ -41,29 +41,58 @@ grant, for example:
   support profile ("PHASE ONE COMPLETE — LINUX SUPPORT PROFILE", declared by
   the project Architect on 2026-09-30 for commit
   `14270a9a38770ac84456c1f812042d2967edec42`). See
-  [Governed coding (Phase One)](#governed-coding-phase-one) below. Phase Two
-  has not started.
+  [Governed coding (Phase One)](#governed-coding-phase-one) below.
 - That checkpoint stays frozen on `rebuild/phase1-governed-coding`. Its
   completion evidence is the `evidence/phase1-closure` branch at
   `c237937189b5977eaad01acad6a4c52bcce796cc`. Later commits do not redefine
-  it: status documentation and the generated ACL schema and test hygiene
-  commit `6f3d64360dd21aa8d717c3995c46e48f396148b9` (`main` after Phase One
-  completion), then the entry hardening described in
+  it: status documentation, a generated ACL schema and test hygiene commit,
+  and then the entry hardening described in
   [Hardening since the Phase One checkpoint](#hardening-since-the-phase-one-checkpoint).
-- Linux is the active validation target for both phases. Windows and macOS
-  portability validation is deferred, and no Phase Zero or Phase One
-  security claim is made for them.
+- Phase Two, governed verification execution, is complete for the same Linux
+  support profile ("PHASE TWO COMPLETE — LINUX SUPPORT PROFILE", declared by
+  the project Architect on 2026-10-04 for commit
+  `dc52fadba078f2cddd6b51e26dd1a38db1ffedcc`). That checkpoint stays frozen
+  on `rebuild/phase2-governed-verification`. Its completion evidence is the
+  `evidence/phase2-closure` branch at
+  `4966a295e395703fc8ff823413b63a32f3d069e0`. `main` does not contain the
+  Phase Two implementation. Phase Three is not current and is not
+  integrated.
+- Linux is the active validation target for all three phases. Windows and
+  macOS portability validation is deferred, and no Phase Zero, Phase One or
+  Phase Two security claim is made for them.
 - No Phase Zero production release, and no security-supported release, has
   been declared yet. This policy therefore lists no supported versions.
   Releases, tags and version numbers published before the rebuild predate
-  Phase Zero and are not a statement of current support.
+  Phase Zero and are not a statement of current support; they do not become
+  supported releases merely because they exist.
 - The current engineering evidence, including explicit non-claims, is in the
   [Phase Zero Final-Gate dossier](docs/security/phase0-final-gate-dossier.md),
   the
   [Phase Zero authority inventory](docs/security/phase0-c5-authority-inventory.md)
-  and, for Phase One, the completion record on the `evidence/phase1-closure`
-  branch. They are internal engineering evidence, not an external audit or a
-  certification.
+  and, for Phase One and Phase Two, the completion records on the
+  `evidence/phase1-closure` and `evidence/phase2-closure` branches. They are
+  internal engineering evidence, not an external audit or a certification.
+
+### Historical checkpoints and current dependency support
+
+- **Historical checkpoint validity.** The frozen Phase Zero and Phase One
+  checkpoints remain complete historical engineering checkpoints. Neither is
+  reopened, and their completion, evidence and recorded claims stand as
+  recorded for the bytes validated at each declaration.
+- **Current dependency support.** The frozen Phase Zero and Phase One bytes
+  are not current shippable bytes and are not a current release candidate.
+  Their lockfiles resolve Wasmtime 43.0.2, which RUSTSEC-2026-0327
+  (GHSA-32h6-97mm-8q3c), disclosed after both checkpoints were frozen,
+  affects. Release or deployment work must not ship directly from those
+  historical snapshots.
+- **Remediation.** The frozen Phase Two checkpoint and current `main`
+  resolve Wasmtime 36.0.17, which RUSTSEC-2026-0327 does not affect (its
+  affected range starts at 39.0.0). This is the current forward dependency
+  remediation. It does not reopen or redefine the frozen Phase Zero and
+  Phase One checkpoints, which stay unchanged.
+- The Linux security gate passes on current `main` with its reviewed set of
+  accepted advisories (see [Dependencies](#dependencies)). A passing gate is
+  not proof that there are no vulnerabilities.
 
 ## Security model (as far as Phase Zero establishes it)
 
@@ -140,8 +169,8 @@ Not claimed for governed coding:
 
 ### Hardening since the Phase One checkpoint
 
-These changes follow the frozen Phase One checkpoint. They do not redefine
-it, and Phase Two has not started.
+These changes follow the frozen Phase One checkpoint and are on `main`. They
+do not redefine it.
 
 - **Run read grant revoked when no longer needed.** A run revokes its
   read-only project grant as soon as it no longer needs project read
