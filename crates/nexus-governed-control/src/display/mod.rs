@@ -190,6 +190,9 @@ struct Server;
 
 #[cfg(not(target_os = "linux"))]
 impl Server {
+    fn start(_root: &RuntimeRoot, _width: u16, _height: u16) -> Result<Self, AuthorityError> {
+        Err(unavailable())
+    }
     fn size(&self) -> (u16, u16) {
         (0, 0)
     }
@@ -222,6 +225,12 @@ impl Server {
     }
     fn pointer_position(&self) -> (u16, u16) {
         (0, 0)
+    }
+    fn hold(&self) -> Result<(), AuthorityError> {
+        Err(unavailable())
+    }
+    fn keys_reach(&self, _window: u32) -> bool {
+        false
     }
 }
 
@@ -285,13 +294,7 @@ impl AgentDisplay {
         if !(320..=3840).contains(&width) || !(240..=2160).contains(&height) {
             return Err(AuthorityError::InvalidAction("display size out of bounds"));
         }
-        #[cfg(target_os = "linux")]
-        let server = Arc::new(server::AgentServer::start(&self.root, width, height)?);
-        #[cfg(not(target_os = "linux"))]
-        let server: Arc<Server> = {
-            let _ = &self.root;
-            return Err(unavailable());
-        };
+        let server = Arc::new(Server::start(&self.root, width, height)?);
         let generation = {
             let mut counter = self.generation.lock().expect("generation");
             *counter += 1;
