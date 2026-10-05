@@ -127,6 +127,25 @@ jobs:
             pkg-config \
             xvfb
 
+      # The runner image makes /opt world-writable (`chmod -R 777 /opt`), and
+      # the governed browser refuses a Chrome that anyone but root could
+      # replace. Restore the package's modes so the live browser tests drive
+      # it, and fail here if any part of its path is still not root-only.
+      - name: Restore Chrome's packaged permissions (governed browser)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo chmod 0755 /opt /opt/google
+          sudo chmod -R go-w /opt/google/chrome
+          sudo chmod 4755 /opt/google/chrome/chrome-sandbox
+          for path in / /opt /opt/google /opt/google/chrome /opt/google/chrome/chrome /opt/google/chrome/chrome-sandbox; do
+            stat -c '%n owner=%U mode=%a' "$path"
+            if [[ $(stat -c %u "$path") != 0 ]] || (( 0$(stat -c %a "$path") & 022 )); then
+              echo "::error::$path is not root-only"
+              exit 1
+            fi
+          done
+
       - name: Install Rust 1.94.0
         uses: dtolnay/rust-toolchain@4be4450ce7d4f1b9d3d643f42e0fe4124db1d31d # 1.94.0
         with:
