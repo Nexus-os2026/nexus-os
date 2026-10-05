@@ -3754,3 +3754,412 @@ fn p3e_scan_02_the_parsers_are_whitespace_and_qualification_insensitive() {
         ]
     );
 }
+
+// ---------------------------------------------------------------------------
+// G6: the Phase Three authority surface (PHASE-THREE-FINAL §22, §24).
+// ---------------------------------------------------------------------------
+
+const P3_CRATE: &str = "crates/nexus-governed-control/src/";
+const P3_FRONT_DOOR: &str = "app/src-tauri/src/governed_real_world.rs";
+
+/// The crate's production sources, as (path under its `src`, text).
+fn p3_sources() -> Vec<(&'static str, &'static str)> {
+    workspace_sources()
+        .iter()
+        .filter_map(|(path, text)| Some((path.strip_prefix(P3_CRATE)?, text.as_str())))
+        .collect()
+}
+
+/// R2 approval, grants and resuming after a stop are confirmed only by the
+/// owner's native dialogs; the crate's one other confirmer declines all.
+#[test]
+fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
+    let mut impls = trait_impls("ControlConfirmer");
+    impls.sort();
+    assert_eq!(
+        impls,
+        [
+            (P3_FRONT_DOOR, "ControlDialogs".to_string()),
+            (
+                "crates/nexus-governed-control/src/governed.rs",
+                "NeverAsk".to_string()
+            ),
+        ]
+    );
+    let governed = production_source("crates/nexus-governed-control/src/governed.rs");
+    for method in ["confirm_action", "confirm_grant", "confirm_resume"] {
+        let never = one_fn(governed, &format!("NeverAsk::{method}"));
+        assert_eq!(
+            compact(never.body_text(governed)),
+            "false",
+            "NeverAsk::{method}"
+        );
+        let front = production_source(P3_FRONT_DOOR);
+        let dialog = one_fn(front, &format!("ControlDialogs::{method}"));
+        let body = compact(dialog.body_text(front));
+        assert!(
+            body.starts_with(
+                "use{DialogExt,MessageDialogButtons,MessageDialogKind};self.0.dialog().message(dialog_text(&request.message())).title(request.title()).kind(MessageDialogKind::Warning).buttons(MessageDialogButtons::OkCancelCustom("
+            ) && body.ends_with(".blocking_show()"),
+            "{method}: {body}"
+        );
+        for forbidden in ["true", "false", "return", "||", "&&", "unsafe"] {
+            assert!(!body.contains(forbidden), "{method}: {forbidden}");
+        }
+        assert_eq!(
+            body.matches("self.").count(),
+            1,
+            "{method}: only its own dialog"
+        );
+    }
+    assert_eq!(
+        compact(
+            one_fn(production_source(P3_FRONT_DOOR), "dialog_text")
+                .body_text(production_source(P3_FRONT_DOOR))
+        ),
+        "message.replace('%',\"%%\")"
+    );
+    // The trait is defined once and never renamed.
+    assert_eq!(
+        renaming("ControlConfirmer"),
+        Vec::<&str>::new(),
+        "ControlConfirmer is renamed somewhere"
+    );
+}
+
+/// An R2 approval exists only after the owner's native answer to exactly
+/// that commitment; it cannot be built, copied or deserialized elsewhere.
+#[test]
+fn p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer() {
+    let commitment = production_source("crates/nexus-governed-control/src/authority/commitment.rs");
+    let mints: Vec<(&str, String)> = references(P3_CRATE, "confirmed")
+        .into_iter()
+        .filter(|(file, _)| {
+            file.ends_with("authority/commitment.rs") || !file.ends_with("approval.rs")
+        })
+        .collect();
+    assert_eq!(
+        mints,
+        [(
+            "crates/nexus-governed-control/src/authority/commitment.rs",
+            "CommitmentRegistry::request_approval".to_string()
+        )]
+    );
+    let request =
+        compact(one_fn(commitment, "CommitmentRegistry::request_approval").body_text(commitment));
+    assert_in_order(
+        &request,
+        &[
+            "letconfirmed=confirmer.confirm_action(&request);",
+            "ifentry.state!=CommitmentState::Prepared||entry.binding!=binding{returnErr(AuthorityError::NotPending);}",
+            "self.live_check(id,entry,agent,run)?;",
+            "if!confirmed{",
+            "self.record(&record)?;",
+            "Ok(R2Approval::confirmed(id,binding))",
+        ],
+        "request_approval",
+    );
+    let approval = production_source("crates/nexus-governed-control/src/authority/approval.rs");
+    let at = approval.find("pub struct R2Approval").expect("R2Approval");
+    let head = &approval[..at];
+    let derive = &head[head.rfind("#[").unwrap()..];
+    assert_eq!(
+        compact(derive),
+        "#[derive(Debug)]",
+        "no Clone, Copy, Default or serde"
+    );
+    assert!(compact(approval)
+        .contains("pub(crate)fnconfirmed(commitment:CommitmentId,binding:Digest)->Self"));
+    // Authorizing consumes it and checks it names this commitment's binding.
+    let authorize =
+        compact(one_fn(commitment, "CommitmentRegistry::authorize").body_text(commitment));
+    assert!(authorize.contains(
+        "ifapproval.commitment()!=id||approval.binding()!=&entry.binding{returnErr(AuthorityError::ApprovalMismatch);}"
+    ));
+}
+
+/// Every governed effect is a pending effect held by the one pipeline and
+/// executed only by it, once, after `begin`; the commitment lifecycle is
+/// crate-private.
+#[test]
+fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
+    let mut effects = trait_impls("PendingEffect");
+    effects.sort();
+    assert_eq!(
+        effects,
+        [
+            (
+                "crates/nexus-governed-control/src/browser/mod.rs",
+                "Session".to_string()
+            ),
+            (
+                "crates/nexus-governed-control/src/display/mod.rs",
+                "Input".to_string()
+            ),
+            (
+                "crates/nexus-governed-control/src/display/mod.rs",
+                "Observe".to_string()
+            ),
+            (
+                "crates/nexus-governed-control/src/egress/mod.rs",
+                "EgressEffect".to_string()
+            ),
+            (
+                "crates/nexus-governed-control/src/tool/mod.rs",
+                "ToolEffect".to_string()
+            ),
+        ]
+    );
+    let control = production_source("crates/nexus-governed-control/src/control.rs");
+    let execute = compact(one_fn(control, "Control::execute").body_text(control));
+    assert_in_order(
+        &execute,
+        &[
+            "pending.remove(&id).expect(\"present\").effect",
+            "effect.revalidate()",
+            ".begin(id,agent,run,&target,&parameters)",
+            "effect.execute(&guard)",
+            "guard.finish(",
+        ],
+        "Control::execute",
+    );
+    // `begin` and an effect's `execute` are called from the pipeline only.
+    assert_eq!(
+        references(P3_CRATE, "begin"),
+        [(
+            "crates/nexus-governed-control/src/control.rs",
+            "Control::execute".to_string()
+        )]
+    );
+    let executed: Vec<(&str, String)> = references(P3_CRATE, "execute");
+    assert!(
+        executed.iter().all(|(file, function)| {
+            (file.ends_with("control.rs") && function == "Control::execute")
+                || (file.ends_with("governed.rs")
+                    && matches!(
+                        function.as_str(),
+                        "GovernedControl::execute" | "GovernedControl::agent_action"
+                    ))
+        }),
+        "{executed:?}"
+    );
+    // The lifecycle is crate-private.
+    let commitment = production_source("crates/nexus-governed-control/src/authority/commitment.rs");
+    for method in [
+        "prepare",
+        "request_approval",
+        "authorize",
+        "begin",
+        "fail_unstarted",
+        "deny",
+    ] {
+        let item = one_fn(commitment, &format!("CommitmentRegistry::{method}"));
+        assert!(item.head.contains("pub(crate)"), "{method}: {}", item.head);
+    }
+}
+
+/// Within the crate, each real-world mechanism lives in exactly one place:
+/// processes in the launcher (and the kernel's sealed spawn for tools),
+/// network in egress, the browser proxy and the X11 socket, the vault in
+/// the broker, X11 in the agent display.
+#[test]
+fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
+    use crate::phase0_surface::rust_paths::{
+        constructs_process, ends_process, opens_network, Analysis, Declaration,
+    };
+    let mut found: BTreeMap<(String, &str), usize> = BTreeMap::new();
+    for (file, _) in p3_sources() {
+        let src = workspace_file(&format!("{P3_CRATE}{file}"));
+        let analysis = Analysis::new(&src, &["crate"]);
+        for o in analysis.production() {
+            if o.declaration == Some(Declaration::Use) && !o.public && o.item.is_none() {
+                continue;
+            }
+            let mut kinds = BTreeSet::new();
+            for path in &o.resolved {
+                let shown = path.join("::");
+                if constructs_process(path) {
+                    kinds.insert("process");
+                }
+                if ends_process(path) {
+                    kinds.insert("ends");
+                }
+                if opens_network(path) {
+                    kinds.insert("network");
+                }
+                if shown.starts_with("x11rb") {
+                    kinds.insert("x11");
+                }
+                if shown.starts_with("nexus_kernel::secrets") {
+                    kinds.insert("vault");
+                }
+                if shown.starts_with("nexus_kernel::resource_limiter") {
+                    kinds.insert("sealed");
+                }
+                if shown.starts_with("libc") {
+                    kinds.insert("libc");
+                }
+            }
+            for kind in kinds {
+                *found.entry((file.to_string(), kind)).or_insert(0) += 1;
+            }
+        }
+    }
+    let allowed: BTreeMap<(String, &str), usize> = [
+        ("broker.rs", "network", 2), // header types for the released credential
+        ("broker.rs", "vault", 3),
+        ("browser/proxy.rs", "network", 9),
+        ("display/server.rs", "network", 1),
+        ("display/server.rs", "x11", 18),
+        ("egress/mod.rs", "network", 8), // header types
+        ("egress/transport.rs", "network", 19),
+        ("launcher.rs", "ends", 1),
+        ("launcher.rs", "libc", 13),
+        ("launcher.rs", "process", 1),
+        ("tool/mod.rs", "sealed", 6),
+    ]
+    .into_iter()
+    .map(|(file, kind, count)| ((file.to_string(), kind), count))
+    .collect();
+    assert_eq!(found, allowed);
+    // Unsafe code is denied crate-wide and allowed only in the launcher.
+    let lib = production_source("crates/nexus-governed-control/src/lib.rs");
+    assert!(lib.contains("#![deny(unsafe_code)]"));
+    let allowing: Vec<&str> = p3_sources()
+        .into_iter()
+        .filter(|(_, text)| text.contains("allow(unsafe_code)"))
+        .map(|(file, _)| file)
+        .collect();
+    assert_eq!(allowing, ["launcher.rs"]);
+}
+
+/// Nothing in Phase Three reads the process environment: not the owner's
+/// display or X authority, not proxies, not credentials; nor does it set
+/// any variable.
+#[test]
+fn p3_g6_05_phase_three_reads_no_ambient_environment() {
+    for (file, text) in p3_sources() {
+        for ambient in [
+            "env::var",
+            "var_os(",
+            "set_var(",
+            "remove_var(",
+            "\"DISPLAY\"",
+            "\"XAUTHORITY\"",
+            "home_dir()",
+            "temp_dir()",
+            "current_dir()",
+            "current_exe()",
+        ] {
+            assert!(!text.contains(ambient), "{file}: {ambient}");
+        }
+    }
+    let front = production_source(P3_FRONT_DOOR);
+    for ambient in [
+        "env::var",
+        "var_os(",
+        "set_var(",
+        "\"DISPLAY\"",
+        "temp_dir()",
+    ] {
+        assert!(!front.contains(ambient), "front door: {ambient}");
+    }
+}
+
+/// The desktop reaches Phase Three only through its front door and the
+/// executor's classification; the IPC commands take data only.
+#[test]
+fn p3_g6_06_the_desktop_reaches_phase_three_only_through_its_front_door() {
+    let naming: BTreeSet<&str> = files_naming("nexus_governed_control")
+        .into_iter()
+        .filter(|file| file.starts_with(DESKTOP_SRC))
+        .collect();
+    assert_eq!(
+        naming,
+        BTreeSet::from([P3_FRONT_DOOR, "app/src-tauri/src/commands/cognitive.rs"])
+    );
+    let cognitive = production_source("app/src-tauri/src/commands/cognitive.rs");
+    assert_eq!(cognitive.matches("nexus_governed_control").count(), 1);
+    // The commands and their parameters, exactly.
+    let front = production_source(P3_FRONT_DOOR);
+    let mut commands: Vec<(String, String)> = fn_items(front)
+        .into_iter()
+        .filter(|item| item.head.contains("#[command]"))
+        .map(|item| (item.name.clone(), item.params.clone()))
+        .collect();
+    commands.sort();
+    let expected: Vec<(String, String)> = [
+        (
+            "p3_approve",
+            "(app:App,state:State<'_,AppState>,commitment:String)",
+        ),
+        ("p3_cancel_run", "(state:State<'_,AppState>,run:String)"),
+        ("p3_deny", "(state:State<'_,AppState>,commitment:String)"),
+        ("p3_display_start", "(state:State<'_,AppState>)"),
+        ("p3_display_stop", "(state:State<'_,AppState>)"),
+        ("p3_emergency_stop", "(state:State<'_,AppState>)"),
+        ("p3_evidence", "(state:State<'_,AppState>)"),
+        ("p3_import_attachment", "(app:App,state:State<'_,AppState>)"),
+        (
+            "p3_request_grant",
+            "(app:App,state:State<'_,AppState>,request:GrantRequest,ttl_secs:u64)",
+        ),
+        ("p3_resume", "(app:App,state:State<'_,AppState>)"),
+        ("p3_revoke_grant", "(state:State<'_,AppState>,grant:String)"),
+        ("p3_status", "(state:State<'_,AppState>)"),
+        (
+            "p3_submit",
+            "(state:State<'_,AppState>,envelope:CommandEnvelope)",
+        ),
+    ]
+    .into_iter()
+    .map(|(name, params)| (name.to_string(), params.to_string()))
+    .collect();
+    assert_eq!(commands, expected);
+    // Every one is registered, listed and granted, and no other command
+    // carries the prefix.
+    let registered: BTreeSet<String> =
+        registry_entries(production_source("app/src-tauri/src/lib.rs"))
+            .iter()
+            .map(|entry| split_entry(entry).1.to_string())
+            .filter(|name| name.starts_with("p3_"))
+            .collect();
+    let names: BTreeSet<String> = expected.iter().map(|(name, _)| name.clone()).collect();
+    assert_eq!(registered, names);
+    for name in &names {
+        assert!(
+            crate::webview_boundary::APP_COMMANDS.contains(&name.as_str()),
+            "{name}"
+        );
+    }
+    // The dialog-bound commands run on the blocking pool with the native dialogs.
+    for name in ["p3_approve", "p3_resume", "p3_request_grant"] {
+        let item = one_fn(front, name);
+        let body = compact(item.body_text(front));
+        assert!(body.contains("blocking(move||"), "{name}");
+        assert!(body.contains("ControlDialogs(app)"), "{name}: {body}");
+    }
+}
+
+/// The final classification is exhaustive and has no wildcard: a new
+/// `PlannedAction` variant fails to compile there until it is classified,
+/// and every variant is named.
+#[test]
+fn p3_g6_07_the_final_classification_names_every_variant() {
+    let planned = production_source("crates/nexus-governed-control/src/planned.rs");
+    let arms = match_arms(planned, "classify");
+    let mut named = Vec::new();
+    for (pattern, _) in &arms {
+        let variants = pattern_variants(pattern)
+            .unwrap_or_else(|| panic!("classify has a catch-all arm `{pattern}`"));
+        named.extend(variants);
+    }
+    let named: BTreeSet<String> = named.into_iter().collect();
+    let declared: BTreeSet<String> = enum_variants(
+        production_source("kernel/src/cognitive/types.rs"),
+        "PlannedAction",
+    )
+    .into_iter()
+    .collect();
+    assert_eq!(named, declared);
+}
