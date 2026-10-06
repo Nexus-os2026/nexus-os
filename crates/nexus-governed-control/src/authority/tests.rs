@@ -355,6 +355,58 @@ fn a_commitment_is_consumed_exactly_once() {
     );
 }
 
+/// An executing commitment stays covered only while its grants are live
+/// and the policy has not moved: effects that run in steps ask before each
+/// one, and what outlives one call asks `liveness`, which also ends with
+/// the run's cancellation.
+#[test]
+fn an_executing_commitment_stays_covered_only_while_its_grants_are_live() {
+    let executing = |f: &Fixture| {
+        let id = f.prepare(EffectClass::R1);
+        f.auth
+            .commitments()
+            .authorize(id, &f.agent, f.run, None)
+            .unwrap();
+        let guard = f.begin(id).unwrap();
+        assert!(guard.still_authorized() && (guard.liveness())());
+        guard
+    };
+    // The grant expires.
+    let f = fixture();
+    let guard = executing(&f);
+    f.clock.advance(Duration::from_secs(601));
+    assert!(!guard.still_authorized() && !(guard.liveness())());
+    // The grant is revoked.
+    let f = fixture();
+    let guard = executing(&f);
+    let live = guard.liveness();
+    f.auth.grants().revoke(f.grant).unwrap();
+    assert!(!guard.still_authorized() && !live());
+    // Another grant is revoked: the policy moved.
+    let f = fixture();
+    let other = f
+        .auth
+        .grants()
+        .request(egress_scope(), Duration::from_secs(600), &f.yes)
+        .unwrap();
+    let guard = executing(&f);
+    f.auth.grants().revoke(other).unwrap();
+    assert!(!guard.still_authorized());
+    // The run is cancelled: still covered, but no longer live.
+    let f = fixture();
+    let guard = executing(&f);
+    let live = guard.liveness();
+    f.auth.cancel_run(f.run).unwrap();
+    assert!(guard.still_authorized() && !live());
+    // A finished commitment is no longer executing.
+    let f = fixture();
+    let guard = executing(&f);
+    let live = guard.liveness();
+    let id = guard.commitment();
+    guard.finish(Outcome::Succeeded { meta: vec![] });
+    assert!(!f.auth.commitments().still_authorized(id) && !live());
+}
+
 #[test]
 fn a_changed_target_or_parameters_fail_the_start() {
     let f = fixture();
@@ -1154,4 +1206,24 @@ fn shown_text_cannot_imitate_an_escape_or_draw_over_its_neighbours() {
         escaped("e\u{301}\u{301}\u{301}\u{301}"),
         "e\u{301}\u{301}\\u{301}\\u{301}"
     );
+    // Marks of any script count, and marks of different scripts interleaved
+    // on one character still stack (re-audit Q9).
+    assert_eq!(
+        escaped("a\u{301}\u{e49}\u{301}\u{e49}"),
+        "a\u{301}\u{e49}\\u{301}\\u{e49}"
+    );
+    for mark in ['\u{5b4}', '\u{e48}', '\u{489}', '\u{f90}', '\u{a8e0}'] {
+        let stacked: String = std::iter::once('x')
+            .chain(std::iter::repeat_n(mark, 4))
+            .collect();
+        let shown = escaped(&stacked);
+        assert_eq!(
+            shown.chars().filter(|c| *c == mark).count(),
+            2,
+            "{mark:?}: {shown}"
+        );
+    }
+    // Ordinary text of other scripts is shown as written.
+    assert_eq!(escaped("שלום עולם"), "שלום עולם");
+    assert_eq!(escaped("café naïve"), "café naïve");
 }

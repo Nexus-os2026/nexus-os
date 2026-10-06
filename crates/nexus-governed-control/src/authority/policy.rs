@@ -154,6 +154,7 @@ impl GrantScope {
                 } else {
                     "Every click, drag and key: asks for your approval (R2)".to_string()
                 },
+                "Pointer moves and scrolls: never ask you (R1)".to_string(),
             ],
             GrantScope::Connector {
                 connector,

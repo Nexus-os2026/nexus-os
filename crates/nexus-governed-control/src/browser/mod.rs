@@ -816,6 +816,7 @@ mod live {
             origins: session.origins.clone(),
             allow_private: session.allow_private,
             resolver: session.resolver.clone(),
+            live: guard.liveness(),
         })
         .map_err(|_| unavailable("the browser proxy did not start"))?;
         let (command_reader, command_writer) =
@@ -900,15 +901,35 @@ mod live {
         let started_ok = start.get("refused").is_none();
         results.push(start);
         if started_ok {
-            for step in &session.steps {
+            let total = session.steps.len();
+            for (index, step) in session.steps.iter().enumerate() {
+                // A failure says how far the session got: the steps before
+                // this one ran.
+                let at = |(class, detail): (FailureClass, String)| {
+                    (
+                        class,
+                        format!("{detail} (at step {} of {total})", index + 1),
+                    )
+                };
                 if cancel.is_cancelled() {
-                    return Err(cancelled());
+                    return Err(at(cancelled()));
+                }
+                // A grant revoked or expired, or a policy change, ends the
+                // session before its next step.
+                if !guard.still_authorized() {
+                    return Err(at((
+                        FailureClass::Refused,
+                        "the grant was revoked or expired".into(),
+                    )));
                 }
                 if started.elapsed() > SESSION_LIMIT {
-                    return Err((FailureClass::Timeout, "the session ran out of time".into()));
+                    return Err(at((
+                        FailureClass::Timeout,
+                        "the session ran out of time".into(),
+                    )));
                 }
-                page.close_popups()?;
-                let (result, ok) = page.step(step)?;
+                page.close_popups().map_err(at)?;
+                let (result, ok) = page.step(step).map_err(at)?;
                 results.push(result);
                 if !ok {
                     completed = false;

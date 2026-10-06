@@ -289,10 +289,9 @@ async fn exchange(
     let work = async move {
         let mut response = request.send().await.map_err(classify)?;
         let peer = response.remote_addr();
-        if let Some(peer) = peer {
-            if !addresses.iter().any(|a| a.ip() == peer.ip()) {
-                return Err(TransportError::Unpinned);
-            }
+        // A peer the client cannot name is not known to be a pinned one.
+        if !peer.is_some_and(|peer| addresses.iter().any(|a| a.ip() == peer.ip())) {
+            return Err(TransportError::Unpinned);
         }
         let status = response.status().as_u16();
         let content_type = header_text(response.headers().get(CONTENT_TYPE), 128);
@@ -303,19 +302,27 @@ async fn exchange(
         {
             return Err(TransportError::Bounds);
         }
-        let mut body = Vec::new();
+        // The body may echo a released credential: it only ever lives in
+        // buffers zeroized when they are dropped (outgrown, or on any early
+        // exit, a cancellation included).
+        let mut body = Zeroizing::new(Vec::with_capacity(
+            response
+                .content_length()
+                .map_or(INITIAL_BODY, |length| length as usize)
+                .min(max_body),
+        ));
         while let Some(chunk) = response.chunk().await.map_err(classify)? {
             if body.len() + chunk.len() > max_body {
                 return Err(TransportError::Bounds);
             }
-            body.extend_from_slice(&chunk);
+            append(&mut body, &chunk, max_body);
         }
         Ok(HttpResponse {
             status,
             peer,
             content_type,
             location,
-            body,
+            body: std::mem::take(&mut *body),
             redacted: false,
         })
     };
@@ -327,6 +334,25 @@ async fn exchange(
         redact(&mut response, &secret);
     }
     Ok(response)
+}
+
+/// A response body's first buffer when its length is not announced.
+const INITIAL_BODY: usize = 64 * 1024;
+
+/// Append `chunk`, never letting the vector reallocate in place: an
+/// outgrown buffer is copied into a larger one and dropped, zeroized.
+fn append(body: &mut Zeroizing<Vec<u8>>, chunk: &[u8], max_body: usize) {
+    let needed = body.len() + chunk.len();
+    if needed > body.capacity() {
+        let mut grown = Zeroizing::new(Vec::with_capacity(
+            needed
+                .max(body.capacity().saturating_mul(2))
+                .min(max_body.max(needed)),
+        ));
+        grown.extend_from_slice(body);
+        *body = grown;
+    }
+    body.extend_from_slice(chunk);
 }
 
 async fn until_cancelled(cancel: &CancelToken) {
@@ -420,6 +446,25 @@ mod tests {
             forms(&secret("Bearer a/b+c", "a/b+c")),
             ["Bearer a/b+c", "a%2Fb%2Bc", "a%2fb%2bc", "a\\/b+c", "a/b+c"]
         );
+    }
+
+    /// A body grows only into fresh buffers (the outgrown one is dropped,
+    /// zeroized), never by reallocating in place, and asks for no more than
+    /// its bound.
+    #[test]
+    fn a_body_grows_only_into_fresh_buffers() {
+        let mut body = Zeroizing::new(Vec::with_capacity(4));
+        let first = body.as_ptr();
+        append(&mut body, b"abc", 64);
+        append(&mut body, b"d", 64);
+        assert_eq!((body.as_ptr(), body.capacity()), (first, 4), "it fitted");
+        append(&mut body, b"efgh", 64);
+        assert_ne!(body.as_ptr(), first, "a fresh buffer");
+        assert_eq!(body.capacity(), 8);
+        assert_eq!(&body[..], b"abcdefgh");
+        append(&mut body, &[b'x'; 50], 60);
+        assert_eq!(body.len(), 58);
+        assert!(body.capacity() <= 60, "{}", body.capacity());
     }
 
     #[test]

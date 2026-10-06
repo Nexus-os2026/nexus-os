@@ -105,7 +105,8 @@ pub enum FailureClass {
     /// The execution guard was dropped without a result.
     Abandoned,
     /// The authority refused to start it (not authorized, no longer live,
-    /// or its start could not be recorded).
+    /// or its start could not be recorded), or to let it take its next step
+    /// (its grant was revoked or expired).
     Refused,
 }
 
@@ -875,6 +876,22 @@ impl CommitmentRegistry {
         views
     }
 
+    /// Whether an executing commitment is still covered: the policy
+    /// generation has not moved and every grant it relies on is still live
+    /// (neither revoked nor expired). Effects that run in steps (a browser
+    /// session) ask before each one.
+    pub fn still_authorized(&self, id: CommitmentId) -> bool {
+        let entries = self.0.entries.lock().expect("commitments");
+        entries.get(&id).is_some_and(|e| {
+            e.state == CommitmentState::Executing
+                && self.0.generation.current() == e.generation
+                && e.prepared
+                    .grants
+                    .iter()
+                    .all(|grant| self.0.grants.live(*grant).is_some())
+        })
+    }
+
     /// The prepared action of a commitment that is executing under `guard`
     /// (actuators read what they committed to, nothing else).
     pub fn prepared_for(&self, guard: &ExecutionGuard) -> Option<PreparedAction> {
@@ -916,6 +933,20 @@ impl ExecutionGuard {
 
     pub fn is_cancelled(&self) -> bool {
         self.cancel.is_cancelled()
+    }
+
+    /// Whether the commitment is still covered (see
+    /// [`CommitmentRegistry::still_authorized`]).
+    pub fn still_authorized(&self) -> bool {
+        self.registry.still_authorized(self.id)
+    }
+
+    /// The same question, with the run's cancellation, for what outlives one
+    /// call (a session's proxy threads): true while the run is not cancelled
+    /// and the commitment is still covered.
+    pub fn liveness(&self) -> Arc<dyn Fn() -> bool + Send + Sync> {
+        let (registry, id, cancel) = (self.registry.clone(), self.id, self.cancel.clone());
+        Arc::new(move || !cancel.is_cancelled() && registry.still_authorized(id))
     }
 
     /// End the commitment with `outcome`. Whether the run was cancelled

@@ -13,6 +13,10 @@
 //! The proxy has no credentials to protect and admits nothing the session's
 //! grant does not; a local process that used it could reach only the
 //! granted public origins, which it can reach directly anyway.
+//!
+//! It goes out only while the session may: once its run is cancelled or
+//! its grant is revoked or expires, no connection is admitted, opened or
+//! written to, and the proxy stops, ending every tunnel.
 
 use crate::authority::AuthorityError;
 use crate::egress::destination::{resolve_checked, Destination, Resolver};
@@ -40,6 +44,9 @@ pub(crate) struct OriginPolicy {
     /// Only test fixtures reach loopback servers.
     pub allow_private: bool,
     pub resolver: Arc<dyn Resolver>,
+    /// Whether the session may still go out: false once its run is
+    /// cancelled, its grants are revoked or expire, or the policy changes.
+    pub live: Arc<dyn Fn() -> bool + Send + Sync>,
 }
 
 impl OriginPolicy {
@@ -81,6 +88,12 @@ impl BrowserProxy {
                 .name("nexus-p3-browser-proxy".into())
                 .spawn(move || {
                     while !stop.load(Ordering::SeqCst) {
+                        // A session that may no longer go out stops its
+                        // proxy, and with it every open tunnel.
+                        if !(policy.live)() {
+                            stop.store(true, Ordering::SeqCst);
+                            break;
+                        }
                         match listener.accept() {
                             Ok((client, _)) => {
                                 if active.load(Ordering::SeqCst) >= MAX_CONNECTIONS {
@@ -179,19 +192,39 @@ fn refuse(mut client: TcpStream) -> bool {
     false
 }
 
-fn connect(addresses: &[std::net::SocketAddr]) -> Option<TcpStream> {
-    addresses
-        .iter()
-        .find_map(|address| TcpStream::connect_timeout(address, CONNECT_TIMEOUT).ok())
+/// Whether a connection may take its next step out: the proxy has not
+/// stopped and the session may still go out.
+fn may_go_on(policy: &OriginPolicy, stop: &AtomicBool) -> bool {
+    !stop.load(Ordering::SeqCst) && (policy.live)()
+}
+
+fn connect(addresses: &[std::net::SocketAddr], go_on: impl Fn() -> bool) -> Option<TcpStream> {
+    for address in addresses {
+        if !go_on() {
+            return None;
+        }
+        if let Ok(stream) = TcpStream::connect_timeout(address, CONNECT_TIMEOUT) {
+            return Some(stream);
+        }
+    }
+    None
 }
 
 /// Serve one client connection; true if it was admitted.
-fn serve(mut client: TcpStream, policy: &OriginPolicy, stop: &Arc<AtomicBool>) -> bool {
+pub(super) fn serve(
+    mut client: TcpStream,
+    policy: &Arc<OriginPolicy>,
+    stop: &Arc<AtomicBool>,
+) -> bool {
+    let go_on = || may_go_on(policy, stop);
     let _ = client.set_read_timeout(Some(POLL));
     let _ = client.set_write_timeout(Some(IDLE));
     let Some((head, rest)) = read_head(&mut client, stop) else {
         return refuse(client);
     };
+    if !go_on() {
+        return refuse(client);
+    }
     let mut lines = head.split("\r\n");
     let request_line = lines.next().unwrap_or_default();
     let mut parts = request_line.split(' ');
@@ -210,9 +243,12 @@ fn serve(mut client: TcpStream, policy: &OriginPolicy, stop: &Arc<AtomicBool>) -
         let Some(addresses) = policy.admit(&destination) else {
             return refuse(client);
         };
-        let Some(upstream) = connect(&addresses) else {
+        let Some(upstream) = connect(&addresses, go_on) else {
             return refuse(client);
         };
+        if !go_on() {
+            return refuse(client);
+        }
         if client
             .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
             .is_err()
@@ -220,10 +256,10 @@ fn serve(mut client: TcpStream, policy: &OriginPolicy, stop: &Arc<AtomicBool>) -
             return false;
         }
         let mut upstream = upstream;
-        if !rest.is_empty() && upstream.write_all(&rest).is_err() {
+        if !rest.is_empty() && (!go_on() || upstream.write_all(&rest).is_err()) {
             return false;
         }
-        tunnel(client, upstream, stop);
+        tunnel(client, upstream, policy, stop);
         return true;
     }
     // Plain http, absolute form, only to a granted http origin.
@@ -236,7 +272,7 @@ fn serve(mut client: TcpStream, policy: &OriginPolicy, stop: &Arc<AtomicBool>) -
     let Some(addresses) = policy.admit(&destination) else {
         return refuse(client);
     };
-    let Some(mut upstream) = connect(&addresses) else {
+    let Some(mut upstream) = connect(&addresses, go_on) else {
         return refuse(client);
     };
     let path = match destination.url().query() {
@@ -261,18 +297,27 @@ fn serve(mut client: TcpStream, policy: &OriginPolicy, stop: &Arc<AtomicBool>) -
         forwarded.push_str("\r\n");
     }
     forwarded.push_str("Connection: close\r\n\r\n");
+    if !go_on() {
+        return refuse(client);
+    }
     if upstream.write_all(forwarded.as_bytes()).is_err()
-        || (!rest.is_empty() && upstream.write_all(&rest).is_err())
+        || (!rest.is_empty() && (!go_on() || upstream.write_all(&rest).is_err()))
     {
         return false;
     }
-    tunnel(client, upstream, stop);
+    tunnel(client, upstream, policy, stop);
     true
 }
 
 /// Copy both ways until either side closes, idles out, the cap, or the
-/// proxy stops.
-fn tunnel(client: TcpStream, upstream: TcpStream, stop: &Arc<AtomicBool>) {
+/// proxy stops; nothing more is written once the session may no longer go
+/// out.
+fn tunnel(
+    client: TcpStream,
+    upstream: TcpStream,
+    policy: &Arc<OriginPolicy>,
+    stop: &Arc<AtomicBool>,
+) {
     for stream in [&client, &upstream] {
         let _ = stream.set_read_timeout(Some(POLL));
         let _ = stream.set_write_timeout(Some(IDLE));
@@ -281,23 +326,25 @@ fn tunnel(client: TcpStream, upstream: TcpStream, stop: &Arc<AtomicBool>) {
     else {
         return;
     };
-    let up_stop = stop.clone();
-    let up = std::thread::spawn(move || copy(client_reader, upstream, &up_stop));
-    copy(upstream_reader, client, stop);
+    let (up_policy, up_stop) = (policy.clone(), stop.clone());
+    let up = std::thread::spawn(move || {
+        copy(client_reader, upstream, || may_go_on(&up_policy, &up_stop))
+    });
+    copy(upstream_reader, client, || may_go_on(policy, stop));
     let _ = up.join();
 }
 
-fn copy(mut from: TcpStream, mut to: TcpStream, stop: &AtomicBool) {
+fn copy(mut from: TcpStream, mut to: TcpStream, go_on: impl Fn() -> bool) {
     let mut buffer = [0u8; 16 * 1024];
     let mut total = 0u64;
     let mut quiet_since = Instant::now();
-    while !stop.load(Ordering::SeqCst) {
+    while go_on() {
         match from.read(&mut buffer) {
             Ok(0) => break,
             Ok(n) => {
                 quiet_since = Instant::now();
                 total += n as u64;
-                if total > MAX_TUNNEL || to.write_all(&buffer[..n]).is_err() {
+                if total > MAX_TUNNEL || !go_on() || to.write_all(&buffer[..n]).is_err() {
                     break;
                 }
             }

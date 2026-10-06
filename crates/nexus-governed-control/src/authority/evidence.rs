@@ -140,37 +140,27 @@ pub fn is_plain(text: &str) -> bool {
 /// (which never wraps) shows every line whole, beginning with its marker.
 pub const DIALOG_COLUMNS: usize = 96;
 
-/// Whether `c` is a combining mark of the common ranges (it is drawn over
-/// the character before it).
-fn combining(c: char) -> bool {
-    matches!(
-        c,
-        '\u{0300}'..='\u{036F}'
-            | '\u{1AB0}'..='\u{1AFF}'
-            | '\u{1DC0}'..='\u{1DFF}'
-            | '\u{20D0}'..='\u{20FF}'
-            | '\u{FE20}'..='\u{FE2F}'
-    )
-}
-
 /// `text` made plain for display, in full: hidden characters escaped (`\n`,
 /// `\u{202e}`), a backslash shown doubled (so text cannot pass for an
-/// escape), and a combining mark escaped once two already sit on a
-/// character (a stack of them draws over the lines around it). Nothing is
-/// cut: the authority refuses a line longer than `MAX_FIELD`, so domains
-/// put long values through [`wrapped`] and content the owner must read
-/// through [`quoted`]. What the owner is shown is never shortened.
+/// escape), and in each user-perceived character (an extended grapheme
+/// cluster: a character with everything drawn onto it, in any script) all
+/// but the first three code points escaped, since a stack of marks draws
+/// over the lines around it. Nothing is cut: the authority refuses a line
+/// longer than `MAX_FIELD`, so domains put long values through [`wrapped`]
+/// and content the owner must read through [`quoted`]. What the owner is
+/// shown is never shortened.
 pub fn escaped(text: &str) -> String {
+    use unicode_segmentation::UnicodeSegmentation;
     let mut out = String::new();
-    let mut stacked = 0usize;
-    for c in text.chars() {
-        stacked = if combining(c) { stacked + 1 } else { 0 };
-        if c == '\\' {
-            out.push_str("\\\\");
-        } else if shown(c) && stacked <= 2 {
-            out.push(c);
-        } else {
-            out.extend(c.escape_default());
+    for cluster in text.graphemes(true) {
+        for (index, c) in cluster.chars().enumerate() {
+            if c == '\\' {
+                out.push_str("\\\\");
+            } else if shown(c) && index < 3 {
+                out.push(c);
+            } else {
+                out.extend(c.escape_default());
+            }
         }
     }
     out

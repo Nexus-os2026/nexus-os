@@ -5474,6 +5474,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
+ "unicode-segmentation",
  "url",
  "x11rb",
  "zeroize",

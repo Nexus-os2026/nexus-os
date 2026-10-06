@@ -444,7 +444,7 @@ impl AgentDisplay {
                 (
                     rect,
                     Some(window.id),
-                    format!("window \"{}\"", hint(&window.title)),
+                    format!("window \"{}\"", quoted_title(&window.title)),
                 )
             }
         };
@@ -716,7 +716,11 @@ impl AgentDisplay {
         let mut summary = summary;
         if let Some(target) = &drop_window {
             summary.push(match target {
-                Some(w) => format!("Dropped on window \"{}\" (id {})", hint(&w.title), w.id),
+                Some(w) => format!(
+                    "Dropped on window \"{}\" (id {})",
+                    quoted_title(&w.title),
+                    w.id
+                ),
                 None => "Dropped on the display background".to_string(),
             });
         }
@@ -738,7 +742,7 @@ impl AgentDisplay {
         let parameters = Digest::of("nexus.p3.display.input.v1", &[&canonical]);
         let place = window
             .as_ref()
-            .map(|w| format!("window \"{}\" (id {})", hint(&w.title), w.id))
+            .map(|w| format!("window \"{}\" (id {})", quoted_title(&w.title), w.id))
             .unwrap_or_else(|| "the display background".into());
         let action = PreparedAction {
             kind: CapabilityKind::Input,
@@ -1090,6 +1094,12 @@ impl Input {
     }
 }
 
+/// A window title as the owner reads it, between quotes: shortened like any
+/// hint, with its own quotes escaped so it cannot close them.
+fn quoted_title(text: &str) -> String {
+    hint(text).replace('"', "\\\"")
+}
+
 /// What an action has pressed and not released yet: released on every
 /// exit, so a failed or cancelled action never leaves a key or a button
 /// held down for the next one.
@@ -1098,6 +1108,10 @@ struct Pressed {
     server: Option<Arc<Server>>,
     keys: Vec<u8>,
     buttons: Vec<u8>,
+    /// Where the pointer was when a button went down: an action that ends
+    /// early lets its button go there, so an interrupted drag drops nowhere
+    /// new.
+    pressed_at: Option<(u16, u16)>,
 }
 
 impl Pressed {
@@ -1115,6 +1129,9 @@ impl Drop for Pressed {
         if let Some(server) = &self.server {
             for code in self.keys.iter().rev() {
                 let _ = server.key(*code, false);
+            }
+            if let (false, Some((x, y))) = (self.buttons.is_empty(), self.pressed_at) {
+                let _ = server.pointer(x, y);
             }
             for code in self.buttons.iter().rev() {
                 let _ = server.button(*code, false);
@@ -1187,7 +1204,12 @@ impl PendingEffect for Input {
                 // the keyboard focus or grab the input between the check and
                 // the event.
                 Step::Button(code, press) => {
-                    let _held = if press {
+                    // A drag's release is its effect: it is checked at the
+                    // drop point, under the hold. The client the press went
+                    // to holds the pointer until the release (checked at the
+                    // press), so no other grab can be taken in between.
+                    let drop = self.drop_point.filter(|_| !press);
+                    let _held = if press || drop.is_some() {
                         Some(server.hold().map_err(failed)?)
                     } else {
                         None
@@ -1198,6 +1220,16 @@ impl PendingEffect for Input {
                             || !server.no_active_grab())
                     {
                         return Err(changed());
+                    }
+                    if let Some(point) = drop {
+                        if self.current_target(&server) != self.target
+                            || server.pointer_position() != point
+                        {
+                            return Err(changed());
+                        }
+                    }
+                    if press {
+                        pressed.pressed_at = Some(server.pointer_position());
                     }
                     server.button(code, press).map_err(failed)?;
                     Pressed::note(&mut pressed.buttons, code, press);

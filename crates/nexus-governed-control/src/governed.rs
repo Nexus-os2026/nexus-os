@@ -276,7 +276,8 @@ impl GovernedControl {
     /// stopped; no new run until the owner resumes natively.
     pub fn emergency_stop(&self) -> usize {
         let cancelled = self.control.emergency_stop();
-        self.display.stop();
+        // Recorded, as every display stop is.
+        self.stop_display();
         cancelled
     }
 
@@ -353,17 +354,29 @@ impl GovernedControl {
         // Evidence first: an unrecorded display does not start. An
         // emergency stop that comes while it starts ends it unused.
         let runs = self.authority().runs();
-        self.display.start(
+        let recorded = std::cell::Cell::new(false);
+        let started = self.display.start(
             1280,
             800,
             || {
-                self.authority().record_display(
+                let record = self.authority().record_display(
                     EvidencePhase::DisplayStarted,
                     vec![("size".into(), "1280x800".into())],
-                )
+                );
+                recorded.set(record.is_ok());
+                record
             },
             || runs.is_stopped(),
-        )
+        );
+        // A start recorded but not completed is recorded as ended, so the
+        // evidence never shows a display that is not there.
+        if started.is_err() && recorded.get() {
+            let _ = self.authority().record_display(
+                EvidencePhase::DisplayStopped,
+                vec![("outcome".into(), "the start failed".into())],
+            );
+        }
+        started
     }
 
     /// Stop the agent display (recorded).

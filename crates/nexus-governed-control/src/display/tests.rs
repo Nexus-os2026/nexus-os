@@ -21,9 +21,14 @@ use x11rb::wrapper::ConnectionExt as _;
 use x11rb::COPY_DEPTH_FROM_PARENT;
 
 /// A started agent display (kept with its temporary root), or `None` where
-/// Xvfb is not installed.
+/// Xvfb is not installed. CI installs it (ci.yml), so there a missing Xvfb
+/// fails the tests instead of skipping them.
 fn display() -> Option<(AgentDisplay, TempRoot)> {
     if !std::path::Path::new("/usr/bin/Xvfb").exists() {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "Xvfb is missing: CI must exercise the live agent display"
+        );
         eprintln!("Xvfb is not installed: live agent-display tests are skipped");
         return None;
     }
@@ -852,6 +857,42 @@ fn background_keys_and_grabbed_input_are_refused() {
         .all(|e| !matches!(e, Event::KeyPress(_) | Event::ButtonPress(_))));
 }
 
+/// The input grant tells the owner what never asks: moves and scrolls.
+#[test]
+fn the_input_grant_says_what_never_asks() {
+    for (session_r1, gestures) in [
+        (
+            false,
+            "Every click, drag and key: asks for your approval (R2)",
+        ),
+        (
+            true,
+            "Clicks, drags and keys: without asking you each time (R1)",
+        ),
+    ] {
+        let lines = AgentDisplay::input_scope(10, session_r1)
+            .unwrap()
+            .describe();
+        assert_eq!(
+            lines[2..],
+            [
+                gestures.to_string(),
+                "Pointer moves and scrolls: never ask you (R1)".to_string()
+            ]
+        );
+    }
+}
+
+/// A window title cannot close the quotes the owner reads it between.
+#[test]
+fn a_window_title_cannot_close_its_quotes() {
+    assert_eq!(
+        super::quoted_title(r#"Bank" (id 7), then "Mail"#),
+        r#"Bank\" (id 7), then \"Mail"#
+    );
+    assert_eq!(super::quoted_title(r#"back\" slash"#), r#"back\\\" slash"#);
+}
+
 /// Whatever an action leaves pressed when it ends early is released.
 #[test]
 fn whatever_an_action_left_pressed_is_released() {
@@ -867,6 +908,7 @@ fn whatever_an_action_left_pressed_is_released() {
         server: Some(server.clone()),
         keys: vec![shift],
         buttons: vec![1],
+        pressed_at: None,
     });
     let client = display.test_client();
     let keys = client.query_keymap().unwrap().reply().unwrap().keys;
@@ -874,6 +916,121 @@ fn whatever_an_action_left_pressed_is_released() {
     let root = client.setup().roots[0].root;
     let pointer = client.query_pointer(root).unwrap().reply().unwrap();
     assert!(!pointer.mask.contains(KeyButMask::BUTTON1));
+    // A button pressed somewhere else is let go where it was pressed.
+    server.pointer(40, 40).unwrap();
+    server.button(1, true).unwrap();
+    server.pointer(300, 200).unwrap();
+    drop(super::Pressed {
+        server: Some(server.clone()),
+        keys: Vec::new(),
+        buttons: vec![1],
+        pressed_at: Some((40, 40)),
+    });
+    let pointer = client.query_pointer(root).unwrap().reply().unwrap();
+    assert!(!pointer.mask.contains(KeyButMask::BUTTON1));
+    assert_eq!((pointer.root_x, pointer.root_y), (40, 40));
+}
+
+/// A drag's drop is checked when it happens: a window appearing at the drop
+/// point while the button is down fails the drag, and the button is let go
+/// where it was pressed, so nothing is dropped anywhere new.
+#[test]
+fn an_interrupted_drag_drops_back_where_it_was_picked_up() {
+    let Some((display, _root)) = display() else {
+        return;
+    };
+    let h = harness();
+    grant_perception(&h);
+    grant_input(&h, 10, true);
+    let client = display.test_client();
+    let screen = client.setup().roots[0].clone();
+    let source = client.generate_id().unwrap();
+    client
+        .create_window(
+            COPY_DEPTH_FROM_PARENT,
+            source,
+            screen.root,
+            10,
+            10,
+            100,
+            100,
+            0,
+            WindowClass::INPUT_OUTPUT,
+            0,
+            &CreateWindowAux::new()
+                .background_pixel(screen.white_pixel)
+                .override_redirect(1)
+                .event_mask(EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE),
+        )
+        .unwrap();
+    client.map_window(source).unwrap();
+    client.sync().unwrap();
+    observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
+    let preparation = display
+        .prepare_input(
+            h.control.authority(),
+            h.run,
+            &InputIntent::Drag {
+                from_x: 50,
+                from_y: 50,
+                to_x: 400,
+                to_y: 300,
+            },
+        )
+        .unwrap();
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    // The moment the button goes down, a window covers the drop point.
+    let watcher = std::thread::spawn(move || {
+        let mut seen = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            match client.poll_for_event().unwrap() {
+                Some(Event::ButtonPress(press)) => {
+                    seen.push((true, press.root_x, press.root_y));
+                    window(
+                        &client,
+                        "Cover",
+                        Rect {
+                            x: 350,
+                            y: 250,
+                            width: 100,
+                            height: 100,
+                        },
+                    );
+                }
+                Some(Event::ButtonRelease(release)) => {
+                    seen.push((false, release.root_x, release.root_y));
+                    break;
+                }
+                Some(_) => {}
+                None => std::thread::sleep(Duration::from_millis(1)),
+            }
+        }
+        seen
+    });
+    assert_eq!(
+        h.control.execute(view.id, &h.agent, h.run).unwrap_err(),
+        AuthorityError::Unavailable("the effect failed")
+    );
+    assert_eq!(
+        watcher.join().unwrap(),
+        vec![(true, 50, 50), (false, 50, 50)]
+    );
+    let records = h.evidence.records();
+    let finished = records.iter().rev().find(|r| r.outcome.is_some()).unwrap();
+    assert_eq!(finished.failure, Some("target_changed"));
+    assert_eq!(
+        h.control
+            .authority()
+            .commitments()
+            .view(view.id)
+            .unwrap()
+            .state,
+        CommitmentState::Failed
+    );
 }
 
 /// A drag is bound to where it is dropped as well: the owner is told, and

@@ -30,11 +30,18 @@ impl Resolver for Fixtures {
 /// A browser to drive live, when this host has a Chrome it may launch.
 ///
 /// A Chrome that someone other than root could replace is refused before
-/// any session: the hosted CI runner image makes `/opt` world-writable.
-/// There the refusal is checked, exactly, along with the reason for it,
-/// and the live sessions are skipped.
+/// any session (the hosted runner image makes `/opt` world-writable until
+/// ci.yml restores Chrome's modes). Where that happens the refusal is
+/// checked, exactly, along with the reason for it, and the live sessions
+/// are skipped. CI installs a root-only Chrome, so there a missing or
+/// refused one fails the tests instead of skipping them.
 fn browser() -> Option<(Browser, TempRoot)> {
+    let in_ci = std::env::var_os("CI").is_some();
     if !std::path::Path::new(super::CHROME).exists() {
+        assert!(
+            !in_ci,
+            "Chrome is missing: CI must exercise the live browser"
+        );
         eprintln!("Chrome is not installed: live browser tests are skipped");
         return None;
     }
@@ -49,6 +56,10 @@ fn browser() -> Option<(Browser, TempRoot)> {
             assert_eq!(
                 refused,
                 AuthorityError::Closed("the executable is not in a trusted location")
+            );
+            assert!(
+                !in_ci,
+                "Chrome is refused ({replaceable}): CI must exercise the live browser"
             );
             eprintln!(
                 "Chrome is refused, as it must be ({replaceable}): live browser tests are skipped"
@@ -679,6 +690,124 @@ fn a_stop_ends_the_session_between_its_steps() {
         0,
         "the session is gone"
     );
+    // No process of the session outlives it, not even one that left its
+    // process group: Chrome's crash handlers daemonize, and end with the
+    // browser.
+    let session = root.0.path().display().to_string();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let left = processes_mentioning(&session);
+        if left.is_empty() {
+            break;
+        }
+        assert!(Instant::now() < deadline, "left behind: {left:?}");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// The processes whose command line mentions `text`.
+fn processes_mentioning(text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir("/proc").unwrap().flatten() {
+        let Ok(cmdline) = std::fs::read(entry.path().join("cmdline")) else {
+            continue;
+        };
+        let cmdline = String::from_utf8_lossy(&cmdline).replace('\0', " ");
+        if cmdline.contains(text) {
+            found.push(format!(
+                "{}: {cmdline}",
+                entry.file_name().to_string_lossy()
+            ));
+        }
+    }
+    found
+}
+
+/// Revoking the session's grant ends it before its next step: no further
+/// click reaches the page, and the failure says how far it got.
+#[test]
+fn a_revoked_grant_ends_the_session_before_its_next_step() {
+    let Some((browser, _root)) = browser() else {
+        return;
+    };
+    let server = server();
+    let h = harness();
+    let page = origin(&server);
+    let grant = h
+        .control
+        .authority()
+        .grants()
+        .request(
+            browser
+                .grant_scope(std::slice::from_ref(&page), false)
+                .unwrap(),
+            Duration::from_secs(600),
+            &Yes::new(true),
+        )
+        .unwrap();
+    let intent = BrowserIntent {
+        start_url: format!("{page}/clicks"),
+        steps: (0..20)
+            .map(|_| BrowserStep::Click {
+                selector: "#count".into(),
+            })
+            .collect(),
+    };
+    let preparation = browser.prepare(h.control.authority(), &intent).unwrap();
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    let control = h.control.clone();
+    let (agent, run) = (h.agent.clone(), h.run);
+    let worker = std::thread::spawn(move || control.execute(view.id, &agent, run));
+    let ticks = || {
+        server
+            .received()
+            .iter()
+            .filter(|r| r.path == "/tick")
+            .count()
+    };
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while ticks() == 0 {
+        assert!(Instant::now() < deadline, "the page was never clicked");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    h.control.authority().grants().revoke(grant).unwrap();
+    let at_revocation = ticks();
+    assert_eq!(
+        worker.join().unwrap().unwrap_err(),
+        AuthorityError::Unavailable("the effect failed")
+    );
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(
+        ticks() <= at_revocation + 1,
+        "{} clicks reached the page, {at_revocation} before the revocation",
+        ticks()
+    );
+    assert_eq!(
+        h.control
+            .authority()
+            .commitments()
+            .view(view.id)
+            .unwrap()
+            .state,
+        CommitmentState::Failed
+    );
+    let records = h.evidence.records();
+    let finished = records.iter().rev().find(|r| r.outcome.is_some()).unwrap();
+    assert_eq!(finished.failure, Some("refused"));
+    let detail = &finished
+        .detail
+        .iter()
+        .find(|(k, _)| k == "detail")
+        .unwrap()
+        .1;
+    assert!(
+        detail.starts_with("the grant was revoked or expired (at step ")
+            && detail.ends_with(" of 20)"),
+        "{detail}"
+    );
 }
 
 /// A selector acts only when it matches exactly one element, and a field
@@ -772,6 +901,7 @@ fn the_proxy_caps_its_connections_and_ends_them_with_the_session() {
         origins: vec![],
         allow_private: true,
         resolver: Arc::new(Fixtures),
+        live: Arc::new(|| true),
     })
     .unwrap();
     let address: SocketAddr = format!("127.0.0.1:{}", proxy.port()).parse().unwrap();
@@ -811,6 +941,172 @@ fn the_proxy_caps_its_connections_and_ends_them_with_the_session() {
             String::from_utf8_lossy(&answer)
         );
     }
+}
+
+/// A loopback upstream that reports every byte that reaches it: one
+/// message per connection, when the connection ends (or after two quiet
+/// seconds).
+fn recording_upstream() -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
+    use std::io::Read;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                break;
+            };
+            let sender = sender.clone();
+            std::thread::spawn(move || {
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut seen = Vec::new();
+                let mut chunk = [0u8; 1024];
+                while let Ok(n) = stream.read(&mut chunk) {
+                    if n == 0 {
+                        break;
+                    }
+                    seen.extend_from_slice(&chunk[..n]);
+                }
+                let _ = sender.send(seen);
+            });
+        }
+    });
+    (port, receiver)
+}
+
+/// A connection goes no further once its session may not: wherever the
+/// session stops being live (before the request is admitted, between
+/// resolving and connecting, after connecting, before the body), nothing
+/// more reaches the upstream.
+#[test]
+fn a_proxy_connection_goes_no_further_once_the_session_may_not() {
+    use super::proxy::{serve, OriginPolicy};
+    use std::io::{Read, Write};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    // `live` answers yes `yes` times, then no.
+    let policy = |port: u16, yes: usize| {
+        let asked = Arc::new(AtomicUsize::new(0));
+        Arc::new(OriginPolicy {
+            origins: vec![
+                format!("http://fixture.nexus.invalid:{port}"),
+                format!("https://fixture.nexus.invalid:{port}"),
+            ],
+            allow_private: true,
+            resolver: Arc::new(Fixtures),
+            live: Arc::new(move || asked.fetch_add(1, Ordering::SeqCst) < yes),
+        })
+    };
+    // Send `request` through a proxy connection; what the client got back,
+    // and every connection's bytes the upstream saw.
+    let run = |request: &dyn Fn(u16) -> Vec<u8>, yes: usize| {
+        let (port, upstream) = recording_upstream();
+        let policy = policy(port, yes);
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let mut client = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (accepted, _) = listener.accept().unwrap();
+        client.write_all(&request(port)).unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let served = std::thread::spawn(move || serve(accepted, &policy, &stop));
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut answer = Vec::new();
+        let _ = client.read_to_end(&mut answer);
+        assert!(!served.join().unwrap(), "refused");
+        let mut seen = Vec::new();
+        while let Ok(bytes) = upstream.recv_timeout(Duration::from_secs(1)) {
+            seen.push(bytes);
+        }
+        (answer, seen)
+    };
+    let post = |port: u16| {
+        format!(
+            "POST http://fixture.nexus.invalid:{port}/submit HTTP/1.1\r\n\
+             Host: fixture.nexus.invalid:{port}\r\nContent-Length: 6\r\n\r\nsecret"
+        )
+        .into_bytes()
+    };
+    let tunnel = |port: u16| {
+        format!(
+            "CONNECT fixture.nexus.invalid:{port} HTTP/1.1\r\n\
+             Host: fixture.nexus.invalid:{port}\r\n\r\nsecret"
+        )
+        .into_bytes()
+    };
+    for yes in 0..3 {
+        let (answer, seen) = run(&post, yes);
+        assert!(answer.starts_with(b"HTTP/1.1 403"), "{yes}: {answer:?}");
+        assert!(seen.iter().all(Vec::is_empty), "{yes}: {seen:?}");
+    }
+    // Live until the head is forwarded: the body is not.
+    let (_, seen) = run(&post, 3);
+    let seen: Vec<u8> = seen.concat();
+    assert!(seen.starts_with(b"POST /submit HTTP/1.1\r\n"), "{seen:?}");
+    assert!(!seen.windows(6).any(|w| w == b"secret"), "{seen:?}");
+    for yes in 0..4 {
+        let (answer, seen) = run(&tunnel, yes);
+        assert!(
+            answer.is_empty() || answer.starts_with(b"HTTP/1.1 "),
+            "{yes}: {answer:?}"
+        );
+        assert!(seen.iter().all(Vec::is_empty), "{yes}: {seen:?}");
+    }
+}
+
+/// A session that may no longer go out stops its proxy: new connections
+/// are refused and an open tunnel carries nothing more.
+#[test]
+fn the_proxy_stops_when_its_session_may_no_longer_go_out() {
+    use super::proxy::{BrowserProxy, OriginPolicy};
+    use std::io::{Read, Write};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let (port, upstream) = recording_upstream();
+    let live = Arc::new(AtomicBool::new(true));
+    let proxy = {
+        let live = live.clone();
+        BrowserProxy::start(OriginPolicy {
+            origins: vec![format!("https://fixture.nexus.invalid:{port}")],
+            allow_private: true,
+            resolver: Arc::new(Fixtures),
+            live: Arc::new(move || live.load(Ordering::SeqCst)),
+        })
+        .unwrap()
+    };
+    let address: SocketAddr = format!("127.0.0.1:{}", proxy.port()).parse().unwrap();
+    let mut client = std::net::TcpStream::connect(address).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    client
+        .write_all(
+            format!(
+                "CONNECT fixture.nexus.invalid:{port} HTTP/1.1\r\n\
+                 Host: fixture.nexus.invalid:{port}\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let mut established = [0u8; 39];
+    client.read_exact(&mut established).unwrap();
+    assert_eq!(&established, b"HTTP/1.1 200 Connection Established\r\n\r\n");
+    client.write_all(b"before").unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    live.store(false, Ordering::SeqCst);
+    client.write_all(b"after").unwrap();
+    // The tunnel ends, and the proxy no longer listens.
+    let mut rest = Vec::new();
+    let _ = client.read_to_end(&mut rest);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while std::net::TcpStream::connect(address).is_ok() {
+        assert!(Instant::now() < deadline, "the proxy still listens");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        upstream.recv_timeout(Duration::from_secs(5)).unwrap(),
+        b"before"
+    );
 }
 
 /// At most four sessions of one control run at once (the number the

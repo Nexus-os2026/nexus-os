@@ -639,6 +639,44 @@ fn a_detached_run_finishes_when_nothing_of_it_waits() {
     assert!(server.received().is_empty());
 }
 
+/// A display start that was recorded but did not complete is recorded as
+/// ended (here the runtime root refuses the display's directory).
+#[cfg(target_os = "linux")]
+#[test]
+fn a_failed_display_start_is_recorded_as_ended() {
+    use crate::authority::evidence::EvidencePhase;
+    use std::os::unix::fs::PermissionsExt;
+    let (control, evidence, root) = control();
+    control
+        .request_grant(
+            &GrantRequest::Perception,
+            Duration::from_secs(600),
+            &Yes::new(true),
+        )
+        .unwrap();
+    let path = root.0.path().to_path_buf();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let started = control.start_display();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(started.is_err(), "{started:?}");
+    assert!(control.status().display.is_none());
+    let display: Vec<EvidencePhase> = evidence
+        .records()
+        .iter()
+        .map(|r| r.phase)
+        .filter(|p| {
+            matches!(
+                p,
+                EvidencePhase::DisplayStarted | EvidencePhase::DisplayStopped
+            )
+        })
+        .collect();
+    assert_eq!(
+        display,
+        [EvidencePhase::DisplayStarted, EvidencePhase::DisplayStopped]
+    );
+}
+
 /// The agent display is a process Phase Three owns: starting it needs a
 /// live perception or input grant and no emergency stop, and its start and
 /// stop are recorded.
@@ -664,6 +702,13 @@ fn starting_the_agent_display_needs_a_grant_and_is_recorded() {
     );
     control.resume(&Yes::new(true)).unwrap();
     if !std::path::Path::new("/usr/bin/Xvfb").exists() {
+        // Linux CI installs Xvfb (ci.yml): there a missing one fails the
+        // test. (The agent display is Linux-only.)
+        assert!(
+            !cfg!(target_os = "linux") || std::env::var_os("CI").is_none(),
+            "Xvfb is missing: CI must start the agent display"
+        );
+        eprintln!("Xvfb is not installed: the display start is not exercised here");
         return;
     }
     control.start_display().unwrap();
@@ -671,4 +716,21 @@ fn starting_the_agent_display_needs_a_grant_and_is_recorded() {
     let phases: Vec<EvidencePhase> = evidence.records().iter().map(|r| r.phase).collect();
     assert!(phases.contains(&EvidencePhase::DisplayStarted));
     assert!(phases.contains(&EvidencePhase::DisplayStopped));
+    // The emergency stop records the display it stops, after the stop.
+    control.start_display().unwrap();
+    let before = evidence.records().len();
+    control.emergency_stop();
+    assert!(control.status().display.is_none());
+    let after: Vec<EvidencePhase> = evidence.records()[before..]
+        .iter()
+        .map(|r| r.phase)
+        .collect();
+    assert_eq!(
+        after
+            .iter()
+            .filter(|p| **p == EvidencePhase::DisplayStopped)
+            .count(),
+        1,
+        "{after:?}"
+    );
 }
