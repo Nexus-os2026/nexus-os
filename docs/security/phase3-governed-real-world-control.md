@@ -103,7 +103,11 @@ exactly once.
   of its own then removes the agents' loops (only the loops they had then,
   never one started after the stop), which may wait while any agent's cycle
   holds the loop lock. A scheduled tick already under way when the owner
-  stops the agent does not bring it back, and starts no loop for it.
+  stops the agent does not bring it back, and starts no loop for it (its
+  goal is recorded as skipped; a paused agent's ticks run, as pausing
+  keeps schedules). A stopped agent's loop runs no further cycle, so a
+  loop whose start was under way when the owner stopped the agent ends at
+  its first cycle.
   Ending an agent's goal cancels it in Phase Three at once and removes its
   loop the same way, under every spelling; it leaves the agent and its
   schedule, so a scheduled goal may start it again. A
@@ -118,8 +122,12 @@ exactly once.
   each run's Cancel, the display's Stop) stay usable while an approved
   effect runs: every command that reaches the agent loops' lock (consent
   decisions, goal assignment, review mode, HiveMind sessions) runs off the
-  interface thread (`p3_g10_01` follows every chain of calls to it), and
-  consent decisions are still made one at a time. Quitting the desktop
+  interface thread (`p3_g10_01` follows every chain of direct calls and
+  function values to it), a HiveMind session on a thread of its own (so
+  the loops of its sub-tasks can run), and consent decisions are still made
+  one at a time. A HiveMind session gives a stopped agent no sub-task, a
+  sub-task ends when its agent is stopped, and the session's own time
+  limit ends only that sub-task's goal. Quitting the desktop
   refuses every new run and display start, cancels every open run, waits
   up to five seconds for executing effects and a display start under way
   to end, and stops the agent display. A display stop always counts: a
@@ -136,8 +144,9 @@ commitment prepared, approved, declined, authorized, denied, started,
 finished, expired, revoked, lease issued, credential released, emergency
 stop, resumed, display started and stopped) is appended to the existing
 hash-chained audit trail as a `p3.action.evidence` event before the step
-proceeds; a display start that does not complete is recorded as ended, and
-so is the display an emergency stop ends. Records carry
+proceeds; a display start that does not complete is recorded as ended
+(stopped while it started, when a stop or quitting overtook it), and so is
+the display an emergency stop ends. Records carry
 identities, classes, digests and bounded, plain text only: never a secret,
 a request or response body, typed text, pixels or audio. A commitment's
 parameters digest is salted with a nonce kept only in memory, so a record
@@ -170,10 +179,13 @@ not rendered width (wide text may need more scrolling).
 The runtime root holding every scratch directory is refused when a
 directory above it could be changed by another user (owned by someone other
 than root or the user, or writable by others without the sticky bit), so
-no one else can swap a scratch directory for one of theirs. Directories
-Nexus creates on the way are private (0700). A `~/.nexus` that already
-exists group-writable (made under umask 002) leaves Phase Three unavailable
-until it is made private.
+no one else can swap a scratch directory for one of theirs. The root must
+be this process's own (a path renamed to lead elsewhere is refused).
+Directories Nexus creates on the way are private (0700), and the desktop
+makes its own state directory (`~/.nexus`) private before opening the root,
+as writing its identity does. Any other directory above the root that
+another user could change (a group-writable home, say) leaves Phase Three
+unavailable.
 
 There is no shell, interpreter, container or code runner (`ShellCommand`,
 `DockerCommand` and `CodeExecute` stay closed). A tool is code: a key, one
@@ -251,8 +263,8 @@ connection once the run is cancelled or the session's grant is revoked or
 expires (checked after a request is read, after it is admitted, between
 connection attempts and before every write upstream; data already handed
 to the kernel, or a write already under way, may still complete), and then
-carries nothing more, ending every tunnel (a connection already being
-opened may complete its handshake, and carries nothing); it keeps its port,
+carries nothing more, ending every tunnel (a name lookup or a connection
+already under way may complete, and carries nothing); it keeps its port,
 closing every new connection unserved, until the session ends, so no other
 process can take the port while the browser uses it. Once a session has
 reached its start page, a failure or a cancellation is recorded with where
@@ -286,12 +298,16 @@ drag is bound to the window it is dropped on as well, and its release is
 checked at the drop point under the same hold; whatever an action pressed
 is released on every way out of it, and one action runs at a time. A
 button an interrupted action still holds is let go, with the server held,
-on the window it was pressed on (at the press point, or another point
-where that window is still on top); if that window is entirely covered, on
-the bare display; only if neither exists is it let go at the press point,
-after an Escape (which cancels a drag in most toolkits) if the keyboard
-focus is on the window it was pressed on (never a key that follows the
-pointer onto another window). The grant's step budget is spent at the effect.
+where it was pressed while the window it was pressed on, or another window
+of the same application (a drag image, its popup), is on top there: a drag
+let go where it began moves nothing. If another application's window
+covers that point, an Escape (which cancels a drag in most toolkits) goes
+first to the window it was pressed on when the keyboard focus is there,
+and the button is let go where it was pressed; otherwise it is let go on
+the bare display (a corner no window covers), where a drop reaches no
+window, and only with no such corner left where it was pressed. No key is
+sent that would follow the pointer onto another window, or go to the
+display background. The grant's step budget is spent at the effect.
 Moves and scrolls are R1, and the input grant says so; clicks, drags and
 keys are R2 unless the owner granted R1 input. Typed text is shown for approval and recorded only as a
 digest. `ComputerAction` is an orchestrator: each step is its own
@@ -391,7 +407,8 @@ macro name. `p3_g6_10` pins the files that declare foreign functions
 `#[link_name]` and any foreign declaration of a process, network (name
 resolution and the resolver's query functions included), signal,
 raw-syscall or loader function (a local `extern` would escape the
-resolver). `p3_g6_09` pins the desktop's reach into the embedded Nexus Code
+resolver), and pins by name every foreign function those files declare,
+so a new declaration fails whatever it is. `p3_g6_09` pins the desktop's reach into the embedded Nexus Code
 application (it lists tools and configures a router slot; its router, tool
 execution, MCP manager and self-improvement run only behind the closed
 `nx_*` commands). `p3_g6_11` pins that the global emergency key, every stop
@@ -405,7 +422,9 @@ unpinned), and `p3_g9_02` that the agent display's X connection is made
 only on its checked socket, with its cookie, `p3_g9_03` that a browser
 session goes out only while it may, and `p3_g10_01` that no command the
 interface thread runs, in any desktop file, reaches the agent loops' lock
-through any chain of desktop functions.
+through any chain of direct calls or function values among desktop
+functions (attributes are read with their literals blanked, `cfg_attr`
+included, and a thread that is joined counts as the caller).
 
 Routes closed or repaired by Phase Three (`Closure::GovernedRoute` unless
 stated):
@@ -467,7 +486,16 @@ stated):
 - **Telegram is not migrated** and stays closed.
 - **Drags whose toolkit maps a drag image under the pointer fail
   closed.** The release is checked against the windows at the drop point,
-  and a drag image there reads as a changed target.
+  and a drag image there reads as a changed target; the button is then let
+  go where the drag began.
+- **An interrupted drag's release is a best effort.** Let go on the bare
+  display, a manipulation that follows the pointer (a slider, a selection,
+  a window moved by its title bar) takes that corner's position. With no
+  bare corner left (one window spanning the display's corners) and the
+  keyboard focus not on the source, a drag-and-drop may drop on the window
+  covering the press point. Windows are judged by their rectangles (input
+  shapes are ignored), and the bare display at its four corners. The
+  release, its moves and any Escape are not recorded as evidence.
 - **Confirmation windows queue.** One is open at a time; a later one
   (Resume included) waits until the open one is answered, and an emergency
   stop does not close an open window: the action it would approve was
@@ -477,14 +505,28 @@ stated):
   (a model call or a download, not the agent loops' lock). The global
   emergency key works meanwhile on X11; the page needs the interface
   thread.
+- **An owner's stop does not cancel a HiveMind session.** Its sub-tasks for
+  stopped agents are refused at once (one already running ends with its
+  agent), and the session ends once more than half of them have failed.
+  `cancel_hivemind` reaches only a session that has ended (the kernel
+  stores a session when it ends).
+- **The stop's loop removal can end a goal given right after the stop.**
+  What it removes is decided when the stop is made, and the removal waits
+  for the loop lock: if the owner restarts the agent and gives it a goal
+  while another agent's cycle holds that lock, the new goal may be the one
+  removed (the owner gives it again).
 - **A display Stop that comes before a pending start begins is overtaken.**
   A start waits for the runtime to pick it up; a Stop pressed before then
-  finds nothing to stop, and the display then starts (and is recorded):
-  pressing Stop again stops it.
+  stops only a display already running, and the pending start then brings
+  one up (recorded): pressing Stop again stops it.
 - **Quitting during a display start longer than its wait** leaves that
-  start's record without an end (the display ends with the desktop).
-- **Window titles may contain characters that look like quotes.** The
-  window's id at the end of its line is what identifies it.
+  start's record without an end. The display then ends with the desktop,
+  by its parent-death signal and without its own cleanup: its lock and
+  socket in `/tmp` and its scratch directory (with its cookie, private to
+  the user) remain until removed.
+- **Window titles may contain characters that look like quotes.** A title
+  only selects a window: the window's id is what an action binds (a drop
+  line also shows it).
 - **The global emergency key is X11-only.** It is registered with an X11
   key grab: under Wayland it fires only while an XWayland window has the
   focus. The Phase Three page's emergency stop works under both.
@@ -511,7 +553,8 @@ stated):
 - **Session processes have no resource limits.** The X server and Chrome
   run without per-process limits; concurrent browser sessions are capped at
   four and there is one agent display.
-- **A crash leaves debris.** Quitting stops Phase Three cleanly; a crash
+- **A crash leaves debris.** Quitting stops Phase Three cleanly (but see a
+  display start longer than its wait, above); a crash
   leaves the display's lock and socket, session profiles and scratch
   directories (all private to the user) until removed.
 - **"Observe before input" is procedural.** Input needs an observation of
@@ -533,7 +576,10 @@ stated):
   and build scripts generally, are outside them (no process, network or
   loader call in the C code today); the two generated manifests that
   production includes are pinned. The latent guard sees paths and a few
-  named methods, not every method call on a value.
+  named methods, not every method call on a value. `p3_g10_01` follows
+  direct calls and function values that are bound to a name or passed as a
+  first argument; a function stored in a structure, or called through a
+  trait object, is not followed.
 - **CI compiles Linux only.** Windows is type-checked and the CRLF checkout
   simulated locally for every candidate. Under CI, the live display,
   browser and speech tests fail rather than skip if their program is
