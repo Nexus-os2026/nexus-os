@@ -215,6 +215,38 @@ test('generated single-page project builds only from Nexus toolchain dependencie
   assert.equal(fs.existsSync(path.join(f.projectRoot, 'dist')), false);
 });
 
+// Candidate 10: exercise the parser override through the actual trusted build,
+// including selectors supplied as project data, with hostile config fixtures.
+test('generated project keeps utilities, variants, apply and complex nested CSS', async () => {
+  const f = fixture(SINGLE_PAGE, {
+    'src/pages/Home.tsx':
+      'export default function Home() { return <main className="flex hover:bg-blue-500 md:grid group-hover:font-bold w-[13px] card primary"><span className="child:token">NEXUS_SELECTOR_COMPAT</span></main> }',
+    'src/index.css': String.raw`
+      @tailwind utilities;
+      .card:is(.primary,.secondary):not([data-note="comma, and )"]) {
+        @apply px-4 font-bold;
+        & > .child\:token:hover { @apply text-red-500; }
+      }
+    `,
+  });
+  try {
+    const out = await trustedBuild(f);
+    assert.match(out.js, /NEXUS_SELECTOR_COMPAT/);
+    assert.match(out.css, /display:\s*flex/);
+    assert.match(out.css, /display:\s*grid/);
+    assert.ok(out.css.includes(String.raw`.hover\:bg-blue-500:hover`));
+    assert.match(out.css, /padding-left:\s*1rem/);
+    assert.match(out.css, /font-weight:\s*700/);
+    assert.match(out.css, /width:\s*13px/);
+    assert.ok(out.css.includes(String.raw`.child\:token:hover`));
+    assert.doesNotMatch(out.css, /@apply|@tailwind/);
+    assert.deepEqual(executedMarkers(f), []);
+    assert.equal(fs.existsSync(path.join(f.projectRoot, 'node_modules')), false);
+  } finally {
+    fs.rmSync(f.base, { recursive: true, force: true });
+  }
+});
+
 test('generated multi-page project resolves react-router-dom from the toolchain', async () => {
   const f = fixture(MULTI_PAGE);
   const out = await trustedBuild(f);
