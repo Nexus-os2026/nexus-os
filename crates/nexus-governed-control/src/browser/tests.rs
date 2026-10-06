@@ -96,6 +96,13 @@ const CLICKS: &str = r#"<!doctype html><html><body>
 <input id="sneaky" onfocus="this.type='password'">
 </body></html>"#;
 
+/// Enter on the link opens another window (a trusted key press), and the
+/// page marks itself a moment later.
+const POPUP: &str = r#"<!doctype html><html><body>
+<a id="away" href="/" target="_blank" rel="opener" onclick="setTimeout(()=>{const p=document.createElement('p');p.id='later';document.body.append(p)},300)">away</a>
+<h1 id="title">Opener</h1>
+</body></html>"#;
+
 const PAGE: &str = r#"<!doctype html><html><head><title>Fixture</title></head><body>
 <h1 id="title">Hello governed</h1>
 <img src="http://blocked.nexus.invalid:PORT/tracker.png">
@@ -135,6 +142,7 @@ fn server() -> TestServer {
             "/hostile" => html(HOSTILE),
             "/escape" => html("<script>location='http://evil.nexus.invalid:PORT/steal'</script>"),
             "/clicks" => html(CLICKS),
+            "/popup" => html(POPUP),
             "/tick" => Reply::ok("tick"),
             "/slow" => Reply {
                 delay: Duration::from_secs(20),
@@ -713,6 +721,45 @@ fn a_step_acts_on_exactly_one_element_and_never_on_a_password_field() {
         assert_eq!(report["steps"][1]["result"], refused, "{report}");
         assert_eq!(report["completed"], false);
     }
+}
+
+/// A window a step opens is closed before the next step, found by listing
+/// the browser's pages rather than from events a page could crowd out.
+#[test]
+fn a_window_a_step_opens_is_closed_before_the_next_step() {
+    let Some((browser, _root)) = browser() else {
+        return;
+    };
+    let server = server();
+    let page = origin(&server);
+    let h = harness();
+    grant(&h, &browser, std::slice::from_ref(&page));
+    let out = run(
+        &h,
+        &browser,
+        BrowserIntent {
+            start_url: format!("{page}/popup"),
+            steps: vec![
+                BrowserStep::Press {
+                    selector: "#away".into(),
+                    key: "enter".into(),
+                },
+                BrowserStep::WaitFor {
+                    selector: Some("#later".into()),
+                    timeout_ms: Some(5_000),
+                },
+                BrowserStep::ExtractText {
+                    selector: "#title".into(),
+                },
+            ],
+        },
+        true,
+    )
+    .unwrap();
+    let report: Value = serde_json::from_str(out.text.as_deref().unwrap()).unwrap();
+    assert_eq!(report["completed"], true, "{report}");
+    assert_eq!(report["popups_closed"], 1, "{report}");
+    assert_eq!(report["steps"][3]["text"], "Opener", "{report}");
 }
 
 /// The session's proxy serves at most `MAX_CONNECTIONS` clients at once and
