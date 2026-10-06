@@ -6727,33 +6727,60 @@ fn p3_g6_13_every_production_module_is_a_scanned_source() {
         .map(|(file, _)| file.clone())
         .chain(NAME_SKIPPED_MODULES.iter().map(|file| file.to_string()))
         .collect();
-    // Every target a manifest names is below its crate's `src`.
-    for (file, _) in workspace_sources() {
-        if !file.ends_with("/src/lib.rs") && !file.ends_with("/src/main.rs") {
+    // Every production crate's targets, from its manifest: what Cargo
+    // infers (`src/lib.rs`, `src/main.rs`, `src/bin`) and every `[lib]` or
+    // `[[bin]]` path, which must lie below `src`. Each is a scanned source,
+    // and no crate is a proc-macro (code that no guard reads).
+    let mut roots = BTreeSet::new();
+    for manifest in workspace_manifests(true) {
+        let crate_dir = manifest.strip_suffix("Cargo.toml").unwrap().to_string();
+        let mut section = String::new();
+        let mut package = false;
+        for line in workspace_file(&manifest).lines() {
+            let line = line.split('#').next().unwrap_or_default().trim();
+            if line.starts_with('[') {
+                section = line.to_string();
+                package |= line == "[package]";
+                continue;
+            }
+            let compact: String = line.split_whitespace().collect();
+            assert!(
+                compact != "proc-macro=true" && compact != "proc_macro=true",
+                "{manifest}: a proc-macro crate"
+            );
+            if (section == "[lib]" || section == "[[bin]]") && compact.starts_with("path=") {
+                let value = line.split('"').nth(1).unwrap_or_default();
+                assert!(value.starts_with("src/"), "{manifest}: a target at {value}");
+                roots.insert(format!("{crate_dir}{value}"));
+            }
+        }
+        if !package {
             continue;
         }
-        let manifest = workspace_file(
-            &file
-                .replace("/src/lib.rs", "/Cargo.toml")
-                .replace("/src/main.rs", "/Cargo.toml"),
-        );
-        let mut section = "";
-        for line in manifest.lines() {
-            let line = line.trim();
-            if line.starts_with('[') {
-                section = line;
-            } else if (section == "[lib]" || section == "[[bin]]") && line.starts_with("path") {
-                let value = line.split('"').nth(1).unwrap_or_default();
-                assert!(value.starts_with("src/"), "{file}: a target at {value}");
+        for default in ["src/lib.rs", "src/main.rs"] {
+            if root.join(&crate_dir).join(default).is_file() {
+                roots.insert(format!("{crate_dir}{default}"));
+            }
+        }
+        if let Ok(entries) = std::fs::read_dir(root.join(&crate_dir).join("src/bin")) {
+            for path in entries.flatten().map(|entry| entry.path()) {
+                let name = path.file_name().unwrap().to_string_lossy().into_owned();
+                if path.is_file() && name.ends_with(".rs") {
+                    roots.insert(format!("{crate_dir}src/bin/{name}"));
+                } else if path.join("main.rs").is_file() {
+                    roots.insert(format!("{crate_dir}src/bin/{name}/main.rs"));
+                }
             }
         }
     }
+    for target in &roots {
+        assert!(
+            scanned.contains(target),
+            "{target}: a crate target no guard scans"
+        );
+    }
     // The module tree, from every crate root: (file, loaded through `#[path]`).
-    let mut queue: Vec<(String, bool)> = scanned
-        .iter()
-        .filter(|file| crate_root(file))
-        .map(|file| (file.clone(), false))
-        .collect();
+    let mut queue: Vec<(String, bool)> = roots.iter().map(|file| (file.clone(), false)).collect();
     assert!(queue.len() > 60, "{} crate roots", queue.len());
     let mut seen = BTreeSet::new();
     let mut includes = BTreeSet::new();
@@ -6768,7 +6795,7 @@ fn p3_g6_13_every_production_module_is_a_scanned_source() {
         let dir = path.parent().unwrap();
         // rustc treats every `#[path]` file as a `mod.rs`: its own modules
         // are its siblings.
-        let mod_rs = path.file_name().unwrap() == "mod.rs" || crate_root(&file) || path_loaded;
+        let mod_rs = path.file_name().unwrap() == "mod.rs" || roots.contains(&file) || path_loaded;
         let own_dir = if mod_rs {
             dir.to_path_buf()
         } else {
@@ -6974,26 +7001,46 @@ fn module_declarations(src: &str) -> (Vec<ModuleDeclaration>, Vec<String>) {
     (declarations, includes)
 }
 
-/// Whether `file` is a crate's target root: `src/lib.rs`, `src/main.rs` or a
-/// `src/bin` target.
-fn crate_root(file: &str) -> bool {
+/// Every workspace `Cargo.toml` (workspace-relative, `/`-separated), build
+/// output and dependencies aside; `production` also leaves out the
+/// directories that hold no production source (`NOT_PRODUCTION_DIRS`).
+fn workspace_manifests(production: bool) -> Vec<String> {
+    fn walk(
+        root: &std::path::Path,
+        dir: &std::path::Path,
+        production: bool,
+        out: &mut Vec<String>,
+    ) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                let skipped = name.starts_with('.')
+                    || name == "target"
+                    || name == "node_modules"
+                    || (production && NOT_PRODUCTION_DIRS.contains(&name.as_str()));
+                if !skipped {
+                    walk(root, &path, production, out);
+                }
+            } else if name == "Cargo.toml" {
+                out.push(
+                    path.strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
+            }
+        }
+    }
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let path = std::path::Path::new(file);
-    let Some(crate_dir) = path
-        .ancestors()
-        .skip(1)
-        .find(|dir| root.join(dir).join("Cargo.toml").is_file())
-    else {
-        return false;
-    };
-    let Ok(below) = path.strip_prefix(crate_dir.join("src")) else {
-        return false;
-    };
-    let parts: Vec<&str> = below.iter().map(|part| part.to_str().unwrap()).collect();
-    matches!(
-        parts.as_slice(),
-        ["lib.rs"] | ["main.rs"] | ["bin", _] | ["bin", _, "main.rs"]
-    )
+    let mut out = Vec::new();
+    walk(&root, &root, production, &mut out);
+    assert!(out.len() > 40, "{out:?}");
+    out
 }
 
 /// `path` with `.` and `..` resolved lexically, `/`-separated.
@@ -7163,32 +7210,23 @@ fn p3_g6_16_test_only_features_are_enabled_only_by_tests() {
         "live-sandbox-harness",
         "development-toolchain",
     ];
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut manifests = Vec::new();
-    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
-        let mut entries: Vec<_> = std::fs::read_dir(dir)
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .collect();
-        entries.sort();
-        for path in entries {
-            let name = path.file_name().unwrap().to_string_lossy().into_owned();
-            if path.is_dir() {
-                if !name.starts_with('.') && name != "target" && name != "node_modules" {
-                    walk(root, &path, out);
-                }
-            } else if name == "Cargo.toml" {
-                out.push(
-                    path.strip_prefix(root)
-                        .unwrap()
-                        .to_string_lossy()
-                        .replace('\\', "/"),
-                );
-            }
-        }
-    }
-    walk(&root, &root, &mut manifests);
-    assert!(manifests.len() > 40, "{manifests:?}");
+    // These are exactly the features the production scanners treat as
+    // test-only (`cfg_requires_test`, the same in both scanner copies).
+    let scanner = item_source(
+        &workspace_file(OWN_SOURCE),
+        "fn cfg_requires_test(predicate: &str) -> bool {",
+    );
+    let start = scanner
+        .find("constTEST_ONLY_FEATURES")
+        .expect("the scanners' test-only features");
+    let listed: Vec<&str> = scanner[start..start + scanner[start..].find("];").unwrap()]
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .collect();
+    assert_eq!(listed, TEST_ONLY_FEATURES);
+    // Every manifest, the integration-test crate's included.
+    let manifests = workspace_manifests(false);
     let named = |text: &str| -> Vec<String> {
         text.split('"')
             .skip(1)
