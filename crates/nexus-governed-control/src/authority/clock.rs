@@ -41,12 +41,21 @@ impl Clock for SystemClock {
 #[derive(Default)]
 pub struct ManualClock {
     now: AtomicU64,
+    /// Wall time that passed while the monotonic clock stood still.
+    suspended: AtomicU64,
 }
 
 impl ManualClock {
     pub fn advance(&self, by: Duration) {
         let ms = u64::try_from(by.as_millis()).unwrap_or(u64::MAX);
         self.now.fetch_add(ms, Ordering::SeqCst);
+    }
+
+    /// The machine sleeps for `by`: wall time passes, monotonic time does
+    /// not (as `CLOCK_MONOTONIC` does not count a suspend).
+    pub fn suspend(&self, by: Duration) {
+        let ms = u64::try_from(by.as_millis()).unwrap_or(u64::MAX);
+        self.suspended.fetch_add(ms, Ordering::SeqCst);
     }
 }
 
@@ -56,6 +65,6 @@ impl Clock for ManualClock {
     }
 
     fn wall_ms(&self) -> u64 {
-        1_700_000_000_000 + self.now.load(Ordering::SeqCst)
+        1_700_000_000_000 + self.now.load(Ordering::SeqCst) + self.suspended.load(Ordering::SeqCst)
     }
 }

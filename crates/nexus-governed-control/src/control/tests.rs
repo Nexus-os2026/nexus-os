@@ -334,10 +334,10 @@ fn an_effect_that_completes_while_its_run_is_cancelled_is_recorded_as_done() {
 #[test]
 fn ended_commitments_do_not_hold_pending_effects() {
     let f = fixture();
-    for _ in 0..super::MAX_PENDING {
+    for _ in 0..super::MAX_PENDING_PER_RUN {
         f.propose(EffectClass::R1);
     }
-    // Full of live commitments: refused.
+    // A run full of live commitments: refused.
     assert_eq!(
         f.control
             .propose(&f.agent, f.run, f.preparation(EffectClass::R1, "x", "x"))
@@ -347,6 +347,50 @@ fn ended_commitments_do_not_hold_pending_effects() {
     // Once they expire, the pipeline reclaims their effects.
     f.clock.advance(Duration::from_secs(61));
     f.propose(EffectClass::R1);
+}
+
+/// Agents together cannot take the places kept for the owner's own
+/// commands: with every other place held by agents, an agent is refused
+/// and the owner is not.
+#[test]
+fn agents_cannot_fill_the_places_kept_for_the_owner() {
+    let f = fixture();
+    let agents_limit = super::MAX_PENDING - super::OWNER_RESERVE;
+    let mut held = 0;
+    while held < agents_limit {
+        let run = f
+            .control
+            .authority()
+            .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+            .unwrap();
+        for _ in 0..super::MAX_PENDING_PER_RUN.min(agents_limit - held) {
+            f.control
+                .propose(&f.agent, run, f.preparation(EffectClass::R1, "x", "x"))
+                .unwrap();
+            held += 1;
+        }
+    }
+    let run = f
+        .control
+        .authority()
+        .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    assert_eq!(
+        f.control
+            .propose(&f.agent, run, f.preparation(EffectClass::R1, "x", "x"))
+            .unwrap_err(),
+        AuthorityError::Capacity
+    );
+    let owner = AgentId::owner_session();
+    let run = f
+        .control
+        .authority()
+        .open_run(owner.clone(), RunOrigin::Command { modalities: vec![] })
+        .unwrap();
+    assert!(f
+        .control
+        .propose(&owner, run, f.preparation(EffectClass::R1, "x", "x"))
+        .is_ok());
 }
 
 #[test]

@@ -16,7 +16,7 @@ use crate::authority::ids::{AgentId, CommitmentId, GrantId, RunId};
 use crate::authority::policy::{Grant, GrantScope};
 use crate::authority::run::RunOrigin;
 use crate::authority::{Authority, AuthorityError};
-use crate::broker::{CredentialBroker, SecretSource};
+use crate::broker::{CredentialBroker, SecretSource, Vault};
 use crate::browser::{Browser, BrowserIntent};
 use crate::connector::{ConnectorIntent, Connectors};
 use crate::control::{Control, EffectOutput, Preparation};
@@ -109,8 +109,17 @@ pub struct GovernedControl {
 
 impl GovernedControl {
     /// Build the production control: `root` is the owned runtime directory,
-    /// `secrets` the vault, `evidence` the audit sink.
+    /// `vault` where credentials come from, `evidence` the audit sink.
     pub fn new(
+        root: &Path,
+        vault: Vault,
+        evidence: Arc<dyn EvidenceSink>,
+        clock: Arc<dyn Clock>,
+    ) -> Result<Self, AuthorityError> {
+        Self::with_secrets(root, vault.source(), evidence, clock)
+    }
+
+    pub(crate) fn with_secrets(
         root: &Path,
         secrets: Arc<dyn SecretSource>,
         evidence: Arc<dyn EvidenceSink>,

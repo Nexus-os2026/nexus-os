@@ -6,12 +6,12 @@
 //! steps (a contained process, a browser session and an input action end
 //! their own resources when they see it), and ends its unconsumed
 //! commitments with their credential leases. An emergency stop cancels every
-//! run. Hooks registered with `on_cancel` fire as well.
+//! run.
 
 use super::ids::{AgentId, RunId};
 use super::AuthorityError;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// A run's cancellation flag, observed by actuators between bounded steps.
@@ -44,37 +44,17 @@ pub struct RunView {
     pub finished: bool,
 }
 
-type Hook = Box<dyn FnOnce() + Send>;
-
 struct RunEntry {
     view: RunView,
     cancelled: Arc<AtomicBool>,
-    hooks: Vec<(u64, Hook)>,
 }
 
-/// Every run, and the hooks of what each owns.
+/// Every run.
 #[derive(Default)]
 pub struct RunRegistry {
     runs: Mutex<HashMap<RunId, RunEntry>>,
-    next_hook: AtomicU64,
     stopped: AtomicBool,
     cancelled_by_stop: AtomicUsize,
-}
-
-/// Deregisters a cancellation hook when the resource it would release has
-/// been released normally.
-pub struct HookRegistration {
-    run: RunId,
-    hook: u64,
-    registry: Arc<RunRegistry>,
-}
-
-impl Drop for HookRegistration {
-    fn drop(&mut self) {
-        if let Some(entry) = self.registry.runs.lock().expect("runs").get_mut(&self.run) {
-            entry.hooks.retain(|(id, _)| *id != self.hook);
-        }
-    }
 }
 
 /// Most runs kept (ended ones are pruned first).
@@ -98,7 +78,6 @@ impl RunRegistry {
                 finished: false,
             },
             cancelled: Arc::new(AtomicBool::new(false)),
-            hooks: Vec::new(),
         };
         let mut runs = self.runs.lock().expect("runs");
         // Checked under the lock an emergency stop takes to cancel every
@@ -118,7 +97,7 @@ impl RunRegistry {
 
     /// The run exists, belongs to `agent`, is not cancelled or finished, and
     /// no emergency stop is in force.
-    pub fn check(&self, run: RunId, agent: &AgentId) -> Result<CancelToken, AuthorityError> {
+    pub(crate) fn check(&self, run: RunId, agent: &AgentId) -> Result<CancelToken, AuthorityError> {
         if self.stopped.load(Ordering::SeqCst) {
             return Err(AuthorityError::EmergencyStopped);
         }
@@ -136,50 +115,16 @@ impl RunRegistry {
         Ok(CancelToken(entry.cancelled.clone()))
     }
 
-    /// Register `hook` to run if `run` is cancelled. Dropping the returned
-    /// registration (after a normal release) removes it.
-    pub fn on_cancel(
-        self: &Arc<Self>,
-        run: RunId,
-        hook: Box<dyn FnOnce() + Send>,
-    ) -> Result<HookRegistration, AuthorityError> {
-        let id = self.next_hook.fetch_add(1, Ordering::SeqCst);
-        let mut runs = self.runs.lock().expect("runs");
-        let entry = runs.get_mut(&run).ok_or(AuthorityError::UnknownRun)?;
-        if entry.view.cancelled {
-            // Already cancelled: release now.
-            drop(runs);
-            hook();
-            return Err(AuthorityError::RunCancelled);
-        }
-        entry.hooks.push((id, hook));
-        Ok(HookRegistration {
-            run,
-            hook: id,
-            registry: self.clone(),
-        })
-    }
-
-    /// Cancel one run: set its token and fire its hooks (outside the lock).
-    /// Returns whether the run was active.
+    /// Cancel one run: set its token. Returns whether the run was active.
     pub(crate) fn cancel(&self, run: RunId) -> bool {
-        let hooks = {
-            let mut runs = self.runs.lock().expect("runs");
-            let Some(entry) = runs.get_mut(&run) else {
-                return false;
-            };
-            let was_active = !entry.view.cancelled && !entry.view.finished;
-            entry.view.cancelled = true;
-            entry.cancelled.store(true, Ordering::SeqCst);
-            if !was_active {
-                return false;
-            }
-            std::mem::take(&mut entry.hooks)
+        let mut runs = self.runs.lock().expect("runs");
+        let Some(entry) = runs.get_mut(&run) else {
+            return false;
         };
-        for (_, hook) in hooks {
-            hook();
-        }
-        true
+        let was_active = !entry.view.cancelled && !entry.view.finished;
+        entry.view.cancelled = true;
+        entry.cancelled.store(true, Ordering::SeqCst);
+        was_active
     }
 
     /// Cancel every run and refuse new work until `resume`.
@@ -207,20 +152,14 @@ impl RunRegistry {
         self.stopped.load(Ordering::SeqCst)
     }
 
-    /// A run is done: it accepts nothing more, and whatever it still owns is
-    /// released (the hooks fire outside the lock).
+    /// A run is done: it accepts nothing more, and whatever of it still
+    /// runs sees the end through its token.
     pub(crate) fn finish(&self, run: RunId) {
-        let hooks = match self.runs.lock().expect("runs").get_mut(&run) {
-            Some(entry) if !entry.view.finished && !entry.view.cancelled => {
+        if let Some(entry) = self.runs.lock().expect("runs").get_mut(&run) {
+            if !entry.view.finished && !entry.view.cancelled {
                 entry.view.finished = true;
-                // Whatever of it still runs sees the end.
                 entry.cancelled.store(true, Ordering::SeqCst);
-                std::mem::take(&mut entry.hooks)
             }
-            _ => return,
-        };
-        for (_, hook) in hooks {
-            hook();
         }
     }
 

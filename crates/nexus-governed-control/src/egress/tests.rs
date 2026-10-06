@@ -250,11 +250,8 @@ fn same_origin_redirects_are_followed_and_checked_others_are_returned() {
     .unwrap();
     assert_eq!(out.text.as_deref(), Some("arrived"));
     assert_eq!(meta(&out, "redirects"), Some("1"));
-    // Paths reach the (permanent) record only as digests.
-    let digest = |path: &str| {
-        crate::authority::ids::Digest::of("nexus.p3.egress.path.v1", &[path.as_bytes()]).short()
-    };
-    assert_eq!(meta(&out, "path_digest"), Some(digest("/next").as_str()));
+    // Neither a path nor a query reaches the (permanent) record.
+    assert!(meta(&out, "path_digest").is_none());
     assert!(meta(&out, "path").is_none());
     let out = run(
         &h,
@@ -266,15 +263,13 @@ fn same_origin_redirects_are_followed_and_checked_others_are_returned() {
     assert_eq!(meta(&out, "status"), Some("302"));
     assert_eq!(
         meta(&out, "redirect_not_followed"),
-        Some(
-            format!(
-                "https://elsewhere.example:443 (path digest {})",
-                digest("/landing?code=secret")
-            )
-            .as_str()
-        ),
+        Some("https://elsewhere.example:443"),
         "neither the path nor its query is kept in evidence"
     );
+    assert!(out
+        .meta
+        .iter()
+        .all(|(_, value)| !value.contains("landing") && !value.contains("secret")));
     assert_eq!(server.received().len(), 3);
 }
 
@@ -488,10 +483,19 @@ fn the_owner_sees_the_whole_request() {
     );
     let mut post = intent("POST", &url);
     post.body = Some(body.clone());
+    // A header's value changes how the body is read: it is shown too.
+    post.headers = vec![(
+        "content-type".into(),
+        "application/x-www-form-urlencoded".into(),
+    )];
     let preparation = egress().prepare(h.control.authority(), &post).unwrap();
     let summary = &preparation.action.summary;
     assert!(summary.iter().all(|l| is_plain(l)), "{summary:?}");
     assert_eq!(unwrapped(summary, 0), format!("POST {url}"));
+    assert!(
+        summary.contains(&"Header content-type: application/x-www-form-urlencoded".to_string()),
+        "{summary:?}"
+    );
     assert_eq!(unquoted(summary, "Body"), body);
     assert!(summary.contains(&"│ Target: https://safe.example".to_string()));
 }

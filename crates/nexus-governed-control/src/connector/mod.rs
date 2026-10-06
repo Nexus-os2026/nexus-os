@@ -91,7 +91,7 @@ impl Connectors {
     }
 
     /// The production catalog.
-    pub fn production(egress: Arc<Egress>, broker: Arc<CredentialBroker>) -> Self {
+    pub(crate) fn production(egress: Arc<Egress>, broker: Arc<CredentialBroker>) -> Self {
         Self::new(catalog::production(), egress, broker)
     }
 

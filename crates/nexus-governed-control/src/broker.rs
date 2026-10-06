@@ -44,14 +44,34 @@ pub enum SecretUnavailable {
     Failed,
 }
 
+/// Which vault a control reads credentials from. Only the crate reads it:
+/// outside, the vault is a choice, not a reader.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Vault {
+    /// The kernel's encrypted vault (`SecretsFacade`), when the owner
+    /// enabled it.
+    Kernel,
+    /// None: every credentialed operation fails closed.
+    Disabled,
+}
+
+impl Vault {
+    pub(crate) fn source(self) -> Arc<dyn SecretSource> {
+        match self {
+            Vault::Kernel => Arc::new(KernelVault),
+            Vault::Disabled => Arc::new(NoVault),
+        }
+    }
+}
+
 /// Where secrets are read from.
-pub trait SecretSource: Send + Sync {
+pub(crate) trait SecretSource: Send + Sync {
     fn read(&self, scope: &str, name: &str) -> Result<Zeroizing<String>, SecretUnavailable>;
 }
 
 /// No vault: every credential is unavailable (operations needing one fail
 /// closed).
-pub struct NoVault;
+pub(crate) struct NoVault;
 
 impl SecretSource for NoVault {
     fn read(&self, _scope: &str, _name: &str) -> Result<Zeroizing<String>, SecretUnavailable> {
@@ -61,7 +81,7 @@ impl SecretSource for NoVault {
 
 /// The kernel's encrypted vault (`SecretsFacade`), when the owner enabled
 /// it. Every read is audited by the facade itself.
-pub struct KernelVault;
+pub(crate) struct KernelVault;
 
 impl SecretSource for KernelVault {
     fn read(&self, scope: &str, name: &str) -> Result<Zeroizing<String>, SecretUnavailable> {
@@ -201,15 +221,16 @@ impl CredentialBroker {
         record.target = Some(origin.origin_text());
         record.detail.push(("lease".into(), id.to_string()));
         record.detail.push(("service".into(), spec.service.into()));
-        // Evidence first: an unrecorded lease is never issued.
-        self.record(record)?;
         let mut leases = self.table.leases.lock().expect("leases");
+        // Room first, so that a lease recorded as issued is one that exists.
         if leases.len() >= LEASE_CAPACITY {
             leases.retain(|_, lease| lease.state == LeaseState::Issued && lease.deadline_ms > now);
             if leases.len() >= LEASE_CAPACITY {
                 return Err(AuthorityError::Capacity);
             }
         }
+        // Evidence first: an unrecorded lease is never issued.
+        self.record(record)?;
         leases.insert(
             id,
             Lease {

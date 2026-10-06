@@ -630,17 +630,11 @@ fn cancellation_before_the_effect_stops_everything_pending() {
     let prepared_only = f.prepare(EffectClass::R1);
     let authorized = f.prepare(EffectClass::R1);
     c.authorize(authorized, &f.agent, f.run, None).unwrap();
-    let released = Arc::new(AtomicBool::new(false));
-    let flag = released.clone();
-    let _registration = f
-        .auth
-        .runs()
-        .on_cancel(f.run, Box::new(move || flag.store(true, Ordering::SeqCst)))
-        .unwrap();
+    let token = f.auth.runs().check(f.run, &f.agent).unwrap();
     f.auth.cancel_run(f.run).unwrap();
     assert!(
-        released.load(Ordering::SeqCst),
-        "owned resources are released"
+        token.is_cancelled(),
+        "whatever of it runs sees the cancellation"
     );
     assert_eq!(f.state(prepared_only), CommitmentState::Revoked);
     assert_eq!(f.state(authorized), CommitmentState::Revoked);
@@ -688,18 +682,9 @@ fn cancellation_during_execution_is_seen_and_recorded_truthfully() {
 fn finishing_a_run_ends_what_it_left_and_releases_what_it_owns() {
     let f = fixture();
     let left = f.prepare(EffectClass::R1);
-    let released = Arc::new(AtomicBool::new(false));
-    let flag = released.clone();
-    let _registration = f
-        .auth
-        .runs()
-        .on_cancel(f.run, Box::new(move || flag.store(true, Ordering::SeqCst)))
-        .unwrap();
+    let token = f.auth.runs().check(f.run, &f.agent).unwrap();
     f.auth.finish_run(f.run);
-    assert!(
-        released.load(Ordering::SeqCst),
-        "owned resources are released"
-    );
+    assert!(token.is_cancelled(), "whatever of it runs sees the end");
     assert_eq!(f.state(left), CommitmentState::Revoked);
     assert_eq!(
         f.auth
@@ -1082,4 +1067,91 @@ fn ended_grants_make_room_for_new_ones() {
     f.clock.advance(Duration::from_secs(2));
     assert!(f.auth.grants().request(egress_scope(), TTL, &f.yes).is_ok());
     assert!(f.auth.grants().live(f.grant).is_some(), "live grants stay");
+}
+
+/// Time the machine spends suspended counts: the monotonic clock does not
+/// see it, the wall clock does, and either ends a grant or a commitment.
+#[test]
+fn a_suspended_machine_does_not_extend_a_grant_or_a_commitment() {
+    let f = fixture();
+    let id = f.prepare(EffectClass::R1);
+    f.clock.suspend(Duration::from_secs(601));
+    assert!(f.auth.grants().live(f.grant).is_none());
+    assert_eq!(
+        f.auth
+            .commitments()
+            .authorize(id, &f.agent, f.run, None)
+            .unwrap_err(),
+        AuthorityError::Expired
+    );
+    assert_eq!(f.state(id), CommitmentState::Expired);
+}
+
+/// Grant evidence keeps every line of the scope in its own bounded field,
+/// so a long scope never loses its flags to one cut sentence.
+#[test]
+fn grant_evidence_keeps_every_line_of_the_scope() {
+    let f = fixture();
+    // Each line fits a field; joined, they would not.
+    let origins: Vec<String> = (0..4)
+        .map(|i| format!("https://a-rather-long-origin-name-{i}.example:443"))
+        .collect();
+    f.auth
+        .grants()
+        .request(
+            GrantScope::Browser {
+                origins,
+                downloads: true,
+                executable: "/opt/google/chrome/chrome".into(),
+                identity: Digest::of("identity", &[]),
+            },
+            Duration::from_secs(60),
+            &f.yes,
+        )
+        .unwrap();
+    let record = f
+        .evidence
+        .records()
+        .into_iter()
+        .rev()
+        .find(|r| r.phase == EvidencePhase::GrantIssued)
+        .unwrap();
+    let scope: String = record
+        .detail
+        .iter()
+        .filter(|(key, _)| key.starts_with("scope."))
+        .map(|(_, value)| value.as_str())
+        .collect();
+    assert!(
+        scope.contains("a-rather-long-origin-name-3.example"),
+        "{scope}"
+    );
+    assert!(
+        scope.contains("Downloads: kept inside the session"),
+        "{scope}"
+    );
+    assert!(
+        scope.contains("Browser: /opt/google/chrome/chrome"),
+        "{scope}"
+    );
+    let json = record.to_json().to_string();
+    assert!(
+        json.contains("Downloads: kept inside the session"),
+        "{json}"
+    );
+}
+
+/// A backslash in content is shown doubled, so text cannot pass for an
+/// escaped hidden character; a blank-looking braille cell is escaped; and
+/// a combining mark beyond two stacked on one character is escaped.
+#[test]
+fn shown_text_cannot_imitate_an_escape_or_draw_over_its_neighbours() {
+    use crate::authority::evidence::escaped;
+    assert_eq!(escaped("a\\u{202e}b"), "a\\\\u{202e}b");
+    assert_eq!(escaped("a\u{202e}b"), "a\\u{202e}b");
+    assert_eq!(escaped("x\u{2800}y"), "x\\u{2800}y");
+    assert_eq!(
+        escaped("e\u{301}\u{301}\u{301}\u{301}"),
+        "e\u{301}\u{301}\\u{301}\\u{301}"
+    );
 }

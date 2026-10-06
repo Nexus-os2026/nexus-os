@@ -15,7 +15,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE, LOCATION
 use std::net::SocketAddr;
 use std::time::Duration;
 use url::Url;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 /// What every governed request says it is.
 pub const USER_AGENT: &str = "NexusOS-GovernedControl/1";
@@ -89,46 +89,47 @@ pub struct SecretHeader {
 
 /// Every form in which a released credential could come back: the header
 /// value, the bare token, and the token JSON-escaped and percent-encoded
-/// (upper- and lower-case hex). Forms shorter than four bytes are skipped.
+/// (upper- and lower-case hex), longest first. Forms shorter than four bytes
+/// are skipped. Each form is written straight into its own zeroized buffer,
+/// sized up front so that it never grows (a growing buffer leaves copies
+/// behind), and a duplicate form is dropped, zeroized.
 fn needles(secret: &SecretHeader) -> Vec<Zeroizing<String>> {
+    use std::fmt::Write as _;
     let token = secret.token.as_str();
-    let json: String = token
-        .chars()
-        .flat_map(|c| match c {
-            '"' => vec!['\\', '"'],
-            '\\' => vec!['\\', '\\'],
-            '/' => vec!['\\', '/'],
-            c => vec![c],
-        })
-        .collect();
-    let percent = |upper: bool| -> String {
-        token
-            .bytes()
-            .map(|b| {
-                if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
-                    (b as char).to_string()
-                } else if upper {
-                    format!("%{b:02X}")
-                } else {
-                    format!("%{b:02x}")
-                }
-            })
-            .collect()
+    let mut json = Zeroizing::new(String::with_capacity(token.len() * 2));
+    for c in token.chars() {
+        if matches!(c, '"' | '\\' | '/') {
+            json.push('\\');
+        }
+        json.push(c);
+    }
+    let percent = |upper: bool| {
+        let mut out = Zeroizing::new(String::with_capacity(token.len() * 3));
+        for b in token.bytes() {
+            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+                out.push(char::from(b));
+            } else if upper {
+                let _ = write!(out, "%{b:02X}");
+            } else {
+                let _ = write!(out, "%{b:02x}");
+            }
+        }
+        out
     };
-    let mut forms: Vec<String> = vec![
-        secret.value.to_string(),
-        token.to_string(),
+    let mut forms: Vec<Zeroizing<String>> = Vec::with_capacity(5);
+    for form in [
+        Zeroizing::new(secret.value.to_string()),
+        Zeroizing::new(token.to_string()),
         json,
         percent(true),
         percent(false),
-    ];
-    forms.sort();
-    forms.dedup();
+    ] {
+        if form.len() >= 4 && !forms.iter().any(|kept| kept.as_str() == form.as_str()) {
+            forms.push(form);
+        }
+    }
+    forms.sort_by_key(|form| std::cmp::Reverse(form.len()));
     forms
-        .into_iter()
-        .filter(|form| form.len() >= 4)
-        .map(Zeroizing::new)
-        .collect()
 }
 
 impl std::fmt::Debug for SecretHeader {
@@ -380,12 +381,16 @@ fn redact_one(response: &mut HttpResponse, secret: &str) {
                 i += 1;
             }
         }
-        response.body = out;
+        // What came back held the credential: zeroized as it is replaced.
+        std::mem::replace(&mut response.body, out).zeroize();
         response.redacted = true;
     }
     for field in [&mut response.location, &mut response.content_type] {
         if let Some(text) = field.as_deref().filter(|text| text.contains(secret)) {
-            *field = Some(text.replace(secret, "[redacted]"));
+            let redacted = text.replace(secret, "[redacted]");
+            if let Some(mut held) = field.replace(redacted) {
+                held.zeroize();
+            }
             response.redacted = true;
         }
     }
@@ -394,6 +399,28 @@ fn redact_one(response: &mut HttpResponse, secret: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every form a credential could come back in is kept once (a token
+    /// whose escaped forms equal it is not kept three times), longest first.
+    #[test]
+    fn each_form_of_a_credential_is_kept_once_longest_first() {
+        let secret = |value: &str, token: &str| SecretHeader {
+            name: HeaderName::from_static("authorization"),
+            value: Zeroizing::new(value.into()),
+            token: Zeroizing::new(token.into()),
+        };
+        let forms = |secret: &SecretHeader| -> Vec<String> {
+            needles(secret).iter().map(|f| f.to_string()).collect()
+        };
+        assert_eq!(
+            forms(&secret("Bearer abc_DEF-123", "abc_DEF-123")),
+            ["Bearer abc_DEF-123", "abc_DEF-123"]
+        );
+        assert_eq!(
+            forms(&secret("Bearer a/b+c", "a/b+c")),
+            ["Bearer a/b+c", "a%2Fb%2Bc", "a%2fb%2bc", "a\\/b+c", "a/b+c"]
+        );
+    }
 
     #[test]
     fn methods_are_exact_and_classed() {

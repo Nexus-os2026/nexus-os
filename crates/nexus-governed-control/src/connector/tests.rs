@@ -590,3 +590,28 @@ fn a_failed_preparation_ends_its_lease() {
     assert!(issued.iter().all(|lease| !broker.is_live(*lease)));
     assert!(server.received().is_empty());
 }
+
+/// A long search query is shown on as many lines as it needs, never
+/// refused for its length up to the operation's own bound.
+#[test]
+fn a_long_search_query_is_shown_whole() {
+    use crate::authority::evidence::is_plain;
+    let connectors: Vec<Connector> = catalog::production();
+    for id in ["gmail.messages.search", "outlook.messages.search"] {
+        let search = connectors
+            .iter()
+            .flat_map(|c| c.operations.iter())
+            .find(|op| op.id == id)
+            .unwrap();
+        let query = "invoice ".repeat(31);
+        let request = (search.build)(&json!({ "query": query.trim_end() })).unwrap();
+        assert!(request.summary.len() > 1, "{:?}", request.summary);
+        assert!(request.summary.iter().all(|l| is_plain(l)), "{id}");
+        let shown: String = request
+            .summary
+            .iter()
+            .map(|l| l.strip_prefix("↳ ").unwrap_or(l))
+            .collect();
+        assert_eq!(shown, format!("Search messages for: {}", query.trim_end()));
+    }
+}

@@ -444,3 +444,54 @@ fn a_refused_preparation_ends_its_lease() {
     assert!(h.control.propose(&h.agent, h.run, preparation).is_err());
     assert!(!broker.is_live(lease));
 }
+
+/// A proposal refused before any commitment exists (its effect does not
+/// match the parameters it declares) leaves no lease behind either.
+#[test]
+fn a_proposal_refused_before_its_commitment_ends_its_lease() {
+    let (h, broker, _vault, destination) = setup();
+    let lease = broker
+        .lease(&h.agent, h.run, SPEC, &destination, Duration::from_secs(60))
+        .unwrap();
+    let grant = h
+        .control
+        .authority()
+        .grants()
+        .request(
+            GrantScope::Connector {
+                connector: "fixture".into(),
+                account: "test".into(),
+                operations: vec!["broker.test".into()],
+            },
+            Duration::from_secs(60),
+            &Yes::new(true),
+        )
+        .unwrap();
+    let preparation = Preparation {
+        action: PreparedAction {
+            kind: CapabilityKind::Connector,
+            class: EffectClass::R1,
+            operation: "broker.test",
+            target: TargetIdentity {
+                display: destination.origin_text(),
+                digest: destination.origin_digest(),
+            },
+            parameters: Digest::of("something else", &[]),
+            grants: vec![grant],
+            leases: vec![lease],
+            summary: vec!["test".into()],
+        },
+        effect: Box::new(Releasing {
+            broker: broker.clone(),
+            lease,
+            destination: destination.clone(),
+            got: Arc::new(Mutex::new(None)),
+        }),
+        ttl: Duration::from_secs(60),
+    };
+    assert!(matches!(
+        h.control.propose(&h.agent, h.run, preparation),
+        Err(AuthorityError::InvalidAction(_))
+    ));
+    assert!(!broker.is_live(lease));
+}

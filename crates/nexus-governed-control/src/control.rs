@@ -74,6 +74,11 @@ pub(crate) struct Control {
 
 /// Most pending effects held at once.
 const MAX_PENDING: usize = 1024;
+/// Most pending effects one run holds (R2 waiting for the owner, mostly).
+const MAX_PENDING_PER_RUN: usize = 32;
+/// Pending places only the owner's own commands may take, so that agents
+/// filling the rest cannot block the owner.
+const OWNER_RESERVE: usize = 64;
 
 impl Control {
     pub(crate) fn new(authority: Authority) -> Self {
@@ -99,15 +104,29 @@ impl Control {
             effect,
             ttl,
         } = preparation;
+        // A refused proposal leaves no credential lease behind.
+        let refuse = |error: AuthorityError| {
+            self.authority.commitments().end_leases(&action.leases);
+            Err(error)
+        };
         if effect.parameters() != action.parameters {
-            return Err(AuthorityError::InvalidAction(
+            return refuse(AuthorityError::InvalidAction(
                 "the prepared parameters do not match the effect",
             ));
         }
-        if self.pending.lock().expect("pending").len() >= MAX_PENDING {
+        let limit = if *agent == AgentId::owner_session() {
+            MAX_PENDING
+        } else {
+            MAX_PENDING - OWNER_RESERVE
+        };
+        let full = |pending: &HashMap<CommitmentId, Pending>| {
+            pending.len() >= limit
+                || pending.values().filter(|p| p.run == run).count() >= MAX_PENDING_PER_RUN
+        };
+        if full(&self.pending.lock().expect("pending")) {
             self.prune();
-            if self.pending.lock().expect("pending").len() >= MAX_PENDING {
-                return Err(AuthorityError::Capacity);
+            if full(&self.pending.lock().expect("pending")) {
+                return refuse(AuthorityError::Capacity);
             }
         }
         let view = self

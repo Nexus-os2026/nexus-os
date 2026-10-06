@@ -113,6 +113,7 @@ pub fn shown(c: char) -> bool {
                 | '\u{200B}'..='\u{200F}'
                 | '\u{2028}'..='\u{202E}'
                 | '\u{2060}'..='\u{206F}'
+                | '\u{2800}'
                 | '\u{3164}'
                 | '\u{FE00}'..='\u{FE0F}'
                 | '\u{FEFF}'
@@ -134,15 +135,39 @@ pub fn is_plain(text: &str) -> bool {
     text.chars().count() <= MAX_FIELD && text.chars().all(shown)
 }
 
+/// The width, in characters, of a line of the owner's confirmation window:
+/// [`wrapped`] and [`quoted`] break text there themselves, so the window
+/// (which never wraps) shows every line whole, beginning with its marker.
+pub const DIALOG_COLUMNS: usize = 96;
+
+/// Whether `c` is a combining mark of the common ranges (it is drawn over
+/// the character before it).
+fn combining(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0300}'..='\u{036F}'
+            | '\u{1AB0}'..='\u{1AFF}'
+            | '\u{1DC0}'..='\u{1DFF}'
+            | '\u{20D0}'..='\u{20FF}'
+            | '\u{FE20}'..='\u{FE2F}'
+    )
+}
+
 /// `text` made plain for display, in full: hidden characters escaped (`\n`,
-/// `\u{202e}`). Nothing is cut: the authority refuses a line longer than
-/// `MAX_FIELD`, so domains put long values through [`wrapped`] and content
-/// the owner must read through [`quoted`]. What the owner is shown is
-/// never shortened.
+/// `\u{202e}`), a backslash shown doubled (so text cannot pass for an
+/// escape), and a combining mark escaped once two already sit on a
+/// character (a stack of them draws over the lines around it). Nothing is
+/// cut: the authority refuses a line longer than `MAX_FIELD`, so domains
+/// put long values through [`wrapped`] and content the owner must read
+/// through [`quoted`]. What the owner is shown is never shortened.
 pub fn escaped(text: &str) -> String {
     let mut out = String::new();
+    let mut stacked = 0usize;
     for c in text.chars() {
-        if shown(c) {
+        stacked = if combining(c) { stacked + 1 } else { 0 };
+        if c == '\\' {
+            out.push_str("\\\\");
+        } else if shown(c) && stacked <= 2 {
             out.push(c);
         } else {
             out.extend(c.escape_default());
@@ -156,9 +181,9 @@ pub fn escaped(text: &str) -> String {
 /// `MAX_FIELD` characters.
 pub fn wrapped(text: &str) -> Vec<String> {
     let chars: Vec<char> = escaped(text).chars().collect();
-    let first = chars.len().min(MAX_FIELD);
+    let first = chars.len().min(DIALOG_COLUMNS);
     let mut lines = vec![chars[..first].iter().collect::<String>()];
-    for chunk in chars[first..].chunks(MAX_FIELD - 2) {
+    for chunk in chars[first..].chunks(DIALOG_COLUMNS - 2) {
         lines.push(format!("↳ {}", chunk.iter().collect::<String>()));
     }
     lines
@@ -172,9 +197,9 @@ pub fn quoted(label: &str, text: &str) -> Vec<String> {
     let mut lines = vec![format!("{label}:")];
     for line in text.split('\n') {
         let chars: Vec<char> = escaped(line).chars().collect();
-        let first = chars.len().min(MAX_FIELD - 2);
+        let first = chars.len().min(DIALOG_COLUMNS - 2);
         lines.push(format!("│ {}", chars[..first].iter().collect::<String>()));
-        for chunk in chars[first..].chunks(MAX_FIELD - 3) {
+        for chunk in chars[first..].chunks(DIALOG_COLUMNS - 3) {
             lines.push(format!("│↳ {}", chunk.iter().collect::<String>()));
         }
     }

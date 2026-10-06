@@ -7,7 +7,24 @@
 //! the commitment consumes it.
 
 use super::effect::{CapabilityKind, EffectClass};
+use super::evidence::DIALOG_COLUMNS;
 use super::ids::{CommitmentId, Digest};
+
+/// The lines of a confirmation, each at most `DIALOG_COLUMNS` characters:
+/// a longer one continues on `↳ ` lines. The lines are already plain; the
+/// confirmation window shows each one whole and never wraps.
+fn fitted(lines: &[String]) -> String {
+    let mut out: Vec<String> = Vec::new();
+    for line in lines {
+        let chars: Vec<char> = line.chars().collect();
+        let first = chars.len().min(DIALOG_COLUMNS);
+        out.push(chars[..first].iter().collect());
+        for chunk in chars[first..].chunks(DIALOG_COLUMNS - 2) {
+            out.push(format!("↳ {}", chunk.iter().collect::<String>()));
+        }
+    }
+    out.join("\n")
+}
 
 /// What the owner is asked to approve: one R2 commitment. Every line is
 /// computed by the backend from the commitment it approves; nothing here is
@@ -50,7 +67,7 @@ impl ActionConfirmation {
             "Commitment: {} [{}], expires in {} s",
             self.commitment, self.binding_short, self.expires_in_secs
         ));
-        lines.join("\n")
+        fitted(&lines)
     }
 }
 
@@ -71,7 +88,7 @@ impl GrantConfirmation {
         let mut lines = self.lines.clone();
         lines.push("Any agent may use it until it expires or you revoke it".to_string());
         lines.push(format!("Expires in {} s", self.expires_in_secs));
-        lines.join("\n")
+        fitted(&lines)
     }
 }
 
@@ -96,13 +113,15 @@ impl ResumeConfirmation {
     }
 
     pub fn message(&self) -> String {
-        format!(
-            "The emergency stop is in force. Resuming lets agents open new runs \
-             and request actions again (each still needs its grants and, for \
-             sensitive actions, your approval).\nRuns the stop cancelled stay \
-             cancelled: {}.",
-            self.runs_cancelled_by_the_stop
-        )
+        fitted(&[
+            "The emergency stop is in force.".to_string(),
+            "Resuming lets agents open new runs and request actions again;".to_string(),
+            "each still needs its grants and, for sensitive actions, your approval.".to_string(),
+            format!(
+                "Runs the stop cancelled stay cancelled: {}.",
+                self.runs_cancelled_by_the_stop
+            ),
+        ])
     }
 }
 

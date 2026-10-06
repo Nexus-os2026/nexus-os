@@ -1004,7 +1004,7 @@ fn p0_fg_messaging_requests_are_bounded_in_time_and_size() {
 #[test]
 fn p0_r1_email_requests_are_bounded_and_follow_no_redirect() {
     use nexus_governed_control::authority::effect::EffectClass;
-    use nexus_governed_control::egress::transport::Method;
+    use nexus_governed_control::egress::Method;
     let apps = lf(include_str!("../../commands/apps.rs"));
     for gone in [
         "fn email_client(",

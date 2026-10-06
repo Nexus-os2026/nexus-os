@@ -327,7 +327,7 @@ fn gmail_search(input: &Value) -> Result<OperationRequest, AuthorityError> {
             "/gmail/v1/users/me/messages?q={}&maxResults=20",
             encoded(query)
         ),
-        vec![format!("Search messages for: {query}")],
+        wrapped(&format!("Search messages for: {query}")),
     )
 }
 
@@ -391,7 +391,7 @@ fn outlook_search(input: &Value) -> Result<OperationRequest, AuthorityError> {
     let quoted = format!("\"{}\"", query.replace('"', ""));
     get(
         format!("/v1.0/me/messages?$search={}&$top=20", encoded(&quoted)),
-        vec![format!("Search messages for: {query}")],
+        wrapped(&format!("Search messages for: {query}")),
     )
 }
 

@@ -19,7 +19,7 @@ use nexus_governed_control::authority::evidence::{
 };
 use nexus_governed_control::authority::ids::{AgentId, CommitmentId, GrantId, RunId};
 use nexus_governed_control::authority::run::RunOrigin;
-use nexus_governed_control::broker::KernelVault;
+use nexus_governed_control::broker::Vault;
 use nexus_governed_control::control::EffectOutput;
 use nexus_governed_control::governed::{AgentOutcome, GovernedControl, Intent};
 use nexus_governed_control::ingress::{understand, Attachments, CommandEnvelope, Understood};
@@ -77,13 +77,9 @@ impl RealWorld {
             Arc::new(AuditEvidence { audit, db }),
             recent.clone(),
         ]));
-        let control = GovernedControl::new(
-            &root,
-            Arc::new(KernelVault),
-            sink,
-            Arc::new(SystemClock::default()),
-        )
-        .map_err(|e| e.to_string())?;
+        let control =
+            GovernedControl::new(&root, Vault::Kernel, sink, Arc::new(SystemClock::default()))
+                .map_err(|e| e.to_string())?;
         Ok(Arc::new(Self {
             control,
             recent,
@@ -108,7 +104,7 @@ impl RealWorld {
         ]));
         let control = GovernedControl::new(
             root,
-            Arc::new(nexus_governed_control::broker::NoVault),
+            Vault::Disabled,
             sink,
             Arc::new(SystemClock::default()),
         )

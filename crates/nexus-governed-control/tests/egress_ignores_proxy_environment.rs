@@ -10,7 +10,7 @@ use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::evidence::MemoryEvidence;
 use nexus_governed_control::authority::ids::AgentId;
 use nexus_governed_control::authority::run::RunOrigin;
-use nexus_governed_control::broker::NoVault;
+use nexus_governed_control::broker::Vault;
 use nexus_governed_control::egress::EgressIntent;
 use nexus_governed_control::governed::{GovernedControl, GrantRequest, Intent};
 use std::io::{Read, Write};
@@ -69,7 +69,7 @@ fn proxy_variables_in_the_environment_are_ignored() {
     let root = std::env::temp_dir().join(format!("nexus-p3-proxy-test-{}", std::process::id()));
     let control = GovernedControl::new(
         &root,
-        Arc::new(NoVault),
+        Vault::Disabled,
         Arc::new(MemoryEvidence::new(64)),
         Arc::new(SystemClock::default()),
     )

@@ -13,7 +13,9 @@
 //! other redirect is returned as data, not followed.
 
 pub mod destination;
-pub mod transport;
+pub(crate) mod transport;
+
+pub use transport::Method;
 
 use crate::authority::commitment::{ExecutionGuard, FailureClass, PreparedAction, TargetIdentity};
 use crate::authority::effect::{CapabilityKind, EffectClass};
@@ -31,7 +33,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use transport::{
-    HttpResponse, HttpTransport, Method, PinnedRequest, SecretHeader, Transport, TransportError,
+    HttpResponse, HttpTransport, PinnedRequest, SecretHeader, Transport, TransportError,
 };
 
 /// Bounds on every governed request.
@@ -85,7 +87,7 @@ const REQUEST_TTL: Duration = Duration::from_secs(10 * 60);
 
 /// Releases a leased credential to exactly the commitment executing under a
 /// guard, for exactly one destination (the credential broker).
-pub trait ReleaseCredential: Send + Sync {
+pub(crate) trait ReleaseCredential: Send + Sync {
     fn release(
         &self,
         lease: LeaseId,
@@ -135,7 +137,7 @@ fn destination_error(error: DestinationError) -> AuthorityError {
 }
 
 impl Egress {
-    pub fn new(
+    pub(crate) fn new(
         resolver: Arc<dyn Resolver>,
         transport: Arc<dyn Transport>,
         limits: EgressLimits,
@@ -148,16 +150,12 @@ impl Egress {
     }
 
     /// The system resolver and the real transport.
-    pub fn system() -> Self {
+    pub(crate) fn system() -> Self {
         Self::new(
             Arc::new(SystemResolver),
             Arc::new(HttpTransport),
             EgressLimits::default(),
         )
-    }
-
-    pub fn resolver(&self) -> &Arc<dyn Resolver> {
-        &self.resolver
     }
 
     /// The scope the owner may grant: requests with `methods` to exactly the
@@ -280,9 +278,14 @@ impl Egress {
             ],
         );
         let mut summary = wrapped(&format!("{} {}", method.as_str(), destination.url()));
-        if !headers.is_empty() {
-            let names: Vec<&str> = headers.iter().map(|(name, _)| name.as_str()).collect();
-            summary.push(format!("Headers: {}", names.join(", ")));
+        // Every header in full: a value changes how the request is read
+        // (a content type turns a body into form fields).
+        for (name, value) in &headers {
+            summary.extend(wrapped(&format!(
+                "Header {}: {}",
+                name.as_str(),
+                value.to_str().unwrap_or_default()
+            )));
         }
         if let Some(text) = &intent.body {
             if from_connector {
@@ -503,15 +506,6 @@ impl PendingEffect for EgressEffect {
     }
 }
 
-fn path_digest(destination: &Destination) -> String {
-    let url = destination.url();
-    let path = match url.query() {
-        Some(query) => format!("{}?{query}", url.path()),
-        None => url.path().to_string(),
-    };
-    Digest::of("nexus.p3.egress.path.v1", &[path.as_bytes()]).short()
-}
-
 fn output(destination: &Destination, response: HttpResponse, redirects: u8) -> EffectOutput {
     let textual = response.content_type.as_deref().is_none_or(|kind| {
         let kind = kind.to_ascii_lowercase();
@@ -522,10 +516,10 @@ fn output(destination: &Destination, response: HttpResponse, redirects: u8) -> E
     });
     let mut meta = vec![
         ("status".to_string(), response.status.to_string()),
+        // The origin only: a path or query may carry a token or other
+        // low-entropy content, and this record is permanent (the request
+        // itself is bound by the commitment's salted parameters digest).
         ("origin".to_string(), destination.origin_text()),
-        // The path and query only as a digest: a URL may carry a token, and
-        // this record is permanent.
-        ("path_digest".to_string(), path_digest(destination)),
         ("bytes".to_string(), response.body.len().to_string()),
         ("redirects".to_string(), redirects.to_string()),
     ];
@@ -533,20 +527,13 @@ fn output(destination: &Destination, response: HttpResponse, redirects: u8) -> E
         meta.push(("content_type".to_string(), bounded(kind)));
     }
     if is_redirect(response.status) {
-        // Where it pointed, without its query (which may carry codes).
+        // Where it pointed: its origin only.
         if let Some(next) = response
             .location
             .as_deref()
             .and_then(|location| destination.join(location).ok())
         {
-            meta.push((
-                "redirect_not_followed".to_string(),
-                format!(
-                    "{} (path digest {})",
-                    next.origin_text(),
-                    path_digest(&next)
-                ),
-            ));
+            meta.push(("redirect_not_followed".to_string(), next.origin_text()));
         }
     }
     if response.redacted {

@@ -7,7 +7,7 @@ use crate::authority::evidence::MemoryEvidence;
 use crate::authority::ids::AgentId;
 use crate::authority::run::RunOrigin;
 use crate::authority::AuthorityError;
-use crate::broker::NoVault;
+use crate::broker::Vault;
 use crate::egress::EgressIntent;
 use crate::harness_tests::{temp_root, Reply, TempRoot, TestServer, Yes};
 use crate::planned::{classify, Disposition};
@@ -24,7 +24,7 @@ fn control() -> (GovernedControl, Arc<MemoryEvidence>, TempRoot) {
     let evidence = Arc::new(MemoryEvidence::new(10_000));
     let control = GovernedControl::new(
         root.0.path(),
-        Arc::new(NoVault),
+        Vault::Disabled,
         evidence.clone(),
         Arc::new(SystemClock::default()),
     )

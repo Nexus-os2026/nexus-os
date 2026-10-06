@@ -140,7 +140,7 @@ pub enum Outcome {
 
 /// The most summary lines an action may show; one that needs more is
 /// refused rather than shortened.
-pub const MAX_SUMMARY_LINES: usize = 64;
+pub const MAX_SUMMARY_LINES: usize = 192;
 
 /// A commitment, for display (holds no authority).
 #[derive(Clone, Debug)]
@@ -437,7 +437,11 @@ impl CommitmentRegistry {
                 return Err(error);
             }
         };
-        let failure = if self.0.clock.monotonic_ms() >= entry.deadline_ms {
+        // Either clock ends it: the monotonic one does not count the time
+        // the machine is suspended, the wall clock does.
+        let failure = if self.0.clock.monotonic_ms() >= entry.deadline_ms
+            || self.0.clock.wall_ms() >= entry.expires_wall_ms
+        {
             Some((CommitmentState::Expired, AuthorityError::Expired))
         } else if self.0.generation.current() != entry.generation {
             Some((CommitmentState::Revoked, AuthorityError::Stale))
@@ -487,7 +491,8 @@ impl CommitmentRegistry {
         self.end_leases(&entry.prepared.leases);
     }
 
-    fn end_leases(&self, leases: &[LeaseId]) {
+    /// End leases no commitment will list (their proposal was refused).
+    pub(crate) fn end_leases(&self, leases: &[LeaseId]) {
         let table = self.0.leases.lock().expect("leases").clone();
         for lease in leases {
             table.end(*lease);

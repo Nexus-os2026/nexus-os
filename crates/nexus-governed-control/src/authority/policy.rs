@@ -9,7 +9,9 @@
 use super::approval::{ControlConfirmer, GrantConfirmation};
 use super::clock::Clock;
 use super::effect::CapabilityKind;
-use super::evidence::{is_plain, EvidencePhase, EvidenceRecord, EvidenceSink};
+use super::evidence::{
+    is_plain, EvidencePhase, EvidenceRecord, EvidenceSink, MAX_DETAIL, MAX_FIELD,
+};
 use super::ids::{Digest, GrantId};
 use super::AuthorityError;
 use std::collections::HashMap;
@@ -173,8 +175,19 @@ pub struct Grant {
     pub id: GrantId,
     pub scope: GrantScope,
     pub created_wall_ms: u64,
+    /// Monotonic expiry.
     pub expires_ms: u64,
+    /// Wall-clock expiry: a grant also ends when this passes, so time the
+    /// machine spends suspended (which the monotonic clock does not count)
+    /// does not extend it.
+    pub expires_wall_ms: u64,
     pub revoked: bool,
+}
+
+impl Grant {
+    fn live(&self, monotonic_ms: u64, wall_ms: u64) -> bool {
+        !self.revoked && self.expires_ms > monotonic_ms && self.expires_wall_ms > wall_ms
+    }
 }
 
 /// The owner's grants.
@@ -230,17 +243,20 @@ impl GrantStore {
         }
         let id = GrantId::fresh();
         let now = self.clock.monotonic_ms();
+        let wall = self.clock.wall_ms();
+        let ttl_ms = u64::try_from(ttl.as_millis()).unwrap_or(u64::MAX);
         let grant = Grant {
             id,
             scope: scope.clone(),
-            created_wall_ms: self.clock.wall_ms(),
-            expires_ms: now.saturating_add(u64::try_from(ttl.as_millis()).unwrap_or(u64::MAX)),
+            created_wall_ms: wall,
+            expires_ms: now.saturating_add(ttl_ms),
+            expires_wall_ms: wall.saturating_add(ttl_ms),
             revoked: false,
         };
         let mut grants = self.grants.lock().expect("grant store");
         if grants.len() >= GRANT_CAPACITY {
-            let now = self.clock.monotonic_ms();
-            grants.retain(|_, grant| !grant.revoked && grant.expires_ms > now);
+            let (now, wall) = (self.clock.monotonic_ms(), self.clock.wall_ms());
+            grants.retain(|_, grant| grant.live(now, wall));
             if grants.len() >= GRANT_CAPACITY {
                 return Err(AuthorityError::Capacity);
             }
@@ -266,24 +282,24 @@ impl GrantStore {
 
     /// The grant, if it exists, is not revoked and has not expired.
     pub fn live(&self, id: GrantId) -> Option<Grant> {
-        let now = self.clock.monotonic_ms();
+        let (now, wall) = (self.clock.monotonic_ms(), self.clock.wall_ms());
         self.grants
             .lock()
             .expect("grant store")
             .get(&id)
-            .filter(|grant| !grant.revoked && grant.expires_ms > now)
+            .filter(|grant| grant.live(now, wall))
             .cloned()
     }
 
     /// Every live grant of `kind`.
     pub fn live_of(&self, kind: CapabilityKind) -> Vec<Grant> {
-        let now = self.clock.monotonic_ms();
+        let (now, wall) = (self.clock.monotonic_ms(), self.clock.wall_ms());
         let mut live: Vec<Grant> = self
             .grants
             .lock()
             .expect("grant store")
             .values()
-            .filter(|grant| grant.scope.kind() == kind && !grant.revoked && grant.expires_ms > now)
+            .filter(|grant| grant.scope.kind() == kind && grant.live(now, wall))
             .cloned()
             .collect();
         live.sort_by_key(|grant| grant.id);
@@ -312,9 +328,23 @@ impl GrantStore {
         let mut record =
             EvidenceRecord::new(phase, self.clock.wall_ms(), self.generation.current());
         record.kind = Some(scope.kind());
-        record.target = Some(scope.describe().join("; "));
+        // Every line of the scope, each in its own bounded field (cut into
+        // pieces if long), so that no flag is lost to one joined, truncated
+        // sentence.
+        let lines = scope.describe();
+        record.target = lines.first().cloned();
         if let Some(id) = id {
             record.detail.push(("grant".into(), id.to_string()));
+        }
+        let pieces = lines.iter().flat_map(|line| {
+            let chars: Vec<char> = line.chars().collect();
+            chars
+                .chunks(MAX_FIELD - 16)
+                .map(|piece| piece.iter().collect::<String>())
+                .collect::<Vec<_>>()
+        });
+        for (index, piece) in pieces.take(MAX_DETAIL - 1).enumerate() {
+            record.detail.push((format!("scope.{}", index + 1), piece));
         }
         self.evidence
             .record(&record)
