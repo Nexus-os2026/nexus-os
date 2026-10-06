@@ -289,8 +289,9 @@ button an interrupted action still holds is let go, with the server held,
 on the window it was pressed on (at the press point, or another point
 where that window is still on top); if that window is entirely covered, on
 the bare display; only if neither exists is it let go at the press point,
-after an Escape (which cancels a drag in most toolkits) when the keys reach
-the window it was pressed on. The grant's step budget is spent at the effect.
+after an Escape (which cancels a drag in most toolkits) if the keyboard
+focus is on the window it was pressed on (never a key that follows the
+pointer onto another window). The grant's step budget is spent at the effect.
 Moves and scrolls are R1, and the input grant says so; clicks, drags and
 keys are R2 unless the owner granted R1 input. Typed text is shown for approval and recorded only as a
 digest. `ComputerAction` is an orchestrator: each step is its own

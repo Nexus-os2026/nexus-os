@@ -408,6 +408,17 @@ impl AgentServer {
     /// Keys bound to the background reach it only when no window holds the
     /// focus.
     pub(crate) fn keys_reach(&self, window: u32) -> bool {
+        self.focus_reaches(window, true)
+    }
+
+    /// Whether the keyboard focus itself is `window` or a window inside it
+    /// (not merely following the pointer): keys reach `window` wherever the
+    /// pointer is.
+    pub(crate) fn focus_on(&self, window: u32) -> bool {
+        self.focus_reaches(window, false)
+    }
+
+    fn focus_reaches(&self, window: u32, following_counts: bool) -> bool {
         let conn = self.conn.lock().expect("display");
         let Some(focus) = conn
             .get_input_focus()
@@ -418,7 +429,7 @@ impl AgentServer {
             return false;
         };
         if focus == POINTER_ROOT {
-            return true;
+            return following_counts;
         }
         if window == 0 {
             return focus == self.root;

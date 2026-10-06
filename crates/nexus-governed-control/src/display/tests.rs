@@ -820,8 +820,8 @@ fn a_stop_wins_over_a_start_and_nothing_starts_unrecorded() {
 }
 
 /// A drag interrupted after its press point was covered is let go on its
-/// own source where that window still shows, or else on the bare display:
-/// never on a window that appeared since.
+/// own source where that window still shows, or else on the bare display;
+/// with neither left, where it was picked up.
 #[test]
 fn an_interrupted_drag_is_let_go_on_its_source_or_on_nothing() {
     let Some((display, _root)) = display() else {
@@ -847,6 +847,17 @@ fn an_interrupted_drag_is_let_go_on_its_source_or_on_nothing() {
                 height: 120,
             },
             "release 1 1",
+        ),
+        // Nothing of the source and no bare display left: back where it
+        // was picked up (no key goes to a window that was not approved).
+        (
+            Rect {
+                x: 0,
+                y: 0,
+                width: 640,
+                height: 480,
+            },
+            "release 50 50",
         ),
     ] {
         let h = harness();

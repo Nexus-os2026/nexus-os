@@ -233,6 +233,9 @@ impl Server {
     fn keys_reach(&self, _window: u32) -> bool {
         false
     }
+    fn focus_on(&self, _window: u32) -> bool {
+        false
+    }
     fn no_active_grab(&self) -> bool {
         false
     }
@@ -1194,10 +1197,11 @@ impl Drop for Pressed {
                     .into_iter()
                     .any(|p| server.window_at(p.0, p.1).is_none() && to(p));
             if !bare {
-                // Nowhere safe: cancel the drag with Escape where the keys
-                // reach its source (never another window), and let go
-                // where it was picked up.
-                if server.keys_reach(window) {
+                // Nowhere safe: cancel the drag with Escape if the keyboard
+                // focus is on its source (never a key that follows the
+                // pointer onto another window), and let go where it was
+                // picked up.
+                if server.focus_on(window) {
                     if let Some(escape) = self.escape {
                         let _ = server.key(escape, true);
                         let _ = server.key(escape, false);
