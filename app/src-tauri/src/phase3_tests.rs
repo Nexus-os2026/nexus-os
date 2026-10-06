@@ -8229,16 +8229,7 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
     // The commands the interface thread runs, in every desktop file.
     let mut checked = 0;
     for (file, item, body) in &bodies {
-        // The attributes read with their literals blanked (a doc string
-        // cannot spell one), `cfg_attr` included.
-        let head = String::from_utf8(masked(&item.head)).expect("masked text");
-        let command =
-            head.contains("#[command") || (head.contains("cfg_attr(") && head.contains("command"));
-        if !command {
-            continue;
-        }
-        let off_thread = head.contains("command(async)") || head.ends_with("async");
-        if off_thread {
+        if command_runs_off_thread(item) != Some(false) {
             continue;
         }
         checked += 1;
@@ -8257,13 +8248,12 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
     }
     // The reading itself: a doc string spelling the async attribute, a
     // `cfg_attr` command, a function value and a joined thread are seen.
-    let fixture = "/// x\n#[doc = \"#[tauri::command(async)]\"]\n#[tauri::command]\nfn f() {}\n#[cfg_attr(all(), tauri::command)]\nfn g() {}\n";
-    let heads: Vec<String> = fn_items(fixture)
+    let fixture = "/// x\n#[doc = \"#[tauri::command(async)]\"]\n#[tauri::command]\nfn f() {}\n#[cfg_attr(all(), tauri::command)]\nfn g() {}\n#[tauri::command]\nasync fn h() {}\nfn i() {}\n";
+    let threads: Vec<Option<bool>> = fn_items(fixture)
         .iter()
-        .map(|item| String::from_utf8(masked(&item.head)).expect("masked text"))
+        .map(command_runs_off_thread)
         .collect();
-    assert!(heads[0].contains("#[command") && !heads[0].contains("command(async)"));
-    assert!(heads[1].contains("cfg_attr(") && heads[1].contains("command"));
+    assert_eq!(threads, [Some(false), Some(false), Some(true), None]);
     assert!(uses(
         "letf=execute_agent_goal;f(state)",
         "execute_agent_goal"
@@ -8314,6 +8304,18 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
         ],
         "start_hivemind",
     );
+}
+
+/// Whether a desktop function, if it is a command, runs off the interface
+/// thread (`Some(true)`: `#[command(async)]` or an `async fn`) or on it
+/// (`Some(false)`); `None` if it is not a command. Its attributes are read
+/// with their literals blanked (a doc string cannot spell one), and a
+/// `cfg_attr` that makes it a command counts.
+fn command_runs_off_thread(item: &FnItem) -> Option<bool> {
+    let head = String::from_utf8(masked(&item.head)).expect("masked text");
+    let command =
+        head.contains("#[command") || (head.contains("cfg_attr(") && head.contains("command"));
+    command.then(|| head.contains("command(async)") || head.ends_with("async"))
 }
 
 /// `text` (normalized) without the bodies of the threads and tasks it
