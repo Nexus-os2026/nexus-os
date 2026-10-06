@@ -1564,7 +1564,11 @@ fn no_authority_lock_is_held_while_any_record_is_written() {
         f.sink.probes(),
         phases.len()
     );
-    assert_eq!(f.sink.violations(), 0);
+    assert_eq!(
+        f.sink.violations(),
+        0,
+        "an authority lock was held while a record was written"
+    );
 }
 
 /// A sink that reads the authority on its own recording thread (as an

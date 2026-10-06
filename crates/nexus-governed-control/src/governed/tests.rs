@@ -891,7 +891,11 @@ fn a_display_start_is_recorded_with_no_lock_held_and_a_stop_overtakes_it() {
         ]
     );
     assert!(sink.probes() >= phases.len());
-    assert_eq!(sink.violations(), 0);
+    assert_eq!(
+        sink.violations(),
+        0,
+        "an authority lock was held while a record was written"
+    );
 }
 
 /// An agent's action is taken only in an agent's run: an owner command run

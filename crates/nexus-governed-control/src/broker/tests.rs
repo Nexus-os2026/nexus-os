@@ -223,7 +223,11 @@ fn leases_are_issued_released_and_ended_with_no_lock_held_across_a_record() {
     assert!(phases.contains(&EvidencePhase::CredentialReleased));
     assert!(phases.contains(&EvidencePhase::Denied));
     assert!(sink.probes() >= phases.len());
-    assert_eq!(sink.violations(), 0);
+    assert_eq!(
+        sink.violations(),
+        0,
+        "an authority lock was held while a record was written"
+    );
 }
 
 #[test]
