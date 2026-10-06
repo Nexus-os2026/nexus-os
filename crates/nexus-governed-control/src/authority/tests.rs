@@ -287,6 +287,29 @@ fn an_expired_commitment_cannot_be_authorized_or_started() {
     assert!(f.phases().contains(&EvidencePhase::Expired));
 }
 
+/// T60b: suspension expires the commitment independently of its grant.
+#[test]
+fn wall_clock_expiry_ends_a_commitment_while_its_grant_stays_live() {
+    let f = fixture();
+    let id = f.prepare(EffectClass::R1); // 60 s commitment, 600 s grant.
+    f.auth
+        .commitments()
+        .authorize(id, &f.agent, f.run, None)
+        .unwrap();
+    f.clock.suspend(TTL + Duration::from_secs(1));
+    assert!(
+        f.auth.grants().live(f.grant).is_some(),
+        "the grant must still be live"
+    );
+    assert_eq!(
+        f.begin(id).unwrap_err(),
+        AuthorityError::Expired,
+        "wall time alone must expire the commitment"
+    );
+    assert_eq!(f.state(id), CommitmentState::Expired);
+    assert!(!f.phases().contains(&EvidencePhase::Started));
+}
+
 #[test]
 fn a_revoked_grant_or_a_moved_policy_generation_ends_unconsumed_commitments() {
     let f = fixture();

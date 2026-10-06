@@ -264,6 +264,8 @@ pub struct AgentDisplay {
     /// one.
     starting: Mutex<bool>,
     started: Condvar,
+    #[cfg(test)]
+    waiting_test: Mutex<Option<std::sync::mpsc::Sender<()>>>,
     /// Counts stops: a start that a stop overtook ends its server unused.
     stops: AtomicU64,
     shared: Arc<Shared>,
@@ -324,6 +326,8 @@ impl AgentDisplay {
             generation: Mutex::new(0),
             starting: Mutex::new(false),
             started: Condvar::new(),
+            #[cfg(test)]
+            waiting_test: Mutex::new(None),
             stops: AtomicU64::new(0),
             shared: Arc::new(Shared::default()),
         }
@@ -352,6 +356,15 @@ impl AgentDisplay {
                 return Err(AuthorityError::Unavailable(
                     "another start of the agent display is under way",
                 ));
+            }
+            #[cfg(test)]
+            if let Some(waiting) = self
+                .waiting_test
+                .lock()
+                .expect("test waiting signal")
+                .take()
+            {
+                let _ = waiting.send(());
             }
             busy = self.started.wait_timeout(busy, left).expect("starting").0;
         }

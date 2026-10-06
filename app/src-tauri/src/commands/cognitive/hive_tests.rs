@@ -269,3 +269,105 @@ fn a_cancelled_sessions_waiting_subtask_ends_only_its_own_goal() {
         "a cancelled session ended a goal that was not its own"
     );
 }
+
+/// T173b: a session timeout ends its own goal, never a newer goal or the
+/// agent's governed-control run. No loop driver, timer sleep or LLM is needed.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_subtask_timeout_ends_only_its_goal_and_preserves_governed_control() {
+    use crate::governed_real_world::{AgentBridge, RealWorld};
+    use nexus_governed_control::authority::approval::{
+        ActionConfirmation, ControlConfirmer, GrantConfirmation, ResumeConfirmation,
+    };
+    use nexus_governed_control::governed::{GrantRequest, Intent};
+    use nexus_governed_control::tool::ToolIntent;
+    struct Yes;
+    impl ControlConfirmer for Yes {
+        fn confirm_action(&self, _: &ActionConfirmation) -> bool {
+            true
+        }
+        fn confirm_grant(&self, _: &GrantConfirmation) -> bool {
+            true
+        }
+        fn confirm_resume(&self, _: &ResumeConfirmation) -> bool {
+            true
+        }
+    }
+    struct Root(std::path::PathBuf);
+    impl Drop for Root {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let root = Root(std::env::temp_dir().join(format!("nexus-p3-timeout-{}", Uuid::new_v4())));
+    let mut state = AppState::new_in_memory();
+    let world = RealWorld::for_tests(&root.0, state.audit.clone(), state.db.clone());
+    state.real_world = Ok(world.clone());
+    let agent = register(&state, "hive-timeout");
+    let session = admit_hivemind(&state).unwrap();
+    world
+        .request_grant(
+            &GrantRequest::Tool {
+                tool: "text.sha256".into(),
+            },
+            600,
+            &Yes,
+        )
+        .unwrap();
+    let bridge = AgentBridge::with_warden(world.clone(), || false);
+    let intent = Intent::Tool(ToolIntent {
+        tool: "text.sha256".into(),
+        input: json!({"text":"still active"}),
+    });
+    assert!(bridge.act(&agent, &intent, false).is_ok());
+    let timeout = |goal: &str| {
+        assert_eq!(
+            await_subtask(
+                &state,
+                &session,
+                &agent,
+                goal,
+                "part",
+                std::time::Duration::ZERO
+            ),
+            Err("sub-task timed out after 0s".to_string())
+        );
+    };
+    // When the timed-out goal is still current, it is removed.
+    let old = execute_agent_goal(&state, agent.clone(), "part".into(), 5, None).unwrap();
+    timeout(&old);
+    assert!(
+        !state.cognitive_runtime.has_active_loop(&agent),
+        "the timed-out goal kept its loop"
+    );
+    assert!(
+        !world.was_stopped(&agent),
+        "a timeout became an agent-wide stop"
+    );
+    assert!(
+        bridge.act(&agent, &intent, false).is_ok(),
+        "governed control stopped with a subtask"
+    );
+    // A replacement is already installed before the old wait times out.
+    let old = execute_agent_goal(&state, agent.clone(), "older part".into(), 5, None).unwrap();
+    let newer = execute_agent_goal(&state, agent.clone(), "newer goal".into(), 5, None).unwrap();
+    timeout(&old);
+    assert_eq!(
+        state
+            .cognitive_runtime
+            .get_agent_status_fast(&agent)
+            .and_then(|status| status.active_goal)
+            .map(|goal| goal.id),
+        Some(newer.clone()),
+        "a subtask timeout ended a newer goal"
+    );
+    assert!(
+        !world.was_stopped(&agent),
+        "a timeout became an agent-wide stop"
+    );
+    assert!(
+        bridge.act(&agent, &intent, false).is_ok(),
+        "the existing governed run must remain usable"
+    );
+    end_goal_loop(&state, &agent, &newer);
+}

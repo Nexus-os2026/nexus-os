@@ -830,6 +830,18 @@ fn a_stop_wins_over_a_start_and_nothing_starts_unrecorded() {
 /// that was not approved.
 #[test]
 fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
+    interrupted_drag_cases(false);
+}
+
+/// T165b: POINTER_ROOT is not focus on the source. With every corner
+/// covered and the keyboard ungrabbed, Escape must not reach the covering
+/// application through pointer-following focus.
+#[test]
+fn pointer_following_focus_never_sends_drag_cleanup_escape_to_another_window() {
+    interrupted_drag_cases(true);
+}
+
+fn interrupted_drag_cases(pointer_root: bool) {
     use x11rb::protocol::xproto::{GrabMode, GrabStatus, InputFocus};
     let Some((display, _root)) = display() else {
         return;
@@ -866,7 +878,7 @@ fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
     // What covers the press point, whether the source holds the keyboard
     // focus, whether another client holds a keyboard grab, and what the
     // windows receive.
-    for (over, focused, grabbed, expected) in [
+    let ordinary = [
         (
             Over::Other(partly),
             false,
@@ -915,7 +927,19 @@ fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
             true,
             &["press", "release 50 50"][..],
         ),
-    ] {
+    ];
+    let following = [(
+        Over::Other(all),
+        false,
+        false,
+        &["press", "release 50 50"][..],
+    )];
+    let cases = if pointer_root {
+        &following[..]
+    } else {
+        &ordinary[..]
+    };
+    for &(over, focused, grabbed, expected) in cases {
         let h = harness();
         grant_perception(&h);
         grant_input(&h, 10, true);
@@ -944,6 +968,16 @@ fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
             )
             .unwrap();
         client.map_window(source).unwrap();
+        if pointer_root {
+            client
+                .set_input_focus(InputFocus::POINTER_ROOT, 1u32, x11rb::CURRENT_TIME)
+                .unwrap();
+            assert_eq!(
+                client.get_input_focus().unwrap().reply().unwrap().focus,
+                1u32
+            );
+            assert!(!grabbed, "T165b exercises an ungrabbed keyboard");
+        }
         if focused {
             client
                 .set_input_focus(InputFocus::PARENT, source, x11rb::CURRENT_TIME)
@@ -1114,12 +1148,19 @@ fn a_queued_start_counts_a_stop_that_came_while_it_waited() {
         })
     };
     // The first start holds the start; the second waits for it.
-    holding.recv().unwrap();
+    holding.recv_timeout(Duration::from_secs(10)).unwrap();
+    let (queued, waiting_for_turn) = std::sync::mpsc::channel();
+    *display.waiting_test.lock().unwrap() = Some(queued);
     let second = {
         let display = display.clone();
         std::thread::spawn(move || display.start(640, 480, || Ok(()), || false))
     };
-    std::thread::sleep(Duration::from_secs(1));
+    // This signal comes from inside turn(), while the second start holds
+    // the busy-state lock, immediately before its condition-variable wait.
+    // Its stop epoch has already been read; no scheduling delay is assumed.
+    waiting_for_turn
+        .recv_timeout(Duration::from_secs(10))
+        .unwrap();
     assert!(display.stop().is_none(), "nothing ran yet");
     release.send(()).unwrap();
     let stopped = AuthorityError::Closed("the agent display was stopped while it started");
