@@ -7028,9 +7028,9 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
             ".open_run(agent.clone(),RunOrigin::AgentGoal)",
             "letmutcurrent=self.run.lock()",
             "letmutagents=self.world.agents();",
-            "ifself.stopped_since_began(&agents,agent_id){Kept::Stopped}",
+            "ifself.stopped_since_began(&agents,agent_id){Opened::Stopped}",
             "agents.runs.entry(agent_id.to_string()).or_default().push(opened);",
-            "Kept::Stopped=>{let_=self.world.control.cancel_run(opened);",
+            "Opened::Stopped=>{let_=self.world.control.cancel_run(opened);",
         ],
         "AgentBridge::open_loop_run",
     );

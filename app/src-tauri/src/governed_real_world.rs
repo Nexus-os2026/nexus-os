@@ -541,7 +541,8 @@ impl AgentBridge {
             .control
             .open_run(agent.clone(), RunOrigin::AgentGoal)
             .map_err(|e| e.to_string())?;
-        enum Kept {
+        /// What became of the run opened.
+        enum Opened {
             Kept,
             Raced(RunId),
             Stopped,
@@ -551,12 +552,12 @@ impl AgentBridge {
             let mut current = self.run.lock().unwrap_or_else(|p| p.into_inner());
             let mut agents = self.world.agents();
             if self.stopped_since_began(&agents, agent_id) {
-                Kept::Stopped
+                Opened::Stopped
             } else {
                 match current.as_ref() {
                     // Another action of this loop opened its run meanwhile.
-                    Some((owner, run)) if owner == agent => Kept::Raced(*run),
-                    Some(_) => Kept::OtherAgent,
+                    Some((owner, run)) if owner == agent => Opened::Raced(*run),
+                    Some(_) => Opened::OtherAgent,
                     None => {
                         let registry = self.world.control.authority().runs();
                         for runs in agents.runs.values_mut() {
@@ -573,23 +574,23 @@ impl AgentBridge {
                             .or_default()
                             .push(opened);
                         *current = Some((agent.clone(), opened));
-                        Kept::Kept
+                        Opened::Kept
                     }
                 }
             }
         };
         // What was opened but not kept ends now, outside the locks.
         match kept {
-            Kept::Kept => Ok(opened),
-            Kept::Raced(run) => {
+            Opened::Kept => Ok(opened),
+            Opened::Raced(run) => {
                 self.world.control.finish_run(opened);
                 Ok(run)
             }
-            Kept::Stopped => {
+            Opened::Stopped => {
                 let _ = self.world.control.cancel_run(opened);
                 Err("governed control: the owner stopped this agent".into())
             }
-            Kept::OtherAgent => {
+            Opened::OtherAgent => {
                 let _ = self.world.control.cancel_run(opened);
                 Err("governed control: one agent per loop".into())
             }
