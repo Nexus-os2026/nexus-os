@@ -92,11 +92,15 @@ pub const MAX_FIELD: usize = 256;
 /// Most detail entries a record keeps.
 pub const MAX_DETAIL: usize = 16;
 
-/// Whether `c` is shown as itself: not a control character, and not an
-/// invisible formatting or direction-changing character that would make a
-/// line read differently from what it is (`U+202E` reverses what follows).
+/// Whether `c` is shown as itself: not a control character, not a space
+/// other than the ASCII space (`U+3000` and the other Unicode spaces draw
+/// blank, some twice as wide, so a line could be padded out of view with
+/// nothing visible), and not an invisible formatting or direction-changing
+/// character that would make a line read differently from what it is
+/// (`U+202E` reverses what follows).
 pub fn shown(c: char) -> bool {
     !c.is_control()
+        && (c == ' ' || !c.is_whitespace())
         && !matches!(
             c,
             '\u{00AD}'

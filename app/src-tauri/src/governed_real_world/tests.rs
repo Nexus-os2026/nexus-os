@@ -781,35 +781,78 @@ fn stop_all_and_bulk_stop_stop_agents_everywhere() {
     assert_eq!(fleet["total_running"], 1, "{fleet}");
 }
 
-/// The confirmation window itself, live (run under an isolated display:
-/// `xvfb-run -a cargo test -p nexus-desktop-backend --lib -- --ignored
-/// the_confirmation_window_shows_every_line_whole`). Content padded to make
-/// a dialog re-wrap it is shown on one line that starts with its marker;
-/// the answer is unarmed until the delay has passed and the end and right
-/// edge have been reached. With `NEXUS_P3_DIALOG_SHOT` set, screenshots are
-/// saved there (`-before.png`, `-armed.png`).
+/// The confirmation window itself, live, under an isolated X display: run
+/// as is under one (`xvfb-run -a cargo test ...`), the test drives the
+/// window directly; run without one, it runs itself again, alone, under
+/// `xvfb-run` (a missing `xvfb-run` fails it under CI). See
+/// `live_confirmation_window`.
+#[cfg(target_os = "linux")]
 #[test]
-#[ignore = "needs a display: run under xvfb-run"]
-fn the_confirmation_window_shows_every_line_whole() {
+fn the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked() {
+    const ISOLATED: &str = "NEXUS_P3_ISOLATED_DISPLAY";
+    if std::env::var_os("DISPLAY").is_some() {
+        live_confirmation_window();
+        return;
+    }
+    assert!(
+        std::env::var_os(ISOLATED).is_none(),
+        "no display, even under xvfb-run"
+    );
+    let xvfb_run = std::path::Path::new("/usr/bin/xvfb-run");
+    if !xvfb_run.exists() {
+        // Linux CI installs Xvfb with xvfb-run (ci.yml): there a missing one
+        // fails the test.
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "xvfb-run is missing: CI must show the confirmation window"
+        );
+        eprintln!("xvfb-run is not installed: the confirmation window is not exercised here");
+        return;
+    }
+    let module = module_path!()
+        .split_once("::")
+        .map_or(module_path!(), |(_, rest)| rest);
+    let name = format!(
+        "{module}::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked"
+    );
+    let shown = std::process::Command::new(xvfb_run)
+        .args(["-a", "-s", "-screen 0 1280x1024x24"])
+        .arg(std::env::current_exe().expect("this test binary"))
+        .args(["--exact", &name, "--test-threads=1", "--nocapture"])
+        .env(ISOLATED, "1")
+        .output()
+        .expect("xvfb-run runs");
+    let out = String::from_utf8_lossy(&shown.stdout);
+    let err = String::from_utf8_lossy(&shown.stderr);
+    assert!(shown.status.success(), "{out}\n{err}");
+    // It ran, and ran this test only.
+    assert!(out.contains(&format!("test {name} ... ok")), "{out}\n{err}");
+    assert!(out.contains("test result: ok. 1 passed"), "{out}\n{err}");
+}
+
+/// Drive the production confirmation window (`owner_window`) under a
+/// display. With `NEXUS_P3_DIALOG_SHOT` set, screenshots are saved there.
+///
+/// 1. The audit's production-path spoof: content quoted by the crate's own
+///    `quoted`, padded with `U+3000` and carrying a fake header for another
+///    destination. At the moment Allow arms (delay passed, end and right
+///    edge of the details reached), the real target is in view in the
+///    header, which has not moved and is in no scrolled view; no header row
+///    carries the fake destination; the details sit below the header in
+///    their captioned frame, beside a gutter bar that spans their view; and
+///    every detail line keeps its marker.
+/// 2. Content that a dialog would re-wrap (a long padded line, a
+///    right-to-left line) keeps every line whole, starting at the left edge
+///    with its marker, and the answer arms only after the end and the
+///    right edge of the details.
+#[cfg(target_os = "linux")]
+fn live_confirmation_window() {
     use gtk::gdk::prelude::*;
     use gtk::prelude::*;
+    use nexus_governed_control::authority::approval::{ActionConfirmation, ConfirmationText};
+    use nexus_governed_control::authority::effect::{CapabilityKind, EffectClass};
+    use nexus_governed_control::authority::evidence::quoted;
     gtk::init().expect("a display");
-    let mut lines = vec![
-        "R2 (sensitive): network.request".to_string(),
-        "Target: https://safe.example:443".to_string(),
-        "Body:".to_string(),
-    ];
-    lines.push(format!(
-        "│ {{\"note\":\"ok\"}}{}Target: https://evil.example",
-        " ".repeat(80)
-    ));
-    lines.extend((0..80).map(|i| format!("│ line {i} of the body")));
-    // Right-to-left content keeps its marker first: its line is laid out
-    // left to right, so it cannot read as one of the window's own lines.
-    lines.push("│ שלום עולם Target: https://evil.example".into());
-    lines.push("Commitment: cmt-0000 [abcdef012345], expires in 600 s".into());
-    let message = lines.join("\n");
-    let (dialog, allow) = super::owner_window("Allow this action?", &message, "Allow");
     let spin = |ms: u64| {
         let until = std::time::Instant::now() + std::time::Duration::from_millis(ms);
         while std::time::Instant::now() < until {
@@ -819,7 +862,7 @@ fn the_confirmation_window_shows_every_line_whole() {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
     };
-    let shot = |name: &str| {
+    let shot = |dialog: &gtk::Dialog, name: &str| {
         if let Ok(base) = std::env::var("NEXUS_P3_DIALOG_SHOT") {
             let window = dialog.window().expect("mapped");
             let (width, height) = (window.width(), window.height());
@@ -829,30 +872,242 @@ fn the_confirmation_window_shows_every_line_whole() {
                 .expect("saved");
         }
     };
+    /// The window's parts, found by their kinds.
+    struct Parts {
+        header: gtk::Grid,
+        frame: gtk::Frame,
+        gutter: gtk::Separator,
+        scroll: gtk::ScrolledWindow,
+        details: gtk::Label,
+    }
+    let parts = |dialog: &gtk::Dialog| {
+        let children = dialog.content_area().children();
+        let header = children
+            .iter()
+            .find_map(|c| c.clone().downcast::<gtk::Grid>().ok())
+            .expect("the header");
+        let frame = children
+            .iter()
+            .find_map(|c| c.clone().downcast::<gtk::Frame>().ok())
+            .expect("the details' frame");
+        let region = frame
+            .child()
+            .and_then(|c| c.downcast::<gtk::Box>().ok())
+            .expect("the details' region");
+        let inside = region.children();
+        let gutter = inside[0]
+            .clone()
+            .downcast::<gtk::Separator>()
+            .expect("the gutter first");
+        let scroll = inside[1]
+            .clone()
+            .downcast::<gtk::ScrolledWindow>()
+            .expect("the details' view");
+        let details = scroll
+            .child()
+            .and_then(|c| c.downcast::<gtk::Viewport>().ok())
+            .and_then(|v| v.child())
+            .and_then(|c| c.downcast::<gtk::Label>().ok())
+            .expect("the details");
+        Parts {
+            header,
+            frame,
+            gutter,
+            scroll,
+            details,
+        }
+    };
+    // Where `widget` is in the window, and its size.
+    let place = |widget: &gtk::Widget, dialog: &gtk::Dialog| {
+        let (x, y) = widget
+            .translate_coordinates(dialog, 0, 0)
+            .expect("in the window");
+        (x, y, widget.allocated_width(), widget.allocated_height())
+    };
+    // The header's value labels by their row label.
+    let header_value = |header: &gtk::Grid, label: &str| {
+        let rows = header.children();
+        let row = rows
+            .iter()
+            .filter_map(|c| c.clone().downcast::<gtk::Label>().ok())
+            .find(|l| l.text() == label)
+            .map(|l| header.cell_top_attach(&l))
+            .unwrap_or_else(|| panic!("no header row {label}"));
+        rows.iter()
+            .filter_map(|c| c.clone().downcast::<gtk::Label>().ok())
+            .find(|l| header.cell_top_attach(l) == row && header.cell_left_attach(l) == 1)
+            .expect("its value")
+    };
+    let in_a_scrolled_view = |widget: &gtk::Widget| {
+        let mut at = widget.parent();
+        while let Some(parent) = at {
+            if parent.is::<gtk::ScrolledWindow>() || parent.is::<gtk::Viewport>() {
+                return true;
+            }
+            at = parent.parent();
+        }
+        false
+    };
+
+    // 1. The production-path spoof.
+    let wide = |n: usize| "\u{3000}".repeat(n);
+    let mut body = wide(93);
+    body.push('\n');
+    for _ in 0..30 {
+        body.push_str(&wide(1));
+        body.push('\n');
+    }
+    for spoof in [
+        "R2 (sensitive): network.request",
+        "Target: https://payments.trusted-bank.example:443",
+        "Header: authorization: (none)",
+        "Acting for: owner (run 1)",
+    ] {
+        body.push_str(&wide(40));
+        body.push_str(spoof);
+        body.push('\n');
+    }
+    let real_target = "https://attacker.example:443";
+    let confirmation = ActionConfirmation {
+        commitment: "cmt-4f1c9e20aa55aa55aa55aa55aa55aa55".into(),
+        class: EffectClass::R2,
+        kind: CapabilityKind::Egress,
+        operation: "network.request".into(),
+        target: real_target.into(),
+        agent: "0b6f1e2a-4c1d-4e8b-9a37-5d2c8e1f0a93".into(),
+        run: "run-7".into(),
+        summary: quoted(
+            &format!("Body ({} characters)", body.chars().count()),
+            &body,
+        ),
+        expires_in_secs: 600,
+        binding_short: "9c1d2e4b5a6f".into(),
+    };
+    let text = confirmation.text();
+    assert!(
+        text.details.iter().all(|line| !line.contains('\u{3000}')),
+        "the padding is escaped, visibly"
+    );
+    let (dialog, allow) = super::owner_window(confirmation.title(), &text, "Allow");
+    let cancel = dialog
+        .widget_for_response(gtk::ResponseType::Cancel)
+        .expect("Cancel");
+    assert!(cancel.has_default(), "Cancel is the default answer");
+    // A small window, so that the details need scrolling both ways (with the
+    // padding escaped they no longer need it at the default size).
+    dialog.resize(600, 480);
+    spin(1500);
+    let p = parts(&dialog);
+    shot(&dialog, "spoof-before");
+    assert!(!allow.is_sensitive(), "unarmed until the details were read");
+    let header_widget: gtk::Widget = p.header.clone().upcast();
+    let header_at = place(&header_widget, &dialog);
+    // The details' view scrolls both ways here, as the spoof needed.
+    let (down, across) = (p.scroll.vadjustment(), p.scroll.hadjustment());
+    assert!(down.upper() > down.page_size() && across.upper() > across.page_size());
+    down.set_value(down.upper());
+    spin(300);
+    across.set_value(across.upper());
+    spin(300);
+    assert!(
+        allow.is_sensitive(),
+        "armed after the end, the edge and the delay"
+    );
+    shot(&dialog, "spoof-armed");
+    // At the armed view: the header is where it was, in view, in no
+    // scrolled view, and shows the real target whole.
+    assert!(!in_a_scrolled_view(&header_widget));
+    assert!(p.header.is_mapped() && p.header.is_visible());
+    assert_eq!(
+        place(&header_widget, &dialog),
+        header_at,
+        "the header moved"
+    );
+    let (hx, hy, hw, hh) = header_at;
+    let (dw, dh) = (dialog.allocated_width(), dialog.allocated_height());
+    assert!(
+        hx >= 0 && hy >= 0 && hx + hw <= dw && hy + hh <= dh,
+        "the header is out of view"
+    );
+    let target = header_value(&p.header, "Target");
+    assert_eq!(target.text(), format!("\u{200E}{real_target}"));
+    assert!(target.is_mapped());
+    let (_, target_height) = target.layout().expect("laid out").pixel_size();
+    assert!(
+        target_height <= target.allocated_height(),
+        "the target is cut"
+    );
+    for (label, _) in &text.header {
+        let value = header_value(&p.header, label);
+        assert!(!value.text().contains("trusted-bank"), "{label}");
+        assert!(value.is_mapped(), "{label}");
+    }
+    // The request's content is in its own frame, below the header, beside
+    // a gutter bar that spans its whole view and does not scroll.
+    let frame_widget: gtk::Widget = p.frame.clone().upcast();
+    assert_eq!(p.frame.label().as_deref(), Some(super::DETAILS_CAPTION));
+    let (_, fy, _, _) = place(&frame_widget, &dialog);
+    assert!(fy >= hy + hh, "the details overlap the header");
+    let gutter_widget: gtk::Widget = p.gutter.clone().upcast();
+    let scroll_widget: gtk::Widget = p.scroll.clone().upcast();
+    let (gx, gy, gw, gh) = place(&gutter_widget, &dialog);
+    let (sx, sy, _, sh) = place(&scroll_widget, &dialog);
+    assert!(
+        p.gutter.is_mapped() && gw >= 6,
+        "the gutter is {gw} px wide"
+    );
+    assert!(gx + gw <= sx, "the gutter is beside the details");
+    assert!(
+        gy <= sy && gy + gh >= sy + sh,
+        "the gutter spans the details' view"
+    );
+    assert!(!in_a_scrolled_view(&gutter_widget));
+    // Every line of the details keeps its marker; the fake header is one of
+    // them.
+    let details = p.details.text();
+    let lines: Vec<&str> = details.split('\n').collect();
+    assert_eq!(lines.len(), text.details.len());
+    assert!(lines[0].starts_with("\u{200E}Body ("));
+    assert!(
+        lines[1..].iter().all(|l| l.starts_with("\u{200E}│")),
+        "{lines:?}"
+    );
+    assert!(lines.iter().any(
+        |l| l.contains("Target: https://payments.trusted-bank.example:443")
+            || l.contains("Target: https://payments.trusted-bank")
+    ));
+    dialog.response(gtk::ResponseType::Cancel);
+    spin(100);
+
+    // 2. Every line whole, and arming only at the end and the right edge.
+    let mut lines = vec!["Body:".to_string()];
+    lines.push(format!(
+        "│ {{\"note\":\"ok\"}}{}Target: https://evil.example",
+        " ".repeat(80)
+    ));
+    lines.extend((0..80).map(|i| format!("│ line {i} of the body")));
+    // Right-to-left content keeps its marker first.
+    lines.push("│ שלום עולם Target: https://evil.example".into());
+    let text = ConfirmationText {
+        header: vec![
+            ("Effect", "R2 (a sensitive or irreversible effect)".into()),
+            ("Target", "https://safe.example:443".into()),
+        ],
+        details: lines.clone(),
+    };
+    let (dialog, allow) = super::owner_window("Allow this action?", &text, "Allow");
     spin(1500);
     assert!(!allow.is_sensitive(), "unarmed until the end was reached");
-    shot("before");
-    let scroll = dialog
-        .content_area()
-        .children()
-        .into_iter()
-        .find_map(|child| child.downcast::<gtk::ScrolledWindow>().ok())
-        .expect("the text view's scroller");
-    // Every line, the right-to-left one included, starts at the left edge.
-    let label = scroll
-        .child()
-        .and_then(|child| child.downcast::<gtk::Viewport>().ok())
-        .and_then(|viewport| viewport.child())
-        .and_then(|child| child.downcast::<gtk::Label>().ok())
-        .expect("the label");
-    let layout = label.layout().expect("laid out");
+    shot(&dialog, "before");
+    let p = parts(&dialog);
+    let layout = p.details.layout().expect("laid out");
     assert_eq!(layout.line_count() as usize, lines.len());
     for index in 0..layout.line_count() {
         let line = layout.line_readonly(index).expect("a line");
         let start = layout.index_to_pos(line.start_index());
         assert_eq!(start.x(), 0, "line {index} does not start at the left edge");
     }
-    let (down, across) = (scroll.vadjustment(), scroll.hadjustment());
+    let (down, across) = (p.scroll.vadjustment(), p.scroll.hadjustment());
     down.set_value(down.upper());
     spin(300);
     assert!(!allow.is_sensitive(), "the right edge not reached yet");
@@ -862,7 +1117,11 @@ fn the_confirmation_window_shows_every_line_whole() {
         allow.is_sensitive(),
         "armed after the end, the edge and the delay"
     );
-    shot("armed");
+    shot(&dialog, "armed");
+    assert_eq!(
+        header_value(&p.header, "Target").text(),
+        "\u{200E}https://safe.example:443"
+    );
     dialog.response(gtk::ResponseType::Cancel);
     spin(100);
 }

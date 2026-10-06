@@ -10,7 +10,7 @@
 
 use crate::AppState;
 use nexus_governed_control::authority::approval::{
-    ActionConfirmation, ControlConfirmer, GrantConfirmation, ResumeConfirmation,
+    ActionConfirmation, ConfirmationText, ControlConfirmer, GrantConfirmation, ResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
@@ -646,7 +646,7 @@ pub(crate) struct ControlDialogs(pub(crate) tauri::AppHandle<tauri::Wry>);
 impl ControlDialogs {
     /// Show the window on the main thread and wait here (never on the main
     /// thread) for the owner's answer; no answer is a refusal.
-    fn confirm(&self, title: &str, message: String, answer: &str) -> bool {
+    fn confirm(&self, title: &str, text: ConfirmationText, answer: &str) -> bool {
         use gtk::prelude::*;
         // One confirmation at a time: the next window opens (and its arming
         // delay starts) only once this one is answered, so a click meant
@@ -659,7 +659,7 @@ impl ControlDialogs {
         let (sender, receiver) = std::sync::mpsc::channel();
         let (title, answer) = (title.to_string(), answer.to_string());
         let shown = self.0.run_on_main_thread(move || {
-            let (dialog, _) = owner_window(&title, &message, &answer);
+            let (dialog, _) = owner_window(&title, &text, &answer);
             let sender = std::cell::RefCell::new(Some(sender));
             dialog.connect_response(move |dialog, response| {
                 if let Some(sender) = sender.borrow_mut().take() {
@@ -726,27 +726,40 @@ impl Drop for DialogTurn {
 #[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
 impl ControlConfirmer for ControlDialogs {
     fn confirm_action(&self, request: &ActionConfirmation) -> bool {
-        self.confirm(request.title(), request.message(), "Allow")
+        self.confirm(request.title(), request.text(), "Allow")
     }
 
     fn confirm_grant(&self, request: &GrantConfirmation) -> bool {
-        self.confirm(request.title(), request.message(), "Grant")
+        self.confirm(request.title(), request.text(), "Grant")
     }
 
     fn confirm_resume(&self, request: &ResumeConfirmation) -> bool {
-        self.confirm(request.title(), request.message(), "Resume")
+        self.confirm(request.title(), request.text(), "Resume")
     }
 }
 
-/// Nexus's own confirmation window. Its text is shown exactly as given, in
-/// a monospace label that never wraps and scrolls both ways: every line
-/// starts where the backend started it, with its marker, so nothing in it
-/// can pass for the window's own text, and nothing is cut. Cancel is the
-/// default answer (Enter and Escape cancel); the answer button arms only
-/// after `ARMING_DELAY`, once the end and the right edge of the text have
-/// been reached. Returns the window and its answer button.
+/// Nexus's own confirmation window, in two parts it keeps apart.
+///
+/// The header, the security identity of what is asked (for an action: its
+/// effect class, operation, canonical target, acting agent, run,
+/// commitment and binding), is a grid the window draws outside every
+/// scrolled view, so it stays in view whenever the answer can be given: its
+/// labels are the window's own (bold), its values the backend's
+/// (monospace, wrapped within their own column, each seen whole).
+///
+/// The request's details are below it, in a frame captioned as the
+/// request's content, with a bar beside them that the window draws and that
+/// does not scroll: shown exactly as given, in a monospace label that never
+/// wraps and scrolls both ways, every line starting where the backend
+/// started it, with its marker. Nothing the request carries can draw in the
+/// header's place or scroll it away, and nothing is cut.
+///
+/// Cancel is the default answer (Enter and Escape cancel); the answer
+/// button arms only after `ARMING_DELAY`, once the end and the right edge
+/// of the details have been reached. Returns the window and its answer
+/// button.
 #[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
-fn owner_window(title: &str, message: &str, answer: &str) -> (gtk::Dialog, gtk::Widget) {
+fn owner_window(title: &str, text: &ConfirmationText, answer: &str) -> (gtk::Dialog, gtk::Widget) {
     use gtk::prelude::*;
     use std::cell::Cell;
     use std::rc::Rc;
@@ -759,29 +772,67 @@ fn owner_window(title: &str, message: &str, answer: &str) -> (gtk::Dialog, gtk::
     let allow = dialog.add_button(answer, gtk::ResponseType::Accept);
     allow.set_sensitive(false);
     dialog.set_default_response(gtk::ResponseType::Cancel);
-    // A label, not a text view: its whole extent is known at its first
-    // layout (a text view lays its lines out lazily, so its end would seem
-    // reached before it is). Plain text, never markup; never wrapped.
-    let text = gtk::Label::new(None);
-    // Every line starts with a left-to-right mark, so each is laid out left
-    // to right with its marker first, whatever script its content begins
-    // with (a line led by a right-to-left letter would otherwise be drawn
-    // flush right, its marker last).
-    let lines: Vec<String> = message
-        .split('\n')
-        .map(|line| format!("\u{200E}{line}"))
-        .collect();
-    text.set_text(&lines.join("\n"));
-    text.set_line_wrap(false);
-    text.set_xalign(0.0);
-    text.set_yalign(0.0);
+    let bold = gtk::pango::AttrList::new();
+    bold.insert(gtk::pango::AttrInt::new_weight(gtk::pango::Weight::Bold));
     let monospace = gtk::pango::AttrList::new();
     monospace.insert(gtk::pango::AttrString::new_family("monospace"));
-    text.set_attributes(Some(&monospace));
+    // Labels, not text views: their whole extent is known at their first
+    // layout. Plain text, never markup. Every value and line starts with a
+    // left-to-right mark, so each is laid out from the left with its marker
+    // first, whatever script it begins with.
+    let header = gtk::Grid::new();
+    header.set_column_spacing(12);
+    header.set_row_spacing(2);
+    for (row, (label, value)) in (0..).zip(&text.header) {
+        let name = gtk::Label::new(Some(label));
+        name.set_attributes(Some(&bold));
+        name.set_xalign(1.0);
+        name.set_yalign(0.0);
+        let shown = gtk::Label::new(Some(&format!("\u{200E}{value}")));
+        shown.set_attributes(Some(&monospace));
+        shown.set_line_wrap(true);
+        shown.set_line_wrap_mode(gtk::pango::WrapMode::Char);
+        shown.set_max_width_chars(DIALOG_COLUMNS);
+        shown.set_xalign(0.0);
+        shown.set_yalign(0.0);
+        shown.set_hexpand(true);
+        header.attach(&name, 0, row, 1, 1);
+        header.attach(&shown, 1, row, 1, 1);
+    }
+    let details = gtk::Label::new(None);
+    let lines: Vec<String> = text
+        .details
+        .iter()
+        .map(|line| format!("\u{200E}{line}"))
+        .collect();
+    details.set_text(&lines.join("\n"));
+    details.set_line_wrap(false);
+    details.set_xalign(0.0);
+    details.set_yalign(0.0);
+    details.set_attributes(Some(&monospace));
     let scroll = gtk::ScrolledWindow::builder().build();
     scroll.set_policy(gtk::PolicyType::Automatic, gtk::PolicyType::Automatic);
-    scroll.add(&text);
-    dialog.content_area().pack_start(&scroll, true, true, 0);
+    scroll.set_min_content_height(160);
+    scroll.add(&details);
+    // The gutter: a bar the window draws beside the details, outside their
+    // scrolled view, wide enough to see wherever they are scrolled.
+    let gutter = gtk::Separator::new(gtk::Orientation::Vertical);
+    let bar = gtk::CssProvider::new();
+    if bar.load_from_data(GUTTER_STYLE.as_bytes()).is_ok() {
+        gutter
+            .style_context()
+            .add_provider(&bar, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    }
+    let region = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    region.pack_start(&gutter, false, false, 0);
+    region.pack_start(&scroll, true, true, 0);
+    let frame = gtk::Frame::new(Some(DETAILS_CAPTION));
+    frame.set_shadow_type(gtk::ShadowType::In);
+    frame.add(&region);
+    let content = dialog.content_area();
+    content.set_spacing(8);
+    content.pack_start(&header, false, false, 0);
+    content.pack_start(&frame, true, true, 0);
     let arming = Rc::new(Cell::new(Arming::default()));
     let update: Rc<dyn Fn()> = {
         let (arming, allow, scroll) = (arming.clone(), allow.clone(), scroll.clone());
@@ -812,6 +863,18 @@ fn owner_window(title: &str, message: &str, answer: &str) -> (gtk::Dialog, gtk::
     dialog.show_all();
     (dialog, allow)
 }
+
+/// How the gutter is drawn: a solid bar.
+#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
+const GUTTER_STYLE: &str = "separator { min-width: 6px; background-color: #3465a4; }";
+
+/// The caption of the region that shows what the request carries.
+#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
+const DETAILS_CAPTION: &str = "From the request (its content, not this window's own text)";
+
+/// The widest a header value is laid out before it wraps, in characters.
+#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
+const DIALOG_COLUMNS: i32 = nexus_governed_control::authority::evidence::DIALOG_COLUMNS as i32;
 
 /// The IPC commands (thin: every decision is in the crate). Dialog-bound
 /// work runs on the blocking pool, never on the IPC or main thread.

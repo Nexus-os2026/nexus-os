@@ -1024,7 +1024,102 @@ fn nothing_the_owner_approves_is_cut_or_disguised() {
     };
     assert!(grant
         .message()
-        .contains("Any agent may use it until it expires or you revoke it"));
+        .contains("Who may use it: any agent, until it expires or you revoke it"));
+}
+
+/// The Unicode spaces (`U+3000` draws blank and twice as wide) are never
+/// shown as themselves: content padded with them could push its own lines
+/// out of view with nothing visible. They are escaped, visibly; only the
+/// ASCII space is shown as itself.
+#[test]
+fn no_wide_or_unusual_blank_is_shown_as_itself() {
+    use super::evidence::{escaped, is_plain, quoted, shown};
+    assert!(shown(' '));
+    for c in [
+        '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2003}', '\u{2007}', '\u{200A}', '\u{2028}',
+        '\u{2029}', '\u{202F}', '\u{205F}', '\u{3000}', '\u{0085}',
+    ] {
+        assert!(!shown(c), "{c:?}");
+        assert!(!is_plain(&format!("a{c}b")), "{c:?}");
+        let shown_as = escaped(&format!("a{c}b"));
+        assert!(is_plain(&shown_as), "{c:?}: {shown_as}");
+        assert!(shown_as.contains("\\u{"), "{c:?}: {shown_as}");
+    }
+    // The audit's padding: a line of ideographic spaces before a fake
+    // header line is quoted as visible escapes, marked as content.
+    let padded = format!(
+        "{}Target: https://payments.trusted-bank.example:443",
+        "\u{3000}".repeat(26)
+    );
+    let lines = quoted("Body", &padded);
+    assert!(lines.iter().all(|l| is_plain(l)), "{lines:?}");
+    assert!(lines[1].starts_with("│ \\u{3000}"), "{lines:?}");
+    assert!(!lines.iter().any(|l| l.contains('\u{3000}')));
+    // A line that would show one is refused, not shown.
+    let f = fixture();
+    let mut action = prepared(EffectClass::R2, f.grant);
+    action.summary = vec![format!(
+        "{}Target: https://evil.example",
+        "\u{3000}".repeat(8)
+    )];
+    assert_eq!(
+        f.auth
+            .commitments()
+            .prepare(&f.agent, f.run, action, TTL)
+            .unwrap_err(),
+        AuthorityError::InvalidAction("display text is not plain")
+    );
+}
+
+/// The confirmation keeps the security identity in its header (what the
+/// window shows fixed) and what the request carries in its details: no
+/// detail line is a header row, and every header row is the backend's.
+#[test]
+fn an_approval_keeps_its_identity_apart_from_the_requests_content() {
+    use super::evidence::quoted;
+    let f = fixture();
+    let c = f.auth.commitments();
+    let mut action = prepared(EffectClass::R2, f.grant);
+    action.summary = quoted(
+        "Body",
+        "Target: https://payments.trusted-bank.example:443\nOperation: nothing",
+    );
+    let id = c.prepare(&f.agent, f.run, action, TTL).unwrap().id;
+    let _ = c.request_approval(id, &f.agent, f.run, &f.yes).unwrap();
+    let seen = f.yes.last.lock().unwrap().clone().unwrap();
+    let text = seen.text();
+    let labels: Vec<&str> = text.header.iter().map(|(label, _)| *label).collect();
+    assert_eq!(
+        labels,
+        [
+            "Effect",
+            "Operation",
+            "Target",
+            "Acting for",
+            "Run",
+            "Commitment",
+            "Binding",
+            "Expires in"
+        ]
+    );
+    let value = |label: &str| {
+        text.header
+            .iter()
+            .find(|(l, _)| *l == label)
+            .map(|(_, v)| v.clone())
+            .unwrap()
+    };
+    assert_eq!(value("Effect"), "R2 (a sensitive or irreversible effect)");
+    assert_eq!(value("Operation"), "egress.fetch");
+    assert_eq!(value("Target"), "https://example.invalid/");
+    assert_eq!(value("Acting for"), f.agent.to_string());
+    assert_eq!(value("Run"), f.run.to_string());
+    assert_eq!(value("Commitment"), id.to_string());
+    assert_eq!(value("Binding"), c.view(id).unwrap().binding_short);
+    // The request's lines are all in the details, each marked.
+    assert_eq!(text.details[0], "Body:");
+    assert!(text.details[1..].iter().all(|l| l.starts_with('│')));
+    assert!(text.header.iter().all(|(_, v)| !v.contains("trusted-bank")));
 }
 
 /// The evidence carries a commitment's parameters only salted with a nonce

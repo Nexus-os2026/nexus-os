@@ -3943,7 +3943,7 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
         let dialog = one_fn(front, &format!("ControlDialogs::{method}"));
         assert_eq!(
             compact(dialog.body_text(front)),
-            format!("self.confirm(request.title(),request.message(),\"{answer}\")"),
+            format!("self.confirm(request.title(),request.text(),\"{answer}\")"),
             "ControlDialogs::{method}"
         );
     }
@@ -3962,6 +3962,9 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
     );
     for constant in [
         "const DIALOG_TURN_WAIT: std::time::Duration =\n    nexus_governed_control::authority::commitment::MAX_COMMITMENT_TTL;",
+        "const GUTTER_STYLE: &str = \"separator { min-width: 6px; background-color: #3465a4; }\";",
+        "const DETAILS_CAPTION: &str = \"From the request (its content, not this window's own text)\";",
+        "const DIALOG_COLUMNS: i32 = nexus_governed_control::authority::evidence::DIALOG_COLUMNS as i32;",
     ] {
         assert!(front.contains(constant), "{constant}");
     }
@@ -3975,13 +3978,15 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
 
 /// The owner's confirmation window, pinned whole (normalized text): the
 /// one-at-a-time turn (a flag, never a lock held across the dialog), the
-/// window and its arming.
+/// window (a fixed header outside every scrolled view, the request's
+/// details in their own captioned frame beside a gutter bar) and its
+/// arming.
 const CONFIRMATION_WINDOW: [(&str, &str); 7] = [
     ("DialogTurn::take", "Self::take_within(DIALOG_TURN_WAIT)"),
-    ("ControlDialogs::confirm", "use*;letSome(_turn)=DialogTurn::take()else{returnfalse;};let(sender,receiver)=channel();let(title,answer)=(title.to_string(),answer.to_string());letshown=self.0.run_on_main_thread(move||{let(dialog,_)=owner_window(&title,&message,&answer);letsender=RefCell::new(Some(sender));dialog.connect_response(move|dialog,response|{ifletSome(sender)=sender.borrow_mut().take(){let_=sender.send(response==ResponseType::Accept);}dialog.close();});dialog.present();});shown.is_ok()&&receiver.recv().unwrap_or(false)"),
+    ("ControlDialogs::confirm", "use*;letSome(_turn)=DialogTurn::take()else{returnfalse;};let(sender,receiver)=channel();let(title,answer)=(title.to_string(),answer.to_string());letshown=self.0.run_on_main_thread(move||{let(dialog,_)=owner_window(&title,&text,&answer);letsender=RefCell::new(Some(sender));dialog.connect_response(move|dialog,response|{ifletSome(sender)=sender.borrow_mut().take(){let_=sender.send(response==ResponseType::Accept);}dialog.close();});dialog.present();});shown.is_ok()&&receiver.recv().unwrap_or(false)"),
     ("DialogTurn::take_within", "let(busy,freed)=&DIALOG_BUSY;letdeadline=Instant::now()+wait;letmuton_screen=busy.lock().unwrap_or_else(|p|p.into_inner());while*on_screen{letleft=deadline.saturating_duration_since(Instant::now());ifleft.is_zero(){returnNone;}on_screen=freed.wait_timeout(on_screen,left).unwrap_or_else(|p|p.into_inner()).0;}*on_screen=true;Some(DialogTurn)"),
     ("DialogTurn::drop", "let(busy,freed)=&DIALOG_BUSY;*busy.lock().unwrap_or_else(|p|p.into_inner())=false;freed.notify_one();"),
-    ("owner_window", "use*;useCell;useRc;letdialog=Dialog::new();dialog.set_title(title);dialog.set_modal(true);dialog.set_keep_above(true);dialog.set_default_size(900,560);dialog.add_button(\"Cancel\",ResponseType::Cancel);letallow=dialog.add_button(answer,ResponseType::Accept);allow.set_sensitive(false);dialog.set_default_response(ResponseType::Cancel);lettext=Label::new(None);letlines:Vec<String>=message.split('\\n').map(|line|format!(\"\\u{200E}{line}\")).collect();text.set_text(&lines.join(\"\\n\"));text.set_line_wrap(false);text.set_xalign(0.0);text.set_yalign(0.0);letmonospace=AttrList::new();monospace.insert(AttrString::new_family(\"monospace\"));text.set_attributes(Some(&monospace));letscroll=ScrolledWindow::builder().build();scroll.set_policy(PolicyType::Automatic,PolicyType::Automatic);scroll.add(&text);dialog.content_area().pack_start(&scroll,true,true,0);letarming=Rc::new(Cell::new(Arming::default()));letupdate:Rc<dynFn()>={let(arming,allow,scroll)=(arming.clone(),allow.clone(),scroll.clone());Rc::new(move||{letmutnow=arming.get();let(down,across)=(scroll.vadjustment(),scroll.hadjustment());now.end_reached|=reached(down.value(),down.page_size(),down.upper());now.edge_reached|=reached(across.value(),across.page_size(),across.upper());arming.set(now);allow.set_sensitive(now.ready());})};foradjustmentin[scroll.vadjustment(),scroll.hadjustment()]{letmoved=update.clone();adjustment.connect_value_changed(move|_|moved());letresized=update.clone();adjustment.connect_changed(move|_|resized());}{let(arming,update)=(arming.clone(),update.clone());timeout_add_local_once(ARMING_DELAY,move||{letmutnow=arming.get();now.delay_passed=true;arming.set(now);update();});}dialog.show_all();(dialog,allow)"),
+    ("owner_window", "use*;useCell;useRc;letdialog=Dialog::new();dialog.set_title(title);dialog.set_modal(true);dialog.set_keep_above(true);dialog.set_default_size(900,560);dialog.add_button(\"Cancel\",ResponseType::Cancel);letallow=dialog.add_button(answer,ResponseType::Accept);allow.set_sensitive(false);dialog.set_default_response(ResponseType::Cancel);letbold=AttrList::new();bold.insert(AttrInt::new_weight(Weight::Bold));letmonospace=AttrList::new();monospace.insert(AttrString::new_family(\"monospace\"));letheader=Grid::new();header.set_column_spacing(12);header.set_row_spacing(2);for(row,(label,value))in(0..).zip(&text.header){letname=Label::new(Some(label));name.set_attributes(Some(&bold));name.set_xalign(1.0);name.set_yalign(0.0);letshown=Label::new(Some(&format!(\"\\u{200E}{value}\")));shown.set_attributes(Some(&monospace));shown.set_line_wrap(true);shown.set_line_wrap_mode(WrapMode::Char);shown.set_max_width_chars(DIALOG_COLUMNS);shown.set_xalign(0.0);shown.set_yalign(0.0);shown.set_hexpand(true);header.attach(&name,0,row,1,1);header.attach(&shown,1,row,1,1);}letdetails=Label::new(None);letlines:Vec<String>=text.details.iter().map(|line|format!(\"\\u{200E}{line}\")).collect();details.set_text(&lines.join(\"\\n\"));details.set_line_wrap(false);details.set_xalign(0.0);details.set_yalign(0.0);details.set_attributes(Some(&monospace));letscroll=ScrolledWindow::builder().build();scroll.set_policy(PolicyType::Automatic,PolicyType::Automatic);scroll.set_min_content_height(160);scroll.add(&details);letgutter=Separator::new(Orientation::Vertical);letbar=CssProvider::new();ifbar.load_from_data(GUTTER_STYLE.as_bytes()).is_ok(){gutter.style_context().add_provider(&bar,STYLE_PROVIDER_PRIORITY_APPLICATION);}letregion=Box::new(Orientation::Horizontal,6);region.pack_start(&gutter,false,false,0);region.pack_start(&scroll,true,true,0);letframe=Frame::new(Some(DETAILS_CAPTION));frame.set_shadow_type(ShadowType::In);frame.add(&region);letcontent=dialog.content_area();content.set_spacing(8);content.pack_start(&header,false,false,0);content.pack_start(&frame,true,true,0);letarming=Rc::new(Cell::new(Arming::default()));letupdate:Rc<dynFn()>={let(arming,allow,scroll)=(arming.clone(),allow.clone(),scroll.clone());Rc::new(move||{letmutnow=arming.get();let(down,across)=(scroll.vadjustment(),scroll.hadjustment());now.end_reached|=reached(down.value(),down.page_size(),down.upper());now.edge_reached|=reached(across.value(),across.page_size(),across.upper());arming.set(now);allow.set_sensitive(now.ready());})};foradjustmentin[scroll.vadjustment(),scroll.hadjustment()]{letmoved=update.clone();adjustment.connect_value_changed(move|_|moved());letresized=update.clone();adjustment.connect_changed(move|_|resized());}{let(arming,update)=(arming.clone(),update.clone());timeout_add_local_once(ARMING_DELAY,move||{letmutnow=arming.get();now.delay_passed=true;arming.set(now);update();});}dialog.show_all();(dialog,allow)"),
     ("Arming::ready", "self.delay_passed&&self.end_reached&&self.edge_reached"),
     ("reached", "page>0.0&&value+page>=upper-1.0"),
 ];
@@ -4395,6 +4400,7 @@ fn p3_g6_06_the_desktop_reaches_phase_three_only_through_its_front_door() {
 /// `p3_g6_06`).
 const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::approval::ActionConfirmation",
+    "nexus_governed_control::authority::approval::ConfirmationText",
     "nexus_governed_control::authority::approval::ControlConfirmer",
     "nexus_governed_control::authority::approval::GrantConfirmation",
     "nexus_governed_control::authority::approval::ResumeConfirmation",
@@ -4404,6 +4410,7 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::commitment::CommitmentState::Executing",
     "nexus_governed_control::authority::commitment::CommitmentView",
     "nexus_governed_control::authority::commitment::MAX_COMMITMENT_TTL",
+    "nexus_governed_control::authority::evidence::DIALOG_COLUMNS",
     "nexus_governed_control::authority::evidence::EvidenceRecord",
     "nexus_governed_control::authority::evidence::EvidenceRecord::to_json",
     "nexus_governed_control::authority::evidence::EvidenceSink",
