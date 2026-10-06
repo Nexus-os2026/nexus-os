@@ -8930,6 +8930,11 @@ pub mod runtime {
                     {
                         eprintln!("[shutdown] {error}");
                     }
+                    // Phase Three: every run cancelled, the agent display
+                    // stopped gracefully (its lock and socket removed).
+                    if let Ok(world) = app.state::<AppState>().real_world() {
+                        world.shutdown();
+                    }
                 }
             });
     }

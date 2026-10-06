@@ -397,6 +397,17 @@ pub(crate) fn admin_agent_stop_all(state: &AppState, workspace_id: String) -> Re
     for agent in &agents {
         if agent.status == "running" {
             if let Ok(id) = Uuid::parse_str(&agent.id) {
+                // As the per-agent stop does: the loop's cancel flag, the
+                // loop itself and what it left in Phase Three end first.
+                if let Some(flag) = state
+                    .cognitive_cancellations
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .get(&agent.id)
+                {
+                    flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                let _ = crate::commands::cognitive::stop_agent_goal(state, agent.id.clone());
                 let mut sup = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
                 // Best-effort: stop agent during bulk shutdown; continue with remaining agents
                 let _ = sup.stop_agent(id);

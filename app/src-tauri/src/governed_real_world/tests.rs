@@ -347,3 +347,200 @@ fn the_production_executor_routes_governed_actions_only_through_phase_three() {
         ))
     );
 }
+
+/// The answer of a confirmation arms only once the delay has passed and
+/// the end and the right edge of its text have been reached; a view not
+/// laid out yet has reached nothing.
+#[test]
+fn a_confirmation_arms_only_after_the_delay_and_the_whole_text() {
+    use super::{reached, Arming};
+    assert!(!reached(0.0, 0.0, 0.0), "not laid out yet");
+    assert!(reached(0.0, 400.0, 400.0), "it fits");
+    assert!(!reached(0.0, 400.0, 1200.0));
+    assert!(reached(800.0, 400.0, 1200.0));
+    let all = Arming {
+        delay_passed: true,
+        end_reached: true,
+        edge_reached: true,
+    };
+    assert!(all.ready());
+    for missing in [
+        Arming {
+            delay_passed: false,
+            ..all
+        },
+        Arming {
+            end_reached: false,
+            ..all
+        },
+        Arming {
+            edge_reached: false,
+            ..all
+        },
+    ] {
+        assert!(!missing.ready(), "{missing:?}");
+    }
+}
+
+/// A paused or stopped agent acts in the real world no more, however it
+/// was paused or stopped.
+#[test]
+fn an_agent_that_is_not_running_acts_no_more() {
+    let t = isolated();
+    let owner = Owner(true, AtomicU32::new(0));
+    t.world
+        .request_grant(
+            &GrantRequest::Tool {
+                tool: "text.sha256".into(),
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let bridge = AgentBridge::for_tests(t.world.clone(), || false, |_| false);
+    let intent = Intent::Tool(ToolIntent {
+        tool: "text.sha256".into(),
+        input: json!({ "text": "abc" }),
+    });
+    let refused = bridge
+        .act(&uuid::Uuid::new_v4().to_string(), &intent, false)
+        .unwrap_err();
+    assert!(refused.contains("not running"), "{refused}");
+}
+
+/// The owner's stop reaches a loop even before it opened its run: no loop
+/// begun before the stop acts again, and a loop begun after it does.
+#[test]
+fn a_stop_reaches_a_loop_that_had_not_opened_its_run() {
+    let t = isolated();
+    let owner = Owner(true, AtomicU32::new(0));
+    t.world
+        .request_grant(
+            &GrantRequest::Tool {
+                tool: "text.sha256".into(),
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let agent = uuid::Uuid::new_v4().to_string();
+    let intent = Intent::Tool(ToolIntent {
+        tool: "text.sha256".into(),
+        input: json!({ "text": "abc" }),
+    });
+    let before = AgentBridge::with_warden(t.world.clone(), || false);
+    t.world.cancel_agent(&agent);
+    let refused = before.act(&agent, &intent, false).unwrap_err();
+    assert!(refused.contains("stopped"), "{refused}");
+    let after = AgentBridge::with_warden(t.world.clone(), || false);
+    assert!(after.act(&agent, &intent, false).is_ok());
+}
+
+/// Quitting cancels every run that is still open.
+#[test]
+fn quitting_cancels_every_open_run() {
+    let t = isolated();
+    let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", server.local_addr().unwrap());
+    let owner = Owner(true, AtomicU32::new(0));
+    t.world
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: origin.clone(),
+                methods: vec!["POST".into()],
+                allow_private: true,
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let bridge = AgentBridge::with_warden(t.world.clone(), || false);
+    let agent = uuid::Uuid::new_v4().to_string();
+    let post = Intent::Request(nexus_governed_control::egress::EgressIntent {
+        method: "POST".into(),
+        url: format!("{origin}/x"),
+        headers: vec![],
+        body: Some("{}".into()),
+    });
+    let waiting: Value = serde_json::from_str(&bridge.act(&agent, &post, true).unwrap()).unwrap();
+    let commitment = waiting["awaiting_owner_approval"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    t.world.shutdown();
+    assert!(t.world.approve(&commitment, &owner).is_err());
+    assert!(t.world.status()["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|run| run["cancelled"] == true || run["finished"] == true));
+}
+
+/// The confirmation window itself, live (run under an isolated display:
+/// `xvfb-run -a cargo test -p nexus-desktop-backend --lib -- --ignored
+/// the_confirmation_window_shows_every_line_whole`). Content padded to make
+/// a dialog re-wrap it is shown on one line that starts with its marker;
+/// the answer is unarmed until the delay has passed and the end and right
+/// edge have been reached. With `NEXUS_P3_DIALOG_SHOT` set, screenshots are
+/// saved there (`-before.png`, `-armed.png`).
+#[test]
+#[ignore = "needs a display: run under xvfb-run"]
+fn the_confirmation_window_shows_every_line_whole() {
+    use gtk::gdk::prelude::*;
+    use gtk::prelude::*;
+    gtk::init().expect("a display");
+    let mut lines = vec![
+        "R2 (sensitive): network.request".to_string(),
+        "Target: https://safe.example:443".to_string(),
+        "Body:".to_string(),
+    ];
+    lines.push(format!(
+        "│ {{\"note\":\"ok\"}}{}Target: https://evil.example",
+        " ".repeat(80)
+    ));
+    lines.extend((0..80).map(|i| format!("│ line {i} of the body")));
+    lines.push("Commitment: cmt-0000 [abcdef012345], expires in 600 s".into());
+    let message = lines.join("\n");
+    let (dialog, allow) = super::owner_window("Allow this action?", &message, "Allow");
+    let spin = |ms: u64| {
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+        while std::time::Instant::now() < until {
+            while gtk::events_pending() {
+                gtk::main_iteration();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    };
+    let shot = |name: &str| {
+        if let Ok(base) = std::env::var("NEXUS_P3_DIALOG_SHOT") {
+            let window = dialog.window().expect("mapped");
+            let (width, height) = (window.width(), window.height());
+            let pixbuf = window.pixbuf(0, 0, width, height).expect("pixels");
+            pixbuf
+                .savev(format!("{base}-{name}.png"), "png", &[])
+                .expect("saved");
+        }
+    };
+    spin(1500);
+    assert!(!allow.is_sensitive(), "unarmed until the end was reached");
+    shot("before");
+    let scroll = dialog
+        .content_area()
+        .children()
+        .into_iter()
+        .find_map(|child| child.downcast::<gtk::ScrolledWindow>().ok())
+        .expect("the text view's scroller");
+    let (down, across) = (scroll.vadjustment(), scroll.hadjustment());
+    down.set_value(down.upper());
+    spin(300);
+    assert!(!allow.is_sensitive(), "the right edge not reached yet");
+    across.set_value(across.upper());
+    spin(300);
+    assert!(
+        allow.is_sensitive(),
+        "armed after the end, the edge and the delay"
+    );
+    shot("armed");
+    dialog.response(gtk::ResponseType::Cancel);
+    spin(100);
+}

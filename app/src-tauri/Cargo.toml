@@ -7,7 +7,7 @@ license.workspace = true
 
 [features]
 default = ["tauri-runtime"]
-tauri-runtime = ["dep:tauri"]
+tauri-runtime = ["dep:tauri", "dep:gtk"]
 real-claude = []
 real-llama = ["nexus-flash-infer/real-llama"]
 test-support = []
@@ -103,6 +103,11 @@ tauri-plugin-dialog = "=2.7.0"
 # Phase Two: governed sandboxed verification (profiles, packaged toolchain,
 # workspace, cgroup scope and the backend side of the separate helper).
 nexus-verifier-sandbox = { path = "../../crates/nexus-verifier-sandbox" }
+# Phase Three: the owner's own confirmation window (a monospace view that
+# never wraps, and an answer armed only once all of it was reached). The
+# version tao and wry already lock: no new package; Cargo.lock gains this
+# crate's dependency edge on gtk.
+gtk = { version = "=0.18.2", optional = true }
 
 # P0 item D native boundary harness (tests/webview_boundary_live.rs): it drives
 # the real Wry runtime with the production context and build_main_window, so it

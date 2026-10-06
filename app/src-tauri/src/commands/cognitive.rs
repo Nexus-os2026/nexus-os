@@ -1605,10 +1605,23 @@ pub(crate) fn phase0_agent_executor(
         )
         .with_llm_handler(Arc::new(BridgeLlmQueryHandler))
         .with_memory_manager(memory),
-        governed: state
-            .real_world()
-            .ok()
-            .map(crate::governed_real_world::AgentBridge::new),
+        governed: state.real_world().ok().map(|world| {
+            // A paused or stopped agent acts in the real world no more,
+            // whichever way it was paused or stopped.
+            let supervisor = state.supervisor.clone();
+            crate::governed_real_world::AgentBridge::new(
+                world,
+                Arc::new(move |agent: &str| {
+                    Uuid::parse_str(agent).ok().is_some_and(|id| {
+                        supervisor
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner())
+                            .get_agent(id)
+                            .is_some_and(|handle| handle.state == AgentState::Running)
+                    })
+                }),
+            )
+        }),
     }
 }
 

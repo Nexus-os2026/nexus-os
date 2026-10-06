@@ -37,9 +37,20 @@ pub(crate) struct RealWorld {
     control: GovernedControl,
     recent: Arc<MemoryEvidence>,
     attachments: Attachments,
+    agents: Mutex<Agents>,
+}
+
+/// What the desktop keeps about agents' use of Phase Three.
+#[derive(Default)]
+struct Agents {
     /// Each agent's runs (ended ones forgotten as new ones arrive), so that
     /// the owner's stop of an agent cancels what it left running or waiting.
-    agent_runs: Mutex<HashMap<String, Vec<RunId>>>,
+    runs: HashMap<String, Vec<RunId>>,
+    /// Counts the owner's stops of agents.
+    epoch: u64,
+    /// The stop (epoch) each agent was last stopped at: a loop begun before
+    /// it can no longer act, even one that had not opened its run yet.
+    stopped_at: HashMap<String, u64>,
 }
 
 /// Evidence into the shared hash-chained audit trail (and its persisted
@@ -84,7 +95,7 @@ impl RealWorld {
             control,
             recent,
             attachments: Attachments::default(),
-            agent_runs: Mutex::new(HashMap::new()),
+            agents: Mutex::new(Agents::default()),
         }))
     }
 
@@ -113,7 +124,7 @@ impl RealWorld {
             control,
             recent,
             attachments: Attachments::default(),
-            agent_runs: Mutex::new(HashMap::new()),
+            agents: Mutex::new(Agents::default()),
         })
     }
 
@@ -190,34 +201,38 @@ impl RealWorld {
         }
     }
 
-    /// Remember `run` as one of `agent`'s (ended runs are forgotten here).
-    fn track_agent_run(&self, agent: &str, run: RunId) {
-        let registry = self.control.authority().runs();
-        let mut map = self.agent_runs.lock().unwrap_or_else(|p| p.into_inner());
-        for runs in map.values_mut() {
-            runs.retain(|r| {
-                registry
-                    .view(*r)
-                    .is_some_and(|view| !view.cancelled && !view.finished)
-            });
-        }
-        map.retain(|_, runs| !runs.is_empty());
-        map.entry(agent.to_string()).or_default().push(run);
+    fn agents(&self) -> std::sync::MutexGuard<'_, Agents> {
+        self.agents.lock().unwrap_or_else(|p| p.into_inner())
     }
 
     /// The owner stopped `agent`: its Phase Three runs are cancelled, so
     /// whatever of them still runs sees the cancellation and nothing it left
-    /// waiting can still be approved.
+    /// waiting can still be approved; and no loop of it begun before this
+    /// stop can act again (recorded under the lock its runs are opened
+    /// under, so a run opened just then is not missed).
     pub(crate) fn cancel_agent(&self, agent: &str) {
-        let runs = self
-            .agent_runs
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .remove(agent)
-            .unwrap_or_default();
+        let runs = {
+            let mut agents = self.agents();
+            agents.epoch += 1;
+            let epoch = agents.epoch;
+            agents.stopped_at.insert(agent.to_string(), epoch);
+            agents.runs.remove(agent).unwrap_or_default()
+        };
         for run in runs {
             let _ = self.control.cancel_run(run);
         }
+    }
+
+    /// The desktop is quitting: every run is cancelled (whatever still runs
+    /// sees it and ends its processes) and the agent display is stopped
+    /// gracefully, recorded, rather than left to die with the process.
+    pub(crate) fn shutdown(&self) {
+        for run in self.control.authority().runs().views() {
+            if !run.cancelled && !run.finished {
+                let _ = self.control.cancel_run(run.id);
+            }
+        }
+        self.control.stop_display();
     }
 
     pub(crate) fn cancel_run(&self, run: &str) -> Result<(), String> {
@@ -367,6 +382,11 @@ pub(crate) struct AgentBridge {
     /// Whether the owner's Warden review is enabled (it then denies every
     /// action it reviews, as it does for the kernel registry).
     warden: fn() -> bool,
+    /// Whether the agent is running now: a paused or stopped agent acts no
+    /// more, whichever way it was paused or stopped.
+    running: Arc<dyn Fn(&str) -> bool + Send + Sync>,
+    /// The owner's stops counted when this loop began.
+    began: u64,
 }
 
 /// The owner's Warden setting; unreadable, it counts as enabled.
@@ -376,23 +396,38 @@ fn warden_enabled() -> bool {
 }
 
 impl AgentBridge {
-    pub(crate) fn new(world: Arc<RealWorld>) -> Self {
+    pub(crate) fn new(
+        world: Arc<RealWorld>,
+        running: Arc<dyn Fn(&str) -> bool + Send + Sync>,
+    ) -> Self {
+        let began = world.agents().epoch;
         Self {
             world,
             run: Mutex::new(None),
             warden: warden_enabled,
+            running,
+            began,
         }
     }
 
-    /// A bridge whose Warden setting is fixed (tests).
+    /// A bridge whose Warden setting and agent state are fixed (tests).
+    #[cfg(test)]
+    #[cfg(target_os = "linux")]
+    pub(crate) fn for_tests(
+        world: Arc<RealWorld>,
+        warden: fn() -> bool,
+        running: fn(&str) -> bool,
+    ) -> Self {
+        let mut bridge = Self::new(world, Arc::new(running));
+        bridge.warden = warden;
+        bridge
+    }
+
+    /// A bridge whose Warden setting is fixed and whose agent runs (tests).
     #[cfg(test)]
     #[cfg(target_os = "linux")]
     pub(crate) fn with_warden(world: Arc<RealWorld>, warden: fn() -> bool) -> Self {
-        Self {
-            world,
-            run: Mutex::new(None),
-            warden,
-        }
+        Self::for_tests(world, warden, |_| true)
     }
 
     /// Run a governed intent for `agent_id`: data back to the agent. A
@@ -410,9 +445,20 @@ impl AgentBridge {
                 crate::commands::cognitive::WARDEN_REVIEW_UNAVAILABLE
             ));
         }
+        if !(self.running)(agent_id) {
+            return Err("governed control: the agent is not running".into());
+        }
         let agent = AgentId::new(agent_id).ok_or("governed control: invalid agent identity")?;
         let run = {
             let mut current = self.run.lock().unwrap_or_else(|p| p.into_inner());
+            let mut agents = self.world.agents();
+            if agents
+                .stopped_at
+                .get(agent_id)
+                .is_some_and(|stopped| *stopped > self.began)
+            {
+                return Err("governed control: the owner stopped this agent".into());
+            }
             match current.as_ref() {
                 Some((owner, run)) if *owner == agent => *run,
                 Some(_) => return Err("governed control: one agent per loop".into()),
@@ -422,7 +468,22 @@ impl AgentBridge {
                         .control
                         .open_run(agent.clone(), RunOrigin::AgentGoal)
                         .map_err(|e| e.to_string())?;
-                    self.world.track_agent_run(agent_id, run);
+                    // Tracked under the lock a stop takes: a stop cannot
+                    // come between opening the run and remembering it.
+                    let registry = self.world.control.authority().runs();
+                    for runs in agents.runs.values_mut() {
+                        runs.retain(|r| {
+                            registry
+                                .view(*r)
+                                .is_some_and(|view| !view.cancelled && !view.finished)
+                        });
+                    }
+                    agents.runs.retain(|_, runs| !runs.is_empty());
+                    agents
+                        .runs
+                        .entry(agent_id.to_string())
+                        .or_default()
+                        .push(run);
                     *current = Some((agent.clone(), run));
                     run
                 }
@@ -453,60 +514,145 @@ impl Drop for AgentBridge {
     }
 }
 
-/// Text for the native message dialog: the GTK backend reads it as a printf
-/// format, so every `%` is doubled.
-fn dialog_text(message: &str) -> String {
-    message.replace('%', "%%")
+/// How long the answer of a confirmation stays unarmed after its window
+/// appears: a click meant for something else cannot give it.
+#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
+const ARMING_DELAY: std::time::Duration = std::time::Duration::from_millis(1000);
+
+/// When the owner may give the answer of a confirmation: once the arming
+/// delay has passed and the end and the right edge of its text have been
+/// reached (nothing it allows can be left unseen below or beside the view).
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Arming {
+    delay_passed: bool,
+    end_reached: bool,
+    edge_reached: bool,
 }
 
-/// The owner's native dialogs: the only production [`ControlConfirmer`].
-/// They are shown by the backend; the webview holds no dialog permission.
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+impl Arming {
+    fn ready(self) -> bool {
+        self.delay_passed && self.end_reached && self.edge_reached
+    }
+}
+
+/// Whether a laid-out scrolled view shows its last part: its position plus
+/// its page reaches its extent (a view that fits shows everything at once).
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+fn reached(value: f64, page: f64, upper: f64) -> bool {
+    page > 0.0 && value + page >= upper - 1.0
+}
+
+/// The owner's confirmations, in Nexus's own window: the only production
+/// [`ControlConfirmer`]. They are shown by the backend; the webview holds
+/// no dialog permission.
 #[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
 pub(crate) struct ControlDialogs(pub(crate) tauri::AppHandle<tauri::Wry>);
 
 #[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
+impl ControlDialogs {
+    /// Show the window on the main thread and wait here (never on the main
+    /// thread) for the owner's answer; no answer is a refusal.
+    fn confirm(&self, title: &str, message: String, answer: &str) -> bool {
+        use gtk::prelude::*;
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let (title, answer) = (title.to_string(), answer.to_string());
+        let shown = self.0.run_on_main_thread(move || {
+            let (dialog, _) = owner_window(&title, &message, &answer);
+            let sender = std::cell::RefCell::new(Some(sender));
+            dialog.connect_response(move |dialog, response| {
+                if let Some(sender) = sender.borrow_mut().take() {
+                    let _ = sender.send(response == gtk::ResponseType::Accept);
+                }
+                dialog.close();
+            });
+            dialog.present();
+        });
+        shown.is_ok() && receiver.recv().unwrap_or(false)
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
 impl ControlConfirmer for ControlDialogs {
     fn confirm_action(&self, request: &ActionConfirmation) -> bool {
-        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-        self.0
-            .dialog()
-            .message(dialog_text(&request.message()))
-            .title(request.title())
-            .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "Allow".to_string(),
-                "Cancel".to_string(),
-            ))
-            .blocking_show()
+        self.confirm(request.title(), request.message(), "Allow")
     }
 
     fn confirm_grant(&self, request: &GrantConfirmation) -> bool {
-        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-        self.0
-            .dialog()
-            .message(dialog_text(&request.message()))
-            .title(request.title())
-            .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "Grant".to_string(),
-                "Cancel".to_string(),
-            ))
-            .blocking_show()
+        self.confirm(request.title(), request.message(), "Grant")
     }
 
     fn confirm_resume(&self, request: &ResumeConfirmation) -> bool {
-        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-        self.0
-            .dialog()
-            .message(dialog_text(&request.message()))
-            .title(request.title())
-            .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "Resume".to_string(),
-                "Cancel".to_string(),
-            ))
-            .blocking_show()
+        self.confirm(request.title(), request.message(), "Resume")
     }
+}
+
+/// Nexus's own confirmation window. Its text is shown exactly as given, in
+/// a monospace label that never wraps and scrolls both ways: every line
+/// starts where the backend started it, with its marker, so nothing in it
+/// can pass for the window's own text, and nothing is cut. Cancel is the
+/// default answer (Enter and Escape cancel); the answer button arms only
+/// after `ARMING_DELAY`, once the end and the right edge of the text have
+/// been reached. Returns the window and its answer button.
+#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
+fn owner_window(title: &str, message: &str, answer: &str) -> (gtk::Dialog, gtk::Widget) {
+    use gtk::prelude::*;
+    use std::cell::Cell;
+    use std::rc::Rc;
+    let dialog = gtk::Dialog::new();
+    dialog.set_title(title);
+    dialog.set_modal(true);
+    dialog.set_keep_above(true);
+    dialog.set_default_size(900, 560);
+    dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+    let allow = dialog.add_button(answer, gtk::ResponseType::Accept);
+    allow.set_sensitive(false);
+    dialog.set_default_response(gtk::ResponseType::Cancel);
+    // A label, not a text view: its whole extent is known at its first
+    // layout (a text view lays its lines out lazily, so its end would seem
+    // reached before it is). Plain text, never markup; never wrapped.
+    let text = gtk::Label::new(None);
+    text.set_text(message);
+    text.set_line_wrap(false);
+    text.set_xalign(0.0);
+    text.set_yalign(0.0);
+    let monospace = gtk::pango::AttrList::new();
+    monospace.insert(gtk::pango::AttrString::new_family("monospace"));
+    text.set_attributes(Some(&monospace));
+    let scroll = gtk::ScrolledWindow::builder().build();
+    scroll.set_policy(gtk::PolicyType::Automatic, gtk::PolicyType::Automatic);
+    scroll.add(&text);
+    dialog.content_area().pack_start(&scroll, true, true, 0);
+    let arming = Rc::new(Cell::new(Arming::default()));
+    let update: Rc<dyn Fn()> = {
+        let (arming, allow, scroll) = (arming.clone(), allow.clone(), scroll.clone());
+        Rc::new(move || {
+            let mut now = arming.get();
+            let (down, across) = (scroll.vadjustment(), scroll.hadjustment());
+            now.end_reached |= reached(down.value(), down.page_size(), down.upper());
+            now.edge_reached |= reached(across.value(), across.page_size(), across.upper());
+            arming.set(now);
+            allow.set_sensitive(now.ready());
+        })
+    };
+    for adjustment in [scroll.vadjustment(), scroll.hadjustment()] {
+        let moved = update.clone();
+        adjustment.connect_value_changed(move |_| moved());
+        let resized = update.clone();
+        adjustment.connect_changed(move |_| resized());
+    }
+    {
+        let (arming, update) = (arming.clone(), update.clone());
+        gtk::glib::timeout_add_local_once(ARMING_DELAY, move || {
+            let mut now = arming.get();
+            now.delay_passed = true;
+            arming.set(now);
+            update();
+        });
+    }
+    dialog.show_all();
+    (dialog, allow)
 }
 
 /// The IPC commands (thin: every decision is in the crate). Dialog-bound
@@ -552,12 +698,15 @@ pub(crate) mod ipc {
         Ok(world(state.inner())?.evidence())
     }
 
+    /// Understanding a command can resolve a destination (blocking DNS):
+    /// it runs on the blocking pool, never on the main thread.
     #[tauri::command]
-    pub(crate) fn p3_submit(
+    pub(crate) async fn p3_submit(
         state: tauri::State<'_, AppState>,
         envelope: CommandEnvelope,
     ) -> Result<Value, String> {
-        world(state.inner())?.submit(envelope)
+        let world = world(state.inner())?;
+        blocking(move || world.submit(envelope)).await
     }
 
     #[tauri::command]
