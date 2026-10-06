@@ -76,10 +76,12 @@ exactly once.
   emergency stop moves the policy generation, which ends every unconsumed
   commitment (recorded as it happens). Grants and commitments expire by the
   wall clock as well as the monotonic one, so a suspended machine does not
-  stretch them. An effect that runs in steps (a browser session) asks
-  before each step whether its grants are still live and the policy
-  generation unchanged: a grant revoked or expired while it runs ends it
-  there.
+  stretch them. A browser session asks before its start page, before
+  each step and after the last whether its grants are still live and the
+  policy generation unchanged: a grant revoked or expired, or any policy
+  change (another grant revoked, an emergency stop), ends it there, and its
+  evidence says which. Input actions are bound to their display and target
+  instead and are checked at every press.
 - A run holds at most 32 effects waiting to execute (an R2 commitment
   waits for its approval), and agents together can never take the last 64
   places, which are kept for the owner's own commands.
@@ -92,20 +94,32 @@ exactly once.
   emergency key, Ctrl+Alt+Shift+K) cancels every run, ends every
   unconsumed commitment, moves the policy generation, stops the agent
   display, and refuses new runs until the owner resumes through a native
-  dialog. Every way the owner stops an agent (Stop, the Admin "Stop all"
-  and bulk Stop, ending its goal) runs off the interface thread and
-  cancels its Phase Three runs first, so a running effect is interrupted,
-  then unregisters its schedule (a scheduled goal cannot restart it) and
-  stops its loop; an agent that is paused or stopped, however that
-  happened, acts no more: the loop's bridge asks the supervisor whether
-  the agent is running before every action, and refuses any action after
-  a stop that came after the loop began. Pausing does not cancel: an
-  effect already executing runs to its end within its own bounds, and a
-  paused agent's waiting R2 actions stay approvable until the owner denies
-  them or cancels their run. The page's stop controls (the emergency stop,
+  dialog. Every way the owner stops agents (Stop, the Admin "Stop all"
+  and bulk Stop) stops every named agent at once, on the interface's IPC
+  thread and before anything waits: its schedule ends (under any spelling
+  of its id), its loop's cancel flag is set, everything it runs or left
+  waiting in Phase Three is cancelled (a running effect is interrupted at
+  its next step), and the supervisor records the stop. A thread of its own
+  then removes the agents' loops, which may wait while any agent's cycle
+  holds the loop lock. A scheduled tick already under way when the owner
+  stops the agent does not bring it back. Ending an agent's goal cancels
+  it in Phase Three at once and removes its loop the same way; it leaves
+  the agent and its schedule, so a scheduled goal may start it again. A
+  stopped or paused agent acts no more in Phase Three: the loop's bridge
+  asks the supervisor whether the agent is running before every action,
+  and refuses any action after a stop that came after the loop began.
+  Pausing does not stop the agent's loop or schedule (they keep planning,
+  and may use routes outside Phase Three) and does not cancel: an effect
+  already executing runs to its end within its own bounds, and a paused
+  agent's waiting R2 actions stay approvable until the owner denies them
+  or cancels their run. The page's stop controls (the emergency stop,
   each run's Cancel, the display's Stop) stay usable while an approved
-  effect runs. Quitting the desktop cancels every open run, waits up to
-  five seconds for executing effects to end, and stops the agent display.
+  effect runs: the commands that wait on the agent loops' lock (consent
+  decisions, goal assignment, review mode) run off the interface thread
+  (`p3_g10_01`). Quitting the desktop refuses every new run, cancels every
+  open one, waits up to five seconds for executing effects to end, and
+  stops the agent display. A display stop always counts: a start in
+  progress ends unused.
 - With the owner's Warden review enabled, an agent's governed action that
   the review covers is refused, as the kernel registry refuses it.
 - Nothing is ever killed by process name: every process Phase Three starts
@@ -131,11 +145,14 @@ line, each line its own bounded field.
 Everything a native dialog shows must be plain text: control,
 bidirectional-override and zero-width characters are refused, so a target
 or summary cannot read differently from what it is. Content shown in full
-(a body, typed or filled text) has its hidden characters escaped, and
-every combining mark after the first two on one character, so stacked
-marks cannot cover text; each of its line breaks starts a new marked line
-(a trailing Return shows as an empty marked line), and window titles are
-shown with their quotes escaped. The owner's confirmation window lays every
+(a body, typed or filled text) has its hidden characters escaped, and a
+character (grapheme cluster) shows at most three code points, the rest
+escaped, so stacked marks cannot cover text (a value that begins with
+marks may show them on the character before it, and some scripts' joined
+letters show escapes); an escaped quote is written `\u{22}`, never `\"`.
+Each line break of the content starts a new marked line (a trailing
+Return shows as an empty marked line), and a window title is shown with
+its own quotes escaped, exactly once. The owner's confirmation window lays every
 line out left to right (right-to-left content cannot move where a line
 starts), only one is open at a time, and its answer arms only after a
 second, once the end and the right edge of its text have been reached;
@@ -145,6 +162,11 @@ not rendered width (wide text may need more scrolling).
 ## 2. Domains
 
 ### P3-A tools (processes)
+
+The runtime root holding every scratch directory is refused when a
+directory above it could be changed by another user (owned by someone other
+than root or the user, or writable by others without the sticky bit), so
+no one else can swap a scratch directory for one of theirs.
 
 There is no shell, interpreter, container or code runner (`ShellCommand`,
 `DockerCommand` and `CodeExecute` stay closed). A tool is code: a key, one
@@ -220,10 +242,13 @@ bounded. A stop is checked before every DevTools command, so nothing a
 session would do after it is sent. The proxy goes no further on any
 connection once the run is cancelled or the session's grant is revoked or
 expires (checked after a request is read, after it is admitted, between
-connection attempts and before every write upstream), and then stops,
-ending every tunnel; a revoked or expired grant ends the session before
-its next step, and a failed session's evidence says at which step it
-failed. Reading is R1; clicking, filling and
+connection attempts and before every write upstream; data already handed
+to the kernel, or a write already under way, may still complete), and then
+carries nothing more, ending every tunnel; it keeps its port, closing every
+new connection unserved, until the session ends, so no other process can
+take the port while the browser uses it. A failed or cancelled session's
+evidence says where it stopped: at the start page, at a step, or after
+the last. Reading is R1; clicking, filling and
 pressing are R2.
 
 ### P3-D perception and P3-E input
@@ -251,9 +276,10 @@ and keys aimed at the display background need the focus on no other
 window); an active keyboard or pointer grab by anyone fails the action; a
 drag is bound to the window it is dropped on as well, and its release is
 checked at the drop point under the same hold; whatever an action pressed
-is released on every way out of it (a held button where it was pressed,
-so an interrupted drag drops nothing anywhere new), and one action runs
-at a time. The grant's step budget is spent at the effect.
+is released on every way out of it, and one action runs at a time. A
+button an interrupted action still holds is let go where it was pressed,
+with the server held, if the window there is unchanged; otherwise the drag
+is first cancelled with Escape (toolkits cancel a drag on Escape). The grant's step budget is spent at the effect.
 Moves and scrolls are R1, and the input grant says so; clicks, drags and
 keys are R2 unless the owner granted R1 input. Typed text is shown for approval and recorded only as a
 digest. `ComputerAction` is an orchestrator: each step is its own
@@ -274,7 +300,10 @@ hand it to the transport, which sends it marked sensitive and redacts it,
 as the header value, the bare token, and the token JSON-escaped or
 percent-encoded, from the body, the location and the content type of
 what comes back; the forms it searches for and the replaced text are
-zeroized, and so is every buffer a response body passes through. A lease no commitment will list (its preparation failed or was
+zeroized, and so is every buffer Nexus collects a response body in (the
+transport's chunks and the HTTP and TLS stack's own buffers are not; once
+returned, the body is a plain vector, zeroized only where redaction
+replaced it). A lease no commitment will list (its preparation failed or was
 refused) ends at once, and the broker checks its capacity before recording
 a lease. Connectors are code: one fixed origin and typed
 operations whose requests must parse to that origin; an operation runs only
@@ -319,9 +348,11 @@ launch and termination, raw system calls, sockets and HTTP and WebSocket
 clients, the X server, the desktop bus (D-Bus, AT-SPI), loading a shared
 library, the credential vault (its global facade and the OS keyring),
 sealed spawns, launching the OS opener, name resolution (std's
-`ToSocketAddrs` and a `to_socket_addrs` call however made, libc's resolver
-functions and the DNS crates), and direct screen, input, clipboard, audio
-and browser-driver crates, the kernel's unsealed spawn
+`ToSocketAddrs`, a `to_socket_addrs` or `socket_addrs` call written as a
+method or through any path, libc's resolver functions and the DNS
+crates), network-capable crates in the production dependencies (the
+Prometheus exporter, the Hugging Face hub client), and direct screen,
+input, clipboard, audio and browser-driver crates, the kernel's unsealed spawn
 (`ResourceSpawnSpec`, `ResourceProgram`), nix and rustix sockets and
 process calls, sysinfo signals (and any kill in a file that lists
 processes with sysinfo), inline assembly and input device nodes. It fails
@@ -331,9 +362,9 @@ nothing. Every "latent" classification names its entries
 (`LATENT_ENTRIES`: the module, type or function a caller must name, and a
 few method names), and a reference to one from any production source in
 the workspace is itself a pinned `latent` site: a new caller anywhere fails
-until it is classified. At this candidate: 178 rows over 147 files, classed
+until it is classified. At this candidate: 180 rows over 149 files, classed
 8 Phase Three (exactly `crates/nexus-governed-control`), 35 existing
-governed, 95 closed and 9 non-production. A new mechanism anywhere in the
+governed, 97 closed and 9 non-production. A new mechanism anywhere in the
 workspace fails the guard until it is classified.
 
 The file set is the module tree (`p3_g6_13`): every production `mod`
@@ -344,8 +375,8 @@ toolchain manifests, pinned. `p3_g6_14` pins the production `macro_rules!`
 and refuses a macro fragment in a path, as a trait, as a method or as a
 macro name. `p3_g6_10` pins the files that declare foreign functions
 (name-skipped modules included, with or without an ABI string), refuses
-`#[link_name]` and any foreign declaration of a process, network, signal,
-raw-syscall or loader function (a local `extern` would escape the
+`#[link_name]` and any foreign declaration of a process, network (name
+resolution included), signal, raw-syscall or loader function (a local `extern` would escape the
 resolver). `p3_g6_09` pins the desktop's reach into the embedded Nexus Code
 application (it lists tools and configures a router slot; its router, tool
 execution, MCP manager and self-improvement run only behind the closed
@@ -357,7 +388,10 @@ error codes, `p3_g6_16` that test-only features are enabled only by tests
 only the browser and the display launch session processes, `p3_g9_01` that
 a response body lives only in zeroizing buffers (and an unknown peer is
 unpinned), and `p3_g9_02` that the agent display's X connection is made
-only on its checked socket, with its cookie.
+only on its checked socket, with its cookie, `p3_g9_03` that a browser
+session goes out only while it may, and `p3_g10_01` that no command the
+interface thread runs waits on the agent loops' lock (one level deep: a
+command reaching that lock through another helper is not seen).
 
 Routes closed or repaired by Phase Three (`Closure::GovernedRoute` unless
 stated):
@@ -417,6 +451,15 @@ stated):
 - **The loopback proxy is unauthenticated.** It admits only the session's
   granted public origins, which any local process could reach directly.
 - **Telegram is not migrated** and stays closed.
+- **Drags whose toolkit maps a drag image under the pointer fail
+  closed.** The release is checked against the windows at the drop point,
+  and a drag image there reads as a changed target.
+- **Confirmation windows queue.** One is open at a time; a later one
+  (Resume included) waits until the open one is answered, and an emergency
+  stop does not close an open window (its answer is then refused).
+- **Other interface commands may still wait on the agent loops' lock**
+  through helpers (`p3_g10_01` checks one level). The global emergency key
+  works meanwhile on X11; the page needs the interface thread.
 - **The global emergency key is X11-only.** It is registered with an X11
   key grab: under Wayland it fires only while an XWayland window has the
   focus. The Phase Three page's emergency stop works under both.
@@ -425,18 +468,14 @@ stated):
   number it tries makes each start fail (availability only: Nexus uses only
   a socket this user owns, in a directory no one else can replace entries
   of).
-- **The runtime root's parent directories are not checked.** With a
-  `~/.nexus` that another user may write (a shared group and umask 002),
-  they could swap its scratch directories; the effect is mostly a denial of
-  service.
 - **A page can steer approved steps within its granted origins.** It can
   move the focus, take trusted key presses into a frame of a granted
   origin, or navigate between granted origins; it reaches nothing else.
 - **Chrome's crash handlers leave the session's process group.** Chrome
   starts two crashpad handlers per session, which daemonize out of it.
-  They end with the browser (a live test checks that no process of a
-  stopped session remains), and their uploads need a consent the fresh
-  profile never gives. No switch of the pinned Chrome removes them without
+  They end with the browser (a live test checks that no process whose
+  command line names the session's directory outlives a stopped session),
+  and their uploads need a consent the fresh profile never gives. No switch of the pinned Chrome removes them without
   breaking page loads: `--disable-crash-reporter` has no effect and
   `--disable-crashpad-for-testing` aborts navigations (checked live with
   Chrome 149).
