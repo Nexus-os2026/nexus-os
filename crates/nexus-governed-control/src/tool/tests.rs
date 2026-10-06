@@ -321,6 +321,89 @@ fn cancelling_the_run_ends_a_running_tool() {
     );
 }
 
+fn touch_marker(input: &Value) -> Result<ToolInvocation, AuthorityError> {
+    crate::connector::only_fields(input, &["path"])?;
+    let path = input["path"]
+        .as_str()
+        .ok_or(AuthorityError::InvalidAction("a path"))?;
+    Ok(ToolInvocation {
+        args: vec![path.into()],
+        files: vec![],
+        summary: vec![],
+    })
+}
+
+/// Between `begin` and the launch nothing new may start: a tool whose run
+/// is cancelled there is never spawned (it would leave its marker).
+#[test]
+fn a_tool_is_not_spawned_once_its_run_is_cancelled() {
+    use crate::control::{PendingEffect, Preparation};
+    let mut _roots = Vec::new();
+    let mut definitions = fixtures();
+    definitions.push(fixture(
+        "fixture.touch",
+        "/usr/bin/touch",
+        touch_marker,
+        Duration::from_secs(10),
+        1024,
+    ));
+    let tools = Tools::new(definitions, root_guard(&mut _roots));
+    let markers = temp_root("markers");
+    let prepare = |h: &Harness, marker: &std::path::Path| {
+        tools
+            .prepare(
+                h.control.authority(),
+                &ToolIntent {
+                    tool: "fixture.touch".into(),
+                    input: json!({ "path": marker.to_str().unwrap() }),
+                },
+            )
+            .unwrap()
+    };
+
+    // The control: with its run live, the tool runs and leaves its marker.
+    let live = harness();
+    grant(&live, &tools, "fixture.touch");
+    let ran = markers.0.path().join("ran");
+    let view = live
+        .control
+        .propose(&live.agent, live.run, prepare(&live, &ran))
+        .unwrap();
+    live.control
+        .authorize(view.id, &live.agent, live.run, &Yes::new(true))
+        .unwrap();
+    live.control
+        .execute(view.id, &live.agent, live.run)
+        .unwrap();
+    assert!(ran.exists(), "the fixture tool did not run");
+
+    // The pipeline's own steps (`Control::execute`), with the run cancelled
+    // after `begin`.
+    let h = harness();
+    grant(&h, &tools, "fixture.touch");
+    let spawned = markers.0.path().join("spawned");
+    let Preparation {
+        action,
+        effect,
+        ttl,
+    } = prepare(&h, &spawned);
+    let commitments = h.control.authority().commitments();
+    let view = commitments.prepare(&h.agent, h.run, action, ttl).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    let target = effect.revalidate().unwrap();
+    let guard = commitments
+        .begin(view.id, &h.agent, h.run, &target, &effect.parameters())
+        .unwrap();
+    h.control.cancel_run(h.run).unwrap();
+    assert!(effect.execute(&guard).is_err());
+    assert!(
+        !spawned.exists(),
+        "a tool was spawned after its run was cancelled"
+    );
+}
+
 #[test]
 fn output_is_bounded_and_failures_are_recorded() {
     let h = harness();
