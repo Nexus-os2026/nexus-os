@@ -7,12 +7,23 @@
 //! and always travel in a header. Telegram is not migrated: its Bot API
 //! carries the token in the URL path, which no Phase Three request may do,
 //! so it stays closed.
+//!
+//! A Slack or Discord post names its channel by id; its destination is
+//! identified by the connector's own API before it is approved and again
+//! immediately before it is sent (see the module above): Slack's
+//! `auth.test` (the workspace) and `conversations.info` (the conversation:
+//! its id, name and kind, a direct message's peer), Discord's channel
+//! object (its id, name and type, its server, a direct message's peer).
 
-use super::{only_fields, text_field, Connector, ConnectorOperation, OperationRequest};
+use super::{
+    only_fields, text_field, Connector, ConnectorOperation, DestinationIdentity,
+    DestinationResolver, OperationRequest,
+};
 use crate::authority::effect::EffectClass;
-use crate::authority::evidence::{quoted, wrapped};
+use crate::authority::evidence::{escaped, is_plain, quoted, wrapped};
 use crate::authority::AuthorityError;
 use crate::broker::{CredentialSpec, Placement};
+use crate::control::EffectOutput;
 use crate::egress::transport::Method;
 use base64::Engine;
 use serde_json::{json, Value};
@@ -131,11 +142,20 @@ pub fn production() -> Vec<Connector> {
                     slack_history,
                 ),
                 op(
+                    "slack.conversations.info",
+                    EffectClass::R1,
+                    Method::Get,
+                    SLACK,
+                    slack_info,
+                ),
+                post(
                     "slack.chat.post",
-                    EffectClass::R2,
-                    Method::Post,
                     SLACK,
                     slack_post,
+                    DestinationResolver {
+                        lookups: slack_lookups,
+                        identify: slack_destination,
+                    },
                 ),
             ],
         },
@@ -159,11 +179,20 @@ pub fn production() -> Vec<Connector> {
                     discord_messages,
                 ),
                 op(
+                    "discord.channel.get",
+                    EffectClass::R1,
+                    Method::Get,
+                    DISCORD,
+                    discord_channel,
+                ),
+                post(
                     "discord.channel.post",
-                    EffectClass::R2,
-                    Method::Post,
                     DISCORD,
                     discord_post,
+                    DestinationResolver {
+                        lookups: discord_lookups,
+                        identify: discord_destination,
+                    },
                 ),
             ],
         },
@@ -183,6 +212,24 @@ fn op(
         method,
         credential: Some(credential),
         build,
+        destination: None,
+    }
+}
+
+/// A post (R2), bound to the destination `destination` identifies.
+fn post(
+    id: &'static str,
+    credential: CredentialSpec,
+    build: fn(&Value) -> Result<OperationRequest, AuthorityError>,
+    destination: DestinationResolver,
+) -> ConnectorOperation {
+    ConnectorOperation {
+        id,
+        class: EffectClass::R2,
+        method: Method::Post,
+        credential: Some(credential),
+        build,
+        destination: Some(destination),
     }
 }
 
@@ -445,6 +492,241 @@ fn slack_post(input: &Value) -> Result<OperationRequest, AuthorityError> {
         json!({ "channel": channel, "text": text }),
         summary,
     )
+}
+
+fn slack_info(input: &Value) -> Result<OperationRequest, AuthorityError> {
+    only_fields(input, &["channel"])?;
+    let channel = identifier(input, "channel", 24, &[])?;
+    get(
+        format!("/api/conversations.info?channel={channel}"),
+        vec![format!("Identify conversation {channel}")],
+    )
+}
+
+fn slack_lookups(input: &Value) -> Result<Vec<(&'static str, Value)>, AuthorityError> {
+    let channel = identifier(input, "channel", 24, &[])?;
+    Ok(vec![
+        ("slack.auth.test", json!({})),
+        ("slack.conversations.info", json!({ "channel": channel })),
+    ])
+}
+
+/// What an API answered: status 200 and a JSON object, else the
+/// destination is not identified.
+fn answer(output: &EffectOutput) -> Result<Value, AuthorityError> {
+    let unidentified = AuthorityError::Unavailable("the destination could not be identified");
+    let status = output
+        .meta
+        .iter()
+        .find(|(key, _)| key == "status")
+        .map(|(_, value)| value.as_str());
+    if status != Some("200") {
+        return Err(unidentified);
+    }
+    let value: Value = serde_json::from_str(output.text.as_deref().unwrap_or_default())
+        .map_err(|_| unidentified.clone())?;
+    if !value.is_object() {
+        return Err(unidentified);
+    }
+    Ok(value)
+}
+
+/// An immutable id from an answer: 1 to `max` ASCII letters and digits
+/// (digits only for Discord).
+fn api_id(value: &Value, field: &str, max: usize, digits: bool) -> Result<String, AuthorityError> {
+    let id = value.get(field).and_then(Value::as_str).unwrap_or_default();
+    let ok = !id.is_empty()
+        && id.len() <= max
+        && id.bytes().all(|b| {
+            if digits {
+                b.is_ascii_digit()
+            } else {
+                b.is_ascii_alphanumeric()
+            }
+        });
+    if !ok {
+        return Err(AuthorityError::Unavailable(
+            "the destination could not be identified",
+        ));
+    }
+    Ok(id.to_string())
+}
+
+/// A readable name from an answer, escaped (shown as it is), at most 100
+/// characters.
+fn api_name(value: &Value, field: &str) -> Result<String, AuthorityError> {
+    let name = value.get(field).and_then(Value::as_str).unwrap_or_default();
+    if name.is_empty() || name.chars().count() > 100 {
+        return Err(AuthorityError::Unavailable(
+            "the destination could not be identified",
+        ));
+    }
+    Ok(escaped(name))
+}
+
+/// The identity from its lines (each shown whole, wrapped) and a short
+/// form for the target, the ids alone when the names make it too long.
+fn identity(lines: &[String], display: String, ids_only: String) -> DestinationIdentity {
+    DestinationIdentity {
+        lines: lines.iter().flat_map(|line| wrapped(line)).collect(),
+        display: if is_plain(&display) {
+            display
+        } else {
+            ids_only
+        },
+    }
+}
+
+/// A Slack answer: also `"ok": true`.
+fn slack_answer(output: &EffectOutput) -> Result<Value, AuthorityError> {
+    let value = answer(output)?;
+    if value.get("ok") != Some(&Value::Bool(true)) {
+        return Err(AuthorityError::Closed(
+            "Slack did not identify the destination",
+        ));
+    }
+    Ok(value)
+}
+
+fn slack_destination(
+    input: &Value,
+    answers: &[EffectOutput],
+) -> Result<DestinationIdentity, AuthorityError> {
+    let channel = identifier(input, "channel", 24, &[])?;
+    let [team, conversation] = answers else {
+        return Err(AuthorityError::Unavailable(
+            "the destination could not be identified",
+        ));
+    };
+    let team = slack_answer(team)?;
+    let team_id = api_id(&team, "team_id", 24, false)?;
+    let team_name = api_name(&team, "team")?;
+    let conversation = slack_answer(conversation)?;
+    let conversation = conversation.get("channel").cloned().unwrap_or(Value::Null);
+    // The id the post names is the conversation's own: never a name.
+    let id = api_id(&conversation, "id", 24, false)?;
+    if id != channel {
+        return Err(AuthorityError::Closed(
+            "the destination is named by its own id",
+        ));
+    }
+    let flag = |name: &str| conversation.get(name) == Some(&Value::Bool(true));
+    let (kind, who) = if flag("is_im") {
+        let peer = api_id(&conversation, "user", 24, false)?;
+        ("direct message".to_string(), format!("with user {peer}"))
+    } else {
+        let kind = if flag("is_mpim") {
+            "group direct message"
+        } else if flag("is_private") || flag("is_group") {
+            "private channel"
+        } else if flag("is_channel") {
+            "public channel"
+        } else {
+            return Err(AuthorityError::Closed(
+                "Slack did not say what kind of conversation it is",
+            ));
+        };
+        let name = api_name(&conversation, "name")?;
+        (kind.to_string(), format!("#{name}"))
+    };
+    Ok(identity(
+        &[
+            format!("Workspace: {team_name} ({team_id})"),
+            format!("Conversation: {kind} {who} ({id})"),
+        ],
+        format!("Slack {kind} {who} ({id}) in {team_name} ({team_id})"),
+        format!("Slack {kind} {id} in workspace {team_id}"),
+    ))
+}
+
+fn discord_channel(input: &Value) -> Result<OperationRequest, AuthorityError> {
+    only_fields(input, &["channel"])?;
+    let channel = snowflake(input, "channel")?;
+    get(
+        format!("/api/v10/channels/{channel}"),
+        vec![format!("Identify channel {channel}")],
+    )
+}
+
+fn discord_lookups(input: &Value) -> Result<Vec<(&'static str, Value)>, AuthorityError> {
+    let channel = snowflake(input, "channel")?;
+    Ok(vec![("discord.channel.get", json!({ "channel": channel }))])
+}
+
+fn discord_destination(
+    input: &Value,
+    answers: &[EffectOutput],
+) -> Result<DestinationIdentity, AuthorityError> {
+    let channel = snowflake(input, "channel")?;
+    let [found] = answers else {
+        return Err(AuthorityError::Unavailable(
+            "the destination could not be identified",
+        ));
+    };
+    let found = answer(found)?;
+    let id = api_id(&found, "id", 20, true)?;
+    if id != channel {
+        return Err(AuthorityError::Closed(
+            "the destination is named by its own id",
+        ));
+    }
+    // Only kinds a message is posted to; anything else (a category, a
+    // forum, a kind this does not know) is refused.
+    let kind = match found.get("type").and_then(Value::as_u64) {
+        Some(0) => "text channel",
+        Some(1) => "direct message",
+        Some(2) => "voice channel",
+        Some(3) => "group direct message",
+        Some(5) => "announcement channel",
+        Some(10) => "announcement thread",
+        Some(11) => "public thread",
+        Some(12) => "private thread",
+        Some(13) => "stage channel",
+        _ => {
+            return Err(AuthorityError::Closed(
+                "Discord did not say it is a channel a message is posted to",
+            ))
+        }
+    };
+    if kind == "direct message" {
+        let recipients = found
+            .get("recipients")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let [peer] = recipients.as_slice() else {
+            return Err(AuthorityError::Unavailable(
+                "the destination could not be identified",
+            ));
+        };
+        let peer_id = api_id(peer, "id", 20, true)?;
+        let peer_name = api_name(peer, "username")?;
+        return Ok(identity(
+            &[format!(
+                "Conversation: direct message with {peer_name} (user {peer_id}) ({id})"
+            )],
+            format!("Discord direct message with {peer_name} (user {peer_id}) ({id})"),
+            format!("Discord direct message with user {peer_id} ({id})"),
+        ));
+    }
+    let name = api_name(&found, "name")?;
+    let server = match found.get("guild_id") {
+        Some(_) => format!("server {}", api_id(&found, "guild_id", 20, true)?),
+        None if kind == "group direct message" => "no server".to_string(),
+        None => {
+            return Err(AuthorityError::Unavailable(
+                "the destination could not be identified",
+            ))
+        }
+    };
+    Ok(identity(
+        &[
+            format!("Server: {server}"),
+            format!("Channel: {kind} #{name} ({id})"),
+        ],
+        format!("Discord {kind} #{name} ({id}) in {server}"),
+        format!("Discord {kind} {id} in {server}"),
+    ))
 }
 
 fn snowflake<'a>(input: &'a Value, name: &'static str) -> Result<&'a str, AuthorityError> {

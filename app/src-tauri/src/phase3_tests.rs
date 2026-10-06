@@ -4109,6 +4109,10 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
                 "Session".to_string()
             ),
             (
+                "crates/nexus-governed-control/src/connector/mod.rs",
+                "BoundPost".to_string()
+            ),
+            (
                 "crates/nexus-governed-control/src/display/mod.rs",
                 "Input".to_string()
             ),
@@ -4153,6 +4157,8 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
             "Control::execute".to_string()
         )]
     );
+    // (A post's destination reads run through the pipeline before it is
+    // proposed, and again inside its own effect, under its guard.)
     let executed: Vec<(&str, String)> = references(P3_CRATE, "execute");
     assert!(
         executed.iter().all(|(file, function)| {
@@ -4162,8 +4168,23 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
                         function.as_str(),
                         "GovernedControl::execute" | "GovernedControl::agent_action"
                     ))
+                || (file.ends_with("connector/mod.rs")
+                    && matches!(
+                        function.as_str(),
+                        "Connectors::propose" | "BoundPost::execute"
+                    ))
         }),
         "{executed:?}"
+    );
+    let connector = production_source("crates/nexus-governed-control/src/connector/mod.rs");
+    assert_in_order(
+        &compact(one_fn(connector, "BoundPost::execute").body_text(connector)),
+        &[
+            "forreadinreads{answers.push(read.execute(guard)?);}",
+            "ifnow!=identity{returnErr((FailureClass::TargetChanged,",
+            "post.execute(guard)",
+        ],
+        "BoundPost::execute",
     );
     // The lifecycle is crate-private.
     let commitment = production_source("crates/nexus-governed-control/src/authority/commitment.rs");
