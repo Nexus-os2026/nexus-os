@@ -476,6 +476,167 @@ fn quitting_cancels_every_open_run() {
         .all(|run| run["cancelled"] == true || run["finished"] == true));
 }
 
+/// Q8 (re-audit of candidate 4): quitting waits, within its bound, until
+/// nothing executes: an agent's request in flight when the desktop quits
+/// has ended (cancelled, recorded) by the time `shutdown` returns.
+#[test]
+fn quitting_waits_until_nothing_executes() {
+    let t = isolated();
+    // An upstream that accepts and never answers.
+    let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", server.local_addr().unwrap());
+    let owner = Owner(true, AtomicU32::new(0));
+    t.world
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: origin.clone(),
+                methods: vec!["GET".into()],
+                allow_private: true,
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let states = |world: &RealWorld| -> Vec<String> {
+        world.status()["commitments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["state"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let world = t.world.clone();
+    let worker = std::thread::spawn(move || {
+        let bridge = AgentBridge::with_warden(world, || false);
+        let get = Intent::Request(nexus_governed_control::egress::EgressIntent {
+            method: "GET".into(),
+            url: format!("{origin}/slow"),
+            headers: vec![],
+            body: None,
+        });
+        bridge.act(&uuid::Uuid::new_v4().to_string(), &get, true)
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while !states(&t.world).iter().any(|s| s == "executing") {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            states(&t.world)
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    t.world.shutdown();
+    let after = states(&t.world);
+    assert!(after.iter().all(|s| s != "executing"), "{after:?}");
+    assert!(worker.join().unwrap().is_err());
+}
+
+/// Q1 (re-audit of candidate 4): the Admin "Stop all" and a bulk "Stop"
+/// stop each agent everywhere, as the per-agent Stop does: by the
+/// supervisor's state (the list reports "Running", never "running"), its
+/// loop and the supervisor, and what it left waiting in Phase Three.
+#[test]
+fn stop_all_and_bulk_stop_stop_agents_everywhere() {
+    use nexus_kernel::lifecycle::AgentState;
+    let t = isolated();
+    let mut state = crate::AppState::new_in_memory();
+    state.real_world = Ok(t.world.clone());
+    let register = |name: &str| {
+        let manifest = crate::commands::chat_llm::parse_agent_manifest_json(
+            &json!({
+                "name": name,
+                "version": "1.0.0",
+                "capabilities": ["llm.query"],
+                "fuel_budget": 1000,
+                "autonomy_level": 2,
+            })
+            .to_string(),
+        )
+        .unwrap();
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .start_agent(manifest)
+            .unwrap()
+    };
+    let agent_state = |id: uuid::Uuid| {
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .get_agent(id)
+            .unwrap()
+            .state
+    };
+    // A running agent with an R2 action waiting for the owner.
+    let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", server.local_addr().unwrap());
+    let owner = Owner(true, AtomicU32::new(0));
+    t.world
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: origin.clone(),
+                methods: vec!["POST".into()],
+                allow_private: true,
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let first = register("stop-all-first");
+    assert_eq!(agent_state(first), AgentState::Running);
+    let bridge = AgentBridge::with_warden(t.world.clone(), || false);
+    let post = Intent::Request(nexus_governed_control::egress::EgressIntent {
+        method: "POST".into(),
+        url: format!("{origin}/x"),
+        headers: vec![],
+        body: Some("{}".into()),
+    });
+    let waiting: Value =
+        serde_json::from_str(&bridge.act(&first.to_string(), &post, true).unwrap()).unwrap();
+    let commitment = waiting["awaiting_owner_approval"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let stopped = crate::admin_agent_stop_all(&state, "default".into()).unwrap();
+    assert_eq!(stopped, 1);
+    assert_eq!(agent_state(first), AgentState::Stopped);
+    assert!(
+        t.world.approve(&commitment, &owner).is_err(),
+        "a stopped agent's waiting action cannot be approved"
+    );
+    // A bulk "Stop" of one named agent stops that agent, and only it; any
+    // other bulk action is reported as not done.
+    let second = register("bulk-stop-second");
+    let third = register("bulk-stop-third");
+    let reply: Value = serde_json::from_str(
+        &crate::admin_agent_bulk_update(
+            &state,
+            vec![format!("did:nexus:{second}")],
+            r#"{"action":"stop"}"#.into(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(reply, json!({ "succeeded": 1, "failed": 0 }));
+    assert_eq!(agent_state(second), AgentState::Stopped);
+    assert_eq!(agent_state(third), AgentState::Running);
+    let reply: Value = serde_json::from_str(
+        &crate::admin_agent_bulk_update(
+            &state,
+            vec![format!("did:nexus:{third}")],
+            r#"{"action":"restart"}"#.into(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(reply, json!({ "succeeded": 0, "failed": 1 }));
+    // The fleet view sees the running agent as running.
+    let fleet: Value = serde_json::from_str(&crate::admin_fleet_status(&state).unwrap()).unwrap();
+    assert_eq!(fleet["total_running"], 1, "{fleet}");
+}
+
 /// The confirmation window itself, live (run under an isolated display:
 /// `xvfb-run -a cargo test -p nexus-desktop-backend --lib -- --ignored
 /// the_confirmation_window_shows_every_line_whole`). Content padded to make

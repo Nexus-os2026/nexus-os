@@ -32,6 +32,11 @@ use std::sync::{Arc, Mutex};
 /// The most output text one effect returns to the interface or an agent.
 const MAX_RETURNED_TEXT: usize = 64 * 1024;
 
+/// How long quitting waits for effects still executing to see their
+/// cancellation and end (a browser session within one DevTools poll, a tool
+/// within one 10 ms poll plus its reaping).
+const SHUTDOWN_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Phase Three in the desktop.
 pub(crate) struct RealWorld {
     control: GovernedControl,
@@ -227,10 +232,28 @@ impl RealWorld {
     /// sees it and ends its processes) and the agent display is stopped
     /// gracefully, recorded, rather than left to die with the process.
     pub(crate) fn shutdown(&self) {
-        for run in self.control.authority().runs().views() {
+        let authority = self.control.authority();
+        for run in authority.runs().views() {
             if !run.cancelled && !run.finished {
                 let _ = self.control.cancel_run(run.id);
             }
+        }
+        // What still executes sees the cancellation at its next step, ends
+        // its processes and removes its directories, and its end is
+        // recorded: wait for that (within a bound) before the process
+        // exits, then stop the display gracefully.
+        let executing = || {
+            authority.runs().views().iter().any(|run| {
+                authority
+                    .commitments()
+                    .views_of_run(run.id)
+                    .iter()
+                    .any(|view| view.state == CommitmentState::Executing)
+            })
+        };
+        let deadline = std::time::Instant::now() + SHUTDOWN_WAIT;
+        while executing() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(25));
         }
         self.control.stop_display();
     }
@@ -556,6 +579,11 @@ impl ControlDialogs {
     /// thread) for the owner's answer; no answer is a refusal.
     fn confirm(&self, title: &str, message: String, answer: &str) -> bool {
         use gtk::prelude::*;
+        // One confirmation at a time: the next window opens (and its arming
+        // delay starts) only once this one is answered, so a click meant
+        // for one window can never land on another already armed.
+        static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
         let (sender, receiver) = std::sync::mpsc::channel();
         let (title, answer) = (title.to_string(), answer.to_string());
         let shown = self.0.run_on_main_thread(move || {
@@ -613,7 +641,15 @@ fn owner_window(title: &str, message: &str, answer: &str) -> (gtk::Dialog, gtk::
     // layout (a text view lays its lines out lazily, so its end would seem
     // reached before it is). Plain text, never markup; never wrapped.
     let text = gtk::Label::new(None);
-    text.set_text(message);
+    // Every line starts with a left-to-right mark, so each is laid out left
+    // to right with its marker first, whatever script its content begins
+    // with (a line led by a right-to-left letter would otherwise be drawn
+    // flush right, its marker last).
+    let lines: Vec<String> = message
+        .split('\n')
+        .map(|line| format!("\u{200E}{line}"))
+        .collect();
+    text.set_text(&lines.join("\n"));
     text.set_line_wrap(false);
     text.set_xalign(0.0);
     text.set_yalign(0.0);

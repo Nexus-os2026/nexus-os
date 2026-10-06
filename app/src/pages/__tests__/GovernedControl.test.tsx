@@ -84,6 +84,33 @@ describe("GovernedControl (Phase Three)", () => {
     await waitFor(() => expectInvoked("p3_emergency_stop"));
   });
 
+  it("keeps every stop usable while an approved effect runs, and opens one approval at a time", async () => {
+    const running = {
+      ...STATUS,
+      runs: [{ id: "run-0123456789abcdef0123456789abcdef", agent: "owner-session", cancelled: false, finished: false }],
+    };
+    const map: Record<string, unknown> = { ...MOCKS, p3_status: running, p3_cancel_run: null, p3_display_stop: null };
+    // The approved effect never finishes during this test.
+    mockInvoke.mockImplementation((cmd: string) =>
+      cmd === "p3_approve" ? new Promise(() => {}) : Promise.resolve(cmd in map ? map[cmd] : {}),
+    );
+    render(<GovernedControl />);
+    await waitFor(() => expect(screen.getByText("Approve…")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Approve…"));
+    await waitFor(() => expectInvoked("p3_approve"));
+    // A second approval cannot open a second window behind the first.
+    await waitFor(() => expect(screen.getByText("Approve…")).toBeDisabled());
+    // The stops stay enabled and reach the backend.
+    expect(screen.getByText("Emergency stop")).not.toBeDisabled();
+    fireEvent.click(screen.getByText("Emergency stop"));
+    await waitFor(() => expectInvoked("p3_emergency_stop"));
+    fireEvent.click(screen.getByText("Cancel"));
+    await waitFor(() => expectInvoked("p3_cancel_run"));
+    expect(argsOf("p3_cancel_run")).toEqual([{ run: running.runs[0].id }]);
+    fireEvent.click(screen.getByText("Stop"));
+    await waitFor(() => expectInvoked("p3_display_stop"));
+  });
+
   it("builds grant requests from the form, never approvals", () => {
     expect(grantRequest("egress", "https://example.com", "")).toEqual({
       kind: "egress",

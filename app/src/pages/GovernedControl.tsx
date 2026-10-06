@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   p3Approve,
+  p3CancelRun,
   p3DisplayStart,
   p3DisplayStop,
   p3EmergencyStop,
@@ -94,10 +95,12 @@ function CommitmentCard({
   commitment,
   onRun,
   onDeny,
+  busy = false,
 }: {
   commitment: P3Commitment;
   onRun?: (c: P3Commitment) => void;
   onDeny?: (c: P3Commitment) => void;
+  busy?: boolean;
 }) {
   const color = CLASS_COLORS[commitment.class] ?? ACCENT;
   const waiting = UNCONSUMED.has(commitment.state);
@@ -123,10 +126,15 @@ function CommitmentCard({
       </div>
       {waiting && onRun && onDeny && (
         <div style={{ marginTop: 8 }}>
-          <button style={button(commitment.requires_approval ? RED : GREEN)} onClick={() => onRun(commitment)}>
+          {/* One action at a time: a second confirmation window never opens behind the first. */}
+          <button
+            style={button(commitment.requires_approval ? RED : GREEN)}
+            disabled={busy}
+            onClick={() => onRun(commitment)}
+          >
             {commitment.requires_approval ? "Approve…" : "Run"}
           </button>
-          <button style={button("#9ca3af")} onClick={() => onDeny(commitment)}>
+          <button style={button("#9ca3af")} disabled={busy} onClick={() => onDeny(commitment)}>
             Deny
           </button>
         </div>
@@ -194,6 +202,20 @@ export default function GovernedControl() {
   const run = (commitment: P3Commitment) => act(async () => setOutput(await p3Approve(commitment.id)));
   const deny = (commitment: P3Commitment) => act(() => p3Deny(commitment.id));
 
+  // Stops never wait for, and are never disabled by, the work they stop.
+  const stopping = (work: () => Promise<unknown>) => async () => {
+    try {
+      await work();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      await refresh();
+    }
+  };
+  const activeRuns = normalizeArray<{ id: string; agent: string; cancelled: boolean; finished: boolean }>(
+    status?.runs,
+  ).filter((r) => !r.cancelled && !r.finished);
+
   const commitments = normalizeArray<P3Commitment>(status?.commitments);
   const pending = commitments.filter((c) => UNCONSUMED.has(c.state));
   const done = commitments.filter((c) => !UNCONSUMED.has(c.state));
@@ -213,7 +235,7 @@ export default function GovernedControl() {
               Resume…
             </button>
           ) : (
-            <button style={button(RED)} disabled={busy} onClick={() => act(p3EmergencyStop)}>
+            <button style={button(RED)} onClick={() => void stopping(p3EmergencyStop)()}>
               Emergency stop
             </button>
           )}
@@ -255,8 +277,25 @@ export default function GovernedControl() {
       <h2 style={{ fontSize: 16 }}>Waiting for you ({pending.length})</h2>
       {pending.length === 0 && <div style={commandMutedStyle}>Nothing is waiting.</div>}
       {pending.map((c) => (
-        <CommitmentCard key={c.id} commitment={c} onRun={run} onDeny={deny} />
+        <CommitmentCard key={c.id} commitment={c} onRun={run} onDeny={deny} busy={busy} />
       ))}
+
+      {activeRuns.length > 0 && (
+        <div style={cardStyle}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Running</div>
+          {activeRuns.map((r) => (
+            <div key={r.id} style={{ fontSize: 12, marginTop: 4 }}>
+              {r.agent} · {r.id}
+              <button
+                style={{ ...button("#9ca3af"), marginLeft: 8 }}
+                onClick={() => void stopping(() => p3CancelRun(r.id))()}
+              >
+                Cancel
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {output && (
         <div style={cardStyle} data-testid="p3-output">
@@ -333,7 +372,7 @@ export default function GovernedControl() {
         <button style={button(GREEN)} disabled={busy} onClick={() => act(p3DisplayStart)}>
           Start
         </button>
-        <button style={button("#9ca3af")} disabled={busy} onClick={() => act(p3DisplayStop)}>
+        <button style={button("#9ca3af")} onClick={() => void stopping(p3DisplayStop)()}>
           Stop
         </button>
       </div>

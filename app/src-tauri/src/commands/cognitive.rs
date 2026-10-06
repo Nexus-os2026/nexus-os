@@ -2179,14 +2179,17 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
 }
 
 pub(crate) fn stop_agent_goal(state: &AppState, agent_id: String) -> Result<(), String> {
+    // Phase Three first: what the agent runs or left waiting there ends now.
+    // Only then is the loop waited for, since a cycle holds the loop lock
+    // through the effect it is executing (which sees the cancellation at its
+    // next step and ends).
+    if let Ok(world) = state.real_world() {
+        world.cancel_agent(&agent_id);
+    }
     state
         .cognitive_runtime
         .stop_agent_loop(&agent_id)
         .map_err(|e| e.to_string())?;
-    // Phase Three: what the agent left running or waiting ends with it.
-    if let Ok(world) = state.real_world() {
-        world.cancel_agent(&agent_id);
-    }
     state.wake_and_clear_blocked_consent_wait(&agent_id);
     state.log_event(
         Uuid::parse_str(&agent_id).unwrap_or_default(),

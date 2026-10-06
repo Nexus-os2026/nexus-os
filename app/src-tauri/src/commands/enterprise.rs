@@ -348,13 +348,16 @@ pub(crate) fn admin_user_deactivate(state: &AppState, user_id: String) -> Result
 
 pub(crate) fn admin_fleet_status(state: &AppState) -> Result<String, String> {
     let agents = list_agents(state)?;
-    let total_running = agents.iter().filter(|a| a.status == "running").count();
-    let total_idle = agents.iter().filter(|a| a.status == "idle").count();
+    // `list_agents` reports states as the kernel names them ("Running").
+    let is =
+        |a: &AgentRow, names: &[&str]| names.iter().any(|name| a.status.eq_ignore_ascii_case(name));
+    let total_running = agents.iter().filter(|a| is(a, &["running"])).count();
+    let total_idle = agents.iter().filter(|a| is(a, &["idle"])).count();
     let total_stopped = agents
         .iter()
-        .filter(|a| a.status == "stopped" || a.status == "destroyed")
+        .filter(|a| is(a, &["stopped", "destroyed"]))
         .count();
-    let total_error = agents.iter().filter(|a| a.status == "error").count();
+    let total_error = agents.iter().filter(|a| is(a, &["error"])).count();
 
     let fleet_agents: Vec<Value> = agents
         .iter()
@@ -364,8 +367,9 @@ pub(crate) fn admin_fleet_status(state: &AppState) -> Result<String, String> {
                 "name": a.name,
                 "workspace_id": "default",
                 "autonomy_level": a.autonomy_level.unwrap_or(0),
-                "status": match a.status.as_str() {
+                "status": match a.status.to_ascii_lowercase().as_str() {
                     "running" => "Running",
+                    "paused" => "Paused",
                     "idle" => "Idle",
                     "stopped" | "destroyed" => "Stopped",
                     _ => "Error",
@@ -389,30 +393,33 @@ pub(crate) fn admin_fleet_status(state: &AppState) -> Result<String, String> {
     serde_json::to_string(&fleet).map_err(|e| format!("serialize: {e}"))
 }
 
+/// The agents an owner's stop applies to: every agent the supervisor holds
+/// that is not already stopped (running, paused or starting), by its state,
+/// never by a display string.
+fn stoppable_agents(state: &AppState) -> Vec<String> {
+    use nexus_kernel::lifecycle::AgentState;
+    let supervisor = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
+    supervisor
+        .health_check()
+        .into_iter()
+        .filter(|status| {
+            matches!(
+                status.state,
+                AgentState::Running | AgentState::Paused | AgentState::Starting
+            )
+        })
+        .map(|status| status.id.to_string())
+        .collect()
+}
+
 pub(crate) fn admin_agent_stop_all(state: &AppState, workspace_id: String) -> Result<u32, String> {
-    let agents = list_agents(state)?;
     let mut stopped = 0u32;
     // suppress unused workspace_id — all agents stopped regardless of workspace
     let _ = workspace_id;
-    for agent in &agents {
-        if agent.status == "running" {
-            if let Ok(id) = Uuid::parse_str(&agent.id) {
-                // As the per-agent stop does: the loop's cancel flag, the
-                // loop itself and what it left in Phase Three end first.
-                if let Some(flag) = state
-                    .cognitive_cancellations
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner())
-                    .get(&agent.id)
-                {
-                    flag.store(true, std::sync::atomic::Ordering::Relaxed);
-                }
-                let _ = crate::commands::cognitive::stop_agent_goal(state, agent.id.clone());
-                let mut sup = state.supervisor.lock().unwrap_or_else(|p| p.into_inner());
-                // Best-effort: stop agent during bulk shutdown; continue with remaining agents
-                let _ = sup.stop_agent(id);
-                stopped += 1;
-            }
+    // Each agent stops everywhere, as the per-agent Stop does.
+    for agent in stoppable_agents(state) {
+        if crate::commands::agents::stop_agent_completely(state, &agent).is_ok() {
+            stopped += 1;
         }
     }
     let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
@@ -430,15 +437,33 @@ pub(crate) fn admin_agent_bulk_update(
     agent_dids: Vec<String>,
     update: String,
 ) -> Result<String, String> {
-    let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
     let count = agent_dids.len();
-    // Best-effort: audit trail for admin action; bulk update proceeds regardless
+    let action = serde_json::from_str::<Value>(&update)
+        .ok()
+        .and_then(|value| value["action"].as_str().map(str::to_string))
+        .unwrap_or_default();
+    // "stop" stops each named agent everywhere, as the per-agent Stop does;
+    // no other bulk action is performed, and none is reported as done.
+    let mut succeeded = 0usize;
+    if action == "stop" {
+        let stoppable = stoppable_agents(state);
+        for did in &agent_dids {
+            let agent = did.strip_prefix("did:nexus:").unwrap_or(did);
+            if stoppable.iter().any(|known| known == agent)
+                && crate::commands::agents::stop_agent_completely(state, agent).is_ok()
+            {
+                succeeded += 1;
+            }
+        }
+    }
+    let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
+    // Best-effort: audit trail for admin action
     let _ = audit.append_event(
         SYSTEM_UUID,
         EventType::UserAction,
-        json!({"action": "admin_agent_bulk_update", "count": count, "update": update}),
+        json!({"action": "admin_agent_bulk_update", "count": count, "update": update, "succeeded": succeeded}),
     );
-    let result = json!({ "succeeded": count, "failed": 0 });
+    let result = json!({ "succeeded": succeeded, "failed": count - succeeded });
     serde_json::to_string(&result).map_err(|e| format!("serialize: {e}"))
 }
 

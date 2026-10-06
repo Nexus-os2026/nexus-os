@@ -2104,32 +2104,18 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command]
+    // Off the main thread: stopping waits for the agent's loop, and the
+    // interface (with its emergency stop) stays responsive meanwhile.
+    #[tauri::command(async)]
     fn stop_agent(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
         agent_id: String,
     ) -> Result<(), String> {
-        // G1b: the Chat bubble Stop button invokes this command. Previously
-        // it only transitioned the supervisor state and left the cognitive
-        // loop running in the background. Now it also signals the cancel
-        // flag and calls stop_agent_goal to drop the loop entry + wake any
-        // blocked consent waits. Order is deliberate:
-        //   1. Set cancel flag FIRST so the next cycle poll sees it.
-        //   2. stop_agent_goal clears the loop entry and wakes notifiers.
-        //   3. Supervisor state transition (through D2 chokepoint).
-        //   4. UI emit.
-        if let Some(flag) = state
-            .inner()
-            .cognitive_cancellations
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .get(&agent_id)
-        {
-            flag.store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-        let _ = crate::commands::cognitive::stop_agent_goal(state.inner(), agent_id.clone());
-        super::stop_agent(state.inner(), agent_id.clone())?;
+        // G1b: the Chat bubble Stop button invokes this command. It stops
+        // the agent everywhere (schedule, loop cancel flag, Phase Three,
+        // loop, supervisor; see `stop_agent_completely`), then tells the UI.
+        super::stop_agent_completely(state.inner(), &agent_id)?;
         emit_agent_status(&window, state.inner(), &agent_id);
         Ok(())
     }
@@ -6389,7 +6375,7 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     fn stop_agent_goal(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
         super::stop_agent_goal(state.inner(), agent_id)
     }
@@ -7585,7 +7571,7 @@ pub mod runtime {
         super::admin_fleet_status(state.inner())
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     fn admin_agent_stop_all(
         state: tauri::State<'_, AppState>,
         workspace_id: String,
@@ -7593,7 +7579,7 @@ pub mod runtime {
         super::admin_agent_stop_all(state.inner(), workspace_id)
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     fn admin_agent_bulk_update(
         state: tauri::State<'_, AppState>,
         agent_dids: Vec<String>,

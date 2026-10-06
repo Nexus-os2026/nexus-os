@@ -492,6 +492,26 @@ pub(crate) fn stop_agent(state: &AppState, agent_id: String) -> Result<(), Strin
     Ok(())
 }
 
+/// Stop one agent everywhere, in an order that never waits on the agent's
+/// own work first: its schedule ends (no tick restarts it), its loop's
+/// cancel flag is set, what it runs or left waiting in Phase Three is
+/// cancelled, its loop is stopped, and the supervisor records the stop.
+/// Every owner route that stops an agent uses this.
+pub(crate) fn stop_agent_completely(state: &AppState, agent_id: &str) -> Result<(), String> {
+    state.agent_scheduler.unregister_agent(agent_id);
+    if let Some(flag) = state
+        .cognitive_cancellations
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(agent_id)
+    {
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    // Cancels in Phase Three before it waits for the loop.
+    let _ = crate::commands::cognitive::stop_agent_goal(state, agent_id.to_string());
+    stop_agent(state, agent_id.to_string())
+}
+
 pub(crate) fn get_scheduled_agents(
     state: &AppState,
 ) -> Result<Vec<nexus_kernel::cognitive::ScheduledAgent>, String> {

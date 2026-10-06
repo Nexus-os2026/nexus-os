@@ -2218,6 +2218,30 @@ fn references(prefix: &str, name: &str) -> Vec<(&'static str, String)> {
     found
 }
 
+/// As `references`, for calls written without a path or a receiver
+/// (`name(…)`: a call within the same module).
+fn bare_calls(prefix: &str, name: &str) -> Vec<(&'static str, String)> {
+    let mut found = Vec::new();
+    for (file, text) in workspace_sources() {
+        if !file.starts_with(prefix) || !text.contains(name) {
+            continue;
+        }
+        let m = masked(text);
+        let functions = fn_items(text);
+        for at in words(&m, name) {
+            if previous_word(&m, at) == "fn"
+                || matches!(previous_byte(&m, at), Some(b'.' | b':'))
+                || m.get(skip_ws(&m, at + name.len())) != Some(&b'(')
+            {
+                continue;
+            }
+            let function = enclosing(&functions, at).map_or_else(String::new, |f| f.path.clone());
+            found.push((file.as_str(), function));
+        }
+    }
+    found
+}
+
 /// The one function at `path` in production `text`.
 fn one_fn(text: &str, path: &str) -> FnItem {
     let mut found: Vec<FnItem> = fn_items(text)
@@ -3946,8 +3970,8 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
 
 /// The owner's confirmation window, pinned whole (normalized text).
 const CONFIRMATION_WINDOW: [(&str, &str); 4] = [
-    ("ControlDialogs::confirm", "use*;let(sender,receiver)=channel();let(title,answer)=(title.to_string(),answer.to_string());letshown=self.0.run_on_main_thread(move||{let(dialog,_)=owner_window(&title,&message,&answer);letsender=RefCell::new(Some(sender));dialog.connect_response(move|dialog,response|{ifletSome(sender)=sender.borrow_mut().take(){let_=sender.send(response==ResponseType::Accept);}dialog.close();});dialog.present();});shown.is_ok()&&receiver.recv().unwrap_or(false)"),
-    ("owner_window", "use*;useCell;useRc;letdialog=Dialog::new();dialog.set_title(title);dialog.set_modal(true);dialog.set_keep_above(true);dialog.set_default_size(900,560);dialog.add_button(\"Cancel\",ResponseType::Cancel);letallow=dialog.add_button(answer,ResponseType::Accept);allow.set_sensitive(false);dialog.set_default_response(ResponseType::Cancel);lettext=Label::new(None);text.set_text(message);text.set_line_wrap(false);text.set_xalign(0.0);text.set_yalign(0.0);letmonospace=AttrList::new();monospace.insert(AttrString::new_family(\"monospace\"));text.set_attributes(Some(&monospace));letscroll=ScrolledWindow::builder().build();scroll.set_policy(PolicyType::Automatic,PolicyType::Automatic);scroll.add(&text);dialog.content_area().pack_start(&scroll,true,true,0);letarming=Rc::new(Cell::new(Arming::default()));letupdate:Rc<dynFn()>={let(arming,allow,scroll)=(arming.clone(),allow.clone(),scroll.clone());Rc::new(move||{letmutnow=arming.get();let(down,across)=(scroll.vadjustment(),scroll.hadjustment());now.end_reached|=reached(down.value(),down.page_size(),down.upper());now.edge_reached|=reached(across.value(),across.page_size(),across.upper());arming.set(now);allow.set_sensitive(now.ready());})};foradjustmentin[scroll.vadjustment(),scroll.hadjustment()]{letmoved=update.clone();adjustment.connect_value_changed(move|_|moved());letresized=update.clone();adjustment.connect_changed(move|_|resized());}{let(arming,update)=(arming.clone(),update.clone());timeout_add_local_once(ARMING_DELAY,move||{letmutnow=arming.get();now.delay_passed=true;arming.set(now);update();});}dialog.show_all();(dialog,allow)"),
+    ("ControlDialogs::confirm", "use*;staticONE_AT_A_TIME:Mutex<()>=Mutex::new(());let_one=ONE_AT_A_TIME.lock().unwrap_or_else(|p|p.into_inner());let(sender,receiver)=channel();let(title,answer)=(title.to_string(),answer.to_string());letshown=self.0.run_on_main_thread(move||{let(dialog,_)=owner_window(&title,&message,&answer);letsender=RefCell::new(Some(sender));dialog.connect_response(move|dialog,response|{ifletSome(sender)=sender.borrow_mut().take(){let_=sender.send(response==ResponseType::Accept);}dialog.close();});dialog.present();});shown.is_ok()&&receiver.recv().unwrap_or(false)"),
+    ("owner_window", "use*;useCell;useRc;letdialog=Dialog::new();dialog.set_title(title);dialog.set_modal(true);dialog.set_keep_above(true);dialog.set_default_size(900,560);dialog.add_button(\"Cancel\",ResponseType::Cancel);letallow=dialog.add_button(answer,ResponseType::Accept);allow.set_sensitive(false);dialog.set_default_response(ResponseType::Cancel);lettext=Label::new(None);letlines:Vec<String>=message.split('\\n').map(|line|format!(\"\\u{200E}{line}\")).collect();text.set_text(&lines.join(\"\\n\"));text.set_line_wrap(false);text.set_xalign(0.0);text.set_yalign(0.0);letmonospace=AttrList::new();monospace.insert(AttrString::new_family(\"monospace\"));text.set_attributes(Some(&monospace));letscroll=ScrolledWindow::builder().build();scroll.set_policy(PolicyType::Automatic,PolicyType::Automatic);scroll.add(&text);dialog.content_area().pack_start(&scroll,true,true,0);letarming=Rc::new(Cell::new(Arming::default()));letupdate:Rc<dynFn()>={let(arming,allow,scroll)=(arming.clone(),allow.clone(),scroll.clone());Rc::new(move||{letmutnow=arming.get();let(down,across)=(scroll.vadjustment(),scroll.hadjustment());now.end_reached|=reached(down.value(),down.page_size(),down.upper());now.edge_reached|=reached(across.value(),across.page_size(),across.upper());arming.set(now);allow.set_sensitive(now.ready());})};foradjustmentin[scroll.vadjustment(),scroll.hadjustment()]{letmoved=update.clone();adjustment.connect_value_changed(move|_|moved());letresized=update.clone();adjustment.connect_changed(move|_|resized());}{let(arming,update)=(arming.clone(),update.clone());timeout_add_local_once(ARMING_DELAY,move||{letmutnow=arming.get();now.delay_passed=true;arming.set(now);update();});}dialog.show_all();(dialog,allow)"),
     ("Arming::ready", "self.delay_passed&&self.end_reached&&self.edge_reached"),
     ("reached", "page>0.0&&value+page>=upper-1.0"),
 ];
@@ -4144,7 +4168,7 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
                 if ends_process(path) {
                     kinds.insert("ends");
                 }
-                if opens_network(path) {
+                if opens_network(path) || network_beyond_sockets(path) {
                     kinds.insert("network");
                 }
                 if shown.starts_with("x11rb") {
@@ -4164,6 +4188,16 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
                 *found.entry((file.to_string(), kind)).or_insert(0) += 1;
             }
         }
+        // A name resolved by a method call (no path names it).
+        let t = &analysis.tokens;
+        for k in 1..t.len() {
+            if !analysis.test[k]
+                && t[k - 1].is(".")
+                && RESOLVING_METHODS.iter().any(|method| t[k].is(method))
+            {
+                *found.entry((file.to_string(), "network")).or_insert(0) += 1;
+            }
+        }
     }
     let allowed: BTreeMap<(String, &str), usize> = [
         ("broker.rs", "network", 2), // header types for the released credential
@@ -4171,7 +4205,8 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
         ("browser/proxy.rs", "network", 9),
         ("display/server.rs", "network", 1),
         ("display/server.rs", "x11", 32),
-        ("egress/mod.rs", "network", 8), // header types
+        ("egress/destination.rs", "network", 1), // name resolution, then the address policy
+        ("egress/mod.rs", "network", 8),         // header types
         ("egress/transport.rs", "network", 19),
         ("launcher.rs", "ends", 2), // SIGTERM with a grace, then SIGKILL
         ("launcher.rs", "libc", 31),
@@ -4333,6 +4368,7 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::clock::SystemClock",
     "nexus_governed_control::authority::clock::SystemClock::default",
     "nexus_governed_control::authority::commitment::CommitmentState",
+    "nexus_governed_control::authority::commitment::CommitmentState::Executing",
     "nexus_governed_control::authority::commitment::CommitmentView",
     "nexus_governed_control::authority::evidence::EvidenceRecord",
     "nexus_governed_control::authority::evidence::EvidenceRecord::to_json",
@@ -4433,6 +4469,60 @@ enum Route {
 /// library; the credential vault (its global facade and the OS keyring);
 /// sealed spawns; launching the OS's opener or browser; and direct screen,
 /// input, clipboard, audio and browser-driver crates.
+/// What reaches the network beyond Phase Zero's socket list: name
+/// resolution (std's `ToSocketAddrs` and `lookup_host`, libc's resolver
+/// functions, the DNS crates) and protocol crates that open their own
+/// connections. (`tokio::net::lookup_host` is under `tokio::net`, which
+/// `opens_network` counts.) A resolver call made as a method is not a path:
+/// see `RESOLVING_METHODS`.
+fn network_beyond_sockets(path: &[String]) -> bool {
+    use crate::phase0_surface::rust_paths::starts_with;
+    (path.len() > 1
+        && [
+            "std::net::ToSocketAddrs",
+            "std::net::lookup_host",
+            "hickory_resolver",
+            "hickory_proto",
+            "hickory_client",
+            "trust_dns_resolver",
+            "trust_dns_proto",
+            "trust_dns_client",
+            "dns_lookup",
+            "hyper_util",
+            "h2",
+            "h3",
+            "quinn",
+            "quinn_proto",
+            "async_net",
+            "smol::net",
+        ]
+        .iter()
+        .any(|prefix| starts_with(path, prefix)))
+        || path.windows(2).any(|pair| {
+            pair[0] == "libc"
+                && [
+                    "getaddrinfo",
+                    "gethostbyname",
+                    "gethostbyname2",
+                    "gethostbyname_r",
+                    "gethostbyname2_r",
+                    "gethostbyaddr",
+                    "gethostbyaddr_r",
+                    "getnameinfo",
+                    "res_init",
+                    "res_query",
+                    "res_search",
+                    "res_nquery",
+                    "res_nsearch",
+                ]
+                .contains(&pair[1].as_str())
+        })
+}
+
+/// Methods that resolve a name (`ToSocketAddrs::to_socket_addrs`): a call
+/// is a network site wherever it is made.
+const RESOLVING_METHODS: &[&str] = &["to_socket_addrs"];
+
 fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     use crate::phase0_surface::rust_paths::{
         constructs_process, ends_process, opens_network, starts_with,
@@ -4474,6 +4564,7 @@ fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
         kinds.insert("ends");
     }
     if opens_network(path)
+        || network_beyond_sockets(path)
         || any(&[
             "tokio_tungstenite",
             "tungstenite",
@@ -4736,6 +4827,9 @@ fn file_effect_sites(file: &str, src: &str, own: &[String]) -> BTreeMap<&'static
         }
         if t[k - 1].is(".") && LATENT_METHODS.iter().any(|method| t[k].is(method)) {
             *sites.entry("latent").or_insert(0) += 1;
+        }
+        if t[k - 1].is(".") && RESOLVING_METHODS.iter().any(|method| t[k].is(method)) {
+            *sites.entry("network").or_insert(0) += 1;
         }
         if lists_processes && t[k - 1].is(".") && (t[k].is("kill") || t[k].is("kill_with")) {
             *sites.entry("ends").or_insert(0) += 1;
@@ -5242,6 +5336,11 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
         32,
     ),
     (
+        "crates/nexus-governed-control/src/egress/destination.rs",
+        "network",
+        1,
+    ),
+    (
         "crates/nexus-governed-control/src/egress/mod.rs",
         "network",
         8,
@@ -5731,6 +5830,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "the agent display: backend-owned Xvfb, cookie-authorized X11 socket",
     ),
     (
+        "crates/nexus-governed-control/src/egress/destination.rs",
+        Route::Phase3,
+        "governed egress: names resolved once, every address checked by the address policy",
+    ),
+    (
         "crates/nexus-governed-control/src/egress/mod.rs",
         Route::Phase3,
         "governed egress (header types)",
@@ -5958,7 +6062,7 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
     (
         "kernel/src/actuators/web.rs",
         Route::Governed,
-        "fixed-host WebSearch (Phase Zero class A; governed curl, CURL_SITES); its WebFetch arm is Phase Three egress or closed",
+        "WebSearch from fixed initial hosts, following https redirects to any host (Phase Zero class A, P0-002C5B, for the Architect); WebFetch: Phase Three or closed",
     ),
     (
         "kernel/src/coding_run/local_model.rs",
@@ -6199,6 +6303,7 @@ fn p3_g6_08_every_real_world_mechanism_in_the_workspace_is_classified() {
             "broker.rs",
             "browser/proxy.rs",
             "display/server.rs",
+            "egress/destination.rs",
             "egress/mod.rs",
             "egress/transport.rs",
             "launcher.rs",
@@ -6455,20 +6560,58 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         handler.contains("ifletOk(world)=state.real_world(){world.emergency_stop();}"),
         "{handler}"
     );
+    // Ending an agent's goal cancels it in Phase Three before it waits for
+    // the loop (a cycle holds the loop's lock through the effect it runs).
     let cognitive = production_source("app/src-tauri/src/commands/cognitive.rs");
-    let body = without_whitespace(one_fn(cognitive, "stop_agent_goal").body_text(cognitive));
-    assert!(
-        body.contains("ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}"),
-        "{body}"
+    let body = compact(one_fn(cognitive, "stop_agent_goal").body_text(cognitive));
+    assert_in_order(
+        &body,
+        &[
+            "ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}",
+            "state.cognitive_runtime.stop_agent_loop(&agent_id)",
+            "state.wake_and_clear_blocked_consent_wait(&agent_id);",
+        ],
+        "stop_agent_goal",
     );
-    // The routes that stop an agent's loop end what it left in Phase Three
-    // first: the per-agent Stop and the Admin "Stop all".
+    // Every owner route that stops an agent (the per-agent Stop, the Admin
+    // "Stop all" and bulk Stop) is one routine: the schedule ends first (no
+    // tick restarts the agent), then the loop's cancel flag, Phase Three
+    // and the loop, then the supervisor's stop.
+    let agents = production_source("app/src-tauri/src/commands/agents.rs");
+    let completely = compact(one_fn(agents, "stop_agent_completely").body_text(agents));
+    assert_in_order(
+        &completely,
+        &[
+            "state.agent_scheduler.unregister_agent(agent_id);",
+            ".cognitive_cancellations",
+            ".get(agent_id){flag.store(true,",
+            "stop_agent_goal(state,agent_id.to_string());",
+            "stop_agent(state,agent_id.to_string())",
+        ],
+        "stop_agent_completely",
+    );
+    let mut callers = references(DESKTOP_SRC, "stop_agent_completely");
+    callers.sort();
+    assert_eq!(
+        callers,
+        [
+            (
+                "app/src-tauri/src/commands/enterprise.rs",
+                "admin_agent_bulk_update".to_string()
+            ),
+            (
+                "app/src-tauri/src/commands/enterprise.rs",
+                "admin_agent_stop_all".to_string()
+            ),
+            ("app/src-tauri/src/lib.rs", "stop_agent".to_string()),
+        ]
+    );
     let stop = compact(one_fn(lib, "stop_agent").body_text(lib));
     assert_in_order(
         &stop,
         &[
-            "stop_agent_goal(state.inner(),agent_id.clone());",
-            "stop_agent(state.inner(),agent_id.clone())?;",
+            "stop_agent_completely(state.inner(),&agent_id)?;",
+            "emit_agent_status(&window,state.inner(),&agent_id);",
         ],
         "stop_agent",
     );
@@ -6477,13 +6620,43 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
     assert_in_order(
         &all,
         &[
-            "stop_agent_goal(state,agent.id.clone());",
-            "sup.stop_agent(id);",
+            "foragentinstoppable_agents(state){",
+            "stop_agent_completely(state,&agent).is_ok(){stopped+=1;}",
         ],
         "admin_agent_stop_all",
     );
+    let bulk = compact(one_fn(enterprise, "admin_agent_bulk_update").body_text(enterprise));
+    assert_in_order(
+        &bulk,
+        &[
+            "ifaction==\"stop\"{",
+            "letstoppable=stoppable_agents(state);",
+            "stoppable.iter().any(|known|known==agent)&&",
+            "stop_agent_completely(state,agent).is_ok()",
+            "json!({\"succeeded\":succeeded,\"failed\":count-succeeded})",
+        ],
+        "admin_agent_bulk_update",
+    );
+    // The agents a stop applies to are chosen by the supervisor's state.
+    let stoppable = compact(one_fn(enterprise, "stoppable_agents").body_text(enterprise));
+    assert!(
+        stoppable.contains(
+            "matches!(status.state,AgentState::Running|AgentState::Paused|AgentState::Starting)"
+        ),
+        "{stoppable}"
+    );
+    // Stopping waits for the agent's loop: these commands run off the
+    // interface thread, so the page and its emergency stop stay usable.
+    for command in [
+        "stop_agent",
+        "stop_agent_goal",
+        "admin_agent_stop_all",
+        "admin_agent_bulk_update",
+    ] {
+        assert_eq!(one_fn(lib, command).head, "#[command(async)]", "{command}");
+    }
     // Every production route that stops or pauses an agent in the
-    // supervisor, pinned: the two above, Pause (which the running check
+    // supervisor, pinned: the routine above, Pause (which the running check
     // below covers), and the two that act before any loop exists (restoring
     // agents at startup, registering prebuilt ones).
     let mut routes = Vec::new();
@@ -6491,6 +6664,7 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         routes.extend(
             references(DESKTOP_SRC, name)
                 .into_iter()
+                .chain(bare_calls(DESKTOP_SRC, name))
                 .map(|(file, function)| (file, function, name)),
         );
     }
@@ -6519,24 +6693,19 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
                 "stop_agent"
             ),
             (
-                "app/src-tauri/src/commands/chat_llm.rs",
-                "AppState::load_prebuilt_agents".to_string(),
+                "app/src-tauri/src/commands/agents.rs",
+                "stop_agent_completely".to_string(),
                 "stop_agent"
             ),
             (
-                "app/src-tauri/src/commands/enterprise.rs",
-                "admin_agent_stop_all".to_string(),
+                "app/src-tauri/src/commands/chat_llm.rs",
+                "AppState::load_prebuilt_agents".to_string(),
                 "stop_agent"
             ),
             (
                 "app/src-tauri/src/lib.rs",
                 "pause_agent".to_string(),
                 "pause_agent"
-            ),
-            (
-                "app/src-tauri/src/lib.rs",
-                "stop_agent".to_string(),
-                "stop_agent"
             ),
         ]
     );
@@ -6592,13 +6761,28 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         ],
         "cancel_agent",
     );
-    // Quitting cancels every open run and stops the agent display.
+    // Quitting cancels every open run, waits (within a bound) until
+    // nothing executes, and stops the agent display.
     let exit = &lib[lib.find("RunEvent::Exit").unwrap() + "RunEvent::Exit".len()..];
     let arm = without_whitespace(&exit[..exit.find("RunEvent::").unwrap_or(exit.len())]);
     assert!(
         arm.contains("ifletOk(world)=app.state::<AppState>().real_world(){world.shutdown();}"),
         "{arm}"
     );
+    let shutdown = compact(one_fn(world, "RealWorld::shutdown").body_text(world));
+    assert_in_order(
+        &shutdown,
+        &[
+            "if!run.cancelled&&!run.finished{let_=self.control.cancel_run(run.id);}",
+            ".any(|view|view.state==CommitmentState::Executing)",
+            "letdeadline=Instant::now()+SHUTDOWN_WAIT;",
+            "whileexecuting()&&Instant::now()<deadline{",
+            "self.control.stop_display();",
+        ],
+        "RealWorld::shutdown",
+    );
+    assert!(world
+        .contains("const SHUTDOWN_WAIT: std::time::Duration = std::time::Duration::from_secs(5);"));
 }
 
 /// §22 (audit P8, P9): the inventory fails closed. A module or binding named
@@ -6697,6 +6881,20 @@ fn p3_g6_12_the_inventory_fails_closed() {
     for kind in ["asm", "device", "ends"] {
         assert_eq!(sites.get(kind), Some(&1), "{kind}: {sites:?}");
     }
+
+    // Name resolution: a method, a trait path, libc and a DNS crate.
+    let resolving = concat!(
+        "use std::net::ToSocketAddrs;\n",
+        "pub fn f() {\n",
+        "    let _ = (\"example.com\", 443).to_socket_addrs();\n",
+        "    let _ = ToSocketAddrs::to_socket_addrs(&(\"example.com\", 443));\n",
+        "    let _ = unsafe { libc::getaddrinfo(todo!(), todo!(), todo!(), todo!()) };\n",
+        "    let _ = hickory_resolver::Resolver::default();\n",
+        "}\n",
+    );
+    let file = "app/src-tauri/src/fixture_resolving.rs";
+    let sites = file_effect_sites(file, resolving, &module_of(file));
+    assert_eq!(sites.get("network"), Some(&4), "{sites:?}");
 
     // Every latent class has entries, so its callers are sites.
     for (file, _, reason) in EFFECT_FILES {
@@ -7325,4 +7523,167 @@ fn p3_g6_17_only_the_browser_and_display_launch_session_processes() {
             launching[0]
         );
     }
+}
+
+/// G9 (audit Q15, Q17): a response body, which may echo a released
+/// credential, lives only in zeroizing buffers: `exchange` collects it with
+/// `append` into a `Zeroizing` vector and grows it no other way, and
+/// `append` moves an outgrown buffer into a fresh one rather than letting
+/// the vector reallocate. A peer the client cannot name is unpinned.
+#[test]
+fn p3_g9_01_a_response_body_lives_only_in_zeroizing_buffers() {
+    let text = production_source(&format!("{P3_CRATE}egress/transport.rs"));
+    let exchange = compact(one_fn(text, "exchange").body_text(text));
+    assert_in_order(
+        &exchange,
+        &[
+            "if!peer.is_some_and(|peer|addresses.iter().any(|a|a.ip()==peer.ip())){returnErr(TransportError::Unpinned);}",
+            "letmutbody=Zeroizing::new(Vec::with_capacity(",
+            "append(&mutbody,&chunk,max_body);",
+            "body:take(&mut*body),",
+        ],
+        "exchange",
+    );
+    for growth in [
+        "body.extend",
+        "body.push",
+        "body.append",
+        "body.resize",
+        "body.reserve",
+    ] {
+        assert!(!exchange.contains(growth), "{growth}");
+    }
+    let append = compact(one_fn(text, "append").body_text(text));
+    assert_in_order(
+        &append,
+        &[
+            "ifneeded>body.capacity(){",
+            "letmutgrown=Zeroizing::new(Vec::with_capacity(",
+            "grown.extend_from_slice(body);*body=grown;}",
+            "body.extend_from_slice(chunk);",
+        ],
+        "append",
+    );
+}
+
+/// G9 (audit Q29): the agent display's X connection is made in one place,
+/// on the agent socket whose ownership was just checked, with the session's
+/// cookie: `connect_to_stream_with_auth_info` in `display/server.rs`'s
+/// `connect`. No constructor that reads `DISPLAY` or `XAUTHORITY`
+/// (`x11rb::connect`, `RustConnection::connect`), opens its own stream, or
+/// skips the cookie (`connect_to_stream`) is named in Phase Three; `p3_g6_04`
+/// and the §22 inventory confine `x11rb` to that file.
+#[test]
+fn p3_g9_02_the_x_connection_is_made_only_on_the_agent_socket_with_its_cookie() {
+    use crate::phase0_surface::rust_paths::Analysis;
+    let mut constructors = BTreeSet::new();
+    for (file, _) in p3_sources() {
+        let src = workspace_file(&format!("{P3_CRATE}{file}"));
+        let analysis = Analysis::new(&src, &["crate"]);
+        for o in analysis.production() {
+            for path in o.resolved.iter().chain(as_written(&o.written)) {
+                let last = path.last().map(String::as_str).unwrap_or_default();
+                if path.first().is_some_and(|root| root == "x11rb")
+                    && (last.starts_with("connect")
+                        || path
+                            .iter()
+                            .any(|segment| segment == "xcb_ffi" || segment == "XCBConnection"))
+                {
+                    constructors.insert((file.to_string(), path.join("::")));
+                }
+            }
+        }
+    }
+    assert_eq!(
+        constructors,
+        BTreeSet::from([(
+            "display/server.rs".to_string(),
+            "x11rb::rust_connection::RustConnection::connect_to_stream_with_auth_info".to_string()
+        )])
+    );
+    let text = production_source(&format!("{P3_CRATE}display/server.rs"));
+    let naming: Vec<String> = fn_items(text)
+        .into_iter()
+        .filter(|item| {
+            item.body_text(text)
+                .contains("connect_to_stream_with_auth_info")
+        })
+        .map(|item| item.path)
+        .collect();
+    assert_eq!(naming, ["connect"]);
+    let connect = compact(one_fn(text, "connect").body_text(text));
+    assert_in_order(
+        &connect,
+        &[
+            "if!socket_is_ours(number,uid){returnNone;}",
+            "letstream=UnixStream::connect(socket(number)).ok()?;",
+            "connect_to_stream_with_auth_info(stream,0,COOKIE.to_vec(),cookie.to_vec())",
+        ],
+        "connect",
+    );
+}
+
+/// G9 (audit Q6, Q7): a browser session goes out only while it may. Its
+/// proxy is given the guard's liveness (the run not cancelled, the
+/// commitment still covered), asks it before every step out of a
+/// connection and stops when it ends; the session asks before each step
+/// whether its grant is still live.
+#[test]
+fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
+    let browser = production_source(&format!("{P3_CRATE}browser/mod.rs"));
+    let runs: Vec<String> = fn_items(browser)
+        .into_iter()
+        .filter(|item| item.path == "run")
+        .map(|item| compact(item.body_text(browser)))
+        .filter(|body| body.contains("BrowserProxy::start("))
+        .collect();
+    assert_eq!(runs.len(), 1);
+    assert_in_order(
+        &runs[0],
+        &[
+            "letproxy=BrowserProxy::start(OriginPolicy{",
+            "live:guard.liveness()}",
+            "if!guard.still_authorized(){returnErr(at((FailureClass::Refused,",
+            "page.close_popups().map_err(at)?;",
+            "page.step(step).map_err(at)?;",
+        ],
+        "run",
+    );
+    let proxy = production_source(&format!("{P3_CRATE}browser/proxy.rs"));
+    assert_eq!(
+        compact(one_fn(proxy, "may_go_on").body_text(proxy)),
+        "!stop.load(Ordering::SeqCst)&&(policy.live)()"
+    );
+    assert!(
+        compact(one_fn(proxy, "BrowserProxy::start").body_text(proxy))
+            .contains("if!(policy.live)(){stop.store(true,Ordering::SeqCst);break;}")
+    );
+    assert_in_order(
+        &compact(one_fn(proxy, "serve").body_text(proxy)),
+        &[
+            "letgo_on=||may_go_on(policy,stop);",
+            "read_head(&mutclient,stop)else{returnrefuse(client);};if!go_on(){returnrefuse(client);}",
+            "connect(&addresses,go_on)",
+            "if!go_on(){returnrefuse(client);}ifclient.write_all(",
+            "connect(&addresses,go_on)",
+            "if!go_on(){returnrefuse(client);}ifupstream.write_all(forwarded.as_bytes())",
+        ],
+        "serve",
+    );
+    assert_in_order(
+        &compact(one_fn(proxy, "connect").body_text(proxy)),
+        &[
+            "foraddressinaddresses{if!go_on(){returnNone;}",
+            "connect_timeout(",
+        ],
+        "connect",
+    );
+    assert_in_order(
+        &compact(one_fn(proxy, "copy").body_text(proxy)),
+        &[
+            "whilego_on(){",
+            "iftotal>MAX_TUNNEL||!go_on()||to.write_all(&buffer[..n]).is_err(){break;}",
+        ],
+        "copy",
+    );
 }
