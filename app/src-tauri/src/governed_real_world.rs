@@ -977,7 +977,11 @@ pub(crate) mod ipc {
 
     #[tauri::command]
     pub(crate) fn p3_emergency_stop(state: tauri::State<'_, AppState>) -> Result<usize, String> {
-        Ok(world(state.inner())?.emergency_stop())
+        let stopped = world(state.inner()).map(|world| world.emergency_stop());
+        // HiveMind sessions stop with Phase Three, whether or not it is
+        // available: none assigns another sub-task.
+        state.inner().hive_sessions.cancel_all();
+        stopped
     }
 
     #[tauri::command]

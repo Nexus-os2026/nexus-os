@@ -305,7 +305,8 @@ fn p3_a_tick_that_never_saw_its_schedule_does_not_revive_an_owner_stopped_agent(
 fn p3_a_stopped_agent_takes_no_subtask_and_its_loop_runs_no_cycle() {
     let state = AppState::new_in_memory();
     let id = register_stopped(&state, "stopped-subtask", 2);
-    let refused = super::execute_hivemind_subtask(&state, &id, "summarize the notes");
+    let session = state.hive_sessions.admit().unwrap();
+    let refused = super::execute_hivemind_subtask(&state, &session, &id, "summarize the notes");
     assert!(
         refused.as_ref().is_err_and(|e| e.contains("is stopped")),
         "{refused:?}"

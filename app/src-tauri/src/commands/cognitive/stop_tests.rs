@@ -103,7 +103,8 @@ fn a_cleared_agents_loop_runs_no_cycle_and_it_takes_no_subtask() {
         "the loop of an agent with no authority to run ran a cycle: {:?}",
         task.result_json
     );
-    let refused = execute_hivemind_subtask(&state, &id, "summarize the notes");
+    let session = state.hive_sessions.admit().unwrap();
+    let refused = execute_hivemind_subtask(&state, &session, &id, "summarize the notes");
     assert!(
         refused.as_ref().is_err_and(|e| e.contains("is stopped")),
         "{refused:?}"

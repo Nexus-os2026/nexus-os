@@ -946,6 +946,8 @@ pub struct AppState {
     /// the top of each cycle and exits cleanly when set.
     pub cognitive_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     hivemind: Arc<nexus_kernel::cognitive::HivemindCoordinator>,
+    /// The HiveMind sessions under way: bounded, each cancellable.
+    hive_sessions: Arc<commands::cognitive::hive::HiveSessions>,
     message_gateway: Arc<Mutex<MessageGateway>>,
     pub evolution_tracker: Arc<nexus_kernel::cognitive::EvolutionTracker>,
     auto_evolution: Arc<AutoEvolutionManager>,
@@ -1354,6 +1356,7 @@ impl AppState {
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),
+            hive_sessions: Arc::default(),
             message_gateway: Arc::new(Mutex::new({
                 let mut gw = MessageGateway::new();
                 // Register enabled platforms from environment
@@ -1716,6 +1719,7 @@ impl AppState {
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),
+            hive_sessions: Arc::default(),
             message_gateway: Arc::new(Mutex::new(MessageGateway::new())),
             evolution_tracker,
             auto_evolution: Arc::new(AutoEvolutionManager::new()),
@@ -6791,11 +6795,15 @@ pub mod runtime {
         agent_ids: Vec<String>,
     ) -> Result<serde_json::Value, String> {
         let state = state.inner().clone();
+        // Admitted (or refused) before any thread starts. The thread owns
+        // the session: its place is given back when the thread ends, or
+        // here if the thread cannot start.
+        let session = super::admit_hivemind(&state)?;
         let (done, result) = tokio::sync::oneshot::channel();
         std::thread::Builder::new()
             .name("nexus-hivemind".into())
             .spawn(move || {
-                let _ = done.send(super::start_hivemind(&state, goal, agent_ids));
+                let _ = done.send(super::start_hivemind(&state, &session, goal, agent_ids));
             })
             .map_err(|e| format!("hivemind: {e}"))?;
         result
@@ -7990,6 +7998,9 @@ pub mod runtime {
                         if let Ok(world) = state.real_world() {
                             world.emergency_stop();
                         }
+                        // HiveMind sessions too: none assigns another
+                        // sub-task, and the ones they wait on end.
+                        state.hive_sessions.cancel_all();
 
                         state.log_event(
                             SYSTEM_UUID,
@@ -9027,6 +9038,9 @@ pub mod runtime {
                     {
                         eprintln!("[shutdown] {error}");
                     }
+                    // No HiveMind session starts any more, and every one
+                    // under way is told to stop.
+                    app.state::<AppState>().hive_sessions.close();
                     // Phase Three: every run cancelled, the agent display
                     // stopped gracefully (its lock and socket removed).
                     if let Ok(world) = app.state::<AppState>().real_world() {

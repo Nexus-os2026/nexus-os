@@ -7021,13 +7021,15 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
             "end_goal_loop",
             vec![
                 at(cognitive_rs, "ScheduledGoalExecutor::execute"),
+                at(cognitive_rs, "await_subtask"),
+                at(cognitive_rs, "await_subtask"),
                 at(cognitive_rs, "execute_hivemind_subtask"),
             ],
         ),
         (
             "agent_stopped",
             vec![
-                at(cognitive_rs, "execute_hivemind_subtask"),
+                at(cognitive_rs, "await_subtask"),
                 at(cognitive_rs, "execute_hivemind_subtask"),
                 at(cognitive_rs, "spawn_cognitive_loop_with_bridge"),
             ],
@@ -7105,20 +7107,39 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         ],
         "spawn_cognitive_loop_with_bridge",
     );
+    // A cancelled HiveMind session assigns no further sub-task: refused
+    // before anything, ended before its loop starts if the cancellation
+    // came while its goal was assigned, and ended (only its goal) while it
+    // is waited on.
     let subtask = compact(one_fn(cognitive, "execute_hivemind_subtask").body_text(cognitive));
     assert!(
-        subtask.starts_with("ifagent_stopped(state,agent_id){returnErr("),
+        subtask.starts_with(
+            "ifsession.cancelled(){returnErr(SESSION_CANCELLED.to_string());}ifagent_stopped(state,agent_id){returnErr("
+        ),
         "{subtask}"
     );
     assert_in_order(
         &subtask,
         &[
-            "ifstarted.elapsed()>=timeout{end_goal_loop(state,agent_id,&goal_id);returnErr(",
-            "ifagent_stopped(state,agent_id){returnErr(",
+            "letgoal_id=execute_agent_goal(",
+            "ifsession.cancelled(){end_goal_loop(state,agent_id,&goal_id);returnErr(SESSION_CANCELLED.to_string());}spawn_cognitive_loop_with_bridge(",
+            "await_subtask(state,session,agent_id,&goal_id,description,SUBTASK_TIMEOUT)",
         ],
         "execute_hivemind_subtask",
     );
-    assert!(!subtask.contains("cancel_agent("), "{subtask}");
+    let wait = compact(one_fn(cognitive, "await_subtask").body_text(cognitive));
+    assert_in_order(
+        &wait,
+        &[
+            "loop{ifsession.cancelled(){end_goal_loop(state,agent_id,goal_id);returnErr(SESSION_CANCELLED.to_string());}",
+            "ifstarted.elapsed()>=timeout{end_goal_loop(state,agent_id,goal_id);returnErr(",
+            "ifagent_stopped(state,agent_id){returnErr(",
+        ],
+        "await_subtask",
+    );
+    for body in [&subtask, &wait] {
+        assert!(!body.contains("cancel_agent("), "{body}");
+    }
     // An agent that is not running, however it was stopped or paused, acts
     // no more: the one production bridge asks the supervisor, and `act`
     // refuses before anything else, then refuses a stop that came after
@@ -8662,6 +8683,7 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
                 "approve",
                 "approve_consent_request",
                 "assign_agent_goal",
+                "await_subtask",
                 "batch_approve_consents",
                 "batch_deny_consents",
                 "deny_consent_request",
@@ -8769,16 +8791,111 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
     }
     assert_eq!(compact(lib).matches("CONSENT_DECISIONS:").count(), 1);
     // A HiveMind session runs on a thread of its own, not on a runtime
-    // worker: its sub-tasks' loops must be free to run while it waits.
+    // worker: its sub-tasks' loops must be free to run while it waits. It
+    // is admitted (bounded, rate limited) before the thread starts, and the
+    // thread owns it (`p3_c9_hivemind_sessions_are_bounded_and_signalled`).
     let hivemind = one_fn(lib, "start_hivemind");
     assert_eq!(hivemind.head, "#[command]async");
     assert_in_order(
         &compact(hivemind.body_text(lib)),
         &[
-            ".name(\"nexus-hivemind\".into()).spawn(move||{let_=done.send(start_hivemind(&state,goal,agent_ids));})",
+            "letsession=admit_hivemind(&state)?;",
+            ".name(\"nexus-hivemind\".into()).spawn(move||{let_=done.send(start_hivemind(&state,&session,goal,agent_ids));})",
             "result.await",
         ],
         "start_hivemind",
+    );
+}
+
+/// Candidate 9 (C8-5): HiveMind sessions are bounded and signalled. A start
+/// is admitted (its place taken under the same lock that checks the cap,
+/// then the agent-execution rate limit) before any thread starts; the
+/// thread owns the session, whose drop gives the place back; the owner's
+/// cancellation, both emergency stops and quitting signal sessions; no
+/// session starts once the desktop quits.
+#[test]
+fn p3_c9_hivemind_sessions_are_bounded_and_signalled() {
+    let hive = production_source("app/src-tauri/src/commands/cognitive/hive.rs");
+    for (path, body) in [
+        (
+            "HiveSessions::admit",
+            "letmuttable=self.table();iftable.quitting{returnErr(\"hivemind: the desktop is quitting\".to_string());}iftable.live.len()>=MAX_SESSIONS{returnErr(format!(\"hivemind: at most {MAX_SESSIONS} sessions run at once\"));}letid=Uuid::new_v4().to_string();letcancelled=Arc::new(AtomicBool::new(false));table.live.insert(id.clone(),cancelled.clone());Ok(HiveSession{sessions:self.clone(),id,cancelled})",
+        ),
+        (
+            "HiveSessions::cancel",
+            "self.table().live.get(id).map(|cancelled|cancelled.store(true,Ordering::SeqCst)).is_some()",
+        ),
+        (
+            "HiveSessions::cancel_all",
+            "lettable=self.table();forcancelledintable.live.values(){cancelled.store(true,Ordering::SeqCst);}table.live.len()",
+        ),
+        (
+            "HiveSessions::close",
+            "letmuttable=self.table();table.quitting=true;forcancelledintable.live.values(){cancelled.store(true,Ordering::SeqCst);}table.live.len()",
+        ),
+        (
+            "HiveSession::drop",
+            "self.sessions.table().live.remove(&self.id);",
+        ),
+    ] {
+        assert_eq!(compact(one_fn(hive, path).body_text(hive)), body, "{path}");
+    }
+    assert!(hive.contains("pub(crate) const MAX_SESSIONS: usize = 2;"));
+    let cognitive = production_source("app/src-tauri/src/commands/cognitive.rs");
+    assert_eq!(
+        compact(one_fn(cognitive, "admit_hivemind").body_text(cognitive)),
+        "letsession=state.hive_sessions.admit()?;state.check_rate(RateCategory::AgentExecute)?;state.log_event(SYSTEM_UUID,EventType::StateChange,json!({\"action\":\"hivemind_session_admitted\",\"session\":session.id()}));Ok(session)"
+    );
+    assert!(
+        compact(one_fn(cognitive, "cancel_hivemind").body_text(cognitive))
+            .starts_with("ifstate.hive_sessions.cancel(&session_id){")
+    );
+    // Every session's sub-tasks go through the session: one executor.
+    assert!(compact(one_fn(cognitive, "start_hivemind").body_text(cognitive)).contains(
+        ".execute_with_executor(&goal,agents,|_task_id,assigned_agent_id,task_desc|{execute_hivemind_subtask(state,session,assigned_agent_id,task_desc)})"
+    ));
+    // The emergency stops and quitting signal the sessions.
+    let lib_rs = "app/src-tauri/src/lib.rs";
+    let lib = production_source(lib_rs);
+    let stop = lib.find("activate_emergency_kill_switch();").unwrap();
+    let upto = lib[stop..].find("log_event(").unwrap();
+    let handler = without_whitespace(&lib[stop..stop + upto]);
+    assert!(
+        handler.contains(
+            "ifletOk(world)=state.real_world(){world.emergency_stop();}state.hive_sessions.cancel_all();"
+        ),
+        "the emergency key does not stop HiveMind sessions: {handler}"
+    );
+    let front = production_source(P3_FRONT_DOOR);
+    assert_eq!(
+        compact(one_fn(front, "p3_emergency_stop").body_text(front)),
+        "letstopped=world(state.inner()).map(|world|world.emergency_stop());state.inner().hive_sessions.cancel_all();stopped",
+        "the Phase Three emergency stop does not stop HiveMind sessions"
+    );
+    let exit = &lib[lib.find("RunEvent::Exit").unwrap() + "RunEvent::Exit".len()..];
+    let arm = without_whitespace(&exit[..exit.find("RunEvent::").unwrap_or(exit.len())]);
+    assert!(
+        arm.contains("app.state::<AppState>().hive_sessions.close();"),
+        "quitting does not close HiveMind sessions: {arm}"
+    );
+    // Every mention of the sessions and their admission, pinned.
+    let at = |file: &'static str, function: &str| (file, function.to_string());
+    let cognitive_rs = "app/src-tauri/src/commands/cognitive.rs";
+    assert_eq!(
+        mentions(DESKTOP_SRC, "admit_hivemind"),
+        vec![at(lib_rs, "start_hivemind")]
+    );
+    assert_eq!(
+        mentions(DESKTOP_SRC, "hive_sessions"),
+        vec![
+            at(cognitive_rs, "admit_hivemind"),
+            at(cognitive_rs, "cancel_hivemind"),
+            at(P3_FRONT_DOOR, "p3_emergency_stop"),
+            at(lib_rs, ""),
+            at(lib_rs, "AppState::new"),
+            at(lib_rs, "run"),
+            at(lib_rs, "run"),
+        ]
     );
 }
 
