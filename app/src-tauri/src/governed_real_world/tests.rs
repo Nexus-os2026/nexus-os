@@ -53,6 +53,17 @@ fn isolated() -> Isolated {
     Isolated { world, audit, root }
 }
 
+/// A commitment's state as the interface lists it.
+fn commitment_state(world: &RealWorld, id: &str) -> String {
+    world.status()["commitments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == id)
+        .map(|c| c["state"].as_str().unwrap().to_string())
+        .unwrap_or_default()
+}
+
 fn evidence_events(audit: &Arc<Mutex<AuditTrail>>) -> usize {
     audit
         .lock()
@@ -626,6 +637,9 @@ fn every_agent_stops_at_once_under_any_spelling_of_its_id() {
             .unwrap()
             .state;
         assert_eq!(stopped, AgentState::Stopped);
+        // Its waiting action ended with its run (revoked), however its id
+        // was written.
+        assert_eq!(commitment_state(&t.world, &commitment), "revoked");
         assert!(
             t.world.approve(&commitment, &owner).is_err(),
             "a stopped agent's waiting action cannot be approved"
@@ -708,6 +722,8 @@ fn stop_all_and_bulk_stop_stop_agents_everywhere() {
     let stopped = crate::admin_agent_stop_all(&state, "default".into()).unwrap();
     assert_eq!(stopped, 1);
     assert_eq!(agent_state(first), AgentState::Stopped);
+    // The waiting action ended with its run (revoked), before any approval.
+    assert_eq!(commitment_state(&t.world, &commitment), "revoked");
     assert!(
         t.world.approve(&commitment, &owner).is_err(),
         "a stopped agent's waiting action cannot be approved"

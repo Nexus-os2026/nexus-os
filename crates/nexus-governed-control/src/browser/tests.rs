@@ -1118,7 +1118,8 @@ fn the_proxy_stops_when_its_session_may_no_longer_go_out() {
     );
     // The proxy keeps its port while the session lasts (no other process
     // can take it from the browser) and closes every new connection at
-    // once, unserved.
+    // once, unserved: long after it saw the session end, it still does.
+    std::thread::sleep(Duration::from_millis(300));
     let refused = proxy.refused();
     let mut late = std::net::TcpStream::connect(address).unwrap();
     late.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
