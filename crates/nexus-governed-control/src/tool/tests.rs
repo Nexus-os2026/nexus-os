@@ -397,7 +397,12 @@ fn a_tool_is_not_spawned_once_its_run_is_cancelled() {
         .begin(view.id, &h.agent, h.run, &target, &effect.parameters())
         .unwrap();
     h.control.cancel_run(h.run).unwrap();
-    assert!(effect.execute(&guard).is_err());
+    // Refused before the launch: a tool launched and then killed at its
+    // first poll could leave no marker, so the refusal is asked for exactly.
+    assert_eq!(
+        effect.execute(&guard).unwrap_err().1,
+        "cancelled before the tool started"
+    );
     assert!(
         !spawned.exists(),
         "a tool was spawned after its run was cancelled"

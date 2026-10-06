@@ -782,11 +782,19 @@ fn the_proxy_caps_its_connections_and_ends_them_with_the_session() {
     let mut over = std::net::TcpStream::connect(address).unwrap();
     over.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
     let mut byte = [0u8; 1];
-    assert_eq!(
-        over.read(&mut byte).unwrap_or(0),
-        0,
-        "the 65th is not served"
+    // The 65th is closed at once and counted as refused: neither served nor
+    // left waiting (a read that times out means it was held open).
+    let started = Instant::now();
+    match over.read(&mut byte) {
+        Ok(0) => {}
+        other => panic!("the 65th connection was not closed at once: {other:?}"),
+    }
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "closed only after {:?}",
+        started.elapsed()
     );
+    assert_eq!(proxy.refused(), 1);
     drop(proxy);
     // Each waiting client is answered 403 or closed, never left open.
     for client in &mut held {
@@ -805,16 +813,20 @@ fn the_proxy_caps_its_connections_and_ends_them_with_the_session() {
     }
 }
 
-/// At most `MAX_SESSIONS` sessions of one control run at once.
+/// At most four sessions of one control run at once (the number the
+/// design record states).
 #[test]
 fn sessions_are_counted_and_capped() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let counter = Arc::new(AtomicUsize::new(0));
-    let slots: Vec<_> = (0..super::MAX_SESSIONS)
+    let slots: Vec<_> = (0..4)
         .map(|_| super::live::SessionSlot::take(&counter).expect("a slot"))
         .collect();
-    assert!(super::live::SessionSlot::take(&counter).is_none());
-    assert_eq!(counter.load(Ordering::SeqCst), super::MAX_SESSIONS);
+    assert!(
+        super::live::SessionSlot::take(&counter).is_none(),
+        "a fifth session"
+    );
+    assert_eq!(counter.load(Ordering::SeqCst), 4);
     drop(slots);
     assert_eq!(counter.load(Ordering::SeqCst), 0);
     assert!(super::live::SessionSlot::take(&counter).is_some());

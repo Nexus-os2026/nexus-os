@@ -370,7 +370,10 @@ mod launch {
         };
         // Nothing starts for a run that was cancelled after it began.
         if guard.is_cancelled() {
-            return Err((FailureClass::Actuator, "cancelled".into()));
+            return Err((
+                FailureClass::Actuator,
+                "cancelled before the tool started".into(),
+            ));
         }
         let limiter = ResourceLimiter::new(ResourceLimits::default());
         let mut child = limiter
