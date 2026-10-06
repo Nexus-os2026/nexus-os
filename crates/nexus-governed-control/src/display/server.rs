@@ -21,7 +21,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use x11rb::connection::Connection;
-use x11rb::protocol::xproto::{self, AtomEnum, ConnectionExt as _, ImageFormat, MapState, Window};
+use x11rb::protocol::xproto::{
+    self, AtomEnum, ConnectionExt as _, EventMask, GrabMode, GrabStatus, ImageFormat, MapState,
+    Window,
+};
 use x11rb::protocol::xtest::ConnectionExt as _;
 use x11rb::rust_connection::{DefaultStream, RustConnection};
 
@@ -345,14 +348,25 @@ impl AgentServer {
             let Some(geometry) = conn.get_geometry(window).ok().and_then(|c| c.reply().ok()) else {
                 continue;
             };
+            // The window's whole extent, border included (a click on the
+            // border is the window's), clipped to the screen's origin.
+            let border = 2 * i32::from(geometry.border_width);
+            let (left, top) = (i32::from(geometry.x), i32::from(geometry.y));
+            let right = left + i32::from(geometry.width) + border;
+            let bottom = top + i32::from(geometry.height) + border;
+            let (left, top) = (left.max(0), top.max(0));
+            if right <= left || bottom <= top {
+                continue;
+            }
+            let span = |from: i32, to: i32| u16::try_from(to - from).unwrap_or(u16::MAX);
             out.push(WindowInfo {
                 id: window,
                 title: Self::title(&conn, window),
                 rect: Rect {
-                    x: geometry.x.max(0) as u16,
-                    y: geometry.y.max(0) as u16,
-                    width: geometry.width,
-                    height: geometry.height,
+                    x: u16::try_from(left).unwrap_or(u16::MAX),
+                    y: u16::try_from(top).unwrap_or(u16::MAX),
+                    width: span(left, right),
+                    height: span(top, bottom),
                 },
             });
         }
@@ -391,6 +405,8 @@ impl AgentServer {
     /// Whether keyboard events now reach `window` (0: the display
     /// background): the focus follows the pointer (which the caller has
     /// checked is over `window`), or it is `window` or a window inside it.
+    /// Keys bound to the background reach it only when no window holds the
+    /// focus.
     pub(crate) fn keys_reach(&self, window: u32) -> bool {
         let conn = self.conn.lock().expect("display");
         let Some(focus) = conn
@@ -404,7 +420,10 @@ impl AgentServer {
         if focus == POINTER_ROOT {
             return true;
         }
-        let target = if window == 0 { self.root } else { window };
+        if window == 0 {
+            return focus == self.root;
+        }
+        let target = window;
         let mut current = focus;
         for _ in 0..64 {
             if current == target {
@@ -419,6 +438,42 @@ impl AgentServer {
             }
         }
         false
+    }
+
+    /// Whether no other client holds an active keyboard or pointer grab,
+    /// which would receive the next key or button event wherever the focus
+    /// or the pointer is. Called while the server is held: Nexus's own
+    /// probing grabs are released at once, before any event is sent.
+    pub(crate) fn no_active_grab(&self) -> bool {
+        let conn = self.conn.lock().expect("display");
+        let keyboard = conn
+            .grab_keyboard(
+                false,
+                self.root,
+                x11rb::CURRENT_TIME,
+                GrabMode::ASYNC,
+                GrabMode::ASYNC,
+            )
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .is_some_and(|r| r.status == GrabStatus::SUCCESS);
+        let _ = conn.ungrab_keyboard(x11rb::CURRENT_TIME);
+        let pointer = conn
+            .grab_pointer(
+                false,
+                self.root,
+                EventMask::NO_EVENT,
+                GrabMode::ASYNC,
+                GrabMode::ASYNC,
+                x11rb::NONE,
+                x11rb::NONE,
+                x11rb::CURRENT_TIME,
+            )
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .is_some_and(|r| r.status == GrabStatus::SUCCESS);
+        let _ = conn.ungrab_pointer(x11rb::CURRENT_TIME);
+        Self::sync(&conn).is_ok() && keyboard && pointer
     }
 
     fn sync(conn: &RustConnection) -> Result<(), AuthorityError> {

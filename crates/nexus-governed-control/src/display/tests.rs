@@ -29,7 +29,7 @@ fn display() -> Option<(AgentDisplay, TempRoot)> {
     }
     let root = temp_root("display");
     let display = AgentDisplay::new(root.0.clone());
-    display.start(640, 480).unwrap();
+    display.start(640, 480, || Ok(()), || false).unwrap();
     Some((display, root))
 }
 
@@ -615,7 +615,7 @@ fn a_restarted_display_fails_everything_bound_to_the_old_one() {
         .authorize(view.id, &h.agent, h.run, &Yes::new(true))
         .unwrap();
     display.stop();
-    display.start(640, 480).unwrap();
+    display.start(640, 480, || Ok(()), || false).unwrap();
     assert_eq!(
         h.control.execute(view.id, &h.agent, h.run).unwrap_err(),
         AuthorityError::TargetChanged
@@ -744,4 +744,194 @@ fn prepared_actions_cannot_exceed_the_step_budget() {
             "the input grant's steps are used up"
         ))
     ));
+}
+
+/// Evidence first, and a stop wins: a display that cannot be recorded, or
+/// that a stop overtakes while its server starts, does not run, and its
+/// server ends unused.
+#[test]
+fn a_stop_wins_over_a_start_and_nothing_starts_unrecorded() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    if !std::path::Path::new("/usr/bin/Xvfb").exists() {
+        return;
+    }
+    let root = temp_root("display-start");
+    let display = AgentDisplay::new(root.0.clone());
+    assert_eq!(
+        display.start(640, 480, || Ok(()), || true).unwrap_err(),
+        AuthorityError::EmergencyStopped
+    );
+    assert_eq!(
+        display
+            .start(
+                640,
+                480,
+                || Err(AuthorityError::EvidenceUnavailable),
+                || false
+            )
+            .unwrap_err(),
+        AuthorityError::EvidenceUnavailable
+    );
+    // The stop arrives while the server starts (after the first check).
+    let checks = AtomicU32::new(0);
+    assert!(display
+        .start(
+            640,
+            480,
+            || Ok(()),
+            || checks.fetch_add(1, Ordering::SeqCst) > 0
+        )
+        .is_err());
+    assert!(display.status().is_none());
+    assert_eq!(
+        std::fs::read_dir(root.0.path()).unwrap().count(),
+        0,
+        "the overtaken server is gone"
+    );
+}
+
+/// Keys bound to the display background are refused while a window holds
+/// the focus, and no key or click is sent while another client holds the
+/// keyboard or the pointer grabbed (it would receive them).
+#[test]
+fn background_keys_and_grabbed_input_are_refused() {
+    use x11rb::protocol::xproto::{GrabMode, GrabStatus, InputFocus};
+    let Some((display, _root)) = display() else {
+        return;
+    };
+    let h = harness();
+    grant_perception(&h);
+    grant_input(&h, 20, true);
+    let client = display.test_client();
+    let window_rect = Rect {
+        x: 300,
+        y: 300,
+        width: 100,
+        height: 100,
+    };
+    let focused = window(&client, "Focused", window_rect);
+    observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
+    act(&h, &display, InputIntent::Move { x: 20, y: 20 }, true).unwrap();
+    client
+        .set_input_focus(InputFocus::PARENT, focused, x11rb::CURRENT_TIME)
+        .unwrap();
+    client.sync().unwrap();
+    assert!(act(&h, &display, InputIntent::Type { text: "x".into() }, true).is_err());
+    assert!(events(&client)
+        .into_iter()
+        .all(|e| !matches!(e, Event::KeyPress(_))));
+    // Over the window, with the focus there, but the keyboard grabbed.
+    act(&h, &display, InputIntent::Move { x: 350, y: 350 }, true).unwrap();
+    observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
+    let grab = client
+        .grab_keyboard(
+            true,
+            focused,
+            x11rb::CURRENT_TIME,
+            GrabMode::ASYNC,
+            GrabMode::ASYNC,
+        )
+        .unwrap()
+        .reply()
+        .unwrap();
+    assert_eq!(grab.status, GrabStatus::SUCCESS);
+    assert!(act(&h, &display, InputIntent::Type { text: "y".into() }, true).is_err());
+    assert!(act(
+        &h,
+        &display,
+        InputIntent::Click {
+            x: 350,
+            y: 350,
+            button: Some(Button::Left)
+        },
+        true
+    )
+    .is_err());
+    assert!(events(&client)
+        .into_iter()
+        .all(|e| !matches!(e, Event::KeyPress(_) | Event::ButtonPress(_))));
+}
+
+/// Whatever an action leaves pressed when it ends early is released.
+#[test]
+fn whatever_an_action_left_pressed_is_released() {
+    use x11rb::protocol::xproto::KeyButMask;
+    let Some((display, _root)) = display() else {
+        return;
+    };
+    let (_, server) = display.current().unwrap();
+    let shift = server.keycode(0xffe1).expect("a Shift key").0;
+    server.key(shift, true).unwrap();
+    server.button(1, true).unwrap();
+    drop(super::Pressed {
+        server: Some(server.clone()),
+        keys: vec![shift],
+        buttons: vec![1],
+    });
+    let client = display.test_client();
+    let keys = client.query_keymap().unwrap().reply().unwrap().keys;
+    assert_eq!(keys[usize::from(shift / 8)] & (1 << (shift % 8)), 0);
+    let root = client.setup().roots[0].root;
+    let pointer = client.query_pointer(root).unwrap().reply().unwrap();
+    assert!(!pointer.mask.contains(KeyButMask::BUTTON1));
+}
+
+/// A drag is bound to where it is dropped as well: the owner is told, and
+/// a window appearing at the drop point fails the drag before anything is
+/// pressed.
+#[test]
+fn a_drag_is_bound_to_where_it_is_dropped() {
+    let Some((display, _root)) = display() else {
+        return;
+    };
+    let h = harness();
+    grant_perception(&h);
+    grant_input(&h, 10, true);
+    let client = display.test_client();
+    window(
+        &client,
+        "Source",
+        Rect {
+            x: 10,
+            y: 10,
+            width: 100,
+            height: 100,
+        },
+    );
+    observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
+    let preparation = display
+        .prepare_input(
+            h.control.authority(),
+            h.run,
+            &InputIntent::Drag {
+                from_x: 50,
+                from_y: 50,
+                to_x: 400,
+                to_y: 300,
+            },
+        )
+        .unwrap();
+    assert!(preparation
+        .action
+        .summary
+        .iter()
+        .any(|line| line == "Dropped on the display background"));
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    window(
+        &client,
+        "Cover",
+        Rect {
+            x: 350,
+            y: 250,
+            width: 100,
+            height: 100,
+        },
+    );
+    assert!(h.control.execute(view.id, &h.agent, h.run).is_err());
+    assert!(events(&client)
+        .into_iter()
+        .all(|e| !matches!(e, Event::ButtonPress(_))));
 }

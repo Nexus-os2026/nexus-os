@@ -350,16 +350,20 @@ impl GovernedControl {
         {
             return Err(AuthorityError::NoCoveringGrant);
         }
-        let status = self.display.start(1280, 800)?;
-        if let Err(error) = self.authority().record_display(
-            EvidencePhase::DisplayStarted,
-            vec![("display".into(), status.number.to_string())],
-        ) {
-            // Nothing unrecorded keeps running.
-            self.display.stop();
-            return Err(error);
-        }
-        Ok(status)
+        // Evidence first: an unrecorded display does not start. An
+        // emergency stop that comes while it starts ends it unused.
+        let runs = self.authority().runs();
+        self.display.start(
+            1280,
+            800,
+            || {
+                self.authority().record_display(
+                    EvidencePhase::DisplayStarted,
+                    vec![("size".into(), "1280x800".into())],
+                )
+            },
+            || runs.is_stopped(),
+        )
     }
 
     /// Stop the agent display (recorded).

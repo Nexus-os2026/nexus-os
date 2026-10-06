@@ -368,6 +368,10 @@ mod launch {
             stdout: ResourceOutput::Piped,
             stderr: ResourceOutput::Piped,
         };
+        // Nothing starts for a run that was cancelled after it began.
+        if guard.is_cancelled() {
+            return Err((FailureClass::Actuator, "cancelled".into()));
+        }
         let limiter = ResourceLimiter::new(ResourceLimits::default());
         let mut child = limiter
             .spawn_sealed(&spec)
@@ -397,15 +401,18 @@ mod launch {
         };
         // Whatever happened, the whole process group ends and is reaped.
         let reaped = child.terminate_and_reap(Instant::now() + Duration::from_secs(5));
-        let (out, out_overflow) = stdout.join();
-        let (err, _) = stderr.join();
-        let status = outcome?;
         if reaped.is_err() {
+            // A process of the group may still hold the pipes open: the
+            // readers are left to end on their own, never waited for.
+            drop((stdout, stderr));
             return Err((
                 FailureClass::Unavailable,
                 "the tool's processes could not be reaped".into(),
             ));
         }
+        let (out, out_overflow) = stdout.join();
+        let (err, _) = stderr.join();
+        let status = outcome?;
         if out_overflow {
             return Err((
                 FailureClass::Bounds,

@@ -33,6 +33,7 @@ use crate::control::{EffectOutput, PendingEffect, Preparation};
 use crate::runtime_root::RuntimeRoot;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -232,6 +233,9 @@ impl Server {
     fn keys_reach(&self, _window: u32) -> bool {
         false
     }
+    fn no_active_grab(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -248,6 +252,10 @@ struct Session {
 pub struct AgentDisplay {
     root: RuntimeRoot,
     generation: Mutex<u64>,
+    /// One start at a time; a stop never waits for one.
+    starting: Mutex<()>,
+    /// Counts stops: a start that a stop overtook ends its server unused.
+    stops: AtomicU64,
     shared: Arc<Shared>,
 }
 
@@ -261,6 +269,9 @@ struct Shared {
     observations: Mutex<HashMap<RunId, LatestObservation>>,
     steps: Mutex<HashMap<GrantId, u32>>,
     last_input: Mutex<Option<Instant>>,
+    /// Held for the whole of an input action: the events of two actions
+    /// never interleave.
+    acting: Mutex<()>,
 }
 
 impl Shared {
@@ -279,14 +290,26 @@ impl AgentDisplay {
         Self {
             root,
             generation: Mutex::new(0),
+            starting: Mutex::new(()),
+            stops: AtomicU64::new(0),
             shared: Arc::new(Shared::default()),
         }
     }
 
-    /// Start the agent display (a no-op while it runs).
-    pub fn start(&self, width: u16, height: u16) -> Result<DisplayStatus, AuthorityError> {
-        let mut session = self.shared.session.lock().expect("display");
-        if let Some(current) = session.as_ref() {
+    /// Start the agent display (a no-op while it runs). `admit` is asked
+    /// first (it records the start: an unrecorded display does not start)
+    /// and `stopped` is asked before the launch; a stop that comes while the
+    /// server starts wins, and that server ends unused. The display's lock
+    /// is not held across the launch, so a stop never waits for one.
+    pub(crate) fn start(
+        &self,
+        width: u16,
+        height: u16,
+        admit: impl FnOnce() -> Result<(), AuthorityError>,
+        stopped: impl Fn() -> bool,
+    ) -> Result<DisplayStatus, AuthorityError> {
+        let _starting = self.starting.lock().expect("starting");
+        if let Some(current) = self.shared.session.lock().expect("display").as_ref() {
             if current.server.alive() {
                 return Ok(status(current));
             }
@@ -294,7 +317,18 @@ impl AgentDisplay {
         if !(320..=3840).contains(&width) || !(240..=2160).contains(&height) {
             return Err(AuthorityError::InvalidAction("display size out of bounds"));
         }
+        let stops = self.stops.load(Ordering::SeqCst);
+        if stopped() {
+            return Err(AuthorityError::EmergencyStopped);
+        }
+        admit()?;
         let server = Arc::new(Server::start(&self.root, width, height)?);
+        let mut session = self.shared.session.lock().expect("display");
+        if self.stops.load(Ordering::SeqCst) != stops || stopped() {
+            return Err(AuthorityError::Closed(
+                "the agent display was stopped while it started",
+            ));
+        }
         let generation = {
             let mut counter = self.generation.lock().expect("generation");
             *counter += 1;
@@ -304,14 +338,18 @@ impl AgentDisplay {
         Ok(status(session.as_ref().expect("started")))
     }
 
-    /// Stop the agent display: everything bound to it fails revalidation.
+    /// Stop the agent display: everything bound to it fails revalidation,
+    /// and a start in progress ends unused.
     pub fn stop(&self) {
-        self.shared.session.lock().expect("display").take();
+        self.stops.fetch_add(1, Ordering::SeqCst);
+        let session = self.shared.session.lock().expect("display").take();
         self.shared
             .observations
             .lock()
             .expect("observations")
             .clear();
+        // The server ends here, outside the display's lock.
+        drop(session);
     }
 
     pub fn status(&self) -> Option<DisplayStatus> {
@@ -669,12 +707,32 @@ impl AgentDisplay {
             height,
         });
         let window_id = window.as_ref().map_or(0, |w| w.id);
+        // A drag lands where it is dropped: the window there is bound too.
+        let drop_point = match intent {
+            InputIntent::Drag { to_x, to_y, .. } => Some((*to_x, *to_y)),
+            _ => None,
+        };
+        let drop_window = drop_point.map(|(x, y)| server.window_at(x, y));
+        let mut summary = summary;
+        if let Some(target) = &drop_window {
+            summary.push(match target {
+                Some(w) => format!("Dropped on window \"{}\" (id {})", hint(&w.title), w.id),
+                None => "Dropped on the display background".to_string(),
+            });
+        }
+        let drop_window = drop_window.map(|w| w.map_or(0, |w| w.id));
         let class = match (gesture, session_r1) {
             (false, _) => EffectClass::R1,
             (true, true) => EffectClass::R1,
             (true, false) => EffectClass::R2,
         };
-        let target = input_target(generation, window_id, window_rect, &observation);
+        let target = input_target(
+            generation,
+            window_id,
+            window_rect,
+            &observation,
+            drop_window,
+        );
         let canonical =
             serde_json::to_vec(intent).map_err(|_| AuthorityError::InvalidAction("input"))?;
         let parameters = Digest::of("nexus.p3.display.input.v1", &[&canonical]);
@@ -710,6 +768,7 @@ impl AgentDisplay {
                 follows_pointer,
                 window_id,
                 window_rect,
+                drop_point,
                 observation,
                 run,
                 grant,
@@ -754,14 +813,25 @@ fn clip(rect: Rect, width: u16, height: u16) -> Option<Rect> {
     })
 }
 
-fn input_target(generation: u64, window: u32, rect: Rect, observation: &str) -> Digest {
+fn input_target(
+    generation: u64,
+    window: u32,
+    rect: Rect,
+    observation: &str,
+    drop_window: Option<u32>,
+) -> Digest {
+    let drop: Vec<u8> = match drop_window {
+        Some(window) => [&[1u8][..], &window.to_be_bytes()].concat(),
+        None => vec![0],
+    };
     Digest::of(
-        "nexus.p3.display.input.target.v1",
+        "nexus.p3.display.input.target.v2",
         &[
             &generation.to_be_bytes(),
             &window.to_be_bytes(),
             &rect.bytes(),
             observation.as_bytes(),
+            &drop,
         ],
     )
 }
@@ -968,6 +1038,8 @@ struct Input {
     follows_pointer: bool,
     window_id: u32,
     window_rect: Rect,
+    /// Where a drag is dropped: the window there is part of the binding.
+    drop_point: Option<(u16, u16)>,
     observation: String,
     run: RunId,
     grant: GrantId,
@@ -1005,12 +1077,49 @@ impl Input {
             .filter(|o| o.generation == self.generation)
             .map(|o| o.id.clone())
             .unwrap_or_default();
+        let drop_window = self
+            .drop_point
+            .map(|(x, y)| server.window_at(x, y).map_or(0, |w| w.id));
         input_target(
             self.generation,
             window.as_ref().map_or(0, |w| w.id),
             rect,
             &observation,
+            drop_window,
         )
+    }
+}
+
+/// What an action has pressed and not released yet: released on every
+/// exit, so a failed or cancelled action never leaves a key or a button
+/// held down for the next one.
+#[derive(Default)]
+struct Pressed {
+    server: Option<Arc<Server>>,
+    keys: Vec<u8>,
+    buttons: Vec<u8>,
+}
+
+impl Pressed {
+    fn note(held: &mut Vec<u8>, code: u8, press: bool) {
+        if press {
+            held.push(code);
+        } else {
+            held.retain(|c| *c != code);
+        }
+    }
+}
+
+impl Drop for Pressed {
+    fn drop(&mut self) {
+        if let Some(server) = &self.server {
+            for code in self.keys.iter().rev() {
+                let _ = server.key(*code, false);
+            }
+            for code in self.buttons.iter().rev() {
+                let _ = server.button(*code, false);
+            }
+        }
     }
 }
 
@@ -1028,6 +1137,8 @@ impl PendingEffect for Input {
         self: Box<Self>,
         guard: &ExecutionGuard,
     ) -> Result<EffectOutput, (FailureClass, String)> {
+        // One action at a time: the events of two actions never interleave.
+        let _acting = self.shared.acting.lock().expect("acting");
         // The grant's step budget is spent here, at the effect, under its
         // lock: actions prepared together cannot exceed it.
         {
@@ -1060,27 +1171,36 @@ impl PendingEffect for Input {
             )
         };
         let mut sent = 0u32;
+        // Whatever is still pressed when the action ends early is released.
+        let mut pressed = Pressed::default();
         for step in &self.steps {
             if guard.is_cancelled() {
                 return Err((FailureClass::Actuator, "cancelled".into()));
             }
             // The display must still be the bound one at every event.
             let server = self.shared.server(self.generation).map_err(|_| changed())?;
+            pressed.server = Some(server.clone());
             match *step {
                 Step::Pointer(x, y) => server.pointer(x, y).map_err(failed)?,
                 // A press is checked and sent while the server is held, so
-                // nothing can appear over the point or take the keyboard
-                // focus between the check and the event.
+                // nothing can appear over the point, move the pointer, take
+                // the keyboard focus or grab the input between the check and
+                // the event.
                 Step::Button(code, press) => {
                     let _held = if press {
                         Some(server.hold().map_err(failed)?)
                     } else {
                         None
                     };
-                    if press && self.current_target(&server) != self.target {
+                    if press
+                        && (self.current_target(&server) != self.target
+                            || (!self.follows_pointer && server.pointer_position() != self.point)
+                            || !server.no_active_grab())
+                    {
                         return Err(changed());
                     }
-                    server.button(code, press).map_err(failed)?
+                    server.button(code, press).map_err(failed)?;
+                    Pressed::note(&mut pressed.buttons, code, press);
                 }
                 // Keys go to the keyboard focus: it must still deliver to
                 // the bound window.
@@ -1092,11 +1212,13 @@ impl PendingEffect for Input {
                     };
                     if press
                         && (self.current_target(&server) != self.target
-                            || !server.keys_reach(self.window_id))
+                            || !server.keys_reach(self.window_id)
+                            || !server.no_active_grab())
                     {
                         return Err(changed());
                     }
-                    server.key(code, press).map_err(failed)?
+                    server.key(code, press).map_err(failed)?;
+                    Pressed::note(&mut pressed.keys, code, press);
                 }
                 Step::Pause(ms) => std::thread::sleep(Duration::from_millis(u64::from(ms))),
             }
