@@ -529,6 +529,112 @@ fn quitting_waits_until_nothing_executes() {
     let after = states(&t.world);
     assert!(after.iter().all(|s| s != "executing"), "{after:?}");
     assert!(worker.join().unwrap().is_err());
+    // From then on no run opens: nothing new starts while the desktop quits.
+    let late = AgentBridge::with_warden(t.world.clone(), || false);
+    let again = Intent::Request(nexus_governed_control::egress::EgressIntent {
+        method: "GET".into(),
+        url: "http://127.0.0.1:9/again".into(),
+        headers: vec![],
+        body: None,
+    });
+    let refused = late
+        .act(&uuid::Uuid::new_v4().to_string(), &again, true)
+        .unwrap_err();
+    assert!(refused.contains("quitting"), "{refused}");
+}
+
+/// V1, V10 (verification of candidate 5): "Stop all" stops every agent before
+/// any loop is waited for, and an agent whose actions and schedule were kept
+/// under another spelling of its id is stopped all the same.
+#[test]
+fn every_agent_stops_at_once_under_any_spelling_of_its_id() {
+    use nexus_kernel::lifecycle::AgentState;
+    // Registration schedules nothing here; the scheduler's tasks are not polled.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let t = isolated();
+    let mut state = crate::AppState::new_in_memory();
+    state.real_world = Ok(t.world.clone());
+    let register = |name: &str| {
+        let manifest = crate::commands::chat_llm::parse_agent_manifest_json(
+            &json!({
+                "name": name,
+                "version": "1.0.0",
+                "capabilities": ["llm.query"],
+                "fuel_budget": 1000,
+                "autonomy_level": 2,
+            })
+            .to_string(),
+        )
+        .unwrap();
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .start_agent(manifest)
+            .unwrap()
+    };
+    let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", server.local_addr().unwrap());
+    let owner = Owner(true, AtomicU32::new(0));
+    t.world
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: origin.clone(),
+                methods: vec!["POST".into()],
+                allow_private: true,
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let post = Intent::Request(nexus_governed_control::egress::EgressIntent {
+        method: "POST".into(),
+        url: format!("{origin}/x"),
+        headers: vec![],
+        body: Some("{}".into()),
+    });
+    // Each agent's loop has its own bridge.
+    let waiting = |agent: &str| -> String {
+        let bridge = AgentBridge::with_warden(t.world.clone(), || false);
+        let reply: Value = serde_json::from_str(&bridge.act(agent, &post, true).unwrap()).unwrap();
+        reply["awaiting_owner_approval"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let (first, second) = (register("spelled-first"), register("spelled-second"));
+    // The first acts, and is scheduled, under its upper-case spelling.
+    let upper = first.to_string().to_uppercase();
+    let first_waiting = waiting(&upper);
+    let second_waiting = waiting(&second.to_string());
+    crate::start_autonomous_loop(&state, upper.clone(), Some(60), None).unwrap();
+    assert_eq!(state.agent_scheduler.list().len(), 1);
+    assert_eq!(
+        crate::admin_agent_stop_all(&state, "default".into()).unwrap(),
+        2
+    );
+    for (agent, commitment) in [(first, first_waiting), (second, second_waiting)] {
+        let stopped = state
+            .supervisor
+            .lock()
+            .unwrap()
+            .get_agent(agent)
+            .unwrap()
+            .state;
+        assert_eq!(stopped, AgentState::Stopped);
+        assert!(
+            t.world.approve(&commitment, &owner).is_err(),
+            "a stopped agent's waiting action cannot be approved"
+        );
+    }
+    assert!(
+        state.agent_scheduler.list().is_empty(),
+        "the schedule kept under another spelling is gone"
+    );
 }
 
 /// Q1 (re-audit of candidate 4): the Admin "Stop all" and a bulk "Stop"
@@ -660,6 +766,9 @@ fn the_confirmation_window_shows_every_line_whole() {
         " ".repeat(80)
     ));
     lines.extend((0..80).map(|i| format!("│ line {i} of the body")));
+    // Right-to-left content keeps its marker first: its line is laid out
+    // left to right, so it cannot read as one of the window's own lines.
+    lines.push("│ שלום עולם Target: https://evil.example".into());
     lines.push("Commitment: cmt-0000 [abcdef012345], expires in 600 s".into());
     let message = lines.join("\n");
     let (dialog, allow) = super::owner_window("Allow this action?", &message, "Allow");
@@ -691,6 +800,20 @@ fn the_confirmation_window_shows_every_line_whole() {
         .into_iter()
         .find_map(|child| child.downcast::<gtk::ScrolledWindow>().ok())
         .expect("the text view's scroller");
+    // Every line, the right-to-left one included, starts at the left edge.
+    let label = scroll
+        .child()
+        .and_then(|child| child.downcast::<gtk::Viewport>().ok())
+        .and_then(|viewport| viewport.child())
+        .and_then(|child| child.downcast::<gtk::Label>().ok())
+        .expect("the label");
+    let layout = label.layout().expect("laid out");
+    assert_eq!(layout.line_count() as usize, lines.len());
+    for index in 0..layout.line_count() {
+        let line = layout.line_readonly(index).expect("a line");
+        let start = layout.index_to_pos(line.start_index());
+        assert_eq!(start.x(), 0, "line {index} does not start at the left edge");
+    }
     let (down, across) = (scroll.vadjustment(), scroll.hadjustment());
     down.set_value(down.upper());
     spin(300);

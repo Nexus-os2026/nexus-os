@@ -492,24 +492,80 @@ pub(crate) fn stop_agent(state: &AppState, agent_id: String) -> Result<(), Strin
     Ok(())
 }
 
-/// Stop one agent everywhere, in an order that never waits on the agent's
-/// own work first: its schedule ends (no tick restarts it), its loop's
-/// cancel flag is set, what it runs or left waiting in Phase Three is
-/// cancelled, its loop is stopped, and the supervisor records the stop.
-/// Every owner route that stops an agent uses this.
-pub(crate) fn stop_agent_completely(state: &AppState, agent_id: &str) -> Result<(), String> {
-    state.agent_scheduler.unregister_agent(agent_id);
-    if let Some(flag) = state
+/// One spelling per agent: a UUID in its canonical form (other ids as
+/// given), so a loop, a schedule and a stop always name the same agent.
+pub(crate) fn canonical_agent_id(agent_id: &str) -> String {
+    Uuid::parse_str(agent_id).map_or_else(|_| agent_id.to_string(), |id| id.to_string())
+}
+
+/// The part of an owner's stop that never waits, for one agent: its
+/// schedule ends (no tick restarts it), its loop's cancel flag is set,
+/// everything it runs or left waiting in Phase Three is cancelled, and the
+/// supervisor records the stop (Phase Three then refuses any action of the
+/// agent). Its loop is removed afterwards, by `stop_agents`.
+pub(crate) fn stop_agent_now(state: &AppState, agent_id: &str) -> Result<(), String> {
+    for spelling in spellings(state, agent_id) {
+        state.agent_scheduler.unregister_agent(&spelling);
+        if let Some(flag) = state
+            .cognitive_cancellations
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&spelling)
+        {
+            flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    if let Ok(world) = state.real_world() {
+        world.cancel_agent(agent_id);
+    }
+    stop_agent(state, agent_id.to_string())
+}
+
+/// Every spelling under which the agent's schedule or loop may be kept (a
+/// UUID can be written several ways), its canonical one first.
+fn spellings(state: &AppState, agent_id: &str) -> Vec<String> {
+    let uuid = Uuid::parse_str(agent_id).ok();
+    let same = |key: &str| key == agent_id || (uuid.is_some() && Uuid::parse_str(key).ok() == uuid);
+    let mut found = vec![canonical_agent_id(agent_id)];
+    let scheduled = state.agent_scheduler.list().into_iter().map(|s| s.agent_id);
+    let looping: Vec<String> = state
         .cognitive_cancellations
         .lock()
         .unwrap_or_else(|p| p.into_inner())
-        .get(agent_id)
-    {
-        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        .keys()
+        .cloned()
+        .collect();
+    for key in scheduled.chain(looping) {
+        if same(&key) && !found.contains(&key) {
+            found.push(key);
+        }
     }
-    // Cancels in Phase Three before it waits for the loop.
-    let _ = crate::commands::cognitive::stop_agent_goal(state, agent_id.to_string());
-    stop_agent(state, agent_id.to_string())
+    found
+}
+
+/// Every owner route that stops agents (Stop, the Admin "Stop all", bulk
+/// Stop) comes here. Every agent stops at once, before anything waits; then
+/// their loops are removed on a thread of their own, which may wait while
+/// any agent's cycle holds the loop lock. One result per agent.
+pub(crate) fn stop_agents(state: &AppState, agents: &[String]) -> Vec<Result<(), String>> {
+    let agents: Vec<String> = agents.iter().map(|id| canonical_agent_id(id)).collect();
+    let loops: Vec<String> = agents
+        .iter()
+        .flat_map(|agent| spellings(state, agent))
+        .collect();
+    let results = agents
+        .iter()
+        .map(|agent| stop_agent_now(state, agent))
+        .collect();
+    let state = state.clone();
+    let _ = std::thread::Builder::new()
+        .name("nexus-agent-stop".into())
+        .spawn(move || {
+            for agent in &loops {
+                let _ = crate::commands::cognitive::end_agent_loop(&state, agent);
+            }
+        });
+    results
 }
 
 pub(crate) fn get_scheduled_agents(

@@ -201,3 +201,51 @@ fn p0_fg_autonomous_loop_intervals_outside_the_schedule_bound_are_refused() {
         state.agent_scheduler.unregister_agent(&agent);
     }
 }
+
+/// Re-audit of candidate 5 (V4): a scheduled tick already under way when the
+/// owner stops the agent does not bring it back. The owner's stop removes the
+/// schedule, then stops the agent under the supervisor's lock; a tick that saw
+/// its schedule as it began and finds it gone gives up before any restart.
+#[test]
+fn p3_a_tick_overtaken_by_an_owners_stop_does_not_restart_the_agent() {
+    let state = AppState::new_in_memory();
+    // Registration schedules nothing here; the scheduler's tasks are not polled.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let manifest =
+        crate::commands::chat_llm::parse_agent_manifest_json(&manifest("overtaken", 2)).unwrap();
+    let id = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(manifest)
+        .unwrap()
+        .to_string();
+    super::start_autonomous_loop(&state, id.clone(), Some(60), None).unwrap();
+    // The tick begins while the owner's stop holds the supervisor.
+    let mut supervisor = state.supervisor.lock().unwrap();
+    let tick = {
+        let executor = ScheduledGoalExecutor {
+            state: state.clone(),
+        };
+        let id = id.clone();
+        std::thread::spawn(move || executor.execute(&id, "p3-scheduled-goal"))
+    };
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    state.agent_scheduler.unregister_agent(&id);
+    supervisor
+        .stop_agent(Uuid::parse_str(&id).unwrap())
+        .unwrap();
+    drop(supervisor);
+    assert_eq!(
+        tick.join().unwrap(),
+        Err("scheduled run skipped: the agent's schedule was removed".to_string())
+    );
+    assert_eq!(
+        snapshot(&state, &id).map(|(s, _)| s),
+        Some(AgentState::Stopped)
+    );
+}

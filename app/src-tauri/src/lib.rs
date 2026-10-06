@@ -2104,9 +2104,10 @@ pub mod runtime {
         Ok(())
     }
 
-    // Off the main thread: stopping waits for the agent's loop, and the
-    // interface (with its emergency stop) stays responsive meanwhile.
-    #[tauri::command(async)]
+    // On the IPC thread, at once: the part of a stop that never waits (no
+    // runtime worker is needed, so a busy runtime cannot delay it); the
+    // agent's loop is removed on a thread of its own (`stop_agents`).
+    #[tauri::command]
     fn stop_agent(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
@@ -2114,8 +2115,10 @@ pub mod runtime {
     ) -> Result<(), String> {
         // G1b: the Chat bubble Stop button invokes this command. It stops
         // the agent everywhere (schedule, loop cancel flag, Phase Three,
-        // loop, supervisor; see `stop_agent_completely`), then tells the UI.
-        super::stop_agent_completely(state.inner(), &agent_id)?;
+        // supervisor, then its loop; see `stop_agents`), then tells the UI.
+        let agent_id = super::canonical_agent_id(&agent_id);
+        let mut results = super::stop_agents(state.inner(), std::slice::from_ref(&agent_id));
+        results.pop().unwrap_or(Ok(()))?;
         emit_agent_status(&window, state.inner(), &agent_id);
         Ok(())
     }
@@ -6280,7 +6283,9 @@ pub mod runtime {
 
     // ── Cognitive Runtime commands ──
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn assign_agent_goal(
         state: tauri::State<'_, AppState>,
         agent_id: String,
@@ -6375,9 +6380,21 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command(async)]
+    // On the IPC thread, at once: Phase Three is cancelled without waiting;
+    // the loop is removed on a thread of its own.
+    #[tauri::command]
     fn stop_agent_goal(state: tauri::State<'_, AppState>, agent_id: String) -> Result<(), String> {
-        super::stop_agent_goal(state.inner(), agent_id)
+        let agent_id = super::canonical_agent_id(&agent_id);
+        if let Ok(world) = state.real_world() {
+            world.cancel_agent(&agent_id);
+        }
+        let state = state.inner().clone();
+        let _ = std::thread::Builder::new()
+            .name("nexus-goal-stop".into())
+            .spawn(move || {
+                let _ = super::end_agent_loop(&state, &agent_id);
+            });
+        Ok(())
     }
 
     #[tauri::command]
@@ -6438,7 +6455,9 @@ pub mod runtime {
     // consent functions they call: each resolution is recorded with the fixed
     // DESKTOP_UI_RESOLVER label inside the consent module.
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn approve_consent_request(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
@@ -6458,7 +6477,9 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn deny_consent_request(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
@@ -6479,7 +6500,9 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn set_agent_review_mode(
         state: tauri::State<'_, AppState>,
         agent_id: String,
@@ -6491,7 +6514,9 @@ pub mod runtime {
             .map_err(|e| e.to_string())
     }
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn batch_approve_consents(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
@@ -6513,7 +6538,9 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn review_consent_batch(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
@@ -6533,7 +6560,9 @@ pub mod runtime {
         Ok(())
     }
 
-    #[tauri::command]
+    // Off the interface thread: it waits on the agent loops' lock, which a
+    // running cycle holds; the interface (and every stop) stays usable.
+    #[tauri::command(async)]
     fn batch_deny_consents(
         window: tauri::Window,
         state: tauri::State<'_, AppState>,
@@ -7571,7 +7600,9 @@ pub mod runtime {
         super::admin_fleet_status(state.inner())
     }
 
-    #[tauri::command(async)]
+    // On the IPC thread, at once: every agent stops before anything waits
+    // (their loops are removed on a thread of their own).
+    #[tauri::command]
     fn admin_agent_stop_all(
         state: tauri::State<'_, AppState>,
         workspace_id: String,
@@ -7579,7 +7610,7 @@ pub mod runtime {
         super::admin_agent_stop_all(state.inner(), workspace_id)
     }
 
-    #[tauri::command(async)]
+    #[tauri::command]
     fn admin_agent_bulk_update(
         state: tauri::State<'_, AppState>,
         agent_dids: Vec<String>,

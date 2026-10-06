@@ -216,6 +216,8 @@ impl RealWorld {
     /// stop can act again (recorded under the lock its runs are opened
     /// under, so a run opened just then is not missed).
     pub(crate) fn cancel_agent(&self, agent: &str) {
+        // One spelling per agent (see `AgentBridge::act`).
+        let agent = &crate::commands::agents::canonical_agent_id(agent);
         let runs = {
             let mut agents = self.agents();
             agents.epoch += 1;
@@ -233,11 +235,8 @@ impl RealWorld {
     /// gracefully, recorded, rather than left to die with the process.
     pub(crate) fn shutdown(&self) {
         let authority = self.control.authority();
-        for run in authority.runs().views() {
-            if !run.cancelled && !run.finished {
-                let _ = self.control.cancel_run(run.id);
-            }
-        }
+        // No run opens any more, and every open one is cancelled.
+        self.control.shut_down();
         // What still executes sees the cancellation at its next step, ends
         // its processes and removes its directories, and its end is
         // recorded: wait for that (within a bound) before the process
@@ -462,6 +461,9 @@ impl AgentBridge {
         intent: &Intent,
         reviewed: bool,
     ) -> Result<String, String> {
+        // One spelling per agent: its runs are kept, and cancelled, under
+        // the canonical one, however its loop writes the id.
+        let agent_id = &crate::commands::agents::canonical_agent_id(agent_id);
         if reviewed && (self.warden)() {
             return Err(format!(
                 "Warden blocked action: {}",

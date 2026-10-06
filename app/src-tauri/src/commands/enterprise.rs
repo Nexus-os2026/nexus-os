@@ -416,9 +416,11 @@ pub(crate) fn admin_agent_stop_all(state: &AppState, workspace_id: String) -> Re
     let mut stopped = 0u32;
     // suppress unused workspace_id — all agents stopped regardless of workspace
     let _ = workspace_id;
-    // Each agent stops everywhere, as the per-agent Stop does.
-    for agent in stoppable_agents(state) {
-        if crate::commands::agents::stop_agent_completely(state, &agent).is_ok() {
+    // Every agent stops at once, as the per-agent Stop does; their loops
+    // are removed afterwards, so no agent waits behind another's cycle.
+    let agents = stoppable_agents(state);
+    for result in crate::commands::agents::stop_agents(state, &agents) {
+        if result.is_ok() {
             stopped += 1;
         }
     }
@@ -447,14 +449,19 @@ pub(crate) fn admin_agent_bulk_update(
     let mut succeeded = 0usize;
     if action == "stop" {
         let stoppable = stoppable_agents(state);
-        for did in &agent_dids {
-            let agent = did.strip_prefix("did:nexus:").unwrap_or(did);
-            if stoppable.iter().any(|known| known == agent)
-                && crate::commands::agents::stop_agent_completely(state, agent).is_ok()
-            {
-                succeeded += 1;
-            }
-        }
+        let named: Vec<String> = agent_dids
+            .iter()
+            .map(|did| {
+                crate::commands::agents::canonical_agent_id(
+                    did.strip_prefix("did:nexus:").unwrap_or(did),
+                )
+            })
+            .filter(|agent| stoppable.iter().any(|known| known == agent))
+            .collect();
+        succeeded = crate::commands::agents::stop_agents(state, &named)
+            .into_iter()
+            .filter(Result::is_ok)
+            .count();
     }
     let mut audit = state.audit.lock().unwrap_or_else(|p| p.into_inner());
     // Best-effort: audit trail for admin action

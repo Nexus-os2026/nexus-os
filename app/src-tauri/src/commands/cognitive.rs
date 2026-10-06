@@ -1119,6 +1119,22 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
         /// Returned (and audited by the scheduler) for a skipped tick.
         const LOOP_ACTIVE: &str =
             "scheduled run skipped: the agent's cognitive loop is still running";
+        /// A tick already under way when the owner stopped the agent (an
+        /// owner's stop removes the schedule first).
+        const UNSCHEDULED: &str = "scheduled run skipped: the agent's schedule was removed";
+
+        // Whether this tick's schedule exists as it begins, before anything
+        // else: an owner's stop removes it first, so a tick that loses it
+        // meanwhile was overtaken by a stop (checked again before any
+        // restart, under the supervisor's lock).
+        let scheduled = || {
+            self.state
+                .agent_scheduler
+                .list()
+                .iter()
+                .any(|scheduled| scheduled.agent_id == agent_id)
+        };
+        let was_scheduled = scheduled();
 
         // P0-FINAL-GATE (item G): a scheduled tick for a transcendent (L6)
         // agent is refused before anything is audited, restarted or assigned,
@@ -1172,6 +1188,12 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
                 .unwrap_or_else(|p| p.into_inner());
             if let Some(handle) = supervisor.get_agent(agent_uuid) {
                 if handle.state == AgentState::Stopped {
+                    // Checked under the lock the owner's stop takes after it
+                    // removed the schedule: an agent stopped while this tick
+                    // ran is not brought back.
+                    if was_scheduled && !scheduled() {
+                        return Err(UNSCHEDULED.to_string());
+                    }
                     supervisor.restart_agent(agent_uuid).map_err(agent_error)?;
                 }
             }
@@ -2183,16 +2205,23 @@ pub(crate) fn stop_agent_goal(state: &AppState, agent_id: String) -> Result<(), 
     // Only then is the loop waited for, since a cycle holds the loop lock
     // through the effect it is executing (which sees the cancellation at its
     // next step and ends).
+    let agent_id = crate::commands::agents::canonical_agent_id(&agent_id);
     if let Ok(world) = state.real_world() {
         world.cancel_agent(&agent_id);
     }
+    end_agent_loop(state, &agent_id)
+}
+
+/// Remove the agent's loop (this waits while any agent's cycle holds the
+/// loop lock), wake a consent wait it sleeps in, and record it.
+pub(crate) fn end_agent_loop(state: &AppState, agent_id: &str) -> Result<(), String> {
     state
         .cognitive_runtime
-        .stop_agent_loop(&agent_id)
+        .stop_agent_loop(agent_id)
         .map_err(|e| e.to_string())?;
-    state.wake_and_clear_blocked_consent_wait(&agent_id);
+    state.wake_and_clear_blocked_consent_wait(agent_id);
     state.log_event(
-        Uuid::parse_str(&agent_id).unwrap_or_default(),
+        Uuid::parse_str(agent_id).unwrap_or_default(),
         EventType::UserAction,
         json!({"action": "stop_agent_goal", "agent_id": agent_id}),
     );

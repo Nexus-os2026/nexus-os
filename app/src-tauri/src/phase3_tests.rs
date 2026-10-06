@@ -2218,9 +2218,11 @@ fn references(prefix: &str, name: &str) -> Vec<(&'static str, String)> {
     found
 }
 
-/// As `references`, for calls written without a path or a receiver
-/// (`name(…)`: a call within the same module).
-fn bare_calls(prefix: &str, name: &str) -> Vec<(&'static str, String)> {
+/// Every mention of the word `name` in production code under `prefix`
+/// (comments and literals left out), except its definitions (`fn name`):
+/// a call of any form, a path, an import, an alias, a function pointer.
+/// (file, enclosing function) per mention, sorted.
+fn mentions(prefix: &str, name: &str) -> Vec<(&'static str, String)> {
     let mut found = Vec::new();
     for (file, text) in workspace_sources() {
         if !file.starts_with(prefix) || !text.contains(name) {
@@ -2229,16 +2231,14 @@ fn bare_calls(prefix: &str, name: &str) -> Vec<(&'static str, String)> {
         let m = masked(text);
         let functions = fn_items(text);
         for at in words(&m, name) {
-            if previous_word(&m, at) == "fn"
-                || matches!(previous_byte(&m, at), Some(b'.' | b':'))
-                || m.get(skip_ws(&m, at + name.len())) != Some(&b'(')
-            {
+            if previous_word(&m, at) == "fn" {
                 continue;
             }
             let function = enclosing(&functions, at).map_or_else(String::new, |f| f.path.clone());
             found.push((file.as_str(), function));
         }
     }
+    found.sort();
     found
 }
 
@@ -4192,7 +4192,7 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
         let t = &analysis.tokens;
         for k in 1..t.len() {
             if !analysis.test[k]
-                && t[k - 1].is(".")
+                && (t[k - 1].is(".") || t[k - 1].is("::"))
                 && RESOLVING_METHODS.iter().any(|method| t[k].is(method))
             {
                 *found.entry((file.to_string(), "network")).or_insert(0) += 1;
@@ -4495,6 +4495,11 @@ fn network_beyond_sockets(path: &[String]) -> bool {
             "quinn_proto",
             "async_net",
             "smol::net",
+            // Network-capable crates already in production dependencies: the
+            // Prometheus exporter (an HTTP listener, a push gateway) and the
+            // Hugging Face hub client.
+            "metrics_exporter_prometheus",
+            "hf_hub",
         ]
         .iter()
         .any(|prefix| starts_with(path, prefix)))
@@ -4519,9 +4524,10 @@ fn network_beyond_sockets(path: &[String]) -> bool {
         })
 }
 
-/// Methods that resolve a name (`ToSocketAddrs::to_socket_addrs`): a call
-/// is a network site wherever it is made.
-const RESOLVING_METHODS: &[&str] = &["to_socket_addrs"];
+/// Methods that resolve a name (`ToSocketAddrs::to_socket_addrs`,
+/// `url::Url::socket_addrs`): a call is a network site wherever and however
+/// it is made, as a method (`.`) or through any type or trait path (`::`).
+const RESOLVING_METHODS: &[&str] = &["to_socket_addrs", "socket_addrs"];
 
 fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     use crate::phase0_surface::rust_paths::{
@@ -4828,7 +4834,9 @@ fn file_effect_sites(file: &str, src: &str, own: &[String]) -> BTreeMap<&'static
         if t[k - 1].is(".") && LATENT_METHODS.iter().any(|method| t[k].is(method)) {
             *sites.entry("latent").or_insert(0) += 1;
         }
-        if t[k - 1].is(".") && RESOLVING_METHODS.iter().any(|method| t[k].is(method)) {
+        if (t[k - 1].is(".") || t[k - 1].is("::"))
+            && RESOLVING_METHODS.iter().any(|method| t[k].is(method))
+        {
             *sites.entry("network").or_insert(0) += 1;
         }
         if lists_processes && t[k - 1].is(".") && (t[k].is("kill") || t[k].is("kill_with")) {
@@ -5502,9 +5510,11 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     ("nexus-code/src/tools/test_runner.rs", "process", 1),
     ("nexus-code/src/tools/web_fetch.rs", "network", 1),
     ("protocols/src/mcp_client.rs", "process", 3),
+    ("protocols/src/metrics.rs", "network", 2),
     ("protocols/src/server_runtime.rs", "network", 1),
     ("sdk/src/typed_tools.rs", "process", 13),
     ("sdk/src/wasmtime_host_functions.rs", "latent", 1),
+    ("telemetry/src/nexus_metrics.rs", "network", 3),
 ];
 
 /// The class of every file holding a mechanism, and why (no fifth class).
@@ -6230,6 +6240,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "mcp_host_connect and mcp_host_call_tool are closed (NetworkDestination); the clients have no caller",
     ),
     (
+        "protocols/src/metrics.rs",
+        Route::Closed,
+        "the Prometheus exporter only as an in-process recorder (install_recorder): its HTTP listener and push gateway are never started",
+    ),
+    (
         "protocols/src/server_runtime.rs",
         Route::Closed,
         "latent: the server binaries are withdrawn and not bundled",
@@ -6243,6 +6258,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "sdk/src/wasmtime_host_functions.rs",
         Route::Closed,
         "nexus_exec_tool only builds a typed command to validate it and returns it as data; nothing spawns it (pinned)",
+    ),
+    (
+        "telemetry/src/nexus_metrics.rs",
+        Route::Closed,
+        "the Prometheus exporter only as an in-process recorder (install_recorder): its HTTP listener and push gateway are never started",
     ),
 ];
 
@@ -6469,6 +6489,24 @@ const FFI_DENIED: &[&str] = &[
     "dlvsym",
     "recvfrom",
     "recvmsg",
+    "getaddrinfo",
+    "getaddrinfo_a",
+    "gai_suspend",
+    "gai_cancel",
+    "gai_error",
+    "getnameinfo",
+    "gethostbyname",
+    "gethostbyname2",
+    "gethostbyname_r",
+    "gethostbyname2_r",
+    "gethostbyaddr",
+    "gethostbyaddr_r",
+    "res_init",
+    "res_ninit",
+    "res_query",
+    "res_nquery",
+    "res_search",
+    "res_nsearch",
     "sigqueue",
     "CreateProcessW",
     "CreateProcessA",
@@ -6560,83 +6598,25 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         handler.contains("ifletOk(world)=state.real_world(){world.emergency_stop();}"),
         "{handler}"
     );
-    // Ending an agent's goal cancels it in Phase Three before it waits for
-    // the loop (a cycle holds the loop's lock through the effect it runs).
+    // Every owner route that stops agents (Stop, the Admin "Stop all", bulk
+    // Stop) is one routine, `stop_agents`: every agent stops at once (its
+    // schedule under every spelling, its loop's cancel flag, Phase Three,
+    // the supervisor) before anything waits; then a thread of its own
+    // removes the loops, which may wait while any agent's cycle holds the
+    // loop lock. Ending a goal cancels in Phase Three at once and removes
+    // the loop the same way. Quitting closes the run registry, cancels every
+    // run, waits (bounded) until nothing executes, and stops the display.
+    // The routines are pinned whole.
     let cognitive = production_source("app/src-tauri/src/commands/cognitive.rs");
-    let body = compact(one_fn(cognitive, "stop_agent_goal").body_text(cognitive));
-    assert_in_order(
-        &body,
-        &[
-            "ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}",
-            "state.cognitive_runtime.stop_agent_loop(&agent_id)",
-            "state.wake_and_clear_blocked_consent_wait(&agent_id);",
-        ],
-        "stop_agent_goal",
-    );
-    // Every owner route that stops an agent (the per-agent Stop, the Admin
-    // "Stop all" and bulk Stop) is one routine: the schedule ends first (no
-    // tick restarts the agent), then the loop's cancel flag, Phase Three
-    // and the loop, then the supervisor's stop.
-    let agents = production_source("app/src-tauri/src/commands/agents.rs");
-    let completely = compact(one_fn(agents, "stop_agent_completely").body_text(agents));
-    assert_in_order(
-        &completely,
-        &[
-            "state.agent_scheduler.unregister_agent(agent_id);",
-            ".cognitive_cancellations",
-            ".get(agent_id){flag.store(true,",
-            "stop_agent_goal(state,agent_id.to_string());",
-            "stop_agent(state,agent_id.to_string())",
-        ],
-        "stop_agent_completely",
-    );
-    let mut callers = references(DESKTOP_SRC, "stop_agent_completely");
-    callers.sort();
-    assert_eq!(
-        callers,
-        [
-            (
-                "app/src-tauri/src/commands/enterprise.rs",
-                "admin_agent_bulk_update".to_string()
-            ),
-            (
-                "app/src-tauri/src/commands/enterprise.rs",
-                "admin_agent_stop_all".to_string()
-            ),
-            ("app/src-tauri/src/lib.rs", "stop_agent".to_string()),
-        ]
-    );
-    let stop = compact(one_fn(lib, "stop_agent").body_text(lib));
-    assert_in_order(
-        &stop,
-        &[
-            "stop_agent_completely(state.inner(),&agent_id)?;",
-            "emit_agent_status(&window,state.inner(),&agent_id);",
-        ],
-        "stop_agent",
-    );
+    for (file, path, body) in STOP_ROUTINES {
+        let text = production_source(file);
+        assert_eq!(
+            compact(one_fn(text, path).body_text(text)),
+            body,
+            "{file} {path}"
+        );
+    }
     let enterprise = production_source("app/src-tauri/src/commands/enterprise.rs");
-    let all = compact(one_fn(enterprise, "admin_agent_stop_all").body_text(enterprise));
-    assert_in_order(
-        &all,
-        &[
-            "foragentinstoppable_agents(state){",
-            "stop_agent_completely(state,&agent).is_ok(){stopped+=1;}",
-        ],
-        "admin_agent_stop_all",
-    );
-    let bulk = compact(one_fn(enterprise, "admin_agent_bulk_update").body_text(enterprise));
-    assert_in_order(
-        &bulk,
-        &[
-            "ifaction==\"stop\"{",
-            "letstoppable=stoppable_agents(state);",
-            "stoppable.iter().any(|known|known==agent)&&",
-            "stop_agent_completely(state,agent).is_ok()",
-            "json!({\"succeeded\":succeeded,\"failed\":count-succeeded})",
-        ],
-        "admin_agent_bulk_update",
-    );
     // The agents a stop applies to are chosen by the supervisor's state.
     let stoppable = compact(one_fn(enterprise, "stoppable_agents").body_text(enterprise));
     assert!(
@@ -6645,70 +6625,111 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         ),
         "{stoppable}"
     );
-    // Stopping waits for the agent's loop: these commands run off the
-    // interface thread, so the page and its emergency stop stay usable.
+    // The stop commands run on the IPC thread, at once: nothing they do
+    // waits (no runtime worker is needed). The commands that wait on the
+    // loops' lock run off it (`p3_g10_01`).
     for command in [
         "stop_agent",
         "stop_agent_goal",
         "admin_agent_stop_all",
         "admin_agent_bulk_update",
     ] {
-        assert_eq!(one_fn(lib, command).head, "#[command(async)]", "{command}");
+        assert_eq!(one_fn(lib, command).head, "#[command]", "{command}");
     }
-    // Every production route that stops or pauses an agent in the
-    // supervisor, pinned: the routine above, Pause (which the running check
-    // below covers), and the two that act before any loop exists (restoring
-    // agents at startup, registering prebuilt ones).
-    let mut routes = Vec::new();
-    for name in ["stop_agent", "pause_agent"] {
-        routes.extend(
-            references(DESKTOP_SRC, name)
-                .into_iter()
-                .chain(bare_calls(DESKTOP_SRC, name))
-                .map(|(file, function)| (file, function, name)),
-        );
+    // Every mention of the names that stop, pause, restart or unschedule an
+    // agent, or wait for its loop, in any form (a call, a path, an import,
+    // an alias, a function pointer), pinned: the routines above, Pause, and
+    // the two that act before any loop exists (restoring agents at startup,
+    // registering prebuilt ones); `run` registers the commands.
+    let at = |file: &'static str, function: &str| (file, function.to_string());
+    let agents_rs = "app/src-tauri/src/commands/agents.rs";
+    let cognitive_rs = "app/src-tauri/src/commands/cognitive.rs";
+    let enterprise_rs = "app/src-tauri/src/commands/enterprise.rs";
+    let lib_rs = "app/src-tauri/src/lib.rs";
+    for (name, expected) in [
+        (
+            "stop_agent",
+            vec![
+                at(agents_rs, "restore_persisted_agents"),
+                at(agents_rs, "stop_agent"),
+                at(agents_rs, "stop_agent_now"),
+                at(
+                    "app/src-tauri/src/commands/chat_llm.rs",
+                    "AppState::load_prebuilt_agents",
+                ),
+                at(lib_rs, "run"),
+            ],
+        ),
+        (
+            "pause_agent",
+            vec![
+                at(agents_rs, "pause_agent"),
+                at(agents_rs, "restore_persisted_agents"),
+                at(lib_rs, "pause_agent"),
+                at(lib_rs, "run"),
+            ],
+        ),
+        ("stop_agent_loop", vec![at(cognitive_rs, "end_agent_loop")]),
+        (
+            "stop_agents",
+            vec![
+                at(enterprise_rs, "admin_agent_bulk_update"),
+                at(enterprise_rs, "admin_agent_stop_all"),
+                at(lib_rs, "stop_agent"),
+            ],
+        ),
+        ("stop_agent_now", vec![at(agents_rs, "stop_agents")]),
+        (
+            "end_agent_loop",
+            vec![
+                at(agents_rs, "stop_agents"),
+                at(cognitive_rs, "stop_agent_goal"),
+                at(lib_rs, "stop_agent_goal"),
+            ],
+        ),
+        (
+            "restart_agent",
+            vec![
+                at(agents_rs, "start_agent"),
+                at(cognitive_rs, "ScheduledGoalExecutor::execute"),
+            ],
+        ),
+        (
+            "unregister_agent",
+            vec![
+                at(agents_rs, "stop_agent"),
+                at(agents_rs, "stop_agent_now"),
+                at(lib_rs, "stop_autonomous_loop"),
+            ],
+        ),
+    ] {
+        assert_eq!(mentions(DESKTOP_SRC, name), expected, "{name}");
     }
-    routes.sort();
-    assert_eq!(
-        routes,
-        [
-            (
-                "app/src-tauri/src/commands/agents.rs",
-                "pause_agent".to_string(),
-                "pause_agent"
-            ),
-            (
-                "app/src-tauri/src/commands/agents.rs",
-                "restore_persisted_agents".to_string(),
-                "pause_agent"
-            ),
-            (
-                "app/src-tauri/src/commands/agents.rs",
-                "restore_persisted_agents".to_string(),
-                "stop_agent"
-            ),
-            (
-                "app/src-tauri/src/commands/agents.rs",
-                "stop_agent".to_string(),
-                "stop_agent"
-            ),
-            (
-                "app/src-tauri/src/commands/agents.rs",
-                "stop_agent_completely".to_string(),
-                "stop_agent"
-            ),
-            (
-                "app/src-tauri/src/commands/chat_llm.rs",
-                "AppState::load_prebuilt_agents".to_string(),
-                "stop_agent"
-            ),
-            (
-                "app/src-tauri/src/lib.rs",
-                "pause_agent".to_string(),
-                "pause_agent"
-            ),
-        ]
+    // The waits happen only on the threads the routines spawn.
+    for (file, path) in [
+        ("app/src-tauri/src/commands/agents.rs", "stop_agents"),
+        ("app/src-tauri/src/lib.rs", "stop_agent_goal"),
+    ] {
+        let text = production_source(file);
+        let body = compact(one_fn(text, path).body_text(text));
+        let spawn = body.find(".spawn(move||{").expect("a thread");
+        assert!(!body[..spawn].contains("end_agent_loop("), "{path}");
+        assert!(body[spawn..].contains("end_agent_loop("), "{path}");
+    }
+    // A scheduled tick that saw its schedule as it began, and finds it
+    // removed (an owner's stop removes it first), does not bring the agent
+    // back: checked under the supervisor's lock before any restart.
+    let tick = compact(one_fn(cognitive, "ScheduledGoalExecutor::execute").body_text(cognitive));
+    assert_in_order(
+        &tick,
+        &[
+            "letwas_scheduled=scheduled();",
+            "ifis_transcendent_agent(&self.state,agent_id){",
+            "ifhandle.state==AgentState::Stopped{ifwas_scheduled&&!scheduled(){returnErr(UNSCHEDULED.to_string());}supervisor.restart_agent(agent_uuid)",
+        ],
+        "ScheduledGoalExecutor::execute",
     );
+    assert_eq!(tick.matches("restart_agent(").count(), 1, "{tick}");
     // An agent that is not running, however it was stopped or paused, acts
     // no more: the one production bridge asks the supervisor, and `act`
     // refuses before anything else, then refuses a stop that came after
@@ -6738,6 +6759,12 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
     assert_eq!(bridges, [("commands/cognitive.rs", 1)]);
     let world = production_source("app/src-tauri/src/governed_real_world.rs");
     let act = compact(one_fn(world, "AgentBridge::act").body_text(world));
+    // One spelling per agent: its runs are kept, and cancelled, under the
+    // canonical one.
+    assert!(
+        act.starts_with("letagent_id=&canonical_agent_id(agent_id);"),
+        "{act}"
+    );
     assert_in_order(
         &act,
         &[
@@ -6773,7 +6800,7 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
     assert_in_order(
         &shutdown,
         &[
-            "if!run.cancelled&&!run.finished{let_=self.control.cancel_run(run.id);}",
+            "self.control.shut_down();",
             ".any(|view|view.state==CommitmentState::Executing)",
             "letdeadline=Instant::now()+SHUTDOWN_WAIT;",
             "whileexecuting()&&Instant::now()<deadline{",
@@ -6784,6 +6811,86 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
     assert!(world
         .contains("const SHUTDOWN_WAIT: std::time::Duration = std::time::Duration::from_secs(5);"));
 }
+
+/// The owner's stop routines and quitting, pinned whole (normalized text):
+/// see `p3_g6_11`.
+const STOP_ROUTINES: [(&str, &str, &str); 15] = [
+    (
+        "app/src-tauri/src/commands/cognitive.rs",
+        "stop_agent_goal",
+        "letagent_id=canonical_agent_id(&agent_id);ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}end_agent_loop(state,&agent_id)",
+    ),
+    (
+        "app/src-tauri/src/commands/cognitive.rs",
+        "end_agent_loop",
+        "state.cognitive_runtime.stop_agent_loop(agent_id).map_err(|e|e.to_string())?;state.wake_and_clear_blocked_consent_wait(agent_id);state.log_event(Uuid::parse_str(agent_id).unwrap_or_default(),EventType::UserAction,json!({\"action\":\"stop_agent_goal\",\"agent_id\":agent_id}));Ok(())",
+    ),
+    (
+        "app/src-tauri/src/commands/agents.rs",
+        "stop_agent_now",
+        "forspellinginspellings(state,agent_id){state.agent_scheduler.unregister_agent(&spelling);ifletSome(flag)=state.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).get(&spelling){flag.store(true,Ordering::Relaxed);}}ifletOk(world)=state.real_world(){world.cancel_agent(agent_id);}stop_agent(state,agent_id.to_string())",
+    ),
+    (
+        "app/src-tauri/src/commands/agents.rs",
+        "stop_agents",
+        "letagents:Vec<String>=agents.iter().map(|id|canonical_agent_id(id)).collect();letloops:Vec<String>=agents.iter().flat_map(|agent|spellings(state,agent)).collect();letresults=agents.iter().map(|agent|stop_agent_now(state,agent)).collect();letstate=state.clone();let_=Builder::new().name(\"nexus-agent-stop\".into()).spawn(move||{foragentin&loops{let_=end_agent_loop(&state,agent);}});results",
+    ),
+    (
+        "app/src-tauri/src/commands/agents.rs",
+        "spellings",
+        "letuuid=Uuid::parse_str(agent_id).ok();letsame=|key:&str|key==agent_id||(uuid.is_some()&&Uuid::parse_str(key).ok()==uuid);letmutfound=vec![canonical_agent_id(agent_id)];letscheduled=state.agent_scheduler.list().into_iter().map(|s|s.agent_id);letlooping:Vec<String>=state.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).keys().cloned().collect();forkeyinscheduled.chain(looping){ifsame(&key)&&!found.contains(&key){found.push(key);}}found",
+    ),
+    (
+        "app/src-tauri/src/commands/agents.rs",
+        "canonical_agent_id",
+        "Uuid::parse_str(agent_id).map_or_else(|_|agent_id.to_string(),|id|id.to_string())",
+    ),
+    (
+        "app/src-tauri/src/lib.rs",
+        "stop_agent",
+        "letagent_id=canonical_agent_id(&agent_id);letmutresults=stop_agents(state.inner(),from_ref(&agent_id));results.pop().unwrap_or(Ok(()))?;emit_agent_status(&window,state.inner(),&agent_id);Ok(())",
+    ),
+    (
+        "app/src-tauri/src/lib.rs",
+        "stop_agent_goal",
+        "letagent_id=canonical_agent_id(&agent_id);ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}letstate=state.inner().clone();let_=Builder::new().name(\"nexus-goal-stop\".into()).spawn(move||{let_=end_agent_loop(&state,&agent_id);});Ok(())",
+    ),
+    (
+        "app/src-tauri/src/commands/enterprise.rs",
+        "admin_agent_stop_all",
+        "letmutstopped=0u32;let_=workspace_id;letagents=stoppable_agents(state);forresultinstop_agents(state,&agents){ifresult.is_ok(){stopped+=1;}}letmutaudit=state.audit.lock().unwrap_or_else(|p|p.into_inner());let_=audit.append_event(SYSTEM_UUID,EventType::UserAction,json!({\"action\":\"admin_agent_stop_all\",\"stopped\":stopped}));Ok(stopped)",
+    ),
+    (
+        "app/src-tauri/src/commands/enterprise.rs",
+        "admin_agent_bulk_update",
+        "letcount=agent_dids.len();letaction=from_str::<Value>(&update).ok().and_then(|value|value[\"action\"].as_str().map(to_string)).unwrap_or_default();letmutsucceeded=0usize;ifaction==\"stop\"{letstoppable=stoppable_agents(state);letnamed:Vec<String>=agent_dids.iter().map(|did|{canonical_agent_id(did.strip_prefix(\"did:nexus:\").unwrap_or(did))}).filter(|agent|stoppable.iter().any(|known|known==agent)).collect();succeeded=stop_agents(state,&named).into_iter().filter(Result::is_ok).count();}letmutaudit=state.audit.lock().unwrap_or_else(|p|p.into_inner());let_=audit.append_event(SYSTEM_UUID,EventType::UserAction,json!({\"action\":\"admin_agent_bulk_update\",\"count\":count,\"update\":update,\"succeeded\":succeeded}));letresult=json!({\"succeeded\":succeeded,\"failed\":count-succeeded});to_string(&result).map_err(|e|format!(\"serialize: {e}\"))",
+    ),
+    (
+        "app/src-tauri/src/governed_real_world.rs",
+        "RealWorld::shutdown",
+        "letauthority=self.control.authority();self.control.shut_down();letexecuting=||{authority.runs().views().iter().any(|run|{authority.commitments().views_of_run(run.id).iter().any(|view|view.state==CommitmentState::Executing)})};letdeadline=Instant::now()+SHUTDOWN_WAIT;whileexecuting()&&Instant::now()<deadline{sleep(Duration::from_millis(25));}self.control.stop_display();",
+    ),
+    (
+        "app/src-tauri/src/governed_real_world.rs",
+        "RealWorld::cancel_agent",
+        "letagent=&canonical_agent_id(agent);letruns={letmutagents=self.agents();agents.epoch+=1;letepoch=agents.epoch;agents.stopped_at.insert(agent.to_string(),epoch);agents.runs.remove(agent).unwrap_or_default()};forruninruns{let_=self.control.cancel_run(run);}",
+    ),
+    (
+        "crates/nexus-governed-control/src/governed.rs",
+        "GovernedControl::stop_display",
+        "ifletSome(status)=self.display.stop(){let_=self.authority().record_display(EvidencePhase::DisplayStopped,vec![(\"display\".into(),status.number.to_string())]);}",
+    ),
+    (
+        "crates/nexus-governed-control/src/governed.rs",
+        "GovernedControl::emergency_stop",
+        "letcancelled=self.control.emergency_stop();self.stop_display();cancelled",
+    ),
+    (
+        "crates/nexus-governed-control/src/governed.rs",
+        "GovernedControl::shut_down",
+        "letruns=self.authority().runs();runs.close();runs.views().into_iter().filter(|run|!run.cancelled&&!run.finished).filter(|run|self.cancel_run(run.id).is_ok()).count()",
+    ),
+];
 
 /// §22 (audit P8, P9): the inventory fails closed. A module or binding named
 /// like a mechanism crate, even one declared in a test module, hides nothing;
@@ -6890,11 +6997,15 @@ fn p3_g6_12_the_inventory_fails_closed() {
         "    let _ = ToSocketAddrs::to_socket_addrs(&(\"example.com\", 443));\n",
         "    let _ = unsafe { libc::getaddrinfo(todo!(), todo!(), todo!(), todo!()) };\n",
         "    let _ = hickory_resolver::Resolver::default();\n",
+        "    let _ = str::to_socket_addrs(\"example.com:443\");\n",
+        "    let _ = <(&str, u16)>::to_socket_addrs(&(\"example.com\", 443));\n",
+        "    let _ = url::Url::parse(\"https://example.com\").unwrap().socket_addrs(|| None);\n",
+        "    let _ = metrics_exporter_prometheus::PrometheusBuilder::new();\n",
         "}\n",
     );
     let file = "app/src-tauri/src/fixture_resolving.rs";
     let sites = file_effect_sites(file, resolving, &module_of(file));
-    assert_eq!(sites.get("network"), Some(&4), "{sites:?}");
+    assert_eq!(sites.get("network"), Some(&9), "{sites:?}");
 
     // Every latent class has entries, so its callers are sites.
     for (file, _, reason) in EFFECT_FILES {
@@ -7533,26 +7644,16 @@ fn p3_g6_17_only_the_browser_and_display_launch_session_processes() {
 #[test]
 fn p3_g9_01_a_response_body_lives_only_in_zeroizing_buffers() {
     let text = production_source(&format!("{P3_CRATE}egress/transport.rs"));
+    // The exchange is pinned whole: the peer check, the zeroizing body that
+    // grows only through `append`, and nothing else that writes into it.
     let exchange = compact(one_fn(text, "exchange").body_text(text));
-    assert_in_order(
-        &exchange,
-        &[
-            "if!peer.is_some_and(|peer|addresses.iter().any(|a|a.ip()==peer.ip())){returnErr(TransportError::Unpinned);}",
-            "letmutbody=Zeroizing::new(Vec::with_capacity(",
-            "append(&mutbody,&chunk,max_body);",
-            "body:take(&mut*body),",
-        ],
-        "exchange",
+    assert_eq!(exchange, EXCHANGE);
+    // Redaction builds its output in a buffer sized for the worst case.
+    let redact = compact(one_fn(text, "redact_one").body_text(text));
+    assert!(
+        redact.contains("letmutout=Vec::with_capacity(response.body.len()/needle.len()*MARK.len().saturating_sub(needle.len())+response.body.len());"),
+        "{redact}"
     );
-    for growth in [
-        "body.extend",
-        "body.push",
-        "body.append",
-        "body.resize",
-        "body.reserve",
-    ] {
-        assert!(!exchange.contains(growth), "{growth}");
-    }
     let append = compact(one_fn(text, "append").body_text(text));
     assert_in_order(
         &append,
@@ -7565,6 +7666,10 @@ fn p3_g9_01_a_response_body_lives_only_in_zeroizing_buffers() {
         "append",
     );
 }
+
+/// The governed transport's exchange, pinned whole (normalized text): see
+/// `p3_g9_01`.
+const EXCHANGE: &str = "letPinnedRequest{method,url,domain,addresses,headers,body,secret,timeout,max_body}=request;ifaddresses.is_empty(){returnErr(TransportError::Unpinned);}letmutbuilder=Client::builder().no_proxy().redirect(Policy::none()).referer(false).https_only(url.scheme()==\"https\").connect_timeout(timeout.min(Duration::from_secs(10))).timeout(timeout).pool_max_idle_per_host(0).user_agent(USER_AGENT).use_rustls_tls();ifletSome(domain)=&domain{builder=builder.resolve_to_addrs(domain,&addresses);}letclient=builder.build().map_err(|_|TransportError::Unavailable)?;letmutheader_map=HeaderMap::new();for(name,value)inheaders{header_map.append(name,value);}letredact_with=secret.as_ref().map(needles);ifletSome(secret)=secret{letmutvalue=HeaderValue::from_str(&secret.value).map_err(|_|TransportError::Protocol)?;value.set_sensitive(true);header_map.insert(secret.name,value);}letmutrequest=client.request(method.to_reqwest(),url).headers(header_map);ifletSome(body)=body{request=request.body(body);}letwork=asyncmove{letmutresponse=request.send().await.map_err(classify)?;letpeer=response.remote_addr();if!peer.is_some_and(|peer|addresses.iter().any(|a|a.ip()==peer.ip())){returnErr(TransportError::Unpinned);}letstatus=response.status().as_u16();letcontent_type=header_text(response.headers().get(CONTENT_TYPE),128);letlocation=header_text(response.headers().get(LOCATION),MAX_URL);ifresponse.content_length().is_some_and(|length|length>max_bodyasu64){returnErr(TransportError::Bounds);}letmutbody=Zeroizing::new(Vec::with_capacity(response.content_length().map_or(INITIAL_BODY,|length|lengthasusize).min(max_body)));whileletSome(chunk)=response.chunk().await.map_err(classify)?{ifbody.len()+chunk.len()>max_body{returnErr(TransportError::Bounds);}append(&mutbody,&chunk,max_body);}Ok(HttpResponse{status,peer,content_type,location,body:take(&mut*body),redacted:false})};letmutresponse=select!{result=work=>result?,()=until_cancelled(&cancel)=>returnErr(TransportError::Cancelled)};ifletSome(secret)=redact_with{redact(&mutresponse,&secret);}Ok(response)";
 
 /// G9 (audit Q29): the agent display's X connection is made in one place,
 /// on the agent socket whose ownership was just checked, with the session's
@@ -7601,7 +7706,58 @@ fn p3_g9_02_the_x_connection_is_made_only_on_the_agent_socket_with_its_cookie() 
             "x11rb::rust_connection::RustConnection::connect_to_stream_with_auth_info".to_string()
         )])
     );
+    // Every path call of a `connect` in the crate, however written
+    // (`<RustConnection>::connect` included): only these two.
+    let mut paths = BTreeSet::new();
+    for (file, _) in p3_sources() {
+        let text = production_source(&format!("{P3_CRATE}{file}"));
+        let m = masked(text);
+        for name in [
+            "connect",
+            "connect_to_stream",
+            "connect_to_stream_with_auth_info",
+        ] {
+            for at in words(&m, name) {
+                let before = m[..at]
+                    .iter()
+                    .rposition(|c| !c.is_ascii_whitespace())
+                    .map_or(0, |i| i + 1);
+                if before >= 2 && &m[before - 2..before] == b"::" {
+                    let qualifier = String::from_utf8_lossy(&m[..before - 2]);
+                    let qualifier = qualifier
+                        .rsplit(|c: char| {
+                            !(c.is_ascii_alphanumeric() || c == '_' || c == '>' || c == '<')
+                        })
+                        .next()
+                        .unwrap_or_default()
+                        .to_string();
+                    paths.insert((file.to_string(), qualifier, name));
+                }
+            }
+        }
+    }
+    assert_eq!(
+        paths,
+        BTreeSet::from([
+            (
+                "display/server.rs".to_string(),
+                "RustConnection".to_string(),
+                "connect_to_stream_with_auth_info"
+            ),
+            (
+                "display/server.rs".to_string(),
+                "UnixStream".to_string(),
+                "connect"
+            ),
+        ])
+    );
     let text = production_source(&format!("{P3_CRATE}display/server.rs"));
+    // The socket is the agent display's, in the fixed socket directory.
+    assert_eq!(
+        compact(one_fn(text, "socket").body_text(text)),
+        "PathBuf::from(format!(\"{SOCKET_DIR}{number}\"))"
+    );
+    assert!(text.contains("const SOCKET_DIR: &str = \"/tmp/.X11-unix/X\";"));
     let naming: Vec<String> = fn_items(text)
         .into_iter()
         .filter(|item| {
@@ -7643,20 +7799,51 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
         &[
             "letproxy=BrowserProxy::start(OriginPolicy{",
             "live:guard.liveness()}",
-            "if!guard.still_authorized(){returnErr(at((FailureClass::Refused,",
+            "ifletSome(reason)=guard.lapse(){returnErr(before((FailureClass::Refused,reason.into())));}letstart=page.navigate(&session.start).map_err(before)?;",
+            "ifletSome(reason)=guard.lapse(){returnErr(at((FailureClass::Refused,reason.into())));}",
             "page.close_popups().map_err(at)?;",
             "page.step(step).map_err(at)?;",
+            "page.close_popups().map_err(after)?;ifletSome(reason)=guard.lapse(){returnErr(after((FailureClass::Refused,reason.into())));}",
         ],
         "run",
     );
+    // The crate starts one proxy, there.
+    let starts: usize = p3_sources()
+        .into_iter()
+        .map(|(file, _)| {
+            compact(production_source(&format!("{P3_CRATE}{file}")))
+                .matches("BrowserProxy::start(")
+                .count()
+        })
+        .sum();
+    assert_eq!(starts, 1);
     let proxy = production_source(&format!("{P3_CRATE}browser/proxy.rs"));
     assert_eq!(
         compact(one_fn(proxy, "may_go_on").body_text(proxy)),
         "!stop.load(Ordering::SeqCst)&&(policy.live)()"
     );
-    assert!(
-        compact(one_fn(proxy, "BrowserProxy::start").body_text(proxy))
-            .contains("if!(policy.live)(){stop.store(true,Ordering::SeqCst);break;}")
+    // When the session may no longer go out, the traffic stops and the port
+    // stays the session's: new connections are closed unserved until the
+    // session ends.
+    assert_in_order(
+        &compact(one_fn(proxy, "BrowserProxy::start").body_text(proxy)),
+        &[
+            "while!closed.load(Ordering::SeqCst){if!(policy.live)(){stop.store(true,Ordering::SeqCst);}",
+            "ifstop.load(Ordering::SeqCst)||active.load(Ordering::SeqCst)>=MAX_CONNECTIONS{refused.fetch_add(1,Ordering::SeqCst);drop(client);continue;}",
+        ],
+        "BrowserProxy::start",
+    );
+    assert_eq!(
+        compact(one_fn(proxy, "BrowserProxy::drop").body_text(proxy)),
+        "self.stop.store(true,Ordering::SeqCst);self.closed.store(true,Ordering::SeqCst);"
+    );
+    assert_in_order(
+        &compact(one_fn(proxy, "tunnel").body_text(proxy)),
+        &[
+            "copy(client_reader,upstream,||may_go_on(&up_policy,&up_stop))",
+            "copy(upstream_reader,client,||may_go_on(policy,stop));",
+        ],
+        "tunnel",
     );
     assert_in_order(
         &compact(one_fn(proxy, "serve").body_text(proxy)),
@@ -7686,4 +7873,181 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
         ],
         "copy",
     );
+}
+
+/// G10 (verification V3): no command the interface thread runs waits on the
+/// agent loops' lock, which a running cycle holds for its whole length (so
+/// the page and every stop stay usable). The kernel's loop runtime takes it
+/// in the methods found here; every desktop function that calls one
+/// directly (outside a thread or task it spawns) is pinned, and the
+/// commands the interface thread runs (`#[command]`, not async) call none
+/// of them, nor the methods, outside a thread they spawn. One level deep: a
+/// command reaching such a function through another helper is not seen
+/// here (stated in the design record).
+#[test]
+fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
+    // The methods that take the lock, and those that call one of them.
+    let kernel = production_source("kernel/src/cognitive/loop_runtime.rs");
+    let methods: Vec<(String, String)> = fn_items(kernel)
+        .into_iter()
+        .map(|item| (item.name.clone(), compact(item.body_text(kernel))))
+        .collect();
+    let mut locking: BTreeSet<String> = methods
+        .iter()
+        .filter(|(_, body)| body.contains("self.loops.lock()"))
+        .map(|(name, _)| name.clone())
+        .collect();
+    loop {
+        let more: Vec<String> = methods
+            .iter()
+            .filter(|(name, body)| {
+                !locking.contains(name)
+                    && locking
+                        .iter()
+                        .any(|method| body.contains(&format!("self.{method}(")))
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        locking.extend(more);
+    }
+    for method in [
+        "stop_agent_loop",
+        "approve_blocked_steps",
+        "deny_blocked_step",
+        "assign_goal",
+        "set_review_each_mode",
+        "get_agent_status",
+    ] {
+        assert!(locking.contains(method), "{method}: {locking:?}");
+    }
+    let waits = |body: &str| {
+        locking
+            .iter()
+            .any(|method| body.contains(&format!("cognitive_runtime.{method}(")))
+    };
+    let mut waiting = BTreeSet::new();
+    for (file, text) in workspace_sources() {
+        if !file.starts_with(DESKTOP_SRC) {
+            continue;
+        }
+        for item in fn_items(text) {
+            if waits(&outside_spawned(&compact(item.body_text(text)))) {
+                waiting.insert((file.as_str(), item.path.clone()));
+            }
+        }
+    }
+    // Reviewed: the consent decisions and goal assignment (their commands
+    // run off the interface thread), the loop's own cycle, the end of a
+    // loop (on the stop routines' threads), the model route of a cycle and
+    // the review-mode switch (an off-thread command).
+    assert_eq!(
+        waiting,
+        BTreeSet::from([
+            (
+                "app/src-tauri/src/commands/cognitive.rs",
+                "assign_agent_goal".to_string()
+            ),
+            (
+                "app/src-tauri/src/commands/cognitive.rs",
+                "end_agent_loop".to_string()
+            ),
+            (
+                "app/src-tauri/src/commands/cognitive.rs",
+                "persist_task_start".to_string()
+            ),
+            (
+                "app/src-tauri/src/commands/cognitive.rs",
+                "run_cognitive_cycle".to_string()
+            ),
+            (
+                "app/src-tauri/src/commands/consent.rs",
+                "approve_consent_request".to_string()
+            ),
+            (
+                "app/src-tauri/src/commands/consent.rs",
+                "batch_approve_consents".to_string()
+            ),
+            (
+                "app/src-tauri/src/commands/consent.rs",
+                "batch_deny_consents".to_string()
+            ),
+            (
+                "app/src-tauri/src/commands/consent.rs",
+                "deny_consent_request".to_string()
+            ),
+            (
+                "app/src-tauri/src/commands/consent.rs",
+                "review_consent_batch".to_string()
+            ),
+            (
+                "app/src-tauri/src/lib.rs",
+                "resolve_agent_llm_route".to_string()
+            ),
+            (
+                "app/src-tauri/src/lib.rs",
+                "set_agent_review_mode".to_string()
+            ),
+        ])
+    );
+    let lib = production_source("app/src-tauri/src/lib.rs");
+    for item in fn_items(lib) {
+        if !item.head.starts_with("#[command]") || item.head.contains("async") {
+            continue;
+        }
+        let body = outside_spawned(&compact(item.body_text(lib)));
+        assert!(!waits(&body), "{} waits on the loops' lock", item.path);
+        for (_, function) in &waiting {
+            let name = function.rsplit("::").next().unwrap_or_default();
+            assert!(
+                !calls(&body, name),
+                "{} waits on the loops' lock through {function}",
+                item.path
+            );
+        }
+    }
+}
+
+/// `text` (normalized) without the bodies of the threads and tasks it
+/// spawns (`spawn(move||{…})`, `spawn(asyncmove{…})`).
+fn outside_spawned(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    loop {
+        let next = ["spawn(move||{", "spawn(asyncmove{"]
+            .iter()
+            .filter_map(|start| rest.find(start).map(|at| (at, at + start.len() - 1)))
+            .min();
+        let Some((at, open)) = next else {
+            break;
+        };
+        out.push_str(&rest[..at]);
+        let mut depth = 0;
+        let mut end = rest.len();
+        for (i, c) in rest[open..].char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = open + i + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Whether normalized `text` calls `name` (`name(`, not part of a longer
+/// identifier).
+fn calls(text: &str, name: &str) -> bool {
+    text.match_indices(&format!("{name}("))
+        .any(|(at, _)| !text[..at].ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_'))
 }
