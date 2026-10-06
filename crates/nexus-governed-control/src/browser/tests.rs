@@ -1165,7 +1165,6 @@ fn sessions_are_counted_and_capped() {
     assert!(super::live::SessionSlot::take(&counter).is_some());
 }
 
-
 /// A machine browser policy, anywhere Chrome or Chromium reads one, refuses
 /// the browser: a policy (`ProxyMode: direct`, a forced extension, cloud
 /// enrollment) takes precedence over the session's proxy. An empty policy
@@ -1185,12 +1184,20 @@ fn a_machine_browser_policy_anywhere_the_browser_reads_one_refuses_it() {
     for kind in ["managed", "recommended", "enrollment"] {
         std::fs::create_dir_all(chromium.join(kind)).unwrap();
     }
-    assert_eq!(no_machine_policy(&roots), Ok(()), "empty policy directories");
+    assert_eq!(
+        no_machine_policy(&roots),
+        Ok(()),
+        "empty policy directories"
+    );
     for (kind, file, text) in [
         ("managed", "proxy.json", r#"{"ProxyMode": "direct"}"#),
         ("recommended", "proxy.json", r#"{"ProxyMode": "direct"}"#),
         ("enrollment", "CloudManagementEnrollmentToken", "token"),
-        ("managed", "harmless.json", r#"{"EncryptedClientHelloEnabled": false}"#),
+        (
+            "managed",
+            "harmless.json",
+            r#"{"EncryptedClientHelloEnabled": false}"#,
+        ),
     ] {
         let path = chromium.join(kind).join(file);
         std::fs::write(&path, text).unwrap();
@@ -1209,7 +1216,11 @@ fn a_machine_browser_policy_anywhere_the_browser_reads_one_refuses_it() {
     assert_eq!(no_machine_policy(&roots), configured, "a link");
     std::fs::remove_file(chromium.join("managed")).unwrap();
     std::fs::write(&chrome, "").unwrap();
-    assert_eq!(no_machine_policy(&roots), configured, "a root that is a file");
+    assert_eq!(
+        no_machine_policy(&roots),
+        configured,
+        "a root that is a file"
+    );
     std::fs::remove_file(&chrome).unwrap();
     // A policy directory that cannot be read (root reads anything: then
     // there is nothing to show).
@@ -1271,8 +1282,7 @@ fn a_production_browser_session_reaches_no_private_address() {
         format!("CONNECT 127.0.0.1:{port} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
         format!("GET http://127.0.0.1:{port}/ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
     ] {
-        let mut client =
-            std::net::TcpStream::connect(("127.0.0.1", proxy.port())).unwrap();
+        let mut client = std::net::TcpStream::connect(("127.0.0.1", proxy.port())).unwrap();
         client
             .set_read_timeout(Some(Duration::from_secs(5)))
             .unwrap();

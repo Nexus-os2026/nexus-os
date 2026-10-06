@@ -867,8 +867,18 @@ fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
     // focus, whether another client holds a keyboard grab, and what the
     // windows receive.
     for (over, focused, grabbed, expected) in [
-        (Over::Other(partly), false, false, &["press", "release 1 1"][..]),
-        (Over::Other(all), false, false, &["press", "release 50 50"][..]),
+        (
+            Over::Other(partly),
+            false,
+            false,
+            &["press", "release 1 1"][..],
+        ),
+        (
+            Over::Other(all),
+            false,
+            false,
+            &["press", "release 50 50"][..],
+        ),
         (
             Over::Other(all),
             true,
@@ -876,7 +886,12 @@ fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
             &["press", "key 9 source", "release 50 50"][..],
         ),
         // The source's own second window is not the source.
-        (Over::Own(partly), false, false, &["press", "release 1 1"][..]),
+        (
+            Over::Own(partly),
+            false,
+            false,
+            &["press", "release 1 1"][..],
+        ),
         // A drag image of the source over another application's window
         // is not the source either.
         (
@@ -886,10 +901,20 @@ fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
             &["press", "release 1 1"][..],
         ),
         // A bare corner is preferred to an Escape, focus or not.
-        (Over::Other(partly), true, false, &["press", "release 1 1"][..]),
+        (
+            Over::Other(partly),
+            true,
+            false,
+            &["press", "release 1 1"][..],
+        ),
         // Another client holds a keyboard grab: no Escape, which it would
         // receive.
-        (Over::Other(all), true, true, &["press", "release 50 50"][..]),
+        (
+            Over::Other(all),
+            true,
+            true,
+            &["press", "release 50 50"][..],
+        ),
     ] {
         let h = harness();
         grant_perception(&h);

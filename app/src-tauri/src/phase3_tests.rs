@@ -4242,7 +4242,7 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
         ("broker.rs", "vault", 5),   // the facade read and the refusal of environment secrets
         ("browser/proxy.rs", "network", 9),
         ("display/server.rs", "network", 1),
-        ("display/server.rs", "x11", 32),
+        ("display/server.rs", "x11", 37),
         ("egress/destination.rs", "network", 1), // name resolution, then the address policy
         ("egress/mod.rs", "network", 8),         // header types
         ("egress/transport.rs", "network", 19),
@@ -5399,7 +5399,7 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     (
         "crates/nexus-governed-control/src/display/server.rs",
         "x11",
-        32,
+        37,
     ),
     (
         "crates/nexus-governed-control/src/egress/destination.rs",
@@ -8077,7 +8077,11 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
         &[
             "letproxy=BrowserProxy::start(OriginPolicy{",
             "live:guard.liveness()}",
+            "args.extend(proxy_switches(session,proxy.port()));",
+            "no_machine_policy(&session.policies).map_err(",
+            "let_process=SessionProcess::launch(SessionSpec{",
             "ifletSome(reason)=guard.lapse(){returnErr(before((FailureClass::Refused,reason.into())));}letstart=page.navigate(&session.start).map_err(before)?;",
+            "letstarted_ok=start.get(\"refused\").is_none();ifproxy.seen()==0||(started_ok&&proxy.opened()==0){returnErr(before((FailureClass::Refused,",
             "ifletSome(reason)=guard.lapse(){returnErr(at((FailureClass::Refused,reason.into())));}",
             "page.close_popups().map_err(at)?;",
             "page.step(step).map_err(at)?;",
@@ -8120,6 +8124,33 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
         compact(one_fn(proxy, "may_go_on").body_text(proxy)),
         "!stop.load(Ordering::SeqCst)&&(policy.live)()"
     );
+    // Every connection through the proxy (no bypass, not even loopback):
+    // the production switches (direct connections exist only in the crate's
+    // own tests).
+    let switches = compact(one_fn(browser, "proxy_switches").body_text(browser));
+    assert_eq!(
+        switches,
+        "let_=session;vec![format!(\"--proxy-server=http://127.0.0.1:{port}\"),\"--proxy-bypass-list=<-loopback>\".into()]"
+    );
+    // No machine policy that could override the proxy, when a session is
+    // prepared and again before launch.
+    let prepare = compact(one_fn(browser, "Browser::prepare").body_text(browser));
+    assert_in_order(
+        &prepare,
+        &[
+            "letidentity=pinned(Path::new(self.executable),self.trust)?;",
+            "no_machine_policy(&self.policies)?;",
+            "covering_grant(authority,&needed,&identity.digest)?;",
+        ],
+        "Browser::prepare",
+    );
+    let new = compact(one_fn(browser, "Browser::new").body_text(browser));
+    assert!(
+        new.contains(
+            "allow_private:false,policies:POLICY_ROOTS.iter().map(PathBuf::from).collect(),"
+        ),
+        "{new}"
+    );
     // When the session may no longer go out, the traffic stops and the port
     // stays the session's: new connections are closed unserved until the
     // session ends.
@@ -8150,8 +8181,8 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
             "letgo_on=||may_go_on(policy,stop);",
             "read_head(&mutclient,stop)else{returnrefuse(client);};if!go_on(){returnrefuse(client);}",
             "connect(&addresses,go_on)",
-            "if!go_on(){returnrefuse(client);}ifclient.write_all(",
-            "connect(&addresses,go_on)",
+            "if!go_on(){returnrefuse(client);}opened.fetch_add(1,Ordering::SeqCst);ifclient.write_all(",
+            "connect(&addresses,go_on)else{returnrefuse(client);};opened.fetch_add(1,Ordering::SeqCst);",
             "if!go_on(){returnrefuse(client);}ifupstream.write_all(forwarded.as_bytes())",
         ],
         "serve",
