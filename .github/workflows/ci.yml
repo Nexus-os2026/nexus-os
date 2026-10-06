@@ -110,6 +110,8 @@ jobs:
             echo "Workflow definition: \`$GITHUB_WORKFLOW_REF\` at \`$GITHUB_WORKFLOW_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # espeak-ng: the governed speech tool's live test runs here, and fails
+      # rather than skips under CI if the engine is missing.
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
         run: |
@@ -125,7 +127,8 @@ jobs:
             libjavascriptcoregtk-4.1-dev \
             glib-2.0 \
             pkg-config \
-            xvfb
+            xvfb \
+            espeak-ng
 
       # The runner image makes /opt world-writable (`chmod -R 777 /opt`), and
       # the governed browser refuses a Chrome that anyone but root could
