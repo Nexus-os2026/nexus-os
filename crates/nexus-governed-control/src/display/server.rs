@@ -383,6 +383,14 @@ impl AgentServer {
             .unwrap_or((0, 0))
     }
 
+    /// Whether two windows belong to one client: an application's own
+    /// windows (such as the image its toolkit drags under the pointer)
+    /// share that client's resource-id base.
+    pub(crate) fn same_client(&self, a: u32, b: u32) -> bool {
+        let mask = self.conn.lock().expect("display").setup().resource_id_mask;
+        a != 0 && b != 0 && (a & !mask) == (b & !mask)
+    }
+
     /// The top-most viewable window containing the point, if any.
     pub(crate) fn window_at(&self, x: u16, y: u16) -> Option<WindowInfo> {
         self.windows()
@@ -432,7 +440,10 @@ impl AgentServer {
             return following_counts;
         }
         if window == 0 {
-            return focus == self.root;
+            // A root focus delivers keys to the window under the pointer
+            // (every window is inside the root): it reaches the background
+            // only as the pointer's focus does.
+            return following_counts && focus == self.root;
         }
         let target = window;
         let mut current = focus;

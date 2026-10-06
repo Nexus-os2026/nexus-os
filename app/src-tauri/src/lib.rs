@@ -6390,14 +6390,34 @@ pub mod runtime {
         }
         // Its loop, under every spelling it may be kept under.
         let loops = super::spellings(state.inner(), &agent_id);
-        let state = state.inner().clone();
-        let _ = std::thread::Builder::new()
+        let remover = state.inner().clone();
+        let removing = loops.clone();
+        let spawned = std::thread::Builder::new()
             .name("nexus-goal-stop".into())
             .spawn(move || {
-                for spelling in &loops {
-                    let _ = super::end_agent_loop(&state, spelling);
+                for spelling in &removing {
+                    let _ = super::end_agent_loop(&remover, spelling);
                 }
             });
+        if spawned.is_err() {
+            // No thread to remove the loops: their cancel flags end them at
+            // their next cycle instead.
+            for spelling in &loops {
+                if let Some(flag) = state
+                    .cognitive_cancellations
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .get(spelling)
+                {
+                    flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+            state.log_event(
+                Uuid::parse_str(&agent_id).unwrap_or_default(),
+                EventType::StateChange,
+                json!({"event": "stop_agent_goal", "loop_removal": "not started"}),
+            );
+        }
         Ok(())
     }
 
@@ -6727,15 +6747,27 @@ pub mod runtime {
 
     // ── Hivemind commands ──
 
-    // Off the interface thread: a session plans with a model and runs its
-    // sub-tasks one after another, each waiting on the agent loops' lock.
-    #[tauri::command(async)]
-    fn start_hivemind(
+    // Off the interface thread and off the runtime's workers: a session
+    // plans with a model and runs its sub-tasks one after another, each
+    // waiting on the agent loops' lock and for a loop the runtime must be
+    // free to run. It runs on a thread of its own.
+    #[tauri::command]
+    async fn start_hivemind(
         state: tauri::State<'_, AppState>,
         goal: String,
         agent_ids: Vec<String>,
     ) -> Result<serde_json::Value, String> {
-        super::start_hivemind(state.inner(), goal, agent_ids)
+        let state = state.inner().clone();
+        let (done, result) = tokio::sync::oneshot::channel();
+        std::thread::Builder::new()
+            .name("nexus-hivemind".into())
+            .spawn(move || {
+                let _ = done.send(super::start_hivemind(&state, goal, agent_ids));
+            })
+            .map_err(|e| format!("hivemind: {e}"))?;
+        result
+            .await
+            .map_err(|_| "hivemind: the session ended without a result".to_string())?
     }
 
     #[tauri::command]

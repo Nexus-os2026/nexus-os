@@ -98,7 +98,16 @@ fn parents_are_safe(root: &Path) -> Result<(), AuthorityError> {
             "a directory above the runtime root can be changed by another user",
         )
     };
-    let uid = std::fs::metadata(root).map_err(|_| unsafe_parent())?.uid();
+    // The root is this process's own (not whoever owns what a renamed path
+    // now leads to), and so is every directory above it, or root's.
+    let owner = std::fs::metadata(root).map_err(|_| unsafe_parent())?.uid();
+    #[cfg(target_os = "linux")]
+    let uid = crate::launcher::effective_uid();
+    #[cfg(not(target_os = "linux"))]
+    let uid = owner;
+    if owner != uid {
+        return Err(unsafe_parent());
+    }
     for parent in root.ancestors().skip(1) {
         let meta = std::fs::metadata(parent).map_err(|_| unsafe_parent())?;
         let owned = meta.uid() == 0 || meta.uid() == uid;
@@ -205,5 +214,11 @@ mod tests {
             assert_eq!(mode, 0o700, "{created}");
         }
         let _ = std::fs::remove_dir_all(&parent);
+        // A root this process does not own is refused, however safe what is
+        // above it (here a directory of root's, below root's own).
+        #[cfg(target_os = "linux")]
+        if crate::launcher::effective_uid() != 0 {
+            assert!(super::parents_are_safe(std::path::Path::new("/usr")).is_err());
+        }
     }
 }

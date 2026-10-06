@@ -353,9 +353,14 @@ fn tunnel(
         return;
     };
     let (up_policy, up_stop) = (policy.clone(), stop.clone());
-    let up = std::thread::spawn(move || {
-        copy(client_reader, upstream, || may_go_on(&up_policy, &up_stop))
-    });
+    // A thread the system refuses ends the tunnel (both ends close), not the
+    // connection's own thread.
+    let Ok(up) = std::thread::Builder::new()
+        .name("nexus-p3-browser-proxy-tunnel".into())
+        .spawn(move || copy(client_reader, upstream, || may_go_on(&up_policy, &up_stop)))
+    else {
+        return;
+    };
     copy(upstream_reader, client, || may_go_on(policy, stop));
     let _ = up.join();
 }

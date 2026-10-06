@@ -1122,6 +1122,8 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
         /// A tick already under way when the owner stopped the agent (an
         /// owner's stop removes the schedule first).
         const UNSCHEDULED: &str = "scheduled run skipped: the agent's schedule was removed";
+        /// A tick whose agent was stopped while its goal was assigned.
+        const STOPPED: &str = "scheduled run skipped: the agent was stopped as it started";
 
         // Whether this tick's schedule exists as it begins, before anything
         // else: an owner's stop removes it first, so a tick that loses it
@@ -1224,19 +1226,42 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
 
         // A stop that came while this tick assigned the goal: no loop starts
         // for it. Checked, and the loop registered, under the supervisor's
-        // lock, which the owner's stop takes: a later stop sees the loop.
+        // lock, which the owner's stop takes (a loop that starts before the
+        // stop ends at its next cycle, once the agent is stopped). A paused
+        // agent's tick runs, as pausing keeps schedules.
         let supervisor = self
             .state
             .supervisor
             .lock()
             .unwrap_or_else(|p| p.into_inner());
-        let running = supervisor
-            .get_agent(agent_uuid)
-            .is_some_and(|handle| handle.state == AgentState::Running);
-        if !running || (was_scheduled && !scheduled()) {
+        let stopped = supervisor.get_agent(agent_uuid).is_none_or(|handle| {
+            matches!(
+                handle.state,
+                AgentState::Stopping | AgentState::Stopped | AgentState::Destroyed
+            )
+        });
+        let refusal = if stopped {
+            Some(STOPPED)
+        } else if was_scheduled && !scheduled() {
+            Some(UNSCHEDULED)
+        } else {
+            None
+        };
+        if let Some(refusal) = refusal {
             drop(supervisor);
-            let _ = end_agent_loop(&self.state, agent_id);
-            return Err(UNSCHEDULED.to_string());
+            // Only this tick's goal ends (not one the owner gave since), as
+            // the scheduler's decision, recorded as skipped.
+            end_goal_loop(&self.state, agent_id, &goal_id);
+            persist_task_completion(
+                &self.state,
+                agent_id,
+                &goal_id,
+                "failed",
+                refusal,
+                false,
+                0.0,
+            );
+            return Err(refusal.to_string());
         }
 
         #[cfg(all(
@@ -1751,6 +1776,30 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
 
         let max_cycles = 500u32;
         'cycle_loop: for _cycle in 0..max_cycles {
+            // A stopped agent runs no cycle: an owner's stop reaches a loop
+            // whose cancel flag it could not set (its start was under way).
+            if agent_stopped(&state, &agent_id) {
+                bridge.emit(
+                    "agent-goal-completed",
+                    json!({
+                        "agent_id": &agent_id,
+                        "goal_id": &goal_id,
+                        "success": false,
+                        "reason": "the agent is stopped",
+                        "result_summary": "Goal ended: the agent is stopped.",
+                    }),
+                );
+                persist_task_completion(
+                    &state,
+                    &agent_id,
+                    &goal_id,
+                    "failed",
+                    "Goal ended: the agent is stopped.",
+                    false,
+                    0.0,
+                );
+                return;
+            }
             // G1b: check cancellation flag before starting a new cycle. If the
             // user hit Stop while we were sleeping between cycles, exit cleanly
             // and emit a Failed goal-completed event.
@@ -2223,26 +2272,37 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
     });
 }
 
-pub(crate) fn stop_agent_goal(state: &AppState, agent_id: String) -> Result<(), String> {
-    // Phase Three first: what the agent runs or left waiting there ends now.
-    // Only then is the loop waited for, since a cycle holds the loop lock
-    // through the effect it is executing (which sees the cancellation at its
-    // next step and ends).
-    let agent_id = crate::commands::agents::canonical_agent_id(&agent_id);
-    if let Ok(world) = state.real_world() {
-        world.cancel_agent(&agent_id);
+/// Whether the supervisor records the agent as stopped (or destroyed): its
+/// loop runs no further cycle and a HiveMind session gives it no sub-task.
+pub(crate) fn agent_stopped(state: &AppState, agent_id: &str) -> bool {
+    Uuid::parse_str(agent_id).is_ok_and(|id| {
+        state
+            .supervisor
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_agent(id)
+            .is_some_and(|handle| {
+                matches!(
+                    handle.state,
+                    AgentState::Stopping | AgentState::Stopped | AgentState::Destroyed
+                )
+            })
+    })
+}
+
+/// End the agent's loop only while it still drives `goal_id` (a goal given
+/// since is left alone), for the scheduler's or a session's own reasons:
+/// not an owner's action, so none is recorded. Waits while any agent's
+/// cycle holds the loop lock.
+fn end_goal_loop(state: &AppState, agent_id: &str, goal_id: &str) {
+    let ours = state
+        .cognitive_runtime
+        .get_agent_status_fast(agent_id)
+        .and_then(|status| status.active_goal)
+        .is_some_and(|goal| goal.id == goal_id);
+    if ours && state.cognitive_runtime.stop_agent_loop(agent_id).is_ok() {
+        state.wake_and_clear_blocked_consent_wait(agent_id);
     }
-    // Its loop, under every spelling it may be kept under.
-    let mut ended = end_agent_loop(state, &agent_id);
-    for spelling in crate::commands::agents::spellings(state, &agent_id)
-        .into_iter()
-        .skip(1)
-    {
-        if end_agent_loop(state, &spelling).is_ok() {
-            ended = Ok(());
-        }
-    }
-    ended
 }
 
 /// Remove the agent's loop (this waits while any agent's cycle holds the
@@ -2266,6 +2326,11 @@ pub(crate) fn execute_hivemind_subtask(
     agent_id: &str,
     description: &str,
 ) -> Result<String, String> {
+    // A stopped agent takes no sub-task: an owner's stop ends its part in a
+    // session (which reassigns the sub-task, or fails it).
+    if agent_stopped(state, agent_id) {
+        return Err(format!("sub-task refused: agent '{agent_id}' is stopped"));
+    }
     let goal_id = execute_agent_goal(
         state,
         agent_id.to_string(),
@@ -2284,9 +2349,15 @@ pub(crate) fn execute_hivemind_subtask(
     let timeout = std::time::Duration::from_secs(300);
     loop {
         if started.elapsed() >= timeout {
-            // Best-effort: attempt to stop the timed-out goal before returning error
-            let _ = stop_agent_goal(state, agent_id.to_string());
+            // The session's own limit, not an owner's stop: only this
+            // sub-task's goal ends.
+            end_goal_loop(state, agent_id, &goal_id);
             return Err(format!("sub-task timed out after {}s", timeout.as_secs()));
+        }
+        // The owner stopped the agent: its loop has ended, and the sub-task
+        // with it.
+        if agent_stopped(state, agent_id) {
+            return Err(format!("sub-task ended: agent '{agent_id}' was stopped"));
         }
 
         if let Ok(tasks) = state.db.load_tasks_by_agent(agent_id, 100) {

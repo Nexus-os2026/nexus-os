@@ -297,3 +297,90 @@ fn p3_a_tick_that_never_saw_its_schedule_does_not_revive_an_owner_stopped_agent(
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// Verification of candidate 7 (G11-A N2, N3): a stopped agent takes no
+/// HiveMind sub-task, and a loop started for it (as when its start was under
+/// way at the owner's stop) runs no cycle: its goal ends, recorded as such.
+#[test]
+fn p3_a_stopped_agent_takes_no_subtask_and_its_loop_runs_no_cycle() {
+    let state = AppState::new_in_memory();
+    let id = register_stopped(&state, "stopped-subtask", 2);
+    let refused = super::execute_hivemind_subtask(&state, &id, "summarize the notes");
+    assert!(
+        refused.as_ref().is_err_and(|e| e.contains("is stopped")),
+        "{refused:?}"
+    );
+    assert!(!state.cognitive_runtime.has_active_loop(&id));
+    let goal = super::execute_agent_goal(&state, id.clone(), "summarize the notes".into(), 5, None)
+        .unwrap();
+    super::spawn_cognitive_loop_with_bridge(
+        BackendEventBridge::default(),
+        state.clone(),
+        id.clone(),
+        goal.clone(),
+    );
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let task = loop {
+        let ended = state
+            .db
+            .load_tasks_by_agent(&id, 10)
+            .unwrap()
+            .into_iter()
+            .find(|task| task.id == goal && task.completed_at.is_some());
+        if let Some(task) = ended {
+            break task;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the loop of a stopped agent did not end"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    assert!(!task.success);
+    assert!(
+        task.result_json
+            .as_deref()
+            .is_some_and(|json| json.contains("the agent is stopped")),
+        "{:?}",
+        task.result_json
+    );
+}
+
+/// Verification of candidate 7 (G11-A N4): a paused agent's scheduled tick
+/// runs as before (pausing keeps schedules); only a stopped agent's tick is
+/// refused once its goal is assigned.
+#[test]
+fn p3_a_paused_agents_tick_still_runs() {
+    let state = AppState::new_in_memory();
+    // Registration schedules nothing here; the scheduler's tasks are not polled.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let manifest =
+        crate::commands::chat_llm::parse_agent_manifest_json(&manifest("paused-tick", 2)).unwrap();
+    let id = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(manifest)
+        .unwrap()
+        .to_string();
+    super::start_autonomous_loop(&state, id.clone(), Some(60), None).unwrap();
+    state
+        .supervisor
+        .lock()
+        .unwrap()
+        .pause_agent(Uuid::parse_str(&id).unwrap())
+        .unwrap();
+    let executor = ScheduledGoalExecutor {
+        state: state.clone(),
+    };
+    assert_eq!(executor.execute(&id, "p3-scheduled-goal"), Ok(()));
+    assert_eq!(
+        snapshot(&state, &id).map(|(s, _)| s),
+        Some(AgentState::Paused)
+    );
+    state.agent_scheduler.unregister_agent(&id);
+}

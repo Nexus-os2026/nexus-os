@@ -4209,7 +4209,7 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
         ("egress/mod.rs", "network", 8),         // header types
         ("egress/transport.rs", "network", 19),
         ("launcher.rs", "ends", 2), // SIGTERM with a grace, then SIGKILL
-        ("launcher.rs", "libc", 31),
+        ("launcher.rs", "libc", 32),
         ("launcher.rs", "process", 1),
         ("tool/mod.rs", "sealed", 6),
     ]
@@ -6465,6 +6465,83 @@ const FFI_FILES: [&str; 3] = [
     "llama-bridge/src/ffi.rs",
 ];
 
+/// The foreign functions each of those files declares, exactly.
+const FFI_DECLARED: [(&str, &[&str]); 3] = [
+    ("app/src-tauri/src/commands/flash.rs", &["malloc_trim"]),
+    (
+        "kernel/src/resource_limiter/darwin_group.rs",
+        &[
+            "nexus_darwin_group_pids",
+            "nexus_darwin_proc_decode",
+            "nexus_darwin_proc_record_size",
+        ],
+    ),
+    (
+        "llama-bridge/src/ffi.rs",
+        &[
+            "llama_backend_free",
+            "llama_backend_init",
+            "llama_batch_free",
+            "llama_batch_init",
+            "llama_chat_apply_template",
+            "llama_decode",
+            "llama_free",
+            "llama_get_memory",
+            "llama_memory_clear",
+            "llama_model_chat_template",
+            "llama_model_free",
+            "llama_model_get_vocab",
+            "llama_model_meta_val_str",
+            "llama_model_n_ctx_train",
+            "llama_model_n_params",
+            "llama_model_size",
+            "llama_n_ctx",
+            "llama_perf_context",
+            "llama_perf_context_reset",
+            "llama_sampler_chain_add",
+            "llama_sampler_chain_default_params",
+            "llama_sampler_chain_init",
+            "llama_sampler_free",
+            "llama_sampler_init_dist",
+            "llama_sampler_init_greedy",
+            "llama_sampler_init_min_p",
+            "llama_sampler_init_penalties",
+            "llama_sampler_init_temp",
+            "llama_sampler_init_top_k",
+            "llama_sampler_init_top_p",
+            "llama_sampler_reset",
+            "llama_sampler_sample",
+            "llama_token_bos",
+            "llama_token_eos",
+            "llama_token_to_piece",
+            "llama_tokenize",
+            "llama_vocab_is_eog",
+            "llama_vocab_n_tokens",
+            "malloc_trim",
+            "nexus_ctx_params_create",
+            "nexus_ctx_params_free",
+            "nexus_ctx_params_set_flash_attn",
+            "nexus_ctx_params_set_n_batch",
+            "nexus_ctx_params_set_n_ctx",
+            "nexus_ctx_params_set_n_threads",
+            "nexus_ctx_params_set_n_threads_batch",
+            "nexus_ctx_params_set_n_ubatch",
+            "nexus_ctx_params_set_no_perf",
+            "nexus_ctx_params_set_type_k",
+            "nexus_ctx_params_set_type_v",
+            "nexus_init_from_model",
+            "nexus_model_load_from_file",
+            "nexus_model_params_create",
+            "nexus_model_params_free",
+            "nexus_model_params_set_n_gpu_layers",
+            "nexus_model_params_set_use_mlock",
+            "nexus_model_params_set_use_mmap",
+            "nexus_sizeof_context_params",
+            "nexus_sizeof_model_params",
+        ],
+    ),
+];
+
 /// C names of process, network, signal, raw-syscall and loader functions: a
 /// local `extern` declaration of one would reach the system without any path
 /// the mechanism predicates resolve.
@@ -6578,6 +6655,7 @@ fn p3_g6_10_no_foreign_declaration_escapes_the_mechanism_predicates() {
                 .map(|file| (file.to_string(), production_text(&workspace_file(file)))),
         );
     let mut declaring = BTreeSet::new();
+    let mut declared: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for (file, text) in sources {
         // Literals are blanked, so neither an ABI string's content nor a
         // literal that spells `extern "C" {` can mislead the scan.
@@ -6606,11 +6684,27 @@ fn p3_g6_10_no_foreign_declaration_escapes_the_mechanism_predicates() {
                     !FFI_DENIED.contains(&name),
                     "{file}: a foreign declaration of {name}"
                 );
+                declared
+                    .entry(file.clone())
+                    .or_default()
+                    .insert(name.to_string());
             }
         }
     }
     let pinned: BTreeSet<String> = FFI_FILES.iter().map(|file| file.to_string()).collect();
     assert_eq!(declaring, pinned);
+    // Every foreign function they declare is pinned by name: a new one fails
+    // here whatever it is (FFI_DENIED names what one may never be).
+    let pinned: BTreeMap<String, BTreeSet<String>> = FFI_DECLARED
+        .iter()
+        .map(|(file, names)| {
+            (
+                file.to_string(),
+                names.iter().map(|name| name.to_string()).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(declared, pinned);
     // The scan itself: an ABI-less block, odd spacing, and a test-named
     // module are all read.
     let fixture = masked("extern {\n    fn  execve(a: i32);\n}\n");
@@ -6704,7 +6798,13 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
                 at(lib_rs, "run"),
             ],
         ),
-        ("stop_agent_loop", vec![at(cognitive_rs, "end_agent_loop")]),
+        (
+            "stop_agent_loop",
+            vec![
+                at(cognitive_rs, "end_agent_loop"),
+                at(cognitive_rs, "end_goal_loop"),
+            ],
+        ),
         (
             "stop_agents",
             vec![
@@ -6716,12 +6816,21 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         ("stop_agent_now", vec![at(agents_rs, "stop_agents")]),
         (
             "end_agent_loop",
+            vec![at(agents_rs, "stop_agents"), at(lib_rs, "stop_agent_goal")],
+        ),
+        (
+            "end_goal_loop",
             vec![
-                at(agents_rs, "stop_agents"),
                 at(cognitive_rs, "ScheduledGoalExecutor::execute"),
-                at(cognitive_rs, "stop_agent_goal"),
-                at(cognitive_rs, "stop_agent_goal"),
-                at(lib_rs, "stop_agent_goal"),
+                at(cognitive_rs, "execute_hivemind_subtask"),
+            ],
+        ),
+        (
+            "agent_stopped",
+            vec![
+                at(cognitive_rs, "execute_hivemind_subtask"),
+                at(cognitive_rs, "execute_hivemind_subtask"),
+                at(cognitive_rs, "spawn_cognitive_loop_with_bridge"),
             ],
         ),
         (
@@ -6739,19 +6848,12 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
                 at(lib_rs, "stop_autonomous_loop"),
             ],
         ),
-        (
-            "stop_agent_goal",
-            vec![
-                at(cognitive_rs, "execute_hivemind_subtask"),
-                at(lib_rs, "run"),
-            ],
-        ),
+        ("stop_agent_goal", vec![at(lib_rs, "run")]),
         (
             "spellings",
             vec![
                 at(agents_rs, "stop_agent_now"),
                 at(agents_rs, "stop_agents"),
-                at(cognitive_rs, "stop_agent_goal"),
                 at(lib_rs, "stop_agent_goal"),
             ],
         ),
@@ -6783,13 +6885,41 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
             "letwas_scheduled=scheduled();",
             "ifis_transcendent_agent(&self.state,agent_id){",
             "letowner_stopped=self.state.real_world().is_ok_and(|world|world.was_stopped(agent_id));if!scheduled()&&(was_scheduled||owner_stopped){returnErr(UNSCHEDULED.to_string());}supervisor.restart_agent(agent_uuid)",
-            "letrunning=supervisor.get_agent(agent_uuid).is_some_and(|handle|handle.state==AgentState::Running);if!running||(was_scheduled&&!scheduled()){drop(supervisor);let_=end_agent_loop(&self.state,agent_id);returnErr(UNSCHEDULED.to_string());}",
+            "letstopped=supervisor.get_agent(agent_uuid).is_none_or(|handle|{matches!(handle.state,AgentState::Stopping|AgentState::Stopped|AgentState::Destroyed)});letrefusal=ifstopped{Some(STOPPED)}elseifwas_scheduled&&!scheduled(){Some(UNSCHEDULED)}else{None};ifletSome(refusal)=refusal{drop(supervisor);end_goal_loop(&self.state,agent_id,&goal_id);persist_task_completion(&self.state,agent_id,&goal_id,\"failed\",refusal,false,0.0);returnErr(refusal.to_string());}",
             "spawn_cognitive_loop_with_bridge(",
             "drop(supervisor);Ok(())",
         ],
         "ScheduledGoalExecutor::execute",
     );
     assert_eq!(tick.matches("restart_agent(").count(), 1, "{tick}");
+    // A stopped agent's loop runs no further cycle (its cancel flag may not
+    // exist yet when the owner's stop comes), and a HiveMind session gives
+    // it no sub-task; a session's own time limit ends only its goal.
+    let driver =
+        compact(one_fn(cognitive, "spawn_cognitive_loop_with_bridge").body_text(cognitive));
+    assert_in_order(
+        &driver,
+        &[
+            "'cycle_loop:for_cyclein0..max_cycles{ifagent_stopped(&state,&agent_id){",
+            "\"Goal ended: the agent is stopped.\",false,0.0);return;}",
+            "ifcancel_flag.load(Ordering::Relaxed){",
+        ],
+        "spawn_cognitive_loop_with_bridge",
+    );
+    let subtask = compact(one_fn(cognitive, "execute_hivemind_subtask").body_text(cognitive));
+    assert!(
+        subtask.starts_with("ifagent_stopped(state,agent_id){returnErr("),
+        "{subtask}"
+    );
+    assert_in_order(
+        &subtask,
+        &[
+            "ifstarted.elapsed()>=timeout{end_goal_loop(state,agent_id,&goal_id);returnErr(",
+            "ifagent_stopped(state,agent_id){returnErr(",
+        ],
+        "execute_hivemind_subtask",
+    );
+    assert!(!subtask.contains("cancel_agent("), "{subtask}");
     // An agent that is not running, however it was stopped or paused, acts
     // no more: the one production bridge asks the supervisor, and `act`
     // refuses before anything else, then refuses a stop that came after
@@ -6874,11 +7004,16 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
 
 /// The owner's stop routines and quitting, pinned whole (normalized text):
 /// see `p3_g6_11`.
-const STOP_ROUTINES: [(&str, &str, &str); 16] = [
+const STOP_ROUTINES: [(&str, &str, &str); 17] = [
     (
         "app/src-tauri/src/commands/cognitive.rs",
-        "stop_agent_goal",
-        "letagent_id=canonical_agent_id(&agent_id);ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}letmutended=end_agent_loop(state,&agent_id);forspellinginspellings(state,&agent_id).into_iter().skip(1){ifend_agent_loop(state,&spelling).is_ok(){ended=Ok(());}}ended",
+        "agent_stopped",
+        "Uuid::parse_str(agent_id).is_ok_and(|id|{state.supervisor.lock().unwrap_or_else(|p|p.into_inner()).get_agent(id).is_some_and(|handle|{matches!(handle.state,AgentState::Stopping|AgentState::Stopped|AgentState::Destroyed)})})",
+    ),
+    (
+        "app/src-tauri/src/commands/cognitive.rs",
+        "end_goal_loop",
+        "letours=state.cognitive_runtime.get_agent_status_fast(agent_id).and_then(|status|status.active_goal).is_some_and(|goal|goal.id==goal_id);ifours&&state.cognitive_runtime.stop_agent_loop(agent_id).is_ok(){state.wake_and_clear_blocked_consent_wait(agent_id);}",
     ),
     (
         "app/src-tauri/src/commands/cognitive.rs",
@@ -6913,7 +7048,7 @@ const STOP_ROUTINES: [(&str, &str, &str); 16] = [
     (
         "app/src-tauri/src/lib.rs",
         "stop_agent_goal",
-        "letagent_id=canonical_agent_id(&agent_id);ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}letloops=spellings(state.inner(),&agent_id);letstate=state.inner().clone();let_=Builder::new().name(\"nexus-goal-stop\".into()).spawn(move||{forspellingin&loops{let_=end_agent_loop(&state,spelling);}});Ok(())",
+        "letagent_id=canonical_agent_id(&agent_id);ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}letloops=spellings(state.inner(),&agent_id);letremover=state.inner().clone();letremoving=loops.clone();letspawned=Builder::new().name(\"nexus-goal-stop\".into()).spawn(move||{forspellingin&removing{let_=end_agent_loop(&remover,spelling);}});ifspawned.is_err(){forspellingin&loops{ifletSome(flag)=state.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).get(spelling){flag.store(true,Ordering::Relaxed);}}state.log_event(Uuid::parse_str(&agent_id).unwrap_or_default(),EventType::StateChange,json!({\"event\":\"stop_agent_goal\",\"loop_removal\":\"not started\"}));}Ok(())",
     ),
     (
         "app/src-tauri/src/commands/enterprise.rs",
@@ -7908,6 +8043,8 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
         .sum();
     assert_eq!(starts, 1);
     let proxy = production_source(&format!("{P3_CRATE}browser/proxy.rs"));
+    // Nor does the proxy's own file start another through `Self`.
+    assert!(!compact(proxy).contains("Self::start("));
     assert_eq!(
         compact(one_fn(proxy, "may_go_on").body_text(proxy)),
         "!stop.load(Ordering::SeqCst)&&(policy.live)()"
@@ -8045,7 +8182,7 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
         let more: Vec<String> = bodies
             .iter()
             .filter(|(_, item, body)| {
-                !waiting.contains(&item.name) && waiting.iter().any(|name| calls(body, name))
+                !waiting.contains(&item.name) && waiting.iter().any(|name| uses(body, name))
             })
             .map(|(_, item, _)| item.name.clone())
             .collect();
@@ -8071,6 +8208,7 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
                 "batch_deny_consents",
                 "deny_consent_request",
                 "end_agent_loop",
+                "end_goal_loop",
                 "execute",
                 "execute_agent_goal",
                 "execute_goal",
@@ -8083,7 +8221,6 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
                 "scheduler_trigger_now",
                 "set_agent_review_mode",
                 "start_hivemind",
-                "stop_agent_goal",
                 "with_agent_llm_route",
             ]
             .map(str::to_string)
@@ -8092,10 +8229,15 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
     // The commands the interface thread runs, in every desktop file.
     let mut checked = 0;
     for (file, item, body) in &bodies {
-        if !item.head.contains("#[command") {
+        // The attributes read with their literals blanked (a doc string
+        // cannot spell one), `cfg_attr` included.
+        let head = String::from_utf8(masked(&item.head)).expect("masked text");
+        let command =
+            head.contains("#[command") || (head.contains("cfg_attr(") && head.contains("command"));
+        if !command {
             continue;
         }
-        let off_thread = item.head.contains("#[command(async)]") || item.head.ends_with("async");
+        let off_thread = head.contains("command(async)") || head.ends_with("async");
         if off_thread {
             continue;
         }
@@ -8107,12 +8249,34 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
         );
         for name in &waiting {
             assert!(
-                !calls(body, name),
+                !uses(body, name),
                 "{file} {} waits on the loops' lock through {name}",
                 item.path
             );
         }
     }
+    // The reading itself: a doc string spelling the async attribute, a
+    // `cfg_attr` command, a function value and a joined thread are seen.
+    let fixture = "/// x\n#[doc = \"#[tauri::command(async)]\"]\n#[tauri::command]\nfn f() {}\n#[cfg_attr(all(), tauri::command)]\nfn g() {}\n";
+    let heads: Vec<String> = fn_items(fixture)
+        .iter()
+        .map(|item| String::from_utf8(masked(&item.head)).expect("masked text"))
+        .collect();
+    assert!(heads[0].contains("#[command") && !heads[0].contains("command(async)"));
+    assert!(heads[1].contains("cfg_attr(") && heads[1].contains("command"));
+    assert!(uses(
+        "letf=execute_agent_goal;f(state)",
+        "execute_agent_goal"
+    ));
+    assert!(!uses(
+        "letf=execute_agent_goal_count;",
+        "execute_agent_goal"
+    ));
+    assert!(
+        outside_spawned("spawn(move||{assign_agent_goal(x)}).join()")
+            .contains("assign_agent_goal(")
+    );
+    assert!(!outside_spawned("spawn(move||{assign_agent_goal(x)});").contains("assign_agent_goal("));
     assert!(checked > 500, "{checked} interface-thread commands checked");
     // Consent decisions, off the interface thread, are still made one at a
     // time: two answers to one request never both count.
@@ -8126,17 +8290,40 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
     ] {
         let item = one_fn(lib, command);
         assert_eq!(item.head, "#[command(async)]", "{command}");
+        let body = compact(item.body_text(lib));
         assert!(
-            compact(item.body_text(lib))
-                .starts_with("let_one=CONSENT_DECISIONS.lock().unwrap_or_else(|p|p.into_inner());"),
+            body.starts_with("let_one=CONSENT_DECISIONS.lock().unwrap_or_else(|p|p.into_inner());"),
+            "{command}"
+        );
+        // Held to the end: never released early, never another lock.
+        assert!(
+            !body.contains("_one)") && !body.contains("CONSENT_DECISIONS:"),
             "{command}"
         );
     }
+    assert_eq!(compact(lib).matches("CONSENT_DECISIONS:").count(), 1);
+    // A HiveMind session runs on a thread of its own, not on a runtime
+    // worker: its sub-tasks' loops must be free to run while it waits.
+    let hivemind = one_fn(lib, "start_hivemind");
+    assert_eq!(hivemind.head, "#[command]async");
+    assert_in_order(
+        &compact(hivemind.body_text(lib)),
+        &[
+            ".name(\"nexus-hivemind\".into()).spawn(move||{let_=done.send(start_hivemind(&state,goal,agent_ids));})",
+            "result.await",
+        ],
+        "start_hivemind",
+    );
 }
 
 /// `text` (normalized) without the bodies of the threads and tasks it
-/// spawns (`spawn(move||{…})`, `spawn(asyncmove{…})`).
+/// spawns (`spawn(move||{…})`, `spawn(asyncmove{…})`), unless it waits for
+/// them: a thread joined (`.join()`), a scope (which joins its threads) or
+/// `block_on` keeps every body, since what runs there runs synchronously.
 fn outside_spawned(text: &str) -> String {
+    if text.contains(".join()") || calls(text, "scope") || calls(text, "block_on") {
+        return text.to_string();
+    }
     let mut out = String::new();
     let mut rest = text;
     loop {
@@ -8174,4 +8361,19 @@ fn outside_spawned(text: &str) -> String {
 fn calls(text: &str, name: &str) -> bool {
     text.match_indices(&format!("{name}("))
         .any(|(at, _)| !text[..at].ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_'))
+}
+
+/// Whether normalized `text` calls `name` or takes it as a value: a
+/// function bound to a name (`=name;`) or passed as the first argument
+/// (`(name,`, `(name)`) to be called later. (A list naming commands, such
+/// as their registration, is not a use.)
+fn uses(text: &str, name: &str) -> bool {
+    calls(text, name)
+        || text.match_indices(name).any(|(at, _)| {
+            let before = text[..at].chars().next_back();
+            let after = text[at + name.len()..].chars().next();
+            matches!(before, Some('=' | '('))
+                && !text[..at].ends_with("==")
+                && matches!(after, Some(';' | ',' | ')'))
+        })
 }

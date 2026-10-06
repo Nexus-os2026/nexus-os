@@ -27,6 +27,7 @@ use crate::tool::{ToolIntent, Tools};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -105,6 +106,24 @@ pub struct GovernedControl {
     /// Runs whose agent or command has ended while something of theirs
     /// still waits: each finishes once nothing in it can start any more.
     detached: Mutex<HashSet<RunId>>,
+    /// Display starts under way, each counted until its end is recorded.
+    display_starts: AtomicUsize,
+}
+
+/// One display start, counted while it lasts.
+struct Starting<'a>(&'a AtomicUsize);
+
+impl<'a> Starting<'a> {
+    fn new(count: &'a AtomicUsize) -> Self {
+        count.fetch_add(1, Ordering::SeqCst);
+        Self(count)
+    }
+}
+
+impl Drop for Starting<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 impl GovernedControl {
@@ -137,6 +156,7 @@ impl GovernedControl {
             control,
             egress,
             detached: Mutex::new(HashSet::new()),
+            display_starts: AtomicUsize::new(0),
         })
     }
 
@@ -350,6 +370,8 @@ impl GovernedControl {
     /// live perception or input grant and no emergency stop, and its start
     /// and stop are recorded.
     pub fn start_display(&self) -> Result<DisplayStatus, AuthorityError> {
+        // Under way until it returns, its end recorded: quitting waits.
+        let _starting = Starting::new(&self.display_starts);
         if self.authority().runs().is_stopped() {
             return Err(AuthorityError::EmergencyStopped);
         }
@@ -384,13 +406,29 @@ impl GovernedControl {
             },
             || runs.is_stopped() || runs.is_closed(),
         );
+        // Refused because the desktop is quitting, not by an emergency stop.
+        let started = started.map_err(|error| {
+            if error == AuthorityError::EmergencyStopped && !runs.is_stopped() && runs.is_closed() {
+                AuthorityError::Closed("the desktop is quitting")
+            } else {
+                error
+            }
+        });
         // A start recorded but not completed is recorded as ended, so the
         // evidence never shows a display that is not there.
-        if started.is_err() && recorded.get() {
-            let _ = self.authority().record_display(
-                EvidencePhase::DisplayStopped,
-                vec![("outcome".into(), "the start failed".into())],
-            );
+        if let Err(error) = &started {
+            if recorded.get() {
+                let outcome = match error {
+                    AuthorityError::Closed(_) | AuthorityError::EmergencyStopped => {
+                        "stopped while it started"
+                    }
+                    _ => "the start failed",
+                };
+                let _ = self.authority().record_display(
+                    EvidencePhase::DisplayStopped,
+                    vec![("outcome".into(), outcome.into())],
+                );
+            }
         }
         started
     }
@@ -398,7 +436,7 @@ impl GovernedControl {
     /// Whether an agent display start is under way (quitting waits for it,
     /// so its end is recorded).
     pub fn is_starting_display(&self) -> bool {
-        self.display.is_starting()
+        self.display_starts.load(Ordering::SeqCst) > 0
     }
 
     /// Stop the agent display (recorded if one ran). A stop always counts:

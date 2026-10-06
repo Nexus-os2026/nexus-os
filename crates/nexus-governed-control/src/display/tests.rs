@@ -819,51 +819,49 @@ fn a_stop_wins_over_a_start_and_nothing_starts_unrecorded() {
     assert_eq!(std::fs::read_dir(root.0.path()).unwrap().count(), 0);
 }
 
-/// A drag interrupted after its press point was covered is let go on its
-/// own source where that window still shows, or else on the bare display;
-/// with neither left, where it was picked up.
+/// A drag interrupted after its press point was covered is let go where it
+/// began while its own application is on top there (a drag image, its
+/// popup). When another application covers it: after an Escape to the
+/// source if the keyboard focus is on the source; otherwise on the bare
+/// display; with none left, where it began. No key reaches a window that
+/// was not approved.
 #[test]
-fn an_interrupted_drag_is_let_go_on_its_source_or_on_nothing() {
+fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
+    use x11rb::protocol::xproto::InputFocus;
     let Some((display, _root)) = display() else {
         return;
     };
-    // Covered at the drop point and the press point; the source still shows
-    // at its top-left corner. Then covered entirely.
-    for (over, release) in [
+    let partly = Rect {
+        x: 30,
+        y: 30,
+        width: 100,
+        height: 100,
+    };
+    let all = Rect {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 480,
+    };
+    // What covers the press point, whether it is the source's own
+    // application's window, whether the source holds the keyboard focus,
+    // and what the windows receive.
+    for (over, own, focused, expected) in [
+        (partly, false, false, &["press", "release 1 1"][..]),
+        (all, false, false, &["press", "release 50 50"][..]),
         (
-            Rect {
-                x: 30,
-                y: 30,
-                width: 100,
-                height: 100,
-            },
-            "release 11 11",
+            all,
+            false,
+            true,
+            &["press", "key 9 source", "release 50 50"][..],
         ),
-        (
-            Rect {
-                x: 5,
-                y: 5,
-                width: 120,
-                height: 120,
-            },
-            "release 1 1",
-        ),
-        // Nothing of the source and no bare display left: back where it
-        // was picked up (no key goes to a window that was not approved).
-        (
-            Rect {
-                x: 0,
-                y: 0,
-                width: 640,
-                height: 480,
-            },
-            "release 50 50",
-        ),
+        (partly, true, false, &["press", "release 50 50"][..]),
     ] {
         let h = harness();
         grant_perception(&h);
         grant_input(&h, 10, true);
         let client = display.test_client();
+        let other = display.test_client();
         let screen = client.setup().roots[0].clone();
         let source = client.generate_id().unwrap();
         client
@@ -887,6 +885,11 @@ fn an_interrupted_drag_is_let_go_on_its_source_or_on_nothing() {
             )
             .unwrap();
         client.map_window(source).unwrap();
+        if focused {
+            client
+                .set_input_focus(InputFocus::PARENT, source, x11rb::CURRENT_TIME)
+                .unwrap();
+        }
         client.sync().unwrap();
         observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
         let preparation = display
@@ -906,16 +909,21 @@ fn an_interrupted_drag_is_let_go_on_its_source_or_on_nothing() {
             .authorize(view.id, &h.agent, h.run, &Yes::new(true))
             .unwrap();
         // The moment the button goes down, windows cover the drop point and
-        // the press point.
+        // the press point: another application's, or (`own`) one of the
+        // source's own application.
         let watcher = std::thread::spawn(move || {
             let mut seen = Vec::new();
+            let mut released = None;
             let deadline = Instant::now() + Duration::from_secs(5);
             while Instant::now() < deadline {
+                if let Some(Event::KeyPress(key)) = other.poll_for_event().unwrap() {
+                    seen.push(format!("key {} other", key.detail));
+                }
                 match client.poll_for_event().unwrap() {
                     Some(Event::ButtonPress(_)) => {
                         seen.push("press".to_string());
                         window(
-                            &client,
+                            &other,
                             "Cover",
                             Rect {
                                 x: 350,
@@ -924,24 +932,70 @@ fn an_interrupted_drag_is_let_go_on_its_source_or_on_nothing() {
                                 height: 100,
                             },
                         );
-                        window(&client, "Over", over);
+                        window(if own { &client } else { &other }, "Over", over);
                     }
-                    Some(Event::KeyPress(key)) => seen.push(format!("key {}", key.detail)),
+                    Some(Event::KeyPress(key)) => {
+                        let to = if key.event == source { "source" } else { "own" };
+                        seen.push(format!("key {} {to}", key.detail));
+                    }
                     Some(Event::ButtonRelease(release)) => {
-                        seen.push(format!("release {} {}", release.root_x, release.root_y));
+                        released = Some(format!("release {} {}", release.root_x, release.root_y));
                         break;
                     }
                     Some(_) => {}
                     None => std::thread::sleep(Duration::from_millis(1)),
                 }
             }
+            // A key sent to the other application comes on its own
+            // connection.
+            for event in events(&other) {
+                if let Event::KeyPress(key) = event {
+                    seen.push(format!("key {} other", key.detail));
+                }
+            }
+            seen.extend(released);
             seen
         });
         assert!(h.control.execute(view.id, &h.agent, h.run).is_err());
         assert_eq!(
             watcher.join().unwrap(),
-            ["press".to_string(), release.to_string()]
+            expected,
+            "over {over:?}, own {own}, focused {focused}"
         );
+    }
+}
+
+/// The keyboard focus is on a window only where it is set: keys that follow
+/// the pointer (the X default, or a focus on the root window, which holds
+/// every window) are on no window, and never on the display background.
+#[test]
+fn the_keyboard_focus_is_on_a_window_only_where_it_is_set() {
+    use x11rb::protocol::xproto::InputFocus;
+    let Some((display, _root)) = display() else {
+        return;
+    };
+    let client = display.test_client();
+    let source = window(
+        &client,
+        "Source",
+        Rect {
+            x: 10,
+            y: 10,
+            width: 100,
+            height: 100,
+        },
+    );
+    let (_, server) = display.current().unwrap();
+    assert!(!server.focus_on(source));
+    assert!(!server.focus_on(0));
+    let root = client.setup().roots[0].root;
+    for (focus, on_source) in [(root, false), (source, true)] {
+        client
+            .set_input_focus(InputFocus::PARENT, focus, x11rb::CURRENT_TIME)
+            .unwrap();
+        client.sync().unwrap();
+        assert_eq!(server.focus_on(source), on_source);
+        assert!(!server.focus_on(0));
     }
 }
 
@@ -1169,16 +1223,7 @@ fn whatever_an_action_left_pressed_is_released() {
         server: Some(server.clone()),
         keys: Vec::new(),
         buttons: vec![1],
-        pressed_at: Some((
-            (40, 40),
-            0,
-            Rect {
-                x: 0,
-                y: 0,
-                width: 640,
-                height: 480,
-            },
-        )),
+        pressed_at: Some(((40, 40), 0)),
         escape: None,
     });
     let pointer = client.query_pointer(root).unwrap().reply().unwrap();

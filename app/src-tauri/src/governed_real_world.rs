@@ -85,9 +85,18 @@ impl RealWorld {
         audit: Arc<Mutex<AuditTrail>>,
         db: Arc<NexusDatabase>,
     ) -> Result<Arc<Self>, String> {
-        let root = nexus_kernel::identity_home::nexus_state_dir()
-            .map_err(|e| format!("governed control: {e}"))?
-            .join("p3-runtime");
+        let state = nexus_kernel::identity_home::nexus_state_dir()
+            .map_err(|e| format!("governed control: {e}"))?;
+        // Nexus's own state directory is private, as writing its identity
+        // makes it: the database may have created it under a group-writable
+        // umask, and the runtime root below it must have no parent another
+        // user could change. (Only its owner can change its mode.)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o700));
+        }
+        let root = state.join("p3-runtime");
         let recent = Arc::new(MemoryEvidence::new(512));
         let sink = Arc::new(TeeEvidence(vec![
             Arc::new(AuditEvidence { audit, db }),

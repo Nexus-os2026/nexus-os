@@ -951,7 +951,12 @@ mod live {
         // The steps that ran (the start page is the first result).
         let ran = results.len() - 1;
         let after = |(class, detail): (FailureClass, String)| {
-            (class, format!("{detail} (after step {ran} of {total})"))
+            let at = if ran == 0 {
+                "at the start page".to_string()
+            } else {
+                format!("after step {ran} of {total}")
+            };
+            (class, format!("{detail} ({at})"))
         };
         page.close_popups().map_err(after)?;
         // A grant that ended during the last step may have cut its traffic:

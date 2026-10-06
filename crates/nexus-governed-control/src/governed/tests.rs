@@ -711,6 +711,66 @@ fn a_failed_display_start_is_recorded_as_ended() {
     );
 }
 
+/// A display start counts as under way (quitting waits for it) until its
+/// end is recorded, here the end of a start that failed.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_display_start_counts_until_its_end_is_recorded() {
+    use crate::authority::evidence::{
+        EvidencePhase, EvidenceRecord, EvidenceSink, EvidenceUnavailable,
+    };
+    use std::os::unix::fs::PermissionsExt;
+    use std::sync::{Mutex, OnceLock, Weak};
+    /// Notes, as each display end is recorded, whether a start counts.
+    struct Watch {
+        control: OnceLock<Weak<GovernedControl>>,
+        starting: Mutex<Vec<bool>>,
+    }
+    impl EvidenceSink for Watch {
+        fn record(&self, record: &EvidenceRecord) -> Result<(), EvidenceUnavailable> {
+            if record.phase == EvidencePhase::DisplayStopped {
+                if let Some(control) = self.control.get().and_then(Weak::upgrade) {
+                    let starting = control.is_starting_display();
+                    self.starting.lock().unwrap().push(starting);
+                }
+            }
+            Ok(())
+        }
+    }
+    let root = temp_root("display-start-count");
+    let watch = Arc::new(Watch {
+        control: OnceLock::new(),
+        starting: Mutex::new(Vec::new()),
+    });
+    let control = Arc::new(
+        GovernedControl::new(
+            root.0.path(),
+            Vault::Disabled,
+            watch.clone(),
+            Arc::new(SystemClock::default()),
+        )
+        .unwrap(),
+    );
+    let _ = watch.control.set(Arc::downgrade(&control));
+    control
+        .request_grant(
+            &GrantRequest::Perception,
+            Duration::from_secs(600),
+            &Yes::new(true),
+        )
+        .unwrap();
+    assert!(!control.is_starting_display());
+    // The runtime root refuses the display's directory: the start fails
+    // after it was recorded.
+    let path = root.0.path().to_path_buf();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let started = control.start_display();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(started.is_err(), "{started:?}");
+    assert_eq!(*watch.starting.lock().unwrap(), [true]);
+    assert!(!control.is_starting_display());
+}
+
 /// The agent display is a process Phase Three owns: starting it needs a
 /// live perception or input grant and no emergency stop, and its start and
 /// stop are recorded.

@@ -50,6 +50,13 @@ pub(crate) struct SessionProcess {
     ended: bool,
 }
 
+/// This process's effective user id: whom the files it creates belong to.
+#[cfg(target_os = "linux")]
+pub(crate) fn effective_uid() -> u32 {
+    // SAFETY: geteuid has no preconditions and cannot fail.
+    unsafe { libc::geteuid() }
+}
+
 #[cfg(target_os = "linux")]
 mod linux {
     use super::{SessionProcess, SessionSpec};
