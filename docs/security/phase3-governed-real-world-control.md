@@ -95,16 +95,18 @@ exactly once.
   unconsumed commitment, moves the policy generation, stops the agent
   display, and refuses new runs until the owner resumes through a native
   dialog. Every way the owner stops agents (Stop, the Admin "Stop all"
-  and bulk Stop) stops every named agent at once, on the interface's IPC
-  thread and before anything waits: its schedule ends (under any spelling
-  of its id), its loop's cancel flag is set, everything it runs or left
-  waiting in Phase Three is cancelled (a running effect is interrupted at
-  its next step), and the supervisor records the stop. A thread of its own
-  then removes the agents' loops, which may wait while any agent's cycle
+  and bulk Stop) works on the interface's IPC thread, before anything
+  waits: everything every named agent runs or left waiting in Phase Three
+  is cancelled first (a running effect is interrupted at its next step),
+  then for each agent its schedule ends (under any spelling of its id), its
+  loop's cancel flag is set, and the supervisor records the stop. A thread
+  of its own then removes the agents' loops (only the loops they had then,
+  never one started after the stop), which may wait while any agent's cycle
   holds the loop lock. A scheduled tick already under way when the owner
-  stops the agent does not bring it back. Ending an agent's goal cancels
-  it in Phase Three at once and removes its loop the same way; it leaves
-  the agent and its schedule, so a scheduled goal may start it again. A
+  stops the agent does not bring it back, and starts no loop for it.
+  Ending an agent's goal cancels it in Phase Three at once and removes its
+  loop the same way, under every spelling; it leaves the agent and its
+  schedule, so a scheduled goal may start it again. A
   stopped or paused agent acts no more in Phase Three: the loop's bridge
   asks the supervisor whether the agent is running before every action,
   and refuses any action after a stop that came after the loop began.
@@ -114,12 +116,14 @@ exactly once.
   agent's waiting R2 actions stay approvable until the owner denies them
   or cancels their run. The page's stop controls (the emergency stop,
   each run's Cancel, the display's Stop) stay usable while an approved
-  effect runs: the commands that wait on the agent loops' lock (consent
-  decisions, goal assignment, review mode) run off the interface thread
-  (`p3_g10_01`). Quitting the desktop refuses every new run, cancels every
-  open one, waits up to five seconds for executing effects to end, and
-  stops the agent display. A display stop always counts: a start in
-  progress ends unused.
+  effect runs: every command that reaches the agent loops' lock (consent
+  decisions, goal assignment, review mode, HiveMind sessions) runs off the
+  interface thread (`p3_g10_01` follows every chain of calls to it), and
+  consent decisions are still made one at a time. Quitting the desktop
+  refuses every new run and display start, cancels every open run, waits
+  up to five seconds for executing effects and a display start under way
+  to end, and stops the agent display. A display stop always counts: a
+  start in progress, or one waiting for another to finish, ends unused.
 - With the owner's Warden review enabled, an agent's governed action that
   the review covers is refused, as the kernel registry refuses it.
 - Nothing is ever killed by process name: every process Phase Three starts
@@ -166,7 +170,10 @@ not rendered width (wide text may need more scrolling).
 The runtime root holding every scratch directory is refused when a
 directory above it could be changed by another user (owned by someone other
 than root or the user, or writable by others without the sticky bit), so
-no one else can swap a scratch directory for one of theirs.
+no one else can swap a scratch directory for one of theirs. Directories
+Nexus creates on the way are private (0700). A `~/.nexus` that already
+exists group-writable (made under umask 002) leaves Phase Three unavailable
+until it is made private.
 
 There is no shell, interpreter, container or code runner (`ShellCommand`,
 `DockerCommand` and `CodeExecute` stay closed). A tool is code: a key, one
@@ -244,11 +251,12 @@ connection once the run is cancelled or the session's grant is revoked or
 expires (checked after a request is read, after it is admitted, between
 connection attempts and before every write upstream; data already handed
 to the kernel, or a write already under way, may still complete), and then
-carries nothing more, ending every tunnel; it keeps its port, closing every
-new connection unserved, until the session ends, so no other process can
-take the port while the browser uses it. A failed or cancelled session's
-evidence says where it stopped: at the start page, at a step, or after
-the last. Reading is R1; clicking, filling and
+carries nothing more, ending every tunnel (a connection already being
+opened may complete its handshake, and carries nothing); it keeps its port,
+closing every new connection unserved, until the session ends, so no other
+process can take the port while the browser uses it. Once a session has
+reached its start page, a failure or a cancellation is recorded with where
+it stopped: at the start page, at a step, or after the last. Reading is R1; clicking, filling and
 pressing are R2.
 
 ### P3-D perception and P3-E input
@@ -277,9 +285,12 @@ window); an active keyboard or pointer grab by anyone fails the action; a
 drag is bound to the window it is dropped on as well, and its release is
 checked at the drop point under the same hold; whatever an action pressed
 is released on every way out of it, and one action runs at a time. A
-button an interrupted action still holds is let go where it was pressed,
-with the server held, if the window there is unchanged; otherwise the drag
-is first cancelled with Escape (toolkits cancel a drag on Escape). The grant's step budget is spent at the effect.
+button an interrupted action still holds is let go, with the server held,
+on the window it was pressed on (at the press point, or another point
+where that window is still on top); if that window is entirely covered, on
+the bare display; only if neither exists is it let go at the press point,
+after an Escape (which cancels a drag in most toolkits) when the keys reach
+the window it was pressed on. The grant's step budget is spent at the effect.
 Moves and scrolls are R1, and the input grant says so; clicks, drags and
 keys are R2 unless the owner granted R1 input. Typed text is shown for approval and recorded only as a
 digest. `ComputerAction` is an orchestrator: each step is its own
@@ -351,7 +362,8 @@ sealed spawns, launching the OS opener, name resolution (std's
 `ToSocketAddrs`, a `to_socket_addrs` or `socket_addrs` call written as a
 method or through any path, libc's resolver functions and the DNS
 crates), network-capable crates in the production dependencies (the
-Prometheus exporter, the Hugging Face hub client), and direct screen,
+Prometheus exporter, with the builder methods that start its listener or
+push gateway counted as calls, and the Hugging Face hub client), and direct screen,
 input, clipboard, audio and browser-driver crates, the kernel's unsealed spawn
 (`ResourceSpawnSpec`, `ResourceProgram`), nix and rustix sockets and
 process calls, sysinfo signals (and any kill in a file that lists
@@ -376,7 +388,8 @@ and refuses a macro fragment in a path, as a trait, as a method or as a
 macro name. `p3_g6_10` pins the files that declare foreign functions
 (name-skipped modules included, with or without an ABI string), refuses
 `#[link_name]` and any foreign declaration of a process, network (name
-resolution included), signal, raw-syscall or loader function (a local `extern` would escape the
+resolution and the resolver's query functions included), signal,
+raw-syscall or loader function (a local `extern` would escape the
 resolver). `p3_g6_09` pins the desktop's reach into the embedded Nexus Code
 application (it lists tools and configures a router slot; its router, tool
 execution, MCP manager and self-improvement run only behind the closed
@@ -390,8 +403,8 @@ a response body lives only in zeroizing buffers (and an unknown peer is
 unpinned), and `p3_g9_02` that the agent display's X connection is made
 only on its checked socket, with its cookie, `p3_g9_03` that a browser
 session goes out only while it may, and `p3_g10_01` that no command the
-interface thread runs waits on the agent loops' lock (one level deep: a
-command reaching that lock through another helper is not seen).
+interface thread runs, in any desktop file, reaches the agent loops' lock
+through any chain of desktop functions.
 
 Routes closed or repaired by Phase Three (`Closure::GovernedRoute` unless
 stated):
@@ -456,10 +469,21 @@ stated):
   and a drag image there reads as a changed target.
 - **Confirmation windows queue.** One is open at a time; a later one
   (Resume included) waits until the open one is answered, and an emergency
-  stop does not close an open window (its answer is then refused).
-- **Other interface commands may still wait on the agent loops' lock**
-  through helpers (`p3_g10_01` checks one level). The global emergency key
-  works meanwhile on X11; the page needs the interface thread.
+  stop does not close an open window: the action it would approve was
+  revoked by the stop and is refused, but a grant or Resume window still
+  takes effect if answered.
+- **Other slow interface commands can still hold the interface thread**
+  (a model call or a download, not the agent loops' lock). The global
+  emergency key works meanwhile on X11; the page needs the interface
+  thread.
+- **A display Stop that comes before a pending start begins is overtaken.**
+  A start waits for the runtime to pick it up; a Stop pressed before then
+  finds nothing to stop, and the display then starts (and is recorded):
+  pressing Stop again stops it.
+- **Quitting during a display start longer than its wait** leaves that
+  start's record without an end (the display ends with the desktop).
+- **Window titles may contain characters that look like quotes.** The
+  window's id at the end of its line is what identifies it.
 - **The global emergency key is X11-only.** It is registered with an X11
   key grab: under Wayland it fires only while an XWayland window has the
   focus. The Phase Three page's emergency stop works under both.
