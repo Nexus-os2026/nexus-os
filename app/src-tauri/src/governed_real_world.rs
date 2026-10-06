@@ -242,6 +242,13 @@ impl RealWorld {
         self.agents().stopped_at.contains_key(&agent)
     }
 
+    /// The agents Phase Three keeps runs for (every run an agent's loop
+    /// opened and kept, until the owner's stop of it), by their canonical
+    /// ids.
+    pub(crate) fn agents_with_runs(&self) -> Vec<String> {
+        self.agents().runs.keys().cloned().collect()
+    }
+
     /// The desktop is quitting: every run is cancelled (whatever still runs
     /// sees it and ends its processes) and the agent display is stopped
     /// gracefully, recorded, rather than left to die with the process.

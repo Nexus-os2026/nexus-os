@@ -6926,7 +6926,8 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         "{handler}"
     );
     // Every owner route that stops agents (Stop, the Admin "Stop all", bulk
-    // Stop) is one routine, `stop_agents`: every agent stops at once (its
+    // Stop, clearing all agents before their records go) is one routine,
+    // `stop_agents`: every agent stops at once (its
     // schedule under every spelling, its loop's cancel flag, Phase Three,
     // the supervisor) before anything waits; then a thread of its own
     // removes the loops, which may wait while any agent's cycle holds the
@@ -6960,6 +6961,7 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         "stop_agent_goal",
         "admin_agent_stop_all",
         "admin_agent_bulk_update",
+        "clear_all_agents",
     ] {
         assert_eq!(one_fn(lib, command).head, "#[command]", "{command}");
     }
@@ -7006,6 +7008,7 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         (
             "stop_agents",
             vec![
+                at(agents_rs, "clear_all_agents"),
                 at(enterprise_rs, "admin_agent_bulk_update"),
                 at(enterprise_rs, "admin_agent_stop_all"),
                 at(lib_rs, "stop_agent"),
@@ -7234,11 +7237,11 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
 
 /// The owner's stop routines and quitting, pinned whole (normalized text):
 /// see `p3_g6_11`.
-const STOP_ROUTINES: [(&str, &str, &str); 17] = [
+const STOP_ROUTINES: [(&str, &str, &str); 19] = [
     (
         "app/src-tauri/src/commands/cognitive.rs",
         "agent_stopped",
-        "Uuid::parse_str(agent_id).is_ok_and(|id|{state.supervisor.lock().unwrap_or_else(|p|p.into_inner()).get_agent(id).is_some_and(|handle|{matches!(handle.state,AgentState::Stopping|AgentState::Stopped|AgentState::Destroyed)})})",
+        "Uuid::parse_str(agent_id).ok().is_none_or(|id|{state.supervisor.lock().unwrap_or_else(|p|p.into_inner()).get_agent(id).is_none_or(|handle|{matches!(handle.state,AgentState::Stopping|AgentState::Stopped|AgentState::Destroyed)})})",
     ),
     (
         "app/src-tauri/src/commands/cognitive.rs",
@@ -7263,7 +7266,17 @@ const STOP_ROUTINES: [(&str, &str, &str); 17] = [
     (
         "app/src-tauri/src/commands/agents.rs",
         "spellings",
-        "letuuid=Uuid::parse_str(agent_id).ok();letsame=|key:&str|key==agent_id||(uuid.is_some()&&Uuid::parse_str(key).ok()==uuid);letmutfound=vec![canonical_agent_id(agent_id)];letscheduled=state.agent_scheduler.list().into_iter().map(|s|s.agent_id);letlooping:Vec<String>=state.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).keys().cloned().collect();forkeyinscheduled.chain(looping){ifsame(&key)&&!found.contains(&key){found.push(key);}}found",
+        "letuuid=Uuid::parse_str(agent_id).ok();letsame=|key:&str|key==agent_id||(uuid.is_some()&&Uuid::parse_str(key).ok()==uuid);letmutfound=vec![canonical_agent_id(agent_id)];letscheduled=state.agent_scheduler.list().into_iter().map(|s|s.agent_id);letlooping:Vec<String>=state.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).keys().cloned().collect();letloops=state.cognitive_runtime.loop_agents();forkeyinscheduled.chain(looping).chain(loops){ifsame(&key)&&!found.contains(&key){found.push(key);}}found",
+    ),
+    (
+        "app/src-tauri/src/commands/agents.rs",
+        "known_agents",
+        "letmutagents:Vec<String>=state.supervisor.lock().unwrap_or_else(|p|p.into_inner()).health_check().into_iter().map(|status|status.id.to_string()).collect();agents.extend(state.agent_scheduler.list().into_iter().map(|s|s.agent_id));letdrivers:Vec<String>=state.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).keys().cloned().collect();agents.extend(drivers);agents.extend(state.cognitive_runtime.loop_agents());ifletOk(world)=state.real_world(){agents.extend(world.agents_with_runs());}letmutknown=Vec::new();foragentinagents{letagent=canonical_agent_id(&agent);if!known.contains(&agent){known.push(agent);}}known",
+    ),
+    (
+        "app/src-tauri/src/commands/agents.rs",
+        "clear_all_agents",
+        "let_=stop_agents(state,&known_agents(state));{letmutsupervisor=matchstate.supervisor.lock(){Ok(guard)=>guard,Err(poisoned)=>poisoned.into_inner()};supervisor.clear_all_agents();}{letmutmeta=matchstate.meta.lock(){Ok(guard)=>guard,Err(poisoned)=>poisoned.into_inner()};meta.clear();}letcount=state.db.clear_all_agents().map_err(|e|format!(\"persistence error: {e}\"))?;Ok(count)",
     ),
     (
         "app/src-tauri/src/commands/agents.rs",

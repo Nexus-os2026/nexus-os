@@ -6,6 +6,7 @@ use super::{AgentBridge, RealWorld};
 use nexus_governed_control::authority::approval::{
     ActionConfirmation, ControlConfirmer, GrantConfirmation, ResumeConfirmation,
 };
+use nexus_governed_control::authority::run::RunOrigin;
 use nexus_governed_control::governed::{GrantRequest, Intent};
 use nexus_governed_control::ingress::CommandEnvelope;
 use nexus_governed_control::tool::ToolIntent;
@@ -779,6 +780,165 @@ fn stop_all_and_bulk_stop_stop_agents_everywhere() {
     // The fleet view sees the running agent as running.
     let fleet: Value = serde_json::from_str(&crate::admin_fleet_status(&state).unwrap()).unwrap();
     assert_eq!(fleet["total_running"], 1, "{fleet}");
+}
+
+/// Candidate 9 (C8-3): clearing every agent first stops each one as the
+/// owner's Stop does, everywhere and under any spelling of its id, whatever
+/// knows of it (the supervisor, a schedule, a loop's driver, a loop, Phase
+/// Three), and only then clears their records: no loop runs on, no schedule
+/// is left, and nothing they left running or waiting in Phase Three stays
+/// open.
+#[test]
+fn clearing_all_agents_stops_each_one_everywhere_first() {
+    // Registration schedules nothing here; the scheduler's tasks are not polled.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let t = isolated();
+    let mut state = crate::AppState::new_in_memory();
+    state.real_world = Ok(t.world.clone());
+    let register = |name: &str| {
+        let manifest = crate::commands::chat_llm::parse_agent_manifest_json(
+            &json!({
+                "name": name,
+                "version": "1.0.0",
+                "capabilities": ["llm.query"],
+                "fuel_budget": 1000,
+                "autonomy_level": 2,
+            })
+            .to_string(),
+        )
+        .unwrap();
+        state
+            .supervisor
+            .lock()
+            .unwrap()
+            .start_agent(manifest)
+            .unwrap()
+    };
+    let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", server.local_addr().unwrap());
+    let owner = Owner(true, AtomicU32::new(0));
+    t.world
+        .request_grant(
+            &GrantRequest::Egress {
+                origin: origin.clone(),
+                methods: vec!["POST".into()],
+                allow_private: true,
+            },
+            60,
+            &owner,
+        )
+        .unwrap();
+    let post = Intent::Request(nexus_governed_control::egress::EgressIntent {
+        method: "POST".into(),
+        url: format!("{origin}/x"),
+        headers: vec![],
+        body: Some("{}".into()),
+    });
+    // An action waiting for the owner, from a loop of its own.
+    let waiting = |agent: &str| -> String {
+        let bridge = AgentBridge::with_warden(t.world.clone(), || false);
+        let reply: Value = serde_json::from_str(&bridge.act(agent, &post, true).unwrap()).unwrap();
+        reply["awaiting_owner_approval"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let unknown = || uuid::Uuid::new_v4().to_string().to_uppercase();
+
+    // Agents only one place still knows of, each under an upper-case
+    // spelling: a loop with no driver whose record is already gone, a
+    // schedule, a loop's driver, and Phase Three.
+    let looping = register("cleared-loop-only").to_string().to_uppercase();
+    crate::execute_agent_goal(&state, looping.clone(), "keep going".into(), 5, None).unwrap();
+    state.supervisor.lock().unwrap().clear_all_agents();
+    let scheduled = unknown();
+    crate::start_autonomous_loop(&state, scheduled.clone(), Some(60), None).unwrap();
+    let driven = unknown();
+    let (driven_cancel, _driven) =
+        crate::commands::cognitive::CognitiveCancelGuard::register(&state, &driven);
+    let acting = unknown();
+    let acting_waiting = waiting(&acting);
+    // And a registered agent known everywhere, under its upper-case
+    // spelling: an action waiting, a schedule, and a loop with its driver.
+    let known = register("cleared-everywhere").to_string().to_uppercase();
+    let known_waiting = waiting(&known);
+    crate::start_autonomous_loop(&state, known.clone(), Some(60), None).unwrap();
+    crate::execute_agent_goal(&state, known.clone(), "keep going".into(), 5, None).unwrap();
+    let (known_cancel, _known) =
+        crate::commands::cognitive::CognitiveCancelGuard::register(&state, &known);
+    let mut loops = state.cognitive_runtime.loop_agents();
+    loops.sort();
+    let mut expected = vec![looping.clone(), known.clone()];
+    expected.sort();
+    assert_eq!(loops, expected);
+    assert_eq!(state.agent_scheduler.list().len(), 2);
+
+    crate::clear_all_agents(&state).unwrap();
+
+    // Phase Three: what they left waiting ended with their runs (revoked),
+    // and no agent's run is open.
+    for commitment in [&known_waiting, &acting_waiting] {
+        assert_eq!(
+            commitment_state(&t.world, commitment),
+            "revoked",
+            "a cleared agent's waiting action stayed open"
+        );
+        assert!(
+            t.world.approve(commitment, &owner).is_err(),
+            "a cleared agent's waiting action cannot be approved"
+        );
+    }
+    let open: Vec<_> = t
+        .world
+        .control
+        .authority()
+        .runs()
+        .views()
+        .into_iter()
+        .filter(|run| run.origin == RunOrigin::AgentGoal && !run.cancelled && !run.finished)
+        .collect();
+    assert!(
+        open.is_empty(),
+        "a cleared agent's run stayed open: {open:?}"
+    );
+    // No schedule, every driver told to stop, and every loop removed (on
+    // the stop's own thread, which may wait for a cycle).
+    assert!(
+        state.agent_scheduler.list().is_empty(),
+        "a cleared agent's schedule was left: {:?}",
+        state.agent_scheduler.list()
+    );
+    for cancel in [&known_cancel, &driven_cancel] {
+        assert!(
+            cancel.load(Ordering::Relaxed),
+            "a cleared agent's loop driver was not told to stop"
+        );
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !state.cognitive_runtime.loop_agents().is_empty() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "a cleared agent's loop was left: {:?}",
+            state.cognitive_runtime.loop_agents()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    // The records are gone, and with them any authority to run.
+    assert!(state.supervisor.lock().unwrap().health_check().is_empty());
+    for agent in [&looping, &scheduled, &driven, &acting, &known] {
+        for spelling in [agent.clone(), agent.to_lowercase()] {
+            assert!(
+                crate::commands::cognitive::agent_stopped(&state, &spelling),
+                "a cleared agent kept authority to run"
+            );
+        }
+    }
+    server.set_nonblocking(true).unwrap();
+    assert!(server.accept().is_err(), "nothing was sent");
 }
 
 /// The confirmation window itself, live, under an isolated X display: run

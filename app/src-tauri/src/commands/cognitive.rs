@@ -2272,16 +2272,20 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
     });
 }
 
-/// Whether the supervisor records the agent as stopped (or destroyed): its
-/// loop runs no further cycle and a HiveMind session gives it no sub-task.
+/// Whether the agent has no authority to run: the supervisor records it as
+/// stopped (or destroyed), or holds no record of it at all (an id that is
+/// not one, or an agent cleared or never registered). Its loop runs no
+/// further cycle and a HiveMind session gives it no sub-task. A missing
+/// agent counts as stopped, as at the scheduler's tick and Phase Three's
+/// bridge (which also refuses a paused one).
 pub(crate) fn agent_stopped(state: &AppState, agent_id: &str) -> bool {
-    Uuid::parse_str(agent_id).is_ok_and(|id| {
+    Uuid::parse_str(agent_id).ok().is_none_or(|id| {
         state
             .supervisor
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .get_agent(id)
-            .is_some_and(|handle| {
+            .is_none_or(|handle| {
                 matches!(
                     handle.state,
                     AgentState::Stopping | AgentState::Stopped | AgentState::Destroyed
@@ -2647,3 +2651,5 @@ pub(crate) fn set_default_agent(
 mod lock_tests;
 #[cfg(test)]
 mod scheduled_tests;
+#[cfg(test)]
+mod stop_tests;

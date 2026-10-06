@@ -1699,6 +1699,19 @@ impl CognitiveRuntime {
             .contains_key(agent_id)
     }
 
+    /// Every agent with a loop now, as its loop is keyed (the spelling its
+    /// goal was assigned under). Read from the status snapshots, which are
+    /// added and removed with the loops under their guard: this never waits
+    /// for a running cycle.
+    pub fn loop_agents(&self) -> Vec<String> {
+        self.status_snapshots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .keys()
+            .cloned()
+            .collect()
+    }
+
     /// Return the remaining plan steps that still require HITL approval.
     pub fn pending_hitl_steps(&self, agent_id: &str) -> Result<Vec<AgentStep>, AgentError> {
         let autonomy_level = {
@@ -2556,6 +2569,29 @@ mod tests {
         assert!(runtime.has_active_loop(&agent_id));
         runtime.stop_agent_loop(&agent_id).unwrap();
         assert!(!runtime.has_active_loop(&agent_id));
+    }
+
+    /// Every loop is listed under the spelling its goal was assigned with,
+    /// and a stopped one no more.
+    #[test]
+    fn every_loop_is_listed_as_it_is_keyed() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        assert!(runtime.loop_agents().is_empty());
+        let upper = agent_id.to_uppercase();
+        runtime
+            .assign_goal(&agent_id, AgentGoal::new("first".into(), 5))
+            .unwrap();
+        runtime
+            .assign_goal(&upper, AgentGoal::new("second".into(), 5))
+            .unwrap();
+        let mut listed = runtime.loop_agents();
+        listed.sort();
+        let mut expected = vec![agent_id.clone(), upper.clone()];
+        expected.sort();
+        assert_eq!(listed, expected);
+        runtime.stop_agent_loop(&agent_id).unwrap();
+        assert_eq!(runtime.loop_agents(), vec![upper]);
     }
 
     #[test]
