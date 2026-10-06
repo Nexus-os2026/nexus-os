@@ -4728,8 +4728,136 @@ fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     ]) {
         kinds.insert("browser");
     }
+    // The desktop's toolkit (gtk-rs, and every crate it re-exports or
+    // binds): its process, URI-opening, capture, network and bus routes are
+    // classified as such, and anything of it outside the native approval
+    // window's own APIs is a mechanism not yet classified ("toolkit").
+    // (A toolkit prelude exports traits only: a name the scanner resolves
+    // through one, as a glob import may bring it, is a method's trait or no
+    // toolkit item at all.)
+    let through_prelude = path.iter().take(3).any(|segment| segment == "prelude");
+    if path.len() > 1 && TOOLKIT_CRATES.contains(&path[0].as_str()) && !through_prelude {
+        let has = |names: &[&str]| path.iter().any(|segment| names.contains(&segment.as_str()));
+        if path.iter().any(|segment| segment.starts_with("spawn"))
+            || has(&[
+                "Subprocess",
+                "SubprocessLauncher",
+                "SubprocessFlags",
+                "AppInfo",
+                "DesktopAppInfo",
+                "AppLaunchContext",
+                "show_uri",
+                "show_uri_on_window",
+                "LinkButton",
+                "MountOperation",
+            ])
+        {
+            kinds.insert("process");
+        }
+        if has(&[
+            "default_root_window",
+            "root_window",
+            "pixbuf_get_from_window",
+            "pixbuf_get_from_surface",
+            "Screen",
+            "Display",
+            "Seat",
+            "Device",
+            "DeviceManager",
+            "test_simulate_button",
+            "test_simulate_key",
+        ]) {
+            kinds.insert("device");
+        }
+        if has(&[
+            "SocketClient",
+            "Socket",
+            "SocketListener",
+            "SocketService",
+            "SocketConnection",
+            "Resolver",
+            "NetworkMonitor",
+            "NetworkAddress",
+            "InetSocketAddress",
+            "TlsClientConnection",
+            "File",
+        ]) || path[0] == "soup"
+        {
+            kinds.insert("network");
+        }
+        if has(&[
+            "DBusConnection",
+            "DBusProxy",
+            "bus_get",
+            "bus_get_sync",
+            "bus_own_name",
+        ]) {
+            kinds.insert("bus");
+        }
+        if !TOOLKIT_UI.contains(&shown.as_str()) {
+            kinds.insert("toolkit");
+        }
+    }
     kinds
 }
+
+/// The toolkit crates the desktop reaches through gtk-rs: gtk itself, the
+/// crates it re-exports (`gtk::glib`, `gtk::gio`, `gtk::gdk`,
+/// `gtk::pango`, ...), their system bindings, and the web view's.
+const TOOLKIT_CRATES: [&str; 21] = [
+    "gtk",
+    "gtk3",
+    "glib",
+    "gio",
+    "gdk",
+    "gdk_pixbuf",
+    "pango",
+    "pangocairo",
+    "cairo",
+    "atk",
+    "gdkx11",
+    "gdkwayland",
+    "webkit2gtk",
+    "soup",
+    "javascriptcore",
+    "gtk_sys",
+    "glib_sys",
+    "gobject_sys",
+    "gio_sys",
+    "gdk_sys",
+    "webkit2gtk_sys",
+];
+
+/// Exactly the toolkit APIs the owner's native approval window uses (each
+/// as the scanner resolves it): its widgets, layout, styling of the gutter,
+/// text attributes and arming timer. Any other path into the toolkit is a
+/// `toolkit` site, which p3_g6_08 refuses until it is classified.
+const TOOLKIT_UI: [&str; 24] = [
+    "gtk::Box::new",
+    "gtk::CssProvider::new",
+    "gtk::Dialog",
+    "gtk::Dialog::new",
+    "gtk::Frame::new",
+    "gtk::Grid::new",
+    "gtk::Label::new",
+    "gtk::Orientation::Horizontal",
+    "gtk::Orientation::Vertical",
+    "gtk::PolicyType::Automatic",
+    "gtk::ResponseType::Accept",
+    "gtk::ResponseType::Cancel",
+    "gtk::STYLE_PROVIDER_PRIORITY_APPLICATION",
+    "gtk::ScrolledWindow::builder",
+    "gtk::Separator::new",
+    "gtk::ShadowType::In",
+    "gtk::Widget",
+    "gtk::glib::timeout_add_local_once",
+    "gtk::pango::AttrInt::new_weight",
+    "gtk::pango::AttrList::new",
+    "gtk::pango::AttrString::new_family",
+    "gtk::pango::Weight::Bold",
+    "gtk::pango::WrapMode::Char",
+    "gtk::prelude",
+];
 
 /// Production modules named like test files (`*tests.rs`, `*_test.rs`), which
 /// the production scanner skips by name: every `mod` declaring them, up to
@@ -7891,6 +8019,165 @@ fn p3_g6_16_test_only_features_are_enabled_only_by_tests() {
     assert_eq!(enabling.len(), 6, "the known test-only edges: {enabling:?}");
 }
 
+/// §3 "There is no fifth" (audit P-6): the direct production dependencies
+/// of the desktop and of the governed-control crate are pinned, so a crate
+/// that brings a new mechanism (as gtk-rs brought process launch, URI
+/// opening and screen capture) cannot arrive unreviewed: adding one fails
+/// here until its routes are classified in `effect_kinds` (as the toolkit
+/// is, by `TOOLKIT_CRATES` and `TOOLKIT_UI`) and it is pinned.
+#[test]
+fn p3_g6_18_the_production_dependency_surface_is_pinned() {
+    let direct = |manifest: &str| -> BTreeSet<String> {
+        let mut section = String::new();
+        let mut names = BTreeSet::new();
+        for line in workspace_file(manifest).lines() {
+            let line = line.split('#').next().unwrap_or_default().trim();
+            if line.starts_with('[') {
+                section = line.trim_matches(['[', ']']).to_string();
+                continue;
+            }
+            let production = section == "dependencies"
+                || (section.ends_with(".dependencies")
+                    && !section.ends_with("dev-dependencies")
+                    && !section.ends_with("build-dependencies"));
+            if let (true, Some((key, _))) = (production, line.split_once('=')) {
+                names.insert(key.trim().to_string());
+            }
+        }
+        names
+    };
+    let pinned = |names: &[&str]| -> BTreeSet<String> {
+        names.iter().map(|name| name.to_string()).collect()
+    };
+    assert_eq!(
+        direct("crates/nexus-governed-control/Cargo.toml"),
+        pinned(&[
+            "base64",
+            "getrandom",
+            "hex",
+            "libc",
+            "nexus-kernel",
+            "png",
+            "reqwest",
+            "serde",
+            "serde_json",
+            "sha2",
+            "tokio",
+            "unicode-segmentation",
+            "url",
+            "x11rb",
+            "zeroize",
+        ])
+    );
+    assert_eq!(
+        direct("app/src-tauri/Cargo.toml"),
+        pinned(&[
+            "base64",
+            "chrono",
+            "dirs",
+            "gtk",
+            "hex",
+            "nexus-a2a",
+            "nexus-adaptation",
+            "nexus-agent-memory",
+            "nexus-airgap",
+            "nexus-auth",
+            "nexus-browser-agent",
+            "nexus-capability-measurement",
+            "nexus-code",
+            "nexus-collab-protocol",
+            "nexus-computer-control",
+            "nexus-computer-use",
+            "nexus-conductor",
+            "nexus-connectors-core",
+            "nexus-connectors-llm",
+            "nexus-connectors-messaging",
+            "nexus-connectors-social",
+            "nexus-connectors-web",
+            "nexus-crypto",
+            "nexus-distributed",
+            "nexus-enterprise",
+            "nexus-external-tools",
+            "nexus-factory",
+            "nexus-flash-infer",
+            "nexus-governance-engine",
+            "nexus-governance-evolution",
+            "nexus-governance-oracle",
+            "nexus-governed-control",
+            "nexus-integrations",
+            "nexus-kernel",
+            "nexus-marketplace",
+            "nexus-mcp",
+            "nexus-memory",
+            "nexus-metering",
+            "nexus-migrate",
+            "nexus-perception",
+            "nexus-persistence",
+            "nexus-predictive-router",
+            "nexus-protocols",
+            "nexus-sdk",
+            "nexus-self-improve",
+            "nexus-software-factory",
+            "nexus-swarm",
+            "nexus-telemetry",
+            "nexus-tenancy",
+            "nexus-token-economy",
+            "nexus-verifier-sandbox",
+            "nexus-world-simulation",
+            "open",
+            "reqwest",
+            "rusqlite",
+            "rustix",
+            "serde",
+            "serde_json",
+            "sha2",
+            "social-poster-agent",
+            "sysinfo",
+            "tauri",
+            "tauri-plugin-dialog",
+            "tauri-plugin-global-shortcut",
+            "tokio",
+            "tokio-util",
+            "toml",
+            "urlencoding",
+            "uuid",
+            "web-builder-agent",
+            "windows-sys",
+            "zip",
+        ])
+    );
+    // The toolkit's own classification: the native approval window's APIs
+    // are allowed and nothing else of it; each mechanism it offers is
+    // classified as one.
+    for (path, kinds) in [
+        ("gtk::Dialog::new", &[][..]),
+        ("gtk::glib::timeout_add_local_once", &[][..]),
+        (
+            "gtk::glib::spawn_command_line_async",
+            &["process", "toolkit"][..],
+        ),
+        ("gtk::gio::Subprocess::newv", &["process", "toolkit"][..]),
+        (
+            "gtk::gio::AppInfo::launch_default_for_uri",
+            &["process", "toolkit"][..],
+        ),
+        ("gtk::show_uri_on_window", &["process", "toolkit"][..]),
+        (
+            "gtk::gdk::Window::default_root_window",
+            &["device", "toolkit"][..],
+        ),
+        ("gtk::gdk::Screen::default", &["device", "toolkit"][..]),
+        ("gtk::gio::SocketClient::new", &["network", "toolkit"][..]),
+        ("gtk::Entry::new", &["toolkit"][..]),
+        ("glib::spawn_async", &["process", "toolkit"][..]),
+        ("webkit2gtk::WebView::new", &["toolkit"][..]),
+    ] {
+        let path: Vec<String> = path.split("::").map(str::to_string).collect();
+        let found: Vec<&str> = effect_kinds(&path).into_iter().collect();
+        assert_eq!(found, kinds, "{}", path.join("::"));
+    }
+}
+
 /// §25 (audit P32): only the browser and the agent display launch a session
 /// process, each with the executable it pinned.
 #[test]
@@ -8249,7 +8536,8 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
 /// same name elsewhere counts too).
 #[test]
 fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
-    // The methods that take the lock, and those that call one of them.
+    // The methods that touch the loops (a lock: whatever it is called
+    // through), and those that call one of them, however spelled.
     let kernel = production_source("kernel/src/cognitive/loop_runtime.rs");
     let methods: Vec<(String, String)> = fn_items(kernel)
         .into_iter()
@@ -8257,17 +8545,14 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
         .collect();
     let mut locking: BTreeSet<String> = methods
         .iter()
-        .filter(|(_, body)| body.contains("self.loops.lock()"))
+        .filter(|(_, body)| body.contains("self.loops"))
         .map(|(name, _)| name.clone())
         .collect();
     loop {
         let more: Vec<String> = methods
             .iter()
             .filter(|(name, body)| {
-                !locking.contains(name)
-                    && locking
-                        .iter()
-                        .any(|method| body.contains(&format!("self.{method}(")))
+                !locking.contains(name) && locking.iter().any(|method| reaches(body, method))
             })
             .map(|(name, _)| name.clone())
             .collect();
@@ -8301,16 +8586,35 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
             }
         }
     }
-    let takes_lock = |body: &str| {
-        locking
-            .iter()
-            .any(|method| body.contains(&format!("cognitive_runtime.{method}(")))
+    // A loops method reached however it is spelled: a call on any receiver
+    // (renamed, aliased, a field of anything), a path (`Type::method`, an
+    // imported alias of the type), or the method as a value. A method of
+    // another type that merely shares a name counts too, unless it is one
+    // of the reviewed calls below, pinned exactly.
+    let takes_lock = |file: &str, item: &FnItem, body: &str| {
+        let mut body = body.to_string();
+        for (reviewed, function, call, receiver) in NOT_THE_LOOPS {
+            if file == *reviewed && item.path == *function && body.contains(receiver) {
+                body = body.replace(call, "");
+            }
+        }
+        locking.iter().any(|method| reaches(&body, method))
     };
     let mut waiting: BTreeSet<String> = bodies
         .iter()
-        .filter(|(_, _, body)| takes_lock(body))
+        .filter(|(file, item, body)| takes_lock(file, item, body))
         .map(|(_, item, _)| item.name.clone())
         .collect();
+    // The reviewed calls of another type's same-named method are exactly
+    // there, on exactly that receiver.
+    for (file, function, call, receiver) in NOT_THE_LOOPS {
+        let (_, _, body) = bodies
+            .iter()
+            .find(|(f, item, _)| f == file && item.path == *function)
+            .unwrap_or_else(|| panic!("{file} {function}"));
+        assert_eq!(body.matches(call).count(), 1, "{function}");
+        assert!(body.contains(receiver), "{function}: {body}");
+    }
     loop {
         let more: Vec<String> = bodies
             .iter()
@@ -8367,7 +8671,7 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
         }
         checked += 1;
         assert!(
-            !takes_lock(body),
+            !takes_lock(file, item, body),
             "{file} {} waits on the loops' lock",
             item.path
         );
@@ -8395,6 +8699,24 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
         "letf=execute_agent_goal_count;",
         "execute_agent_goal"
     ));
+    // Every spelling of a loops call is seen: the receiver as written, a
+    // renamed or aliased receiver, a type path, an imported alias of the
+    // type, the method as a value; a longer name is not.
+    for spelled in [
+        "state.cognitive_runtime.get_agent_status(id)",
+        "letrt=&state.cognitive_runtime;rt.get_agent_status(id)",
+        "CognitiveRuntime::get_agent_status(&state.cognitive_runtime,id)",
+        "Runtime::get_agent_status(&rt,id)",
+        "letf=CognitiveRuntime::get_agent_status;f(&rt,id)",
+        "<CognitiveRuntime>::get_agent_status(&rt,id)",
+    ] {
+        assert!(reaches(spelled, "get_agent_status"), "{spelled}");
+    }
+    assert!(!reaches(
+        "rt.get_agent_status_count(id)",
+        "get_agent_status"
+    ));
+    assert!(!reaches("get_agent_status(id)", "get_agent_status"));
     assert!(
         outside_spawned("spawn(move||{assign_agent_goal(x)}).join()")
             .contains("assign_agent_goal(")
@@ -8502,6 +8824,31 @@ fn calls(text: &str, name: &str) -> bool {
 /// function bound to a name (`=name;`) or passed as the first argument
 /// (`(name,`, `(name)`) to be called later. (A list naming commands, such
 /// as their registration, is not a use.)
+/// Calls of another type's method that shares a loops method's name,
+/// reviewed: (file, function, the exact call, the receiver's binding).
+const NOT_THE_LOOPS: &[(&str, &str, &str, &str)] = &[(
+    "app/src-tauri/src/commands/crate_bridges.rs",
+    "governance_evolution_run_attack_cycle",
+    "evo.run_cycle(",
+    "letmutevo=state.governance_evolution.lock()",
+)];
+
+/// Whether `text` (compacted) reaches the method `method`: a call on any
+/// receiver, a path to it (a call, or the method as a value), however the
+/// receiver or the type is spelled.
+fn reaches(text: &str, method: &str) -> bool {
+    let named = |marker: &str| {
+        text.match_indices(&format!("{marker}{method}"))
+            .any(|(at, found)| {
+                !text[at + found.len()..]
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphanumeric() || c == '_')
+            })
+    };
+    named(".") || named("::")
+}
+
 fn uses(text: &str, name: &str) -> bool {
     calls(text, name)
         || text.match_indices(name).any(|(at, _)| {
