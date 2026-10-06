@@ -68,6 +68,11 @@ pub(crate) struct BrowserProxy {
     stop: Arc<AtomicBool>,
     /// The session ended: the port is released.
     closed: Arc<AtomicBool>,
+    /// Client connections accepted (served or not).
+    seen: Arc<AtomicU32>,
+    /// Connections admitted and connected upstream, counted when they open.
+    opened: Arc<AtomicU32>,
+    /// Admitted connections, counted when they end.
     admitted: Arc<AtomicU32>,
     refused: Arc<AtomicU32>,
 }
@@ -85,12 +90,15 @@ impl BrowserProxy {
             .map_err(|_| AuthorityError::Unavailable("the browser proxy cannot listen"))?;
         let stop = Arc::new(AtomicBool::new(false));
         let closed = Arc::new(AtomicBool::new(false));
+        let seen = Arc::new(AtomicU32::new(0));
+        let opened = Arc::new(AtomicU32::new(0));
         let admitted = Arc::new(AtomicU32::new(0));
         let refused = Arc::new(AtomicU32::new(0));
         let active = Arc::new(AtomicUsize::new(0));
         let policy = Arc::new(policy);
         {
             let (stop, closed) = (stop.clone(), closed.clone());
+            let (seen, opened) = (seen.clone(), opened.clone());
             let (admitted, refused) = (admitted.clone(), refused.clone());
             std::thread::Builder::new()
                 .name("nexus-p3-browser-proxy".into())
@@ -109,6 +117,7 @@ impl BrowserProxy {
                         }
                         match listener.accept() {
                             Ok((client, _)) => {
+                                seen.fetch_add(1, Ordering::SeqCst);
                                 if stop.load(Ordering::SeqCst)
                                     || active.load(Ordering::SeqCst) >= MAX_CONNECTIONS
                                 {
@@ -119,13 +128,14 @@ impl BrowserProxy {
                                 active.fetch_add(1, Ordering::SeqCst);
                                 let (policy, stop) = (policy.clone(), stop.clone());
                                 let (admitted, counted) = (admitted.clone(), refused.clone());
+                                let opening = opened.clone();
                                 let serving = active.clone();
                                 // A thread the system refuses leaves the
                                 // connection unserved, not this loop ended.
                                 let spawned = std::thread::Builder::new()
                                     .name("nexus-p3-browser-proxy-connection".into())
                                     .spawn(move || {
-                                        let ok = serve(client, &policy, &stop);
+                                        let ok = serve(client, &policy, &stop, &opening);
                                         if ok {
                                             admitted.fetch_add(1, Ordering::SeqCst);
                                         } else {
@@ -148,9 +158,19 @@ impl BrowserProxy {
             port,
             stop,
             closed,
+            seen,
+            opened,
             admitted,
             refused,
         })
+    }
+
+    pub(crate) fn seen(&self) -> u32 {
+        self.seen.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn opened(&self) -> u32 {
+        self.opened.load(Ordering::SeqCst)
     }
 
     pub(crate) fn port(&self) -> u16 {
@@ -236,11 +256,13 @@ fn connect(addresses: &[std::net::SocketAddr], go_on: impl Fn() -> bool) -> Opti
     None
 }
 
-/// Serve one client connection; true if it was admitted.
+/// Serve one client connection; true if it was admitted. `opened` counts
+/// it as soon as it is admitted and connected upstream.
 pub(super) fn serve(
     mut client: TcpStream,
     policy: &Arc<OriginPolicy>,
     stop: &Arc<AtomicBool>,
+    opened: &AtomicU32,
 ) -> bool {
     let go_on = || may_go_on(policy, stop);
     let _ = client.set_read_timeout(Some(POLL));
@@ -275,6 +297,7 @@ pub(super) fn serve(
         if !go_on() {
             return refuse(client);
         }
+        opened.fetch_add(1, Ordering::SeqCst);
         if client
             .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
             .is_err()
@@ -301,6 +324,7 @@ pub(super) fn serve(
     let Some(mut upstream) = connect(&addresses, go_on) else {
         return refuse(client);
     };
+    opened.fetch_add(1, Ordering::SeqCst);
     let path = match destination.url().query() {
         Some(query) => format!("{}?{query}", destination.url().path()),
         None => destination.url().path().to_string(),
