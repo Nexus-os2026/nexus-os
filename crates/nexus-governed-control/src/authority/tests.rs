@@ -1237,3 +1237,659 @@ fn shown_text_cannot_imitate_an_escape_or_draw_over_its_neighbours() {
     assert_eq!(escaped("שלום עולם"), "שלום עולם");
     assert_eq!(escaped("café naïve"), "café naïve");
 }
+
+// ---- No authority lock is held while evidence is recorded ----
+//
+// Every record is written with every authority lock released: the
+// evidence-first transitions (approval, authorization, start) reserve the
+// commitment under the lock, record with it released and complete only if
+// the same reservation still holds a live commitment.
+
+use super::evidence::EvidenceRecord;
+use super::scripted::{within, ScriptedSink};
+use std::sync::Weak;
+
+struct Scripted {
+    auth: Arc<Authority>,
+    sink: Arc<ScriptedSink>,
+    clock: Arc<ManualClock>,
+    yes: Confirmer,
+    agent: AgentId,
+    run: RunId,
+    grant: GrantId,
+}
+
+fn scripted() -> Scripted {
+    let sink = ScriptedSink::new();
+    let clock = Arc::new(ManualClock::default());
+    let auth = Arc::new(Authority::new(sink.clone(), clock.clone()));
+    let yes = Confirmer::new(true);
+    let agent = AgentId::new("agent-a").unwrap();
+    let run = auth.open_run(agent.clone(), RunOrigin::AgentGoal).unwrap();
+    let grant = auth
+        .grants()
+        .request(egress_scope(), Duration::from_secs(600), &yes)
+        .unwrap();
+    Scripted {
+        auth,
+        sink,
+        clock,
+        yes,
+        agent,
+        run,
+        grant,
+    }
+}
+
+impl Scripted {
+    fn prepare(&self, class: EffectClass) -> CommitmentId {
+        self.auth
+            .commitments()
+            .prepare(&self.agent, self.run, prepared(class, self.grant), TTL)
+            .unwrap()
+            .id
+    }
+
+    fn authorized(&self) -> CommitmentId {
+        let id = self.prepare(EffectClass::R1);
+        self.auth
+            .commitments()
+            .authorize(id, &self.agent, self.run, None)
+            .unwrap();
+        id
+    }
+
+    fn begin(&self, id: CommitmentId) -> Result<super::commitment::ExecutionGuard, AuthorityError> {
+        begin_as(&self.auth, &self.agent, self.run, id)
+    }
+
+    fn state(&self, id: CommitmentId) -> CommitmentState {
+        self.auth.commitments().view(id).unwrap().state
+    }
+
+    /// While every record is written, probe every authority lock from
+    /// another thread.
+    fn probe(&self) {
+        let auth: Weak<Authority> = Arc::downgrade(&self.auth);
+        self.sink.probe_with(move || {
+            if let Some(auth) = auth.upgrade() {
+                auth.probe_locks();
+            }
+        });
+    }
+
+    fn last(&self, phase: EvidencePhase, id: CommitmentId) -> EvidenceRecord {
+        self.sink
+            .memory
+            .records()
+            .into_iter()
+            .rev()
+            .find(|r| r.phase == phase && r.commitment.as_deref() == Some(&id.to_string()))
+            .unwrap_or_else(|| panic!("no {phase:?} record for {id}"))
+    }
+}
+
+fn begin_as(
+    auth: &Authority,
+    agent: &AgentId,
+    run: RunId,
+    id: CommitmentId,
+) -> Result<super::commitment::ExecutionGuard, AuthorityError> {
+    auth.commitments().begin(
+        id,
+        agent,
+        run,
+        &target("https://example.invalid/").digest,
+        &params("GET"),
+    )
+}
+
+/// Every record of every authority transition, with a probe of every
+/// authority lock from another thread while it is written: none is held.
+#[test]
+fn no_authority_lock_is_held_while_any_record_is_written() {
+    let f = scripted();
+    let unprobed = f.sink.memory.records().len();
+    f.probe();
+    let c = f.auth.commitments();
+    // Grant issue, run opening.
+    let grant = f
+        .auth
+        .grants()
+        .request(egress_scope(), Duration::from_secs(600), &f.yes)
+        .unwrap();
+    let declined = Confirmer::new(false);
+    assert!(f
+        .auth
+        .grants()
+        .request(egress_scope(), Duration::from_secs(600), &declined)
+        .is_err());
+    let run = f
+        .auth
+        .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    // Prepare, authorize, start, finish.
+    let id = f.prepare(EffectClass::R1);
+    c.authorize(id, &f.agent, f.run, None).unwrap();
+    f.begin(id)
+        .unwrap()
+        .finish(Outcome::Succeeded { meta: vec![] });
+    // Approval, approval declined, denial.
+    let r2 = f.prepare(EffectClass::R2);
+    let approval = c.request_approval(r2, &f.agent, f.run, &f.yes).unwrap();
+    c.authorize(r2, &f.agent, f.run, Some(approval)).unwrap();
+    let declined_r2 = f.prepare(EffectClass::R2);
+    assert!(c
+        .request_approval(declined_r2, &f.agent, f.run, &declined)
+        .is_err());
+    let denied = f.prepare(EffectClass::R1);
+    c.deny(denied, &f.agent, f.run).unwrap();
+    // A changed target, a failure before the start, an abandoned guard.
+    let changed = f.authorized();
+    assert!(c
+        .begin(
+            changed,
+            &f.agent,
+            f.run,
+            &target("elsewhere").digest,
+            &params("GET")
+        )
+        .is_err());
+    let unstarted = f.authorized();
+    c.fail_unstarted(unstarted, &f.agent, f.run, &AuthorityError::TargetChanged)
+        .unwrap();
+    drop(f.begin(f.authorized()).unwrap());
+    // Expiry by sweep, cancellation, run finish, grant revocation, an
+    // emergency stop and the resume.
+    let expiring = f.prepare(EffectClass::R1);
+    f.clock.advance(TTL + Duration::from_secs(1));
+    assert!(c.sweep() >= 1);
+    assert_eq!(f.state(expiring), CommitmentState::Expired);
+    let in_run = c
+        .prepare(&f.agent, run, prepared(EffectClass::R1, f.grant), TTL)
+        .unwrap()
+        .id;
+    f.auth.cancel_run(run).unwrap();
+    assert_eq!(f.state(in_run), CommitmentState::Revoked);
+    let finishing = f
+        .auth
+        .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    c.prepare(&f.agent, finishing, prepared(EffectClass::R1, f.grant), TTL)
+        .unwrap();
+    f.auth.finish_run(finishing);
+    f.auth.grants().revoke(grant).unwrap();
+    f.prepare(EffectClass::R1);
+    f.auth.emergency_stop();
+    f.auth.resume(&f.yes).unwrap();
+    // A preparation whose run is cancelled while it is recorded ends
+    // revoked, recorded too.
+    let run = f
+        .auth
+        .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    f.sink.hold_next(EvidencePhase::Prepared);
+    let (auth, agent, grant) = (f.auth.clone(), f.agent.clone(), f.grant);
+    let preparing = std::thread::spawn(move || {
+        auth.commitments()
+            .prepare(&agent, run, prepared(EffectClass::R1, grant), TTL)
+    });
+    f.sink.wait_held();
+    let auth = f.auth.clone();
+    within(move || auth.cancel_run(run)).unwrap();
+    f.sink.release();
+    assert_eq!(
+        preparing.join().unwrap().unwrap_err(),
+        AuthorityError::RunCancelled
+    );
+    let phases = f.sink.phases();
+    for phase in [
+        EvidencePhase::GrantIssued,
+        EvidencePhase::GrantDeclined,
+        EvidencePhase::RunOpened,
+        EvidencePhase::Prepared,
+        EvidencePhase::Approved,
+        EvidencePhase::ApprovalDeclined,
+        EvidencePhase::Authorized,
+        EvidencePhase::Started,
+        EvidencePhase::Finished,
+        EvidencePhase::Denied,
+        EvidencePhase::Expired,
+        EvidencePhase::Revoked,
+        EvidencePhase::RunCancelled,
+        EvidencePhase::GrantRevoked,
+        EvidencePhase::EmergencyStop,
+        EvidencePhase::Resumed,
+    ] {
+        assert!(phases.contains(&phase), "{phase:?} in {phases:?}");
+    }
+    assert!(
+        f.sink.probes() >= phases.len() - unprobed,
+        "{} probes, {} records",
+        f.sink.probes(),
+        phases.len()
+    );
+    assert_eq!(f.sink.violations(), 0);
+}
+
+/// A sink that reads the authority on its own recording thread (as an
+/// audit sink that looks up what it records would): no transition holds a
+/// lock it needs, so none deadlocks.
+#[test]
+fn a_reentrant_sink_never_deadlocks_the_authority() {
+    let f = scripted();
+    let auth: Weak<Authority> = Arc::downgrade(&f.auth);
+    let run = f.run;
+    f.sink.reenter_with(move |record| {
+        let Some(auth) = auth.upgrade() else {
+            return;
+        };
+        let c = auth.commitments();
+        if let Some(id) = record.commitment.as_deref().and_then(CommitmentId::parse) {
+            let _ = c.view(id);
+            let _ = c.is_unconsumed(id);
+            let _ = c.lapse(id);
+        }
+        let _ = c.views_of_run(run);
+        let _ = auth.grants().all();
+        let _ = auth.grants().live_of(CapabilityKind::Egress);
+        let _ = auth.runs().views();
+        let _ = auth.runs().view(run);
+    });
+    let (auth, agent, grant, yes) = (f.auth.clone(), f.agent.clone(), f.grant, f.yes);
+    within(move || {
+        let c = auth.commitments();
+        let id = c
+            .prepare(&agent, run, prepared(EffectClass::R2, grant), TTL)
+            .unwrap()
+            .id;
+        let approval = c.request_approval(id, &agent, run, &yes).unwrap();
+        c.authorize(id, &agent, run, Some(approval)).unwrap();
+        begin_as(&auth, &agent, run, id)
+            .unwrap()
+            .finish(Outcome::Succeeded { meta: vec![] });
+        let denied = c
+            .prepare(&agent, run, prepared(EffectClass::R1, grant), TTL)
+            .unwrap()
+            .id;
+        c.deny(denied, &agent, run).unwrap();
+        c.prepare(&agent, run, prepared(EffectClass::R1, grant), TTL)
+            .unwrap();
+        auth.grants()
+            .request(egress_scope(), Duration::from_secs(600), &yes)
+            .unwrap();
+        c.sweep();
+        auth.cancel_run(run).unwrap();
+        auth.emergency_stop();
+    });
+}
+
+/// A slow sink: while the start of one commitment is being recorded, no
+/// lock is held (the rest of the authority goes on), and the commitment is
+/// not yet executing.
+#[test]
+fn a_slow_start_record_holds_no_lock_and_makes_nothing_executable() {
+    let f = Arc::new(scripted());
+    let id = f.authorized();
+    f.sink.hold_next(EvidencePhase::Started);
+    let starting = {
+        let f = f.clone();
+        std::thread::spawn(move || f.begin(id))
+    };
+    f.sink.wait_held();
+    // Recorded, not yet in effect.
+    assert_eq!(f.state(id), CommitmentState::Authorized);
+    assert_eq!(
+        f.auth.commitments().lapse(id),
+        Some("the action is no longer executing")
+    );
+    // The authority goes on meanwhile.
+    let other = {
+        let f = f.clone();
+        within(move || {
+            let other = f.authorized();
+            f.begin(other)
+                .unwrap()
+                .finish(Outcome::Succeeded { meta: vec![] });
+            other
+        })
+    };
+    assert_eq!(f.state(other), CommitmentState::Succeeded);
+    f.sink.release();
+    let guard = starting.join().unwrap().unwrap();
+    assert_eq!(f.state(id), CommitmentState::Executing);
+    guard.finish(Outcome::Succeeded { meta: vec![] });
+    assert_eq!(f.state(id), CommitmentState::Succeeded);
+}
+
+/// A record that fails: the transition does not take effect, and the
+/// commitment is as it was (an approval is never given, an authorization
+/// never made, a start never made).
+#[test]
+fn a_failed_record_leaves_nothing_approved_authorized_or_started() {
+    let f = scripted();
+    let c = f.auth.commitments();
+    // Authorization.
+    let id = f.prepare(EffectClass::R1);
+    f.sink.fail_on(Some(EvidencePhase::Authorized));
+    assert_eq!(
+        c.authorize(id, &f.agent, f.run, None),
+        Err(AuthorityError::EvidenceUnavailable)
+    );
+    assert_eq!(f.state(id), CommitmentState::Prepared);
+    assert_eq!(f.begin(id).unwrap_err(), AuthorityError::NotAuthorized);
+    f.sink.fail_on(None);
+    // Withdrawn, not stuck: it can be authorized once evidence works.
+    c.authorize(id, &f.agent, f.run, None).unwrap();
+    // Approval.
+    let r2 = f.prepare(EffectClass::R2);
+    f.sink.fail_on(Some(EvidencePhase::Approved));
+    assert_eq!(
+        c.request_approval(r2, &f.agent, f.run, &f.yes).unwrap_err(),
+        AuthorityError::EvidenceUnavailable
+    );
+    assert_eq!(
+        c.authorize(r2, &f.agent, f.run, None),
+        Err(AuthorityError::ApprovalRequired)
+    );
+    f.sink.fail_on(None);
+    // An approval whose authorization is not recorded is spent.
+    let approval = c.request_approval(r2, &f.agent, f.run, &f.yes).unwrap();
+    f.sink.fail_on(Some(EvidencePhase::Authorized));
+    assert_eq!(
+        c.authorize(r2, &f.agent, f.run, Some(approval)),
+        Err(AuthorityError::EvidenceUnavailable)
+    );
+    assert_eq!(f.state(r2), CommitmentState::Prepared);
+    assert_eq!(
+        c.authorize(r2, &f.agent, f.run, None),
+        Err(AuthorityError::ApprovalRequired)
+    );
+    f.sink.fail_on(None);
+    // Start.
+    let started = f.authorized();
+    f.sink.fail_on(Some(EvidencePhase::Started));
+    assert_eq!(
+        f.begin(started).unwrap_err(),
+        AuthorityError::EvidenceUnavailable
+    );
+    assert_eq!(f.state(started), CommitmentState::Authorized);
+    assert!(c.lapse(started).is_some());
+    f.sink.fail_on(None);
+    let phases = f.sink.phases();
+    assert!(!phases.contains(&EvidencePhase::Started), "{phases:?}");
+}
+
+/// A cancellation that comes while a start is being recorded wins: the
+/// commitment ends revoked at once (its record says the start was
+/// interrupted), and the start, once recorded, finds it gone.
+#[test]
+fn a_cancellation_while_the_start_is_recorded_wins() {
+    let f = Arc::new(scripted());
+    let id = f.authorized();
+    f.sink.hold_next(EvidencePhase::Started);
+    let starting = {
+        let f = f.clone();
+        std::thread::spawn(move || f.begin(id))
+    };
+    f.sink.wait_held();
+    let (auth, run) = (f.auth.clone(), f.run);
+    within(move || auth.cancel_run(run)).unwrap();
+    assert_eq!(f.state(id), CommitmentState::Revoked);
+    let revoked = f.last(EvidencePhase::Revoked, id);
+    assert!(
+        revoked
+            .detail
+            .contains(&("interrupted".to_string(), "start".to_string())),
+        "{:?}",
+        revoked.detail
+    );
+    f.sink.release();
+    assert_eq!(
+        starting.join().unwrap().unwrap_err(),
+        AuthorityError::RunCancelled
+    );
+    // Nothing revives it.
+    assert_eq!(f.state(id), CommitmentState::Revoked);
+    assert_eq!(f.begin(id).unwrap_err(), AuthorityError::RunCancelled);
+    assert!(f.auth.commitments().lapse(id).is_some());
+}
+
+/// A revocation, a denial, an emergency stop or an expiry that comes while
+/// an evidence-first transition is being recorded wins; the stale
+/// reservation never completes.
+#[test]
+fn whatever_ends_a_commitment_while_its_transition_is_recorded_wins() {
+    // A grant revoked while the authorization is recorded.
+    let f = Arc::new(scripted());
+    let id = f.prepare(EffectClass::R1);
+    f.sink.hold_next(EvidencePhase::Authorized);
+    let authorizing = {
+        let f = f.clone();
+        std::thread::spawn(move || f.auth.commitments().authorize(id, &f.agent, f.run, None))
+    };
+    f.sink.wait_held();
+    let (auth, grant) = (f.auth.clone(), f.grant);
+    within(move || auth.grants().revoke(grant)).unwrap();
+    f.sink.release();
+    assert_eq!(authorizing.join().unwrap(), Err(AuthorityError::Stale));
+    assert_eq!(f.state(id), CommitmentState::Revoked);
+    assert_eq!(f.begin(id).unwrap_err(), AuthorityError::Stale);
+
+    // A denial while the authorization is recorded.
+    let f = Arc::new(scripted());
+    let id = f.prepare(EffectClass::R1);
+    f.sink.hold_next(EvidencePhase::Authorized);
+    let authorizing = {
+        let f = f.clone();
+        std::thread::spawn(move || f.auth.commitments().authorize(id, &f.agent, f.run, None))
+    };
+    f.sink.wait_held();
+    let (auth, agent, run) = (f.auth.clone(), f.agent.clone(), f.run);
+    within(move || auth.commitments().deny(id, &agent, run)).unwrap();
+    f.sink.release();
+    assert_eq!(authorizing.join().unwrap(), Err(AuthorityError::NotPending));
+    assert_eq!(f.state(id), CommitmentState::Denied);
+    let denied = f.last(EvidencePhase::Denied, id);
+    assert!(denied
+        .detail
+        .contains(&("interrupted".to_string(), "authorization".to_string())));
+
+    // An emergency stop while the approval is recorded: no approval.
+    let f = Arc::new(scripted());
+    let id = f.prepare(EffectClass::R2);
+    f.sink.hold_next(EvidencePhase::Approved);
+    let approving = {
+        let f = f.clone();
+        std::thread::spawn(move || {
+            f.auth
+                .commitments()
+                .request_approval(id, &f.agent, f.run, &f.yes)
+                .map(|_| ())
+        })
+    };
+    f.sink.wait_held();
+    let auth = f.auth.clone();
+    within(move || auth.emergency_stop());
+    f.sink.release();
+    assert_eq!(
+        approving.join().unwrap(),
+        Err(AuthorityError::EmergencyStopped)
+    );
+    assert_eq!(f.state(id), CommitmentState::Revoked);
+
+    // An expiry while the start is recorded.
+    let f = Arc::new(scripted());
+    let id = f.authorized();
+    f.sink.hold_next(EvidencePhase::Started);
+    let starting = {
+        let f = f.clone();
+        std::thread::spawn(move || f.begin(id).map(|_| ()))
+    };
+    f.sink.wait_held();
+    f.clock.advance(TTL + Duration::from_secs(1));
+    f.sink.release();
+    assert_eq!(starting.join().unwrap(), Err(AuthorityError::Expired));
+    assert_eq!(f.state(id), CommitmentState::Expired);
+}
+
+/// A sink that panics, caught outside the authority: no authority lock is
+/// poisoned, the interrupted transition is withdrawn, and the authority
+/// goes on.
+#[test]
+fn a_panicking_sink_poisons_no_authority_lock() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    let f = scripted();
+    let c = f.auth.commitments();
+    let id = f.authorized();
+    for phase in [
+        EvidencePhase::Started,
+        EvidencePhase::Authorized,
+        EvidencePhase::Prepared,
+        EvidencePhase::Revoked,
+        EvidencePhase::GrantIssued,
+    ] {
+        f.sink.panic_on(Some(phase));
+        let panicked = catch_unwind(AssertUnwindSafe(|| match phase {
+            EvidencePhase::Started => drop(f.begin(id)),
+            EvidencePhase::Authorized => {
+                let other = f.prepare(EffectClass::R1);
+                let _ = c.authorize(other, &f.agent, f.run, None);
+            }
+            EvidencePhase::Prepared => drop(f.prepare(EffectClass::R1)),
+            EvidencePhase::Revoked => {
+                f.prepare(EffectClass::R1);
+                let _ = f.auth.cancel_run(f.run);
+            }
+            _ => drop(
+                f.auth
+                    .grants()
+                    .request(egress_scope(), Duration::from_secs(600), &f.yes),
+            ),
+        }));
+        assert!(panicked.is_err(), "{phase:?} did not panic");
+        f.sink.panic_on(None);
+        // Every lock is free and none is poisoned.
+        let auth = f.auth.clone();
+        within(move || auth.probe_locks());
+        assert!(c.view(id).is_some());
+        assert!(!f.auth.grants().all().is_empty());
+        assert_eq!(f.auth.grants().rooms_held(), 0, "{phase:?}");
+        assert!(!f.auth.runs().views().is_empty());
+        c.sweep();
+    }
+    // The start the panic interrupted was withdrawn, so it can start now
+    // (its run was cancelled since: it ended revoked).
+    assert_eq!(f.state(id), CommitmentState::Revoked);
+    let run = f
+        .auth
+        .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    let fresh = c
+        .prepare(&f.agent, run, prepared(EffectClass::R1, f.grant), TTL)
+        .unwrap()
+        .id;
+    c.authorize(fresh, &f.agent, run, None).unwrap();
+    f.sink.panic_on(Some(EvidencePhase::Started));
+    assert!(catch_unwind(AssertUnwindSafe(|| drop(begin_as(
+        &f.auth, &f.agent, run, fresh
+    ))))
+    .is_err());
+    f.sink.panic_on(None);
+    assert_eq!(f.state(fresh), CommitmentState::Authorized);
+    begin_as(&f.auth, &f.agent, run, fresh)
+        .unwrap()
+        .finish(Outcome::Succeeded { meta: vec![] });
+}
+
+/// A commitment starts exactly once, however its starts race, also while
+/// its first start is being recorded.
+#[test]
+fn a_commitment_starts_exactly_once_while_its_start_is_recorded() {
+    let f = Arc::new(scripted());
+    let id = f.authorized();
+    f.sink.hold_next(EvidencePhase::Started);
+    let first = {
+        let f = f.clone();
+        std::thread::spawn(move || f.begin(id))
+    };
+    f.sink.wait_held();
+    // A second start while the first is recorded: refused at once.
+    let second = {
+        let f = f.clone();
+        within(move || f.begin(id).map(|_| ()))
+    };
+    assert_eq!(second, Err(AuthorityError::NotAuthorized));
+    f.sink.release();
+    let guard = first.join().unwrap().unwrap();
+    assert_eq!(f.begin(id).unwrap_err(), AuthorityError::NotAuthorized);
+    guard.finish(Outcome::Succeeded { meta: vec![] });
+    // Many racing starts, one success.
+    let id = f.authorized();
+    let barrier = Arc::new(std::sync::Barrier::new(16));
+    let starts: Vec<_> = (0..16)
+        .map(|_| {
+            let (f, barrier) = (f.clone(), barrier.clone());
+            std::thread::spawn(move || {
+                barrier.wait();
+                f.begin(id).map(|guard| {
+                    guard.finish(Outcome::Succeeded { meta: vec![] });
+                })
+            })
+        })
+        .collect();
+    let started = starts
+        .into_iter()
+        .map(|start| start.join().unwrap())
+        .filter(Result::is_ok)
+        .count();
+    assert_eq!(started, 1);
+    let starts = f
+        .sink
+        .phases()
+        .iter()
+        .filter(|p| **p == EvidencePhase::Started)
+        .count();
+    assert_eq!(starts, 2);
+}
+
+/// Evidence first, observed from inside the sink: when an approval, an
+/// authorization or a start is recorded, it has not taken effect yet.
+#[test]
+fn no_transition_is_in_effect_before_its_record() {
+    let f = scripted();
+    let seen: Arc<Mutex<Vec<(EvidencePhase, CommitmentState)>>> = Arc::default();
+    let (auth, saw): (Weak<Authority>, _) = (Arc::downgrade(&f.auth), seen.clone());
+    f.sink.reenter_with(move |record| {
+        if !matches!(
+            record.phase,
+            EvidencePhase::Approved | EvidencePhase::Authorized | EvidencePhase::Started
+        ) {
+            return;
+        }
+        let (Some(auth), Some(id)) = (
+            auth.upgrade(),
+            record.commitment.as_deref().and_then(CommitmentId::parse),
+        ) else {
+            return;
+        };
+        let state = auth.commitments().view(id).unwrap().state;
+        saw.lock().unwrap().push((record.phase, state));
+    });
+    let c = f.auth.commitments();
+    let id = f.prepare(EffectClass::R2);
+    let approval = c.request_approval(id, &f.agent, f.run, &f.yes).unwrap();
+    c.authorize(id, &f.agent, f.run, Some(approval)).unwrap();
+    assert_eq!(f.state(id), CommitmentState::Authorized);
+    let guard = f.begin(id).unwrap();
+    assert_eq!(f.state(id), CommitmentState::Executing);
+    guard.finish(Outcome::Succeeded { meta: vec![] });
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            (EvidencePhase::Approved, CommitmentState::Prepared),
+            (EvidencePhase::Authorized, CommitmentState::Prepared),
+            (EvidencePhase::Started, CommitmentState::Authorized),
+        ]
+    );
+}

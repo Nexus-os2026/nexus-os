@@ -359,6 +359,28 @@ fn the_production_executor_routes_governed_actions_only_through_phase_three() {
     );
 }
 
+/// One confirmation window at a time, without a lock held across it: while
+/// one is on screen the next waits (within its bound) and, the bound
+/// passed, gets no window at all (no confirmation); once it is answered the
+/// next opens.
+#[test]
+fn one_confirmation_at_a_time_and_a_wait_is_bounded() {
+    use super::DialogTurn;
+    use std::time::{Duration, Instant};
+    let first = DialogTurn::take_within(Duration::from_secs(1)).expect("free");
+    let began = Instant::now();
+    assert!(DialogTurn::take_within(Duration::from_millis(200)).is_none());
+    assert!(began.elapsed() >= Duration::from_millis(200));
+    let waiting = std::thread::spawn(|| DialogTurn::take_within(Duration::from_secs(10)).is_some());
+    std::thread::sleep(Duration::from_millis(50));
+    drop(first);
+    assert!(
+        waiting.join().unwrap(),
+        "the next opens once one is answered"
+    );
+    assert!(DialogTurn::take_within(Duration::from_millis(10)).is_some());
+}
+
 /// The answer of a confirmation arms only once the delay has passed and
 /// the end and the right edge of its text have been reached; a view not
 /// laid out yet has reached nothing.

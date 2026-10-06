@@ -92,6 +92,13 @@ impl Control {
         &self.authority
     }
 
+    /// Take and release every lock of the pipeline once (tests).
+    #[cfg(test)]
+    pub(crate) fn probe_locks(&self) {
+        drop(self.pending.lock().expect("pending"));
+        self.authority.probe_locks();
+    }
+
     /// Commit to a prepared effect for `agent` in `run`. Nothing happens yet.
     pub(crate) fn propose(
         &self,

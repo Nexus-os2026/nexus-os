@@ -433,6 +433,14 @@ impl GovernedControl {
         started
     }
 
+    /// Take and release every lock of the control once (tests).
+    #[cfg(test)]
+    pub(crate) fn probe_locks(&self) {
+        self.control.probe_locks();
+        self.display.probe_locks();
+        drop(self.detached.lock().expect("detached"));
+    }
+
     /// Whether an agent display start is under way (quitting waits for it,
     /// so its end is recorded).
     pub fn is_starting_display(&self) -> bool {

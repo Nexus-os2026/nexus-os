@@ -180,6 +180,12 @@ impl RunRegistry {
         }
     }
 
+    /// Take and release the runs' lock once (tests).
+    #[cfg(test)]
+    pub(crate) fn probe_locks(&self) {
+        drop(self.runs.lock().expect("runs"));
+    }
+
     pub fn view(&self, run: RunId) -> Option<RunView> {
         self.runs
             .lock()

@@ -13,6 +13,8 @@ pub mod policy;
 pub mod run;
 
 #[cfg(test)]
+pub(crate) mod scripted;
+#[cfg(test)]
 mod tests;
 
 use self::approval::{ControlConfirmer, ResumeConfirmation};
@@ -168,6 +170,15 @@ impl Authority {
 
     pub(crate) fn generation(&self) -> &Arc<PolicyGeneration> {
         &self.generation
+    }
+
+    /// Take and release every lock of the authority once (tests: it blocks
+    /// while another thread holds one).
+    #[cfg(test)]
+    pub(crate) fn probe_locks(&self) {
+        self.commitments.probe_locks();
+        self.grants.probe_locks();
+        self.runs.probe_locks();
     }
 
     fn record(&self, record: &EvidenceRecord) -> Result<(), AuthorityError> {

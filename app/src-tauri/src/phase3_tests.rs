@@ -3960,6 +3960,11 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
         ),
         "the answer stays unarmed for a second"
     );
+    for constant in [
+        "const DIALOG_TURN_WAIT: std::time::Duration =\n    nexus_governed_control::authority::commitment::MAX_COMMITMENT_TTL;",
+    ] {
+        assert!(front.contains(constant), "{constant}");
+    }
     // The trait is defined once and never renamed.
     assert_eq!(
         renaming("ControlConfirmer"),
@@ -3968,9 +3973,14 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
     );
 }
 
-/// The owner's confirmation window, pinned whole (normalized text).
-const CONFIRMATION_WINDOW: [(&str, &str); 4] = [
-    ("ControlDialogs::confirm", "use*;staticONE_AT_A_TIME:Mutex<()>=Mutex::new(());let_one=ONE_AT_A_TIME.lock().unwrap_or_else(|p|p.into_inner());let(sender,receiver)=channel();let(title,answer)=(title.to_string(),answer.to_string());letshown=self.0.run_on_main_thread(move||{let(dialog,_)=owner_window(&title,&message,&answer);letsender=RefCell::new(Some(sender));dialog.connect_response(move|dialog,response|{ifletSome(sender)=sender.borrow_mut().take(){let_=sender.send(response==ResponseType::Accept);}dialog.close();});dialog.present();});shown.is_ok()&&receiver.recv().unwrap_or(false)"),
+/// The owner's confirmation window, pinned whole (normalized text): the
+/// one-at-a-time turn (a flag, never a lock held across the dialog), the
+/// window and its arming.
+const CONFIRMATION_WINDOW: [(&str, &str); 7] = [
+    ("DialogTurn::take", "Self::take_within(DIALOG_TURN_WAIT)"),
+    ("ControlDialogs::confirm", "use*;letSome(_turn)=DialogTurn::take()else{returnfalse;};let(sender,receiver)=channel();let(title,answer)=(title.to_string(),answer.to_string());letshown=self.0.run_on_main_thread(move||{let(dialog,_)=owner_window(&title,&message,&answer);letsender=RefCell::new(Some(sender));dialog.connect_response(move|dialog,response|{ifletSome(sender)=sender.borrow_mut().take(){let_=sender.send(response==ResponseType::Accept);}dialog.close();});dialog.present();});shown.is_ok()&&receiver.recv().unwrap_or(false)"),
+    ("DialogTurn::take_within", "let(busy,freed)=&DIALOG_BUSY;letdeadline=Instant::now()+wait;letmuton_screen=busy.lock().unwrap_or_else(|p|p.into_inner());while*on_screen{letleft=deadline.saturating_duration_since(Instant::now());ifleft.is_zero(){returnNone;}on_screen=freed.wait_timeout(on_screen,left).unwrap_or_else(|p|p.into_inner()).0;}*on_screen=true;Some(DialogTurn)"),
+    ("DialogTurn::drop", "let(busy,freed)=&DIALOG_BUSY;*busy.lock().unwrap_or_else(|p|p.into_inner())=false;freed.notify_one();"),
     ("owner_window", "use*;useCell;useRc;letdialog=Dialog::new();dialog.set_title(title);dialog.set_modal(true);dialog.set_keep_above(true);dialog.set_default_size(900,560);dialog.add_button(\"Cancel\",ResponseType::Cancel);letallow=dialog.add_button(answer,ResponseType::Accept);allow.set_sensitive(false);dialog.set_default_response(ResponseType::Cancel);lettext=Label::new(None);letlines:Vec<String>=message.split('\\n').map(|line|format!(\"\\u{200E}{line}\")).collect();text.set_text(&lines.join(\"\\n\"));text.set_line_wrap(false);text.set_xalign(0.0);text.set_yalign(0.0);letmonospace=AttrList::new();monospace.insert(AttrString::new_family(\"monospace\"));text.set_attributes(Some(&monospace));letscroll=ScrolledWindow::builder().build();scroll.set_policy(PolicyType::Automatic,PolicyType::Automatic);scroll.add(&text);dialog.content_area().pack_start(&scroll,true,true,0);letarming=Rc::new(Cell::new(Arming::default()));letupdate:Rc<dynFn()>={let(arming,allow,scroll)=(arming.clone(),allow.clone(),scroll.clone());Rc::new(move||{letmutnow=arming.get();let(down,across)=(scroll.vadjustment(),scroll.hadjustment());now.end_reached|=reached(down.value(),down.page_size(),down.upper());now.edge_reached|=reached(across.value(),across.page_size(),across.upper());arming.set(now);allow.set_sensitive(now.ready());})};foradjustmentin[scroll.vadjustment(),scroll.hadjustment()]{letmoved=update.clone();adjustment.connect_value_changed(move|_|moved());letresized=update.clone();adjustment.connect_changed(move|_|resized());}{let(arming,update)=(arming.clone(),update.clone());timeout_add_local_once(ARMING_DELAY,move||{letmutnow=arming.get();now.delay_passed=true;arming.set(now);update();});}dialog.show_all();(dialog,allow)"),
     ("Arming::ready", "self.delay_passed&&self.end_reached&&self.edge_reached"),
     ("reached", "page>0.0&&value+page>=upper-1.0"),
@@ -3992,18 +4002,24 @@ fn p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer() {
     );
     let request =
         compact(one_fn(commitment, "CommitmentRegistry::request_approval").body_text(commitment));
+    // The dialog is shown with no lock held; afterwards the commitment must
+    // be exactly what was shown, unreserved and live; the approval is
+    // reserved, recorded with the lock released, and minted only once the
+    // same reservation of a still live commitment completes.
     assert_in_order(
         &request,
         &[
-            "letconfirmed=confirmer.confirm_action(&request);",
-            "ifentry.state!=CommitmentState::Prepared||entry.binding!=binding{returnErr(AuthorityError::NotPending);}",
-            "self.live_check(id,entry,agent,run)?;",
+            "self.flush(deferred);let(request,binding)=asked?;letconfirmed=confirmer.confirm_action(&request);",
+            "Some(entry)ifentry.state!=CommitmentState::Prepared||entry.binding!=binding||entry.reserved.is_some()=>{Err(AuthorityError::NotPending)}",
+            "self.live_check(id,entry,agent,run,now,&mutdeferred)",
             "if!confirmed{",
-            "self.record(&record)?;",
+            "lettoken=self.reserve(entry,Transition::Approve);",
+            "self.flush(deferred);let(token,record)=answered?;let_reserved=Reserved{registry:self,id,token};self.record(&record)?;self.complete(id,token,CommitmentState::Prepared,agent,run,|_,_|())?;",
             "Ok(R2Approval::confirmed(id,binding))",
         ],
         "request_approval",
     );
+    assert_eq!(request.matches("confirm_action(").count(), 1);
     let approval = production_source("crates/nexus-governed-control/src/authority/approval.rs");
     let at = approval.find("pub struct R2Approval").expect("R2Approval");
     // Every attribute of the item: from the previous item's end.
@@ -4048,12 +4064,29 @@ fn p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer() {
     );
     assert!(compact(approval)
         .contains("pub(crate)fnconfirmed(commitment:CommitmentId,binding:Digest)->Self"));
-    // Authorizing consumes it and checks it names this commitment's binding.
+    // Authorizing consumes it and checks it names this commitment's binding
+    // (under the lock, before reserving); the authorization is recorded
+    // before it takes effect.
+    let authorization =
+        compact(one_fn(commitment, "CommitmentRegistry::authorization").body_text(commitment));
+    assert_in_order(
+        &authorization,
+        &[
+            "ifapproval.commitment()!=id||approval.binding()!=&entry.binding{returnErr(AuthorityError::ApprovalMismatch);}",
+            "lettoken=self.reserve(entry,Transition::Authorize);",
+        ],
+        "CommitmentRegistry::authorization",
+    );
     let authorize =
         compact(one_fn(commitment, "CommitmentRegistry::authorize").body_text(commitment));
-    assert!(authorize.contains(
-        "ifapproval.commitment()!=id||approval.binding()!=&entry.binding{returnErr(AuthorityError::ApprovalMismatch);}"
-    ));
+    assert_in_order(
+        &authorize,
+        &[
+            "self.authorization(id,entry,agent,run,approval,now,&mutdeferred)",
+            "self.record(&record)?;self.complete(id,token,CommitmentState::Prepared,agent,run,|entry,_|{entry.approval=approved.or(entry.approval);entry.state=CommitmentState::Authorized;})",
+        ],
+        "CommitmentRegistry::authorize",
+    );
 }
 
 /// Every governed effect is a pending effect held by the one pipeline and
@@ -4370,6 +4403,7 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::commitment::CommitmentState",
     "nexus_governed_control::authority::commitment::CommitmentState::Executing",
     "nexus_governed_control::authority::commitment::CommitmentView",
+    "nexus_governed_control::authority::commitment::MAX_COMMITMENT_TTL",
     "nexus_governed_control::authority::evidence::EvidenceRecord",
     "nexus_governed_control::authority::evidence::EvidenceRecord::to_json",
     "nexus_governed_control::authority::evidence::EvidenceSink",
@@ -6959,13 +6993,45 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         &act,
         &[
             "if!(self.running)(agent_id){returnErr(",
-            "letmutagents=self.world.agents();",
-            ".stopped_at.get(agent_id).is_some_and(|stopped|*stopped>self.began)",
-            ".open_run(agent.clone(),RunOrigin::AgentGoal)",
-            "agents.runs.entry(agent_id.to_string()).or_default().push(run);",
+            "letrun=matchself.loop_run(agent_id,&agent)?{",
+            "None=>self.open_loop_run(agent_id,&agent)?}",
             ".agent_action(&agent,run,intent)",
         ],
         "AgentBridge::act",
+    );
+    let stopped = compact(one_fn(world, "AgentBridge::stopped_since_began").body_text(world));
+    assert_eq!(
+        stopped,
+        "agents.stopped_at.get(agent_id).is_some_and(|stopped|*stopped>self.began)"
+    );
+    let loop_run = compact(one_fn(world, "AgentBridge::loop_run").body_text(world));
+    assert_in_order(
+        &loop_run,
+        &[
+            "letcurrent=self.run.lock()",
+            "ifself.stopped_since_began(&self.world.agents(),agent_id){returnErr(",
+            "Some((owner,run))ifowner==agent=>Ok(Some(*run)),",
+        ],
+        "AgentBridge::loop_run",
+    );
+    // The run is opened (and recorded) with no lock held, then kept under
+    // the lock a stop takes, checked again there; one not kept ends.
+    let open = compact(one_fn(world, "AgentBridge::open_loop_run").body_text(world));
+    assert_in_order(
+        &open,
+        &[
+            ".open_run(agent.clone(),RunOrigin::AgentGoal)",
+            "letmutcurrent=self.run.lock()",
+            "letmutagents=self.world.agents();",
+            "ifself.stopped_since_began(&agents,agent_id){Kept::Stopped}",
+            "agents.runs.entry(agent_id.to_string()).or_default().push(opened);",
+            "Kept::Stopped=>{let_=self.world.control.cancel_run(opened);",
+        ],
+        "AgentBridge::open_loop_run",
+    );
+    assert!(
+        !open[..open.find(".open_run(").unwrap()].contains(".lock()"),
+        "{open}"
     );
     let cancel = compact(one_fn(world, "RealWorld::cancel_agent").body_text(world));
     assert_in_order(

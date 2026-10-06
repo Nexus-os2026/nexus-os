@@ -493,45 +493,9 @@ impl AgentBridge {
             return Err("governed control: the agent is not running".into());
         }
         let agent = AgentId::new(agent_id).ok_or("governed control: invalid agent identity")?;
-        let run = {
-            let mut current = self.run.lock().unwrap_or_else(|p| p.into_inner());
-            let mut agents = self.world.agents();
-            if agents
-                .stopped_at
-                .get(agent_id)
-                .is_some_and(|stopped| *stopped > self.began)
-            {
-                return Err("governed control: the owner stopped this agent".into());
-            }
-            match current.as_ref() {
-                Some((owner, run)) if *owner == agent => *run,
-                Some(_) => return Err("governed control: one agent per loop".into()),
-                None => {
-                    let run = self
-                        .world
-                        .control
-                        .open_run(agent.clone(), RunOrigin::AgentGoal)
-                        .map_err(|e| e.to_string())?;
-                    // Tracked under the lock a stop takes: a stop cannot
-                    // come between opening the run and remembering it.
-                    let registry = self.world.control.authority().runs();
-                    for runs in agents.runs.values_mut() {
-                        runs.retain(|r| {
-                            registry
-                                .view(*r)
-                                .is_some_and(|view| !view.cancelled && !view.finished)
-                        });
-                    }
-                    agents.runs.retain(|_, runs| !runs.is_empty());
-                    agents
-                        .runs
-                        .entry(agent_id.to_string())
-                        .or_default()
-                        .push(run);
-                    *current = Some((agent.clone(), run));
-                    run
-                }
-            }
+        let run = match self.loop_run(agent_id, &agent)? {
+            Some(run) => run,
+            None => self.open_loop_run(agent_id, &agent)?,
         };
         match self
             .world
@@ -545,6 +509,95 @@ impl AgentBridge {
                 "summary": view.summary,
             })
             .to_string()),
+        }
+    }
+}
+
+impl AgentBridge {
+    /// Whether the owner stopped this agent since its loop began (read
+    /// under the lock its stop takes).
+    fn stopped_since_began(&self, agents: &Agents, agent_id: &str) -> bool {
+        agents
+            .stopped_at
+            .get(agent_id)
+            .is_some_and(|stopped| *stopped > self.began)
+    }
+
+    /// This loop's run, if it has one and the owner has not stopped it.
+    fn loop_run(&self, agent_id: &str, agent: &AgentId) -> Result<Option<RunId>, String> {
+        let current = self.run.lock().unwrap_or_else(|p| p.into_inner());
+        if self.stopped_since_began(&self.world.agents(), agent_id) {
+            return Err("governed control: the owner stopped this agent".into());
+        }
+        match current.as_ref() {
+            Some((owner, run)) if owner == agent => Ok(Some(*run)),
+            Some(_) => Err("governed control: one agent per loop".into()),
+            None => Ok(None),
+        }
+    }
+
+    /// Open this loop's run. It is opened (and its opening recorded) with no
+    /// lock held, then kept under the lock a stop takes, checked again
+    /// there: a stop that came meanwhile cancels it, so a stop cannot come
+    /// between opening the run and remembering it unseen.
+    fn open_loop_run(&self, agent_id: &str, agent: &AgentId) -> Result<RunId, String> {
+        let opened = self
+            .world
+            .control
+            .open_run(agent.clone(), RunOrigin::AgentGoal)
+            .map_err(|e| e.to_string())?;
+        enum Kept {
+            Kept,
+            Raced(RunId),
+            Stopped,
+            OtherAgent,
+        }
+        let kept = {
+            let mut current = self.run.lock().unwrap_or_else(|p| p.into_inner());
+            let mut agents = self.world.agents();
+            if self.stopped_since_began(&agents, agent_id) {
+                Kept::Stopped
+            } else {
+                match current.as_ref() {
+                    // Another action of this loop opened its run meanwhile.
+                    Some((owner, run)) if owner == agent => Kept::Raced(*run),
+                    Some(_) => Kept::OtherAgent,
+                    None => {
+                        let registry = self.world.control.authority().runs();
+                        for runs in agents.runs.values_mut() {
+                            runs.retain(|r| {
+                                registry
+                                    .view(*r)
+                                    .is_some_and(|view| !view.cancelled && !view.finished)
+                            });
+                        }
+                        agents.runs.retain(|_, runs| !runs.is_empty());
+                        agents
+                            .runs
+                            .entry(agent_id.to_string())
+                            .or_default()
+                            .push(opened);
+                        *current = Some((agent.clone(), opened));
+                        Kept::Kept
+                    }
+                }
+            }
+        };
+        // What was opened but not kept ends now, outside the locks.
+        match kept {
+            Kept::Kept => Ok(opened),
+            Kept::Raced(run) => {
+                self.world.control.finish_run(opened);
+                Ok(run)
+            }
+            Kept::Stopped => {
+                let _ = self.world.control.cancel_run(opened);
+                Err("governed control: the owner stopped this agent".into())
+            }
+            Kept::OtherAgent => {
+                let _ = self.world.control.cancel_run(opened);
+                Err("governed control: one agent per loop".into())
+            }
         }
     }
 }
@@ -602,9 +655,12 @@ impl ControlDialogs {
         use gtk::prelude::*;
         // One confirmation at a time: the next window opens (and its arming
         // delay starts) only once this one is answered, so a click meant
-        // for one window can never land on another already armed.
-        static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
+        // for one window can never land on another already armed. The turn
+        // is a flag, not a lock held across the dialog; waiting for it is
+        // bounded, and no turn is no confirmation.
+        let Some(_turn) = DialogTurn::take() else {
+            return false;
+        };
         let (sender, receiver) = std::sync::mpsc::channel();
         let (title, answer) = (title.to_string(), answer.to_string());
         let shown = self.0.run_on_main_thread(move || {
@@ -619,6 +675,56 @@ impl ControlDialogs {
             dialog.present();
         });
         shown.is_ok() && receiver.recv().unwrap_or(false)
+    }
+}
+
+/// The longest a confirmation waits for the one on screen to be answered
+/// (as long as a commitment may wait to start).
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+const DIALOG_TURN_WAIT: std::time::Duration =
+    nexus_governed_control::authority::commitment::MAX_COMMITMENT_TTL;
+
+/// Whether a confirmation window is on screen, and its waiters.
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+static DIALOG_BUSY: (std::sync::Mutex<bool>, std::sync::Condvar) =
+    (std::sync::Mutex::new(false), std::sync::Condvar::new());
+
+/// The turn of one confirmation window: given back, and the next waiter
+/// woken, when it ends, however it ends.
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+struct DialogTurn;
+
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+impl DialogTurn {
+    fn take() -> Option<Self> {
+        Self::take_within(DIALOG_TURN_WAIT)
+    }
+
+    fn take_within(wait: std::time::Duration) -> Option<Self> {
+        let (busy, freed) = &DIALOG_BUSY;
+        let deadline = std::time::Instant::now() + wait;
+        let mut on_screen = busy.lock().unwrap_or_else(|p| p.into_inner());
+        while *on_screen {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                return None;
+            }
+            on_screen = freed
+                .wait_timeout(on_screen, left)
+                .unwrap_or_else(|p| p.into_inner())
+                .0;
+        }
+        *on_screen = true;
+        Some(DialogTurn)
+    }
+}
+
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+impl Drop for DialogTurn {
+    fn drop(&mut self) {
+        let (busy, freed) = &DIALOG_BUSY;
+        *busy.lock().unwrap_or_else(|p| p.into_inner()) = false;
+        freed.notify_one();
     }
 }
 

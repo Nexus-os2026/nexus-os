@@ -828,3 +828,76 @@ fn starting_the_agent_display_needs_a_grant_and_is_recorded() {
         "{after:?}"
     );
 }
+
+/// The start of the agent display is recorded with no lock held: while its
+/// record is written, the display's status and a stop go on (neither waits
+/// for the start), and the start, overtaken, ends without a display.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_display_start_is_recorded_with_no_lock_held_and_a_stop_overtakes_it() {
+    use crate::authority::evidence::EvidencePhase;
+    use crate::authority::scripted::{within, ScriptedSink};
+    let root = temp_root("display-start-lock");
+    let sink = ScriptedSink::new();
+    let control = Arc::new(
+        GovernedControl::new(
+            root.0.path(),
+            Vault::Disabled,
+            sink.clone(),
+            Arc::new(SystemClock::default()),
+        )
+        .unwrap(),
+    );
+    let weak = Arc::downgrade(&control);
+    sink.probe_with(move || {
+        if let Some(control) = weak.upgrade() {
+            control.probe_locks();
+        }
+    });
+    control
+        .request_grant(
+            &GrantRequest::Perception,
+            Duration::from_secs(600),
+            &Yes::new(true),
+        )
+        .unwrap();
+    sink.hold_next(EvidencePhase::DisplayStarted);
+    let starting = {
+        let control = control.clone();
+        std::thread::spawn(move || control.start_display())
+    };
+    sink.wait_held();
+    assert!(control.is_starting_display());
+    {
+        let control = control.clone();
+        within(move || {
+            assert!(control.status().display.is_none());
+            control.stop_display();
+        });
+    }
+    sink.release();
+    let started = starting.join().unwrap();
+    assert_eq!(
+        started.unwrap_err(),
+        AuthorityError::Closed("the agent display was stopped while it started")
+    );
+    assert!(control.status().display.is_none());
+    assert!(!control.is_starting_display());
+    // Its recorded start is recorded as ended.
+    let phases = sink.phases();
+    assert_eq!(
+        phases
+            .iter()
+            .filter(|p| matches!(
+                p,
+                EvidencePhase::DisplayStarted | EvidencePhase::DisplayStopped
+            ))
+            .collect::<Vec<_>>(),
+        [
+            &EvidencePhase::DisplayStarted,
+            &EvidencePhase::DisplayStopped
+        ]
+    );
+    assert!(sink.probes() >= phases.len());
+    assert_eq!(sink.violations(), 0);
+}
