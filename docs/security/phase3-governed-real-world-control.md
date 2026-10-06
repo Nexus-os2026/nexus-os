@@ -1,11 +1,30 @@
 # Phase Three: governed real-world control
 
-Status: Candidate 9 on `repair/p3-candidate9`, a bounded repair of
+Status: Candidate 10 closure work on `repair/p3-candidate10-closure`, based on
+Candidate 9 (`9d5fdf95920bdeddb7453911f86390417b6a4604`), a bounded repair of
 Candidate 8 (`7d1eaced` on `implement/p3-governed-real-world-control`, base
 `forward/post-p2-hardening` `309f2c5a`), Linux support profile, awaiting
 independent Architect review. It is not integrated into `main` and is not a
 completed phase. This document states what Phase Three governs, how, and
 what it does not claim.
+
+## Architect decisions P1-A and P3-A (Candidate 10)
+
+Candidate 9 closes the demonstrated in-scope R2 content-scroll spoof.
+The native GTK confirmation is **not authenticated secure attention against
+a hostile same-user X11 client**. Hostile desktop clients running as the same
+user and synthetic same-session input are outside the existing Phase Three
+threat model. Its fixed header and marked content do not establish such an
+authentication boundary.
+
+Machine-policy checks rely on the trusted-root/trusted-administrator
+assumption. Root/admin is outside the Phase Three threat model. The checks
+are **not atomic confinement against hostile root**: a privileged adversary
+could change policy between checking it and Chrome reading it. The
+post-launch proxy observation is **detection, not prevention**; a bypass may
+already have reached its initial page before Nexus refuses the session.
+These are explicit limits of the existing design, not additional isolation
+claims. Candidate 10 adds no secure-attention or namespace isolation.
 
 ## 1. One authority architecture
 
