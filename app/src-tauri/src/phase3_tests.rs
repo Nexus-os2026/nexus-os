@@ -2163,6 +2163,10 @@ fn trait_impls(trait_name: &str) -> Vec<(&'static str, String)> {
     let mut impls = Vec::new();
     for file in files_naming(trait_name) {
         for block in impl_blocks(&masked(production_source(file))) {
+            assert!(
+                !block.trait_name.starts_with('$'),
+                "{file}: an impl of a macro fragment hides its trait"
+            );
             if block.trait_name == trait_name {
                 impls.push((file, block.self_type));
             }
@@ -2171,7 +2175,9 @@ fn trait_impls(trait_name: &str) -> Vec<(&'static str, String)> {
     impls
 }
 
-/// Files renaming `word` with `as`, or defining a trait named `word`.
+/// Files renaming `word` with `as`. (A second trait of the same name needs
+/// no check here: `trait_impls` matches traits by their last segment, so its
+/// impls are counted with the real one's.)
 fn renaming(word: &str) -> Vec<&'static str> {
     files_naming(word)
         .into_iter()
@@ -2806,9 +2812,99 @@ fn item_end(b: &[u8], mut i: usize) -> usize {
     b.len()
 }
 
-/// Production text of a Rust source: comments removed, and every item under
-/// `#[cfg(test)]` or `#[cfg(any(test, ..))]` removed. Literals are kept and
-/// are never read as delimiters or attributes.
+/// If a `#[cfg(...)]` attribute starts at `i` and its predicate holds only
+/// in test builds (`test`, an `all(..)` with such a member, or an `any(..)`
+/// whose members all are), the end of the attribute. An item shipped in
+/// some build (`any(test, target_os = "linux")`) is not test-only.
+fn test_only_cfg(b: &[u8], i: usize) -> Option<usize> {
+    if !b[i..].starts_with(b"#[cfg(") {
+        return None;
+    }
+    let open = i + b"#[cfg(".len();
+    let mut depth = 1usize;
+    let mut j = open;
+    while j < b.len() {
+        match b[j] {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            b'"' => j = literal_end(b, j)? - 1,
+            _ => {}
+        }
+        j += 1;
+    }
+    if b.get(j + 1) != Some(&b']') {
+        return None;
+    }
+    let predicate = std::str::from_utf8(&b[open..j]).ok()?;
+    cfg_requires_test(predicate).then_some(j + 2)
+}
+
+/// Whether a `cfg` predicate holds only when `test` is set, or one of the
+/// features only test builds enable (on dev-dependency edges, or by the
+/// workspace's integration-test crate; `p3_g6_12` pins that).
+fn cfg_requires_test(predicate: &str) -> bool {
+    const TEST_ONLY_FEATURES: [&str; 5] = [
+        "test-support",
+        "test-utils",
+        "testing",
+        "live-sandbox-harness",
+        "development-toolchain",
+    ];
+    let predicate = predicate.trim();
+    if TEST_ONLY_FEATURES
+        .iter()
+        .any(|feature| predicate == format!("feature = \"{feature}\""))
+    {
+        return true;
+    }
+    let members = |inner: &str| -> Vec<String> {
+        let mut out = Vec::new();
+        let (mut depth, mut start, mut quoted) = (0i32, 0usize, false);
+        for (at, c) in inner.char_indices() {
+            match c {
+                '"' => quoted = !quoted,
+                '(' if !quoted => depth += 1,
+                ')' if !quoted => depth -= 1,
+                ',' if !quoted && depth == 0 => {
+                    out.push(inner[start..at].trim().to_string());
+                    start = at + 1;
+                }
+                _ => {}
+            }
+        }
+        out.push(inner[start..].trim().to_string());
+        out.retain(|member| !member.is_empty());
+        out
+    };
+    if predicate == "test" {
+        true
+    } else if let Some(inner) = predicate
+        .strip_prefix("all(")
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        members(inner)
+            .iter()
+            .any(|member| cfg_requires_test(member))
+    } else if let Some(inner) = predicate
+        .strip_prefix("any(")
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        let members = members(inner);
+        !members.is_empty() && members.iter().all(|member| cfg_requires_test(member))
+    } else {
+        false
+    }
+}
+
+/// Production text of a Rust source: comments removed, and every item that
+/// only a test build compiles removed (its `cfg` requires `test` or a
+/// test-only feature; see `cfg_requires_test`). Literals are kept and are
+/// never read as delimiters or attributes.
 fn production_text(src: &str) -> String {
     let b = src.as_bytes();
     let mut out = Vec::with_capacity(b.len());
@@ -2820,8 +2916,7 @@ fn production_text(src: &str) -> String {
         } else if let Some(end) = comment_end(b, i) {
             out.push(b' ');
             i = end;
-        } else if b[i..].starts_with(b"#[cfg(test)]") || b[i..].starts_with(b"#[cfg(any(test") {
-            let attribute = i + b[i..].windows(2).position(|w| w == b")]").unwrap() + 2;
+        } else if let Some(attribute) = test_only_cfg(b, i) {
             i = item_end(b, attribute);
         } else {
             out.push(b[i]);
@@ -3542,6 +3637,8 @@ fn p3e_scan_01_the_local_scanner_is_the_phase_zero_scanner() {
         "fn literal_end(b: &[u8], i: usize) -> Option<usize> {",
         "fn comment_end(b: &[u8], i: usize) -> Option<usize> {",
         "fn item_end(b: &[u8], mut i: usize) -> usize {",
+        "fn test_only_cfg(b: &[u8], i: usize) -> Option<usize> {",
+        "fn cfg_requires_test(predicate: &str) -> bool {",
         "fn production_text(src: &str) -> String {",
     ] {
         assert_eq!(
@@ -3557,6 +3654,9 @@ fn p3e_scan_01_the_local_scanner_is_the_phase_zero_scanner() {
         "/* block /* nested */ */ fn b<'a>(x: &'a str) -> char { '}' }\n",
         "#[cfg(test)]\nmod tests { fn t() { let _ = \"}\"; } }\n",
         "#[cfg(any(test, feature = \"x\"))]\npub fn helper() -> [u8; 2] { [1, 2] }\n",
+        "#[cfg(any(test, target_os = \"linux\"))]\nfn shipped() {}\n",
+        "#[cfg(all(test, unix))]\nfn only_in_tests() {}\n",
+        "#[cfg(any(test, all(test, feature = \"x\")))]\nfn also_only_in_tests() {}\n",
         "#[cfg(test)]\nuse std::fmt;\n",
         "fn c() -> &'static str { r#\"raw \" // kept\"# }\n",
         "fn d() -> S { S { #[cfg(test)] probe: 1, kept_field: 2 } }\n",
@@ -3569,8 +3669,15 @@ fn p3e_scan_01_the_local_scanner_is_the_phase_zero_scanner() {
         text.contains("fn b<'a>(x: &'a str) -> char { '}' }"),
         "{text}"
     );
+    assert!(!text.contains("mod tests"), "{text}");
+    // An item some build ships is production (it only also compiles in
+    // tests); an item no build but a test build compiles is not.
     assert!(
-        !text.contains("mod tests") && !text.contains("helper"),
+        text.contains("pub fn helper()") && text.contains("fn shipped()"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("only_in_tests") && !text.contains("also_only_in_tests"),
         "{text}"
     );
     assert!(!text.contains("std::fmt"), "{text}");
@@ -3798,30 +3905,36 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
             "false",
             "NeverAsk::{method}"
         );
-        let front = production_source(P3_FRONT_DOOR);
+    }
+    // The owner's confirmations are exactly Nexus's own window, pinned
+    // whole: its answers and labels, the main-thread hand-off, and the
+    // window that shows the text unwrapped and arms its answer only after
+    // the delay, at the end and the right edge of the text.
+    let front = production_source(P3_FRONT_DOOR);
+    for (method, answer) in [
+        ("confirm_action", "Allow"),
+        ("confirm_grant", "Grant"),
+        ("confirm_resume", "Resume"),
+    ] {
         let dialog = one_fn(front, &format!("ControlDialogs::{method}"));
-        let body = compact(dialog.body_text(front));
-        assert!(
-            body.starts_with(
-                "use{DialogExt,MessageDialogButtons,MessageDialogKind};self.0.dialog().message(dialog_text(&request.message())).title(request.title()).kind(MessageDialogKind::Warning).buttons(MessageDialogButtons::OkCancelCustom("
-            ) && body.ends_with(".blocking_show()"),
-            "{method}: {body}"
-        );
-        for forbidden in ["true", "false", "return", "||", "&&", "unsafe"] {
-            assert!(!body.contains(forbidden), "{method}: {forbidden}");
-        }
         assert_eq!(
-            body.matches("self.").count(),
-            1,
-            "{method}: only its own dialog"
+            compact(dialog.body_text(front)),
+            format!("self.confirm(request.title(),request.message(),\"{answer}\")"),
+            "ControlDialogs::{method}"
         );
     }
-    assert_eq!(
-        compact(
-            one_fn(production_source(P3_FRONT_DOOR), "dialog_text")
-                .body_text(production_source(P3_FRONT_DOOR))
+    for (path, body) in CONFIRMATION_WINDOW {
+        assert_eq!(
+            compact(one_fn(front, path).body_text(front)),
+            *body,
+            "{path}"
+        );
+    }
+    assert!(
+        front.contains(
+            "const ARMING_DELAY: std::time::Duration = std::time::Duration::from_millis(1000);"
         ),
-        "message.replace('%',\"%%\")"
+        "the answer stays unarmed for a second"
     );
     // The trait is defined once and never renamed.
     assert_eq!(
@@ -3831,17 +3944,21 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
     );
 }
 
+/// The owner's confirmation window, pinned whole (normalized text).
+const CONFIRMATION_WINDOW: [(&str, &str); 4] = [
+    ("ControlDialogs::confirm", "use*;let(sender,receiver)=channel();let(title,answer)=(title.to_string(),answer.to_string());letshown=self.0.run_on_main_thread(move||{let(dialog,_)=owner_window(&title,&message,&answer);letsender=RefCell::new(Some(sender));dialog.connect_response(move|dialog,response|{ifletSome(sender)=sender.borrow_mut().take(){let_=sender.send(response==ResponseType::Accept);}dialog.close();});dialog.present();});shown.is_ok()&&receiver.recv().unwrap_or(false)"),
+    ("owner_window", "use*;useCell;useRc;letdialog=Dialog::new();dialog.set_title(title);dialog.set_modal(true);dialog.set_keep_above(true);dialog.set_default_size(900,560);dialog.add_button(\"Cancel\",ResponseType::Cancel);letallow=dialog.add_button(answer,ResponseType::Accept);allow.set_sensitive(false);dialog.set_default_response(ResponseType::Cancel);lettext=Label::new(None);text.set_text(message);text.set_line_wrap(false);text.set_xalign(0.0);text.set_yalign(0.0);letmonospace=AttrList::new();monospace.insert(AttrString::new_family(\"monospace\"));text.set_attributes(Some(&monospace));letscroll=ScrolledWindow::builder().build();scroll.set_policy(PolicyType::Automatic,PolicyType::Automatic);scroll.add(&text);dialog.content_area().pack_start(&scroll,true,true,0);letarming=Rc::new(Cell::new(Arming::default()));letupdate:Rc<dynFn()>={let(arming,allow,scroll)=(arming.clone(),allow.clone(),scroll.clone());Rc::new(move||{letmutnow=arming.get();let(down,across)=(scroll.vadjustment(),scroll.hadjustment());now.end_reached|=reached(down.value(),down.page_size(),down.upper());now.edge_reached|=reached(across.value(),across.page_size(),across.upper());arming.set(now);allow.set_sensitive(now.ready());})};foradjustmentin[scroll.vadjustment(),scroll.hadjustment()]{letmoved=update.clone();adjustment.connect_value_changed(move|_|moved());letresized=update.clone();adjustment.connect_changed(move|_|resized());}{let(arming,update)=(arming.clone(),update.clone());timeout_add_local_once(ARMING_DELAY,move||{letmutnow=arming.get();now.delay_passed=true;arming.set(now);update();});}dialog.show_all();(dialog,allow)"),
+    ("Arming::ready", "self.delay_passed&&self.end_reached&&self.edge_reached"),
+    ("reached", "page>0.0&&value+page>=upper-1.0"),
+];
+
 /// An R2 approval exists only after the owner's native answer to exactly
 /// that commitment; it cannot be built, copied or deserialized elsewhere.
 #[test]
 fn p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer() {
     let commitment = production_source("crates/nexus-governed-control/src/authority/commitment.rs");
-    let mints: Vec<(&str, String)> = references(P3_CRATE, "confirmed")
-        .into_iter()
-        .filter(|(file, _)| {
-            file.ends_with("authority/commitment.rs") || !file.ends_with("approval.rs")
-        })
-        .collect();
+    // Every reference anywhere in the crate, `approval.rs` included.
+    let mints: Vec<(&str, String)> = references(P3_CRATE, "confirmed");
     assert_eq!(
         mints,
         [(
@@ -3865,12 +3982,45 @@ fn p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer() {
     );
     let approval = production_source("crates/nexus-governed-control/src/authority/approval.rs");
     let at = approval.find("pub struct R2Approval").expect("R2Approval");
-    let head = &approval[..at];
-    let derive = &head[head.rfind("#[").unwrap()..];
+    // Every attribute of the item: from the previous item's end.
+    let head = &approval[approval[..at].rfind(['}', ';']).unwrap() + 1..at];
     assert_eq!(
-        compact(derive),
+        compact(head),
         "#[derive(Debug)]",
         "no Clone, Copy, Default or serde"
+    );
+    // Its only impl in the crate is the inherent one, with exactly these
+    // functions: no `From`, `Default` or `Deserialize` builds one.
+    let mut impls = Vec::new();
+    for (file, text) in workspace_sources() {
+        if !file.starts_with(P3_CRATE) || !text.contains("R2Approval") {
+            continue;
+        }
+        for block in impl_blocks(&masked(text)) {
+            if block.self_type == "R2Approval" {
+                impls.push((file.as_str(), block.trait_name));
+            }
+        }
+    }
+    assert_eq!(
+        impls,
+        [(
+            "crates/nexus-governed-control/src/authority/approval.rs",
+            String::new()
+        )]
+    );
+    let functions: Vec<String> = fn_items(approval)
+        .into_iter()
+        .filter(|item| item.path.starts_with("R2Approval::"))
+        .map(|item| format!("{}fn {}{}", item.head, item.name, item.params))
+        .collect();
+    assert_eq!(
+        functions,
+        [
+            "pub(crate)fn confirmed(commitment:CommitmentId,binding:Digest)",
+            "pubfn commitment(&self)",
+            "pubfn binding(&self)",
+        ]
     );
     assert!(compact(approval)
         .contains("pub(crate)fnconfirmed(commitment:CommitmentId,binding:Digest)->Self"));
@@ -4020,7 +4170,7 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
         ("broker.rs", "vault", 5),   // the facade read and the refusal of environment secrets
         ("browser/proxy.rs", "network", 9),
         ("display/server.rs", "network", 1),
-        ("display/server.rs", "x11", 19),
+        ("display/server.rs", "x11", 32),
         ("egress/mod.rs", "network", 8), // header types
         ("egress/transport.rs", "network", 19),
         ("launcher.rs", "ends", 2), // SIGTERM with a grace, then SIGKILL
@@ -4149,7 +4299,85 @@ fn p3_g6_06_the_desktop_reaches_phase_three_only_through_its_front_door() {
         assert!(body.contains("blocking(move||"), "{name}");
         assert!(body.contains("ControlDialogs(app)"), "{name}: {body}");
     }
+    // The crate's items the desktop names, resolved (aliases included),
+    // exactly: nothing else of the crate, such as a raw transport, a run's
+    // cancellation token or a secret reader, can be named here.
+    let mut items = BTreeSet::new();
+    for file in naming {
+        let own = module_of(file);
+        let module: Vec<&str> = own.iter().map(String::as_str).collect();
+        let analysis =
+            crate::phase0_surface::rust_paths::Analysis::new(&workspace_file(file), &module);
+        for o in analysis.production() {
+            for path in o.resolved.iter().chain(as_written(&o.written)) {
+                if path
+                    .first()
+                    .is_some_and(|root| root == "nexus_governed_control")
+                {
+                    items.insert(path.join("::"));
+                }
+            }
+        }
+    }
+    let items: Vec<&str> = items.iter().map(String::as_str).collect();
+    assert_eq!(items, DESKTOP_P3_ITEMS);
 }
+
+/// The paths of the governed-control crate the desktop names (see
+/// `p3_g6_06`).
+const DESKTOP_P3_ITEMS: &[&str] = &[
+    "nexus_governed_control::authority::approval::ActionConfirmation",
+    "nexus_governed_control::authority::approval::ControlConfirmer",
+    "nexus_governed_control::authority::approval::GrantConfirmation",
+    "nexus_governed_control::authority::approval::ResumeConfirmation",
+    "nexus_governed_control::authority::clock::SystemClock",
+    "nexus_governed_control::authority::clock::SystemClock::default",
+    "nexus_governed_control::authority::commitment::CommitmentState",
+    "nexus_governed_control::authority::commitment::CommitmentView",
+    "nexus_governed_control::authority::evidence::EvidenceRecord",
+    "nexus_governed_control::authority::evidence::EvidenceRecord::to_json",
+    "nexus_governed_control::authority::evidence::EvidenceSink",
+    "nexus_governed_control::authority::evidence::EvidenceUnavailable",
+    "nexus_governed_control::authority::evidence::MemoryEvidence",
+    "nexus_governed_control::authority::evidence::MemoryEvidence::new",
+    "nexus_governed_control::authority::evidence::TeeEvidence",
+    "nexus_governed_control::authority::ids::AgentId",
+    "nexus_governed_control::authority::ids::AgentId::new",
+    "nexus_governed_control::authority::ids::AgentId::owner_session",
+    "nexus_governed_control::authority::ids::CommitmentId",
+    "nexus_governed_control::authority::ids::CommitmentId::parse",
+    "nexus_governed_control::authority::ids::GrantId",
+    "nexus_governed_control::authority::ids::GrantId::parse",
+    "nexus_governed_control::authority::ids::RunId",
+    "nexus_governed_control::authority::ids::RunId::parse",
+    "nexus_governed_control::authority::run::RunOrigin",
+    "nexus_governed_control::authority::run::RunOrigin::AgentGoal",
+    "nexus_governed_control::authority::run::RunOrigin::Command",
+    "nexus_governed_control::broker::Vault",
+    "nexus_governed_control::broker::Vault::Kernel",
+    "nexus_governed_control::control::EffectOutput",
+    "nexus_governed_control::governed::AgentOutcome",
+    "nexus_governed_control::governed::AgentOutcome::AwaitingApproval",
+    "nexus_governed_control::governed::AgentOutcome::Done",
+    "nexus_governed_control::governed::GovernedControl",
+    "nexus_governed_control::governed::GovernedControl::new",
+    "nexus_governed_control::governed::GrantRequest",
+    "nexus_governed_control::governed::Intent",
+    "nexus_governed_control::ingress::Attachments",
+    "nexus_governed_control::ingress::Attachments::default",
+    "nexus_governed_control::ingress::CommandEnvelope",
+    "nexus_governed_control::ingress::MAX_ATTACHMENT",
+    "nexus_governed_control::ingress::Understood",
+    "nexus_governed_control::ingress::Understood::Intent",
+    "nexus_governed_control::ingress::Understood::NotUnderstood",
+    "nexus_governed_control::ingress::understand",
+    "nexus_governed_control::planned::Disposition",
+    "nexus_governed_control::planned::Disposition::Closed",
+    "nexus_governed_control::planned::Disposition::Governed",
+    "nexus_governed_control::planned::Disposition::Inert",
+    "nexus_governed_control::planned::Disposition::Orchestrated",
+    "nexus_governed_control::planned::classify",
+];
 
 /// The final classification is exhaustive and has no wildcard: a new
 /// `PlannedAction` variant fails to compile there until it is classified,
@@ -4198,7 +4426,8 @@ enum Route {
 
 /// The kinds of real-world mechanism a resolved path names. Phase Zero's
 /// process, termination and network predicates, extended with WebSocket
-/// clients; raw system calls (`syscall` can start or replace a process
+/// clients, nix and rustix sockets, rustix's fork, exec and kill calls and
+/// sysinfo's signals; raw system calls (`syscall` can start or replace a process
 /// outside every predicate); the X server; the desktop bus (D-Bus, and
 /// AT-SPI, which reads and drives other applications); loading a shared
 /// library; the credential vault (its global facade and the OS keyring);
@@ -4216,6 +4445,7 @@ fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     let mut kinds = BTreeSet::new();
     if constructs_process(path)
         || any(&[
+            "rustix::runtime",
             "open::that",
             "open::that_detached",
             "open::that_in_background",
@@ -4229,10 +4459,29 @@ fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     {
         kinds.insert("process");
     }
-    if ends_process(path) {
+    if ends_process(path)
+        || any(&[
+            "rustix::process::kill_process",
+            "rustix::process::kill_process_group",
+            "rustix::process::kill_current_process_group",
+            "rustix::process::test_kill_process",
+            "rustix::process::test_kill_process_group",
+            "rustix::process::test_kill_current_process_group",
+            "rustix::process::pidfd_send_signal",
+            "sysinfo::Signal",
+        ])
+    {
         kinds.insert("ends");
     }
-    if opens_network(path) || any(&["tokio_tungstenite", "tungstenite", "async_tungstenite"]) {
+    if opens_network(path)
+        || any(&[
+            "tokio_tungstenite",
+            "tungstenite",
+            "async_tungstenite",
+            "nix::sys::socket",
+            "rustix::net",
+        ])
+    {
         kinds.insert("network");
     }
     if any(&["libc::syscall", "nix::libc::syscall"]) {
@@ -4244,7 +4493,12 @@ fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     if any(&["zbus", "atspi", "dbus"]) {
         kinds.insert("bus");
     }
-    if any(&["libloading", "dlopen2", "libc::dlopen", "nix::libc::dlopen"]) {
+    if any(&["libloading", "dlopen2"])
+        || path.windows(2).any(|pair| {
+            pair[0] == "libc"
+                && ["dlopen", "dlmopen", "dlsym", "dlvsym"].contains(&pair[1].as_str())
+        })
+    {
         kinds.insert("dynload");
     }
     if shown.contains("secrets::global::try_facade")
@@ -4255,6 +4509,17 @@ fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     }
     if shown.ends_with("SealedSpawnSpec") {
         kinds.insert("sealed");
+    }
+    // The kernel's unsealed spawn: `ResourceLimiter::spawn` takes a
+    // `ResourceSpawnSpec`, whose `ResourceProgram::Shell` runs `sh -lc` with
+    // a PATH lookup and the inherited environment (also re-exported as
+    // `nexus_sdk::resource_limiter`).
+    if path
+        .iter()
+        .any(|segment| segment == "ResourceSpawnSpec" || segment == "ResourceProgram")
+        || shown.ends_with("ResourceLimiter::spawn")
+    {
+        kinds.insert("process");
     }
     if any(&[
         "xcap",
@@ -4417,43 +4682,452 @@ fn without_comments(text: &str) -> String {
 /// (file, kind) -> occurrences, over every workspace production source: each
 /// production occurrence that resolves to a mechanism counts once per kind
 /// (a private `use` only binds a name, so its uses count instead).
+///
+/// Fail closed on shadowing: a path that does not start at `crate`, `self`
+/// or `super` is also measured exactly as written. The resolver lets any
+/// binding or module of the same name win, including one declared inside a
+/// test module (`mod reqwest {}`, `use super::probe as reqwest;`), and that
+/// must not hide the file's real `reqwest::get`.
 fn measured_effect_sites() -> BTreeMap<(String, &'static str), usize> {
-    use crate::phase0_surface::rust_paths::{Analysis, Declaration};
     let mut sites = BTreeMap::new();
     let files = workspace_sources()
         .iter()
         .map(|(file, _)| file.clone())
         .chain(NAME_SKIPPED_MODULES.iter().map(|file| file.to_string()));
     for file in files {
-        let file = &file;
-        let src = workspace_file(file);
-        let analysis = Analysis::new(&src, &["crate"]);
-        for o in analysis.production() {
-            if o.declaration == Some(Declaration::Use) && !o.public && o.item.is_none() {
-                continue;
-            }
-            let kinds: BTreeSet<&str> = o.resolved.iter().flat_map(|p| effect_kinds(p)).collect();
-            for kind in kinds {
-                *sites.entry((file.clone(), kind)).or_insert(0) += 1;
-            }
+        let src = workspace_file(&file);
+        let own = module_of(&file);
+        for (kind, count) in file_effect_sites(&file, &src, &own) {
+            sites.insert((file.clone(), kind), count);
         }
     }
     sites
+}
+
+/// kind -> occurrences in one source, `file` (whose module is `own`); see
+/// `measured_effect_sites`.
+fn file_effect_sites(file: &str, src: &str, own: &[String]) -> BTreeMap<&'static str, usize> {
+    use crate::phase0_surface::rust_paths::{Analysis, Declaration};
+    let mut sites = BTreeMap::new();
+    let module: Vec<&str> = own.iter().map(String::as_str).collect();
+    let analysis = Analysis::new(src, &module);
+    for o in analysis.production() {
+        if o.declaration == Some(Declaration::Use) && !o.public && o.item.is_none() {
+            continue;
+        }
+        let candidates: Vec<&Vec<String>> =
+            o.resolved.iter().chain(as_written(&o.written)).collect();
+        let mut kinds: BTreeSet<&str> = candidates.iter().flat_map(|p| effect_kinds(p)).collect();
+        if candidates.iter().any(|p| reaches_latent(file, own, p)) {
+            kinds.insert("latent");
+        }
+        for kind in kinds {
+            *sites.entry(kind).or_insert(0) += 1;
+        }
+    }
+    // A method call is not a path: a latent effect a value's method reaches
+    // counts wherever that method is called, and so does a kill in a file
+    // that lists processes with sysinfo (a kill by name or by pid).
+    let t = &analysis.tokens;
+    let lists_processes = (0..t.len()).any(|k| !analysis.test[k] && t[k].is("sysinfo"));
+    for k in 1..t.len() {
+        if analysis.test[k] {
+            continue;
+        }
+        if t[k - 1].is(".") && LATENT_METHODS.iter().any(|method| t[k].is(method)) {
+            *sites.entry("latent").or_insert(0) += 1;
+        }
+        if lists_processes && t[k - 1].is(".") && (t[k].is("kill") || t[k].is("kill_with")) {
+            *sites.entry("ends").or_insert(0) += 1;
+        }
+        // Inline assembly reaches the kernel without any path.
+        if ["asm", "global_asm", "naked_asm"]
+            .iter()
+            .any(|name| t[k - 1].is(name))
+            && t[k].is("!")
+        {
+            *sites.entry("asm").or_insert(0) += 1;
+        }
+    }
+    // Input device nodes, opened by path.
+    for (literal, _, _) in analysis.literals() {
+        if literal.contains("/dev/uinput") || literal.contains("/dev/input/") {
+            *sites.entry("device").or_insert(0) += 1;
+        }
+    }
+    sites
+}
+
+/// The latent closed modules of `EFFECT_FILES` and the paths that reach
+/// their mechanisms: (crate directory, library name, module below the crate
+/// root (empty: the root), the items that reach the mechanism (empty: the
+/// whole module), the same items as the crate root re-exports them). A
+/// resolved reference to one from any production source outside the
+/// module, inside its crate (`crate::…`) or outside it, is a `latent` site,
+/// so a new caller anywhere fails until it is classified. Data types the
+/// modules share are not entries; what runs the mechanism is.
+type Latent = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static [&'static str],
+    &'static [&'static str],
+);
+
+const LATENT_ENTRIES: &[Latent] = &[
+    (
+        "agents/coder",
+        "coder_agent",
+        "context",
+        &["build_context"],
+        &[],
+    ),
+    (
+        "agents/coder",
+        "coder_agent",
+        "fix_loop",
+        &[
+            "fix_until_pass",
+            "fix_until_pass_with",
+            "FrameworkTestExecutor",
+        ],
+        &[],
+    ),
+    ("agents/coder", "coder_agent", "git", &[], &[]),
+    (
+        "agents/coder",
+        "coder_agent",
+        "scanner",
+        &["scan_project", "scan_project_with_config"],
+        &[],
+    ),
+    ("agents/coder", "coder_agent", "terminal", &[], &[]),
+    (
+        "agents/coder",
+        "coder_agent",
+        "test_runner",
+        &["run_tests"],
+        &[],
+    ),
+    // The conductor runs the coder's scanner, context and tests.
+    (
+        "agents/conductor",
+        "nexus_conductor",
+        "",
+        &["Conductor"],
+        &[],
+    ),
+    // The social poster's real pipeline runs the web search and reader.
+    (
+        "agents/social-poster",
+        "social_poster_agent",
+        "",
+        &[
+            "PipelineDependencies::real",
+            "RealReaderStep",
+            "RealSearchStep",
+            "SocialPosterAgent::new",
+            "run_social_poster_from_manifest",
+        ],
+        &[],
+    ),
+    (
+        "agents/web-builder",
+        "web_builder_agent",
+        "dev_server",
+        &[],
+        &[],
+    ),
+    (
+        "auth",
+        "nexus_auth",
+        "config",
+        &["AuthConfig::resolve_client_secret"],
+        &["AuthConfig::resolve_client_secret"],
+    ),
+    (
+        "auth",
+        "nexus_auth",
+        "oidc",
+        &["OidcClient"],
+        &["OidcClient"],
+    ),
+    (
+        "connectors/core",
+        "nexus_connectors_core",
+        "github_connector",
+        &["GitHubConnector"],
+        &[],
+    ),
+    (
+        "connectors/core",
+        "nexus_connectors_core",
+        "http_connector",
+        &[],
+        &[],
+    ),
+    (
+        "connectors/core",
+        "nexus_connectors_core",
+        "validation",
+        &[],
+        &[],
+    ),
+    (
+        "connectors/web",
+        "nexus_connectors_web",
+        "reader",
+        &["WebReaderConnector"],
+        &[],
+    ),
+    (
+        "connectors/web",
+        "nexus_connectors_web",
+        "search",
+        &["WebSearchConnector"],
+        &[],
+    ),
+    (
+        "crates/nexus-capability-measurement",
+        "nexus_capability_measurement",
+        "evaluation::openrouter_client",
+        &[],
+        &[],
+    ),
+    (
+        "crates/nexus-memory",
+        "nexus_memory",
+        "embedding",
+        &["OllamaEmbedder"],
+        &["OllamaEmbedder"],
+    ),
+    (
+        "distributed",
+        "nexus_distributed",
+        "tcp_transport",
+        &[],
+        &[],
+    ),
+    (
+        "integrations",
+        "nexus_integrations",
+        "providers::discord",
+        &[],
+        &[],
+    ),
+    (
+        "integrations",
+        "nexus_integrations",
+        "providers::github",
+        &[],
+        &[],
+    ),
+    (
+        "integrations",
+        "nexus_integrations",
+        "providers::gitlab",
+        &[],
+        &[],
+    ),
+    (
+        "integrations",
+        "nexus_integrations",
+        "providers::jira",
+        &[],
+        &[],
+    ),
+    (
+        "integrations",
+        "nexus_integrations",
+        "providers::servicenow",
+        &[],
+        &[],
+    ),
+    (
+        "integrations",
+        "nexus_integrations",
+        "providers::slack",
+        &[],
+        &[],
+    ),
+    (
+        "integrations",
+        "nexus_integrations",
+        "providers::teams",
+        &[],
+        &[],
+    ),
+    (
+        "integrations",
+        "nexus_integrations",
+        "providers::telegram",
+        &[],
+        &[],
+    ),
+    (
+        "integrations",
+        "nexus_integrations",
+        "providers::webhook",
+        &[],
+        &[],
+    ),
+    // The router builds the providers its configuration names.
+    (
+        "integrations",
+        "nexus_integrations",
+        "router",
+        &["IntegrationRouter::from_config"],
+        &["IntegrationRouter::from_config"],
+    ),
+    ("nexus-code", "nexus_code", "mcp", &["McpManager"], &[]),
+    (
+        "nexus-code",
+        "nexus_code",
+        "mcp::transport",
+        &["StdioTransport", "SseTransport"],
+        &[],
+    ),
+    ("protocols", "nexus_protocols", "server_runtime", &[], &[]),
+    (
+        "sdk",
+        "nexus_sdk",
+        "typed_tools",
+        &["execute_typed_tool", "build_command"],
+        &[],
+    ),
+];
+
+/// Methods of latent values whose effect no path names (see
+/// `LATENT_ENTRIES`): the vault read of the OIDC secret and the MCP
+/// manager's connections.
+const LATENT_METHODS: &[&str] = &["resolve_client_secret", "connect", "connect_all"];
+
+/// Whether `path`, resolved in `file` (whose module is `own`), names a latent
+/// entry from outside its module.
+fn reaches_latent(file: &str, own: &[String], path: &[String]) -> bool {
+    /// Per entry: the crate's source directory, the module's own path from
+    /// `crate` (none for the root), and the targets as written outside the
+    /// crate and inside it.
+    type Targets = (
+        String,
+        Option<Vec<String>>,
+        Vec<Vec<String>>,
+        Vec<Vec<String>>,
+    );
+    static TARGETS: OnceLock<Vec<Targets>> = OnceLock::new();
+    let targets = TARGETS.get_or_init(|| {
+        let segments = |parts: &[&str]| -> Vec<String> {
+            parts
+                .iter()
+                .flat_map(|part| part.split("::"))
+                .filter(|segment| !segment.is_empty())
+                .map(str::to_string)
+                .collect()
+        };
+        LATENT_ENTRIES
+            .iter()
+            .map(|(dir, library, module, items, reexported)| {
+                let mut relative: Vec<Vec<String>> = if items.is_empty() {
+                    vec![segments(&[module])]
+                } else {
+                    items.iter().map(|item| segments(&[module, item])).collect()
+                };
+                relative.extend(reexported.iter().map(|item| segments(&[item])));
+                let outside = relative
+                    .iter()
+                    .map(|path| {
+                        segments(&[library])
+                            .into_iter()
+                            .chain(path.clone())
+                            .collect()
+                    })
+                    .collect();
+                let inside = relative
+                    .iter()
+                    .map(|path| {
+                        segments(&["crate"])
+                            .into_iter()
+                            .chain(path.clone())
+                            .collect()
+                    })
+                    .collect();
+                let own_module = (!module.is_empty()).then(|| segments(&["crate", module]));
+                (format!("{dir}/src/"), own_module, outside, inside)
+            })
+            .collect()
+    });
+    let prefix = |path: &[String], target: &[String]| path.starts_with(target);
+    targets.iter().any(|(dir, module, outside, inside)| {
+        let in_crate = file.starts_with(dir.as_str());
+        if in_crate
+            && module
+                .as_ref()
+                .is_some_and(|module| own.starts_with(module))
+        {
+            return false;
+        }
+        outside.iter().any(|target| prefix(path, target))
+            || (in_crate && inside.iter().any(|target| prefix(path, target)))
+    })
+}
+
+/// The module path of a workspace source, from its crate root (`crate`, then
+/// the directories and file below the crate's `src`), so that `self::` and
+/// `super::` resolve where they are written. A target root (`lib.rs`,
+/// `main.rs`, a `src/bin` file) is `crate` itself.
+fn module_of(file: &str) -> Vec<String> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let path = std::path::Path::new(file);
+    let crate_dir = path
+        .ancestors()
+        .skip(1)
+        .find(|dir| root.join(dir).join("Cargo.toml").is_file())
+        .unwrap_or_else(|| panic!("{file}: no crate"));
+    let mut module = vec!["crate".to_string()];
+    let Ok(below) = path.strip_prefix(crate_dir.join("src")) else {
+        return module;
+    };
+    let parts: Vec<&str> = below.iter().map(|part| part.to_str().unwrap()).collect();
+    if parts.first() == Some(&"bin") {
+        return module;
+    }
+    let (file_name, dirs) = parts.split_last().unwrap();
+    module.extend(dirs.iter().map(|dir| dir.to_string()));
+    let stem = file_name.strip_suffix(".rs").unwrap();
+    if !(dirs.is_empty() && matches!(stem, "lib" | "main")) && stem != "mod" {
+        module.push(stem.to_string());
+    }
+    module
+}
+
+/// The path exactly as written, unless it starts at `crate`, `self` or
+/// `super` (which no binding can shadow).
+fn as_written(written: &crate::phase0_surface::rust_paths::Written) -> Option<&Vec<String>> {
+    let local = matches!(
+        written.segs.first().map(String::as_str),
+        Some("crate" | "self" | "super")
+    );
+    (!local).then_some(&written.segs)
 }
 
 /// Every production real-world mechanism in the workspace, resolved
 /// structurally: (file, kind, count). A new occurrence anywhere fails.
 const EFFECT_SITES: &[(&str, &str, usize)] = &[
     ("agents/coder/src/context.rs", "process", 1),
+    ("agents/coder/src/fix_loop.rs", "latent", 1),
     ("agents/coder/src/git.rs", "process", 1),
     ("agents/coder/src/scanner.rs", "process", 1),
+    ("agents/coder/src/terminal.rs", "process", 2),
     ("agents/coder/src/test_runner.rs", "process", 2),
     ("agents/coding-agent/src/lib.rs", "process", 2),
+    ("agents/conductor/src/lib.rs", "latent", 5),
+    ("agents/social-poster/src/lib.rs", "latent", 12),
     ("agents/web-builder/src/deploy/cloudflare.rs", "network", 7),
     ("agents/web-builder/src/deploy/mod.rs", "network", 6),
     ("agents/web-builder/src/deploy/netlify.rs", "network", 5),
     ("agents/web-builder/src/deploy/vercel.rs", "network", 4),
     ("agents/web-builder/src/dev_server.rs", "ends", 3),
+    ("agents/web-builder/src/dev_server.rs", "latent", 1),
     ("agents/web-builder/src/dev_server.rs", "network", 2),
     ("agents/web-builder/src/dev_server.rs", "process", 3),
     ("agents/web-builder/src/image_gen/api.rs", "network", 1),
@@ -4476,10 +5150,16 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     ("app/src-tauri/src/commands/chat_llm.rs", "vault", 2),
     ("app/src-tauri/src/commands/flash.rs", "process", 1),
     ("app/src-tauri/src/commands/trust_security.rs", "process", 1),
+    ("app/src-tauri/src/lib.rs", "latent", 1),
     ("auth/src/config.rs", "vault", 1),
     ("auth/src/error.rs", "network", 2),
+    ("auth/src/lib.rs", "latent", 1),
+    ("auth/src/oidc.rs", "latent", 1),
     ("auth/src/oidc.rs", "network", 2),
+    ("cli/src/lib.rs", "latent", 3),
     ("cli/src/lib.rs", "process", 1),
+    ("cli/src/setup.rs", "latent", 3),
+    ("connectors/core/src/github_connector.rs", "latent", 2),
     ("connectors/core/src/http_connector.rs", "vault", 1),
     ("connectors/core/src/validation.rs", "process", 2),
     ("connectors/llm/src/model_hub.rs", "process", 4),
@@ -4559,7 +5239,7 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     (
         "crates/nexus-governed-control/src/display/server.rs",
         "x11",
-        19,
+        32,
     ),
     (
         "crates/nexus-governed-control/src/egress/mod.rs",
@@ -4586,6 +5266,7 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     ("crates/nexus-mcp/src/client.rs", "process", 1),
     ("crates/nexus-mcp/src/tools.rs", "process", 2),
     ("crates/nexus-memory/src/embedding.rs", "process", 1),
+    ("crates/nexus-memory/src/lib.rs", "latent", 1),
     ("crates/nexus-perception/src/vision.rs", "process", 1),
     ("crates/nexus-swarm/src/adapters/herald.rs", "vault", 1),
     (
@@ -4669,10 +5350,12 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     ("integrations/src/providers/teams.rs", "network", 4),
     ("integrations/src/providers/telegram.rs", "network", 2),
     ("integrations/src/providers/webhook.rs", "network", 2),
+    ("integrations/src/router.rs", "latent", 9),
     ("kernel/src/actuators/api.rs", "process", 1),
     ("kernel/src/actuators/browser.rs", "process", 1),
     ("kernel/src/actuators/code_exec.rs", "process", 1),
     ("kernel/src/actuators/docker.rs", "process", 1),
+    ("kernel/src/actuators/execution_platform.rs", "process", 3),
     ("kernel/src/actuators/image_gen.rs", "process", 3),
     ("kernel/src/actuators/shell.rs", "process", 1),
     ("kernel/src/actuators/tts.rs", "process", 3),
@@ -4681,16 +5364,18 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     ("kernel/src/computer_control.rs", "process", 5),
     ("kernel/src/hardware.rs", "process", 5),
     ("kernel/src/protocols/a2a_client.rs", "process", 2),
+    ("kernel/src/resource_limiter.rs", "process", 3),
     ("kernel/src/resource_limiter.rs", "sealed", 1),
     ("kernel/src/resource_limiter/unix.rs", "ends", 1),
-    ("kernel/src/resource_limiter/unix.rs", "process", 4),
+    ("kernel/src/resource_limiter/unix.rs", "process", 7),
     ("kernel/src/resource_limiter/unix.rs", "sealed", 1),
     ("kernel/src/resource_limiter/windows.rs", "ends", 1),
-    ("kernel/src/resource_limiter/windows.rs", "process", 1),
+    ("kernel/src/resource_limiter/windows.rs", "process", 11),
     ("kernel/src/resource_limiter/windows.rs", "sealed", 1),
     ("kernel/src/secrets/backend_keyring.rs", "vault", 4),
     ("kernel/src/typed_tools.rs", "process", 1),
     ("llama-bridge/src/model.rs", "process", 1),
+    ("nexus-code/src/app.rs", "latent", 2),
     ("nexus-code/src/bench/swe_bench.rs", "process", 5),
     ("nexus-code/src/commands/diff.rs", "process", 1),
     ("nexus-code/src/error.rs", "network", 3),
@@ -4705,6 +5390,7 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     ),
     ("nexus-code/src/llm/router.rs", "network", 1),
     ("nexus-code/src/llm/streaming.rs", "network", 5),
+    ("nexus-code/src/mcp/mod.rs", "latent", 3),
     ("nexus-code/src/mcp/transport.rs", "network", 2),
     ("nexus-code/src/mcp/transport.rs", "process", 4),
     ("nexus-code/src/setup.rs", "process", 2),
@@ -4719,6 +5405,7 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     ("protocols/src/mcp_client.rs", "process", 3),
     ("protocols/src/server_runtime.rs", "network", 1),
     ("sdk/src/typed_tools.rs", "process", 13),
+    ("sdk/src/wasmtime_host_functions.rs", "latent", 1),
 ];
 
 /// The class of every file holding a mechanism, and why (no fifth class).
@@ -4727,6 +5414,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "agents/coder/src/context.rs",
         Route::Closed,
         "latent: the coder conductor is never constructed by the desktop (only the withdrawn CLI and tests)",
+    ),
+    (
+        "agents/coder/src/fix_loop.rs",
+        Route::Closed,
+        "latent: the coder fix loop runs the coder's tests; only the conductor calls it (LATENT_ENTRIES)",
     ),
     (
         "agents/coder/src/git.rs",
@@ -4739,6 +5431,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "latent: reached only from the coder conductor, which the desktop never constructs",
     ),
     (
+        "agents/coder/src/terminal.rs",
+        Route::Closed,
+        "latent: the coder terminal's unsealed sh -lc spawn; no production caller (LATENT_ENTRIES)",
+    ),
+    (
         "agents/coder/src/test_runner.rs",
         Route::Closed,
         "latent: reached only from the coder conductor, which the desktop never constructs",
@@ -4747,6 +5444,16 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "agents/coding-agent/src/lib.rs",
         Route::NonProduction,
         "not in the desktop dependency closure (withdrawn CLI and integration tests only)",
+    ),
+    (
+        "agents/conductor/src/lib.rs",
+        Route::Closed,
+        "latent: the conductor runs the coder's scanner, context, tests and fix loop; only the withdrawn CLI builds one",
+    ),
+    (
+        "agents/social-poster/src/lib.rs",
+        Route::Closed,
+        "latent: the real pipeline (web search and reader) runs only from the withdrawn CLI's manifest runner",
     ),
     (
         "agents/web-builder/src/deploy/cloudflare.rs",
@@ -4819,6 +5526,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "the C5C notification: fixed program, the message only as data after --; its only caller is the emergency-stop shortcut",
     ),
     (
+        "app/src-tauri/src/lib.rs",
+        Route::Closed,
+        "the integration router is built only from the default configuration, which names no provider (Phase Zero S13 pin)",
+    ),
+    (
         "auth/src/config.rs",
         Route::Closed,
         "latent: the OIDC client-secret read; its only caller, OidcClient, has no production caller (needle OidcClient)",
@@ -4829,6 +5541,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "an error conversion only (no connection); its producer, OidcClient, has no production caller",
     ),
     (
+        "auth/src/lib.rs",
+        Route::Closed,
+        "re-exports the latent OidcClient; its callers are latent sites (LATENT_ENTRIES)",
+    ),
+    (
         "auth/src/oidc.rs",
         Route::Closed,
         "latent: OidcClient has no production caller (needle OidcClient)",
@@ -4837,6 +5554,16 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "cli/src/lib.rs",
         Route::NonProduction,
         "only the withdrawn nexus binary depends on nexus-cli",
+    ),
+    (
+        "cli/src/setup.rs",
+        Route::NonProduction,
+        "the withdrawn nexus-cli's setup; only the withdrawn nexus binary depends on nexus-cli",
+    ),
+    (
+        "connectors/core/src/github_connector.rs",
+        Route::Closed,
+        "latent: wraps HttpConnector; GitHubConnector has no production caller (LATENT_ENTRIES)",
     ),
     (
         "connectors/core/src/http_connector.rs",
@@ -5039,6 +5766,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "latent: the embedder is never constructed in production",
     ),
     (
+        "crates/nexus-memory/src/lib.rs",
+        Route::Closed,
+        "re-exports the latent OllamaEmbedder; its callers are latent sites (LATENT_ENTRIES)",
+    ),
+    (
         "crates/nexus-perception/src/vision.rs",
         Route::Closed,
         "perception_init is closed (CredentialTransport)",
@@ -5179,6 +5911,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "latent (S13): the desktop's integration router has no provider configured and no send caller",
     ),
     (
+        "integrations/src/router.rs",
+        Route::Closed,
+        "builds only the providers its configuration names; the desktop's router names none (Phase Zero S13 pin)",
+    ),
+    (
         "kernel/src/actuators/api.rs",
         Route::Closed,
         "ApiCall is governed egress in Phase Three and never reaches the registry; the Phase Zero fallback closes it (AgentExecution)",
@@ -5197,6 +5934,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "kernel/src/actuators/docker.rs",
         Route::Closed,
         "DockerCommand stays closed",
+    ),
+    (
+        "kernel/src/actuators/execution_platform.rs",
+        Route::Closed,
+        "the Windows backend of ShellCommand and CodeExecute, which stay closed; Windows makes no Phase Three claim",
     ),
     (
         "kernel/src/actuators/image_gen.rs",
@@ -5241,17 +5983,17 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
     (
         "kernel/src/resource_limiter.rs",
         Route::Governed,
-        "the sealed-spawn specification (P0-002C4C2), used by the Builder lifecycle and the Phase Three tool launcher",
+        "the kernel spawn specs: sealed (Builder lifecycle, Phase Three tools) and unsealed (callers closed or latent only)",
     ),
     (
         "kernel/src/resource_limiter/unix.rs",
         Route::Governed,
-        "the sealed-spawn substrate: absolute program, cleared environment, own process group and limits, owner-held killpg",
+        "sealed spawn (absolute program, cleared env, own group, limits, owner killpg); unsealed sh -lc only for closed or latent callers",
     ),
     (
         "kernel/src/resource_limiter/windows.rs",
         Route::Governed,
-        "the Windows sealed-spawn substrate (kill-on-close job); Windows makes no Phase Three claim",
+        "the Windows spawn substrate (kill-on-close job), sealed and unsealed; Windows makes no Phase Three claim",
     ),
     (
         "kernel/src/secrets/backend_keyring.rs",
@@ -5267,6 +6009,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "llama-bridge/src/model.rs",
         Route::Closed,
         "no open route loads a model (flash sessions closed, FileSelection)",
+    ),
+    (
+        "nexus-code/src/app.rs",
+        Route::Closed,
+        "App holds an unconnected McpManager; nothing calls connect or connect_all; the desktop only lists tools (p3_g6_09)",
     ),
     (
         "nexus-code/src/bench/swe_bench.rs",
@@ -5317,6 +6064,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "nexus-code/src/llm/streaming.rs",
         Route::Closed,
         "nexus-code executor routes are closed in the desktop (nx_chat, nx_tool, nx_agent_run; AgentExecution, ProcessExecution)",
+    ),
+    (
+        "nexus-code/src/mcp/mod.rs",
+        Route::Closed,
+        "McpManager::connect spawns or dials a configured MCP server; nothing calls connect or connect_all (LATENT_METHODS)",
     ),
     (
         "nexus-code/src/mcp/transport.rs",
@@ -5382,6 +6134,11 @@ const EFFECT_FILES: &[(&str, Route, &str)] = &[
         "sdk/src/typed_tools.rs",
         Route::Closed,
         "latent: execute_typed_tool has no caller (needles)",
+    ),
+    (
+        "sdk/src/wasmtime_host_functions.rs",
+        Route::Closed,
+        "nexus_exec_tool only builds a typed command to validate it and returns it as data; nothing spawns it (pinned)",
     ),
 ];
 
@@ -5602,16 +6359,30 @@ const FFI_DENIED: &[&str] = &[
     "ptrace",
     "syscall",
     "dlopen",
+    "dlmopen",
     "dlsym",
+    "dlvsym",
+    "recvfrom",
+    "recvmsg",
+    "sigqueue",
     "CreateProcessW",
     "CreateProcessA",
+    "CreateProcessAsUserW",
+    "CreateProcessAsUserA",
+    "CreateProcessWithLogonW",
+    "CreateProcessWithTokenW",
     "ShellExecuteW",
     "ShellExecuteA",
     "ShellExecuteExW",
+    "ShellExecuteExA",
     "WinExec",
+    "TerminateProcess",
+    "OpenProcess",
     "LoadLibraryW",
     "LoadLibraryA",
     "LoadLibraryExW",
+    "LoadLibraryExA",
+    "GetProcAddress",
 ];
 
 /// §22 and §34 (alternate imports): a foreign declaration escapes the
@@ -5620,39 +6391,55 @@ const FFI_DENIED: &[&str] = &[
 /// function.
 #[test]
 fn p3_g6_10_no_foreign_declaration_escapes_the_mechanism_predicates() {
+    let sources = workspace_sources()
+        .iter()
+        .map(|(file, text)| (file.clone(), text.clone()))
+        .chain(
+            NAME_SKIPPED_MODULES
+                .iter()
+                .map(|file| (file.to_string(), production_text(&workspace_file(file)))),
+        );
     let mut declaring = BTreeSet::new();
-    for (file, text) in workspace_sources() {
+    for (file, text) in sources {
         // Literals are blanked, so neither an ABI string's content nor a
         // literal that spells `extern "C" {` can mislead the scan.
-        let m = masked(text);
+        let m = masked(&text);
         let flat = String::from_utf8(m.clone()).expect("masking keeps UTF-8");
-        let mut from = 0;
-        while let Some(found) = flat[from..].find("extern \"") {
-            let quote = from + found + "extern ".len();
-            let abi_end = quote + 1 + flat[quote + 1..].find('"').expect("a closed ABI string");
-            from = abi_end + 1;
-            let open = from + (flat[from..].len() - flat[from..].trim_start().len());
-            if flat.as_bytes().get(open) != Some(&b'{') {
-                continue; // an `extern "C" fn` item or type
+        // `#[link_name]` binds a declaration to any symbol: no name below
+        // would show what it calls.
+        assert!(words(&m, "link_name").is_empty(), "{file}: link_name");
+        for at in words(&m, "extern") {
+            // `extern {` or `extern "ABI" {`; `extern crate`, `extern "C" fn`
+            // items and types are not blocks.
+            let mut open = skip_ws(&m, at + "extern".len());
+            if m.get(open) == Some(&b'"') {
+                let abi_end = open + 1 + flat[open + 1..].find('"').expect("a closed ABI string");
+                open = skip_ws(&m, abi_end + 1);
+            }
+            if m.get(open) != Some(&b'{') {
+                continue;
             }
             let close = close_of(&m, open);
-            declaring.insert(file.as_str());
+            declaring.insert(file.clone());
             let block = &flat[open..close];
-            for (index, _) in block.match_indices("fn ") {
-                let name: String = block[index + 3..]
-                    .trim_start()
-                    .chars()
-                    .take_while(|c| c.is_alphanumeric() || *c == '_')
-                    .collect();
+            for index in words(block.as_bytes(), "fn") {
+                let name = ident_at(block.as_bytes(), skip_ws(block.as_bytes(), index + 2));
                 assert!(
-                    !FFI_DENIED.contains(&name.as_str()),
+                    !FFI_DENIED.contains(&name),
                     "{file}: a foreign declaration of {name}"
                 );
             }
-            from = close;
         }
     }
-    assert_eq!(declaring, BTreeSet::from(FFI_FILES));
+    let pinned: BTreeSet<String> = FFI_FILES.iter().map(|file| file.to_string()).collect();
+    assert_eq!(declaring, pinned);
+    // The scan itself: an ABI-less block, odd spacing, and a test-named
+    // module are all read.
+    let fixture = masked("extern {\n    fn  execve(a: i32);\n}\n");
+    let at = words(&fixture, "extern")[0];
+    let open = skip_ws(&fixture, at + "extern".len());
+    assert_eq!(fixture[open], b'{');
+    assert!(NAME_SKIPPED_MODULES.contains(&"kernel/src/autopilot/stress_test.rs"));
 }
 
 /// The owner's stops reach Phase Three: the global emergency key stops it
@@ -5674,4 +6461,830 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         body.contains("ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}"),
         "{body}"
     );
+    // The routes that stop an agent's loop end what it left in Phase Three
+    // first: the per-agent Stop and the Admin "Stop all".
+    let stop = compact(one_fn(lib, "stop_agent").body_text(lib));
+    assert_in_order(
+        &stop,
+        &[
+            "stop_agent_goal(state.inner(),agent_id.clone());",
+            "stop_agent(state.inner(),agent_id.clone())?;",
+        ],
+        "stop_agent",
+    );
+    let enterprise = production_source("app/src-tauri/src/commands/enterprise.rs");
+    let all = compact(one_fn(enterprise, "admin_agent_stop_all").body_text(enterprise));
+    assert_in_order(
+        &all,
+        &[
+            "stop_agent_goal(state,agent.id.clone());",
+            "sup.stop_agent(id);",
+        ],
+        "admin_agent_stop_all",
+    );
+    // Every production route that stops or pauses an agent in the
+    // supervisor, pinned: the two above, Pause (which the running check
+    // below covers), and the two that act before any loop exists (restoring
+    // agents at startup, registering prebuilt ones).
+    let mut routes = Vec::new();
+    for name in ["stop_agent", "pause_agent"] {
+        routes.extend(
+            references(DESKTOP_SRC, name)
+                .into_iter()
+                .map(|(file, function)| (file, function, name)),
+        );
+    }
+    routes.sort();
+    assert_eq!(
+        routes,
+        [
+            (
+                "app/src-tauri/src/commands/agents.rs",
+                "pause_agent".to_string(),
+                "pause_agent"
+            ),
+            (
+                "app/src-tauri/src/commands/agents.rs",
+                "restore_persisted_agents".to_string(),
+                "pause_agent"
+            ),
+            (
+                "app/src-tauri/src/commands/agents.rs",
+                "restore_persisted_agents".to_string(),
+                "stop_agent"
+            ),
+            (
+                "app/src-tauri/src/commands/agents.rs",
+                "stop_agent".to_string(),
+                "stop_agent"
+            ),
+            (
+                "app/src-tauri/src/commands/chat_llm.rs",
+                "AppState::load_prebuilt_agents".to_string(),
+                "stop_agent"
+            ),
+            (
+                "app/src-tauri/src/commands/enterprise.rs",
+                "admin_agent_stop_all".to_string(),
+                "stop_agent"
+            ),
+            (
+                "app/src-tauri/src/lib.rs",
+                "pause_agent".to_string(),
+                "pause_agent"
+            ),
+            (
+                "app/src-tauri/src/lib.rs",
+                "stop_agent".to_string(),
+                "stop_agent"
+            ),
+        ]
+    );
+    // An agent that is not running, however it was stopped or paused, acts
+    // no more: the one production bridge asks the supervisor, and `act`
+    // refuses before anything else, then refuses a stop that came after
+    // the loop began, under the lock that tracks the run it opens.
+    let executor = compact(one_fn(cognitive, "phase0_agent_executor").body_text(cognitive));
+    assert_eq!(
+        executor.matches("AgentBridge::new(").count(),
+        1,
+        "{executor}"
+    );
+    assert!(
+        executor.contains(".get_agent(id).is_some_and(|handle|handle.state==AgentState::Running)"),
+        "{executor}"
+    );
+    let bridges: Vec<(&str, usize)> = desktop_sources()
+        .into_iter()
+        .map(|(file, text)| {
+            let text = compact(text);
+            (
+                file,
+                text.matches("AgentBridge::new(").count()
+                    + text.matches("AgentBridge::for_tests(").count(),
+            )
+        })
+        .filter(|(_, count)| *count > 0)
+        .collect();
+    assert_eq!(bridges, [("commands/cognitive.rs", 1)]);
+    let world = production_source("app/src-tauri/src/governed_real_world.rs");
+    let act = compact(one_fn(world, "AgentBridge::act").body_text(world));
+    assert_in_order(
+        &act,
+        &[
+            "if!(self.running)(agent_id){returnErr(",
+            "letmutagents=self.world.agents();",
+            ".stopped_at.get(agent_id).is_some_and(|stopped|*stopped>self.began)",
+            ".open_run(agent.clone(),RunOrigin::AgentGoal)",
+            "agents.runs.entry(agent_id.to_string()).or_default().push(run);",
+            ".agent_action(&agent,run,intent)",
+        ],
+        "AgentBridge::act",
+    );
+    let cancel = compact(one_fn(world, "RealWorld::cancel_agent").body_text(world));
+    assert_in_order(
+        &cancel,
+        &[
+            "agents.epoch+=1;",
+            "agents.stopped_at.insert(agent.to_string(),epoch);",
+            "agents.runs.remove(agent)",
+            "self.control.cancel_run(run);",
+        ],
+        "cancel_agent",
+    );
+    // Quitting cancels every open run and stops the agent display.
+    let exit = &lib[lib.find("RunEvent::Exit").unwrap() + "RunEvent::Exit".len()..];
+    let arm = without_whitespace(&exit[..exit.find("RunEvent::").unwrap_or(exit.len())]);
+    assert!(
+        arm.contains("ifletOk(world)=app.state::<AppState>().real_world(){world.shutdown();}"),
+        "{arm}"
+    );
+}
+
+/// §22 (audit P8, P9): the inventory fails closed. A module or binding named
+/// like a mechanism crate, even one declared in a test module, hides nothing;
+/// the kernel's unsealed spawn is a process; a latent API's caller is a site
+/// wherever it is and however it names the API (alias, turbofish, crate-root
+/// re-export, method); and every latent class names its entries.
+#[test]
+fn p3_g6_12_the_inventory_fails_closed() {
+    use crate::phase0_surface::rust_paths::Analysis;
+    // Shadowing: the resolver alone lets a test module's names win.
+    let shadowed = concat!(
+        "fn fetch() {\n",
+        "    let _ = reqwest::blocking::get(\"https://example.com\");\n",
+        "    let _ = std::process::Command::new(\"true\");\n",
+        "}\n",
+        "#[cfg(test)]\n",
+        "mod tests {\n",
+        "    mod std {}\n",
+        "    use super::fetch as reqwest;\n",
+        "}\n",
+    );
+    let file = "app/src-tauri/src/fixture_shadowed.rs";
+    let own = module_of(file);
+    let module: Vec<&str> = own.iter().map(String::as_str).collect();
+    let analysis = Analysis::new(shadowed, &module);
+    for written in ["reqwest::blocking::get", "std::process::Command::new"] {
+        let o = analysis
+            .production()
+            .find(|o| o.written.to_string() == written)
+            .unwrap_or_else(|| panic!("{written}"));
+        assert!(
+            o.resolved.iter().all(|p| effect_kinds(p).is_empty()),
+            "the resolver alone sees {written}: {:?}",
+            o.resolved
+        );
+    }
+    let sites = file_effect_sites(file, shadowed, &own);
+    assert_eq!(
+        sites,
+        BTreeMap::from([("network", 1), ("process", 1)]),
+        "shadowing hid a mechanism"
+    );
+
+    // The kernel's unsealed spawn, through the SDK's re-export.
+    let unsealed = concat!(
+        "use nexus_sdk::resource_limiter::{ResourceLimiter, ResourceProgram, ResourceSpawnSpec};\n",
+        "pub fn run(spec: ResourceSpawnSpec) {\n",
+        "    let _ = ResourceProgram::Shell(String::new());\n",
+        "    let _ = ResourceLimiter::spawn(&ResourceLimiter::default(), &spec);\n",
+        "}\n",
+    );
+    let file = "agents/coder/src/fixture_unsealed.rs";
+    let sites = file_effect_sites(file, unsealed, &module_of(file));
+    assert_eq!(sites.get("process"), Some(&3), "{sites:?}");
+
+    // Latent callers, however they name the entry.
+    let callers = concat!(
+        "use nexus_auth::OidcClient as Client;\n",
+        "use coder_agent::terminal;\n",
+        "pub fn wire(config: nexus_auth::AuthConfig) {\n",
+        "    let _ = Client::new(config.clone());\n",
+        "    let _ = terminal::execute(\"true\", todo!());\n",
+        "    let _ = nexus_conductor::Conductor::<()>::new(todo!());\n",
+        "    let _ = config.resolve_client_secret();\n",
+        "    let _ = nexus_auth::AuthConfig::resolve_client_secret(&config);\n",
+        "}\n",
+    );
+    let file = "app/src-tauri/src/fixture_latent.rs";
+    let sites = file_effect_sites(file, callers, &module_of(file));
+    assert_eq!(sites.get("latent"), Some(&5), "{sites:?}");
+    // Inside its crate a latent module's sibling is a caller; the module
+    // itself is not.
+    let inside = "pub fn f() { let _ = crate::terminal::execute(\"true\", todo!()); }";
+    let sibling = "agents/coder/src/fixture_sibling.rs";
+    assert_eq!(
+        file_effect_sites(sibling, inside, &module_of(sibling)).get("latent"),
+        Some(&1)
+    );
+    let itself = "agents/coder/src/terminal.rs";
+    assert_eq!(
+        file_effect_sites(itself, inside, &module_of(itself)).get("latent"),
+        None
+    );
+
+    // Assembly, device nodes, and a kill beside a process listing.
+    let other = concat!(
+        "pub fn f(sys: &sysinfo::System) {\n",
+        "    unsafe { core::arch::asm!(\"nop\") };\n",
+        "    let _ = std::fs::File::open(\"/dev/uinput\");\n",
+        "    for p in sys.processes().values() { p.kill(); }\n",
+        "}\n",
+    );
+    let file = "app/src-tauri/src/fixture_other.rs";
+    let sites = file_effect_sites(file, other, &module_of(file));
+    for kind in ["asm", "device", "ends"] {
+        assert_eq!(sites.get(kind), Some(&1), "{kind}: {sites:?}");
+    }
+
+    // Every latent class has entries, so its callers are sites.
+    for (file, _, reason) in EFFECT_FILES {
+        if !reason.starts_with("latent") {
+            continue;
+        }
+        let own = module_of(file);
+        let covered = LATENT_ENTRIES.iter().any(|(dir, _, module, _, _)| {
+            let module: Vec<String> = std::iter::once("crate")
+                .chain(module.split("::").filter(|s| !s.is_empty()))
+                .map(str::to_string)
+                .collect();
+            file.starts_with(&format!("{dir}/src/")) && own == module
+        });
+        assert!(covered, "{file} is latent but no LATENT_ENTRIES names it");
+    }
+}
+
+/// §22 (audit P10): the guards' file set is the module tree. Every module a
+/// production source declares, with or without `#[path]`, loads a source the
+/// guards scan, and the only production `include!`s are the two toolchain
+/// manifests that build scripts generate (constants), pinned exactly.
+#[test]
+fn p3_g6_13_every_production_module_is_a_scanned_source() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let scanned: BTreeSet<String> = workspace_sources()
+        .iter()
+        .map(|(file, _)| file.clone())
+        .chain(NAME_SKIPPED_MODULES.iter().map(|file| file.to_string()))
+        .collect();
+    // Every target a manifest names is below its crate's `src`.
+    for (file, _) in workspace_sources() {
+        if !file.ends_with("/src/lib.rs") && !file.ends_with("/src/main.rs") {
+            continue;
+        }
+        let manifest = workspace_file(
+            &file
+                .replace("/src/lib.rs", "/Cargo.toml")
+                .replace("/src/main.rs", "/Cargo.toml"),
+        );
+        let mut section = "";
+        for line in manifest.lines() {
+            let line = line.trim();
+            if line.starts_with('[') {
+                section = line;
+            } else if (section == "[lib]" || section == "[[bin]]") && line.starts_with("path") {
+                let value = line.split('"').nth(1).unwrap_or_default();
+                assert!(value.starts_with("src/"), "{file}: a target at {value}");
+            }
+        }
+    }
+    // The module tree, from every crate root: (file, loaded through `#[path]`).
+    let mut queue: Vec<(String, bool)> = scanned
+        .iter()
+        .filter(|file| crate_root(file))
+        .map(|file| (file.clone(), false))
+        .collect();
+    assert!(queue.len() > 60, "{} crate roots", queue.len());
+    let mut seen = BTreeSet::new();
+    let mut includes = BTreeSet::new();
+    let mut declared = 0;
+    while let Some((file, path_loaded)) = queue.pop() {
+        if !seen.insert(file.clone()) {
+            continue;
+        }
+        let (found, included) = module_declarations(&workspace_file(&file));
+        includes.extend(included.into_iter().map(|call| (file.clone(), call)));
+        let path = std::path::Path::new(&file);
+        let dir = path.parent().unwrap();
+        // rustc treats every `#[path]` file as a `mod.rs`: its own modules
+        // are its siblings.
+        let mod_rs = path.file_name().unwrap() == "mod.rs" || crate_root(&file) || path_loaded;
+        let own_dir = if mod_rs {
+            dir.to_path_buf()
+        } else {
+            dir.join(path.file_stem().unwrap())
+        };
+        for d in found {
+            declared += 1;
+            let inline: std::path::PathBuf = d.inline.iter().collect();
+            let candidates = match &d.path {
+                Some(value) if d.inline.is_empty() => vec![dir.join(value)],
+                Some(value) => vec![own_dir.join(&inline).join(value)],
+                None => {
+                    let base = own_dir.join(&inline);
+                    vec![
+                        base.join(format!("{}.rs", d.name)),
+                        base.join(&d.name).join("mod.rs"),
+                    ]
+                }
+            };
+            let loaded: Vec<String> = candidates
+                .iter()
+                .map(|candidate| lexically_normal(candidate))
+                .filter(|candidate| root.join(candidate).is_file())
+                .collect();
+            assert_eq!(loaded.len(), 1, "{file}: mod {} loads {loaded:?}", d.name);
+            assert!(
+                scanned.contains(&loaded[0]),
+                "{file}: mod {} loads {}, which no guard scans",
+                d.name,
+                loaded[0]
+            );
+            queue.push((loaded[0].clone(), d.path.is_some()));
+        }
+    }
+    assert!(declared > 400, "{declared} declarations");
+    assert!(seen.len() > 500, "{} production modules", seen.len());
+    assert_eq!(
+        includes,
+        BTreeSet::from([
+            (
+                "app/src-tauri/src/builder_workspace/trusted_toolchain.rs".to_string(),
+                "include!(concat!(env!(\"OUT_DIR\"),\"/builder_toolchain_manifest.rs\"))"
+                    .to_string()
+            ),
+            (
+                "crates/nexus-verifier-sandbox/src/toolchain.rs".to_string(),
+                "include!(concat!(env!(\"OUT_DIR\"),\"/verifier_toolchain_manifest.rs\"))"
+                    .to_string()
+            ),
+        ])
+    );
+    // The scan itself: a `#[path]` module inside an inline module, a test
+    // module, and an `include!` are all seen.
+    let (found, included) = module_declarations(concat!(
+        "pub(crate) mod a;\n",
+        "mod outer { #[cfg(unix)] #[path = \"../x.rs\"] pub mod b; }\n",
+        "#[cfg(test)] mod tests;\n",
+        "include!(\"gen.rs\");\n",
+    ));
+    let found: Vec<(String, Option<String>, Vec<String>)> = found
+        .into_iter()
+        .map(|d| (d.name, d.path, d.inline))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("a".to_string(), None, vec![]),
+            (
+                "b".to_string(),
+                Some("../x.rs".to_string()),
+                vec!["outer".to_string()]
+            ),
+        ]
+    );
+    assert_eq!(included, ["include!(\"gen.rs\")"]);
+}
+
+/// A production `mod name;` declaration: its `#[path]` value, and the
+/// inline modules it sits in.
+struct ModuleDeclaration {
+    name: String,
+    path: Option<String>,
+    inline: Vec<String>,
+}
+
+/// The production module declarations and `include!` calls (rendered
+/// without whitespace) of one source.
+fn module_declarations(src: &str) -> (Vec<ModuleDeclaration>, Vec<String>) {
+    use crate::phase0_surface::rust_paths::{Analysis, Tok, Token};
+    let ident = |token: Option<&Token>| match token.map(|token| &token.tok) {
+        Some(Tok::Ident(name)) => Some(name.clone()),
+        _ => None,
+    };
+    let rendered = |tokens: &[Token]| -> String {
+        tokens
+            .iter()
+            .map(|token| match &token.tok {
+                Tok::Ident(text) | Tok::Num(text) | Tok::Punct(text) => text.clone(),
+                Tok::Str(text) => format!("\"{text}\""),
+                Tok::Atom => "'".to_string(),
+            })
+            .collect()
+    };
+    let analysis = Analysis::new(src, &["crate"]);
+    let t = &analysis.tokens;
+    let mut declarations = Vec::new();
+    let mut includes = Vec::new();
+    // Inline modules: (name, depth of their body).
+    let mut inline: Vec<(String, usize)> = Vec::new();
+    let mut depth = 0usize;
+    for k in 0..t.len() {
+        if t[k].is("{") {
+            depth += 1;
+            if k >= 2 && t[k - 2].is("mod") {
+                if let Some(name) = ident(t.get(k - 1)) {
+                    inline.push((name, depth));
+                }
+            }
+            continue;
+        }
+        if t[k].is("}") {
+            if inline.last().is_some_and(|(_, at)| *at == depth) {
+                inline.pop();
+            }
+            depth = depth.saturating_sub(1);
+            continue;
+        }
+        if analysis.test[k] {
+            continue;
+        }
+        if t[k].is("include") && t.get(k + 1).is_some_and(|x| x.is("!")) {
+            let mut end = k + 2;
+            let mut open = 0;
+            while end < t.len() {
+                if t[end].is("(") {
+                    open += 1;
+                } else if t[end].is(")") {
+                    open -= 1;
+                    if open == 0 {
+                        break;
+                    }
+                }
+                end += 1;
+            }
+            includes.push(rendered(&t[k..=end.min(t.len() - 1)]));
+            continue;
+        }
+        let qualified = k > 0 && (t[k - 1].is("::") || t[k - 1].is("."));
+        let Some(name) = ident(t.get(k + 1)) else {
+            continue;
+        };
+        if !t[k].is("mod") || qualified || !t.get(k + 2).is_some_and(|x| x.is(";")) {
+            continue;
+        }
+        // The item's attributes, before its visibility.
+        let mut j = k;
+        if j >= 1 && t[j - 1].is("pub") {
+            j -= 1;
+        } else if j >= 1 && t[j - 1].is(")") {
+            let open = (0..j - 1).rev().find(|&o| t[o].is("(")).unwrap();
+            if open >= 1 && t[open - 1].is("pub") {
+                j = open - 1;
+            }
+        }
+        let mut path = None;
+        while j >= 1 && t[j - 1].is("]") {
+            let close = j - 1;
+            let mut level = 0;
+            let mut open = close;
+            loop {
+                if t[open].is("]") {
+                    level += 1;
+                } else if t[open].is("[") {
+                    level -= 1;
+                    if level == 0 {
+                        break;
+                    }
+                }
+                open -= 1;
+            }
+            if open == 0 || !t[open - 1].is("#") {
+                break;
+            }
+            let body = &t[open + 1..close];
+            assert!(
+                !(body.first().is_some_and(|x| x.is("cfg_attr"))
+                    && body.iter().any(|x| x.is("path"))),
+                "mod {name} has a conditional #[path]"
+            );
+            if let [key, eq, value] = body {
+                if let (true, true, Tok::Str(value)) = (key.is("path"), eq.is("="), &value.tok) {
+                    path = Some(value.clone());
+                }
+            }
+            j = open - 1;
+        }
+        declarations.push(ModuleDeclaration {
+            name,
+            path,
+            inline: inline.iter().map(|(name, _)| name.clone()).collect(),
+        });
+    }
+    (declarations, includes)
+}
+
+/// Whether `file` is a crate's target root: `src/lib.rs`, `src/main.rs` or a
+/// `src/bin` target.
+fn crate_root(file: &str) -> bool {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let path = std::path::Path::new(file);
+    let Some(crate_dir) = path
+        .ancestors()
+        .skip(1)
+        .find(|dir| root.join(dir).join("Cargo.toml").is_file())
+    else {
+        return false;
+    };
+    let Ok(below) = path.strip_prefix(crate_dir.join("src")) else {
+        return false;
+    };
+    let parts: Vec<&str> = below.iter().map(|part| part.to_str().unwrap()).collect();
+    matches!(
+        parts.as_slice(),
+        ["lib.rs"] | ["main.rs"] | ["bin", _] | ["bin", _, "main.rs"]
+    )
+}
+
+/// `path` with `.` and `..` resolved lexically, `/`-separated.
+fn lexically_normal(path: &std::path::Path) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                parts.pop();
+            }
+            other => parts.push(other.as_os_str().to_string_lossy().into_owned()),
+        }
+    }
+    parts.join("/")
+}
+
+/// §22 (audit P25): a macro can build a path, a trait or a method name from
+/// its fragments, and then neither the resolver nor the impl inventories see
+/// it. The production `macro_rules!` are pinned, and none of them puts a
+/// fragment in a path, as a trait, as a method or as a macro name.
+#[test]
+fn p3_g6_14_no_macro_assembles_a_path_trait_or_method() {
+    let sources = workspace_sources()
+        .iter()
+        .map(|(file, text)| (file.clone(), text.clone()))
+        .chain(
+            NAME_SKIPPED_MODULES
+                .iter()
+                .map(|file| (file.to_string(), production_text(&workspace_file(file)))),
+        );
+    let mut defined = BTreeMap::new();
+    for (file, text) in sources {
+        let m = masked(&text);
+        for at in words(&m, "macro_rules") {
+            let open = at
+                + m[at..]
+                    .iter()
+                    .position(|c| matches!(c, b'{' | b'(' | b'['))
+                    .expect("a macro body");
+            let body = String::from_utf8_lossy(&m[open..close_of(&m, open)]).into_owned();
+            *defined.entry(file.clone()).or_insert(0) += 1;
+            for (i, _) in body.match_indices('$') {
+                let rest = &body[i + 1..];
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if name.is_empty() || name == "crate" {
+                    continue; // a repetition, or the macro's own crate
+                }
+                let after = rest[name.len()..].trim_start();
+                let before = body[..i].trim_end();
+                let as_trait = after.starts_with("for")
+                    && !after[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_');
+                assert!(
+                    !after.starts_with("::") && !before.ends_with("::"),
+                    "{file}: ${name} in a path"
+                );
+                assert!(!before.ends_with('.'), "{file}: ${name} as a method");
+                assert!(!after.starts_with('!'), "{file}: ${name} as a macro");
+                assert!(!as_trait, "{file}: ${name} as a trait");
+            }
+        }
+    }
+    assert_eq!(
+        defined,
+        BTreeMap::from([
+            (
+                "crates/nexus-governed-control/src/authority/ids.rs".to_string(),
+                2
+            ),
+            ("crates/nexus-verifier-sandbox/src/hash.rs".to_string(), 1),
+        ])
+    );
+}
+
+/// The crate's compile-fail doctests, each pinned whole with the error that
+/// makes it fail (checked by rustdoc on nightly; on the pinned stable
+/// toolchain the text pin keeps each one failing for its stated reason).
+const COMPILE_FAIL_DOCTESTS: &[(&str, &str)] = &[
+    (
+        "E0451",
+        "use nexus_governed_control::authority::approval::R2Approval;\nuse nexus_governed_control::authority::ids::{CommitmentId, Digest};\nfn forge(id: CommitmentId, binding: Digest) -> R2Approval {\n    R2Approval { commitment: id, binding } // the fields are private\n}",
+    ),
+    (
+        "E0624",
+        "use nexus_governed_control::authority::approval::R2Approval;\nuse nexus_governed_control::authority::ids::{CommitmentId, Digest};\nfn forge(id: CommitmentId, binding: Digest) -> R2Approval {\n    R2Approval::confirmed(id, binding) // crate-private\n}",
+    ),
+    (
+        "E0599",
+        "use nexus_governed_control::authority::approval::R2Approval;\nfn twice(approval: R2Approval) -> (R2Approval, R2Approval) {\n    (approval.clone(), approval) // not Clone\n}",
+    ),
+    (
+        "E0277",
+        "let _: nexus_governed_control::authority::approval::R2Approval =\n    serde_json::from_str(\"{}\").unwrap(); // no deserializer",
+    ),
+    (
+        "E0624",
+        "use nexus_governed_control::authority::ids::CommitmentId;\nlet _ = CommitmentId::fresh(); // only the registry creates identities",
+    ),
+    (
+        "E0599",
+        "use nexus_governed_control::authority::commitment::ExecutionGuard;\nfn twice(guard: ExecutionGuard) -> (ExecutionGuard, ExecutionGuard) {\n    (guard.clone(), guard) // one-shot: not Clone\n}",
+    ),
+    (
+        "E0624",
+        "use nexus_governed_control::authority::Authority;\nuse nexus_governed_control::authority::ids::{AgentId, CommitmentId, Digest, RunId};\nfn start(a: &Authority, id: CommitmentId, agent: &AgentId, run: RunId, d: &Digest) {\n    // Only the pipeline starts an effect: the lifecycle is crate-private.\n    let _ = a.commitments().begin(id, agent, run, d, d);\n}",
+    ),
+];
+
+/// §24 (audit P27): the non-forgeability doctests stay, each whole and with
+/// its error code, and keep running under `cargo test`.
+#[test]
+fn p3_g6_15_the_compile_fail_doctests_are_pinned_with_their_errors() {
+    let lib = workspace_file("crates/nexus-governed-control/src/lib.rs");
+    let docs: String = lib
+        .lines()
+        .filter_map(|line| line.strip_prefix("//!"))
+        .map(|line| line.strip_prefix(' ').unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut blocks = Vec::new();
+    let mut rest = docs.as_str();
+    while let Some(start) = rest.find("```") {
+        let fence = &rest[start + 3..];
+        let tag_end = fence.find('\n').expect("a fence line");
+        let tag = &fence[..tag_end];
+        let close = fence[tag_end + 1..].find("```").expect("a closed block");
+        let code = fence[tag_end + 1..tag_end + 1 + close].trim_end();
+        if tag.starts_with("compile_fail") {
+            let code_tag = tag
+                .strip_prefix("compile_fail,")
+                .unwrap_or_else(|| panic!("a compile_fail doctest without an error code: {code}"));
+            blocks.push((code_tag.to_string(), code.to_string()));
+        }
+        rest = &fence[tag_end + 1 + close + 3..];
+    }
+    let pinned: Vec<(String, String)> = COMPILE_FAIL_DOCTESTS
+        .iter()
+        .map(|(code, text)| (code.to_string(), text.to_string()))
+        .collect();
+    assert_eq!(blocks, pinned);
+    let manifest = workspace_file("crates/nexus-governed-control/Cargo.toml");
+    assert!(
+        !manifest
+            .lines()
+            .any(|line| line.trim_start().starts_with("doctest")),
+        "{manifest}"
+    );
+    assert!(normalized(production_source(
+        "crates/nexus-governed-control/src/lib.rs"
+    ))
+    .contains("pubmodauthority;"));
+}
+
+/// Test-only features (see `cfg_requires_test`): every edge that enables one
+/// is a dev-dependency, or belongs to the integration-test crate, and no
+/// crate's own feature turns one on, so no shipped build compiles what the
+/// production scanners leave out.
+#[test]
+fn p3_g6_16_test_only_features_are_enabled_only_by_tests() {
+    const TEST_ONLY_FEATURES: [&str; 5] = [
+        "test-support",
+        "test-utils",
+        "testing",
+        "live-sandbox-harness",
+        "development-toolchain",
+    ];
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut manifests = Vec::new();
+    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !name.starts_with('.') && name != "target" && name != "node_modules" {
+                    walk(root, &path, out);
+                }
+            } else if name == "Cargo.toml" {
+                out.push(
+                    path.strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
+            }
+        }
+    }
+    walk(&root, &root, &mut manifests);
+    assert!(manifests.len() > 40, "{manifests:?}");
+    let named = |text: &str| -> Vec<String> {
+        text.split('"')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_string)
+            .collect()
+    };
+    let mut enabling = BTreeSet::new();
+    for manifest in &manifests {
+        let text = workspace_file(manifest);
+        let mut section = String::new();
+        let mut pending = String::new();
+        for line in text.lines() {
+            let line = line.split('#').next().unwrap_or_default().trim();
+            if line.starts_with('[') && pending.is_empty() {
+                section = line.trim_matches(['[', ']']).to_string();
+                continue;
+            }
+            pending.push_str(line);
+            pending.push(' ');
+            if pending.matches('[').count() > pending.matches(']').count() {
+                continue; // a list continues on the next line
+            }
+            let statement = std::mem::take(&mut pending);
+            let Some((key, value)) = statement.split_once('=') else {
+                continue;
+            };
+            let key = key.trim();
+            for feature in TEST_ONLY_FEATURES {
+                let enables = if section == "features" {
+                    key != feature
+                        && named(value)
+                            .iter()
+                            .any(|item| item == feature || item.ends_with(&format!("/{feature}")))
+                } else {
+                    (key == "features" || value.contains("features"))
+                        && named(value).iter().any(|item| item == feature)
+                };
+                if enables {
+                    enabling.insert((manifest.clone(), section.clone(), key.to_string()));
+                }
+            }
+        }
+    }
+    for (manifest, section, key) in &enabling {
+        assert!(
+            section.ends_with("dev-dependencies") || manifest == "tests/integration/Cargo.toml",
+            "{manifest} [{section}] {key} enables a test-only feature"
+        );
+    }
+    assert_eq!(enabling.len(), 6, "the known test-only edges: {enabling:?}");
+}
+
+/// §25 (audit P32): only the browser and the agent display launch a session
+/// process, each with the executable it pinned.
+#[test]
+fn p3_g6_17_only_the_browser_and_display_launch_session_processes() {
+    let mut launches = references(P3_CRATE, "launch");
+    launches.sort();
+    assert_eq!(
+        launches,
+        [
+            (
+                "crates/nexus-governed-control/src/browser/mod.rs",
+                "run".to_string()
+            ),
+            (
+                "crates/nexus-governed-control/src/display/server.rs",
+                "AgentServer::start".to_string()
+            ),
+        ]
+    );
+    for (file, function, program) in [
+        (
+            "browser/mod.rs",
+            "run",
+            "program:session.executable.clone(),",
+        ),
+        (
+            "display/server.rs",
+            "AgentServer::start",
+            "program:program.path.clone(),",
+        ),
+    ] {
+        let text = production_source(&format!("{P3_CRATE}{file}"));
+        let launching: Vec<String> = fn_items(text)
+            .into_iter()
+            .filter(|item| item.path == function)
+            .map(|item| compact(item.body_text(text)))
+            .filter(|body| body.contains("SessionProcess::launch("))
+            .collect();
+        assert_eq!(launching.len(), 1, "{file}");
+        assert!(
+            launching[0].contains(&format!("SessionProcess::launch(SessionSpec{{{program}")),
+            "{file}: {}",
+            launching[0]
+        );
+    }
 }

@@ -44,9 +44,10 @@
 //! let _ = serde_json::to_string(&1);
 //! ```
 //!
-//! The authority's types cannot be forged from outside the crate:
+//! The authority's types cannot be forged from outside the crate (each
+//! block fails with the error its tag names; `p3_g6_15` pins them):
 //!
-//! ```compile_fail
+//! ```compile_fail,E0451
 //! use nexus_governed_control::authority::approval::R2Approval;
 //! use nexus_governed_control::authority::ids::{CommitmentId, Digest};
 //! fn forge(id: CommitmentId, binding: Digest) -> R2Approval {
@@ -54,7 +55,7 @@
 //! }
 //! ```
 //!
-//! ```compile_fail
+//! ```compile_fail,E0624
 //! use nexus_governed_control::authority::approval::R2Approval;
 //! use nexus_governed_control::authority::ids::{CommitmentId, Digest};
 //! fn forge(id: CommitmentId, binding: Digest) -> R2Approval {
@@ -62,31 +63,31 @@
 //! }
 //! ```
 //!
-//! ```compile_fail
+//! ```compile_fail,E0599
 //! use nexus_governed_control::authority::approval::R2Approval;
 //! fn twice(approval: R2Approval) -> (R2Approval, R2Approval) {
 //!     (approval.clone(), approval) // not Clone
 //! }
 //! ```
 //!
-//! ```compile_fail
+//! ```compile_fail,E0277
 //! let _: nexus_governed_control::authority::approval::R2Approval =
 //!     serde_json::from_str("{}").unwrap(); // no deserializer
 //! ```
 //!
-//! ```compile_fail
+//! ```compile_fail,E0624
 //! use nexus_governed_control::authority::ids::CommitmentId;
 //! let _ = CommitmentId::fresh(); // only the registry creates identities
 //! ```
 //!
-//! ```compile_fail
+//! ```compile_fail,E0599
 //! use nexus_governed_control::authority::commitment::ExecutionGuard;
 //! fn twice(guard: ExecutionGuard) -> (ExecutionGuard, ExecutionGuard) {
 //!     (guard.clone(), guard) // one-shot: not Clone
 //! }
 //! ```
 //!
-//! ```compile_fail
+//! ```compile_fail,E0624
 //! use nexus_governed_control::authority::Authority;
 //! use nexus_governed_control::authority::ids::{AgentId, CommitmentId, Digest, RunId};
 //! fn start(a: &Authority, id: CommitmentId, agent: &AgentId, run: RunId, d: &Digest) {

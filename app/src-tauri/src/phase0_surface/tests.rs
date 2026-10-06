@@ -1841,9 +1841,99 @@ fn item_end(b: &[u8], mut i: usize) -> usize {
     b.len()
 }
 
-/// Production text of a Rust source: comments removed, and every item under
-/// `#[cfg(test)]` or `#[cfg(any(test, ..))]` removed. Literals are kept and
-/// are never read as delimiters or attributes.
+/// If a `#[cfg(...)]` attribute starts at `i` and its predicate holds only
+/// in test builds (`test`, an `all(..)` with such a member, or an `any(..)`
+/// whose members all are), the end of the attribute. An item shipped in
+/// some build (`any(test, target_os = "linux")`) is not test-only.
+fn test_only_cfg(b: &[u8], i: usize) -> Option<usize> {
+    if !b[i..].starts_with(b"#[cfg(") {
+        return None;
+    }
+    let open = i + b"#[cfg(".len();
+    let mut depth = 1usize;
+    let mut j = open;
+    while j < b.len() {
+        match b[j] {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            b'"' => j = literal_end(b, j)? - 1,
+            _ => {}
+        }
+        j += 1;
+    }
+    if b.get(j + 1) != Some(&b']') {
+        return None;
+    }
+    let predicate = std::str::from_utf8(&b[open..j]).ok()?;
+    cfg_requires_test(predicate).then_some(j + 2)
+}
+
+/// Whether a `cfg` predicate holds only when `test` is set, or one of the
+/// features only test builds enable (on dev-dependency edges, or by the
+/// workspace's integration-test crate; `p3_g6_12` pins that).
+fn cfg_requires_test(predicate: &str) -> bool {
+    const TEST_ONLY_FEATURES: [&str; 5] = [
+        "test-support",
+        "test-utils",
+        "testing",
+        "live-sandbox-harness",
+        "development-toolchain",
+    ];
+    let predicate = predicate.trim();
+    if TEST_ONLY_FEATURES
+        .iter()
+        .any(|feature| predicate == format!("feature = \"{feature}\""))
+    {
+        return true;
+    }
+    let members = |inner: &str| -> Vec<String> {
+        let mut out = Vec::new();
+        let (mut depth, mut start, mut quoted) = (0i32, 0usize, false);
+        for (at, c) in inner.char_indices() {
+            match c {
+                '"' => quoted = !quoted,
+                '(' if !quoted => depth += 1,
+                ')' if !quoted => depth -= 1,
+                ',' if !quoted && depth == 0 => {
+                    out.push(inner[start..at].trim().to_string());
+                    start = at + 1;
+                }
+                _ => {}
+            }
+        }
+        out.push(inner[start..].trim().to_string());
+        out.retain(|member| !member.is_empty());
+        out
+    };
+    if predicate == "test" {
+        true
+    } else if let Some(inner) = predicate
+        .strip_prefix("all(")
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        members(inner)
+            .iter()
+            .any(|member| cfg_requires_test(member))
+    } else if let Some(inner) = predicate
+        .strip_prefix("any(")
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        let members = members(inner);
+        !members.is_empty() && members.iter().all(|member| cfg_requires_test(member))
+    } else {
+        false
+    }
+}
+
+/// Production text of a Rust source: comments removed, and every item that
+/// only a test build compiles removed (its `cfg` requires `test` or a
+/// test-only feature; see `cfg_requires_test`). Literals are kept and are
+/// never read as delimiters or attributes.
 fn production_text(src: &str) -> String {
     let b = src.as_bytes();
     let mut out = Vec::with_capacity(b.len());
@@ -1855,8 +1945,7 @@ fn production_text(src: &str) -> String {
         } else if let Some(end) = comment_end(b, i) {
             out.push(b' ');
             i = end;
-        } else if b[i..].starts_with(b"#[cfg(test)]") || b[i..].starts_with(b"#[cfg(any(test") {
-            let attribute = i + b[i..].windows(2).position(|w| w == b")]").unwrap() + 2;
+        } else if let Some(attribute) = test_only_cfg(b, i) {
             i = item_end(b, attribute);
         } else {
             out.push(b[i]);
@@ -1873,6 +1962,9 @@ fn production_text_drops_comments_and_test_items_but_keeps_literals() {
         "/* block /* nested */ */ fn b<'a>(x: &'a str) -> char { '}' }\n",
         "#[cfg(test)]\nmod tests { fn t() { let _ = \"}\"; } }\n",
         "#[cfg(any(test, feature = \"x\"))]\npub fn helper() -> [u8; 2] { [1, 2] }\n",
+        "#[cfg(any(test, target_os = \"linux\"))]\nfn shipped() {}\n",
+        "#[cfg(all(test, unix))]\nfn only_in_tests() {}\n",
+        "#[cfg(any(test, all(test, feature = \"x\")))]\nfn also_only_in_tests() {}\n",
         "#[cfg(test)]\nuse std::fmt;\n",
         "fn c() -> &'static str { r#\"raw \" // kept\"# }\n",
         "fn d() -> S { S { #[cfg(test)] probe: 1, kept_field: 2 } }\n",
@@ -1885,8 +1977,15 @@ fn production_text_drops_comments_and_test_items_but_keeps_literals() {
         text.contains("fn b<'a>(x: &'a str) -> char { '}' }"),
         "{text}"
     );
+    assert!(!text.contains("mod tests"), "{text}");
+    // An item some build ships is production (it only also compiles in
+    // tests); an item no build but a test build compiles is not.
     assert!(
-        !text.contains("mod tests") && !text.contains("helper"),
+        text.contains("pub fn helper()") && text.contains("fn shipped()"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("only_in_tests") && !text.contains("also_only_in_tests"),
         "{text}"
     );
     assert!(!text.contains("std::fmt"), "{text}");
