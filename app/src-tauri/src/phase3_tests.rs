@@ -4244,6 +4244,7 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
         ("display/server.rs", "network", 1),
         ("display/server.rs", "x11", 37),
         ("egress/destination.rs", "network", 1), // name resolution, then the address policy
+        ("egress/interfaces.rs", "libc", 5),     // getifaddrs: this machine's interfaces
         ("egress/mod.rs", "network", 8),         // header types
         ("egress/transport.rs", "network", 19),
         ("launcher.rs", "ends", 2), // SIGTERM with a grace, then SIGKILL
@@ -4255,15 +4256,24 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
     .map(|(file, kind, count)| ((file.to_string(), kind), count))
     .collect();
     assert_eq!(found, allowed);
-    // Unsafe code is denied crate-wide and allowed only in the launcher.
+    // Unsafe code is denied crate-wide and allowed only in the launcher and
+    // in the one call that reads this machine's network interfaces.
     let lib = production_source("crates/nexus-governed-control/src/lib.rs");
     assert!(lib.contains("#![deny(unsafe_code)]"));
-    let allowing: Vec<&str> = p3_sources()
+    let mut allowing: Vec<&str> = p3_sources()
         .into_iter()
         .filter(|(_, text)| text.contains("allow(unsafe_code)"))
         .map(|(file, _)| file)
         .collect();
-    assert_eq!(allowing, ["launcher.rs"]);
+    allowing.sort();
+    assert_eq!(allowing, ["egress/interfaces.rs", "launcher.rs"]);
+    let interfaces = production_source("crates/nexus-governed-control/src/egress/interfaces.rs");
+    let calls: Vec<&str> = ["getifaddrs(", "freeifaddrs("]
+        .into_iter()
+        .filter(|call| interfaces.contains(call))
+        .collect();
+    assert_eq!(calls, ["getifaddrs(", "freeifaddrs("]);
+    assert_eq!(compact(interfaces).matches("unsafe{").count(), 6);
 }
 
 /// Nothing in Phase Three reads the process environment: not the owner's

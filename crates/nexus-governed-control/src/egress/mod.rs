@@ -13,6 +13,7 @@
 //! other redirect is returned as data, not followed.
 
 pub mod destination;
+mod interfaces;
 pub(crate) mod transport;
 
 pub use transport::Method;
@@ -131,6 +132,9 @@ fn destination_error(error: DestinationError) -> AuthorityError {
         }
         DestinationError::Unresolvable => {
             AuthorityError::Unavailable("destination does not resolve")
+        }
+        DestinationError::NoLocalBoundary => {
+            AuthorityError::Unavailable("the local network boundary cannot be read")
         }
         other => AuthorityError::InvalidAction(other.as_str()),
     }

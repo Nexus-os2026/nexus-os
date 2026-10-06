@@ -521,3 +521,169 @@ fn a_refused_address_anywhere_in_an_answer_refuses_it() {
         DestinationError::NotPermitted
     );
 }
+
+/// A fixed answer and a fixed view of this machine's network (`None`: the
+/// view cannot be read). Answers change from the second lookup on when
+/// `later` is given.
+struct Local {
+    answer: Vec<std::net::IpAddr>,
+    later: Option<Vec<std::net::IpAddr>>,
+    local: Option<super::destination::LocalNetworks>,
+    lookups: AtomicU32,
+}
+
+impl Local {
+    fn new(answer: &[&str], local: Option<&[(&str, u8)]>) -> Self {
+        Self {
+            answer: answer.iter().map(|ip| ip.parse().unwrap()).collect(),
+            later: None,
+            local: local.map(|networks| {
+                super::destination::LocalNetworks(
+                    networks
+                        .iter()
+                        .map(|(ip, length)| (ip.parse().unwrap(), *length))
+                        .collect(),
+                )
+            }),
+            lookups: AtomicU32::new(0),
+        }
+    }
+}
+
+impl Resolver for Local {
+    fn resolve(&self, _host: &str, port: u16) -> std::io::Result<Vec<SocketAddr>> {
+        let first = self.lookups.fetch_add(1, Ordering::SeqCst) == 0;
+        let answer = match (&self.later, first) {
+            (Some(later), false) => later,
+            _ => &self.answer,
+        };
+        Ok(answer.iter().map(|ip| SocketAddr::new(*ip, port)).collect())
+    }
+
+    fn local_networks(&self) -> std::io::Result<super::destination::LocalNetworks> {
+        self.local
+            .clone()
+            .ok_or_else(|| std::io::Error::other("no view of the local network"))
+    }
+}
+
+/// Not being in a private range is not enough: an address of this machine,
+/// or in a network directly connected to it, is refused where private
+/// addresses are not granted, IPv4 and IPv6 alike, as is any answer that
+/// holds one; an ordinary remote address passes; a boundary that cannot be
+/// read refuses everything; a grant of private addresses admits them, as
+/// it says.
+#[test]
+fn this_machines_addresses_and_link_networks_are_refused_however_public() {
+    use super::destination::{resolve_checked, Destination, DestinationError};
+    let host = Destination::parse("https://rebound.example/").unwrap();
+    let literal = Destination::parse("https://93.184.216.34/").unwrap();
+    // This machine: a public IPv4 address on a /24, a global IPv6 address
+    // on a /64, a point-to-point peer.
+    let machine: &[(&str, u8)] = &[
+        ("93.184.216.34", 24),
+        ("2606:2800:220:1::5", 64),
+        ("198.18.0.1", 32),
+        ("45.33.32.156", 32),
+    ];
+    let refused = Err(DestinationError::NotPermitted);
+    for (answer, expected) in [
+        // Its own public IPv4 address, by name and as a literal below.
+        (&["93.184.216.34"][..], refused),
+        // Another host of its directly connected public subnet.
+        (&["93.184.216.99"][..], refused),
+        // Its own global IPv6 address, and another of its /64.
+        (&["2606:2800:220:1::5"][..], refused),
+        (&["2606:2800:220:1:abcd::1"][..], refused),
+        // The point-to-point peer.
+        (&["45.33.32.156"][..], refused),
+        // A mapped IPv6 form of its subnet.
+        (&["::ffff:93.184.216.99"][..], refused),
+        // A mixed answer, one address local: the whole answer.
+        (&["8.8.8.8", "93.184.216.99"][..], refused),
+        (&["2001:4860:4860::8888", "2606:2800:220:1::9"][..], refused),
+    ] {
+        let resolver = Local::new(answer, Some(machine));
+        assert_eq!(
+            resolve_checked(&host, false, &resolver).map(|_| ()),
+            expected,
+            "{answer:?}"
+        );
+    }
+    assert_eq!(
+        resolve_checked(&literal, false, &Local::new(&[], Some(machine))).map(|_| ()),
+        refused,
+        "an IP literal"
+    );
+    // Ordinary remote addresses, just outside the local networks.
+    for remote in [
+        &["8.8.8.8"][..],
+        &["93.184.217.1"][..],
+        &["2606:2800:220:2::1"][..],
+        &["2001:4860:4860::8888", "1.1.1.1"][..],
+    ] {
+        let resolver = Local::new(remote, Some(machine));
+        assert!(
+            resolve_checked(&host, false, &resolver).is_ok(),
+            "{remote:?}"
+        );
+    }
+    // No view of the boundary: nothing passes where it is needed.
+    assert_eq!(
+        resolve_checked(&host, false, &Local::new(&["8.8.8.8"], None)).unwrap_err(),
+        DestinationError::NoLocalBoundary
+    );
+    // A network of length zero covers every address.
+    assert_eq!(
+        resolve_checked(
+            &host,
+            false,
+            &Local::new(&["8.8.8.8"], Some(&[("10.0.0.1", 0)]))
+        )
+        .unwrap_err(),
+        DestinationError::NotPermitted
+    );
+    // A grant of private addresses admits this machine's, explicitly, and
+    // needs no view of the boundary.
+    for answer in [&["93.184.216.99"][..], &["2606:2800:220:1::5"][..]] {
+        assert!(resolve_checked(&host, true, &Local::new(answer, None)).is_ok());
+    }
+}
+
+/// The system's view of this machine's network is read for real: it holds
+/// the loopback interface's address and network.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_system_view_of_the_local_network_is_read() {
+    let view = SystemResolver.local_networks().unwrap();
+    assert!(view.contains("127.0.0.1".parse().unwrap()));
+    assert!(view.contains("127.1.2.3".parse().unwrap()));
+    assert!(!view.contains("8.8.8.8".parse().unwrap()) || view.0.iter().any(|(_, l)| *l == 0));
+}
+
+/// Every resolution is checked against the boundary: a name granted as a
+/// public origin that resolves, when the request is about to be sent, to
+/// this machine's directly connected network is refused before any
+/// socket is opened.
+#[test]
+fn a_name_rebound_to_this_machines_network_is_refused_before_any_socket() {
+    let mut resolver = Local::new(&["8.8.8.8"], Some(&[("93.184.216.34", 24)]));
+    resolver.later = Some(vec!["93.184.216.99".parse().unwrap()]);
+    let transport = Arc::new(Counting(AtomicU32::new(0)));
+    let egress = Egress::new(
+        Arc::new(resolver),
+        transport.clone(),
+        EgressLimits::default(),
+    );
+    let h = harness();
+    grant(&h, "https://rebound.example", &["GET"], false);
+    let error = run(
+        &h,
+        &egress,
+        intent("GET", "https://rebound.example/"),
+        false,
+    )
+    .unwrap_err();
+    assert_eq!(error, AuthorityError::TargetChanged);
+    assert_eq!(transport.0.load(Ordering::SeqCst), 0, "nothing was sent");
+}
