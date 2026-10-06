@@ -136,7 +136,11 @@ pub enum Outcome {
         class: FailureClass,
         detail: String,
     },
-    Cancelled,
+    /// The run was cancelled during the effect; `detail` says how far the
+    /// effect got, when the actuator said.
+    Cancelled {
+        detail: Option<String>,
+    },
 }
 
 /// The most summary lines an action may show; one that needs more is
@@ -682,7 +686,7 @@ impl CommitmentRegistry {
             Outcome::Failed { class, .. } => {
                 (CommitmentState::Failed, "failed", Some(class.as_str()))
             }
-            Outcome::Cancelled => (CommitmentState::Cancelled, "cancelled", None),
+            Outcome::Cancelled { .. } => (CommitmentState::Cancelled, "cancelled", None),
         };
         entry.state = state;
         let mut record = self.base_record(EvidencePhase::Finished, id, entry);
@@ -690,7 +694,7 @@ impl CommitmentRegistry {
         record.finished_wall_ms = Some(self.0.clock.wall_ms());
         record.outcome = Some(outcome_str);
         record.failure = failure;
-        record.cancelled = cancelled || matches!(outcome, Outcome::Cancelled);
+        record.cancelled = cancelled || matches!(outcome, Outcome::Cancelled { .. });
         match &outcome {
             Outcome::Succeeded { meta } => {
                 record.detail = meta
@@ -702,7 +706,11 @@ impl CommitmentRegistry {
             Outcome::Failed { detail, .. } => {
                 record.detail.push(("detail".into(), bounded(detail)))
             }
-            Outcome::Cancelled => {}
+            Outcome::Cancelled { detail } => {
+                if let Some(detail) = detail {
+                    record.detail.push(("detail".into(), bounded(detail)))
+                }
+            }
         }
         // A failure to record the end of an effect that already happened
         // cannot undo it; the start record stands either way.
@@ -881,15 +889,31 @@ impl CommitmentRegistry {
     /// (neither revoked nor expired). Effects that run in steps (a browser
     /// session) ask before each one.
     pub fn still_authorized(&self, id: CommitmentId) -> bool {
+        self.lapse(id).is_none()
+    }
+
+    /// Why an executing commitment is no longer covered, if it is not: its
+    /// own grant was revoked or expired, or the policy changed (another
+    /// grant was revoked, or every run was stopped).
+    pub fn lapse(&self, id: CommitmentId) -> Option<&'static str> {
         let entries = self.0.entries.lock().expect("commitments");
-        entries.get(&id).is_some_and(|e| {
-            e.state == CommitmentState::Executing
-                && self.0.generation.current() == e.generation
-                && e.prepared
-                    .grants
-                    .iter()
-                    .all(|grant| self.0.grants.live(*grant).is_some())
-        })
+        let Some(e) = entries.get(&id) else {
+            return Some("the action is no longer known");
+        };
+        if e.state != CommitmentState::Executing {
+            Some("the action is no longer executing")
+        } else if !e
+            .prepared
+            .grants
+            .iter()
+            .all(|grant| self.0.grants.live(*grant).is_some())
+        {
+            Some("its grant was revoked or expired")
+        } else if self.0.generation.current() != e.generation {
+            Some("the policy changed (a grant was revoked or every run was stopped)")
+        } else {
+            None
+        }
     }
 
     /// The prepared action of a commitment that is executing under `guard`
@@ -939,6 +963,12 @@ impl ExecutionGuard {
     /// [`CommitmentRegistry::still_authorized`]).
     pub fn still_authorized(&self) -> bool {
         self.registry.still_authorized(self.id)
+    }
+
+    /// Why the commitment is no longer covered, if it is not (see
+    /// [`CommitmentRegistry::lapse`]).
+    pub fn lapse(&self) -> Option<&'static str> {
+        self.registry.lapse(self.id)
     }
 
     /// The same question, with the run's cancellation, for what outlives one

@@ -55,6 +55,8 @@ pub struct RunRegistry {
     runs: Mutex<HashMap<RunId, RunEntry>>,
     stopped: AtomicBool,
     cancelled_by_stop: AtomicUsize,
+    /// The desktop is quitting: no run opens any more, and nothing resumes.
+    closed: AtomicBool,
 }
 
 /// Most runs kept (ended ones are pruned first).
@@ -84,6 +86,9 @@ impl RunRegistry {
         // run: a run cannot slip in between the stop and its sweep.
         if self.stopped.load(Ordering::SeqCst) {
             return Err(AuthorityError::EmergencyStopped);
+        }
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
         }
         if runs.len() >= RUN_CAPACITY {
             runs.retain(|_, e| !e.view.cancelled && !e.view.finished);
@@ -125,6 +130,13 @@ impl RunRegistry {
         entry.view.cancelled = true;
         entry.cancelled.store(true, Ordering::SeqCst);
         was_active
+    }
+
+    /// Refuse every new run from now on (the desktop is quitting). Taken
+    /// under the lock `open` checks under, so no run slips in after it.
+    pub(crate) fn close(&self) {
+        let _runs = self.runs.lock().expect("runs");
+        self.closed.store(true, Ordering::SeqCst);
     }
 
     /// Cancel every run and refuse new work until `resume`.

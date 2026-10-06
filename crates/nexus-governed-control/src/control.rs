@@ -226,8 +226,12 @@ impl Control {
             }
             Err((class, detail)) => {
                 let cancelled = guard.is_cancelled();
+                // A cancelled effect keeps what its actuator said: how far
+                // it got.
                 guard.finish(if cancelled {
-                    Outcome::Cancelled
+                    Outcome::Cancelled {
+                        detail: Some(detail),
+                    }
                 } else {
                     Outcome::Failed { class, detail }
                 });

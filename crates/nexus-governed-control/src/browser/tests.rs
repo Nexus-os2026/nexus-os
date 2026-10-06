@@ -685,6 +685,20 @@ fn a_stop_ends_the_session_between_its_steps() {
             .state,
         CommitmentState::Cancelled
     );
+    // The cancelled session's record says how far it got.
+    let records = h.evidence.records();
+    let finished = records.iter().rev().find(|r| r.outcome.is_some()).unwrap();
+    assert_eq!(finished.outcome, Some("cancelled"));
+    let detail = &finished
+        .detail
+        .iter()
+        .find(|(k, _)| k == "detail")
+        .unwrap()
+        .1;
+    assert!(
+        detail.contains(" (at step ") && detail.ends_with(" of 20)"),
+        "{detail}"
+    );
     assert_eq!(
         std::fs::read_dir(root.0.path()).unwrap().count(),
         0,
@@ -804,7 +818,7 @@ fn a_revoked_grant_ends_the_session_before_its_next_step() {
         .unwrap()
         .1;
     assert!(
-        detail.starts_with("the grant was revoked or expired (at step ")
+        detail.starts_with("its grant was revoked or expired (at step ")
             && detail.ends_with(" of 20)"),
         "{detail}"
     );
@@ -1095,18 +1109,33 @@ fn the_proxy_stops_when_its_session_may_no_longer_go_out() {
     std::thread::sleep(Duration::from_millis(300));
     live.store(false, Ordering::SeqCst);
     client.write_all(b"after").unwrap();
-    // The tunnel ends, and the proxy no longer listens.
+    // The tunnel ends.
     let mut rest = Vec::new();
     let _ = client.read_to_end(&mut rest);
+    assert_eq!(
+        upstream.recv_timeout(Duration::from_secs(5)).unwrap(),
+        b"before"
+    );
+    // The proxy keeps its port while the session lasts (no other process
+    // can take it from the browser) and closes every new connection at
+    // once, unserved.
+    let refused = proxy.refused();
+    let mut late = std::net::TcpStream::connect(address).unwrap();
+    late.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    late.write_all(format!("CONNECT fixture.nexus.invalid:{port} HTTP/1.1\r\n\r\n").as_bytes())
+        .ok();
+    let mut answer = Vec::new();
+    let _ = late.read_to_end(&mut answer);
+    assert!(answer.is_empty(), "{}", String::from_utf8_lossy(&answer));
+    assert_eq!(proxy.refused(), refused + 1);
+    // The port is released when the session ends.
+    drop(proxy);
     let deadline = Instant::now() + Duration::from_secs(2);
     while std::net::TcpStream::connect(address).is_ok() {
         assert!(Instant::now() < deadline, "the proxy still listens");
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert_eq!(
-        upstream.recv_timeout(Duration::from_secs(5)).unwrap(),
-        b"before"
-    );
+    assert!(upstream.recv_timeout(Duration::from_secs(1)).is_err());
 }
 
 /// At most four sessions of one control run at once (the number the

@@ -897,11 +897,21 @@ mod live {
         page.call("Page.enable", json!({}))?;
         let mut results = Vec::new();
         let mut completed = true;
-        let start = page.navigate(&session.start)?;
+        let total = session.steps.len();
+        // A failure says how far the session got, wherever it happens.
+        let before = |(class, detail): (FailureClass, String)| {
+            (
+                class,
+                format!("{detail} (at the start page, before step 1 of {total})"),
+            )
+        };
+        if let Some(reason) = guard.lapse() {
+            return Err(before((FailureClass::Refused, reason.into())));
+        }
+        let start = page.navigate(&session.start).map_err(before)?;
         let started_ok = start.get("refused").is_none();
         results.push(start);
         if started_ok {
-            let total = session.steps.len();
             for (index, step) in session.steps.iter().enumerate() {
                 // A failure says how far the session got: the steps before
                 // this one ran.
@@ -915,12 +925,9 @@ mod live {
                     return Err(at(cancelled()));
                 }
                 // A grant revoked or expired, or a policy change, ends the
-                // session before its next step.
-                if !guard.still_authorized() {
-                    return Err(at((
-                        FailureClass::Refused,
-                        "the grant was revoked or expired".into(),
-                    )));
+                // session before its next step, and says which.
+                if let Some(reason) = guard.lapse() {
+                    return Err(at((FailureClass::Refused, reason.into())));
                 }
                 if started.elapsed() > SESSION_LIMIT {
                     return Err(at((
@@ -939,7 +946,17 @@ mod live {
         } else {
             completed = false;
         }
-        page.close_popups()?;
+        // The steps that ran (the start page is the first result).
+        let ran = results.len() - 1;
+        let after = |(class, detail): (FailureClass, String)| {
+            (class, format!("{detail} (after step {ran} of {total})"))
+        };
+        page.close_popups().map_err(after)?;
+        // A grant that ended during the last step may have cut its traffic:
+        // the session is not reported as done.
+        if let Some(reason) = guard.lapse() {
+            return Err(after((FailureClass::Refused, reason.into())));
+        }
         let origin = page.script(scripts::LOCATION, &[]).unwrap_or(Value::Null);
         let mut downloaded = Vec::new();
         if let Some(dir) = &downloads {

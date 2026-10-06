@@ -376,6 +376,7 @@ fn an_executing_commitment_stays_covered_only_while_its_grants_are_live() {
     let guard = executing(&f);
     f.clock.advance(Duration::from_secs(601));
     assert!(!guard.still_authorized() && !(guard.liveness())());
+    assert_eq!(guard.lapse(), Some("its grant was revoked or expired"));
     // The grant is revoked.
     let f = fixture();
     let guard = executing(&f);
@@ -392,6 +393,11 @@ fn an_executing_commitment_stays_covered_only_while_its_grants_are_live() {
     let guard = executing(&f);
     f.auth.grants().revoke(other).unwrap();
     assert!(!guard.still_authorized());
+    // It says what happened: not its own grant.
+    assert_eq!(
+        guard.lapse(),
+        Some("the policy changed (a grant was revoked or every run was stopped)")
+    );
     // The run is cancelled: still covered, but no longer live.
     let f = fixture();
     let guard = executing(&f);
@@ -405,6 +411,10 @@ fn an_executing_commitment_stays_covered_only_while_its_grants_are_live() {
     let id = guard.commitment();
     guard.finish(Outcome::Succeeded { meta: vec![] });
     assert!(!f.auth.commitments().still_authorized(id) && !live());
+    assert_eq!(
+        f.auth.commitments().lapse(id),
+        Some("the action is no longer executing")
+    );
 }
 
 #[test]
@@ -716,7 +726,7 @@ fn cancellation_during_execution_is_seen_and_recorded_truthfully() {
         "the bounded execution observes the token"
     );
     assert!(completing.is_cancelled());
-    stopping.finish(Outcome::Cancelled);
+    stopping.finish(Outcome::Cancelled { detail: None });
     assert_eq!(f.state(stopped), CommitmentState::Cancelled);
     let last = f.evidence.records().pop().unwrap();
     assert_eq!(last.outcome, Some("cancelled"));

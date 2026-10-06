@@ -396,7 +396,12 @@ fn redact_one(response: &mut HttpResponse, secret: &str) {
         .windows(needle.len())
         .any(|window| window == needle)
     {
-        let mut out = Vec::with_capacity(response.body.len());
+        // Sized for the worst case (every needle replaced by the longer
+        // mark), so the output never reallocates and leaves no copy behind.
+        let mut out = Vec::with_capacity(
+            response.body.len() / needle.len() * MARK.len().saturating_sub(needle.len())
+                + response.body.len(),
+        );
         let mut i = 0;
         while i < response.body.len() {
             if response.body[i..].starts_with(needle) {
@@ -465,6 +470,23 @@ mod tests {
         append(&mut body, &[b'x'; 50], 60);
         assert_eq!(body.len(), 58);
         assert!(body.capacity() <= 60, "{}", body.capacity());
+    }
+
+    /// Redaction builds its output without reallocating it: a reallocation
+    /// would leave a copy holding the credential's other forms behind.
+    #[test]
+    fn redaction_builds_its_output_without_reallocating() {
+        let mut response = HttpResponse {
+            status: 200,
+            peer: None,
+            content_type: None,
+            location: None,
+            body: b"abcd".repeat(100),
+            redacted: false,
+        };
+        redact_one(&mut response, "abcd");
+        assert_eq!(response.body, b"[redacted]".repeat(100));
+        assert_eq!(response.body.capacity(), 1000);
     }
 
     #[test]

@@ -158,6 +158,10 @@ pub fn escaped(text: &str) -> String {
                 out.push_str("\\\\");
             } else if shown(c) && index < 3 {
                 out.push(c);
+            } else if c == '"' || c == '\'' {
+                // Never `\"`: a quoted value (a window title) escapes its
+                // own quotes, and an escaped quote must not look like one.
+                out.extend(c.escape_unicode());
             } else {
                 out.extend(c.escape_default());
             }

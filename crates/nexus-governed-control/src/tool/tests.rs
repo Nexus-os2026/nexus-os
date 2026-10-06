@@ -476,10 +476,10 @@ fn the_production_catalog_has_no_shell_interpreter_or_runner() {
 #[test]
 fn speech_is_synthesized_when_the_local_engine_is_installed() {
     if !std::path::Path::new("/usr/bin/espeak-ng").exists() {
-        // CI installs the engine (ci.yml), so there a missing engine fails
-        // this test instead of skipping it.
+        // Linux CI installs the engine (ci.yml), so there a missing engine
+        // fails this test instead of skipping it. (Speech is Linux-only.)
         assert!(
-            std::env::var_os("CI").is_none(),
+            !cfg!(target_os = "linux") || std::env::var_os("CI").is_none(),
             "espeak-ng is missing: CI must exercise speech synthesis"
         );
         eprintln!("espeak-ng is not installed: speech synthesis is not exercised here");

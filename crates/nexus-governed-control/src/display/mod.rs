@@ -339,8 +339,9 @@ impl AgentDisplay {
     }
 
     /// Stop the agent display: everything bound to it fails revalidation,
-    /// and a start in progress ends unused.
-    pub fn stop(&self) {
+    /// and a start in progress ends unused. Returns the display that was
+    /// running, if one was.
+    pub fn stop(&self) -> Option<DisplayStatus> {
         self.stops.fetch_add(1, Ordering::SeqCst);
         let session = self.shared.session.lock().expect("display").take();
         self.shared
@@ -348,8 +349,10 @@ impl AgentDisplay {
             .lock()
             .expect("observations")
             .clear();
+        let stopped = session.as_ref().map(status);
         // The server ends here, outside the display's lock.
         drop(session);
+        stopped
     }
 
     pub fn status(&self) -> Option<DisplayStatus> {
@@ -461,8 +464,10 @@ impl AgentDisplay {
             kind: CapabilityKind::Perception,
             class: EffectClass::R0,
             operation: "display.observe",
+            // Every part of the label is escaped already (a title by
+            // `quoted_title`): escaping it again would undo its quotes.
             target: TargetIdentity {
-                display: escaped(&format!("{label} on agent display {}", server.number())),
+                display: format!("{label} on agent display {}", server.number()),
                 digest: target,
             },
             parameters,
@@ -470,11 +475,7 @@ impl AgentDisplay {
             leases: vec![],
             summary: vec![format!(
                 "Observe {}x{} at ({}, {}) of {}",
-                rect.width,
-                rect.height,
-                rect.x,
-                rect.y,
-                escaped(&label)
+                rect.width, rect.height, rect.x, rect.y, label
             )],
         };
         Ok(Preparation {
@@ -748,8 +749,9 @@ impl AgentDisplay {
             kind: CapabilityKind::Input,
             class,
             operation: "display.input",
+            // Escaped already, part by part (see the observation's target).
             target: TargetIdentity {
-                display: escaped(&format!("{place} on agent display {}", server.number())),
+                display: format!("{place} on agent display {}", server.number()),
                 digest: target,
             },
             parameters,
@@ -854,6 +856,7 @@ fn button_code(button: Button) -> (u8, &'static str) {
 }
 
 const KEYSYM_SHIFT: u32 = 0xffe1;
+const KEYSYM_ESCAPE: u32 = 0xff1b;
 
 fn char_keysym(c: char) -> Result<u32, AuthorityError> {
     match c {
@@ -1108,10 +1111,13 @@ struct Pressed {
     server: Option<Arc<Server>>,
     keys: Vec<u8>,
     buttons: Vec<u8>,
-    /// Where the pointer was when a button went down: an action that ends
-    /// early lets its button go there, so an interrupted drag drops nowhere
-    /// new.
-    pressed_at: Option<(u16, u16)>,
+    /// Where the pointer was when a button went down, and the window there.
+    /// An action that ends early lets its button go at that point, with
+    /// the server held, if that window is still there; otherwise it first
+    /// cancels the drag with Escape. An interrupted drag drops nowhere new.
+    pressed_at: Option<((u16, u16), u32)>,
+    /// The Escape key of the display's keyboard.
+    escape: Option<u8>,
 }
 
 impl Pressed {
@@ -1126,16 +1132,31 @@ impl Pressed {
 
 impl Drop for Pressed {
     fn drop(&mut self) {
-        if let Some(server) = &self.server {
-            for code in self.keys.iter().rev() {
-                let _ = server.key(*code, false);
+        let Some(server) = &self.server else {
+            return;
+        };
+        for code in self.keys.iter().rev() {
+            let _ = server.key(*code, false);
+        }
+        if self.buttons.is_empty() {
+            return;
+        }
+        // Held: nothing can appear at the press point between the check and
+        // the release.
+        let _held = server.hold();
+        if let Some(((x, y), window)) = self.pressed_at {
+            let back = server.pointer(x, y).is_ok()
+                && server.pointer_position() == (x, y)
+                && server.window_at(x, y).map_or(0, |w| w.id) == window;
+            if !back {
+                if let Some(escape) = self.escape {
+                    let _ = server.key(escape, true);
+                    let _ = server.key(escape, false);
+                }
             }
-            if let (false, Some((x, y))) = (self.buttons.is_empty(), self.pressed_at) {
-                let _ = server.pointer(x, y);
-            }
-            for code in self.buttons.iter().rev() {
-                let _ = server.button(*code, false);
-            }
+        }
+        for code in self.buttons.iter().rev() {
+            let _ = server.button(*code, false);
         }
     }
 }
@@ -1229,7 +1250,10 @@ impl PendingEffect for Input {
                         }
                     }
                     if press {
-                        pressed.pressed_at = Some(server.pointer_position());
+                        let (x, y) = server.pointer_position();
+                        pressed.pressed_at =
+                            Some(((x, y), server.window_at(x, y).map_or(0, |w| w.id)));
+                        pressed.escape = server.keycode(KEYSYM_ESCAPE).map(|(code, _)| code);
                     }
                     server.button(code, press).map_err(failed)?;
                     Pressed::note(&mut pressed.buttons, code, press);

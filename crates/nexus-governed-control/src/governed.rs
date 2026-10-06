@@ -266,6 +266,18 @@ impl GovernedControl {
         self.control.cancel_run(run)
     }
 
+    /// The desktop is quitting: no run opens any more, and every open run
+    /// is cancelled (recorded). Returns how many were cancelled.
+    pub fn shut_down(&self) -> usize {
+        let runs = self.authority().runs();
+        runs.close();
+        runs.views()
+            .into_iter()
+            .filter(|run| !run.cancelled && !run.finished)
+            .filter(|run| self.cancel_run(run.id).is_ok())
+            .count()
+    }
+
     pub fn finish_run(&self, run: RunId) {
         self.display.forget_run(run);
         self.control.finish_run(run);
@@ -379,10 +391,10 @@ impl GovernedControl {
         started
     }
 
-    /// Stop the agent display (recorded).
+    /// Stop the agent display (recorded if one ran). A stop always counts:
+    /// a start in progress ends unused, even when no display runs yet.
     pub fn stop_display(&self) {
-        if let Some(status) = self.display.status() {
-            self.display.stop();
+        if let Some(status) = self.display.stop() {
             let _ = self.authority().record_display(
                 EvidencePhase::DisplayStopped,
                 vec![("display".into(), status.number.to_string())],

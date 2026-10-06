@@ -758,6 +758,10 @@ fn prepared_actions_cannot_exceed_the_step_budget() {
 fn a_stop_wins_over_a_start_and_nothing_starts_unrecorded() {
     use std::sync::atomic::{AtomicU32, Ordering};
     if !std::path::Path::new("/usr/bin/Xvfb").exists() {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "Xvfb is missing: CI must exercise the live agent display"
+        );
         return;
     }
     let root = temp_root("display-start");
@@ -792,6 +796,121 @@ fn a_stop_wins_over_a_start_and_nothing_starts_unrecorded() {
         std::fs::read_dir(root.0.path()).unwrap().count(),
         0,
         "the overtaken server is gone"
+    );
+    // A plain stop while no display runs yet still overtakes a start in
+    // progress, and says it stopped nothing.
+    let mut stopped_nothing = false;
+    assert_eq!(
+        display
+            .start(
+                640,
+                480,
+                || {
+                    stopped_nothing = display.stop().is_none();
+                    Ok(())
+                },
+                || false
+            )
+            .unwrap_err(),
+        AuthorityError::Closed("the agent display was stopped while it started")
+    );
+    assert!(stopped_nothing);
+    assert!(display.status().is_none());
+    assert_eq!(std::fs::read_dir(root.0.path()).unwrap().count(), 0);
+}
+
+/// A drag whose press point changed too cannot be dropped back there: it is
+/// cancelled with Escape, with the server held, before its button goes.
+#[test]
+fn a_drag_that_cannot_go_back_is_cancelled_before_its_release() {
+    let Some((display, _root)) = display() else {
+        return;
+    };
+    let h = harness();
+    grant_perception(&h);
+    grant_input(&h, 10, true);
+    let escape = display.current().unwrap().1.keycode(0xff1b).unwrap().0;
+    let client = display.test_client();
+    let screen = client.setup().roots[0].clone();
+    let source = client.generate_id().unwrap();
+    client
+        .create_window(
+            COPY_DEPTH_FROM_PARENT,
+            source,
+            screen.root,
+            10,
+            10,
+            100,
+            100,
+            0,
+            WindowClass::INPUT_OUTPUT,
+            0,
+            &CreateWindowAux::new()
+                .background_pixel(screen.white_pixel)
+                .override_redirect(1)
+                .event_mask(EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE),
+        )
+        .unwrap();
+    client.map_window(source).unwrap();
+    client.sync().unwrap();
+    observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
+    let preparation = display
+        .prepare_input(
+            h.control.authority(),
+            h.run,
+            &InputIntent::Drag {
+                from_x: 50,
+                from_y: 50,
+                to_x: 400,
+                to_y: 300,
+            },
+        )
+        .unwrap();
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    // The moment the button goes down, windows cover the drop point and the
+    // press point.
+    let watcher = std::thread::spawn(move || {
+        let mut seen = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            match client.poll_for_event().unwrap() {
+                Some(Event::ButtonPress(_)) => {
+                    seen.push("press".to_string());
+                    for (title, x, y) in [("Cover", 350, 250), ("Over", 30, 30)] {
+                        window(
+                            &client,
+                            title,
+                            Rect {
+                                x,
+                                y,
+                                width: 100,
+                                height: 100,
+                            },
+                        );
+                    }
+                }
+                Some(Event::KeyPress(key)) => seen.push(format!("key {}", key.detail)),
+                Some(Event::ButtonRelease(release)) => {
+                    seen.push(format!("release {} {}", release.root_x, release.root_y));
+                    break;
+                }
+                Some(_) => {}
+                None => std::thread::sleep(Duration::from_millis(1)),
+            }
+        }
+        seen
+    });
+    assert!(h.control.execute(view.id, &h.agent, h.run).is_err());
+    assert_eq!(
+        watcher.join().unwrap(),
+        [
+            "press".to_string(),
+            format!("key {escape}"),
+            "release 50 50".to_string()
+        ]
     );
 }
 
@@ -891,6 +1010,55 @@ fn a_window_title_cannot_close_its_quotes() {
         r#"Bank\" (id 7), then \"Mail"#
     );
     assert_eq!(super::quoted_title(r#"back\" slash"#), r#"back\\\" slash"#);
+    // A quote past a cluster's shown marks is escaped as a code point,
+    // never as `\"`, so it cannot pass for the end of the title.
+    let reph = "\u{0D4E}".repeat(3);
+    assert_eq!(
+        super::quoted_title(&format!("Trash{reph}\"x")),
+        format!("Trash{reph}\\u{{22}}x")
+    );
+}
+
+/// The owner reads a window's title escaped exactly once: a title that
+/// imitates the rest of the target line cannot close its quotes there.
+#[test]
+fn a_target_line_shows_a_title_escaped_once() {
+    let Some((display, _root)) = display() else {
+        return;
+    };
+    let h = harness();
+    grant_perception(&h);
+    grant_input(&h, 10, true);
+    let client = display.test_client();
+    let id = window(
+        &client,
+        r#"Mail" (id 12) on agent display 201, and window "Bank"#,
+        Rect {
+            x: 10,
+            y: 10,
+            width: 100,
+            height: 100,
+        },
+    );
+    observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
+    let preparation = display
+        .prepare_input(
+            h.control.authority(),
+            h.run,
+            &InputIntent::Click {
+                x: 50,
+                y: 50,
+                button: Some(Button::Left),
+            },
+        )
+        .unwrap();
+    let number = display.status().unwrap().number;
+    assert_eq!(
+        preparation.action.target.display,
+        format!(
+            r#"window "Mail\" (id 12) on agent display 201, and window \"Bank" (id {id}) on agent display {number}"#
+        )
+    );
 }
 
 /// Whatever an action leaves pressed when it ends early is released.
@@ -909,6 +1077,7 @@ fn whatever_an_action_left_pressed_is_released() {
         keys: vec![shift],
         buttons: vec![1],
         pressed_at: None,
+        escape: None,
     });
     let client = display.test_client();
     let keys = client.query_keymap().unwrap().reply().unwrap().keys;
@@ -924,7 +1093,8 @@ fn whatever_an_action_left_pressed_is_released() {
         server: Some(server.clone()),
         keys: Vec::new(),
         buttons: vec![1],
-        pressed_at: Some((40, 40)),
+        pressed_at: Some(((40, 40), 0)),
+        escape: None,
     });
     let pointer = client.query_pointer(root).unwrap().reply().unwrap();
     assert!(!pointer.mask.contains(KeyButMask::BUTTON1));

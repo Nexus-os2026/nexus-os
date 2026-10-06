@@ -15,8 +15,11 @@
 //! granted public origins, which it can reach directly anyway.
 //!
 //! It goes out only while the session may: once its run is cancelled or
-//! its grant is revoked or expires, no connection is admitted, opened or
-//! written to, and the proxy stops, ending every tunnel.
+//! its grant is revoked or expires, it admits, opens and writes nothing
+//! more (data already handed to the kernel, or a write already under way,
+//! may still complete), ending every tunnel. It keeps its port until the
+//! session ends, closing every new connection unserved, so no other
+//! process can take the port while the browser still uses it.
 
 use crate::authority::AuthorityError;
 use crate::egress::destination::{resolve_checked, Destination, Resolver};
@@ -58,10 +61,13 @@ impl OriginPolicy {
     }
 }
 
-/// A running proxy; it stops when dropped.
+/// A running proxy; it releases its port when dropped.
 pub(crate) struct BrowserProxy {
     port: u16,
+    /// No more traffic.
     stop: Arc<AtomicBool>,
+    /// The session ended: the port is released.
+    closed: Arc<AtomicBool>,
     admitted: Arc<AtomicU32>,
     refused: Arc<AtomicU32>,
 }
@@ -78,26 +84,30 @@ impl BrowserProxy {
             .set_nonblocking(true)
             .map_err(|_| AuthorityError::Unavailable("the browser proxy cannot listen"))?;
         let stop = Arc::new(AtomicBool::new(false));
+        let closed = Arc::new(AtomicBool::new(false));
         let admitted = Arc::new(AtomicU32::new(0));
         let refused = Arc::new(AtomicU32::new(0));
         let active = Arc::new(AtomicUsize::new(0));
         let policy = Arc::new(policy);
         {
-            let (stop, admitted, refused) = (stop.clone(), admitted.clone(), refused.clone());
+            let (stop, closed) = (stop.clone(), closed.clone());
+            let (admitted, refused) = (admitted.clone(), refused.clone());
             std::thread::Builder::new()
                 .name("nexus-p3-browser-proxy".into())
                 .spawn(move || {
-                    while !stop.load(Ordering::SeqCst) {
+                    while !closed.load(Ordering::SeqCst) {
                         // A session that may no longer go out stops its
-                        // proxy, and with it every open tunnel.
+                        // proxy's traffic, and with it every open tunnel.
                         if !(policy.live)() {
                             stop.store(true, Ordering::SeqCst);
-                            break;
                         }
                         match listener.accept() {
                             Ok((client, _)) => {
-                                if active.load(Ordering::SeqCst) >= MAX_CONNECTIONS {
+                                if stop.load(Ordering::SeqCst)
+                                    || active.load(Ordering::SeqCst) >= MAX_CONNECTIONS
+                                {
                                     refused.fetch_add(1, Ordering::SeqCst);
+                                    drop(client);
                                     continue;
                                 }
                                 active.fetch_add(1, Ordering::SeqCst);
@@ -123,6 +133,7 @@ impl BrowserProxy {
         Ok(Self {
             port,
             stop,
+            closed,
             admitted,
             refused,
         })
@@ -144,6 +155,7 @@ impl BrowserProxy {
 impl Drop for BrowserProxy {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
+        self.closed.store(true, Ordering::SeqCst);
     }
 }
 

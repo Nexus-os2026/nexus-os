@@ -639,6 +639,28 @@ fn a_detached_run_finishes_when_nothing_of_it_waits() {
     assert!(server.received().is_empty());
 }
 
+/// Quitting cancels every open run and refuses new ones from then on, so
+/// nothing starts while the desktop waits for what still executes.
+#[test]
+fn quitting_cancels_every_run_and_opens_no_more() {
+    let (control, _evidence, _root) = control();
+    let agent = AgentId::new("agent-quit").unwrap();
+    let run = control
+        .open_run(agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    assert_eq!(control.shut_down(), 1);
+    assert!(control
+        .authority()
+        .runs()
+        .views()
+        .iter()
+        .all(|view| view.id != run || view.cancelled));
+    assert_eq!(
+        control.open_run(agent, RunOrigin::AgentGoal).unwrap_err(),
+        AuthorityError::Closed("the desktop is quitting")
+    );
+}
+
 /// A display start that was recorded but did not complete is recorded as
 /// ended (here the runtime root refuses the display's directory).
 #[cfg(target_os = "linux")]
