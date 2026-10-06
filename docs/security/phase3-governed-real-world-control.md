@@ -1,10 +1,11 @@
 # Phase Three: governed real-world control
 
-Status: implementation candidate on `implement/p3-governed-real-world-control`
-(base `forward/post-p2-hardening` `309f2c5a`), Linux support profile, under
-Architect review. It is not integrated into `main` and is not a completed
-phase. This document states what Phase Three governs, how, and what it does
-not claim.
+Status: Candidate 9 on `repair/p3-candidate9`, a bounded repair of
+Candidate 8 (`7d1eaced` on `implement/p3-governed-real-world-control`, base
+`forward/post-p2-hardening` `309f2c5a`), Linux support profile, awaiting
+independent Architect review. It is not integrated into `main` and is not a
+completed phase. This document states what Phase Three governs, how, and
+what it does not claim.
 
 ## 1. One authority architecture
 
@@ -31,10 +32,18 @@ pipeline in `crates/nexus-governed-control`:
    dialog); the approval is a crate-private, non-`Clone`,
    non-deserializable value consumed by authorization, which is recorded
    before it takes effect. The confirmation is a window Nexus owns, not a
-   system message box: monospace, never re-wrapping a line, scrolling both
-   ways; Cancel is the default answer, and Allow is armed only after a
-   one-second delay and once the end and the right edge of the text have
-   been reached. It shows everything the approval allows, never shortened:
+   system message box, in two parts it keeps apart. Its header, the
+   security identity of what is asked (an action's effect class,
+   operation, canonical target, acting agent, run, commitment and binding;
+   a grant's or Resume's own identity), is a grid outside every scrolled
+   view, always in view while the answer can be given: the labels are the
+   window's own, the values the backend's, each shown whole (wrapped within
+   its own column). The request's details (its content) are below, in a
+   frame captioned as such, beside a solid bar the window draws and that
+   does not scroll, in monospace, never re-wrapping a line, scrolling both
+   ways. Cancel is the default answer, and Allow is armed only after a
+   one-second delay and once the end and the right edge of the details
+   have been reached. It shows everything the approval allows, never shortened:
    a line is at most 96 columns and a longer value continues on `↳` lines,
    every request header is shown with its value, content (a body, filled or
    typed text) is quoted line by line behind `│` with backslashes, hidden
@@ -84,7 +93,12 @@ exactly once.
   instead and are checked at every press.
 - A run holds at most 32 effects waiting to execute (an R2 commitment
   waits for its approval), and agents together can never take the last 64
-  places, which are kept for the owner's own commands.
+  places, which are kept for the owner's own command runs. A run's class
+  (the owner's or an agent's) is set by the backend when it opens the run
+  and kept with it: only the owner's command front door opens an owner run,
+  an agent's action is refused in one, and no agent name (not even the
+  owner's label) carries the owner's places. A place is checked and taken
+  at once.
 - A run is the scope of one command or agent loop. Cancelling or finishing
   it sets its token (every executing effect observes it, and so does a
   browser session's proxy), ends its unconsumed commitments with their
@@ -94,8 +108,9 @@ exactly once.
   emergency key, Ctrl+Alt+Shift+K) cancels every run, ends every
   unconsumed commitment, moves the policy generation, stops the agent
   display, and refuses new runs until the owner resumes through a native
-  dialog. Every way the owner stops agents (Stop, the Admin "Stop all"
-  and bulk Stop) works on the interface's IPC thread, before anything
+  dialog, and tells every HiveMind session under way to stop. Every way
+  the owner stops agents (Stop, the Admin "Stop all" and bulk Stop, and
+  clearing all agents) works on the interface's IPC thread, before anything
   waits: everything every named agent runs or left waiting in Phase Three
   is cancelled first (a running effect is interrupted at its next step),
   then for each agent its schedule ends (under any spelling of its id), its
@@ -107,7 +122,12 @@ exactly once.
   goal is recorded as skipped; a paused agent's ticks run, as pausing
   keeps schedules). A stopped agent's loop runs no further cycle, so a
   loop whose start was under way when the owner stopped the agent ends at
-  its first cycle.
+  its first cycle. An agent the supervisor holds no record of (an id that
+  is not one, an agent cleared or never registered) counts as stopped
+  everywhere. Clearing all agents first stops, this way, every agent
+  anything still knows of (the supervisor, a schedule, a loop or its
+  driver, Phase Three's runs), under every spelling, and only then clears
+  their records.
   Ending an agent's goal cancels it in Phase Three at once and removes its
   loop the same way, under every spelling; it leaves the agent and its
   schedule, so a scheduled goal may start it again. A
@@ -127,8 +147,18 @@ exactly once.
   the loops of its sub-tasks can run), and consent decisions are still made
   one at a time. A HiveMind session gives a stopped agent no sub-task, a
   sub-task ends when its agent is stopped, and the session's own time
-  limit ends only that sub-task's goal. Quitting the desktop
-  refuses every new run and display start, cancels every open run, waits
+  limit ends only that sub-task's goal. At most two HiveMind sessions run
+  at once, each admitted (within that cap, then the agent-execution rate
+  limit) before its thread starts, with its own identity (recorded in the
+  audit trail) and cancellation: the owner's `cancel_hivemind`, both
+  emergency stops and quitting signal it, and a cancelled session assigns
+  no further sub-task (the one it waits on ends, only its own goal). Its
+  place is given back when its thread ends, however it ends. A goal's own
+  cleanup (a session's cancellation or time limit, a refused tick)
+  compares the goal and removes its loop under the loops' one lock, so it
+  never ends a goal given since, and wakes only that goal's consent wait.
+  Quitting the desktop refuses every new HiveMind session and signals
+  those under way, refuses every new run and display start, cancels every open run, waits
   up to five seconds for executing effects and a display start under way
   to end, and stops the agent display. A display stop always counts: a
   start in progress, or one waiting for another to finish, ends unused.
@@ -143,8 +173,24 @@ Every phase (run opened or cancelled, grant issued, declined or revoked,
 commitment prepared, approved, declined, authorized, denied, started,
 finished, expired, revoked, lease issued, credential released, emergency
 stop, resumed, display started and stopped) is appended to the existing
-hash-chained audit trail as a `p3.action.evidence` event before the step
-proceeds; a display start that does not complete is recorded as ended
+hash-chained audit trail as a `p3.action.evidence` event, and no authority
+lock is held while a record is written. A step that gives authority is
+recorded first: a commitment enters the registry only once its
+preparation is recorded, a grant or a lease holds its room while it is
+recorded and only then exists, a run's id reaches its caller only once
+the run's opening is recorded (a run whose record fails is cancelled), and
+the display's server is launched only once its start is recorded. An
+approval, authorization or start is reserved under the lock (a
+reservation makes nothing approvable, authorizable or executable),
+recorded with the lock released, and completed only if the same
+reservation still holds the commitment, in the same state, still live; a
+cancellation, revocation, denial, stop or expiry that comes meanwhile
+wins, and its record names the transition it interrupted. A record that
+fails (or panics) leaves nothing of the step it precedes in effect. A step
+that ends authority (a commitment finished, cancelled, revoked, denied or
+expired) takes effect at once; its credential leases end and its record is
+written right after, with the lock released, and a record that cannot be
+written does not undo it. A display start that does not complete is recorded as ended
 (stopped while it started, when a stop or quitting overtook it), and so is
 the display an emergency stop ends. Records carry
 identities, classes, digests and bounded, plain text only: never a secret,
@@ -156,9 +202,11 @@ and a redirect records only its origin. A grant's scope is recorded line by
 line, each line its own bounded field.
 
 Everything a native dialog shows must be plain text: control,
-bidirectional-override and zero-width characters are refused, so a target
-or summary cannot read differently from what it is. Content shown in full
-(a body, typed or filled text) has its hidden characters escaped, and a
+bidirectional-override and zero-width characters, and every space but the
+ASCII space (U+3000, U+00A0, U+2000 to U+200A, U+202F, U+205F, U+1680),
+are refused, so a target or summary cannot read differently from what it
+is. Content shown in full (a body, typed or filled text) has its hidden
+characters and those spaces escaped, and a
 character (grapheme cluster) shows at most three code points, the rest
 escaped, so stacked marks cannot cover text (a value that begins with
 marks may show them on the character before it, and some scripts' joined
@@ -168,7 +216,7 @@ Return shows as an empty marked line), and a window title is shown with
 its own quotes escaped, exactly once. The owner's confirmation window lays every
 line out left to right (right-to-left content cannot move where a line
 starts), only one is open at a time, and its answer arms only after a
-second, once the end and the right edge of its text have been reached;
+second, once the end and the right edge of its details have been reached;
 each of the two is latched on its own, and line bounds count characters,
 not rendered width (wide text may need more scrolling).
 
@@ -221,7 +269,15 @@ site-local addresses need a grant that names private destinations; the
 unspecified, multicast, broadcast, reserved, documentation and benchmarking
 ranges and the deprecated IPv6 transition forms are never reachable;
 IPv4-mapped, NAT64 and 6to4 addresses are classified by the IPv4 address
-they embed; a mixed DNS answer is refused. Grants name exactly one origin
+they embed; a mixed DNS answer is refused. Where private destinations are
+not granted, every address is also checked, before any socket is opened,
+against this machine's own network boundary as it is at that moment: an
+address of any of its interfaces, an address in a network directly
+connected through one (the interface's address with its prefix) and a
+point-to-point peer are refused however public they look, in their mapped,
+NAT64 and 6to4 forms too; an answer holding one is refused whole, and a
+boundary that cannot be read refuses (off Linux it cannot be read). The
+browser proxy and the connectors use the same check. Grants name exactly one origin
 and its methods; GET, HEAD and OPTIONS are R1, the others R2. The
 destination is resolved at preparation and again immediately before the
 request, and the connection is pinned to exactly the addresses checked then
@@ -243,6 +299,19 @@ executable. The session is a fresh headless Chrome with a new profile in a
 private directory deleted when it ends, driven over its DevTools pipe (no
 debugging port), in its own process group, with a `PATH` of an empty
 session directory (a page cannot reach the system's opener through it).
+The browser does not run while any machine policy is configured where
+Google Chrome, Chrome for Testing or Chromium read one on Linux
+(`/etc/opt/chrome/policies`, `/etc/opt/chrome_for_testing/policies`,
+`/etc/chromium/policies`, `/etc/chromium-browser/policies`, each
+`managed`, `recommended` and `enrollment`): a policy can override the
+session's proxy switch, so which settings it holds is not judged, and a
+place that cannot be read, or is not a plain directory, counts as
+configured. It is checked when a session is prepared and again
+immediately before launch. A session whose start page needed the network
+while the browser never came to its proxy, or that loaded with no
+connection admitted, is refused before any step and never reported done
+(this notices a bypass after it happened; the policy refusal is what
+prevents one).
 Its only way out is a session-owned loopback proxy that admits connections
 to the granted origins only, applying the egress address policy with the
 same pinning, so subresources, redirects and page-initiated navigations
@@ -298,14 +367,14 @@ drag is bound to the window it is dropped on as well, and its release is
 checked at the drop point under the same hold; whatever an action pressed
 is released on every way out of it, and one action runs at a time. A
 button an interrupted action still holds is let go, with the server held,
-where it was pressed while the window it was pressed on, or another window
-of the same application (a drag image, its popup), is on top there: a drag
-let go where it began moves nothing. If another application's window
-covers that point, an Escape (which cancels a drag in most toolkits) goes
-first to the window it was pressed on when the keyboard focus is there,
-and the button is let go where it was pressed; otherwise it is let go on
-the bare display (a corner no window covers), where a drop reaches no
-window, and only with no such corner left where it was pressed. No key is
+where it was pressed only while the exact window it was pressed on is on
+top there (a drag let go where it began moves nothing); otherwise on the
+bare display (a corner no window covers, checked under the hold), where a
+drop reaches no window, whether or not that window has the focus. Only
+with no bare corner left is the button let go where it was pressed, after
+an Escape (which cancels a drag in most toolkits) sent only when the
+keyboard focus is on the window it was pressed on and no client holds a
+keyboard grab. No key is
 sent that would follow the pointer onto another window, or go to the
 display background. The grant's step budget is spent at the effect.
 Moves and scrolls are R1, and the input grant says so; clicks, drags and
@@ -340,7 +409,17 @@ migrates the Phase Zero email and messaging endpoints: Gmail and Outlook
 list, search and send; Slack and Discord connection checks, reads and
 posts. Reads are R1; sends are R2 with one bare recipient address (no
 display name, quotes, brackets or lists), the subject and the whole text
-shown natively. The account in a connector grant is only the owner's
+shown natively. A Slack or Discord post's destination is identified
+before the post is proposed, by the connector's own API (Slack's
+`auth.test` and `conversations.info`, Discord's channel object), each read
+an R1 commitment of the same run under the post's grant: the id the post
+names must be the conversation's own (a name is refused), and an unknown
+kind, an answer for another id or a destination the API does not identify
+refuses the post. The identity (the readable destination, from the API
+and escaped, and its immutable ids) is shown in the approval and bound
+into the commitment's digests; immediately before the post is sent the
+same reads run again, and any difference fails it as `target_changed`
+with nothing sent. The account in a connector grant is only the owner's
 label: the connector uses its one stored credential. Telegram is not migrated: its Bot API carries
 the token in the URL path.
 
@@ -375,6 +454,11 @@ resolve to the real path) and pins each file's mechanisms by kind: process
 launch and termination, raw system calls, sockets and HTTP and WebSocket
 clients, the X server, the desktop bus (D-Bus, AT-SPI), loading a shared
 library, the credential vault (its global facade and the OS keyring),
+the GUI toolkit's own routes (gtk-rs and every crate it re-exports or
+binds: process spawns, subprocesses and URI openers, root-window and
+screen access, sockets and resolvers, the desktop bus; any other toolkit
+use outside the exact APIs the native approval window uses is a site to
+classify),
 sealed spawns, launching the OS opener, name resolution (std's
 `ToSocketAddrs`, a `to_socket_addrs` or `socket_addrs` call written as a
 method or through any path, libc's resolver functions and the DNS
@@ -413,7 +497,9 @@ application (it lists tools and configures a router slot; its router, tool
 execution, MCP manager and self-improvement run only behind the closed
 `nx_*` commands). `p3_g6_11` pins that the global emergency key, every stop
 route and quitting reach Phase Three, and that a paused or stopped agent
-acts no more. `p3_g6_15` pins the non-forgeability doctests with their
+acts no more. `p3_g6_18` pins the direct production dependencies of the
+desktop and of `nexus-governed-control`, so a new mechanism crate cannot
+arrive unreviewed. `p3_g6_15` pins the non-forgeability doctests with their
 error codes, `p3_g6_16` that test-only features are enabled only by tests
 (so the production scanners may leave their items out), `p3_g6_17` that
 only the browser and the display launch session processes, `p3_g9_01` that
@@ -424,7 +510,11 @@ session goes out only while it may, and `p3_g10_01` that no command the
 interface thread runs, in any desktop file, reaches the agent loops' lock
 through any chain of direct calls or function values among desktop
 functions (attributes are read with their literals blanked, `cfg_attr`
-included, and a thread that is joined counts as the caller).
+included, and a thread that is joined counts as the caller). A loops
+method is found by its name on any receiver, by any path to it (a type
+path, an imported alias of the type) and as a value; every kernel method
+that touches the loops, or reaches one that does, counts, and the one call
+of another type's same-named method is a pinned, reviewed exception.
 
 Routes closed or repaired by Phase Three (`Closure::GovernedRoute` unless
 stated):
@@ -460,7 +550,14 @@ stated):
   loopback proxy, the session directories).
 - **Chrome is trusted to honour its flags.** The proxy, QUIC, WebRTC and
   DNS-prefetch settings bound what the browser reaches; they were not
-  verified in a separate network namespace.
+  verified in a separate network namespace. A machine policy where Google
+  Chrome, Chrome for Testing or Chromium read one on Linux refuses the
+  browser; a browser that read policy from elsewhere is not detected
+  beyond the check that its start page came through the proxy.
+- **The local network boundary is the interface view.** On-link routes
+  that carry no address of this machine (a static device route, an
+  advertised on-link prefix with no address taken from it) are not part
+  of it.
 - **A plain-HTTP proxied connection is checked once.** The browser proxy
   checks the first request on a plain-HTTP connection and asks the
   upstream to close after it; a request a non-compliant upstream keeps
@@ -487,17 +584,20 @@ stated):
 - **Drags whose toolkit maps a drag image under the pointer fail
   closed.** The release is checked against the windows at the drop point,
   and a drag image there reads as a changed target; the button is then let
-  go where the drag began.
+  go as an interrupted drag's is (a drag image is not the source window).
 - **An interrupted drag's release is a best effort.** Let go on the bare
   display, a manipulation that follows the pointer (a slider, a selection,
   a window moved by its title bar) takes that corner's position. With no
-  bare corner left (one window spanning the display's corners) and the
-  keyboard focus not on the source, a drag-and-drop may drop on the window
+  bare corner left (windows covering all four corners of the display) and
+  the source not on top at the press point, the button is let go there: a
+  drag-and-drop that the Escape does not cancel (or that gets no Escape:
+  the focus elsewhere, or a keyboard grab held) may drop on the window
   covering the press point. Windows are judged by their rectangles (input
   shapes are ignored), and the bare display at its four corners. The
   release, its moves and any Escape are not recorded as evidence.
 - **Confirmation windows queue.** One is open at a time; a later one
-  (Resume included) waits until the open one is answered, and an emergency
+  (Resume included) waits until the open one is answered (at most 15
+  minutes, the longest a commitment lives, and is then declined), and an emergency
   stop does not close an open window: the action it would approve was
   revoked by the stop and is refused, but a grant or Resume window still
   takes effect if answered.
@@ -505,11 +605,17 @@ stated):
   (a model call or a download, not the agent loops' lock). The global
   emergency key works meanwhile on X11; the page needs the interface
   thread.
-- **An owner's stop does not cancel a HiveMind session.** Its sub-tasks for
-  stopped agents are refused at once (one already running ends with its
-  agent), and the session ends once more than half of them have failed.
-  `cancel_hivemind` reaches only a session that has ended (the kernel
-  stores a session when it ends).
+- **An owner's stop of an agent does not cancel a HiveMind session.** Its
+  sub-tasks for stopped agents are refused at once (one already running
+  ends with its agent), and the session ends once more than half of them
+  have failed. The owner cancels a session through `cancel_hivemind` with
+  the identity its admission recorded in the audit trail; the interface
+  does not show that identity yet. A session's planning and merging model
+  calls in flight are not interrupted, the number of sub-tasks a plan may
+  hold is not capped (each is waited on for at most 300 s), and an
+  emergency stop signals the sessions under way without keeping new ones
+  from starting (their agents' Phase Three actions are refused until the
+  owner resumes).
 - **The stop's loop removal can end a goal given right after the stop.**
   What it removes is decided when the stop is made, and the removal waits
   for the loop lock: if the owner restarts the agent and gives it a goal
