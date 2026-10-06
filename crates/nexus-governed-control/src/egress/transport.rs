@@ -376,6 +376,25 @@ fn header_text(value: Option<&HeaderValue>, max: usize) -> Option<String> {
     (text.len() <= max).then(|| text.to_string())
 }
 
+/// `text` with every `secret` replaced by `[redacted]` (left to right, as
+/// `str::replace` does), built in a buffer sized for the worst case so it
+/// never reallocates: an outgrown buffer could keep another form of the
+/// credential that is not redacted yet.
+fn replaced(text: &str, secret: &str) -> String {
+    const MARK: &str = "[redacted]";
+    let mut out = String::with_capacity(
+        text.len() / secret.len() * MARK.len().saturating_sub(secret.len()) + text.len(),
+    );
+    let mut rest = text;
+    while let Some(at) = rest.find(secret) {
+        out.push_str(&rest[..at]);
+        out.push_str(MARK);
+        rest = &rest[at + secret.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Remove every occurrence of a released credential, in any of its forms,
 /// from everything that came back: the body, the location and the content
 /// type.
@@ -418,7 +437,7 @@ fn redact_one(response: &mut HttpResponse, secret: &str) {
     }
     for field in [&mut response.location, &mut response.content_type] {
         if let Some(text) = field.as_deref().filter(|text| text.contains(secret)) {
-            let redacted = text.replace(secret, "[redacted]");
+            let redacted = replaced(text, secret);
             if let Some(mut held) = field.replace(redacted) {
                 held.zeroize();
             }
@@ -487,6 +506,15 @@ mod tests {
         redact_one(&mut response, "abcd");
         assert_eq!(response.body, b"[redacted]".repeat(100));
         assert_eq!(response.body.capacity(), 1000);
+        // The header fields too.
+        let text = "abcd".repeat(10);
+        let out = replaced(&text, "abcd");
+        assert_eq!(out, "[redacted]".repeat(10));
+        assert_eq!(out.capacity(), 100);
+        assert_eq!(
+            replaced("x-abcd-abcde", "abcd"),
+            "x-abcd-abcde".replace("abcd", "[redacted]")
+        );
     }
 
     #[test]

@@ -819,99 +819,164 @@ fn a_stop_wins_over_a_start_and_nothing_starts_unrecorded() {
     assert_eq!(std::fs::read_dir(root.0.path()).unwrap().count(), 0);
 }
 
-/// A drag whose press point changed too cannot be dropped back there: it is
-/// cancelled with Escape, with the server held, before its button goes.
+/// A drag interrupted after its press point was covered is let go on its
+/// own source where that window still shows, or else on the bare display:
+/// never on a window that appeared since.
 #[test]
-fn a_drag_that_cannot_go_back_is_cancelled_before_its_release() {
+fn an_interrupted_drag_is_let_go_on_its_source_or_on_nothing() {
     let Some((display, _root)) = display() else {
         return;
     };
-    let h = harness();
-    grant_perception(&h);
-    grant_input(&h, 10, true);
-    let escape = display.current().unwrap().1.keycode(0xff1b).unwrap().0;
-    let client = display.test_client();
-    let screen = client.setup().roots[0].clone();
-    let source = client.generate_id().unwrap();
-    client
-        .create_window(
-            COPY_DEPTH_FROM_PARENT,
-            source,
-            screen.root,
-            10,
-            10,
-            100,
-            100,
-            0,
-            WindowClass::INPUT_OUTPUT,
-            0,
-            &CreateWindowAux::new()
-                .background_pixel(screen.white_pixel)
-                .override_redirect(1)
-                .event_mask(EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE),
-        )
-        .unwrap();
-    client.map_window(source).unwrap();
-    client.sync().unwrap();
-    observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
-    let preparation = display
-        .prepare_input(
-            h.control.authority(),
-            h.run,
-            &InputIntent::Drag {
-                from_x: 50,
-                from_y: 50,
-                to_x: 400,
-                to_y: 300,
+    // Covered at the drop point and the press point; the source still shows
+    // at its top-left corner. Then covered entirely.
+    for (over, release) in [
+        (
+            Rect {
+                x: 30,
+                y: 30,
+                width: 100,
+                height: 100,
             },
-        )
-        .unwrap();
-    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
-    h.control
-        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
-        .unwrap();
-    // The moment the button goes down, windows cover the drop point and the
-    // press point.
-    let watcher = std::thread::spawn(move || {
-        let mut seen = Vec::new();
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while Instant::now() < deadline {
-            match client.poll_for_event().unwrap() {
-                Some(Event::ButtonPress(_)) => {
-                    seen.push("press".to_string());
-                    for (title, x, y) in [("Cover", 350, 250), ("Over", 30, 30)] {
+            "release 11 11",
+        ),
+        (
+            Rect {
+                x: 5,
+                y: 5,
+                width: 120,
+                height: 120,
+            },
+            "release 1 1",
+        ),
+    ] {
+        let h = harness();
+        grant_perception(&h);
+        grant_input(&h, 10, true);
+        let client = display.test_client();
+        let screen = client.setup().roots[0].clone();
+        let source = client.generate_id().unwrap();
+        client
+            .create_window(
+                COPY_DEPTH_FROM_PARENT,
+                source,
+                screen.root,
+                10,
+                10,
+                100,
+                100,
+                0,
+                WindowClass::INPUT_OUTPUT,
+                0,
+                &CreateWindowAux::new()
+                    .background_pixel(screen.white_pixel)
+                    .override_redirect(1)
+                    .event_mask(
+                        EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE | EventMask::KEY_PRESS,
+                    ),
+            )
+            .unwrap();
+        client.map_window(source).unwrap();
+        client.sync().unwrap();
+        observe(&h, &display, PerceptionIntent::Screen { region: None }).unwrap();
+        let preparation = display
+            .prepare_input(
+                h.control.authority(),
+                h.run,
+                &InputIntent::Drag {
+                    from_x: 50,
+                    from_y: 50,
+                    to_x: 400,
+                    to_y: 300,
+                },
+            )
+            .unwrap();
+        let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+        h.control
+            .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+            .unwrap();
+        // The moment the button goes down, windows cover the drop point and
+        // the press point.
+        let watcher = std::thread::spawn(move || {
+            let mut seen = Vec::new();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Instant::now() < deadline {
+                match client.poll_for_event().unwrap() {
+                    Some(Event::ButtonPress(_)) => {
+                        seen.push("press".to_string());
                         window(
                             &client,
-                            title,
+                            "Cover",
                             Rect {
-                                x,
-                                y,
+                                x: 350,
+                                y: 250,
                                 width: 100,
                                 height: 100,
                             },
                         );
+                        window(&client, "Over", over);
                     }
+                    Some(Event::KeyPress(key)) => seen.push(format!("key {}", key.detail)),
+                    Some(Event::ButtonRelease(release)) => {
+                        seen.push(format!("release {} {}", release.root_x, release.root_y));
+                        break;
+                    }
+                    Some(_) => {}
+                    None => std::thread::sleep(Duration::from_millis(1)),
                 }
-                Some(Event::KeyPress(key)) => seen.push(format!("key {}", key.detail)),
-                Some(Event::ButtonRelease(release)) => {
-                    seen.push(format!("release {} {}", release.root_x, release.root_y));
-                    break;
-                }
-                Some(_) => {}
-                None => std::thread::sleep(Duration::from_millis(1)),
             }
-        }
-        seen
-    });
-    assert!(h.control.execute(view.id, &h.agent, h.run).is_err());
-    assert_eq!(
-        watcher.join().unwrap(),
-        [
-            "press".to_string(),
-            format!("key {escape}"),
-            "release 50 50".to_string()
-        ]
-    );
+            seen
+        });
+        assert!(h.control.execute(view.id, &h.agent, h.run).is_err());
+        assert_eq!(
+            watcher.join().unwrap(),
+            ["press".to_string(), release.to_string()]
+        );
+    }
+}
+
+/// A start that waits for another to finish counts a stop that came while
+/// it waited: the display does not come up after the owner stopped it.
+#[test]
+fn a_queued_start_counts_a_stop_that_came_while_it_waited() {
+    if !std::path::Path::new("/usr/bin/Xvfb").exists() {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "Xvfb is missing: CI must exercise the live agent display"
+        );
+        return;
+    }
+    let root = temp_root("display-queued");
+    let display = std::sync::Arc::new(AgentDisplay::new(root.0.clone()));
+    let (entered, holding) = std::sync::mpsc::channel();
+    let (release, waiting) = std::sync::mpsc::channel::<()>();
+    let first = {
+        let display = display.clone();
+        std::thread::spawn(move || {
+            display.start(
+                640,
+                480,
+                move || {
+                    entered.send(()).unwrap();
+                    waiting.recv().unwrap();
+                    Ok(())
+                },
+                || false,
+            )
+        })
+    };
+    // The first start holds the start; the second waits for it.
+    holding.recv().unwrap();
+    let second = {
+        let display = display.clone();
+        std::thread::spawn(move || display.start(640, 480, || Ok(()), || false))
+    };
+    std::thread::sleep(Duration::from_secs(1));
+    assert!(display.stop().is_none(), "nothing ran yet");
+    release.send(()).unwrap();
+    let stopped = AuthorityError::Closed("the agent display was stopped while it started");
+    assert_eq!(first.join().unwrap().unwrap_err(), stopped);
+    assert_eq!(second.join().unwrap().unwrap_err(), stopped);
+    assert!(display.status().is_none());
 }
 
 /// Keys bound to the display background are refused while a window holds
@@ -1093,7 +1158,16 @@ fn whatever_an_action_left_pressed_is_released() {
         server: Some(server.clone()),
         keys: Vec::new(),
         buttons: vec![1],
-        pressed_at: Some(((40, 40), 0)),
+        pressed_at: Some((
+            (40, 40),
+            0,
+            Rect {
+                x: 0,
+                y: 0,
+                width: 640,
+                height: 480,
+            },
+        )),
         escape: None,
     });
     let pointer = client.query_pointer(root).unwrap().reply().unwrap();

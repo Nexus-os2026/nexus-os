@@ -139,6 +139,11 @@ impl RunRegistry {
         self.closed.store(true, Ordering::SeqCst);
     }
 
+    /// Whether the desktop is quitting (see `close`).
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst)
+    }
+
     /// Cancel every run and refuse new work until `resume`.
     pub(crate) fn stop_all(&self) -> usize {
         self.stopped.store(true, Ordering::SeqCst);

@@ -900,10 +900,12 @@ mod live {
         let total = session.steps.len();
         // A failure says how far the session got, wherever it happens.
         let before = |(class, detail): (FailureClass, String)| {
-            (
-                class,
-                format!("{detail} (at the start page, before step 1 of {total})"),
-            )
+            let at = if total == 0 {
+                "at the start page".to_string()
+            } else {
+                format!("at the start page, before step 1 of {total}")
+            };
+            (class, format!("{detail} ({at})"))
         };
         if let Some(reason) = guard.lapse() {
             return Err(before((FailureClass::Refused, reason.into())));

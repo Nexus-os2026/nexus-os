@@ -97,8 +97,14 @@ impl BrowserProxy {
                 .spawn(move || {
                     while !closed.load(Ordering::SeqCst) {
                         // A session that may no longer go out stops its
-                        // proxy's traffic, and with it every open tunnel.
-                        if !(policy.live)() {
+                        // proxy's traffic, and with it every open tunnel. A
+                        // probe that fails counts as "no more": nothing ends
+                        // this loop, which holds the port, but the session.
+                        let live = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            (policy.live)()
+                        }))
+                        .unwrap_or(false);
+                        if !live {
                             stop.store(true, Ordering::SeqCst);
                         }
                         match listener.accept() {
@@ -112,17 +118,25 @@ impl BrowserProxy {
                                 }
                                 active.fetch_add(1, Ordering::SeqCst);
                                 let (policy, stop) = (policy.clone(), stop.clone());
-                                let (admitted, refused) = (admitted.clone(), refused.clone());
-                                let active = active.clone();
-                                std::thread::spawn(move || {
-                                    let ok = serve(client, &policy, &stop);
-                                    if ok {
-                                        admitted.fetch_add(1, Ordering::SeqCst);
-                                    } else {
-                                        refused.fetch_add(1, Ordering::SeqCst);
-                                    }
+                                let (admitted, counted) = (admitted.clone(), refused.clone());
+                                let serving = active.clone();
+                                // A thread the system refuses leaves the
+                                // connection unserved, not this loop ended.
+                                let spawned = std::thread::Builder::new()
+                                    .name("nexus-p3-browser-proxy-connection".into())
+                                    .spawn(move || {
+                                        let ok = serve(client, &policy, &stop);
+                                        if ok {
+                                            admitted.fetch_add(1, Ordering::SeqCst);
+                                        } else {
+                                            counted.fetch_add(1, Ordering::SeqCst);
+                                        }
+                                        serving.fetch_sub(1, Ordering::SeqCst);
+                                    });
+                                if spawned.is_err() {
                                     active.fetch_sub(1, Ordering::SeqCst);
-                                });
+                                    refused.fetch_add(1, Ordering::SeqCst);
+                                }
                             }
                             Err(_) => std::thread::sleep(Duration::from_millis(10)),
                         }

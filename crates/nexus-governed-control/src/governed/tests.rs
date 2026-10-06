@@ -659,6 +659,18 @@ fn quitting_cancels_every_run_and_opens_no_more() {
         control.open_run(agent, RunOrigin::AgentGoal).unwrap_err(),
         AuthorityError::Closed("the desktop is quitting")
     );
+    // Nor does the agent display start.
+    control
+        .request_grant(
+            &GrantRequest::Perception,
+            Duration::from_secs(600),
+            &Yes::new(true),
+        )
+        .unwrap();
+    assert_eq!(
+        control.start_display().unwrap_err(),
+        AuthorityError::Closed("the desktop is quitting")
+    );
 }
 
 /// A display start that was recorded but did not complete is recorded as

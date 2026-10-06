@@ -353,6 +353,9 @@ impl GovernedControl {
         if self.authority().runs().is_stopped() {
             return Err(AuthorityError::EmergencyStopped);
         }
+        if self.authority().runs().is_closed() {
+            return Err(AuthorityError::Closed("the desktop is quitting"));
+        }
         let grants = self.authority().grants();
         if grants
             .live_of(crate::authority::effect::CapabilityKind::Perception)
@@ -364,7 +367,8 @@ impl GovernedControl {
             return Err(AuthorityError::NoCoveringGrant);
         }
         // Evidence first: an unrecorded display does not start. An
-        // emergency stop that comes while it starts ends it unused.
+        // emergency stop, or quitting, that comes while it starts ends it
+        // unused.
         let runs = self.authority().runs();
         let recorded = std::cell::Cell::new(false);
         let started = self.display.start(
@@ -378,7 +382,7 @@ impl GovernedControl {
                 recorded.set(record.is_ok());
                 record
             },
-            || runs.is_stopped(),
+            || runs.is_stopped() || runs.is_closed(),
         );
         // A start recorded but not completed is recorded as ended, so the
         // evidence never shows a display that is not there.
@@ -389,6 +393,12 @@ impl GovernedControl {
             );
         }
         started
+    }
+
+    /// Whether an agent display start is under way (quitting waits for it,
+    /// so its end is recorded).
+    pub fn is_starting_display(&self) -> bool {
+        self.display.is_starting()
     }
 
     /// Stop the agent display (recorded if one ran). A stop always counts:

@@ -26,7 +26,7 @@ impl RuntimeRoot {
                 "the runtime root is not absolute",
             ));
         }
-        std::fs::create_dir_all(path)
+        create_private(path)
             .map_err(|_| AuthorityError::Unavailable("the runtime root cannot be created"))?;
         let meta = std::fs::symlink_metadata(path)
             .map_err(|_| AuthorityError::Unavailable("the runtime root cannot be read"))?;
@@ -67,6 +67,23 @@ fn private(path: &Path) -> Result<(), AuthorityError> {
     // is ours.
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
         .map_err(|_| AuthorityError::Unavailable("a runtime directory is not ours"))
+}
+
+/// Create `path` and any missing directory above it, each private to this
+/// user (0700, whatever the umask), so the parent check below never refuses
+/// what Nexus itself created.
+#[cfg(unix)]
+fn create_private(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(path)
+}
+
+#[cfg(not(unix))]
+fn create_private(path: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(path)
 }
 
 /// Every directory above the (canonical) root belongs to root or to this
@@ -179,6 +196,14 @@ mod tests {
         assert!(RuntimeRoot::open(&parent.join("root")).is_ok());
         mode(0o755).unwrap();
         assert!(RuntimeRoot::open(&parent.join("root")).is_ok());
+        // Directories Nexus creates on the way are private, whatever the
+        // umask, so they never fail the check.
+        assert!(RuntimeRoot::open(&parent.join("a/b/root")).is_ok());
+        for created in ["a", "a/b"] {
+            use std::os::unix::fs::MetadataExt;
+            let mode = std::fs::metadata(parent.join(created)).unwrap().mode() & 0o7777;
+            assert_eq!(mode, 0o700, "{created}");
+        }
         let _ = std::fs::remove_dir_all(&parent);
     }
 }

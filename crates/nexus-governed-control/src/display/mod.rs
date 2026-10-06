@@ -308,6 +308,9 @@ impl AgentDisplay {
         admit: impl FnOnce() -> Result<(), AuthorityError>,
         stopped: impl Fn() -> bool,
     ) -> Result<DisplayStatus, AuthorityError> {
+        // Read before waiting for another start to finish: a stop that comes
+        // while this one waits counts against it too.
+        let stops = self.stops.load(Ordering::SeqCst);
         let _starting = self.starting.lock().expect("starting");
         if let Some(current) = self.shared.session.lock().expect("display").as_ref() {
             if current.server.alive() {
@@ -317,9 +320,13 @@ impl AgentDisplay {
         if !(320..=3840).contains(&width) || !(240..=2160).contains(&height) {
             return Err(AuthorityError::InvalidAction("display size out of bounds"));
         }
-        let stops = self.stops.load(Ordering::SeqCst);
         if stopped() {
             return Err(AuthorityError::EmergencyStopped);
+        }
+        if self.stops.load(Ordering::SeqCst) != stops {
+            return Err(AuthorityError::Closed(
+                "the agent display was stopped while it started",
+            ));
         }
         admit()?;
         let server = Arc::new(Server::start(&self.root, width, height)?);
@@ -353,6 +360,11 @@ impl AgentDisplay {
         // The server ends here, outside the display's lock.
         drop(session);
         stopped
+    }
+
+    /// Whether a start is under way.
+    pub fn is_starting(&self) -> bool {
+        self.starting.try_lock().is_err()
     }
 
     pub fn status(&self) -> Option<DisplayStatus> {
@@ -1111,11 +1123,12 @@ struct Pressed {
     server: Option<Arc<Server>>,
     keys: Vec<u8>,
     buttons: Vec<u8>,
-    /// Where the pointer was when a button went down, and the window there.
-    /// An action that ends early lets its button go at that point, with
-    /// the server held, if that window is still there; otherwise it first
-    /// cancels the drag with Escape. An interrupted drag drops nowhere new.
-    pressed_at: Option<((u16, u16), u32)>,
+    /// Where the pointer was when a button went down, and the window there
+    /// (its id and its rectangle). An action that ends early lets its button
+    /// go, with the server held, on that window: at the press point, or
+    /// another point of it that is still on top. An interrupted drag drops
+    /// back on its own source, nowhere new.
+    pressed_at: Option<((u16, u16), u32, Rect)>,
     /// The Escape key of the display's keyboard.
     escape: Option<u8>,
 }
@@ -1141,18 +1154,56 @@ impl Drop for Pressed {
         if self.buttons.is_empty() {
             return;
         }
-        // Held: nothing can appear at the press point between the check and
-        // the release.
+        // Held: nothing can appear between the check and the release.
         let _held = server.hold();
-        if let Some(((x, y), window)) = self.pressed_at {
-            let back = server.pointer(x, y).is_ok()
-                && server.pointer_position() == (x, y)
-                && server.window_at(x, y).map_or(0, |w| w.id) == window;
-            if !back {
-                if let Some(escape) = self.escape {
-                    let _ = server.key(escape, true);
-                    let _ = server.key(escape, false);
+        if let Some(((x, y), window, rect)) = self.pressed_at {
+            // Back on the window it was picked up from: the press point, or
+            // its centre or a corner, wherever that window is still on top.
+            let (right, bottom) = (
+                rect.x.saturating_add(rect.width.saturating_sub(2)),
+                rect.y.saturating_add(rect.height.saturating_sub(2)),
+            );
+            let points = [
+                (x, y),
+                (
+                    rect.x.saturating_add(rect.width / 2),
+                    rect.y.saturating_add(rect.height / 2),
+                ),
+                (rect.x.saturating_add(1), rect.y.saturating_add(1)),
+                (right, rect.y.saturating_add(1)),
+                (rect.x.saturating_add(1), bottom),
+                (right, bottom),
+            ];
+            let to = |(px, py): (u16, u16)| {
+                server.pointer(px, py).is_ok() && server.pointer_position() == (px, py)
+            };
+            let back = points
+                .into_iter()
+                .any(|p| server.window_at(p.0, p.1).map_or(0, |w| w.id) == window && to(p));
+            // Its source entirely covered: onto the bare display, where a drop
+            // reaches no window.
+            let (width, height) = server.size();
+            let edges = [
+                (1, 1),
+                (width.saturating_sub(2), 1),
+                (1, height.saturating_sub(2)),
+                (width.saturating_sub(2), height.saturating_sub(2)),
+            ];
+            let bare = back
+                || edges
+                    .into_iter()
+                    .any(|p| server.window_at(p.0, p.1).is_none() && to(p));
+            if !bare {
+                // Nowhere safe: cancel the drag with Escape where the keys
+                // reach its source (never another window), and let go
+                // where it was picked up.
+                if server.keys_reach(window) {
+                    if let Some(escape) = self.escape {
+                        let _ = server.key(escape, true);
+                        let _ = server.key(escape, false);
+                    }
                 }
+                let _ = to((x, y));
             }
         }
         for code in self.buttons.iter().rev() {
@@ -1251,8 +1302,20 @@ impl PendingEffect for Input {
                     }
                     if press {
                         let (x, y) = server.pointer_position();
-                        pressed.pressed_at =
-                            Some(((x, y), server.window_at(x, y).map_or(0, |w| w.id)));
+                        let (width, height) = server.size();
+                        let (id, rect) = server.window_at(x, y).map_or(
+                            (
+                                0,
+                                Rect {
+                                    x: 0,
+                                    y: 0,
+                                    width,
+                                    height,
+                                },
+                            ),
+                            |w| (w.id, w.rect),
+                        );
+                        pressed.pressed_at = Some(((x, y), id, rect));
                         pressed.escape = server.keycode(KEYSYM_ESCAPE).map(|(code, _)| code);
                     }
                     server.button(code, press).map_err(failed)?;
