@@ -337,7 +337,7 @@ fn touch_marker(input: &Value) -> Result<ToolInvocation, AuthorityError> {
 /// is cancelled there is never spawned (it would leave its marker).
 #[test]
 fn a_tool_is_not_spawned_once_its_run_is_cancelled() {
-    use crate::control::{PendingEffect, Preparation};
+    use crate::control::Preparation;
     let mut _roots = Vec::new();
     let mut definitions = fixtures();
     definitions.push(fixture(
