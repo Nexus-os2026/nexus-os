@@ -14,7 +14,7 @@ use crate::authority::effect::EffectClass;
 use crate::authority::evidence::{EvidencePhase, EvidenceSink};
 use crate::authority::ids::{AgentId, CommitmentId, GrantId, RunId};
 use crate::authority::policy::{Grant, GrantScope};
-use crate::authority::run::RunOrigin;
+use crate::authority::run::{RunClass, RunOrigin};
 use crate::authority::{Authority, AuthorityError};
 use crate::broker::{CredentialBroker, SecretSource, Vault};
 use crate::browser::{Browser, BrowserIntent};
@@ -197,9 +197,27 @@ impl GovernedControl {
         self.control.authority()
     }
 
+    /// Open an agent's run (whatever the agent is called, it is an agent's).
     pub fn open_run(&self, agent: AgentId, origin: RunOrigin) -> Result<RunId, AuthorityError> {
         self.settle();
         self.authority().open_run(agent, origin)
+    }
+
+    /// Open the run of one of the owner's own commands, from the unified
+    /// front door: the only way to an owner run. Returns its agent label
+    /// and the run.
+    pub fn open_owner_run(
+        &self,
+        modalities: Vec<String>,
+    ) -> Result<(AgentId, RunId), AuthorityError> {
+        self.settle();
+        self.authority().open_owner_run(modalities)
+    }
+
+    /// Whether `run` is one of the owner's own command runs, as the backend
+    /// opened it (never judged from a name).
+    pub fn is_owner_run(&self, run: RunId) -> bool {
+        self.authority().runs().class(run) == Some(RunClass::Owner)
     }
 
     fn prepare(
@@ -273,6 +291,11 @@ impl GovernedControl {
         run: RunId,
         intent: &Intent,
     ) -> Result<AgentOutcome, AuthorityError> {
+        // An agent acts only in an agent's run: an owner run is not reached
+        // by carrying the owner's label.
+        if self.authority().runs().class(run) != Some(RunClass::Agent) {
+            return Err(AuthorityError::WrongRun);
+        }
         let view = self.propose(agent, run, intent)?;
         if view.class == EffectClass::R2 {
             return Ok(AgentOutcome::AwaitingApproval(view));

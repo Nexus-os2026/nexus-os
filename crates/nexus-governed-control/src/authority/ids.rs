@@ -155,7 +155,10 @@ impl AgentId {
         ok.then(|| Self(text.to_string()))
     }
 
-    pub fn owner_session() -> Self {
+    /// The label of the owner's command runs (display and evidence only:
+    /// an agent may carry the same text, and gains nothing by it; see
+    /// [`super::run::RunClass`]).
+    pub(crate) fn owner_session() -> Self {
         Self(OWNER_SESSION.to_string())
     }
 

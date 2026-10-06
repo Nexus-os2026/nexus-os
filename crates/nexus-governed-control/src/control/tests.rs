@@ -381,16 +381,59 @@ fn agents_cannot_fill_the_places_kept_for_the_owner() {
             .unwrap_err(),
         AuthorityError::Capacity
     );
-    let owner = AgentId::owner_session();
+    // An agent that carries the owner's label is still an agent: its run
+    // is an agent's, and the owner's places are not its to take.
+    let impostor = AgentId::new(crate::authority::ids::OWNER_SESSION).unwrap();
+    assert_eq!(impostor, AgentId::owner_session());
     let run = f
         .control
         .authority()
-        .open_run(owner.clone(), RunOrigin::Command { modalities: vec![] })
+        .open_run(impostor.clone(), RunOrigin::Command { modalities: vec![] })
         .unwrap();
+    assert_eq!(
+        f.control
+            .propose(&impostor, run, f.preparation(EffectClass::R1, "x", "x"))
+            .unwrap_err(),
+        AuthorityError::Capacity
+    );
+    // The owner's own command run, as the backend opened it, is admitted.
+    let (owner, run) = f.control.authority().open_owner_run(vec![]).unwrap();
+    assert_eq!(owner, impostor);
     assert!(f
         .control
         .propose(&owner, run, f.preparation(EffectClass::R1, "x", "x"))
         .is_ok());
+}
+
+/// Places are checked and taken at once: proposals racing for the last
+/// places of a run never hold more than the run may.
+#[test]
+fn racing_proposals_never_exceed_a_runs_places() {
+    let f = std::sync::Arc::new(fixture());
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(64));
+    let admitted = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let threads: Vec<_> = (0..64)
+        .map(|_| {
+            let (f, barrier, admitted) = (f.clone(), barrier.clone(), admitted.clone());
+            std::thread::spawn(move || {
+                barrier.wait();
+                if f.control
+                    .propose(&f.agent, f.run, f.preparation(EffectClass::R1, "x", "x"))
+                    .is_ok()
+                {
+                    admitted.fetch_add(1, Ordering::SeqCst);
+                }
+            })
+        })
+        .collect();
+    for thread in threads {
+        thread.join().unwrap();
+    }
+    assert_eq!(admitted.load(Ordering::SeqCst), super::MAX_PENDING_PER_RUN);
+    let table = f.control.pending();
+    assert_eq!(table.held.len(), super::MAX_PENDING_PER_RUN);
+    assert_eq!(table.reserved, 0);
+    assert!(table.reserved_by_run.is_empty());
 }
 
 #[test]

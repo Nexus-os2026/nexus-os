@@ -460,15 +460,7 @@ fn the_front_door_grants_and_runs_a_tool() {
             &owner,
         )
         .unwrap();
-    let agent = AgentId::owner_session();
-    let run = control
-        .open_run(
-            agent.clone(),
-            RunOrigin::Command {
-                modalities: vec![s("text")],
-            },
-        )
-        .unwrap();
+    let (agent, run) = control.open_owner_run(vec![s("text")]).unwrap();
     let intent = Intent::Tool(ToolIntent {
         tool: s("text.sha256"),
         input: json!({ "text": "abc" }),
@@ -900,4 +892,41 @@ fn a_display_start_is_recorded_with_no_lock_held_and_a_stop_overtakes_it() {
     );
     assert!(sink.probes() >= phases.len());
     assert_eq!(sink.violations(), 0);
+}
+
+/// An agent's action is taken only in an agent's run: an owner command run
+/// is not reached by carrying the owner's label, and an agent that carries
+/// that label opens an agent's run like any other.
+#[test]
+fn an_agent_action_never_runs_in_an_owner_run() {
+    let (control, _evidence, _root) = control();
+    control
+        .request_grant(
+            &GrantRequest::Tool {
+                tool: s("text.sha256"),
+            },
+            Duration::from_secs(60),
+            &Yes::new(true),
+        )
+        .unwrap();
+    let intent = Intent::Tool(ToolIntent {
+        tool: s("text.sha256"),
+        input: json!({ "text": "x" }),
+    });
+    let (label, run) = control.open_owner_run(vec![s("text")]).unwrap();
+    assert!(control.is_owner_run(run));
+    assert_eq!(
+        control.agent_action(&label, run, &intent).unwrap_err(),
+        AuthorityError::WrongRun
+    );
+    let impostor = AgentId::new(crate::authority::ids::OWNER_SESSION).unwrap();
+    assert_eq!(impostor, label);
+    let agent_run = control
+        .open_run(impostor.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    assert!(!control.is_owner_run(agent_run));
+    assert!(matches!(
+        control.agent_action(&impostor, agent_run, &intent).unwrap(),
+        AgentOutcome::Done(_)
+    ));
 }

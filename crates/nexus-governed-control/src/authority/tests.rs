@@ -1495,6 +1495,7 @@ fn a_reentrant_sink_never_deadlocks_the_authority() {
         let _ = auth.grants().live_of(CapabilityKind::Egress);
         let _ = auth.runs().views();
         let _ = auth.runs().view(run);
+        let _ = auth.runs().class(run);
     });
     let (auth, agent, grant, yes) = (f.auth.clone(), f.agent.clone(), f.grant, f.yes);
     within(move || {

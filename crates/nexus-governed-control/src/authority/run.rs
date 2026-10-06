@@ -33,6 +33,16 @@ pub enum RunOrigin {
     AgentGoal,
 }
 
+/// Whose run it is, as the backend opened it, retained with the run: only
+/// the owner's own command front door opens an owner run
+/// ([`super::Authority::open_owner_run`]); every other run is an agent's.
+/// Never derived from the agent identity, the origin or any other text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunClass {
+    Owner,
+    Agent,
+}
+
 /// A run, for display.
 #[derive(Clone, Debug)]
 pub struct RunView {
@@ -46,6 +56,7 @@ pub struct RunView {
 
 struct RunEntry {
     view: RunView,
+    class: RunClass,
     cancelled: Arc<AtomicBool>,
 }
 
@@ -67,6 +78,7 @@ impl RunRegistry {
         &self,
         agent: AgentId,
         origin: RunOrigin,
+        class: RunClass,
         now_wall_ms: u64,
     ) -> Result<RunId, AuthorityError> {
         let id = RunId::fresh();
@@ -79,6 +91,7 @@ impl RunRegistry {
                 cancelled: false,
                 finished: false,
             },
+            class,
             cancelled: Arc::new(AtomicBool::new(false)),
         };
         let mut runs = self.runs.lock().expect("runs");
@@ -184,6 +197,11 @@ impl RunRegistry {
     #[cfg(test)]
     pub(crate) fn probe_locks(&self) {
         drop(self.runs.lock().expect("runs"));
+    }
+
+    /// Whose run it is (`None`: no such run).
+    pub fn class(&self, run: RunId) -> Option<RunClass> {
+        self.runs.lock().expect("runs").get(&run).map(|e| e.class)
     }
 
     pub fn view(&self, run: RunId) -> Option<RunView> {

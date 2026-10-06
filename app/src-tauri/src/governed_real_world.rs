@@ -150,15 +150,9 @@ impl RealWorld {
                 return Ok(json!({ "understood": false, "reason": why }));
             }
         };
-        let agent = AgentId::owner_session();
-        let run = self
+        let (agent, run) = self
             .control
-            .open_run(
-                agent.clone(),
-                RunOrigin::Command {
-                    modalities: envelope.modalities(),
-                },
-            )
+            .open_owner_run(envelope.modalities())
             .map_err(|e| e.to_string())?;
         match self.control.propose(&agent, run, &intent) {
             Ok(view) => {
@@ -208,9 +202,10 @@ impl RealWorld {
         result.map_err(|e| e.to_string())
     }
 
-    /// An owner command's run ends with its one commitment.
+    /// An owner command's run ends with its one commitment (an owner run as
+    /// the backend opened it, never judged from its agent's name).
     fn settle(&self, view: &CommitmentView) {
-        if view.agent == AgentId::owner_session() {
+        if self.control.is_owner_run(view.run) {
             self.control.finish_run(view.run);
         }
     }

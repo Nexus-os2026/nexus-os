@@ -4132,7 +4132,7 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
     assert_in_order(
         &execute,
         &[
-            "pending.remove(&id).expect(\"present\").effect",
+            "pending.held.remove(&id).expect(\"present\").effect",
             "effect.revalidate()",
             ".begin(id,agent,run,&target,&parameters)",
             "effect.execute(&guard)",
@@ -4413,7 +4413,6 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::evidence::TeeEvidence",
     "nexus_governed_control::authority::ids::AgentId",
     "nexus_governed_control::authority::ids::AgentId::new",
-    "nexus_governed_control::authority::ids::AgentId::owner_session",
     "nexus_governed_control::authority::ids::CommitmentId",
     "nexus_governed_control::authority::ids::CommitmentId::parse",
     "nexus_governed_control::authority::ids::GrantId",
@@ -4422,7 +4421,6 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::ids::RunId::parse",
     "nexus_governed_control::authority::run::RunOrigin",
     "nexus_governed_control::authority::run::RunOrigin::AgentGoal",
-    "nexus_governed_control::authority::run::RunOrigin::Command",
     "nexus_governed_control::broker::Vault",
     "nexus_governed_control::broker::Vault::Kernel",
     "nexus_governed_control::control::EffectOutput",
