@@ -1,8 +1,37 @@
 //! The DevTools reader keeps only the events a session uses, within bounds.
 
-use super::{Cdp, MAX_EVENTS, MAX_EVENT_BYTES};
-use std::io::Write;
+use super::{Cdp, CdpError, MAX_EVENTS, MAX_EVENT_BYTES};
+use crate::harness_tests::harness;
+use serde_json::json;
+use std::io::{Read, Write};
 use std::time::{Duration, Instant};
+
+/// Once the session's run is cancelled nothing more is sent to the
+/// browser: the command is refused before it is written, so no further step
+/// reaches the page after a stop.
+#[test]
+fn nothing_is_sent_after_a_stop() {
+    let (mut commands, command_writer) = std::io::pipe().unwrap();
+    let (reply_reader, _replies) = std::io::pipe().unwrap();
+    let cdp = Cdp::new(command_writer, reply_reader);
+    let h = harness();
+    let token = h.control.authority().runs().check(h.run, &h.agent).unwrap();
+    h.control.authority().cancel_run(h.run).unwrap();
+    assert!(matches!(
+        cdp.call(
+            "Runtime.evaluate",
+            json!({ "expression": "1" }),
+            None,
+            Duration::from_secs(1),
+            &token
+        ),
+        Err(CdpError::Cancelled)
+    ));
+    drop(cdp);
+    let mut sent = Vec::new();
+    commands.read_to_end(&mut sent).unwrap();
+    assert!(sent.is_empty(), "{}", String::from_utf8_lossy(&sent));
+}
 
 /// Page console output and other events are dropped as they arrive; target
 /// events are kept, at most `MAX_EVENTS` of them and `MAX_EVENT_BYTES`, the

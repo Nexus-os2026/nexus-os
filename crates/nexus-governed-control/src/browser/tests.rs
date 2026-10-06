@@ -89,6 +89,13 @@ fn a_path_others_could_replace_is_named() {
     assert_eq!(replaceable_by_others("/usr/bin"), None);
 }
 
+/// Each click on `#count` takes about 40 ms and is reported to the server.
+const CLICKS: &str = r#"<!doctype html><html><body>
+<button id="count" onclick="const t=Date.now();while(Date.now()-t<40){};fetch('/tick')">+1</button>
+<p class="twice">one</p><p class="twice">two</p>
+<input id="sneaky" onfocus="this.type='password'">
+</body></html>"#;
+
 const PAGE: &str = r#"<!doctype html><html><head><title>Fixture</title></head><body>
 <h1 id="title">Hello governed</h1>
 <img src="http://blocked.nexus.invalid:PORT/tracker.png">
@@ -127,6 +134,8 @@ fn server() -> TestServer {
             "/" => html(PAGE),
             "/hostile" => html(HOSTILE),
             "/escape" => html("<script>location='http://evil.nexus.invalid:PORT/steal'</script>"),
+            "/clicks" => html(CLICKS),
+            "/tick" => Reply::ok("tick"),
             "/slow" => Reply {
                 delay: Duration::from_secs(20),
                 ..Reply::ok("late")
@@ -444,7 +453,11 @@ fn the_browser_is_identity_pinned() {
 /// the session instead of staying in the system's.
 #[test]
 fn the_browser_environment_is_the_sessions_own() {
-    let env = super::live::environment("/session/home".into(), "/session/tmp".into());
+    let env = super::live::environment(
+        "/session/home".into(),
+        "/session/tmp".into(),
+        "/session/bin".into(),
+    );
     let env: Vec<(&str, &str)> = env
         .iter()
         .map(|(key, value)| (key.as_str(), value.to_str().unwrap()))
@@ -454,6 +467,7 @@ fn the_browser_environment_is_the_sessions_own() {
         [
             ("HOME", "/session/home"),
             ("LANG", "C.UTF-8"),
+            ("PATH", "/session/bin"),
             ("TMPDIR", "/session/tmp"),
         ]
     );
@@ -511,7 +525,13 @@ fn every_step_is_shown_in_full_and_selector_lists_are_refused() {
         }
     }
     assert_eq!(rebuilt.join("\n"), fill);
-    for list in ["#safe, #delete-account", "a,b", "#x , #y"] {
+    for list in [
+        "#safe, #delete-account",
+        "a,b",
+        "#x , #y",
+        "/*)*/#a, #b",
+        "#a/**/",
+    ] {
         assert!(
             matches!(
                 browser.prepare(
@@ -587,4 +607,168 @@ fn a_report_is_cut_on_a_character_boundary() {
     let out = super::bounded_report(text);
     assert!(out.len() <= 256 * 1024);
     assert!(out.chars().all(|c| c == '語'));
+}
+
+/// A stop ends a session between its steps: once the run is cancelled no
+/// further step reaches the page (each click here takes about 40 ms and is
+/// counted by the server), the session ends cancelled, and the browser and
+/// everything of the session are gone.
+#[test]
+fn a_stop_ends_the_session_between_its_steps() {
+    let Some((browser, root)) = browser() else {
+        return;
+    };
+    let server = server();
+    let h = harness();
+    let page = origin(&server);
+    grant(&h, &browser, std::slice::from_ref(&page));
+    let intent = BrowserIntent {
+        start_url: format!("{page}/clicks"),
+        steps: (0..20)
+            .map(|_| BrowserStep::Click {
+                selector: "#count".into(),
+            })
+            .collect(),
+    };
+    let preparation = browser.prepare(h.control.authority(), &intent).unwrap();
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    let control = h.control.clone();
+    let (agent, run) = (h.agent.clone(), h.run);
+    let worker = std::thread::spawn(move || control.execute(view.id, &agent, run));
+    let ticks = || {
+        server
+            .received()
+            .iter()
+            .filter(|r| r.path == "/tick")
+            .count()
+    };
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while ticks() == 0 {
+        assert!(Instant::now() < deadline, "the page was never clicked");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    h.control.cancel_run(h.run).unwrap();
+    assert_eq!(
+        worker.join().unwrap().unwrap_err(),
+        AuthorityError::RunCancelled
+    );
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(ticks() <= 4, "{} clicks reached the page", ticks());
+    assert_eq!(
+        h.control
+            .authority()
+            .commitments()
+            .view(view.id)
+            .unwrap()
+            .state,
+        CommitmentState::Cancelled
+    );
+    assert_eq!(
+        std::fs::read_dir(root.0.path()).unwrap().count(),
+        0,
+        "the session is gone"
+    );
+}
+
+/// A selector acts only when it matches exactly one element, and a field
+/// that turns into a password field when focused is not filled.
+#[test]
+fn a_step_acts_on_exactly_one_element_and_never_on_a_password_field() {
+    let Some((browser, _root)) = browser() else {
+        return;
+    };
+    let server = server();
+    let page = origin(&server);
+    for (step, refused) in [
+        (
+            BrowserStep::Click {
+                selector: ".twice".into(),
+            },
+            "ambiguous",
+        ),
+        (
+            BrowserStep::Fill {
+                selector: "#sneaky".into(),
+                text: "hunter2".into(),
+            },
+            "refused",
+        ),
+    ] {
+        let h = harness();
+        grant(&h, &browser, std::slice::from_ref(&page));
+        let out = run(
+            &h,
+            &browser,
+            BrowserIntent {
+                start_url: format!("{page}/clicks"),
+                steps: vec![step],
+            },
+            true,
+        )
+        .unwrap();
+        let report: Value = serde_json::from_str(out.text.as_deref().unwrap()).unwrap();
+        assert_eq!(report["steps"][1]["result"], refused, "{report}");
+        assert_eq!(report["completed"], false);
+    }
+}
+
+/// The session's proxy serves at most `MAX_CONNECTIONS` clients at once and
+/// ends every connection soon after the session (and so the proxy) ends.
+#[test]
+fn the_proxy_caps_its_connections_and_ends_them_with_the_session() {
+    use super::proxy::{BrowserProxy, OriginPolicy};
+    use std::io::Read;
+    let proxy = BrowserProxy::start(OriginPolicy {
+        origins: vec![],
+        allow_private: true,
+        resolver: Arc::new(Fixtures),
+    })
+    .unwrap();
+    let address: SocketAddr = format!("127.0.0.1:{}", proxy.port()).parse().unwrap();
+    let mut held: Vec<std::net::TcpStream> = (0..64)
+        .map(|_| std::net::TcpStream::connect(address).unwrap())
+        .collect();
+    std::thread::sleep(Duration::from_millis(300));
+    let mut over = std::net::TcpStream::connect(address).unwrap();
+    over.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let mut byte = [0u8; 1];
+    assert_eq!(
+        over.read(&mut byte).unwrap_or(0),
+        0,
+        "the 65th is not served"
+    );
+    drop(proxy);
+    // Each waiting client is answered 403 or closed, never left open.
+    for client in &mut held {
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut answer = Vec::new();
+        client
+            .read_to_end(&mut answer)
+            .expect("the connection ends with the proxy");
+        assert!(
+            answer.is_empty() || answer.starts_with(b"HTTP/1.1 403"),
+            "{}",
+            String::from_utf8_lossy(&answer)
+        );
+    }
+}
+
+/// At most `MAX_SESSIONS` sessions of one control run at once.
+#[test]
+fn sessions_are_counted_and_capped() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let counter = Arc::new(AtomicUsize::new(0));
+    let slots: Vec<_> = (0..super::MAX_SESSIONS)
+        .map(|_| super::live::SessionSlot::take(&counter).expect("a slot"))
+        .collect();
+    assert!(super::live::SessionSlot::take(&counter).is_none());
+    assert_eq!(counter.load(Ordering::SeqCst), super::MAX_SESSIONS);
+    drop(slots);
+    assert_eq!(counter.load(Ordering::SeqCst), 0);
+    assert!(super::live::SessionSlot::take(&counter).is_some());
 }

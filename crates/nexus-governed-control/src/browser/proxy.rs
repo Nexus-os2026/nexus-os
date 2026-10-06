@@ -18,15 +18,20 @@ use crate::authority::AuthorityError;
 use crate::egress::destination::{resolve_checked, Destination, Resolver};
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const MAX_HEAD: usize = 16 * 1024;
 const IDLE: Duration = Duration::from_secs(60);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Most bytes one tunnel carries in each direction.
 const MAX_TUNNEL: u64 = 256 * 1024 * 1024;
+/// Client connections served at once; more are closed unserved.
+const MAX_CONNECTIONS: usize = 64;
+/// How often a blocked read looks at the stop flag: when the session ends,
+/// every connection of its proxy ends within this.
+const POLL: Duration = Duration::from_millis(250);
 
 /// Which origins a session may reach.
 pub(crate) struct OriginPolicy {
@@ -68,6 +73,7 @@ impl BrowserProxy {
         let stop = Arc::new(AtomicBool::new(false));
         let admitted = Arc::new(AtomicU32::new(0));
         let refused = Arc::new(AtomicU32::new(0));
+        let active = Arc::new(AtomicUsize::new(0));
         let policy = Arc::new(policy);
         {
             let (stop, admitted, refused) = (stop.clone(), admitted.clone(), refused.clone());
@@ -77,8 +83,14 @@ impl BrowserProxy {
                     while !stop.load(Ordering::SeqCst) {
                         match listener.accept() {
                             Ok((client, _)) => {
+                                if active.load(Ordering::SeqCst) >= MAX_CONNECTIONS {
+                                    refused.fetch_add(1, Ordering::SeqCst);
+                                    continue;
+                                }
+                                active.fetch_add(1, Ordering::SeqCst);
                                 let (policy, stop) = (policy.clone(), stop.clone());
                                 let (admitted, refused) = (admitted.clone(), refused.clone());
+                                let active = active.clone();
                                 std::thread::spawn(move || {
                                     let ok = serve(client, &policy, &stop);
                                     if ok {
@@ -86,6 +98,7 @@ impl BrowserProxy {
                                     } else {
                                         refused.fetch_add(1, Ordering::SeqCst);
                                     }
+                                    active.fetch_sub(1, Ordering::SeqCst);
                                 });
                             }
                             Err(_) => std::thread::sleep(Duration::from_millis(10)),
@@ -121,13 +134,31 @@ impl Drop for BrowserProxy {
     }
 }
 
+/// Whether a read failed only because nothing arrived within `POLL`.
+fn idle(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+    )
+}
+
 /// Read the request head (through the blank line); returns it and any bytes
-/// read past it.
-fn read_head(client: &mut TcpStream) -> Option<(String, Vec<u8>)> {
+/// read past it. It gives up when the proxy stops or the client idles.
+fn read_head(client: &mut TcpStream, stop: &AtomicBool) -> Option<(String, Vec<u8>)> {
     let mut buffer = Vec::new();
     let mut chunk = [0u8; 2048];
+    let deadline = Instant::now() + IDLE;
     loop {
-        let n = client.read(&mut chunk).ok()?;
+        let n = match client.read(&mut chunk) {
+            Ok(n) => n,
+            Err(error) if idle(&error) => {
+                if stop.load(Ordering::SeqCst) || Instant::now() >= deadline {
+                    return None;
+                }
+                continue;
+            }
+            Err(_) => return None,
+        };
         if n == 0 {
             return None;
         }
@@ -155,9 +186,10 @@ fn connect(addresses: &[std::net::SocketAddr]) -> Option<TcpStream> {
 }
 
 /// Serve one client connection; true if it was admitted.
-fn serve(mut client: TcpStream, policy: &OriginPolicy, stop: &AtomicBool) -> bool {
-    let _ = client.set_read_timeout(Some(IDLE));
-    let Some((head, rest)) = read_head(&mut client) else {
+fn serve(mut client: TcpStream, policy: &OriginPolicy, stop: &Arc<AtomicBool>) -> bool {
+    let _ = client.set_read_timeout(Some(POLL));
+    let _ = client.set_write_timeout(Some(IDLE));
+    let Some((head, rest)) = read_head(&mut client, stop) else {
         return refuse(client);
     };
     let mut lines = head.split("\r\n");
@@ -238,32 +270,43 @@ fn serve(mut client: TcpStream, policy: &OriginPolicy, stop: &AtomicBool) -> boo
     true
 }
 
-/// Copy both ways until either side closes, idles out, or the cap.
-fn tunnel(client: TcpStream, upstream: TcpStream, stop: &AtomicBool) {
-    let _ = client.set_read_timeout(Some(IDLE));
-    let _ = upstream.set_read_timeout(Some(IDLE));
+/// Copy both ways until either side closes, idles out, the cap, or the
+/// proxy stops.
+fn tunnel(client: TcpStream, upstream: TcpStream, stop: &Arc<AtomicBool>) {
+    for stream in [&client, &upstream] {
+        let _ = stream.set_read_timeout(Some(POLL));
+        let _ = stream.set_write_timeout(Some(IDLE));
+    }
     let (Ok(client_reader), Ok(upstream_reader)) = (client.try_clone(), upstream.try_clone())
     else {
         return;
     };
-    let up = std::thread::spawn(move || copy(client_reader, upstream));
-    copy(upstream_reader, client);
+    let up_stop = stop.clone();
+    let up = std::thread::spawn(move || copy(client_reader, upstream, &up_stop));
+    copy(upstream_reader, client, stop);
     let _ = up.join();
-    let _ = stop;
 }
 
-fn copy(mut from: TcpStream, mut to: TcpStream) {
+fn copy(mut from: TcpStream, mut to: TcpStream, stop: &AtomicBool) {
     let mut buffer = [0u8; 16 * 1024];
     let mut total = 0u64;
-    loop {
+    let mut quiet_since = Instant::now();
+    while !stop.load(Ordering::SeqCst) {
         match from.read(&mut buffer) {
-            Ok(0) | Err(_) => break,
+            Ok(0) => break,
             Ok(n) => {
+                quiet_since = Instant::now();
                 total += n as u64;
                 if total > MAX_TUNNEL || to.write_all(&buffer[..n]).is_err() {
                     break;
                 }
             }
+            Err(error) if idle(&error) => {
+                if quiet_since.elapsed() >= IDLE {
+                    break;
+                }
+            }
+            Err(_) => break,
         }
     }
     let _ = to.shutdown(Shutdown::Write);

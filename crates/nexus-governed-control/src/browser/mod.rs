@@ -32,10 +32,11 @@ use crate::authority::policy::GrantScope;
 use crate::authority::{Authority, AuthorityError};
 use crate::control::{EffectOutput, PendingEffect, Preparation};
 use crate::egress::destination::{Destination, Resolver, SystemResolver};
-use crate::executable::{inspect, Trust};
+use crate::executable::{inspect, inspect_tree, ExecutableIdentity, Trust};
 use crate::runtime_root::RuntimeRoot;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -64,6 +65,8 @@ const MAX_ORIGINS: usize = 16;
 const SESSION_LIMIT: Duration = Duration::from_secs(120);
 const STEP_TIMEOUT: Duration = Duration::from_secs(20);
 const SESSION_TTL: Duration = Duration::from_secs(10 * 60);
+/// Browser sessions one control runs at once; another is refused.
+const MAX_SESSIONS: usize = 4;
 
 /// One step, as data.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -119,6 +122,8 @@ pub struct Browser {
     executable: &'static str,
     trust: Trust,
     allow_private: bool,
+    /// Sessions running now.
+    sessions: Arc<AtomicUsize>,
 }
 
 /// Keys a step may press: (name, DOM key, virtual key code).
@@ -153,9 +158,10 @@ fn plain(text: &str, max: usize) -> bool {
             .any(|c| c.is_control() && c != '\n' && c != '\t')
 }
 
-/// A selector naming one thing: plain, bounded, and not a list. A top-level
-/// `,` makes a selector list, and `querySelector` takes the first element
-/// matching any part of it, which the owner may not read as the target.
+/// A selector naming one thing: plain, bounded, not a list and without
+/// comments. A top-level `,` makes a selector list, and a comment can hide
+/// one from this check. The page scripts also act only when the selector
+/// matches exactly one element, whatever it is written as.
 fn selector(text: &str) -> bool {
     let mut depth = 0i32;
     let mut quote: Option<char> = None;
@@ -176,7 +182,20 @@ fn selector(text: &str) -> bool {
             _ => {}
         }
     }
-    plain(text, MAX_SELECTOR) && !text.contains('\n')
+    plain(text, MAX_SELECTOR) && !text.contains('\n') && !text.contains("/*")
+}
+
+/// The browser's identity as it is now. A system browser's whole
+/// installation must also be root-only: what it loads or runs from its own
+/// directory cannot be replaced by another user either.
+fn pinned(executable: &Path, trust: Trust) -> Result<ExecutableIdentity, AuthorityError> {
+    let identity = inspect(executable, trust)?;
+    if trust == Trust::System {
+        if let Some(installation) = identity.path.parent() {
+            inspect_tree(installation)?;
+        }
+    }
+    Ok(identity)
 }
 
 fn origin_of(url: &str) -> Result<Destination, AuthorityError> {
@@ -191,6 +210,7 @@ impl Browser {
             executable: CHROME,
             trust: Trust::System,
             allow_private: false,
+            sessions: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -228,7 +248,7 @@ impl Browser {
             }
         }
         granted.sort();
-        let identity = inspect(Path::new(self.executable), self.trust)?;
+        let identity = pinned(Path::new(self.executable), self.trust)?;
         Ok(GrantScope::Browser {
             origins: granted,
             downloads,
@@ -289,7 +309,7 @@ impl Browser {
                 }
             }
         }
-        let identity = inspect(Path::new(self.executable), self.trust)?;
+        let identity = pinned(Path::new(self.executable), self.trust)?;
         let (grant, origins, downloads) = covering_grant(authority, &needed, &identity.digest)?;
         let class = if intent.steps.iter().any(BrowserStep::interacts) {
             EffectClass::R2
@@ -370,6 +390,7 @@ impl Browser {
             root: self.root.clone(),
             target,
             parameters,
+            sessions: self.sessions.clone(),
         };
         Ok(Preparation {
             action,
@@ -423,12 +444,13 @@ struct Session {
     root: RuntimeRoot,
     target: Digest,
     parameters: Digest,
+    sessions: Arc<AtomicUsize>,
 }
 
 impl PendingEffect for Session {
     fn revalidate(&self) -> Result<Digest, AuthorityError> {
         let now =
-            inspect(&self.executable, self.trust).map_err(|_| AuthorityError::TargetChanged)?;
+            pinned(&self.executable, self.trust).map_err(|_| AuthorityError::TargetChanged)?;
         if now.digest != self.identity {
             return Err(AuthorityError::TargetChanged);
         }
@@ -452,25 +474,27 @@ impl PendingEffect for Session {
 mod scripts {
     pub const READY: &str = "()=>document.readyState";
     pub const LOCATION: &str = "()=>location.origin";
-    pub const EXISTS: &str = "(s)=>document.querySelector(s)!==null";
-    pub const CLICK: &str = "(s)=>{const e=document.querySelector(s);if(!e)return'missing';e.scrollIntoView({block:'center'});e.click();return'ok'}";
-    pub const FILL: &str = "(s,t)=>{const e=document.querySelector(s);if(!e)return'missing';const k=(e.type||'').toLowerCase();if(k==='password'||k==='file')return'refused';e.focus();e.value=t;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return'ok'}";
-    pub const FOCUS: &str =
-        "(s)=>{const e=document.querySelector(s);if(!e)return'missing';e.focus();return'ok'}";
-    pub const TEXT: &str =
-        "(s,n)=>{const e=document.querySelector(s);return e?String(e.innerText).slice(0,n):null}";
+    pub const EXISTS: &str = "(s)=>document.querySelectorAll(s).length===1";
+    pub const CLICK: &str = "(s)=>{const a=document.querySelectorAll(s);if(a.length!==1)return a.length?'ambiguous':'missing';const e=a[0];e.scrollIntoView({block:'center'});e.click();return'ok'}";
+    pub const FILL: &str = "(s,t)=>{const a=document.querySelectorAll(s);if(a.length!==1)return a.length?'ambiguous':'missing';const e=a[0];e.focus();const k=(e.type||'').toLowerCase();if(k==='password'||k==='file')return'refused';e.value=t;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return'ok'}";
+    pub const FOCUS: &str = "(s)=>{const a=document.querySelectorAll(s);if(a.length!==1)return a.length?'ambiguous':'missing';a[0].focus();return'ok'}";
+    pub const TEXT: &str = "(s,n)=>{const a=document.querySelectorAll(s);return a.length===1?String(a[0].innerText).slice(0,n):null}";
 }
 
 #[cfg(target_os = "linux")]
 mod live {
     use super::cdp::{Cdp, CdpError};
     use super::proxy::{BrowserProxy, OriginPolicy};
-    use super::{key, scripts, BrowserStep, Session, MAX_EXTRACT, SESSION_LIMIT, STEP_TIMEOUT};
+    use super::{
+        key, scripts, BrowserStep, Session, MAX_EXTRACT, MAX_SESSIONS, SESSION_LIMIT, STEP_TIMEOUT,
+    };
     use crate::authority::commitment::{ExecutionGuard, FailureClass};
     use crate::authority::run::CancelToken;
     use crate::control::EffectOutput;
     use crate::launcher::{SessionProcess, SessionSpec};
     use serde_json::{json, Value};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
 
     type Failure = (FailureClass, String);
@@ -589,22 +613,33 @@ mod live {
             Ok(json!({ "navigate": url, "loaded": loaded }))
         }
 
-        /// Close any page this session did not open.
+        /// Close every page but the session's own, as the browser lists
+        /// them now (no event a page could crowd out is relied on). Pages a
+        /// page opened are counted as popups.
         fn close_popups(&mut self) -> Result<(), Failure> {
-            for event in self.cdp.drain_events() {
-                if event["method"] == "Target.targetCreated"
-                    && event["params"]["targetInfo"]["type"] == "page"
-                    && event["params"]["targetInfo"]["targetId"] != json!(self.target)
-                {
-                    let id = event["params"]["targetInfo"]["targetId"].clone();
+            drop(self.cdp.drain_events());
+            let targets = self
+                .cdp
+                .call(
+                    "Target.getTargets",
+                    json!({}),
+                    None,
+                    STEP_TIMEOUT,
+                    self.cancel,
+                )
+                .map_err(failure)?;
+            for info in targets["targetInfos"].as_array().into_iter().flatten() {
+                if info["type"] == "page" && info["targetId"] != json!(self.target) {
                     let _ = self.cdp.call(
                         "Target.closeTarget",
-                        json!({ "targetId": id }),
+                        json!({ "targetId": info["targetId"] }),
                         None,
                         STEP_TIMEOUT,
                         self.cancel,
                     );
-                    self.popups_closed += 1;
+                    if info.get("openerId").is_some_and(|opener| !opener.is_null()) {
+                        self.popups_closed += 1;
+                    }
                 }
             }
             Ok(())
@@ -708,20 +743,48 @@ mod live {
 
     /// The browser's whole environment: a home and a temporary directory
     /// of the session's own (Chrome keeps its process-singleton socket in
-    /// the temporary one), and a fixed locale.
+    /// the temporary one), a fixed locale, and a `PATH` that is an empty
+    /// directory of the session, so nothing a page opens (an external
+    /// protocol handler) can find a program to start.
     pub(super) fn environment(
         home: std::path::PathBuf,
         temp: std::path::PathBuf,
+        path: std::path::PathBuf,
     ) -> Vec<(String, std::ffi::OsString)> {
         vec![
             ("HOME".into(), home.into_os_string()),
             ("LANG".into(), "C.UTF-8".into()),
+            ("PATH".into(), path.into_os_string()),
             ("TMPDIR".into(), temp.into_os_string()),
         ]
     }
 
+    /// One running session of a control, counted while it lives.
+    pub(super) struct SessionSlot(Arc<AtomicUsize>);
+
+    impl SessionSlot {
+        pub(super) fn take(sessions: &Arc<AtomicUsize>) -> Option<Self> {
+            let running = sessions.fetch_add(1, Ordering::SeqCst);
+            let slot = Self(sessions.clone());
+            (running < MAX_SESSIONS).then_some(slot)
+        }
+    }
+
+    impl Drop for SessionSlot {
+        fn drop(&mut self) {
+            self.0.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
     pub(super) fn run(session: &Session, guard: &ExecutionGuard) -> Result<EffectOutput, Failure> {
         let unavailable = |what: &str| (FailureClass::Unavailable, what.to_string());
+        let cancelled = || (FailureClass::Actuator, "cancelled".to_string());
+        if guard.is_cancelled() {
+            return Err(cancelled());
+        }
+        let Some(_slot) = SessionSlot::take(&session.sessions) else {
+            return Err(unavailable("too many browser sessions at once"));
+        };
         let started = Instant::now();
         let scratch = session
             .root
@@ -733,6 +796,9 @@ mod live {
         let home = scratch
             .subdir("home")
             .map_err(|_| unavailable("no home directory"))?;
+        let no_programs = scratch
+            .subdir("bin")
+            .map_err(|_| unavailable("no session directory"))?;
         // Chrome's own temporary files (its process-singleton socket, whose
         // path must stay short) go in a private directory of this session,
         // removed when it ends (declared before the process, dropped after).
@@ -787,7 +853,7 @@ mod live {
         let _process = SessionProcess::launch(SessionSpec {
             program: session.executable.clone(),
             args: args.into_iter().map(Into::into).collect(),
-            env: environment(home, temp.0.clone()),
+            env: environment(home, temp.0.clone(), no_programs),
             current_dir: scratch.path().to_path_buf(),
             stop_grace: None,
             inherit: vec![(command_reader.into(), 3), (reply_writer.into(), 4)],
@@ -835,6 +901,9 @@ mod live {
         results.push(start);
         if started_ok {
             for step in &session.steps {
+                if cancel.is_cancelled() {
+                    return Err(cancelled());
+                }
                 if started.elapsed() > SESSION_LIMIT {
                     return Err((FailureClass::Timeout, "the session ran out of time".into()));
                 }

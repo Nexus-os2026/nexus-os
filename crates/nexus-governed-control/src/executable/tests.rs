@@ -45,3 +45,20 @@ fn a_user_writable_location_is_not_trusted() {
     assert!(changed.map(|c| c.digest != pinned.digest).unwrap_or(true));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// An installation directory anything in which another user owns or may
+/// write is refused (a system browser's whole directory must be root-only).
+#[test]
+fn an_installation_others_could_change_is_refused() {
+    let dir = std::env::temp_dir().join(format!("nexus-p3-installation-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("locales")).unwrap();
+    std::fs::write(dir.join("locales").join("en.pak"), b"pak").unwrap();
+    let refused = super::inspect_tree(&dir);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        refused,
+        Err(AuthorityError::Closed(
+            "the executable's installation is not in a trusted location"
+        ))
+    );
+}

@@ -108,7 +108,9 @@ impl Cdp {
         }
     }
 
-    /// Send one command and wait for its reply, observing `cancel`.
+    /// Send one command and wait for its reply, observing `cancel`. Nothing
+    /// is sent once the session is cancelled, and a reply that arrives after
+    /// the cancellation is not used: no further step runs after a stop.
     pub(crate) fn call(
         &self,
         method: &str,
@@ -117,6 +119,9 @@ impl Cdp {
         timeout: Duration,
         cancel: &CancelToken,
     ) -> Result<Value, CdpError> {
+        if cancel.is_cancelled() {
+            return Err(CdpError::Cancelled);
+        }
         let id = self.next.fetch_add(1, Ordering::SeqCst);
         let mut message = json!({ "id": id, "method": method, "params": params });
         if let Some(session) = session {
@@ -141,6 +146,7 @@ impl Cdp {
         let deadline = Instant::now() + timeout;
         loop {
             match receiver.recv_timeout(Duration::from_millis(50)) {
+                Ok(_) if cancel.is_cancelled() => return Err(CdpError::Cancelled),
                 Ok(reply) => {
                     if let Some(error) = reply.get("error") {
                         let text = error

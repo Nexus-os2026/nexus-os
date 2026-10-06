@@ -142,9 +142,55 @@ pub(crate) fn inspect(path: &Path, trust: Trust) -> Result<ExecutableIdentity, A
     })
 }
 
+/// The most entries an installation directory may hold.
+#[cfg(target_os = "linux")]
+const MAX_INSTALLATION: usize = 8192;
+
+/// Every entry under `dir` (an executable's own installation directory)
+/// belongs to root and, unless it is a symbolic link, is writable by no one
+/// else: what the executable loads or runs from beside itself cannot be
+/// replaced by another user either. The directory itself is one of the
+/// executable's ancestors, which `inspect` checks.
+#[cfg(target_os = "linux")]
+pub(crate) fn inspect_tree(dir: &Path) -> Result<(), AuthorityError> {
+    use std::os::unix::fs::MetadataExt;
+    let untrusted =
+        AuthorityError::Closed("the executable's installation is not in a trusted location");
+    let mut pending = vec![dir.to_path_buf()];
+    let mut seen = 0usize;
+    while let Some(current) = pending.pop() {
+        for entry in std::fs::read_dir(&current).map_err(|_| untrusted.clone())? {
+            let path = entry.map_err(|_| untrusted.clone())?.path();
+            seen += 1;
+            if seen > MAX_INSTALLATION {
+                return Err(AuthorityError::Closed(
+                    "the executable's installation is too large to check",
+                ));
+            }
+            let meta = std::fs::symlink_metadata(&path).map_err(|_| untrusted.clone())?;
+            let link = meta.file_type().is_symlink();
+            if meta.uid() != 0 || (!link && meta.mode() & 0o022 != 0) {
+                return Err(untrusted);
+            }
+            if meta.is_dir() {
+                pending.push(path);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Other platforms: governed launches are not available.
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn inspect(_path: &Path, _trust: Trust) -> Result<ExecutableIdentity, AuthorityError> {
+    Err(AuthorityError::Unavailable(
+        "governed real-world control is available on Linux only",
+    ))
+}
+
+/// Other platforms: governed launches are not available.
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn inspect_tree(_dir: &Path) -> Result<(), AuthorityError> {
     Err(AuthorityError::Unavailable(
         "governed real-world control is available on Linux only",
     ))
