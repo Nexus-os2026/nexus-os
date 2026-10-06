@@ -3129,7 +3129,7 @@ fn p0_fg_transcendent_approval_is_refused_and_changes_nothing() {
 fn test_approve_consent_request_wakes_blocked_wait() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-approve-wake", "a1", "fs.write", "Tier1");
-    let notify = state.register_blocked_consent_wait("a1", "c-approve-wake");
+    let notify = state.register_blocked_consent_wait("a1", "g-approve-wake", "c-approve-wake");
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()
@@ -3242,7 +3242,7 @@ fn test_deny_transcendent_creation_cleans_up_pending_agent() {
 fn test_deny_consent_request_wakes_blocked_wait() {
     let state = AppState::new_in_memory();
     enqueue_test_consent(&state, "c-deny-wake", "a2", "process.exec", "Tier2");
-    let notify = state.register_blocked_consent_wait("a2", "c-deny-wake");
+    let notify = state.register_blocked_consent_wait("a2", "g-deny-wake", "c-deny-wake");
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()

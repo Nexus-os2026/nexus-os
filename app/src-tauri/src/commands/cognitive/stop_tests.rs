@@ -1,7 +1,8 @@
 //! Candidate 9 (C8-3): an agent the supervisor holds no record of has no
 //! authority to run. Its loop runs no cycle and it takes no HiveMind
 //! sub-task, as a stopped agent; the scheduler's tick and Phase Three's
-//! bridge already refuse it.
+//! bridge already refuse it. (C8-4): a goal's own cleanup ends only that
+//! goal.
 
 use super::*;
 
@@ -106,5 +107,68 @@ fn a_cleared_agents_loop_runs_no_cycle_and_it_takes_no_subtask() {
     assert!(
         refused.as_ref().is_err_and(|e| e.contains("is stopped")),
         "{refused:?}"
+    );
+}
+
+/// Candidate 9 (C8-4): a goal's own cleanup (a HiveMind session's limit, a
+/// refused tick) ends only that goal: a goal given since keeps its loop and
+/// its consent wait, and the goal's own cleanup ends it and wakes only its
+/// own wait. (The race itself, a goal assigned while the cleanup waits for
+/// the loops guard, is the kernel's `an_older_goals_cleanup_never_ends_a_newer_goal`.)
+#[test]
+fn a_goals_cleanup_ends_only_that_goal_and_wakes_only_its_wait() {
+    let state = AppState::new_in_memory();
+    let id = register(&state, "goal-cleanup");
+    let active = |state: &AppState| {
+        state
+            .cognitive_runtime
+            .get_agent_status_fast(&id)
+            .and_then(|status| status.active_goal)
+            .map(|goal| goal.id)
+    };
+    let waiting = |state: &AppState| {
+        state
+            .blocked_consent_waits
+            .lock()
+            .unwrap()
+            .contains_key(&id)
+    };
+    let older = execute_agent_goal(&state, id.clone(), "older".into(), 5, None).unwrap();
+    let newer = execute_agent_goal(&state, id.clone(), "newer".into(), 5, None).unwrap();
+    // The newer goal's loop waits for the owner's consent; the older goal's
+    // cleanup leaves both alone.
+    let notify = state.register_blocked_consent_wait(&id, &newer, "consent-for-newer");
+    end_goal_loop(&state, &id, &older);
+    assert_eq!(
+        active(&state),
+        Some(newer.clone()),
+        "an older goal's cleanup ended a newer goal"
+    );
+    assert!(
+        waiting(&state),
+        "an older goal's cleanup woke a newer goal's consent wait"
+    );
+    // Its own cleanup ends it, and wakes its wait.
+    end_goal_loop(&state, &id, &newer);
+    assert_eq!(active(&state), None);
+    assert!(!waiting(&state));
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    runtime
+        .block_on(async {
+            tokio::time::timeout(std::time::Duration::from_secs(5), notify.notified()).await
+        })
+        .expect("the goal's own consent wait was woken");
+    // A goal's cleanup wakes no other goal's wait (here one of a goal that
+    // was replaced while its loop waited).
+    let third = execute_agent_goal(&state, id.clone(), "third".into(), 5, None).unwrap();
+    state.register_blocked_consent_wait(&id, &newer, "consent-still-open");
+    end_goal_loop(&state, &id, &third);
+    assert_eq!(active(&state), None);
+    assert!(
+        waiting(&state),
+        "a goal's cleanup woke another goal's consent wait"
     );
 }

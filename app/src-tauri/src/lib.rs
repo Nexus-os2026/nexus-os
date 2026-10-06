@@ -787,6 +787,8 @@ struct VoiceProcess {
 #[derive(Clone)]
 struct BlockedConsentWait {
     consent_id: String,
+    /// The goal whose loop waits: a goal's own cleanup wakes only its wait.
+    goal_id: String,
     notify: Arc<Notify>,
 }
 
@@ -1888,7 +1890,12 @@ impl AppState {
             .map_err(|e| e.to_string())
     }
 
-    pub fn register_blocked_consent_wait(&self, agent_id: &str, consent_id: &str) -> Arc<Notify> {
+    pub fn register_blocked_consent_wait(
+        &self,
+        agent_id: &str,
+        goal_id: &str,
+        consent_id: &str,
+    ) -> Arc<Notify> {
         let notify = Arc::new(Notify::new());
         self.blocked_consent_waits
             .lock()
@@ -1897,6 +1904,7 @@ impl AppState {
                 agent_id.to_string(),
                 BlockedConsentWait {
                     consent_id: consent_id.to_string(),
+                    goal_id: goal_id.to_string(),
                     notify: notify.clone(),
                 },
             );
@@ -1938,6 +1946,31 @@ impl AppState {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .remove(agent_id);
+        if let Some(wait) = wait {
+            wait.notify.notify_one();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Wake the agent's consent wait only if `goal_id`'s loop is the one
+    /// waiting: a newer goal's wait is left alone.
+    fn wake_and_clear_goal_consent_wait(&self, agent_id: &str, goal_id: &str) -> bool {
+        let wait = {
+            let mut waits = self
+                .blocked_consent_waits
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            if waits
+                .get(agent_id)
+                .is_some_and(|wait| wait.goal_id == goal_id)
+            {
+                waits.remove(agent_id)
+            } else {
+                None
+            }
+        };
         if let Some(wait) = wait {
             wait.notify.notify_one();
             true

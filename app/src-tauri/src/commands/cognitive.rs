@@ -2026,7 +2026,8 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                         };
 
                         let consent_id = Uuid::new_v4().to_string();
-                        let notify = state.register_blocked_consent_wait(&agent_id, &consent_id);
+                        let notify =
+                            state.register_blocked_consent_wait(&agent_id, &goal_id, &consent_id);
                         let now = {
                             use chrono::Utc;
                             Utc::now().to_rfc3339()
@@ -2295,17 +2296,16 @@ pub(crate) fn agent_stopped(state: &AppState, agent_id: &str) -> bool {
 }
 
 /// End the agent's loop only while it still drives `goal_id` (a goal given
-/// since is left alone), for the scheduler's or a session's own reasons:
-/// not an owner's action, so none is recorded. Waits while any agent's
-/// cycle holds the loop lock.
+/// since is left alone: compared and removed under the loops' one guard),
+/// and wake only that goal's consent wait, for the scheduler's or a
+/// session's own reasons: not an owner's action, so none is recorded.
+/// Waits while any agent's cycle holds the loop lock.
 fn end_goal_loop(state: &AppState, agent_id: &str, goal_id: &str) {
-    let ours = state
+    if state
         .cognitive_runtime
-        .get_agent_status_fast(agent_id)
-        .and_then(|status| status.active_goal)
-        .is_some_and(|goal| goal.id == goal_id);
-    if ours && state.cognitive_runtime.stop_agent_loop(agent_id).is_ok() {
-        state.wake_and_clear_blocked_consent_wait(agent_id);
+        .stop_agent_loop_if(agent_id, goal_id)
+    {
+        state.wake_and_clear_goal_consent_wait(agent_id, goal_id);
     }
 }
 

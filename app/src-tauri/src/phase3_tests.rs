@@ -6998,12 +6998,10 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
                 at(lib_rs, "run"),
             ],
         ),
+        ("stop_agent_loop", vec![at(cognitive_rs, "end_agent_loop")]),
         (
-            "stop_agent_loop",
-            vec![
-                at(cognitive_rs, "end_agent_loop"),
-                at(cognitive_rs, "end_goal_loop"),
-            ],
+            "stop_agent_loop_if",
+            vec![at(cognitive_rs, "end_goal_loop")],
         ),
         (
             "stop_agents",
@@ -7237,7 +7235,7 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
 
 /// The owner's stop routines and quitting, pinned whole (normalized text):
 /// see `p3_g6_11`.
-const STOP_ROUTINES: [(&str, &str, &str); 19] = [
+const STOP_ROUTINES: [(&str, &str, &str); 21] = [
     (
         "app/src-tauri/src/commands/cognitive.rs",
         "agent_stopped",
@@ -7246,7 +7244,17 @@ const STOP_ROUTINES: [(&str, &str, &str); 19] = [
     (
         "app/src-tauri/src/commands/cognitive.rs",
         "end_goal_loop",
-        "letours=state.cognitive_runtime.get_agent_status_fast(agent_id).and_then(|status|status.active_goal).is_some_and(|goal|goal.id==goal_id);ifours&&state.cognitive_runtime.stop_agent_loop(agent_id).is_ok(){state.wake_and_clear_blocked_consent_wait(agent_id);}",
+        "ifstate.cognitive_runtime.stop_agent_loop_if(agent_id,goal_id){state.wake_and_clear_goal_consent_wait(agent_id,goal_id);}",
+    ),
+    (
+        "kernel/src/cognitive/loop_runtime.rs",
+        "CognitiveRuntime::stop_agent_loop_if",
+        "self.stop_loop_if(agent_id,goal_id,||{})",
+    ),
+    (
+        "kernel/src/cognitive/loop_runtime.rs",
+        "CognitiveRuntime::stop_loop_if",
+        "waiting();letmutloops=self.loops.lock().unwrap_or_else(|p|p.into_inner());ifloops.get(agent_id).is_none_or(|state|state.goal.id!=goal_id){returnfalse;}letSome(state)=loops.remove(agent_id)else{returnfalse;};state.shutdown.store(true,Ordering::Relaxed);self.status_snapshots.lock().unwrap_or_else(|p|p.into_inner()).remove(agent_id);drop(loops);letmutflags=self.shutdown_flags.lock().unwrap_or_else(|p|p.into_inner());ifflags.get(agent_id).is_some_and(|flag|Arc::ptr_eq(flag,&state.shutdown)){flags.remove(agent_id);}true",
     ),
     (
         "app/src-tauri/src/commands/cognitive.rs",

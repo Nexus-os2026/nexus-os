@@ -1637,6 +1637,51 @@ impl CognitiveRuntime {
         Ok(())
     }
 
+    /// Stop the agent's loop only while it still pursues `goal_id`, and say
+    /// whether it did. The goal is compared, and the loop told to stop and
+    /// removed, under the one `loops` guard: a goal assigned since (even
+    /// while this call waited for a cycle) is never removed or stopped by
+    /// an older goal's cleanup.
+    pub fn stop_agent_loop_if(&self, agent_id: &str, goal_id: &str) -> bool {
+        self.stop_loop_if(agent_id, goal_id, || {})
+    }
+
+    /// `stop_agent_loop_if`, calling `waiting` just before it waits for the
+    /// `loops` guard (where a test interleaves a newer assignment).
+    fn stop_loop_if(&self, agent_id: &str, goal_id: &str, waiting: impl FnOnce()) -> bool {
+        waiting();
+        let mut loops = self.loops.lock().unwrap_or_else(|p| p.into_inner());
+        // No loop, or one for another goal: nothing is ended.
+        if loops
+            .get(agent_id)
+            .is_none_or(|state| state.goal.id != goal_id)
+        {
+            return false;
+        }
+        let Some(state) = loops.remove(agent_id) else {
+            return false;
+        };
+        state.shutdown.store(true, Ordering::Relaxed);
+        self.status_snapshots
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(agent_id);
+        drop(loops);
+        // Only this loop's own flag: a newer assignment may already have
+        // put its own in place.
+        let mut flags = self
+            .shutdown_flags
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if flags
+            .get(agent_id)
+            .is_some_and(|flag| Arc::ptr_eq(flag, &state.shutdown))
+        {
+            flags.remove(agent_id);
+        }
+        true
+    }
+
     /// Get the current cognitive phase for an agent.
     pub fn get_agent_phase(&self, agent_id: &str) -> Option<CognitivePhase> {
         self.loops
@@ -2592,6 +2637,86 @@ mod tests {
         assert_eq!(listed, expected);
         runtime.stop_agent_loop(&agent_id).unwrap();
         assert_eq!(runtime.loop_agents(), vec![upper]);
+    }
+
+    /// Candidate 9 (C8-4): an older goal's cleanup never removes or stops a
+    /// newer goal, even one assigned while the cleanup waited for the
+    /// loops guard. Deterministic: the cleanup is held just before that
+    /// wait while the newer goal is assigned.
+    #[test]
+    fn an_older_goals_cleanup_never_ends_a_newer_goal() {
+        let (sup, agent_id) = make_supervisor_with_agent();
+        let (runtime, _) = make_runtime(sup);
+        let runtime = Arc::new(runtime);
+        let older = AgentGoal::new("older".into(), 5);
+        let older_id = older.id.clone();
+        runtime.assign_goal(&agent_id, older).unwrap();
+
+        let (at_guard, reached) = std::sync::mpsc::channel();
+        let (go, proceed) = std::sync::mpsc::channel::<()>();
+        let cleanup = {
+            let runtime = runtime.clone();
+            let (agent, goal) = (agent_id.clone(), older_id.clone());
+            std::thread::spawn(move || {
+                runtime.stop_loop_if(&agent, &goal, move || {
+                    at_guard.send(()).unwrap();
+                    proceed.recv().unwrap();
+                })
+            })
+        };
+        reached
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap();
+        // Meanwhile the agent is given a newer goal.
+        let newer = AgentGoal::new("newer".into(), 5);
+        let newer_id = newer.id.clone();
+        runtime.assign_goal(&agent_id, newer).unwrap();
+        let newer_flag = runtime
+            .shutdown_flags
+            .lock()
+            .unwrap()
+            .get(&agent_id)
+            .unwrap()
+            .clone();
+        go.send(()).unwrap();
+        assert!(
+            !cleanup.join().unwrap(),
+            "an older goal's cleanup ended a newer goal"
+        );
+        // The newer goal is untouched: its loop, its status, its flag.
+        assert_eq!(
+            runtime
+                .get_agent_status_fast(&agent_id)
+                .and_then(|status| status.active_goal)
+                .map(|goal| goal.id),
+            Some(newer_id.clone()),
+            "an older goal's cleanup ended a newer goal"
+        );
+        assert!(runtime.has_active_loop(&agent_id));
+        assert!(
+            !newer_flag.load(Ordering::Relaxed),
+            "an older goal's cleanup stopped a newer goal"
+        );
+        assert!(runtime
+            .shutdown_flags
+            .lock()
+            .unwrap()
+            .get(&agent_id)
+            .is_some_and(|flag| Arc::ptr_eq(flag, &newer_flag)));
+        // A cleanup for a goal no loop pursues does nothing; the newer
+        // goal's own ends it, and stops it.
+        assert!(!runtime.stop_agent_loop_if(&agent_id, &older_id));
+        assert!(runtime.stop_agent_loop_if(&agent_id, &newer_id));
+        assert!(!runtime.has_active_loop(&agent_id));
+        assert!(newer_flag.load(Ordering::Relaxed));
+        assert!(runtime.get_agent_status_fast(&agent_id).is_none());
+        assert!(runtime
+            .shutdown_flags
+            .lock()
+            .unwrap()
+            .get(&agent_id)
+            .is_none());
+        assert!(runtime.loop_agents().is_empty());
     }
 
     #[test]
