@@ -7,6 +7,14 @@
 //! information, no whitespace or control characters, a host, a port. Every
 //! address a destination resolves to is classified before anything connects
 //! to it, and the connection is pinned to exactly the checked addresses.
+//!
+//! Not being in a private range does not make an address safe to reach:
+//! where private addresses are not granted, every answer is also checked,
+//! at each resolution, against this machine's own network boundary as it
+//! is then ([`LocalNetworks`]: its interface addresses and the networks
+//! directly connected to them). A public-looking address there is this
+//! machine or its link, and is refused; so is everything when the boundary
+//! cannot be read.
 
 use crate::authority::ids::Digest;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
@@ -34,6 +42,9 @@ pub enum DestinationError {
     NotPermitted,
     /// The destination does not resolve.
     Unresolvable,
+    /// This machine's network boundary could not be read, so no address
+    /// can be shown to be outside it.
+    NoLocalBoundary,
 }
 
 impl DestinationError {
@@ -47,6 +58,7 @@ impl DestinationError {
             DestinationError::Host => "malformed host",
             DestinationError::NotPermitted => "destination address not permitted",
             DestinationError::Unresolvable => "destination does not resolve",
+            DestinationError::NoLocalBoundary => "the local network boundary cannot be read",
         }
     }
 }
@@ -296,9 +308,68 @@ fn embedded_v4(high: u16, low: u16) -> Ipv4Addr {
     Ipv4Addr::new(a, b, c, d)
 }
 
-/// Name resolution, injectable for tests.
+/// This machine's side of the network: each entry an interface address
+/// (or a point-to-point peer) with the prefix of the network directly
+/// connected through it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LocalNetworks(pub Vec<(IpAddr, u8)>);
+
+impl LocalNetworks {
+    /// Whether `ip` is one of these addresses or in one of these networks.
+    /// An IPv6 form that embeds an IPv4 address (mapped, NAT64, 6to4) is
+    /// local when either it or the address it embeds is.
+    pub fn contains(&self, ip: IpAddr) -> bool {
+        let embedded = match ip {
+            IpAddr::V6(v6) => embedded_in(v6).map(IpAddr::V4),
+            IpAddr::V4(_) => None,
+        };
+        self.0.iter().any(|(network, length)| {
+            in_network(ip, *network, *length)
+                || embedded.is_some_and(|inner| in_network(inner, *network, *length))
+        })
+    }
+}
+
+fn in_network(ip: IpAddr, network: IpAddr, length: u8) -> bool {
+    match (ip, network) {
+        (IpAddr::V4(ip), IpAddr::V4(network)) => {
+            let length = u32::from(length.min(32));
+            let mask = u32::MAX.checked_shl(32 - length).unwrap_or(0);
+            u32::from(ip) & mask == u32::from(network) & mask
+        }
+        (IpAddr::V6(ip), IpAddr::V6(network)) => {
+            let length = u32::from(length.min(128));
+            let mask = u128::MAX.checked_shl(128 - length).unwrap_or(0);
+            u128::from(ip) & mask == u128::from(network) & mask
+        }
+        _ => false,
+    }
+}
+
+/// The IPv4 address an IPv6 form embeds, if it is one that does.
+fn embedded_in(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    let s = ip.segments();
+    // Mapped (::ffff:a.b.c.d) and the well-known NAT64 prefix.
+    if (s[..5] == [0, 0, 0, 0, 0] && s[5] == 0xffff) || s[..6] == [0x64, 0xff9b, 0, 0, 0, 0] {
+        Some(embedded_v4(s[6], s[7]))
+    } else if s[0] == 0x2002 {
+        Some(embedded_v4(s[1], s[2]))
+    } else {
+        None
+    }
+}
+
+/// Name resolution, and this machine's network boundary as it is now:
+/// both injectable for tests.
 pub trait Resolver: Send + Sync {
     fn resolve(&self, host: &str, port: u16) -> std::io::Result<Vec<SocketAddr>>;
+
+    /// This machine's interface addresses and directly connected networks,
+    /// read again at every resolution (the system's unless a test supplies
+    /// a view). An error means the boundary cannot be established.
+    fn local_networks(&self) -> std::io::Result<LocalNetworks> {
+        super::interfaces::system()
+    }
 }
 
 /// The system resolver.
@@ -349,6 +420,17 @@ pub fn resolve_checked(
         .any(|address| !classify(address.ip()).permitted(allow_private))
     {
         return Err(DestinationError::NotPermitted);
+    }
+    // Where private addresses are not granted, an address of this machine,
+    // or in a network directly connected to it, is refused however public
+    // it looks: the boundary as it is now, read for this answer.
+    if !allow_private {
+        let local = resolver
+            .local_networks()
+            .map_err(|_| DestinationError::NoLocalBoundary)?;
+        if addresses.iter().any(|address| local.contains(address.ip())) {
+            return Err(DestinationError::NotPermitted);
+        }
     }
     addresses.truncate(MAX_ADDRESSES);
     Ok(addresses)

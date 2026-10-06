@@ -193,10 +193,45 @@ impl Grant {
 
 /// The owner's grants.
 pub struct GrantStore {
-    grants: Mutex<HashMap<GrantId, Grant>>,
+    grants: Mutex<Grants>,
     generation: Arc<PolicyGeneration>,
     evidence: Arc<dyn EvidenceSink>,
     clock: Arc<dyn Clock>,
+}
+
+/// The grants, and the room held for grants whose issue is being recorded
+/// (no lock is held while a record is written).
+#[derive(Default)]
+struct Grants {
+    map: HashMap<GrantId, Grant>,
+    reserved: usize,
+}
+
+/// Room held for one grant while its issue is recorded: filled by the
+/// grant, or given back when dropped unfilled (the record failed or
+/// panicked).
+struct Room<'a> {
+    grants: &'a Mutex<Grants>,
+    held: bool,
+}
+
+impl Room<'_> {
+    fn fill(mut self, grant: Grant) {
+        let mut grants = self.grants.lock().expect("grant store");
+        grants.reserved = grants.reserved.saturating_sub(1);
+        grants.map.insert(grant.id, grant);
+        self.held = false;
+    }
+}
+
+impl Drop for Room<'_> {
+    fn drop(&mut self) {
+        if self.held {
+            if let Ok(mut grants) = self.grants.lock() {
+                grants.reserved = grants.reserved.saturating_sub(1);
+            }
+        }
+    }
 }
 
 /// Grants last at most a day; the owner grants again for longer work.
@@ -212,7 +247,7 @@ impl GrantStore {
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
-            grants: Mutex::new(HashMap::new()),
+            grants: Mutex::new(Grants::default()),
             generation,
             evidence,
             clock,
@@ -254,16 +289,26 @@ impl GrantStore {
             expires_wall_ms: wall.saturating_add(ttl_ms),
             revoked: false,
         };
-        let mut grants = self.grants.lock().expect("grant store");
-        if grants.len() >= GRANT_CAPACITY {
-            let (now, wall) = (self.clock.monotonic_ms(), self.clock.wall_ms());
-            grants.retain(|_, grant| grant.live(now, wall));
-            if grants.len() >= GRANT_CAPACITY {
-                return Err(AuthorityError::Capacity);
+        // Room first, so that a grant recorded as issued is one that exists;
+        // held, not inserted, while the issue is recorded with the lock
+        // released.
+        {
+            let mut grants = self.grants.lock().expect("grant store");
+            if grants.map.len() + grants.reserved >= GRANT_CAPACITY {
+                grants.map.retain(|_, grant| grant.live(now, wall));
+                if grants.map.len() + grants.reserved >= GRANT_CAPACITY {
+                    return Err(AuthorityError::Capacity);
+                }
             }
+            grants.reserved += 1;
         }
+        let room = Room {
+            grants: &self.grants,
+            held: true,
+        };
+        // Evidence first: an unrecorded grant is never issued.
         self.record(EvidencePhase::GrantIssued, Some(id), &scope)?;
-        grants.insert(id, grant);
+        room.fill(grant);
         Ok(id)
     }
 
@@ -272,7 +317,10 @@ impl GrantStore {
     pub fn revoke(&self, id: GrantId) -> Result<(), AuthorityError> {
         let scope = {
             let mut grants = self.grants.lock().expect("grant store");
-            let grant = grants.get_mut(&id).ok_or(AuthorityError::UnknownGrant)?;
+            let grant = grants
+                .map
+                .get_mut(&id)
+                .ok_or(AuthorityError::UnknownGrant)?;
             grant.revoked = true;
             grant.scope.clone()
         };
@@ -281,14 +329,33 @@ impl GrantStore {
         Ok(())
     }
 
+    /// Take and release the grants' lock once (tests).
+    #[cfg(test)]
+    pub(crate) fn probe_locks(&self) {
+        drop(self.grants.lock().expect("grant store"));
+    }
+
+    /// The room held for grants whose issue is being recorded (tests).
+    #[cfg(test)]
+    pub(crate) fn rooms_held(&self) -> usize {
+        self.grants.lock().expect("grant store").reserved
+    }
+
     /// The grant, if it exists, is not revoked and has not expired.
     pub fn live(&self, id: GrantId) -> Option<Grant> {
         let (now, wall) = (self.clock.monotonic_ms(), self.clock.wall_ms());
+        self.live_at(id, now, wall)
+    }
+
+    /// The same, at the given clock readings (taken by a caller that holds
+    /// a lock, so that no clock is read under it).
+    pub(crate) fn live_at(&self, id: GrantId, monotonic_ms: u64, wall_ms: u64) -> Option<Grant> {
         self.grants
             .lock()
             .expect("grant store")
+            .map
             .get(&id)
-            .filter(|grant| grant.live(now, wall))
+            .filter(|grant| grant.live(monotonic_ms, wall_ms))
             .cloned()
     }
 
@@ -299,6 +366,7 @@ impl GrantStore {
             .grants
             .lock()
             .expect("grant store")
+            .map
             .values()
             .filter(|grant| grant.scope.kind() == kind && grant.live(now, wall))
             .cloned()
@@ -313,6 +381,7 @@ impl GrantStore {
             .grants
             .lock()
             .expect("grant store")
+            .map
             .values()
             .cloned()
             .collect();
@@ -320,6 +389,7 @@ impl GrantStore {
         all
     }
 
+    /// Write one record. Never called with the grants' lock held.
     fn record(
         &self,
         phase: EvidencePhase,

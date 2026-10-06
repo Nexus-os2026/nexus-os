@@ -18,6 +18,17 @@
 //! as JSON data: no model-written script ever runs. Password and file
 //! inputs are never filled. Navigation and reading are R1; clicking,
 //! filling and pressing are R2.
+//!
+//! The proxy switch is only as strong as the browser's own configuration:
+//! a machine policy (`ProxyMode`, a forced extension, cloud management)
+//! takes precedence over it. So the browser does not run while any machine
+//! policy is configured where Chrome or Chromium reads one
+//! ([`POLICY_ROOTS`]): checked when a session is prepared and again
+//! immediately before launch, a place that cannot be read counting as
+//! configured. And a session whose browser did not go through its proxy
+//! (no connection admitted once a page loaded) is refused, never reported
+//! as done; that check only notices a bypass after it happened, so the
+//! policy refusal is what keeps one from happening.
 
 #[cfg(target_os = "linux")]
 mod cdp;
@@ -42,6 +53,50 @@ use std::time::Duration;
 
 /// The browser Phase Three drives.
 pub const CHROME: &str = "/opt/google/chrome/chrome";
+
+/// Where Google Chrome, Chrome for Testing and Chromium read machine policy
+/// on Linux. In each, `managed` and `recommended` hold policy files and
+/// `enrollment` a cloud-management token (whose policies come from the
+/// cloud); any of them can set the proxy over the session's own.
+pub const POLICY_ROOTS: [&str; 4] = [
+    "/etc/opt/chrome/policies",
+    "/etc/opt/chrome_for_testing/policies",
+    "/etc/chromium/policies",
+    "/etc/chromium-browser/policies",
+];
+const POLICY_KINDS: [&str; 3] = ["managed", "recommended", "enrollment"];
+
+const POLICY_CONFIGURED: &str =
+    "a browser policy is configured on this machine (it can override the session's proxy)";
+
+/// Fail closed while any machine policy is configured under `roots`: which
+/// of a policy's settings could override the session's proxy is not judged
+/// here. A root, or a policy directory, that cannot be read or is not a
+/// plain directory counts as configured; an empty policy directory does
+/// not.
+fn no_machine_policy(roots: &[PathBuf]) -> Result<(), AuthorityError> {
+    let configured = AuthorityError::Closed(POLICY_CONFIGURED);
+    for root in roots {
+        match std::fs::symlink_metadata(root) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Ok(meta) if meta.is_dir() => {}
+            _ => return Err(configured),
+        }
+        for kind in POLICY_KINDS {
+            let dir = root.join(kind);
+            match std::fs::symlink_metadata(&dir) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Ok(meta) if meta.is_dir() => {}
+                _ => return Err(configured),
+            }
+            let mut entries = std::fs::read_dir(&dir).map_err(|_| configured.clone())?;
+            if entries.next().is_some() {
+                return Err(configured);
+            }
+        }
+    }
+    Ok(())
+}
 const MAX_STEPS: usize = 32;
 const MAX_SELECTOR: usize = 512;
 const MAX_TEXT: usize = 4096;
@@ -122,6 +177,13 @@ pub struct Browser {
     executable: &'static str,
     trust: Trust,
     allow_private: bool,
+    /// Where machine policy is looked for (the browser refuses to run while
+    /// one is configured).
+    policies: Vec<PathBuf>,
+    /// Tests only: launch the browser without its proxy, as a machine
+    /// policy forcing direct connections would.
+    #[cfg(test)]
+    direct: bool,
     /// Sessions running now.
     sessions: Arc<AtomicUsize>,
 }
@@ -210,18 +272,38 @@ impl Browser {
             executable: CHROME,
             trust: Trust::System,
             allow_private: false,
+            policies: POLICY_ROOTS.iter().map(PathBuf::from).collect(),
+            #[cfg(test)]
+            direct: false,
             sessions: Arc::new(AtomicUsize::new(0)),
         }
     }
 
-    /// Tests only: a resolver of fixtures and loopback test servers.
+    /// Tests only: a resolver of fixtures and loopback test servers, and no
+    /// machine policy looked for (see `with_policies`).
     #[cfg(test)]
     pub(crate) fn for_tests(root: RuntimeRoot, resolver: Arc<dyn Resolver>) -> Self {
         Self {
             resolver,
             allow_private: true,
+            policies: Vec::new(),
             ..Self::new(root)
         }
+    }
+
+    /// Tests only: look for machine policy under `roots`.
+    #[cfg(test)]
+    pub(crate) fn with_policies(mut self, roots: Vec<PathBuf>) -> Self {
+        self.policies = roots;
+        self
+    }
+
+    /// Tests only: launch without the session's proxy (as a policy forcing
+    /// direct connections would).
+    #[cfg(test)]
+    pub(crate) fn direct(mut self) -> Self {
+        self.direct = true;
+        self
     }
 
     /// The scope the owner may grant: sessions limited to `origins`, with
@@ -310,6 +392,7 @@ impl Browser {
             }
         }
         let identity = pinned(Path::new(self.executable), self.trust)?;
+        no_machine_policy(&self.policies)?;
         let (grant, origins, downloads) = covering_grant(authority, &needed, &identity.digest)?;
         let class = if intent.steps.iter().any(BrowserStep::interacts) {
             EffectClass::R2
@@ -387,6 +470,9 @@ impl Browser {
             downloads,
             allow_private: self.allow_private,
             resolver: self.resolver.clone(),
+            policies: self.policies.clone(),
+            #[cfg(test)]
+            direct: self.direct,
             root: self.root.clone(),
             target,
             parameters,
@@ -441,6 +527,9 @@ struct Session {
     downloads: bool,
     allow_private: bool,
     resolver: Arc<dyn Resolver>,
+    policies: Vec<PathBuf>,
+    #[cfg(test)]
+    direct: bool,
     root: RuntimeRoot,
     target: Digest,
     parameters: Digest,
@@ -486,7 +575,8 @@ mod live {
     use super::cdp::{Cdp, CdpError};
     use super::proxy::{BrowserProxy, OriginPolicy};
     use super::{
-        key, scripts, BrowserStep, Session, MAX_EXTRACT, MAX_SESSIONS, SESSION_LIMIT, STEP_TIMEOUT,
+        key, no_machine_policy, scripts, BrowserStep, Session, MAX_EXTRACT, MAX_SESSIONS,
+        POLICY_CONFIGURED, SESSION_LIMIT, STEP_TIMEOUT,
     };
     use crate::authority::commitment::{ExecutionGuard, FailureClass};
     use crate::authority::run::CancelToken;
@@ -776,6 +866,20 @@ mod live {
         }
     }
 
+    /// The switches that send every connection of the browser through the
+    /// session's proxy, with no implicit bypass (not even loopback).
+    fn proxy_switches(session: &Session, port: u16) -> Vec<String> {
+        #[cfg(test)]
+        if session.direct {
+            return vec!["--no-proxy-server".into()];
+        }
+        let _ = session;
+        vec![
+            format!("--proxy-server=http://127.0.0.1:{port}"),
+            "--proxy-bypass-list=<-loopback>".into(),
+        ]
+    }
+
     pub(super) fn run(session: &Session, guard: &ExecutionGuard) -> Result<EffectOutput, Failure> {
         let unavailable = |what: &str| (FailureClass::Unavailable, what.to_string());
         let cancelled = || (FailureClass::Actuator, "cancelled".to_string());
@@ -822,12 +926,13 @@ mod live {
         let (command_reader, command_writer) =
             std::io::pipe().map_err(|_| unavailable("no pipe"))?;
         let (reply_reader, reply_writer) = std::io::pipe().map_err(|_| unavailable("no pipe"))?;
-        let args: Vec<String> = vec![
+        let mut args: Vec<String> = vec![
             "--headless".into(),
             "--remote-debugging-pipe".into(),
             format!("--user-data-dir={}", profile.display()),
-            format!("--proxy-server=http://127.0.0.1:{}", proxy.port()),
-            "--proxy-bypass-list=<-loopback>".into(),
+        ];
+        args.extend(proxy_switches(session, proxy.port()));
+        args.extend([
             "--no-first-run".into(),
             "--no-default-browser-check".into(),
             "--disable-background-networking".into(),
@@ -850,7 +955,15 @@ mod live {
             "--deny-permission-prompts".into(),
             "--disable-features=Translate,MediaRouter,OptimizationHints,AutofillServerCommunication".into(),
             "about:blank".into(),
-        ];
+        ]);
+        // Immediately before launch: no machine policy can override the
+        // proxy it is given.
+        no_machine_policy(&session.policies).map_err(|_| {
+            (
+                FailureClass::Refused,
+                format!("{POLICY_CONFIGURED}: the browser was not started"),
+            )
+        })?;
         let _process = SessionProcess::launch(SessionSpec {
             program: session.executable.clone(),
             args: args.into_iter().map(Into::into).collect(),
@@ -912,6 +1025,15 @@ mod live {
         }
         let start = page.navigate(&session.start).map_err(before)?;
         let started_ok = start.get("refused").is_none();
+        // The start page needed the network: a browser that did not come to
+        // its proxy for it (or that loaded it with no connection admitted)
+        // went around it. Nothing more runs, and the session is refused.
+        if proxy.seen() == 0 || (started_ok && proxy.opened() == 0) {
+            return Err(before((
+                FailureClass::Refused,
+                "the browser did not go through the session's proxy".into(),
+            )));
+        }
         results.push(start);
         if started_ok {
             for (index, step) in session.steps.iter().enumerate() {
@@ -991,6 +1113,7 @@ mod live {
             meta: vec![
                 ("steps".into(), session.steps.len().to_string()),
                 ("completed".into(), completed.to_string()),
+                ("connections_opened".into(), proxy.opened().to_string()),
                 ("connections_admitted".into(), proxy.admitted().to_string()),
                 ("connections_refused".into(), proxy.refused().to_string()),
                 ("popups_closed".into(), page.popups_closed.to_string()),

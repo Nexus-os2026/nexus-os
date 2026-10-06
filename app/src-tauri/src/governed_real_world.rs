@@ -10,7 +10,7 @@
 
 use crate::AppState;
 use nexus_governed_control::authority::approval::{
-    ActionConfirmation, ControlConfirmer, GrantConfirmation, ResumeConfirmation,
+    ActionConfirmation, ConfirmationText, ControlConfirmer, GrantConfirmation, ResumeConfirmation,
 };
 use nexus_governed_control::authority::clock::SystemClock;
 use nexus_governed_control::authority::commitment::{CommitmentState, CommitmentView};
@@ -150,15 +150,9 @@ impl RealWorld {
                 return Ok(json!({ "understood": false, "reason": why }));
             }
         };
-        let agent = AgentId::owner_session();
-        let run = self
+        let (agent, run) = self
             .control
-            .open_run(
-                agent.clone(),
-                RunOrigin::Command {
-                    modalities: envelope.modalities(),
-                },
-            )
+            .open_owner_run(envelope.modalities())
             .map_err(|e| e.to_string())?;
         match self.control.propose(&agent, run, &intent) {
             Ok(view) => {
@@ -208,9 +202,10 @@ impl RealWorld {
         result.map_err(|e| e.to_string())
     }
 
-    /// An owner command's run ends with its one commitment.
+    /// An owner command's run ends with its one commitment (an owner run as
+    /// the backend opened it, never judged from its agent's name).
     fn settle(&self, view: &CommitmentView) {
-        if view.agent == AgentId::owner_session() {
+        if self.control.is_owner_run(view.run) {
             self.control.finish_run(view.run);
         }
     }
@@ -245,6 +240,13 @@ impl RealWorld {
     pub(crate) fn was_stopped(&self, agent: &str) -> bool {
         let agent = crate::commands::agents::canonical_agent_id(agent);
         self.agents().stopped_at.contains_key(&agent)
+    }
+
+    /// The agents Phase Three keeps runs for (every run an agent's loop
+    /// opened and kept, until the owner's stop of it), by their canonical
+    /// ids.
+    pub(crate) fn agents_with_runs(&self) -> Vec<String> {
+        self.agents().runs.keys().cloned().collect()
     }
 
     /// The desktop is quitting: every run is cancelled (whatever still runs
@@ -493,45 +495,9 @@ impl AgentBridge {
             return Err("governed control: the agent is not running".into());
         }
         let agent = AgentId::new(agent_id).ok_or("governed control: invalid agent identity")?;
-        let run = {
-            let mut current = self.run.lock().unwrap_or_else(|p| p.into_inner());
-            let mut agents = self.world.agents();
-            if agents
-                .stopped_at
-                .get(agent_id)
-                .is_some_and(|stopped| *stopped > self.began)
-            {
-                return Err("governed control: the owner stopped this agent".into());
-            }
-            match current.as_ref() {
-                Some((owner, run)) if *owner == agent => *run,
-                Some(_) => return Err("governed control: one agent per loop".into()),
-                None => {
-                    let run = self
-                        .world
-                        .control
-                        .open_run(agent.clone(), RunOrigin::AgentGoal)
-                        .map_err(|e| e.to_string())?;
-                    // Tracked under the lock a stop takes: a stop cannot
-                    // come between opening the run and remembering it.
-                    let registry = self.world.control.authority().runs();
-                    for runs in agents.runs.values_mut() {
-                        runs.retain(|r| {
-                            registry
-                                .view(*r)
-                                .is_some_and(|view| !view.cancelled && !view.finished)
-                        });
-                    }
-                    agents.runs.retain(|_, runs| !runs.is_empty());
-                    agents
-                        .runs
-                        .entry(agent_id.to_string())
-                        .or_default()
-                        .push(run);
-                    *current = Some((agent.clone(), run));
-                    run
-                }
-            }
+        let run = match self.loop_run(agent_id, &agent)? {
+            Some(run) => run,
+            None => self.open_loop_run(agent_id, &agent)?,
         };
         match self
             .world
@@ -545,6 +511,96 @@ impl AgentBridge {
                 "summary": view.summary,
             })
             .to_string()),
+        }
+    }
+}
+
+impl AgentBridge {
+    /// Whether the owner stopped this agent since its loop began (read
+    /// under the lock its stop takes).
+    fn stopped_since_began(&self, agents: &Agents, agent_id: &str) -> bool {
+        agents
+            .stopped_at
+            .get(agent_id)
+            .is_some_and(|stopped| *stopped > self.began)
+    }
+
+    /// This loop's run, if it has one and the owner has not stopped it.
+    fn loop_run(&self, agent_id: &str, agent: &AgentId) -> Result<Option<RunId>, String> {
+        let current = self.run.lock().unwrap_or_else(|p| p.into_inner());
+        if self.stopped_since_began(&self.world.agents(), agent_id) {
+            return Err("governed control: the owner stopped this agent".into());
+        }
+        match current.as_ref() {
+            Some((owner, run)) if owner == agent => Ok(Some(*run)),
+            Some(_) => Err("governed control: one agent per loop".into()),
+            None => Ok(None),
+        }
+    }
+
+    /// Open this loop's run. It is opened (and its opening recorded) with no
+    /// lock held, then kept under the lock a stop takes, checked again
+    /// there: a stop that came meanwhile cancels it, so a stop cannot come
+    /// between opening the run and remembering it unseen.
+    fn open_loop_run(&self, agent_id: &str, agent: &AgentId) -> Result<RunId, String> {
+        let opened = self
+            .world
+            .control
+            .open_run(agent.clone(), RunOrigin::AgentGoal)
+            .map_err(|e| e.to_string())?;
+        /// What became of the run opened.
+        enum Opened {
+            Kept,
+            Raced(RunId),
+            Stopped,
+            OtherAgent,
+        }
+        let kept = {
+            let mut current = self.run.lock().unwrap_or_else(|p| p.into_inner());
+            let mut agents = self.world.agents();
+            if self.stopped_since_began(&agents, agent_id) {
+                Opened::Stopped
+            } else {
+                match current.as_ref() {
+                    // Another action of this loop opened its run meanwhile.
+                    Some((owner, run)) if owner == agent => Opened::Raced(*run),
+                    Some(_) => Opened::OtherAgent,
+                    None => {
+                        let registry = self.world.control.authority().runs();
+                        for runs in agents.runs.values_mut() {
+                            runs.retain(|r| {
+                                registry
+                                    .view(*r)
+                                    .is_some_and(|view| !view.cancelled && !view.finished)
+                            });
+                        }
+                        agents.runs.retain(|_, runs| !runs.is_empty());
+                        agents
+                            .runs
+                            .entry(agent_id.to_string())
+                            .or_default()
+                            .push(opened);
+                        *current = Some((agent.clone(), opened));
+                        Opened::Kept
+                    }
+                }
+            }
+        };
+        // What was opened but not kept ends now, outside the locks.
+        match kept {
+            Opened::Kept => Ok(opened),
+            Opened::Raced(run) => {
+                self.world.control.finish_run(opened);
+                Ok(run)
+            }
+            Opened::Stopped => {
+                let _ = self.world.control.cancel_run(opened);
+                Err("governed control: the owner stopped this agent".into())
+            }
+            Opened::OtherAgent => {
+                let _ = self.world.control.cancel_run(opened);
+                Err("governed control: one agent per loop".into())
+            }
         }
     }
 }
@@ -598,17 +654,20 @@ pub(crate) struct ControlDialogs(pub(crate) tauri::AppHandle<tauri::Wry>);
 impl ControlDialogs {
     /// Show the window on the main thread and wait here (never on the main
     /// thread) for the owner's answer; no answer is a refusal.
-    fn confirm(&self, title: &str, message: String, answer: &str) -> bool {
+    fn confirm(&self, title: &str, text: ConfirmationText, answer: &str) -> bool {
         use gtk::prelude::*;
         // One confirmation at a time: the next window opens (and its arming
         // delay starts) only once this one is answered, so a click meant
-        // for one window can never land on another already armed.
-        static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
+        // for one window can never land on another already armed. The turn
+        // is a flag, not a lock held across the dialog; waiting for it is
+        // bounded, and no turn is no confirmation.
+        let Some(_turn) = DialogTurn::take() else {
+            return false;
+        };
         let (sender, receiver) = std::sync::mpsc::channel();
         let (title, answer) = (title.to_string(), answer.to_string());
         let shown = self.0.run_on_main_thread(move || {
-            let (dialog, _) = owner_window(&title, &message, &answer);
+            let (dialog, _) = owner_window(&title, &text, &answer);
             let sender = std::cell::RefCell::new(Some(sender));
             dialog.connect_response(move |dialog, response| {
                 if let Some(sender) = sender.borrow_mut().take() {
@@ -622,30 +681,93 @@ impl ControlDialogs {
     }
 }
 
-#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
-impl ControlConfirmer for ControlDialogs {
-    fn confirm_action(&self, request: &ActionConfirmation) -> bool {
-        self.confirm(request.title(), request.message(), "Allow")
+/// The longest a confirmation waits for the one on screen to be answered
+/// (as long as a commitment may wait to start).
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+const DIALOG_TURN_WAIT: std::time::Duration =
+    nexus_governed_control::authority::commitment::MAX_COMMITMENT_TTL;
+
+/// Whether a confirmation window is on screen, and its waiters.
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+static DIALOG_BUSY: (std::sync::Mutex<bool>, std::sync::Condvar) =
+    (std::sync::Mutex::new(false), std::sync::Condvar::new());
+
+/// The turn of one confirmation window: given back, and the next waiter
+/// woken, when it ends, however it ends.
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+struct DialogTurn;
+
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+impl DialogTurn {
+    fn take() -> Option<Self> {
+        Self::take_within(DIALOG_TURN_WAIT)
     }
 
-    fn confirm_grant(&self, request: &GrantConfirmation) -> bool {
-        self.confirm(request.title(), request.message(), "Grant")
-    }
-
-    fn confirm_resume(&self, request: &ResumeConfirmation) -> bool {
-        self.confirm(request.title(), request.message(), "Resume")
+    fn take_within(wait: std::time::Duration) -> Option<Self> {
+        let (busy, freed) = &DIALOG_BUSY;
+        let deadline = std::time::Instant::now() + wait;
+        let mut on_screen = busy.lock().unwrap_or_else(|p| p.into_inner());
+        while *on_screen {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                return None;
+            }
+            on_screen = freed
+                .wait_timeout(on_screen, left)
+                .unwrap_or_else(|p| p.into_inner())
+                .0;
+        }
+        *on_screen = true;
+        Some(DialogTurn)
     }
 }
 
-/// Nexus's own confirmation window. Its text is shown exactly as given, in
-/// a monospace label that never wraps and scrolls both ways: every line
-/// starts where the backend started it, with its marker, so nothing in it
-/// can pass for the window's own text, and nothing is cut. Cancel is the
-/// default answer (Enter and Escape cancel); the answer button arms only
-/// after `ARMING_DELAY`, once the end and the right edge of the text have
-/// been reached. Returns the window and its answer button.
+#[cfg(all(target_os = "linux", any(test, feature = "tauri-runtime")))]
+impl Drop for DialogTurn {
+    fn drop(&mut self) {
+        let (busy, freed) = &DIALOG_BUSY;
+        *busy.lock().unwrap_or_else(|p| p.into_inner()) = false;
+        freed.notify_one();
+    }
+}
+
 #[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
-fn owner_window(title: &str, message: &str, answer: &str) -> (gtk::Dialog, gtk::Widget) {
+impl ControlConfirmer for ControlDialogs {
+    fn confirm_action(&self, request: &ActionConfirmation) -> bool {
+        self.confirm(request.title(), request.text(), "Allow")
+    }
+
+    fn confirm_grant(&self, request: &GrantConfirmation) -> bool {
+        self.confirm(request.title(), request.text(), "Grant")
+    }
+
+    fn confirm_resume(&self, request: &ResumeConfirmation) -> bool {
+        self.confirm(request.title(), request.text(), "Resume")
+    }
+}
+
+/// Nexus's own confirmation window, in two parts it keeps apart.
+///
+/// The header, the security identity of what is asked (for an action: its
+/// effect class, operation, canonical target, acting agent, run,
+/// commitment and binding), is a grid the window draws outside every
+/// scrolled view, so it stays in view whenever the answer can be given: its
+/// labels are the window's own (bold), its values the backend's
+/// (monospace, wrapped within their own column, each seen whole).
+///
+/// The request's details are below it, in a frame captioned as the
+/// request's content, with a bar beside them that the window draws and that
+/// does not scroll: shown exactly as given, in a monospace label that never
+/// wraps and scrolls both ways, every line starting where the backend
+/// started it, with its marker. Nothing the request carries can draw in the
+/// header's place or scroll it away, and nothing is cut.
+///
+/// Cancel is the default answer (Enter and Escape cancel); the answer
+/// button arms only after `ARMING_DELAY`, once the end and the right edge
+/// of the details have been reached. Returns the window and its answer
+/// button.
+#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
+fn owner_window(title: &str, text: &ConfirmationText, answer: &str) -> (gtk::Dialog, gtk::Widget) {
     use gtk::prelude::*;
     use std::cell::Cell;
     use std::rc::Rc;
@@ -658,29 +780,67 @@ fn owner_window(title: &str, message: &str, answer: &str) -> (gtk::Dialog, gtk::
     let allow = dialog.add_button(answer, gtk::ResponseType::Accept);
     allow.set_sensitive(false);
     dialog.set_default_response(gtk::ResponseType::Cancel);
-    // A label, not a text view: its whole extent is known at its first
-    // layout (a text view lays its lines out lazily, so its end would seem
-    // reached before it is). Plain text, never markup; never wrapped.
-    let text = gtk::Label::new(None);
-    // Every line starts with a left-to-right mark, so each is laid out left
-    // to right with its marker first, whatever script its content begins
-    // with (a line led by a right-to-left letter would otherwise be drawn
-    // flush right, its marker last).
-    let lines: Vec<String> = message
-        .split('\n')
-        .map(|line| format!("\u{200E}{line}"))
-        .collect();
-    text.set_text(&lines.join("\n"));
-    text.set_line_wrap(false);
-    text.set_xalign(0.0);
-    text.set_yalign(0.0);
+    let bold = gtk::pango::AttrList::new();
+    bold.insert(gtk::pango::AttrInt::new_weight(gtk::pango::Weight::Bold));
     let monospace = gtk::pango::AttrList::new();
     monospace.insert(gtk::pango::AttrString::new_family("monospace"));
-    text.set_attributes(Some(&monospace));
+    // Labels, not text views: their whole extent is known at their first
+    // layout. Plain text, never markup. Every value and line starts with a
+    // left-to-right mark, so each is laid out from the left with its marker
+    // first, whatever script it begins with.
+    let header = gtk::Grid::new();
+    header.set_column_spacing(12);
+    header.set_row_spacing(2);
+    for (row, (label, value)) in (0..).zip(&text.header) {
+        let name = gtk::Label::new(Some(label));
+        name.set_attributes(Some(&bold));
+        name.set_xalign(1.0);
+        name.set_yalign(0.0);
+        let shown = gtk::Label::new(Some(&format!("\u{200E}{value}")));
+        shown.set_attributes(Some(&monospace));
+        shown.set_line_wrap(true);
+        shown.set_line_wrap_mode(gtk::pango::WrapMode::Char);
+        shown.set_max_width_chars(DIALOG_COLUMNS);
+        shown.set_xalign(0.0);
+        shown.set_yalign(0.0);
+        shown.set_hexpand(true);
+        header.attach(&name, 0, row, 1, 1);
+        header.attach(&shown, 1, row, 1, 1);
+    }
+    let details = gtk::Label::new(None);
+    let lines: Vec<String> = text
+        .details
+        .iter()
+        .map(|line| format!("\u{200E}{line}"))
+        .collect();
+    details.set_text(&lines.join("\n"));
+    details.set_line_wrap(false);
+    details.set_xalign(0.0);
+    details.set_yalign(0.0);
+    details.set_attributes(Some(&monospace));
     let scroll = gtk::ScrolledWindow::builder().build();
     scroll.set_policy(gtk::PolicyType::Automatic, gtk::PolicyType::Automatic);
-    scroll.add(&text);
-    dialog.content_area().pack_start(&scroll, true, true, 0);
+    scroll.set_min_content_height(160);
+    scroll.add(&details);
+    // The gutter: a bar the window draws beside the details, outside their
+    // scrolled view, wide enough to see wherever they are scrolled.
+    let gutter = gtk::Separator::new(gtk::Orientation::Vertical);
+    let bar = gtk::CssProvider::new();
+    if bar.load_from_data(GUTTER_STYLE.as_bytes()).is_ok() {
+        gutter
+            .style_context()
+            .add_provider(&bar, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+    }
+    let region = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    region.pack_start(&gutter, false, false, 0);
+    region.pack_start(&scroll, true, true, 0);
+    let frame = gtk::Frame::new(Some(DETAILS_CAPTION));
+    frame.set_shadow_type(gtk::ShadowType::In);
+    frame.add(&region);
+    let content = dialog.content_area();
+    content.set_spacing(8);
+    content.pack_start(&header, false, false, 0);
+    content.pack_start(&frame, true, true, 0);
     let arming = Rc::new(Cell::new(Arming::default()));
     let update: Rc<dyn Fn()> = {
         let (arming, allow, scroll) = (arming.clone(), allow.clone(), scroll.clone());
@@ -711,6 +871,18 @@ fn owner_window(title: &str, message: &str, answer: &str) -> (gtk::Dialog, gtk::
     dialog.show_all();
     (dialog, allow)
 }
+
+/// How the gutter is drawn: a solid bar.
+#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
+const GUTTER_STYLE: &str = "separator { min-width: 6px; background-color: #3465a4; }";
+
+/// The caption of the region that shows what the request carries.
+#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
+const DETAILS_CAPTION: &str = "From the request (its content, not this window's own text)";
+
+/// The widest a header value is laid out before it wraps, in characters.
+#[cfg(all(target_os = "linux", feature = "tauri-runtime"))]
+const DIALOG_COLUMNS: i32 = nexus_governed_control::authority::evidence::DIALOG_COLUMNS as i32;
 
 /// The IPC commands (thin: every decision is in the crate). Dialog-bound
 /// work runs on the blocking pool, never on the IPC or main thread.
@@ -805,7 +977,11 @@ pub(crate) mod ipc {
 
     #[tauri::command]
     pub(crate) fn p3_emergency_stop(state: tauri::State<'_, AppState>) -> Result<usize, String> {
-        Ok(world(state.inner())?.emergency_stop())
+        let stopped = world(state.inner()).map(|world| world.emergency_stop());
+        // HiveMind sessions stop with Phase Three, whether or not it is
+        // available: none assigns another sub-task.
+        state.inner().hive_sessions.cancel_all();
+        stopped
     }
 
     #[tauri::command]

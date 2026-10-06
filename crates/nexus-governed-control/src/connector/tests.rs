@@ -88,6 +88,7 @@ fn fixture(server: &TestServer) -> Connector {
                 method: Method::Get,
                 credential: Some(SPEC),
                 build: notes_list,
+                destination: None,
             },
             ConnectorOperation {
                 id: "fixture.notes.create",
@@ -95,6 +96,7 @@ fn fixture(server: &TestServer) -> Connector {
                 method: Method::Post,
                 credential: Some(SPEC),
                 build: notes_create,
+                destination: None,
             },
             ConnectorOperation {
                 id: "fixture.notes.import",
@@ -102,6 +104,7 @@ fn fixture(server: &TestServer) -> Connector {
                 method: Method::Post,
                 credential: Some(SPEC),
                 build: notes_import,
+                destination: None,
             },
         ],
     }
@@ -135,8 +138,7 @@ fn run(
         operation: operation.into(),
         input,
     };
-    let preparation = connectors.prepare(h.control.authority(), &h.agent, h.run, &intent)?;
-    let view = h.control.propose(&h.agent, h.run, preparation)?;
+    let view = connectors.propose(&h.control, &h.agent, h.run, &intent)?;
     h.control
         .authorize(view.id, &h.agent, h.run, &Yes::new(approve))?;
     h.control.execute(view.id, &h.agent, h.run)
@@ -188,7 +190,7 @@ fn a_write_is_r2_and_sends_exactly_what_the_owner_approved() {
         input: json!({ "text": "buy milk" }),
     };
     let preparation = connectors
-        .prepare(h.control.authority(), &h.agent, h.run, &intent)
+        .prepare(h.control.authority(), &h.agent, h.run, &intent, None)
         .unwrap();
     assert_eq!(preparation.action.class, EffectClass::R2);
     assert!(preparation
@@ -288,6 +290,7 @@ fn an_operation_never_leaves_its_connectors_origin() {
                 method: Method::Get,
                 credential: None,
                 build: escape_to_another_host,
+                destination: None,
             },
             ConnectorOperation {
                 id: "fixture.port",
@@ -295,6 +298,7 @@ fn an_operation_never_leaves_its_connectors_origin() {
                 method: Method::Get,
                 credential: None,
                 build: escape_to_another_port,
+                destination: None,
             },
         ],
     };
@@ -456,7 +460,7 @@ fn the_production_catalog_is_sound() {
         !ids.iter().any(|id| id.starts_with("telegram")),
         "Telegram stays closed"
     );
-    assert_eq!(ids.len(), 13);
+    assert_eq!(ids.len(), 15);
 }
 
 #[test]
@@ -614,4 +618,493 @@ fn a_long_search_query_is_shown_whole() {
             .collect();
         assert_eq!(shown, format!("Search messages for: {}", query.trim_end()));
     }
+}
+
+/// A Slack and Discord API stand-in: answers by path (the first entry whose
+/// path starts the request's) from a table the test can change, and records
+/// every request: method, URL, credential header.
+struct Api {
+    answers: Mutex<Vec<(&'static str, u16, String)>>,
+    sent: Mutex<Vec<(String, String, Option<String>)>>,
+}
+
+impl Api {
+    fn new(answers: &[(&'static str, Value)]) -> Arc<Self> {
+        let api = Arc::new(Self {
+            answers: Mutex::new(Vec::new()),
+            sent: Mutex::new(Vec::new()),
+        });
+        for (path, body) in answers {
+            api.answer(path, body.clone());
+        }
+        api
+    }
+
+    fn answer(&self, path: &'static str, body: Value) {
+        self.answer_with(path, 200, body.to_string());
+    }
+
+    fn answer_with(&self, path: &'static str, status: u16, body: String) {
+        let mut answers = self.answers.lock().unwrap();
+        answers.retain(|(p, _, _)| *p != path);
+        answers.push((path, status, body));
+    }
+
+    fn sent(&self) -> Vec<(String, String, Option<String>)> {
+        self.sent.lock().unwrap().clone()
+    }
+
+    fn posts(&self) -> usize {
+        self.sent().iter().filter(|(m, _, _)| m == "POST").count()
+    }
+}
+
+impl Transport for Api {
+    fn exchange(
+        &self,
+        request: PinnedRequest,
+        _cancel: &CancelToken,
+    ) -> Result<HttpResponse, TransportError> {
+        let path = match request.url.query() {
+            Some(query) => format!("{}?{query}", request.url.path()),
+            None => request.url.path().to_string(),
+        };
+        self.sent.lock().unwrap().push((
+            request.method.as_str().to_string(),
+            request.url.to_string(),
+            request
+                .secret
+                .as_ref()
+                .map(|s| format!("{}: {}", s.name, *s.value)),
+        ));
+        let (status, body) = self
+            .answers
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(p, _, _)| path.starts_with(p))
+            .map(|(_, status, body)| (*status, body.clone()))
+            .unwrap_or((404, "{}".into()));
+        Ok(HttpResponse {
+            status,
+            peer: None,
+            content_type: Some("application/json".into()),
+            location: (status == 302).then(|| "https://elsewhere.example/".to_string()),
+            body: body.into_bytes(),
+            redacted: false,
+        })
+    }
+}
+
+/// The Slack and Discord tokens.
+struct ChatVault;
+impl SecretSource for ChatVault {
+    fn read(
+        &self,
+        scope: &str,
+        name: &str,
+    ) -> Result<zeroize::Zeroizing<String>, crate::broker::SecretUnavailable> {
+        assert_eq!(scope, CONNECTOR_SCOPE);
+        match name {
+            "slack.bot_token" => Ok(zeroize::Zeroizing::new("xoxb-fixture".into())),
+            "discord.bot_token" => Ok(zeroize::Zeroizing::new("discord-fixture".into())),
+            _ => Err(crate::broker::SecretUnavailable::NotFound),
+        }
+    }
+}
+
+/// Records what the owner was asked to approve.
+struct Shown(Mutex<Option<crate::authority::approval::ActionConfirmation>>);
+impl crate::authority::approval::ControlConfirmer for Shown {
+    fn confirm_action(&self, request: &crate::authority::approval::ActionConfirmation) -> bool {
+        *self.0.lock().unwrap() = Some(request.clone());
+        true
+    }
+    fn confirm_grant(&self, _: &crate::authority::approval::GrantConfirmation) -> bool {
+        false
+    }
+    fn confirm_resume(&self, _: &crate::authority::approval::ResumeConfirmation) -> bool {
+        false
+    }
+}
+
+fn chat(h: &Harness, api: &Arc<Api>) -> Connectors {
+    let egress = Arc::new(Egress::new(
+        Arc::new(Public),
+        api.clone(),
+        EgressLimits::default(),
+    ));
+    let broker = CredentialBroker::new(h.control.authority(), Arc::new(ChatVault));
+    Connectors::production(egress, broker)
+}
+
+fn slack_answers(name: &str) -> Vec<(&'static str, Value)> {
+    vec![
+        (
+            "/api/auth.test",
+            json!({ "ok": true, "team": "Acme", "team_id": "T0123", "user_id": "U9" }),
+        ),
+        (
+            "/api/conversations.info",
+            json!({ "ok": true, "channel": {
+                "id": "C0456", "name": name, "is_channel": true, "is_private": false
+            } }),
+        ),
+        ("/api/chat.postMessage", json!({ "ok": true })),
+    ]
+}
+
+fn post(
+    h: &Harness,
+    connectors: &Connectors,
+    operation: &str,
+    input: Value,
+) -> Result<crate::authority::commitment::CommitmentView, AuthorityError> {
+    connectors.propose(
+        &h.control,
+        &h.agent,
+        h.run,
+        &ConnectorIntent {
+            operation: operation.into(),
+            input,
+        },
+    )
+}
+
+/// A Slack post is approved knowing where it goes: before it is proposed,
+/// its destination is identified by Slack itself (the workspace and the
+/// conversation: ids, name, kind), through governed reads of the run under
+/// the post's own grant, to Slack's origin with its token; the owner sees
+/// both the readable destination and its immutable ids; immediately before
+/// it is sent the same reads run again under its commitment.
+#[test]
+fn a_slack_post_is_approved_and_sent_to_the_destination_slack_identified() {
+    let h = harness();
+    let api = Api::new(&slack_answers("general"));
+    let connectors = chat(&h, &api);
+    grant(&h, &connectors, "slack", &["slack.chat.post"]);
+    let view = post(
+        &h,
+        &connectors,
+        "slack.chat.post",
+        json!({ "channel": "C0456", "text": "hello" }),
+    )
+    .unwrap();
+    assert_eq!(view.class, EffectClass::R2);
+    assert_eq!(
+        view.target,
+        "Slack public channel #general (C0456) in Acme (T0123)"
+    );
+    for line in [
+        "Workspace: Acme (T0123)",
+        "Conversation: public channel #general (C0456)",
+    ] {
+        assert!(
+            view.summary.contains(&line.to_string()),
+            "{:?}",
+            view.summary
+        );
+    }
+    // The reads that identified it: governed R1 commitments of the run,
+    // done; to Slack, with its token; nothing posted.
+    let views = h.control.authority().commitments().views_of_run(h.run);
+    let mut reads: Vec<(&str, CommitmentState)> = views
+        .iter()
+        .filter(|v| v.id != view.id)
+        .map(|v| (v.operation, v.state))
+        .collect();
+    reads.sort_by_key(|(operation, _)| *operation);
+    assert_eq!(
+        reads,
+        [
+            ("slack.auth.test", CommitmentState::Succeeded),
+            ("slack.conversations.info", CommitmentState::Succeeded)
+        ]
+    );
+    let token = Some("authorization: Bearer xoxb-fixture".to_string());
+    assert_eq!(
+        api.sent(),
+        [
+            (
+                "GET".to_string(),
+                "https://slack.com/api/auth.test".to_string(),
+                token.clone()
+            ),
+            (
+                "GET".to_string(),
+                "https://slack.com/api/conversations.info?channel=C0456".to_string(),
+                token.clone()
+            ),
+        ]
+    );
+    // The owner's approval shows it.
+    let shown = Shown(Mutex::new(None));
+    h.control
+        .authorize(view.id, &h.agent, h.run, &shown)
+        .unwrap();
+    let asked = shown.0.lock().unwrap().clone().unwrap();
+    assert_eq!(asked.target, view.target);
+    assert!(asked
+        .summary
+        .contains(&"Conversation: public channel #general (C0456)".to_string()));
+    h.control.execute(view.id, &h.agent, h.run).unwrap();
+    let sent = api.sent();
+    assert_eq!(sent.len(), 5);
+    assert_eq!(
+        sent[2..]
+            .iter()
+            .map(|(m, u, _)| format!("{m} {u}"))
+            .collect::<Vec<_>>(),
+        [
+            "GET https://slack.com/api/auth.test",
+            "GET https://slack.com/api/conversations.info?channel=C0456",
+            "POST https://slack.com/api/chat.postMessage"
+        ]
+    );
+    assert!(sent.iter().all(|(_, _, secret)| *secret == token));
+}
+
+/// Whatever about the destination changes between the approval and the
+/// send (its name, its kind, its workspace or server, its id), the post
+/// fails as `target_changed` and nothing is sent.
+#[test]
+fn a_destination_that_changed_after_approval_fails_the_post_and_sends_nothing() {
+    let slack_changes: Vec<(&'static str, Value)> = vec![
+        (
+            "/api/conversations.info",
+            json!({ "ok": true, "channel": {
+                "id": "C0456", "name": "ceo-private", "is_channel": true, "is_private": false
+            } }),
+        ),
+        (
+            "/api/conversations.info",
+            json!({ "ok": true, "channel": {
+                "id": "C0456", "name": "general", "is_channel": true, "is_private": true
+            } }),
+        ),
+        (
+            "/api/conversations.info",
+            json!({ "ok": true, "channel": {
+                "id": "C0999", "name": "general", "is_channel": true, "is_private": false
+            } }),
+        ),
+        (
+            "/api/auth.test",
+            json!({ "ok": true, "team": "Acme", "team_id": "T0999", "user_id": "U9" }),
+        ),
+        (
+            "/api/conversations.info",
+            json!({ "ok": true, "channel": { "id": "C0456", "is_im": true, "user": "U777" } }),
+        ),
+    ];
+    for (path, changed) in slack_changes {
+        let h = harness();
+        let api = Api::new(&slack_answers("general"));
+        let connectors = chat(&h, &api);
+        grant(&h, &connectors, "slack", &["slack.chat.post"]);
+        let view = post(
+            &h,
+            &connectors,
+            "slack.chat.post",
+            json!({ "channel": "C0456", "text": "hello" }),
+        )
+        .unwrap();
+        h.control
+            .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+            .unwrap();
+        api.answer(path, changed.clone());
+        assert!(h.control.execute(view.id, &h.agent, h.run).is_err());
+        assert_eq!(api.posts(), 0, "{changed}");
+        let finished = h
+            .evidence
+            .records()
+            .into_iter()
+            .rev()
+            .find(|r| r.commitment.as_deref() == Some(&view.id.to_string()) && r.outcome.is_some())
+            .unwrap();
+        assert_eq!(finished.failure, Some("target_changed"), "{changed}");
+    }
+    let discord = |name: &str, kind: u64, guild: &str| json!({ "id": "1234", "type": kind, "name": name, "guild_id": guild });
+    for changed in [
+        discord("random", 0, "77"),
+        discord("general", 5, "77"),
+        discord("general", 0, "78"),
+    ] {
+        let h = harness();
+        let api = Api::new(&[
+            ("/api/v10/channels/1234/messages", json!({ "id": "1" })),
+            ("/api/v10/channels/1234", discord("general", 0, "77")),
+        ]);
+        let connectors = chat(&h, &api);
+        grant(&h, &connectors, "discord", &["discord.channel.post"]);
+        let view = post(
+            &h,
+            &connectors,
+            "discord.channel.post",
+            json!({ "channel": "1234", "text": "hello" }),
+        )
+        .unwrap();
+        assert_eq!(
+            view.target,
+            "Discord text channel #general (1234) in server 77"
+        );
+        h.control
+            .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+            .unwrap();
+        api.answer("/api/v10/channels/1234", changed.clone());
+        assert!(h.control.execute(view.id, &h.agent, h.run).is_err());
+        assert_eq!(api.posts(), 0, "{changed}");
+    }
+}
+
+/// The destination is named by its own id, and what it is comes from the
+/// API: a name in place of an id, an answer for another id, a kind that is
+/// not a place to post, or an unidentified destination is refused before
+/// anything is proposed; a direct message shows as one, with its peer.
+#[test]
+fn a_destination_is_its_id_and_what_the_api_says_it_is() {
+    let refused = |answers: Vec<(&'static str, Value)>, operation: &str, input: Value| {
+        let h = harness();
+        let api = Api::new(&answers);
+        let connectors = chat(&h, &api);
+        grant(&h, &connectors, "slack", &["slack.chat.post"]);
+        grant(&h, &connectors, "discord", &["discord.channel.post"]);
+        let error = post(&h, &connectors, operation, input).unwrap_err();
+        assert_eq!(api.posts(), 0);
+        assert!(h
+            .control
+            .authority()
+            .commitments()
+            .views_of_run(h.run)
+            .iter()
+            .all(|v| v.class == EffectClass::R1));
+        error
+    };
+    // A channel name where its id belongs: Slack does not identify it.
+    let mut by_name = slack_answers("general");
+    by_name[1] = (
+        "/api/conversations.info",
+        json!({ "ok": false, "error": "channel_not_found" }),
+    );
+    assert_eq!(
+        refused(
+            by_name,
+            "slack.chat.post",
+            json!({ "channel": "general", "text": "x" })
+        ),
+        AuthorityError::Closed("Slack did not identify the destination")
+    );
+    // An answer for another id.
+    let mut other = slack_answers("general");
+    other[1] = (
+        "/api/conversations.info",
+        json!({ "ok": true, "channel": { "id": "C0999", "name": "general", "is_channel": true } }),
+    );
+    assert_eq!(
+        refused(
+            other,
+            "slack.chat.post",
+            json!({ "channel": "C0456", "text": "x" })
+        ),
+        AuthorityError::Closed("the destination is named by its own id")
+    );
+    // A conversation Slack does not say the kind of.
+    let mut unknown = slack_answers("general");
+    unknown[1] = (
+        "/api/conversations.info",
+        json!({ "ok": true, "channel": { "id": "C0456", "name": "general" } }),
+    );
+    assert_eq!(
+        refused(
+            unknown,
+            "slack.chat.post",
+            json!({ "channel": "C0456", "text": "x" })
+        ),
+        AuthorityError::Closed("Slack did not say what kind of conversation it is")
+    );
+    // A Discord category is not a place to post.
+    assert_eq!(
+        refused(
+            vec![(
+                "/api/v10/channels/1234",
+                json!({ "id": "1234", "type": 4, "name": "stuff", "guild_id": "77" })
+            )],
+            "discord.channel.post",
+            json!({ "channel": "1234", "text": "x" })
+        ),
+        AuthorityError::Closed("Discord did not say it is a channel a message is posted to")
+    );
+    // A redirect is not followed and identifies nothing.
+    let h = harness();
+    let api = Api::new(&[]);
+    api.answer_with("/api/v10/channels/1234", 302, String::new());
+    let connectors = chat(&h, &api);
+    grant(&h, &connectors, "discord", &["discord.channel.post"]);
+    assert_eq!(
+        post(
+            &h,
+            &connectors,
+            "discord.channel.post",
+            json!({ "channel": "1234", "text": "x" })
+        )
+        .unwrap_err(),
+        AuthorityError::Unavailable("the destination could not be identified")
+    );
+    assert_eq!(api.sent().len(), 1, "the redirect was not followed");
+    // Direct messages show as such, with their peer.
+    let h = harness();
+    let mut im = slack_answers("general");
+    im[1] = (
+        "/api/conversations.info",
+        json!({ "ok": true, "channel": { "id": "D0123", "is_im": true, "user": "U777" } }),
+    );
+    let api = Api::new(&im);
+    let connectors = chat(&h, &api);
+    grant(&h, &connectors, "slack", &["slack.chat.post"]);
+    let view = post(
+        &h,
+        &connectors,
+        "slack.chat.post",
+        json!({ "channel": "D0123", "text": "x" }),
+    )
+    .unwrap();
+    assert_eq!(
+        view.target,
+        "Slack direct message with user U777 (D0123) in Acme (T0123)"
+    );
+    let h = harness();
+    let api = Api::new(&[(
+        "/api/v10/channels/555",
+        json!({ "id": "555", "type": 1, "recipients": [{ "id": "42", "username": "alice" }] }),
+    )]);
+    let connectors = chat(&h, &api);
+    grant(&h, &connectors, "discord", &["discord.channel.post"]);
+    let view = post(
+        &h,
+        &connectors,
+        "discord.channel.post",
+        json!({ "channel": "555", "text": "x" }),
+    )
+    .unwrap();
+    assert_eq!(
+        view.target,
+        "Discord direct message with alice (user 42) (555)"
+    );
+    // A post cannot be prepared without its destination identified.
+    assert_eq!(
+        connectors
+            .prepare(
+                h.control.authority(),
+                &h.agent,
+                h.run,
+                &ConnectorIntent {
+                    operation: "discord.channel.post".into(),
+                    input: json!({ "channel": "555", "text": "x" }),
+                },
+                None
+            )
+            .err()
+            .unwrap(),
+        AuthorityError::Closed("a post's destination is identified before it is prepared")
+    );
 }

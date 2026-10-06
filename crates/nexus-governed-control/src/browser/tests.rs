@@ -1022,7 +1022,14 @@ fn a_proxy_connection_goes_no_further_once_the_session_may_not() {
         let (accepted, _) = listener.accept().unwrap();
         client.write_all(&request(port)).unwrap();
         let stop = Arc::new(AtomicBool::new(false));
-        let served = std::thread::spawn(move || serve(accepted, &policy, &stop));
+        let served = std::thread::spawn(move || {
+            serve(
+                accepted,
+                &policy,
+                &stop,
+                &std::sync::atomic::AtomicU32::new(0),
+            )
+        });
         client
             .set_read_timeout(Some(Duration::from_secs(5)))
             .unwrap();
@@ -1156,4 +1163,292 @@ fn sessions_are_counted_and_capped() {
     drop(slots);
     assert_eq!(counter.load(Ordering::SeqCst), 0);
     assert!(super::live::SessionSlot::take(&counter).is_some());
+}
+
+/// A machine browser policy, anywhere Chrome or Chromium reads one, refuses
+/// the browser: a policy (`ProxyMode: direct`, a forced extension, cloud
+/// enrollment) takes precedence over the session's proxy. An empty policy
+/// directory is no policy; one that cannot be read, or is not a plain
+/// directory, counts as one.
+#[test]
+fn a_machine_browser_policy_anywhere_the_browser_reads_one_refuses_it() {
+    use super::{no_machine_policy, POLICY_CONFIGURED, POLICY_ROOTS};
+    use std::os::unix::fs::PermissionsExt;
+    let configured = Err(AuthorityError::Closed(POLICY_CONFIGURED));
+    let root = temp_root("policies");
+    let chrome = root.0.path().join("chrome");
+    let chromium = root.0.path().join("chromium");
+    let roots = vec![chrome.clone(), chromium.clone()];
+    assert_eq!(no_machine_policy(&[]), Ok(()));
+    assert_eq!(no_machine_policy(&roots), Ok(()), "no root exists");
+    for kind in ["managed", "recommended", "enrollment"] {
+        std::fs::create_dir_all(chromium.join(kind)).unwrap();
+    }
+    assert_eq!(
+        no_machine_policy(&roots),
+        Ok(()),
+        "empty policy directories"
+    );
+    for (kind, file, text) in [
+        ("managed", "proxy.json", r#"{"ProxyMode": "direct"}"#),
+        ("recommended", "proxy.json", r#"{"ProxyMode": "direct"}"#),
+        ("enrollment", "CloudManagementEnrollmentToken", "token"),
+        (
+            "managed",
+            "harmless.json",
+            r#"{"EncryptedClientHelloEnabled": false}"#,
+        ),
+    ] {
+        let path = chromium.join(kind).join(file);
+        std::fs::write(&path, text).unwrap();
+        assert_eq!(no_machine_policy(&roots), configured, "{kind}/{file}");
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(no_machine_policy(&roots), Ok(()));
+    }
+    // A policy place that is not a plain directory.
+    std::fs::remove_dir(chromium.join("managed")).unwrap();
+    std::fs::write(chromium.join("managed"), "{}").unwrap();
+    assert_eq!(no_machine_policy(&roots), configured, "a file");
+    std::fs::remove_file(chromium.join("managed")).unwrap();
+    let elsewhere = root.0.path().join("elsewhere");
+    std::fs::create_dir(&elsewhere).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, chromium.join("managed")).unwrap();
+    assert_eq!(no_machine_policy(&roots), configured, "a link");
+    std::fs::remove_file(chromium.join("managed")).unwrap();
+    std::fs::write(&chrome, "").unwrap();
+    assert_eq!(
+        no_machine_policy(&roots),
+        configured,
+        "a root that is a file"
+    );
+    std::fs::remove_file(&chrome).unwrap();
+    // A policy directory that cannot be read (root reads anything: then
+    // there is nothing to show).
+    std::fs::create_dir(chromium.join("managed")).unwrap();
+    std::fs::set_permissions(
+        chromium.join("managed"),
+        std::fs::Permissions::from_mode(0o000),
+    )
+    .unwrap();
+    if std::fs::read_dir(chromium.join("managed")).is_err() {
+        assert_eq!(no_machine_policy(&roots), configured, "unreadable");
+    }
+    std::fs::set_permissions(
+        chromium.join("managed"),
+        std::fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    assert_eq!(no_machine_policy(&roots), Ok(()));
+    // The production browser looks in every place Chrome and Chromium read,
+    // and on this host its answer is what those places hold.
+    let production = Browser::new(root.0.clone());
+    let expected: Vec<std::path::PathBuf> =
+        POLICY_ROOTS.iter().map(std::path::PathBuf::from).collect();
+    assert_eq!(production.policies, expected);
+    let held = POLICY_ROOTS.iter().any(|root| {
+        ["managed", "recommended", "enrollment"].iter().any(|kind| {
+            let dir = std::path::Path::new(root).join(kind);
+            std::fs::read_dir(&dir).map_or(dir.exists(), |mut entries| entries.next().is_some())
+        })
+    });
+    assert_eq!(
+        no_machine_policy(&production.policies).is_err(),
+        held,
+        "this host's machine policy"
+    );
+}
+
+/// The production browser reaches no private or loopback address: its
+/// sessions' proxy, with the production browser's own address policy and
+/// resolver, refuses a granted loopback origin and sends nothing there.
+#[test]
+fn a_production_browser_session_reaches_no_private_address() {
+    use super::proxy::{BrowserProxy, OriginPolicy};
+    use std::io::{Read, Write};
+    let root = temp_root("production-browser");
+    let production = Browser::new(root.0.clone());
+    let (port, upstream) = recording_upstream();
+    let proxy = BrowserProxy::start(OriginPolicy {
+        origins: vec![
+            format!("https://127.0.0.1:{port}"),
+            format!("http://127.0.0.1:{port}"),
+        ],
+        allow_private: production.allow_private,
+        resolver: production.resolver.clone(),
+        live: Arc::new(|| true),
+    })
+    .unwrap();
+    for request in [
+        format!("CONNECT 127.0.0.1:{port} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+        format!("GET http://127.0.0.1:{port}/ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+    ] {
+        let mut client = std::net::TcpStream::connect(("127.0.0.1", proxy.port())).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        client.write_all(request.as_bytes()).unwrap();
+        let mut answer = Vec::new();
+        let _ = client.read_to_end(&mut answer);
+        assert!(answer.starts_with(b"HTTP/1.1 403"), "{request}");
+    }
+    assert_eq!(proxy.opened(), 0);
+    assert!(upstream.recv_timeout(Duration::from_secs(1)).is_err());
+}
+
+/// When the session ends (its proxy dropped) while its grant is still live,
+/// an established tunnel ends within the proxy's poll bound and carries
+/// nothing more: the proxy's own stop, not only the session's liveness,
+/// ends it.
+#[test]
+fn an_open_tunnel_ends_with_its_session_within_the_poll_bound() {
+    use super::proxy::{BrowserProxy, OriginPolicy};
+    use std::io::{Read, Write};
+    let (port, upstream) = recording_upstream();
+    let proxy = BrowserProxy::start(OriginPolicy {
+        origins: vec![format!("https://fixture.nexus.invalid:{port}")],
+        allow_private: true,
+        resolver: Arc::new(Fixtures),
+        // The grant stays live throughout.
+        live: Arc::new(|| true),
+    })
+    .unwrap();
+    let mut client = std::net::TcpStream::connect(("127.0.0.1", proxy.port())).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    client
+        .write_all(
+            format!(
+                "CONNECT fixture.nexus.invalid:{port} HTTP/1.1\r\n\
+                 Host: fixture.nexus.invalid:{port}\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    let mut established = [0u8; 39];
+    client.read_exact(&mut established).unwrap();
+    assert_eq!(&established, b"HTTP/1.1 200 Connection Established\r\n\r\n");
+    assert_eq!(proxy.opened(), 1);
+    client.write_all(b"before").unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    let ended = Instant::now();
+    drop(proxy);
+    // The documented bound: every connection ends within one poll (250
+    // ms) of the end; allowed here twice that and a margin.
+    let mut rest = Vec::new();
+    let _ = client.read_to_end(&mut rest);
+    assert!(
+        ended.elapsed() < Duration::from_millis(1500),
+        "the tunnel outlived its session by {:?}",
+        ended.elapsed()
+    );
+    let _ = client.write_all(b"after");
+    assert_eq!(
+        upstream.recv_timeout(Duration::from_secs(5)).unwrap(),
+        b"before"
+    );
+}
+
+/// A machine policy that could force direct connections, configured where
+/// the browser reads one, refuses the session: when it is prepared, and
+/// when it appears between the approval and the launch (the browser is
+/// then never started). Nothing reaches the granted origin or any other.
+#[test]
+fn a_direct_mode_policy_refuses_the_session_before_any_connection() {
+    use super::POLICY_CONFIGURED;
+    let Some((browser, root)) = browser() else {
+        return;
+    };
+    let policies = temp_root("policy-roots");
+    let chrome = policies.0.path().join("chrome");
+    std::fs::create_dir_all(chrome.join("managed")).unwrap();
+    let browser = browser.with_policies(vec![chrome.clone()]);
+    let server = server();
+    let h = harness();
+    let page = origin(&server);
+    grant(&h, &browser, std::slice::from_ref(&page));
+    let intent = BrowserIntent {
+        start_url: format!("{page}/"),
+        steps: vec![],
+    };
+    let direct = chrome.join("managed").join("proxy.json");
+    std::fs::write(&direct, r#"{"ProxyMode": "direct"}"#).unwrap();
+    assert_eq!(
+        browser
+            .prepare(h.control.authority(), &intent)
+            .err()
+            .unwrap(),
+        AuthorityError::Closed(POLICY_CONFIGURED)
+    );
+    // Prepared and approved with no policy; the policy appears before the
+    // launch.
+    std::fs::remove_file(&direct).unwrap();
+    let preparation = browser.prepare(h.control.authority(), &intent).unwrap();
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    std::fs::write(&direct, r#"{"ProxyMode": "direct"}"#).unwrap();
+    assert!(h.control.execute(view.id, &h.agent, h.run).is_err());
+    let finished = h
+        .evidence
+        .records()
+        .into_iter()
+        .rev()
+        .find(|r| r.commitment.as_deref() == Some(&view.id.to_string()) && r.outcome.is_some())
+        .unwrap();
+    assert_eq!(finished.failure, Some("refused"));
+    assert!(
+        format!("{:?}", finished.detail).contains("the browser was not started"),
+        "{:?}",
+        finished.detail
+    );
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(server.received().is_empty(), "nothing was reached");
+    assert_eq!(std::fs::read_dir(root.0.path()).unwrap().count(), 0);
+}
+
+/// A browser that goes around its session's proxy (as one under a policy
+/// forcing direct connections would) is refused, never reported as done,
+/// and runs no step: the proxy saw none of its traffic. (It did reach the
+/// page directly first, which is why the policy refusal must keep it from
+/// starting at all.)
+#[test]
+fn a_browser_that_goes_around_its_proxy_is_refused() {
+    let Some((browser, _root)) = browser() else {
+        return;
+    };
+    let browser = browser.direct();
+    let server = server();
+    let h = harness();
+    let page = format!("http://127.0.0.1:{}", server.address.port());
+    grant(&h, &browser, std::slice::from_ref(&page));
+    let result = run(
+        &h,
+        &browser,
+        BrowserIntent {
+            start_url: format!("{page}/"),
+            steps: vec![BrowserStep::ExtractText {
+                selector: "#title".into(),
+            }],
+        },
+        true,
+    );
+    assert!(result.is_err(), "{result:?}");
+    let finished = h
+        .evidence
+        .records()
+        .into_iter()
+        .rev()
+        .find(|r| r.outcome.is_some())
+        .unwrap();
+    assert_eq!(finished.outcome, Some("failed"));
+    assert_eq!(finished.failure, Some("refused"));
+    assert!(
+        format!("{:?}", finished.detail).contains("did not go through the session's proxy"),
+        "{:?}",
+        finished.detail
+    );
+    // The page was reached directly; no step ran.
+    assert!(server.received().iter().any(|r| r.path == "/"));
 }

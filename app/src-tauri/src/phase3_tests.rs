@@ -3943,7 +3943,7 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
         let dialog = one_fn(front, &format!("ControlDialogs::{method}"));
         assert_eq!(
             compact(dialog.body_text(front)),
-            format!("self.confirm(request.title(),request.message(),\"{answer}\")"),
+            format!("self.confirm(request.title(),request.text(),\"{answer}\")"),
             "ControlDialogs::{method}"
         );
     }
@@ -3960,6 +3960,14 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
         ),
         "the answer stays unarmed for a second"
     );
+    for constant in [
+        "const DIALOG_TURN_WAIT: std::time::Duration =\n    nexus_governed_control::authority::commitment::MAX_COMMITMENT_TTL;",
+        "const GUTTER_STYLE: &str = \"separator { min-width: 6px; background-color: #3465a4; }\";",
+        "const DETAILS_CAPTION: &str = \"From the request (its content, not this window's own text)\";",
+        "const DIALOG_COLUMNS: i32 = nexus_governed_control::authority::evidence::DIALOG_COLUMNS as i32;",
+    ] {
+        assert!(front.contains(constant), "{constant}");
+    }
     // The trait is defined once and never renamed.
     assert_eq!(
         renaming("ControlConfirmer"),
@@ -3968,10 +3976,17 @@ fn p3_g6_01_the_native_dialogs_are_the_only_control_confirmer() {
     );
 }
 
-/// The owner's confirmation window, pinned whole (normalized text).
-const CONFIRMATION_WINDOW: [(&str, &str); 4] = [
-    ("ControlDialogs::confirm", "use*;staticONE_AT_A_TIME:Mutex<()>=Mutex::new(());let_one=ONE_AT_A_TIME.lock().unwrap_or_else(|p|p.into_inner());let(sender,receiver)=channel();let(title,answer)=(title.to_string(),answer.to_string());letshown=self.0.run_on_main_thread(move||{let(dialog,_)=owner_window(&title,&message,&answer);letsender=RefCell::new(Some(sender));dialog.connect_response(move|dialog,response|{ifletSome(sender)=sender.borrow_mut().take(){let_=sender.send(response==ResponseType::Accept);}dialog.close();});dialog.present();});shown.is_ok()&&receiver.recv().unwrap_or(false)"),
-    ("owner_window", "use*;useCell;useRc;letdialog=Dialog::new();dialog.set_title(title);dialog.set_modal(true);dialog.set_keep_above(true);dialog.set_default_size(900,560);dialog.add_button(\"Cancel\",ResponseType::Cancel);letallow=dialog.add_button(answer,ResponseType::Accept);allow.set_sensitive(false);dialog.set_default_response(ResponseType::Cancel);lettext=Label::new(None);letlines:Vec<String>=message.split('\\n').map(|line|format!(\"\\u{200E}{line}\")).collect();text.set_text(&lines.join(\"\\n\"));text.set_line_wrap(false);text.set_xalign(0.0);text.set_yalign(0.0);letmonospace=AttrList::new();monospace.insert(AttrString::new_family(\"monospace\"));text.set_attributes(Some(&monospace));letscroll=ScrolledWindow::builder().build();scroll.set_policy(PolicyType::Automatic,PolicyType::Automatic);scroll.add(&text);dialog.content_area().pack_start(&scroll,true,true,0);letarming=Rc::new(Cell::new(Arming::default()));letupdate:Rc<dynFn()>={let(arming,allow,scroll)=(arming.clone(),allow.clone(),scroll.clone());Rc::new(move||{letmutnow=arming.get();let(down,across)=(scroll.vadjustment(),scroll.hadjustment());now.end_reached|=reached(down.value(),down.page_size(),down.upper());now.edge_reached|=reached(across.value(),across.page_size(),across.upper());arming.set(now);allow.set_sensitive(now.ready());})};foradjustmentin[scroll.vadjustment(),scroll.hadjustment()]{letmoved=update.clone();adjustment.connect_value_changed(move|_|moved());letresized=update.clone();adjustment.connect_changed(move|_|resized());}{let(arming,update)=(arming.clone(),update.clone());timeout_add_local_once(ARMING_DELAY,move||{letmutnow=arming.get();now.delay_passed=true;arming.set(now);update();});}dialog.show_all();(dialog,allow)"),
+/// The owner's confirmation window, pinned whole (normalized text): the
+/// one-at-a-time turn (a flag, never a lock held across the dialog), the
+/// window (a fixed header outside every scrolled view, the request's
+/// details in their own captioned frame beside a gutter bar) and its
+/// arming.
+const CONFIRMATION_WINDOW: [(&str, &str); 7] = [
+    ("DialogTurn::take", "Self::take_within(DIALOG_TURN_WAIT)"),
+    ("ControlDialogs::confirm", "use*;letSome(_turn)=DialogTurn::take()else{returnfalse;};let(sender,receiver)=channel();let(title,answer)=(title.to_string(),answer.to_string());letshown=self.0.run_on_main_thread(move||{let(dialog,_)=owner_window(&title,&text,&answer);letsender=RefCell::new(Some(sender));dialog.connect_response(move|dialog,response|{ifletSome(sender)=sender.borrow_mut().take(){let_=sender.send(response==ResponseType::Accept);}dialog.close();});dialog.present();});shown.is_ok()&&receiver.recv().unwrap_or(false)"),
+    ("DialogTurn::take_within", "let(busy,freed)=&DIALOG_BUSY;letdeadline=Instant::now()+wait;letmuton_screen=busy.lock().unwrap_or_else(|p|p.into_inner());while*on_screen{letleft=deadline.saturating_duration_since(Instant::now());ifleft.is_zero(){returnNone;}on_screen=freed.wait_timeout(on_screen,left).unwrap_or_else(|p|p.into_inner()).0;}*on_screen=true;Some(DialogTurn)"),
+    ("DialogTurn::drop", "let(busy,freed)=&DIALOG_BUSY;*busy.lock().unwrap_or_else(|p|p.into_inner())=false;freed.notify_one();"),
+    ("owner_window", "use*;useCell;useRc;letdialog=Dialog::new();dialog.set_title(title);dialog.set_modal(true);dialog.set_keep_above(true);dialog.set_default_size(900,560);dialog.add_button(\"Cancel\",ResponseType::Cancel);letallow=dialog.add_button(answer,ResponseType::Accept);allow.set_sensitive(false);dialog.set_default_response(ResponseType::Cancel);letbold=AttrList::new();bold.insert(AttrInt::new_weight(Weight::Bold));letmonospace=AttrList::new();monospace.insert(AttrString::new_family(\"monospace\"));letheader=Grid::new();header.set_column_spacing(12);header.set_row_spacing(2);for(row,(label,value))in(0..).zip(&text.header){letname=Label::new(Some(label));name.set_attributes(Some(&bold));name.set_xalign(1.0);name.set_yalign(0.0);letshown=Label::new(Some(&format!(\"\\u{200E}{value}\")));shown.set_attributes(Some(&monospace));shown.set_line_wrap(true);shown.set_line_wrap_mode(WrapMode::Char);shown.set_max_width_chars(DIALOG_COLUMNS);shown.set_xalign(0.0);shown.set_yalign(0.0);shown.set_hexpand(true);header.attach(&name,0,row,1,1);header.attach(&shown,1,row,1,1);}letdetails=Label::new(None);letlines:Vec<String>=text.details.iter().map(|line|format!(\"\\u{200E}{line}\")).collect();details.set_text(&lines.join(\"\\n\"));details.set_line_wrap(false);details.set_xalign(0.0);details.set_yalign(0.0);details.set_attributes(Some(&monospace));letscroll=ScrolledWindow::builder().build();scroll.set_policy(PolicyType::Automatic,PolicyType::Automatic);scroll.set_min_content_height(160);scroll.add(&details);letgutter=Separator::new(Orientation::Vertical);letbar=CssProvider::new();ifbar.load_from_data(GUTTER_STYLE.as_bytes()).is_ok(){gutter.style_context().add_provider(&bar,STYLE_PROVIDER_PRIORITY_APPLICATION);}letregion=Box::new(Orientation::Horizontal,6);region.pack_start(&gutter,false,false,0);region.pack_start(&scroll,true,true,0);letframe=Frame::new(Some(DETAILS_CAPTION));frame.set_shadow_type(ShadowType::In);frame.add(&region);letcontent=dialog.content_area();content.set_spacing(8);content.pack_start(&header,false,false,0);content.pack_start(&frame,true,true,0);letarming=Rc::new(Cell::new(Arming::default()));letupdate:Rc<dynFn()>={let(arming,allow,scroll)=(arming.clone(),allow.clone(),scroll.clone());Rc::new(move||{letmutnow=arming.get();let(down,across)=(scroll.vadjustment(),scroll.hadjustment());now.end_reached|=reached(down.value(),down.page_size(),down.upper());now.edge_reached|=reached(across.value(),across.page_size(),across.upper());arming.set(now);allow.set_sensitive(now.ready());})};foradjustmentin[scroll.vadjustment(),scroll.hadjustment()]{letmoved=update.clone();adjustment.connect_value_changed(move|_|moved());letresized=update.clone();adjustment.connect_changed(move|_|resized());}{let(arming,update)=(arming.clone(),update.clone());timeout_add_local_once(ARMING_DELAY,move||{letmutnow=arming.get();now.delay_passed=true;arming.set(now);update();});}dialog.show_all();(dialog,allow)"),
     ("Arming::ready", "self.delay_passed&&self.end_reached&&self.edge_reached"),
     ("reached", "page>0.0&&value+page>=upper-1.0"),
 ];
@@ -3992,18 +4007,24 @@ fn p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer() {
     );
     let request =
         compact(one_fn(commitment, "CommitmentRegistry::request_approval").body_text(commitment));
+    // The dialog is shown with no lock held; afterwards the commitment must
+    // be exactly what was shown, unreserved and live; the approval is
+    // reserved, recorded with the lock released, and minted only once the
+    // same reservation of a still live commitment completes.
     assert_in_order(
         &request,
         &[
-            "letconfirmed=confirmer.confirm_action(&request);",
-            "ifentry.state!=CommitmentState::Prepared||entry.binding!=binding{returnErr(AuthorityError::NotPending);}",
-            "self.live_check(id,entry,agent,run)?;",
+            "self.flush(deferred);let(request,binding)=asked?;letconfirmed=confirmer.confirm_action(&request);",
+            "Some(entry)ifentry.state!=CommitmentState::Prepared||entry.binding!=binding||entry.reserved.is_some()=>{Err(AuthorityError::NotPending)}",
+            "self.live_check(id,entry,agent,run,now,&mutdeferred)",
             "if!confirmed{",
-            "self.record(&record)?;",
+            "lettoken=self.reserve(entry,Transition::Approve);",
+            "self.flush(deferred);let(token,record)=answered?;let_reserved=Reserved{registry:self,id,token};self.record(&record)?;self.complete(id,token,CommitmentState::Prepared,agent,run,|_,_|())?;",
             "Ok(R2Approval::confirmed(id,binding))",
         ],
         "request_approval",
     );
+    assert_eq!(request.matches("confirm_action(").count(), 1);
     let approval = production_source("crates/nexus-governed-control/src/authority/approval.rs");
     let at = approval.find("pub struct R2Approval").expect("R2Approval");
     // Every attribute of the item: from the previous item's end.
@@ -4048,12 +4069,29 @@ fn p3_g6_02_an_r2_approval_is_minted_once_after_the_native_answer() {
     );
     assert!(compact(approval)
         .contains("pub(crate)fnconfirmed(commitment:CommitmentId,binding:Digest)->Self"));
-    // Authorizing consumes it and checks it names this commitment's binding.
+    // Authorizing consumes it and checks it names this commitment's binding
+    // (under the lock, before reserving); the authorization is recorded
+    // before it takes effect.
+    let authorization =
+        compact(one_fn(commitment, "CommitmentRegistry::authorization").body_text(commitment));
+    assert_in_order(
+        &authorization,
+        &[
+            "ifapproval.commitment()!=id||approval.binding()!=&entry.binding{returnErr(AuthorityError::ApprovalMismatch);}",
+            "lettoken=self.reserve(entry,Transition::Authorize);",
+        ],
+        "CommitmentRegistry::authorization",
+    );
     let authorize =
         compact(one_fn(commitment, "CommitmentRegistry::authorize").body_text(commitment));
-    assert!(authorize.contains(
-        "ifapproval.commitment()!=id||approval.binding()!=&entry.binding{returnErr(AuthorityError::ApprovalMismatch);}"
-    ));
+    assert_in_order(
+        &authorize,
+        &[
+            "self.authorization(id,entry,agent,run,approval,now,&mutdeferred)",
+            "self.record(&record)?;self.complete(id,token,CommitmentState::Prepared,agent,run,|entry,_|{entry.approval=approved.or(entry.approval);entry.state=CommitmentState::Authorized;})",
+        ],
+        "CommitmentRegistry::authorize",
+    );
 }
 
 /// Every governed effect is a pending effect held by the one pipeline and
@@ -4069,6 +4107,10 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
             (
                 "crates/nexus-governed-control/src/browser/mod.rs",
                 "Session".to_string()
+            ),
+            (
+                "crates/nexus-governed-control/src/connector/mod.rs",
+                "BoundPost".to_string()
             ),
             (
                 "crates/nexus-governed-control/src/display/mod.rs",
@@ -4099,7 +4141,7 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
     assert_in_order(
         &execute,
         &[
-            "pending.remove(&id).expect(\"present\").effect",
+            "pending.held.remove(&id).expect(\"present\").effect",
             "effect.revalidate()",
             ".begin(id,agent,run,&target,&parameters)",
             "effect.execute(&guard)",
@@ -4115,6 +4157,8 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
             "Control::execute".to_string()
         )]
     );
+    // (A post's destination reads run through the pipeline before it is
+    // proposed, and again inside its own effect, under its guard.)
     let executed: Vec<(&str, String)> = references(P3_CRATE, "execute");
     assert!(
         executed.iter().all(|(file, function)| {
@@ -4124,8 +4168,23 @@ fn p3_g6_03_every_governed_effect_runs_only_through_the_pipeline() {
                         function.as_str(),
                         "GovernedControl::execute" | "GovernedControl::agent_action"
                     ))
+                || (file.ends_with("connector/mod.rs")
+                    && matches!(
+                        function.as_str(),
+                        "Connectors::propose" | "BoundPost::execute"
+                    ))
         }),
         "{executed:?}"
+    );
+    let connector = production_source("crates/nexus-governed-control/src/connector/mod.rs");
+    assert_in_order(
+        &compact(one_fn(connector, "BoundPost::execute").body_text(connector)),
+        &[
+            "forreadinreads{answers.push(read.execute(guard)?);}",
+            "ifnow!=identity{returnErr((FailureClass::TargetChanged,",
+            "post.execute(guard)",
+        ],
+        "BoundPost::execute",
     );
     // The lifecycle is crate-private.
     let commitment = production_source("crates/nexus-governed-control/src/authority/commitment.rs");
@@ -4204,8 +4263,9 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
         ("broker.rs", "vault", 5),   // the facade read and the refusal of environment secrets
         ("browser/proxy.rs", "network", 9),
         ("display/server.rs", "network", 1),
-        ("display/server.rs", "x11", 32),
+        ("display/server.rs", "x11", 37),
         ("egress/destination.rs", "network", 1), // name resolution, then the address policy
+        ("egress/interfaces.rs", "libc", 5),     // getifaddrs: this machine's interfaces
         ("egress/mod.rs", "network", 8),         // header types
         ("egress/transport.rs", "network", 19),
         ("launcher.rs", "ends", 2), // SIGTERM with a grace, then SIGKILL
@@ -4217,15 +4277,24 @@ fn p3_g6_04_the_mechanisms_are_confined_to_their_modules() {
     .map(|(file, kind, count)| ((file.to_string(), kind), count))
     .collect();
     assert_eq!(found, allowed);
-    // Unsafe code is denied crate-wide and allowed only in the launcher.
+    // Unsafe code is denied crate-wide and allowed only in the launcher and
+    // in the one call that reads this machine's network interfaces.
     let lib = production_source("crates/nexus-governed-control/src/lib.rs");
     assert!(lib.contains("#![deny(unsafe_code)]"));
-    let allowing: Vec<&str> = p3_sources()
+    let mut allowing: Vec<&str> = p3_sources()
         .into_iter()
         .filter(|(_, text)| text.contains("allow(unsafe_code)"))
         .map(|(file, _)| file)
         .collect();
-    assert_eq!(allowing, ["launcher.rs"]);
+    allowing.sort();
+    assert_eq!(allowing, ["egress/interfaces.rs", "launcher.rs"]);
+    let interfaces = production_source("crates/nexus-governed-control/src/egress/interfaces.rs");
+    let calls: Vec<&str> = ["getifaddrs(", "freeifaddrs("]
+        .into_iter()
+        .filter(|call| interfaces.contains(call))
+        .collect();
+    assert_eq!(calls, ["getifaddrs(", "freeifaddrs("]);
+    assert_eq!(compact(interfaces).matches("unsafe{").count(), 6);
 }
 
 /// Nothing in Phase Three reads the process environment: not the owner's
@@ -4362,6 +4431,7 @@ fn p3_g6_06_the_desktop_reaches_phase_three_only_through_its_front_door() {
 /// `p3_g6_06`).
 const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::approval::ActionConfirmation",
+    "nexus_governed_control::authority::approval::ConfirmationText",
     "nexus_governed_control::authority::approval::ControlConfirmer",
     "nexus_governed_control::authority::approval::GrantConfirmation",
     "nexus_governed_control::authority::approval::ResumeConfirmation",
@@ -4370,6 +4440,8 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::commitment::CommitmentState",
     "nexus_governed_control::authority::commitment::CommitmentState::Executing",
     "nexus_governed_control::authority::commitment::CommitmentView",
+    "nexus_governed_control::authority::commitment::MAX_COMMITMENT_TTL",
+    "nexus_governed_control::authority::evidence::DIALOG_COLUMNS",
     "nexus_governed_control::authority::evidence::EvidenceRecord",
     "nexus_governed_control::authority::evidence::EvidenceRecord::to_json",
     "nexus_governed_control::authority::evidence::EvidenceSink",
@@ -4379,7 +4451,6 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::evidence::TeeEvidence",
     "nexus_governed_control::authority::ids::AgentId",
     "nexus_governed_control::authority::ids::AgentId::new",
-    "nexus_governed_control::authority::ids::AgentId::owner_session",
     "nexus_governed_control::authority::ids::CommitmentId",
     "nexus_governed_control::authority::ids::CommitmentId::parse",
     "nexus_governed_control::authority::ids::GrantId",
@@ -4388,7 +4459,6 @@ const DESKTOP_P3_ITEMS: &[&str] = &[
     "nexus_governed_control::authority::ids::RunId::parse",
     "nexus_governed_control::authority::run::RunOrigin",
     "nexus_governed_control::authority::run::RunOrigin::AgentGoal",
-    "nexus_governed_control::authority::run::RunOrigin::Command",
     "nexus_governed_control::broker::Vault",
     "nexus_governed_control::broker::Vault::Kernel",
     "nexus_governed_control::control::EffectOutput",
@@ -4658,8 +4728,136 @@ fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     ]) {
         kinds.insert("browser");
     }
+    // The desktop's toolkit (gtk-rs, and every crate it re-exports or
+    // binds): its process, URI-opening, capture, network and bus routes are
+    // classified as such, and anything of it outside the native approval
+    // window's own APIs is a mechanism not yet classified ("toolkit").
+    // (A toolkit prelude exports traits only: a name the scanner resolves
+    // through one, as a glob import may bring it, is a method's trait or no
+    // toolkit item at all.)
+    let through_prelude = path.iter().take(3).any(|segment| segment == "prelude");
+    if path.len() > 1 && TOOLKIT_CRATES.contains(&path[0].as_str()) && !through_prelude {
+        let has = |names: &[&str]| path.iter().any(|segment| names.contains(&segment.as_str()));
+        if path.iter().any(|segment| segment.starts_with("spawn"))
+            || has(&[
+                "Subprocess",
+                "SubprocessLauncher",
+                "SubprocessFlags",
+                "AppInfo",
+                "DesktopAppInfo",
+                "AppLaunchContext",
+                "show_uri",
+                "show_uri_on_window",
+                "LinkButton",
+                "MountOperation",
+            ])
+        {
+            kinds.insert("process");
+        }
+        if has(&[
+            "default_root_window",
+            "root_window",
+            "pixbuf_get_from_window",
+            "pixbuf_get_from_surface",
+            "Screen",
+            "Display",
+            "Seat",
+            "Device",
+            "DeviceManager",
+            "test_simulate_button",
+            "test_simulate_key",
+        ]) {
+            kinds.insert("device");
+        }
+        if has(&[
+            "SocketClient",
+            "Socket",
+            "SocketListener",
+            "SocketService",
+            "SocketConnection",
+            "Resolver",
+            "NetworkMonitor",
+            "NetworkAddress",
+            "InetSocketAddress",
+            "TlsClientConnection",
+            "File",
+        ]) || path[0] == "soup"
+        {
+            kinds.insert("network");
+        }
+        if has(&[
+            "DBusConnection",
+            "DBusProxy",
+            "bus_get",
+            "bus_get_sync",
+            "bus_own_name",
+        ]) {
+            kinds.insert("bus");
+        }
+        if !TOOLKIT_UI.contains(&shown.as_str()) {
+            kinds.insert("toolkit");
+        }
+    }
     kinds
 }
+
+/// The toolkit crates the desktop reaches through gtk-rs: gtk itself, the
+/// crates it re-exports (`gtk::glib`, `gtk::gio`, `gtk::gdk`,
+/// `gtk::pango`, ...), their system bindings, and the web view's.
+const TOOLKIT_CRATES: [&str; 21] = [
+    "gtk",
+    "gtk3",
+    "glib",
+    "gio",
+    "gdk",
+    "gdk_pixbuf",
+    "pango",
+    "pangocairo",
+    "cairo",
+    "atk",
+    "gdkx11",
+    "gdkwayland",
+    "webkit2gtk",
+    "soup",
+    "javascriptcore",
+    "gtk_sys",
+    "glib_sys",
+    "gobject_sys",
+    "gio_sys",
+    "gdk_sys",
+    "webkit2gtk_sys",
+];
+
+/// Exactly the toolkit APIs the owner's native approval window uses (each
+/// as the scanner resolves it): its widgets, layout, styling of the gutter,
+/// text attributes and arming timer. Any other path into the toolkit is a
+/// `toolkit` site, which p3_g6_08 refuses until it is classified.
+const TOOLKIT_UI: [&str; 24] = [
+    "gtk::Box::new",
+    "gtk::CssProvider::new",
+    "gtk::Dialog",
+    "gtk::Dialog::new",
+    "gtk::Frame::new",
+    "gtk::Grid::new",
+    "gtk::Label::new",
+    "gtk::Orientation::Horizontal",
+    "gtk::Orientation::Vertical",
+    "gtk::PolicyType::Automatic",
+    "gtk::ResponseType::Accept",
+    "gtk::ResponseType::Cancel",
+    "gtk::STYLE_PROVIDER_PRIORITY_APPLICATION",
+    "gtk::ScrolledWindow::builder",
+    "gtk::Separator::new",
+    "gtk::ShadowType::In",
+    "gtk::Widget",
+    "gtk::glib::timeout_add_local_once",
+    "gtk::pango::AttrInt::new_weight",
+    "gtk::pango::AttrList::new",
+    "gtk::pango::AttrString::new_family",
+    "gtk::pango::Weight::Bold",
+    "gtk::pango::WrapMode::Char",
+    "gtk::prelude",
+];
 
 /// Production modules named like test files (`*tests.rs`, `*_test.rs`), which
 /// the production scanner skips by name: every `mod` declaring them, up to
@@ -5360,7 +5558,7 @@ const EFFECT_SITES: &[(&str, &str, usize)] = &[
     (
         "crates/nexus-governed-control/src/display/server.rs",
         "x11",
-        32,
+        37,
     ),
     (
         "crates/nexus-governed-control/src/egress/destination.rs",
@@ -6728,7 +6926,8 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         "{handler}"
     );
     // Every owner route that stops agents (Stop, the Admin "Stop all", bulk
-    // Stop) is one routine, `stop_agents`: every agent stops at once (its
+    // Stop, clearing all agents before their records go) is one routine,
+    // `stop_agents`: every agent stops at once (its
     // schedule under every spelling, its loop's cancel flag, Phase Three,
     // the supervisor) before anything waits; then a thread of its own
     // removes the loops, which may wait while any agent's cycle holds the
@@ -6762,6 +6961,7 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         "stop_agent_goal",
         "admin_agent_stop_all",
         "admin_agent_bulk_update",
+        "clear_all_agents",
     ] {
         assert_eq!(one_fn(lib, command).head, "#[command]", "{command}");
     }
@@ -6798,16 +6998,15 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
                 at(lib_rs, "run"),
             ],
         ),
+        ("stop_agent_loop", vec![at(cognitive_rs, "end_agent_loop")]),
         (
-            "stop_agent_loop",
-            vec![
-                at(cognitive_rs, "end_agent_loop"),
-                at(cognitive_rs, "end_goal_loop"),
-            ],
+            "stop_agent_loop_if",
+            vec![at(cognitive_rs, "end_goal_loop")],
         ),
         (
             "stop_agents",
             vec![
+                at(agents_rs, "clear_all_agents"),
                 at(enterprise_rs, "admin_agent_bulk_update"),
                 at(enterprise_rs, "admin_agent_stop_all"),
                 at(lib_rs, "stop_agent"),
@@ -6822,13 +7021,15 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
             "end_goal_loop",
             vec![
                 at(cognitive_rs, "ScheduledGoalExecutor::execute"),
+                at(cognitive_rs, "await_subtask"),
+                at(cognitive_rs, "await_subtask"),
                 at(cognitive_rs, "execute_hivemind_subtask"),
             ],
         ),
         (
             "agent_stopped",
             vec![
-                at(cognitive_rs, "execute_hivemind_subtask"),
+                at(cognitive_rs, "await_subtask"),
                 at(cognitive_rs, "execute_hivemind_subtask"),
                 at(cognitive_rs, "spawn_cognitive_loop_with_bridge"),
             ],
@@ -6906,20 +7107,39 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         ],
         "spawn_cognitive_loop_with_bridge",
     );
+    // A cancelled HiveMind session assigns no further sub-task: refused
+    // before anything, ended before its loop starts if the cancellation
+    // came while its goal was assigned, and ended (only its goal) while it
+    // is waited on.
     let subtask = compact(one_fn(cognitive, "execute_hivemind_subtask").body_text(cognitive));
     assert!(
-        subtask.starts_with("ifagent_stopped(state,agent_id){returnErr("),
+        subtask.starts_with(
+            "ifsession.cancelled(){returnErr(SESSION_CANCELLED.to_string());}ifagent_stopped(state,agent_id){returnErr("
+        ),
         "{subtask}"
     );
     assert_in_order(
         &subtask,
         &[
-            "ifstarted.elapsed()>=timeout{end_goal_loop(state,agent_id,&goal_id);returnErr(",
-            "ifagent_stopped(state,agent_id){returnErr(",
+            "letgoal_id=execute_agent_goal(",
+            "ifsession.cancelled(){end_goal_loop(state,agent_id,&goal_id);returnErr(SESSION_CANCELLED.to_string());}spawn_cognitive_loop_with_bridge(",
+            "await_subtask(state,session,agent_id,&goal_id,description,SUBTASK_TIMEOUT)",
         ],
         "execute_hivemind_subtask",
     );
-    assert!(!subtask.contains("cancel_agent("), "{subtask}");
+    let wait = compact(one_fn(cognitive, "await_subtask").body_text(cognitive));
+    assert_in_order(
+        &wait,
+        &[
+            "loop{ifsession.cancelled(){end_goal_loop(state,agent_id,goal_id);returnErr(SESSION_CANCELLED.to_string());}",
+            "ifstarted.elapsed()>=timeout{end_goal_loop(state,agent_id,goal_id);returnErr(",
+            "ifagent_stopped(state,agent_id){returnErr(",
+        ],
+        "await_subtask",
+    );
+    for body in [&subtask, &wait] {
+        assert!(!body.contains("cancel_agent("), "{body}");
+    }
     // An agent that is not running, however it was stopped or paused, acts
     // no more: the one production bridge asks the supervisor, and `act`
     // refuses before anything else, then refuses a stop that came after
@@ -6959,13 +7179,45 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         &act,
         &[
             "if!(self.running)(agent_id){returnErr(",
-            "letmutagents=self.world.agents();",
-            ".stopped_at.get(agent_id).is_some_and(|stopped|*stopped>self.began)",
-            ".open_run(agent.clone(),RunOrigin::AgentGoal)",
-            "agents.runs.entry(agent_id.to_string()).or_default().push(run);",
+            "letrun=matchself.loop_run(agent_id,&agent)?{",
+            "None=>self.open_loop_run(agent_id,&agent)?}",
             ".agent_action(&agent,run,intent)",
         ],
         "AgentBridge::act",
+    );
+    let stopped = compact(one_fn(world, "AgentBridge::stopped_since_began").body_text(world));
+    assert_eq!(
+        stopped,
+        "agents.stopped_at.get(agent_id).is_some_and(|stopped|*stopped>self.began)"
+    );
+    let loop_run = compact(one_fn(world, "AgentBridge::loop_run").body_text(world));
+    assert_in_order(
+        &loop_run,
+        &[
+            "letcurrent=self.run.lock()",
+            "ifself.stopped_since_began(&self.world.agents(),agent_id){returnErr(",
+            "Some((owner,run))ifowner==agent=>Ok(Some(*run)),",
+        ],
+        "AgentBridge::loop_run",
+    );
+    // The run is opened (and recorded) with no lock held, then kept under
+    // the lock a stop takes, checked again there; one not kept ends.
+    let open = compact(one_fn(world, "AgentBridge::open_loop_run").body_text(world));
+    assert_in_order(
+        &open,
+        &[
+            ".open_run(agent.clone(),RunOrigin::AgentGoal)",
+            "letmutcurrent=self.run.lock()",
+            "letmutagents=self.world.agents();",
+            "ifself.stopped_since_began(&agents,agent_id){Opened::Stopped}",
+            "agents.runs.entry(agent_id.to_string()).or_default().push(opened);",
+            "Opened::Stopped=>{let_=self.world.control.cancel_run(opened);",
+        ],
+        "AgentBridge::open_loop_run",
+    );
+    assert!(
+        !open[..open.find(".open_run(").unwrap()].contains(".lock()"),
+        "{open}"
     );
     let cancel = compact(one_fn(world, "RealWorld::cancel_agent").body_text(world));
     assert_in_order(
@@ -7004,16 +7256,26 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
 
 /// The owner's stop routines and quitting, pinned whole (normalized text):
 /// see `p3_g6_11`.
-const STOP_ROUTINES: [(&str, &str, &str); 17] = [
+const STOP_ROUTINES: [(&str, &str, &str); 21] = [
     (
         "app/src-tauri/src/commands/cognitive.rs",
         "agent_stopped",
-        "Uuid::parse_str(agent_id).is_ok_and(|id|{state.supervisor.lock().unwrap_or_else(|p|p.into_inner()).get_agent(id).is_some_and(|handle|{matches!(handle.state,AgentState::Stopping|AgentState::Stopped|AgentState::Destroyed)})})",
+        "Uuid::parse_str(agent_id).ok().is_none_or(|id|{state.supervisor.lock().unwrap_or_else(|p|p.into_inner()).get_agent(id).is_none_or(|handle|{matches!(handle.state,AgentState::Stopping|AgentState::Stopped|AgentState::Destroyed)})})",
     ),
     (
         "app/src-tauri/src/commands/cognitive.rs",
         "end_goal_loop",
-        "letours=state.cognitive_runtime.get_agent_status_fast(agent_id).and_then(|status|status.active_goal).is_some_and(|goal|goal.id==goal_id);ifours&&state.cognitive_runtime.stop_agent_loop(agent_id).is_ok(){state.wake_and_clear_blocked_consent_wait(agent_id);}",
+        "ifstate.cognitive_runtime.stop_agent_loop_if(agent_id,goal_id){state.wake_and_clear_goal_consent_wait(agent_id,goal_id);}",
+    ),
+    (
+        "kernel/src/cognitive/loop_runtime.rs",
+        "CognitiveRuntime::stop_agent_loop_if",
+        "self.stop_loop_if(agent_id,goal_id,||{})",
+    ),
+    (
+        "kernel/src/cognitive/loop_runtime.rs",
+        "CognitiveRuntime::stop_loop_if",
+        "waiting();letmutloops=self.loops.lock().unwrap_or_else(|p|p.into_inner());ifloops.get(agent_id).is_none_or(|state|state.goal.id!=goal_id){returnfalse;}letSome(state)=loops.remove(agent_id)else{returnfalse;};state.shutdown.store(true,Ordering::Relaxed);self.status_snapshots.lock().unwrap_or_else(|p|p.into_inner()).remove(agent_id);drop(loops);letmutflags=self.shutdown_flags.lock().unwrap_or_else(|p|p.into_inner());ifflags.get(agent_id).is_some_and(|flag|Arc::ptr_eq(flag,&state.shutdown)){flags.remove(agent_id);}true",
     ),
     (
         "app/src-tauri/src/commands/cognitive.rs",
@@ -7033,7 +7295,17 @@ const STOP_ROUTINES: [(&str, &str, &str); 17] = [
     (
         "app/src-tauri/src/commands/agents.rs",
         "spellings",
-        "letuuid=Uuid::parse_str(agent_id).ok();letsame=|key:&str|key==agent_id||(uuid.is_some()&&Uuid::parse_str(key).ok()==uuid);letmutfound=vec![canonical_agent_id(agent_id)];letscheduled=state.agent_scheduler.list().into_iter().map(|s|s.agent_id);letlooping:Vec<String>=state.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).keys().cloned().collect();forkeyinscheduled.chain(looping){ifsame(&key)&&!found.contains(&key){found.push(key);}}found",
+        "letuuid=Uuid::parse_str(agent_id).ok();letsame=|key:&str|key==agent_id||(uuid.is_some()&&Uuid::parse_str(key).ok()==uuid);letmutfound=vec![canonical_agent_id(agent_id)];letscheduled=state.agent_scheduler.list().into_iter().map(|s|s.agent_id);letlooping:Vec<String>=state.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).keys().cloned().collect();letloops=state.cognitive_runtime.loop_agents();forkeyinscheduled.chain(looping).chain(loops){ifsame(&key)&&!found.contains(&key){found.push(key);}}found",
+    ),
+    (
+        "app/src-tauri/src/commands/agents.rs",
+        "known_agents",
+        "letmutagents:Vec<String>=state.supervisor.lock().unwrap_or_else(|p|p.into_inner()).health_check().into_iter().map(|status|status.id.to_string()).collect();agents.extend(state.agent_scheduler.list().into_iter().map(|s|s.agent_id));letdrivers:Vec<String>=state.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).keys().cloned().collect();agents.extend(drivers);agents.extend(state.cognitive_runtime.loop_agents());ifletOk(world)=state.real_world(){agents.extend(world.agents_with_runs());}letmutknown=Vec::new();foragentinagents{letagent=canonical_agent_id(&agent);if!known.contains(&agent){known.push(agent);}}known",
+    ),
+    (
+        "app/src-tauri/src/commands/agents.rs",
+        "clear_all_agents",
+        "let_=stop_agents(state,&known_agents(state));{letmutsupervisor=matchstate.supervisor.lock(){Ok(guard)=>guard,Err(poisoned)=>poisoned.into_inner()};supervisor.clear_all_agents();}{letmutmeta=matchstate.meta.lock(){Ok(guard)=>guard,Err(poisoned)=>poisoned.into_inner()};meta.clear();}letcount=state.db.clear_all_agents().map_err(|e|format!(\"persistence error: {e}\"))?;Ok(count)",
     ),
     (
         "app/src-tauri/src/commands/agents.rs",
@@ -7789,6 +8061,165 @@ fn p3_g6_16_test_only_features_are_enabled_only_by_tests() {
     assert_eq!(enabling.len(), 6, "the known test-only edges: {enabling:?}");
 }
 
+/// §3 "There is no fifth" (audit P-6): the direct production dependencies
+/// of the desktop and of the governed-control crate are pinned, so a crate
+/// that brings a new mechanism (as gtk-rs brought process launch, URI
+/// opening and screen capture) cannot arrive unreviewed: adding one fails
+/// here until its routes are classified in `effect_kinds` (as the toolkit
+/// is, by `TOOLKIT_CRATES` and `TOOLKIT_UI`) and it is pinned.
+#[test]
+fn p3_g6_18_the_production_dependency_surface_is_pinned() {
+    let direct = |manifest: &str| -> BTreeSet<String> {
+        let mut section = String::new();
+        let mut names = BTreeSet::new();
+        for line in workspace_file(manifest).lines() {
+            let line = line.split('#').next().unwrap_or_default().trim();
+            if line.starts_with('[') {
+                section = line.trim_matches(['[', ']']).to_string();
+                continue;
+            }
+            let production = section == "dependencies"
+                || (section.ends_with(".dependencies")
+                    && !section.ends_with("dev-dependencies")
+                    && !section.ends_with("build-dependencies"));
+            if let (true, Some((key, _))) = (production, line.split_once('=')) {
+                names.insert(key.trim().to_string());
+            }
+        }
+        names
+    };
+    let pinned = |names: &[&str]| -> BTreeSet<String> {
+        names.iter().map(|name| name.to_string()).collect()
+    };
+    assert_eq!(
+        direct("crates/nexus-governed-control/Cargo.toml"),
+        pinned(&[
+            "base64",
+            "getrandom",
+            "hex",
+            "libc",
+            "nexus-kernel",
+            "png",
+            "reqwest",
+            "serde",
+            "serde_json",
+            "sha2",
+            "tokio",
+            "unicode-segmentation",
+            "url",
+            "x11rb",
+            "zeroize",
+        ])
+    );
+    assert_eq!(
+        direct("app/src-tauri/Cargo.toml"),
+        pinned(&[
+            "base64",
+            "chrono",
+            "dirs",
+            "gtk",
+            "hex",
+            "nexus-a2a",
+            "nexus-adaptation",
+            "nexus-agent-memory",
+            "nexus-airgap",
+            "nexus-auth",
+            "nexus-browser-agent",
+            "nexus-capability-measurement",
+            "nexus-code",
+            "nexus-collab-protocol",
+            "nexus-computer-control",
+            "nexus-computer-use",
+            "nexus-conductor",
+            "nexus-connectors-core",
+            "nexus-connectors-llm",
+            "nexus-connectors-messaging",
+            "nexus-connectors-social",
+            "nexus-connectors-web",
+            "nexus-crypto",
+            "nexus-distributed",
+            "nexus-enterprise",
+            "nexus-external-tools",
+            "nexus-factory",
+            "nexus-flash-infer",
+            "nexus-governance-engine",
+            "nexus-governance-evolution",
+            "nexus-governance-oracle",
+            "nexus-governed-control",
+            "nexus-integrations",
+            "nexus-kernel",
+            "nexus-marketplace",
+            "nexus-mcp",
+            "nexus-memory",
+            "nexus-metering",
+            "nexus-migrate",
+            "nexus-perception",
+            "nexus-persistence",
+            "nexus-predictive-router",
+            "nexus-protocols",
+            "nexus-sdk",
+            "nexus-self-improve",
+            "nexus-software-factory",
+            "nexus-swarm",
+            "nexus-telemetry",
+            "nexus-tenancy",
+            "nexus-token-economy",
+            "nexus-verifier-sandbox",
+            "nexus-world-simulation",
+            "open",
+            "reqwest",
+            "rusqlite",
+            "rustix",
+            "serde",
+            "serde_json",
+            "sha2",
+            "social-poster-agent",
+            "sysinfo",
+            "tauri",
+            "tauri-plugin-dialog",
+            "tauri-plugin-global-shortcut",
+            "tokio",
+            "tokio-util",
+            "toml",
+            "urlencoding",
+            "uuid",
+            "web-builder-agent",
+            "windows-sys",
+            "zip",
+        ])
+    );
+    // The toolkit's own classification: the native approval window's APIs
+    // are allowed and nothing else of it; each mechanism it offers is
+    // classified as one.
+    for (path, kinds) in [
+        ("gtk::Dialog::new", &[][..]),
+        ("gtk::glib::timeout_add_local_once", &[][..]),
+        (
+            "gtk::glib::spawn_command_line_async",
+            &["process", "toolkit"][..],
+        ),
+        ("gtk::gio::Subprocess::newv", &["process", "toolkit"][..]),
+        (
+            "gtk::gio::AppInfo::launch_default_for_uri",
+            &["process", "toolkit"][..],
+        ),
+        ("gtk::show_uri_on_window", &["process", "toolkit"][..]),
+        (
+            "gtk::gdk::Window::default_root_window",
+            &["device", "toolkit"][..],
+        ),
+        ("gtk::gdk::Screen::default", &["device", "toolkit"][..]),
+        ("gtk::gio::SocketClient::new", &["network", "toolkit"][..]),
+        ("gtk::Entry::new", &["toolkit"][..]),
+        ("glib::spawn_async", &["process", "toolkit"][..]),
+        ("webkit2gtk::WebView::new", &["toolkit"][..]),
+    ] {
+        let path: Vec<String> = path.split("::").map(str::to_string).collect();
+        let found: Vec<&str> = effect_kinds(&path).into_iter().collect();
+        assert_eq!(found, kinds, "{}", path.join("::"));
+    }
+}
+
 /// §25 (audit P32): only the browser and the agent display launch a session
 /// process, each with the executable it pinned.
 #[test]
@@ -8006,7 +8437,11 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
         &[
             "letproxy=BrowserProxy::start(OriginPolicy{",
             "live:guard.liveness()}",
+            "args.extend(proxy_switches(session,proxy.port()));",
+            "no_machine_policy(&session.policies).map_err(",
+            "let_process=SessionProcess::launch(SessionSpec{",
             "ifletSome(reason)=guard.lapse(){returnErr(before((FailureClass::Refused,reason.into())));}letstart=page.navigate(&session.start).map_err(before)?;",
+            "letstarted_ok=start.get(\"refused\").is_none();ifproxy.seen()==0||(started_ok&&proxy.opened()==0){returnErr(before((FailureClass::Refused,",
             "ifletSome(reason)=guard.lapse(){returnErr(at((FailureClass::Refused,reason.into())));}",
             "page.close_popups().map_err(at)?;",
             "page.step(step).map_err(at)?;",
@@ -8049,6 +8484,33 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
         compact(one_fn(proxy, "may_go_on").body_text(proxy)),
         "!stop.load(Ordering::SeqCst)&&(policy.live)()"
     );
+    // Every connection through the proxy (no bypass, not even loopback):
+    // the production switches (direct connections exist only in the crate's
+    // own tests).
+    let switches = compact(one_fn(browser, "proxy_switches").body_text(browser));
+    assert_eq!(
+        switches,
+        "let_=session;vec![format!(\"--proxy-server=http://127.0.0.1:{port}\"),\"--proxy-bypass-list=<-loopback>\".into()]"
+    );
+    // No machine policy that could override the proxy, when a session is
+    // prepared and again before launch.
+    let prepare = compact(one_fn(browser, "Browser::prepare").body_text(browser));
+    assert_in_order(
+        &prepare,
+        &[
+            "letidentity=pinned(Path::new(self.executable),self.trust)?;",
+            "no_machine_policy(&self.policies)?;",
+            "covering_grant(authority,&needed,&identity.digest)?;",
+        ],
+        "Browser::prepare",
+    );
+    let new = compact(one_fn(browser, "Browser::new").body_text(browser));
+    assert!(
+        new.contains(
+            "allow_private:false,policies:POLICY_ROOTS.iter().map(PathBuf::from).collect(),"
+        ),
+        "{new}"
+    );
     // When the session may no longer go out, the traffic stops and the port
     // stays the session's: new connections are closed unserved until the
     // session ends.
@@ -8079,8 +8541,8 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
             "letgo_on=||may_go_on(policy,stop);",
             "read_head(&mutclient,stop)else{returnrefuse(client);};if!go_on(){returnrefuse(client);}",
             "connect(&addresses,go_on)",
-            "if!go_on(){returnrefuse(client);}ifclient.write_all(",
-            "connect(&addresses,go_on)",
+            "if!go_on(){returnrefuse(client);}opened.fetch_add(1,Ordering::SeqCst);ifclient.write_all(",
+            "connect(&addresses,go_on)else{returnrefuse(client);};opened.fetch_add(1,Ordering::SeqCst);",
             "if!go_on(){returnrefuse(client);}ifupstream.write_all(forwarded.as_bytes())",
         ],
         "serve",
@@ -8116,7 +8578,8 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
 /// same name elsewhere counts too).
 #[test]
 fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
-    // The methods that take the lock, and those that call one of them.
+    // The methods that touch the loops (a lock: whatever it is called
+    // through), and those that call one of them, however spelled.
     let kernel = production_source("kernel/src/cognitive/loop_runtime.rs");
     let methods: Vec<(String, String)> = fn_items(kernel)
         .into_iter()
@@ -8124,17 +8587,14 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
         .collect();
     let mut locking: BTreeSet<String> = methods
         .iter()
-        .filter(|(_, body)| body.contains("self.loops.lock()"))
+        .filter(|(_, body)| body.contains("self.loops"))
         .map(|(name, _)| name.clone())
         .collect();
     loop {
         let more: Vec<String> = methods
             .iter()
             .filter(|(name, body)| {
-                !locking.contains(name)
-                    && locking
-                        .iter()
-                        .any(|method| body.contains(&format!("self.{method}(")))
+                !locking.contains(name) && locking.iter().any(|method| reaches(body, method))
             })
             .map(|(name, _)| name.clone())
             .collect();
@@ -8168,16 +8628,35 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
             }
         }
     }
-    let takes_lock = |body: &str| {
-        locking
-            .iter()
-            .any(|method| body.contains(&format!("cognitive_runtime.{method}(")))
+    // A loops method reached however it is spelled: a call on any receiver
+    // (renamed, aliased, a field of anything), a path (`Type::method`, an
+    // imported alias of the type), or the method as a value. A method of
+    // another type that merely shares a name counts too, unless it is one
+    // of the reviewed calls below, pinned exactly.
+    let takes_lock = |file: &str, item: &FnItem, body: &str| {
+        let mut body = body.to_string();
+        for (reviewed, function, call, receiver) in NOT_THE_LOOPS {
+            if file == *reviewed && item.path == *function && body.contains(receiver) {
+                body = body.replace(call, "");
+            }
+        }
+        locking.iter().any(|method| reaches(&body, method))
     };
     let mut waiting: BTreeSet<String> = bodies
         .iter()
-        .filter(|(_, _, body)| takes_lock(body))
+        .filter(|(file, item, body)| takes_lock(file, item, body))
         .map(|(_, item, _)| item.name.clone())
         .collect();
+    // The reviewed calls of another type's same-named method are exactly
+    // there, on exactly that receiver.
+    for (file, function, call, receiver) in NOT_THE_LOOPS {
+        let (_, _, body) = bodies
+            .iter()
+            .find(|(f, item, _)| f == file && item.path == *function)
+            .unwrap_or_else(|| panic!("{file} {function}"));
+        assert_eq!(body.matches(call).count(), 1, "{function}");
+        assert!(body.contains(receiver), "{function}: {body}");
+    }
     loop {
         let more: Vec<String> = bodies
             .iter()
@@ -8204,6 +8683,7 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
                 "approve",
                 "approve_consent_request",
                 "assign_agent_goal",
+                "await_subtask",
                 "batch_approve_consents",
                 "batch_deny_consents",
                 "deny_consent_request",
@@ -8234,7 +8714,7 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
         }
         checked += 1;
         assert!(
-            !takes_lock(body),
+            !takes_lock(file, item, body),
             "{file} {} waits on the loops' lock",
             item.path
         );
@@ -8262,6 +8742,24 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
         "letf=execute_agent_goal_count;",
         "execute_agent_goal"
     ));
+    // Every spelling of a loops call is seen: the receiver as written, a
+    // renamed or aliased receiver, a type path, an imported alias of the
+    // type, the method as a value; a longer name is not.
+    for spelled in [
+        "state.cognitive_runtime.get_agent_status(id)",
+        "letrt=&state.cognitive_runtime;rt.get_agent_status(id)",
+        "CognitiveRuntime::get_agent_status(&state.cognitive_runtime,id)",
+        "Runtime::get_agent_status(&rt,id)",
+        "letf=CognitiveRuntime::get_agent_status;f(&rt,id)",
+        "<CognitiveRuntime>::get_agent_status(&rt,id)",
+    ] {
+        assert!(reaches(spelled, "get_agent_status"), "{spelled}");
+    }
+    assert!(!reaches(
+        "rt.get_agent_status_count(id)",
+        "get_agent_status"
+    ));
+    assert!(!reaches("get_agent_status(id)", "get_agent_status"));
     assert!(
         outside_spawned("spawn(move||{assign_agent_goal(x)}).join()")
             .contains("assign_agent_goal(")
@@ -8293,16 +8791,111 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
     }
     assert_eq!(compact(lib).matches("CONSENT_DECISIONS:").count(), 1);
     // A HiveMind session runs on a thread of its own, not on a runtime
-    // worker: its sub-tasks' loops must be free to run while it waits.
+    // worker: its sub-tasks' loops must be free to run while it waits. It
+    // is admitted (bounded, rate limited) before the thread starts, and the
+    // thread owns it (`p3_c9_hivemind_sessions_are_bounded_and_signalled`).
     let hivemind = one_fn(lib, "start_hivemind");
     assert_eq!(hivemind.head, "#[command]async");
     assert_in_order(
         &compact(hivemind.body_text(lib)),
         &[
-            ".name(\"nexus-hivemind\".into()).spawn(move||{let_=done.send(start_hivemind(&state,goal,agent_ids));})",
+            "letsession=admit_hivemind(&state)?;",
+            ".name(\"nexus-hivemind\".into()).spawn(move||{let_=done.send(start_hivemind(&state,&session,goal,agent_ids));})",
             "result.await",
         ],
         "start_hivemind",
+    );
+}
+
+/// Candidate 9 (C8-5): HiveMind sessions are bounded and signalled. A start
+/// is admitted (its place taken under the same lock that checks the cap,
+/// then the agent-execution rate limit) before any thread starts; the
+/// thread owns the session, whose drop gives the place back; the owner's
+/// cancellation, both emergency stops and quitting signal sessions; no
+/// session starts once the desktop quits.
+#[test]
+fn p3_c9_hivemind_sessions_are_bounded_and_signalled() {
+    let hive = production_source("app/src-tauri/src/commands/cognitive/hive.rs");
+    for (path, body) in [
+        (
+            "HiveSessions::admit",
+            "letmuttable=self.table();iftable.quitting{returnErr(\"hivemind: the desktop is quitting\".to_string());}iftable.live.len()>=MAX_SESSIONS{returnErr(format!(\"hivemind: at most {MAX_SESSIONS} sessions run at once\"));}letid=Uuid::new_v4().to_string();letcancelled=Arc::new(AtomicBool::new(false));table.live.insert(id.clone(),cancelled.clone());Ok(HiveSession{sessions:self.clone(),id,cancelled})",
+        ),
+        (
+            "HiveSessions::cancel",
+            "self.table().live.get(id).map(|cancelled|cancelled.store(true,Ordering::SeqCst)).is_some()",
+        ),
+        (
+            "HiveSessions::cancel_all",
+            "lettable=self.table();forcancelledintable.live.values(){cancelled.store(true,Ordering::SeqCst);}table.live.len()",
+        ),
+        (
+            "HiveSessions::close",
+            "letmuttable=self.table();table.quitting=true;forcancelledintable.live.values(){cancelled.store(true,Ordering::SeqCst);}table.live.len()",
+        ),
+        (
+            "HiveSession::drop",
+            "self.sessions.table().live.remove(&self.id);",
+        ),
+    ] {
+        assert_eq!(compact(one_fn(hive, path).body_text(hive)), body, "{path}");
+    }
+    assert!(hive.contains("pub(crate) const MAX_SESSIONS: usize = 2;"));
+    let cognitive = production_source("app/src-tauri/src/commands/cognitive.rs");
+    assert_eq!(
+        compact(one_fn(cognitive, "admit_hivemind").body_text(cognitive)),
+        "letsession=state.hive_sessions.admit()?;state.check_rate(RateCategory::AgentExecute)?;state.log_event(SYSTEM_UUID,EventType::StateChange,json!({\"action\":\"hivemind_session_admitted\",\"session\":session.id()}));Ok(session)"
+    );
+    assert!(
+        compact(one_fn(cognitive, "cancel_hivemind").body_text(cognitive))
+            .starts_with("ifstate.hive_sessions.cancel(&session_id){")
+    );
+    // Every session's sub-tasks go through the session: one executor.
+    assert!(compact(one_fn(cognitive, "start_hivemind").body_text(cognitive)).contains(
+        ".execute_with_executor(&goal,agents,|_task_id,assigned_agent_id,task_desc|{execute_hivemind_subtask(state,session,assigned_agent_id,task_desc)})"
+    ));
+    // The emergency stops and quitting signal the sessions.
+    let lib_rs = "app/src-tauri/src/lib.rs";
+    let lib = production_source(lib_rs);
+    let stop = lib.find("activate_emergency_kill_switch();").unwrap();
+    let upto = lib[stop..].find("log_event(").unwrap();
+    let handler = without_whitespace(&lib[stop..stop + upto]);
+    assert!(
+        handler.contains(
+            "ifletOk(world)=state.real_world(){world.emergency_stop();}state.hive_sessions.cancel_all();"
+        ),
+        "the emergency key does not stop HiveMind sessions: {handler}"
+    );
+    let front = production_source(P3_FRONT_DOOR);
+    assert_eq!(
+        compact(one_fn(front, "p3_emergency_stop").body_text(front)),
+        "letstopped=world(state.inner()).map(|world|world.emergency_stop());state.inner().hive_sessions.cancel_all();stopped",
+        "the Phase Three emergency stop does not stop HiveMind sessions"
+    );
+    let exit = &lib[lib.find("RunEvent::Exit").unwrap() + "RunEvent::Exit".len()..];
+    let arm = without_whitespace(&exit[..exit.find("RunEvent::").unwrap_or(exit.len())]);
+    assert!(
+        arm.contains("app.state::<AppState>().hive_sessions.close();"),
+        "quitting does not close HiveMind sessions: {arm}"
+    );
+    // Every mention of the sessions and their admission, pinned.
+    let at = |file: &'static str, function: &str| (file, function.to_string());
+    let cognitive_rs = "app/src-tauri/src/commands/cognitive.rs";
+    assert_eq!(
+        mentions(DESKTOP_SRC, "admit_hivemind"),
+        vec![at(lib_rs, "start_hivemind")]
+    );
+    assert_eq!(
+        mentions(DESKTOP_SRC, "hive_sessions"),
+        vec![
+            at(cognitive_rs, "admit_hivemind"),
+            at(cognitive_rs, "cancel_hivemind"),
+            at(P3_FRONT_DOOR, "p3_emergency_stop"),
+            at(lib_rs, ""),
+            at(lib_rs, "AppState::new"),
+            at(lib_rs, "run"),
+            at(lib_rs, "run"),
+        ]
     );
 }
 
@@ -8369,6 +8962,31 @@ fn calls(text: &str, name: &str) -> bool {
 /// function bound to a name (`=name;`) or passed as the first argument
 /// (`(name,`, `(name)`) to be called later. (A list naming commands, such
 /// as their registration, is not a use.)
+/// Calls of another type's method that shares a loops method's name,
+/// reviewed: (file, function, the exact call, the receiver's binding).
+const NOT_THE_LOOPS: &[(&str, &str, &str, &str)] = &[(
+    "app/src-tauri/src/commands/crate_bridges.rs",
+    "governance_evolution_run_attack_cycle",
+    "evo.run_cycle(",
+    "letmutevo=state.governance_evolution.lock()",
+)];
+
+/// Whether `text` (compacted) reaches the method `method`: a call on any
+/// receiver, a path to it (a call, or the method as a value), however the
+/// receiver or the type is spelled.
+fn reaches(text: &str, method: &str) -> bool {
+    let named = |marker: &str| {
+        text.match_indices(&format!("{marker}{method}"))
+            .any(|(at, found)| {
+                !text[at + found.len()..]
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphanumeric() || c == '_')
+            })
+    };
+    named(".") || named("::")
+}
+
 fn uses(text: &str, name: &str) -> bool {
     calls(text, name)
         || text.match_indices(name).any(|(at, _)| {

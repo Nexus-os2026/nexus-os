@@ -2026,7 +2026,8 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
                         };
 
                         let consent_id = Uuid::new_v4().to_string();
-                        let notify = state.register_blocked_consent_wait(&agent_id, &consent_id);
+                        let notify =
+                            state.register_blocked_consent_wait(&agent_id, &goal_id, &consent_id);
                         let now = {
                             use chrono::Utc;
                             Utc::now().to_rfc3339()
@@ -2272,16 +2273,20 @@ pub(crate) fn spawn_cognitive_loop_with_bridge(
     });
 }
 
-/// Whether the supervisor records the agent as stopped (or destroyed): its
-/// loop runs no further cycle and a HiveMind session gives it no sub-task.
+/// Whether the agent has no authority to run: the supervisor records it as
+/// stopped (or destroyed), or holds no record of it at all (an id that is
+/// not one, or an agent cleared or never registered). Its loop runs no
+/// further cycle and a HiveMind session gives it no sub-task. A missing
+/// agent counts as stopped, as at the scheduler's tick and Phase Three's
+/// bridge (which also refuses a paused one).
 pub(crate) fn agent_stopped(state: &AppState, agent_id: &str) -> bool {
-    Uuid::parse_str(agent_id).is_ok_and(|id| {
+    Uuid::parse_str(agent_id).ok().is_none_or(|id| {
         state
             .supervisor
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .get_agent(id)
-            .is_some_and(|handle| {
+            .is_none_or(|handle| {
                 matches!(
                     handle.state,
                     AgentState::Stopping | AgentState::Stopped | AgentState::Destroyed
@@ -2291,17 +2296,16 @@ pub(crate) fn agent_stopped(state: &AppState, agent_id: &str) -> bool {
 }
 
 /// End the agent's loop only while it still drives `goal_id` (a goal given
-/// since is left alone), for the scheduler's or a session's own reasons:
-/// not an owner's action, so none is recorded. Waits while any agent's
-/// cycle holds the loop lock.
+/// since is left alone: compared and removed under the loops' one guard),
+/// and wake only that goal's consent wait, for the scheduler's or a
+/// session's own reasons: not an owner's action, so none is recorded.
+/// Waits while any agent's cycle holds the loop lock.
 fn end_goal_loop(state: &AppState, agent_id: &str, goal_id: &str) {
-    let ours = state
+    if state
         .cognitive_runtime
-        .get_agent_status_fast(agent_id)
-        .and_then(|status| status.active_goal)
-        .is_some_and(|goal| goal.id == goal_id);
-    if ours && state.cognitive_runtime.stop_agent_loop(agent_id).is_ok() {
-        state.wake_and_clear_blocked_consent_wait(agent_id);
+        .stop_agent_loop_if(agent_id, goal_id)
+    {
+        state.wake_and_clear_goal_consent_wait(agent_id, goal_id);
     }
 }
 
@@ -2321,11 +2325,21 @@ pub(crate) fn end_agent_loop(state: &AppState, agent_id: &str) -> Result<(), Str
     Ok(())
 }
 
+/// The longest a HiveMind sub-task's goal may run.
+const SUBTASK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// Run one sub-task of `session` on `agent_id`: assign its goal, start its
+/// loop, and wait for the goal to end. A cancelled session assigns no
+/// further sub-task, and a stopped agent takes none.
 pub(crate) fn execute_hivemind_subtask(
     state: &AppState,
+    session: &hive::HiveSession,
     agent_id: &str,
     description: &str,
 ) -> Result<String, String> {
+    if session.cancelled() {
+        return Err(hive::SESSION_CANCELLED.to_string());
+    }
     // A stopped agent takes no sub-task: an owner's stop ends its part in a
     // session (which reassigns the sub-task, or fails it).
     if agent_stopped(state, agent_id) {
@@ -2338,20 +2352,49 @@ pub(crate) fn execute_hivemind_subtask(
         5,
         None,
     )?;
+    // A cancellation that came while the goal was assigned: it ends before
+    // its loop starts.
+    if session.cancelled() {
+        end_goal_loop(state, agent_id, &goal_id);
+        return Err(hive::SESSION_CANCELLED.to_string());
+    }
     spawn_cognitive_loop_with_bridge(
         BackendEventBridge::default(),
         state.clone(),
         agent_id.to_string(),
         goal_id.clone(),
     );
+    await_subtask(
+        state,
+        session,
+        agent_id,
+        &goal_id,
+        description,
+        SUBTASK_TIMEOUT,
+    )
+}
 
+/// Wait (polling, within `timeout`) for a sub-task's goal to end. The
+/// session's cancellation or its time limit ends only this goal; the
+/// owner's stop of the agent has ended its loop already.
+fn await_subtask(
+    state: &AppState,
+    session: &hive::HiveSession,
+    agent_id: &str,
+    goal_id: &str,
+    description: &str,
+    timeout: std::time::Duration,
+) -> Result<String, String> {
     let started = std::time::Instant::now();
-    let timeout = std::time::Duration::from_secs(300);
     loop {
+        if session.cancelled() {
+            end_goal_loop(state, agent_id, goal_id);
+            return Err(hive::SESSION_CANCELLED.to_string());
+        }
         if started.elapsed() >= timeout {
             // The session's own limit, not an owner's stop: only this
             // sub-task's goal ends.
-            end_goal_loop(state, agent_id, &goal_id);
+            end_goal_loop(state, agent_id, goal_id);
             return Err(format!("sub-task timed out after {}s", timeout.as_secs()));
         }
         // The owner stopped the agent: its loop has ended, and the sub-task
@@ -2512,8 +2555,24 @@ pub(crate) fn trigger_cross_agent_learning(state: &AppState) -> Result<u32, Stri
 
 // ── Hivemind Orchestration Commands ──
 
+/// Admit a HiveMind session before any thread is started for it: within
+/// the cap on sessions at once, then the agent-execution rate limit (a
+/// refusal there gives the place back). The owner cancels it by the
+/// identity recorded here.
+pub(crate) fn admit_hivemind(state: &AppState) -> Result<hive::HiveSession, String> {
+    let session = state.hive_sessions.admit()?;
+    state.check_rate(nexus_kernel::rate_limit::RateCategory::AgentExecute)?;
+    state.log_event(
+        SYSTEM_UUID,
+        EventType::StateChange,
+        json!({"action": "hivemind_session_admitted", "session": session.id()}),
+    );
+    Ok(session)
+}
+
 pub(crate) fn start_hivemind(
     state: &AppState,
+    session: &hive::HiveSession,
     goal: String,
     agent_ids: Vec<String>,
 ) -> Result<serde_json::Value, String> {
@@ -2535,26 +2594,26 @@ pub(crate) fn start_hivemind(
         .collect();
     drop(supervisor);
 
-    let session = state
+    let outcome = state
         .hivemind
         .execute_with_executor(&goal, agents, |_task_id, assigned_agent_id, task_desc| {
-            execute_hivemind_subtask(state, assigned_agent_id, task_desc)
+            execute_hivemind_subtask(state, session, assigned_agent_id, task_desc)
         })
         .map_err(|e| e.to_string())?;
 
     // Persist session
     let row = nexus_persistence::HivemindSessionRow {
-        id: session.id.clone(),
-        goal: session.master_goal.clone(),
-        status: format!("{:?}", session.status),
-        sub_tasks_json: serde_json::to_string(&session.sub_tasks)
+        id: outcome.id.clone(),
+        goal: outcome.master_goal.clone(),
+        status: format!("{:?}", outcome.status),
+        sub_tasks_json: serde_json::to_string(&outcome.sub_tasks)
             .unwrap_or_else(|_| "[]".to_string()),
-        assignments_json: serde_json::to_string(&session.assignments)
+        assignments_json: serde_json::to_string(&outcome.assignments)
             .unwrap_or_else(|_| "{}".to_string()),
-        results_json: serde_json::to_string(&session.results).unwrap_or_else(|_| "{}".to_string()),
-        fuel_consumed: session.total_fuel_consumed,
-        started_at: session.started_at.clone(),
-        completed_at: session.completed_at.clone(),
+        results_json: serde_json::to_string(&outcome.results).unwrap_or_else(|_| "{}".to_string()),
+        fuel_consumed: outcome.total_fuel_consumed,
+        started_at: outcome.started_at.clone(),
+        completed_at: outcome.completed_at.clone(),
     };
     // Best-effort: persist hivemind session for history; in-memory state is authoritative
     let _ = state.db.save_hivemind_session(&row);
@@ -2562,10 +2621,15 @@ pub(crate) fn start_hivemind(
     state.log_event(
         SYSTEM_UUID,
         EventType::StateChange,
-        json!({"action": "start_hivemind", "session_id": session.id, "goal": goal}),
+        json!({
+            "action": "start_hivemind",
+            "session_id": outcome.id,
+            "session": session.id(),
+            "goal": goal,
+        }),
     );
 
-    serde_json::to_value(&session).map_err(|e| format!("serialize error: {e}"))
+    serde_json::to_value(&outcome).map_err(|e| format!("serialize error: {e}"))
 }
 
 pub(crate) fn get_hivemind_status(
@@ -2586,6 +2650,16 @@ pub(crate) fn get_hivemind_status(
 }
 
 pub(crate) fn cancel_hivemind(state: &AppState, session_id: String) -> Result<(), String> {
+    // A session under way (by the identity its admission recorded) is told
+    // to stop: it assigns no further sub-task, and the one it waits on ends.
+    if state.hive_sessions.cancel(&session_id) {
+        state.log_event(
+            SYSTEM_UUID,
+            EventType::UserAction,
+            json!({"action": "cancel_hivemind", "session": session_id}),
+        );
+        return Ok(());
+    }
     state
         .hivemind
         .cancel_session(&session_id)
@@ -2643,7 +2717,13 @@ pub(crate) fn set_default_agent(
     Ok(())
 }
 
+pub(crate) mod hive;
+
+#[cfg(test)]
+mod hive_tests;
 #[cfg(test)]
 mod lock_tests;
 #[cfg(test)]
 mod scheduled_tests;
+#[cfg(test)]
+mod stop_tests;

@@ -820,14 +820,17 @@ fn a_stop_wins_over_a_start_and_nothing_starts_unrecorded() {
 }
 
 /// A drag interrupted after its press point was covered is let go where it
-/// began while its own application is on top there (a drag image, its
-/// popup). When another application covers it: after an Escape to the
-/// source if the keyboard focus is on the source; otherwise on the bare
-/// display; with none left, where it began. No key reaches a window that
-/// was not approved.
+/// began only while exactly its source window is on top there. Covered,
+/// by another application or by another window of the source's own (a
+/// second top-level window, a drag image above another application's
+/// window), it is let go on the bare display, a corner no window covers,
+/// even when the source holds the focus; with none left, after an Escape
+/// to the source only if the source holds the keyboard focus and no client
+/// holds a keyboard grab; then where it began. No key reaches a window
+/// that was not approved.
 #[test]
 fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
-    use x11rb::protocol::xproto::InputFocus;
+    use x11rb::protocol::xproto::{GrabMode, GrabStatus, InputFocus};
     let Some((display, _root)) = display() else {
         return;
     };
@@ -843,19 +846,75 @@ fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
         width: 640,
         height: 480,
     };
-    // What covers the press point, whether it is the source's own
-    // application's window, whether the source holds the keyboard focus,
-    // and what the windows receive.
-    for (over, own, focused, expected) in [
-        (partly, false, false, &["press", "release 1 1"][..]),
-        (all, false, false, &["press", "release 50 50"][..]),
+    let image = Rect {
+        x: 45,
+        y: 45,
+        width: 12,
+        height: 12,
+    };
+    /// What covers the press point.
+    #[derive(Clone, Copy, Debug)]
+    enum Over {
+        /// Another application's window.
+        Other(Rect),
+        /// Another top-level window of the source's own application.
+        Own(Rect),
+        /// Another application's window, under a drag image of the
+        /// source's own application.
+        ImageAbove(Rect),
+    }
+    // What covers the press point, whether the source holds the keyboard
+    // focus, whether another client holds a keyboard grab, and what the
+    // windows receive.
+    for (over, focused, grabbed, expected) in [
         (
-            all,
+            Over::Other(partly),
             false,
+            false,
+            &["press", "release 1 1"][..],
+        ),
+        (
+            Over::Other(all),
+            false,
+            false,
+            &["press", "release 50 50"][..],
+        ),
+        (
+            Over::Other(all),
             true,
+            false,
             &["press", "key 9 source", "release 50 50"][..],
         ),
-        (partly, true, false, &["press", "release 50 50"][..]),
+        // The source's own second window is not the source.
+        (
+            Over::Own(partly),
+            false,
+            false,
+            &["press", "release 1 1"][..],
+        ),
+        // A drag image of the source over another application's window
+        // is not the source either.
+        (
+            Over::ImageAbove(partly),
+            false,
+            false,
+            &["press", "release 1 1"][..],
+        ),
+        // A bare corner is preferred to an Escape, focus or not.
+        (
+            Over::Other(partly),
+            true,
+            false,
+            &["press", "release 1 1"][..],
+        ),
+        // Another client holds a keyboard grab: no Escape, which it would
+        // receive.
+        (
+            Over::Other(all),
+            true,
+            true,
+            &["press", "release 50 50"][..],
+        ),
     ] {
         let h = harness();
         grant_perception(&h);
@@ -932,7 +991,32 @@ fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
                                 height: 100,
                             },
                         );
-                        window(if own { &client } else { &other }, "Over", over);
+                        match over {
+                            Over::Other(rect) => {
+                                window(&other, "Over", rect);
+                            }
+                            Over::Own(rect) => {
+                                window(&client, "Over", rect);
+                            }
+                            Over::ImageAbove(rect) => {
+                                window(&other, "Over", rect);
+                                window(&client, "Image", image);
+                            }
+                        }
+                        if grabbed {
+                            let grab = other
+                                .grab_keyboard(
+                                    false,
+                                    other.setup().roots[0].root,
+                                    x11rb::CURRENT_TIME,
+                                    GrabMode::ASYNC,
+                                    GrabMode::ASYNC,
+                                )
+                                .unwrap()
+                                .reply()
+                                .unwrap();
+                            assert_eq!(grab.status, GrabStatus::SUCCESS);
+                        }
                     }
                     Some(Event::KeyPress(key)) => {
                         let to = if key.event == source { "source" } else { "own" };
@@ -960,7 +1044,7 @@ fn an_interrupted_drag_is_let_go_where_it_began_or_on_nothing() {
         assert_eq!(
             watcher.join().unwrap(),
             expected,
-            "over {over:?}, own {own}, focused {focused}"
+            "over {over:?}, focused {focused}, grabbed {grabbed}"
         );
     }
 }

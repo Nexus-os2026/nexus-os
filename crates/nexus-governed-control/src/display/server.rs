@@ -383,14 +383,6 @@ impl AgentServer {
             .unwrap_or((0, 0))
     }
 
-    /// Whether two windows belong to one client: an application's own
-    /// windows (such as the image its toolkit drags under the pointer)
-    /// share that client's resource-id base.
-    pub(crate) fn same_client(&self, a: u32, b: u32) -> bool {
-        let mask = self.conn.lock().expect("display").setup().resource_id_mask;
-        a != 0 && b != 0 && (a & !mask) == (b & !mask)
-    }
-
     /// The top-most viewable window containing the point, if any.
     pub(crate) fn window_at(&self, x: u16, y: u16) -> Option<WindowInfo> {
         self.windows()
@@ -496,6 +488,27 @@ impl AgentServer {
             .is_some_and(|r| r.status == GrabStatus::SUCCESS);
         let _ = conn.ungrab_pointer(x11rb::CURRENT_TIME);
         Self::sync(&conn).is_ok() && keyboard && pointer
+    }
+
+    /// Whether no client holds an active keyboard grab, which would receive
+    /// the next key event wherever the focus is. Called while the server is
+    /// held: Nexus's own probing grab is released at once, before any event
+    /// is sent.
+    pub(crate) fn keyboard_free(&self) -> bool {
+        let conn = self.conn.lock().expect("display");
+        let keyboard = conn
+            .grab_keyboard(
+                false,
+                self.root,
+                x11rb::CURRENT_TIME,
+                GrabMode::ASYNC,
+                GrabMode::ASYNC,
+            )
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .is_some_and(|r| r.status == GrabStatus::SUCCESS);
+        let _ = conn.ungrab_keyboard(x11rb::CURRENT_TIME);
+        Self::sync(&conn).is_ok() && keyboard
     }
 
     fn sync(conn: &RustConnection) -> Result<(), AuthorityError> {

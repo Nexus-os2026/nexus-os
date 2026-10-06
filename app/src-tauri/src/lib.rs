@@ -787,6 +787,8 @@ struct VoiceProcess {
 #[derive(Clone)]
 struct BlockedConsentWait {
     consent_id: String,
+    /// The goal whose loop waits: a goal's own cleanup wakes only its wait.
+    goal_id: String,
     notify: Arc<Notify>,
 }
 
@@ -944,6 +946,8 @@ pub struct AppState {
     /// the top of each cycle and exits cleanly when set.
     pub cognitive_cancellations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     hivemind: Arc<nexus_kernel::cognitive::HivemindCoordinator>,
+    /// The HiveMind sessions under way: bounded, each cancellable.
+    hive_sessions: Arc<commands::cognitive::hive::HiveSessions>,
     message_gateway: Arc<Mutex<MessageGateway>>,
     pub evolution_tracker: Arc<nexus_kernel::cognitive::EvolutionTracker>,
     auto_evolution: Arc<AutoEvolutionManager>,
@@ -1352,6 +1356,7 @@ impl AppState {
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),
+            hive_sessions: Arc::default(),
             message_gateway: Arc::new(Mutex::new({
                 let mut gw = MessageGateway::new();
                 // Register enabled platforms from environment
@@ -1714,6 +1719,7 @@ impl AppState {
                 Arc::new(nexus_kernel::cognitive::hivemind::NoOpHivemindEmitter),
                 Arc::new(Mutex::new(AuditTrail::new())),
             )),
+            hive_sessions: Arc::default(),
             message_gateway: Arc::new(Mutex::new(MessageGateway::new())),
             evolution_tracker,
             auto_evolution: Arc::new(AutoEvolutionManager::new()),
@@ -1888,7 +1894,12 @@ impl AppState {
             .map_err(|e| e.to_string())
     }
 
-    pub fn register_blocked_consent_wait(&self, agent_id: &str, consent_id: &str) -> Arc<Notify> {
+    pub fn register_blocked_consent_wait(
+        &self,
+        agent_id: &str,
+        goal_id: &str,
+        consent_id: &str,
+    ) -> Arc<Notify> {
         let notify = Arc::new(Notify::new());
         self.blocked_consent_waits
             .lock()
@@ -1897,6 +1908,7 @@ impl AppState {
                 agent_id.to_string(),
                 BlockedConsentWait {
                     consent_id: consent_id.to_string(),
+                    goal_id: goal_id.to_string(),
                     notify: notify.clone(),
                 },
             );
@@ -1938,6 +1950,31 @@ impl AppState {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .remove(agent_id);
+        if let Some(wait) = wait {
+            wait.notify.notify_one();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Wake the agent's consent wait only if `goal_id`'s loop is the one
+    /// waiting: a newer goal's wait is left alone.
+    fn wake_and_clear_goal_consent_wait(&self, agent_id: &str, goal_id: &str) -> bool {
+        let wait = {
+            let mut waits = self
+                .blocked_consent_waits
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            if waits
+                .get(agent_id)
+                .is_some_and(|wait| wait.goal_id == goal_id)
+            {
+                waits.remove(agent_id)
+            } else {
+                None
+            }
+        };
         if let Some(wait) = wait {
             wait.notify.notify_one();
             true
@@ -6758,11 +6795,15 @@ pub mod runtime {
         agent_ids: Vec<String>,
     ) -> Result<serde_json::Value, String> {
         let state = state.inner().clone();
+        // Admitted (or refused) before any thread starts. The thread owns
+        // the session: its place is given back when the thread ends, or
+        // here if the thread cannot start.
+        let session = super::admit_hivemind(&state)?;
         let (done, result) = tokio::sync::oneshot::channel();
         std::thread::Builder::new()
             .name("nexus-hivemind".into())
             .spawn(move || {
-                let _ = done.send(super::start_hivemind(&state, goal, agent_ids));
+                let _ = done.send(super::start_hivemind(&state, &session, goal, agent_ids));
             })
             .map_err(|e| format!("hivemind: {e}"))?;
         result
@@ -7957,6 +7998,9 @@ pub mod runtime {
                         if let Ok(world) = state.real_world() {
                             world.emergency_stop();
                         }
+                        // HiveMind sessions too: none assigns another
+                        // sub-task, and the ones they wait on end.
+                        state.hive_sessions.cancel_all();
 
                         state.log_event(
                             SYSTEM_UUID,
@@ -8994,6 +9038,9 @@ pub mod runtime {
                     {
                         eprintln!("[shutdown] {error}");
                     }
+                    // No HiveMind session starts any more, and every one
+                    // under way is told to stop.
+                    app.state::<AppState>().hive_sessions.close();
                     // Phase Three: every run cancelled, the agent display
                     // stopped gracefully (its lock and socket removed).
                     if let Ok(world) = app.state::<AppState>().real_world() {

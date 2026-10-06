@@ -855,12 +855,13 @@ fn assert_downloads_end_at_exit(lib_rs: &str, model_hub: &str) {
                 if let Err(error) = nexus_connectors_llm::model_hub::terminate_in_flight_downloads() {
                     eprintln!(\"[shutdown] {error}\");
                 }
+                app.state::<AppState>().hive_sessions.close();
                 if let Ok(world) = app.state::<AppState>().real_world() {
                     world.shutdown();
                 }
             }"
         ),
-        "the exit arm (Phase Three adds its own shutdown last)"
+        "the exit arm (Phase Three adds its HiveMind sessions' close and its own shutdown last)"
     );
 
     let model_hub = production_text(&lf(model_hub));

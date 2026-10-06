@@ -148,12 +148,47 @@ struct Lease {
 /// The leases; the commitment registry ends them with their commitments.
 #[derive(Default)]
 struct LeaseTable {
-    leases: Mutex<HashMap<LeaseId, Lease>>,
+    leases: Mutex<Leases>,
+}
+
+/// The leases, and the room held for leases whose issue is being recorded
+/// (no lock is held while a record is written).
+#[derive(Default)]
+struct Leases {
+    map: HashMap<LeaseId, Lease>,
+    reserved: usize,
+}
+
+/// Room held for one lease while its issue is recorded: filled by the
+/// lease, or given back when dropped unfilled (the record failed or
+/// panicked).
+struct Room<'a> {
+    table: &'a LeaseTable,
+    held: bool,
+}
+
+impl Room<'_> {
+    fn fill(mut self, id: LeaseId, lease: Lease) {
+        let mut leases = self.table.leases.lock().expect("leases");
+        leases.reserved = leases.reserved.saturating_sub(1);
+        leases.map.insert(id, lease);
+        self.held = false;
+    }
+}
+
+impl Drop for Room<'_> {
+    fn drop(&mut self) {
+        if self.held {
+            if let Ok(mut leases) = self.table.leases.lock() {
+                leases.reserved = leases.reserved.saturating_sub(1);
+            }
+        }
+    }
 }
 
 impl LeaseEnd for LeaseTable {
     fn end(&self, lease: LeaseId) {
-        if let Some(lease) = self.leases.lock().expect("leases").get_mut(&lease) {
+        if let Some(lease) = self.leases.lock().expect("leases").map.get_mut(&lease) {
             lease.state = LeaseState::Ended;
         }
     }
@@ -192,6 +227,7 @@ impl CredentialBroker {
         })
     }
 
+    /// Write one record. Never called with the lease table's lock held.
     fn record(&self, record: EvidenceRecord) -> Result<(), AuthorityError> {
         self.evidence
             .record(&record)
@@ -221,17 +257,28 @@ impl CredentialBroker {
         record.target = Some(origin.origin_text());
         record.detail.push(("lease".into(), id.to_string()));
         record.detail.push(("service".into(), spec.service.into()));
-        let mut leases = self.table.leases.lock().expect("leases");
-        // Room first, so that a lease recorded as issued is one that exists.
-        if leases.len() >= LEASE_CAPACITY {
-            leases.retain(|_, lease| lease.state == LeaseState::Issued && lease.deadline_ms > now);
-            if leases.len() >= LEASE_CAPACITY {
-                return Err(AuthorityError::Capacity);
+        // Room first, so that a lease recorded as issued is one that exists;
+        // held, not inserted, while the issue is recorded with the lock
+        // released.
+        {
+            let mut leases = self.table.leases.lock().expect("leases");
+            if leases.map.len() + leases.reserved >= LEASE_CAPACITY {
+                leases.map.retain(|_, lease| {
+                    lease.state == LeaseState::Issued && lease.deadline_ms > now
+                });
+                if leases.map.len() + leases.reserved >= LEASE_CAPACITY {
+                    return Err(AuthorityError::Capacity);
+                }
             }
+            leases.reserved += 1;
         }
+        let room = Room {
+            table: &self.table,
+            held: true,
+        };
         // Evidence first: an unrecorded lease is never issued.
         self.record(record)?;
-        leases.insert(
+        room.fill(
             id,
             Lease {
                 agent: agent.clone(),
@@ -243,6 +290,18 @@ impl CredentialBroker {
             },
         );
         Ok(id)
+    }
+
+    /// Take and release the lease table's lock once (tests).
+    #[cfg(test)]
+    pub(crate) fn probe_locks(&self) {
+        drop(self.table.leases.lock().expect("leases"));
+    }
+
+    /// The room held for leases whose issue is being recorded (tests).
+    #[cfg(test)]
+    pub(crate) fn rooms_held(&self) -> usize {
+        self.table.leases.lock().expect("leases").reserved
     }
 
     /// Whether a lease could still be released (for display and tests).
@@ -258,6 +317,7 @@ impl CredentialBroker {
             .leases
             .lock()
             .expect("leases")
+            .map
             .keys()
             .copied()
             .collect()
@@ -269,6 +329,7 @@ impl CredentialBroker {
             .leases
             .lock()
             .expect("leases")
+            .map
             .get(&lease)
             .is_some_and(|l| l.state == LeaseState::Issued && l.deadline_ms > now)
     }
@@ -295,9 +356,11 @@ impl ReleaseCredential for CredentialBroker {
             .commitments
             .view(guard.commitment())
             .ok_or(AuthorityError::UnknownCommitment)?;
+        let now = self.clock.monotonic_ms();
         let spec = {
             let mut leases = self.table.leases.lock().expect("leases");
             let lease = leases
+                .map
                 .get_mut(&lease_id)
                 .ok_or(AuthorityError::UnknownLease)?;
             if lease.agent != view.agent {
@@ -309,7 +372,7 @@ impl ReleaseCredential for CredentialBroker {
             if lease.state != LeaseState::Issued {
                 return Err(AuthorityError::NotPending);
             }
-            if self.clock.monotonic_ms() >= lease.deadline_ms {
+            if now >= lease.deadline_ms {
                 lease.state = LeaseState::Ended;
                 return Err(AuthorityError::Expired);
             }

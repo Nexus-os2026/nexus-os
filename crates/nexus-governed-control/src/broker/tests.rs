@@ -82,6 +82,26 @@ fn use_lease(
     lease: crate::authority::ids::LeaseId,
     destination: &Destination,
 ) -> Option<Result<String, AuthorityError>> {
+    let (preparation, got) = lease_preparation(h, broker, lease, destination);
+    let view = h.control.propose(&h.agent, h.run, preparation).ok()?;
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .ok()?;
+    let _ = h.control.execute(view.id, &h.agent, h.run);
+    let result = got.lock().unwrap().take();
+    result
+}
+
+type Got = Arc<Mutex<Option<Result<String, AuthorityError>>>>;
+
+/// An action listing `lease` for `destination`, and where it puts what the
+/// broker gave it.
+fn lease_preparation(
+    h: &Harness,
+    broker: &Arc<CredentialBroker>,
+    lease: crate::authority::ids::LeaseId,
+    destination: &Destination,
+) -> (Preparation, Got) {
     let grant = h
         .control
         .authority()
@@ -119,13 +139,95 @@ fn use_lease(
         }),
         ttl: Duration::from_secs(60),
     };
-    let view = h.control.propose(&h.agent, h.run, preparation).ok()?;
-    h.control
-        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
-        .ok()?;
-    let _ = h.control.execute(view.id, &h.agent, h.run);
-    let result = got.lock().unwrap().take();
-    result
+    (preparation, got)
+}
+
+/// No lock (the lease table's, the pipeline's or the authority's) is held
+/// while a lease's issue or release is recorded, or while a lease ends with
+/// its commitment; a sink that panics on an issue leaves no lock poisoned
+/// and no room held.
+#[test]
+fn leases_are_issued_released_and_ended_with_no_lock_held_across_a_record() {
+    use crate::authority::clock::SystemClock;
+    use crate::authority::evidence::{EvidencePhase, MemoryEvidence};
+    use crate::authority::ids::AgentId;
+    use crate::authority::run::RunOrigin;
+    use crate::authority::scripted::{within, ScriptedSink};
+    use crate::authority::Authority;
+    use crate::control::Control;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    let sink = ScriptedSink::new();
+    let control = Arc::new(Control::new(Authority::new(
+        sink.clone(),
+        Arc::new(SystemClock::default()),
+    )));
+    let agent = AgentId::new("agent-test").unwrap();
+    let run = control
+        .authority()
+        .open_run(agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    let h = Harness {
+        control,
+        evidence: Arc::new(MemoryEvidence::new(1)),
+        agent,
+        run,
+    };
+    let vault = Arc::new(FakeVault(AtomicU32::new(0)));
+    let broker = CredentialBroker::new(h.control.authority(), vault);
+    let destination = Destination::parse("https://api.fixture.example").unwrap();
+    let probe = {
+        let (control, broker) = (Arc::downgrade(&h.control), Arc::downgrade(&broker));
+        move || {
+            if let Some(control) = control.upgrade() {
+                control.probe_locks();
+            }
+            if let Some(broker) = broker.upgrade() {
+                broker.probe_locks();
+            }
+        }
+    };
+    sink.probe_with(probe.clone());
+    let ttl = Duration::from_secs(60);
+    // Issued and released.
+    let lease = broker
+        .lease(&h.agent, h.run, SPEC, &destination, ttl)
+        .unwrap();
+    assert_eq!(
+        use_lease(&h, &broker, lease, &destination)
+            .unwrap()
+            .unwrap(),
+        format!("authorization: Bearer {SECRET}")
+    );
+    // Ended with its commitment.
+    let ended = broker
+        .lease(&h.agent, h.run, SPEC, &destination, ttl)
+        .unwrap();
+    let (preparation, _) = lease_preparation(&h, &broker, ended, &destination);
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control.deny(view.id, &h.agent, h.run).unwrap();
+    assert!(!broker.is_live(ended));
+    // A sink that panics on an issue.
+    sink.panic_on(Some(EvidencePhase::LeaseIssued));
+    assert!(catch_unwind(AssertUnwindSafe(|| {
+        broker.lease(&h.agent, h.run, SPEC, &destination, ttl)
+    }))
+    .is_err());
+    sink.panic_on(None);
+    within(probe);
+    assert_eq!(broker.rooms_held(), 0);
+    assert!(broker
+        .lease(&h.agent, h.run, SPEC, &destination, ttl)
+        .is_ok());
+    let phases = sink.phases();
+    assert!(phases.contains(&EvidencePhase::LeaseIssued));
+    assert!(phases.contains(&EvidencePhase::CredentialReleased));
+    assert!(phases.contains(&EvidencePhase::Denied));
+    assert!(sink.probes() >= phases.len());
+    assert_eq!(
+        sink.violations(),
+        0,
+        "an authority lock was held while a record was written"
+    );
 }
 
 #[test]

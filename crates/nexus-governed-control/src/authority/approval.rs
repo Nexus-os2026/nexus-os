@@ -10,10 +10,10 @@ use super::effect::{CapabilityKind, EffectClass};
 use super::evidence::DIALOG_COLUMNS;
 use super::ids::{CommitmentId, Digest};
 
-/// The lines of a confirmation, each at most `DIALOG_COLUMNS` characters:
-/// a longer one continues on `↳ ` lines. The lines are already plain; the
-/// confirmation window shows each one whole and never wraps.
-fn fitted(lines: &[String]) -> String {
+/// The lines of a confirmation's details, each at most `DIALOG_COLUMNS`
+/// characters: a longer one continues on `↳ ` lines. The lines are already
+/// plain; the confirmation window shows each one whole and never wraps.
+fn fitted_lines(lines: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for line in lines {
         let chars: Vec<char> = line.chars().collect();
@@ -23,7 +23,36 @@ fn fitted(lines: &[String]) -> String {
             out.push(format!("↳ {}", chunk.iter().collect::<String>()));
         }
     }
-    out.join("\n")
+    out
+}
+
+/// What the owner's confirmation window shows, in two parts it keeps
+/// apart. The header is the security identity of what is asked: rows of a
+/// label the window draws itself and the backend's value, shown whole and
+/// never scrolled, in view whenever the answer can be given. The details
+/// are what the request carries (bodies, typed text, steps), each line
+/// plain and at most `DIALOG_COLUMNS` characters (a longer one continues on
+/// `↳ ` lines), shown in a scrolled region of their own that the window
+/// marks as the request's content: nothing in them shares the header's
+/// place.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConfirmationText {
+    pub header: Vec<(&'static str, String)>,
+    pub details: Vec<String>,
+}
+
+impl ConfirmationText {
+    /// The same as plain text (logs and tests): the header rows, then the
+    /// details.
+    pub fn plain(&self) -> String {
+        let mut lines: Vec<String> = self
+            .header
+            .iter()
+            .map(|(label, value)| format!("{label}: {value}"))
+            .collect();
+        lines.extend(self.details.iter().cloned());
+        lines.join("\n")
+    }
 }
 
 /// What the owner is asked to approve: one R2 commitment. Every line is
@@ -50,24 +79,31 @@ impl ActionConfirmation {
         "Allow this action?"
     }
 
-    /// The text of the native confirmation.
+    /// The text of the native confirmation: the effect class, operation,
+    /// canonical target, acting agent, run, commitment and binding in the
+    /// header; the action's summary in the details.
+    pub fn text(&self) -> ConfirmationText {
+        ConfirmationText {
+            header: vec![
+                (
+                    "Effect",
+                    format!("{} ({})", self.class, self.class.meaning()),
+                ),
+                ("Operation", self.operation.clone()),
+                ("Target", self.target.clone()),
+                ("Acting for", self.agent.clone()),
+                ("Run", self.run.clone()),
+                ("Commitment", self.commitment.clone()),
+                ("Binding", self.binding_short.clone()),
+                ("Expires in", format!("{} s", self.expires_in_secs)),
+            ],
+            details: fitted_lines(&self.summary),
+        }
+    }
+
+    /// The same as plain text.
     pub fn message(&self) -> String {
-        let mut lines = vec![
-            format!(
-                "{} ({}): {}",
-                self.class,
-                self.class.meaning(),
-                self.operation
-            ),
-            format!("Target: {}", self.target),
-        ];
-        lines.extend(self.summary.iter().cloned());
-        lines.push(format!("Acting for: {} (run {})", self.agent, self.run));
-        lines.push(format!(
-            "Commitment: {} [{}], expires in {} s",
-            self.commitment, self.binding_short, self.expires_in_secs
-        ));
-        fitted(&lines)
+        self.text().plain()
     }
 }
 
@@ -84,11 +120,24 @@ impl GrantConfirmation {
         "Grant this capability?"
     }
 
+    /// The capability and who may use it in the header; its scope, line by
+    /// line, in the details.
+    pub fn text(&self) -> ConfirmationText {
+        ConfirmationText {
+            header: vec![
+                ("Capability", self.kind.as_str().to_string()),
+                (
+                    "Who may use it",
+                    "any agent, until it expires or you revoke it".to_string(),
+                ),
+                ("Expires in", format!("{} s", self.expires_in_secs)),
+            ],
+            details: fitted_lines(&self.lines),
+        }
+    }
+
     pub fn message(&self) -> String {
-        let mut lines = self.lines.clone();
-        lines.push("Any agent may use it until it expires or you revoke it".to_string());
-        lines.push(format!("Expires in {} s", self.expires_in_secs));
-        fitted(&lines)
+        self.text().plain()
     }
 }
 
@@ -112,16 +161,25 @@ impl ResumeConfirmation {
         "Resume governed control?"
     }
 
+    pub fn text(&self) -> ConfirmationText {
+        ConfirmationText {
+            header: vec![
+                ("Lifts", "the emergency stop".to_string()),
+                (
+                    "Runs it cancelled",
+                    format!("{} (they stay cancelled)", self.runs_cancelled_by_the_stop),
+                ),
+            ],
+            details: fitted_lines(&[
+                "Resuming lets agents open new runs and request actions again;".to_string(),
+                "each still needs its grants and, for sensitive actions, your approval."
+                    .to_string(),
+            ]),
+        }
+    }
+
     pub fn message(&self) -> String {
-        fitted(&[
-            "The emergency stop is in force.".to_string(),
-            "Resuming lets agents open new runs and request actions again;".to_string(),
-            "each still needs its grants and, for sensitive actions, your approval.".to_string(),
-            format!(
-                "Runs the stop cancelled stay cancelled: {}.",
-                self.runs_cancelled_by_the_stop
-            ),
-        ])
+        self.text().plain()
     }
 }
 

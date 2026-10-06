@@ -34,7 +34,7 @@ use crate::runtime_root::RuntimeRoot;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 /// The one display Phase Three acts on.
@@ -236,10 +236,10 @@ impl Server {
     fn focus_on(&self, _window: u32) -> bool {
         false
     }
-    fn same_client(&self, _a: u32, _b: u32) -> bool {
+    fn no_active_grab(&self) -> bool {
         false
     }
-    fn no_active_grab(&self) -> bool {
+    fn keyboard_free(&self) -> bool {
         false
     }
 }
@@ -258,11 +258,32 @@ struct Session {
 pub struct AgentDisplay {
     root: RuntimeRoot,
     generation: Mutex<u64>,
-    /// One start at a time; a stop never waits for one.
-    starting: Mutex<()>,
+    /// One start at a time: whether one is under way. No lock is held while
+    /// a start records its evidence or launches its server; the next start
+    /// waits (within a bound) for the flag to clear. A stop never waits for
+    /// one.
+    starting: Mutex<bool>,
+    started: Condvar,
     /// Counts stops: a start that a stop overtook ends its server unused.
     stops: AtomicU64,
     shared: Arc<Shared>,
+}
+
+/// The longest a start waits for another under way to end (a server start
+/// gives up after 10 s).
+const START_WAIT: Duration = Duration::from_secs(30);
+
+/// The turn of one start: given back, and the next start woken, when it
+/// ends, however it ends.
+struct Turn<'a>(&'a AgentDisplay);
+
+impl Drop for Turn<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut busy) = self.0.starting.lock() {
+            *busy = false;
+        }
+        self.0.started.notify_all();
+    }
 }
 
 /// State shared with pending effects. Effects never keep the server: they
@@ -281,12 +302,17 @@ struct Shared {
 }
 
 impl Shared {
-    /// The running server of `generation`, if it still answers.
+    /// The running server of `generation`, if it still answers (asked with
+    /// the session's lock released: a stop never waits on the server).
     fn server(&self, generation: u64) -> Result<Arc<Server>, AuthorityError> {
-        let session = self.session.lock().expect("display");
-        match session.as_ref() {
-            Some(s) if s.generation == generation && s.server.alive() => Ok(s.server.clone()),
-            _ => Err(AuthorityError::TargetChanged),
+        let server = match self.session.lock().expect("display").as_ref() {
+            Some(s) if s.generation == generation => s.server.clone(),
+            _ => return Err(AuthorityError::TargetChanged),
+        };
+        if server.alive() {
+            Ok(server)
+        } else {
+            Err(AuthorityError::TargetChanged)
         }
     }
 }
@@ -296,17 +322,49 @@ impl AgentDisplay {
         Self {
             root,
             generation: Mutex::new(0),
-            starting: Mutex::new(()),
+            starting: Mutex::new(false),
+            started: Condvar::new(),
             stops: AtomicU64::new(0),
             shared: Arc::new(Shared::default()),
         }
     }
 
+    /// Take and release the display's state locks once (tests). `acting`
+    /// is held for a whole input action by design and is not probed.
+    #[cfg(test)]
+    pub(crate) fn probe_locks(&self) {
+        drop(self.generation.lock().expect("generation"));
+        drop(self.starting.lock().expect("starting"));
+        drop(self.shared.session.lock().expect("display"));
+        drop(self.shared.observations.lock().expect("observations"));
+        drop(self.shared.steps.lock().expect("steps"));
+        drop(self.shared.last_input.lock().expect("last input"));
+    }
+
+    /// Wait (within `START_WAIT`) until no other start is under way, and
+    /// take the turn. No lock is held once it returns.
+    fn turn(&self) -> Result<Turn<'_>, AuthorityError> {
+        let deadline = Instant::now() + START_WAIT;
+        let mut busy = self.starting.lock().expect("starting");
+        while *busy {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Err(AuthorityError::Unavailable(
+                    "another start of the agent display is under way",
+                ));
+            }
+            busy = self.started.wait_timeout(busy, left).expect("starting").0;
+        }
+        *busy = true;
+        Ok(Turn(self))
+    }
+
     /// Start the agent display (a no-op while it runs). `admit` is asked
     /// first (it records the start: an unrecorded display does not start)
-    /// and `stopped` is asked before the launch; a stop that comes while the
-    /// server starts wins, and that server ends unused. The display's lock
-    /// is not held across the launch, so a stop never waits for one.
+    /// and `stopped` is asked before the launch and again after it; a stop
+    /// that comes while the server starts wins, and that server ends
+    /// unused. No lock is held across `admit`, `stopped` or the launch, so
+    /// a stop never waits for one.
     pub(crate) fn start(
         &self,
         width: u16,
@@ -317,10 +375,17 @@ impl AgentDisplay {
         // Read before waiting for another start to finish: a stop that comes
         // while this one waits counts against it too.
         let stops = self.stops.load(Ordering::SeqCst);
-        let _starting = self.starting.lock().expect("starting");
-        if let Some(current) = self.shared.session.lock().expect("display").as_ref() {
-            if current.server.alive() {
-                return Ok(status(current));
+        let _turn = self.turn()?;
+        let running = self
+            .shared
+            .session
+            .lock()
+            .expect("display")
+            .as_ref()
+            .map(|current| (status(current), current.server.clone()));
+        if let Some((running, server)) = running {
+            if server.alive() {
+                return Ok(running);
             }
         }
         if !(320..=3840).contains(&width) || !(240..=2160).contains(&height) {
@@ -335,9 +400,22 @@ impl AgentDisplay {
             ));
         }
         admit()?;
-        let server = Arc::new(Server::start(&self.root, width, height)?);
-        let mut session = self.shared.session.lock().expect("display");
+        // A stop that came while the start was recorded wins before the
+        // launch, too.
         if self.stops.load(Ordering::SeqCst) != stops || stopped() {
+            return Err(AuthorityError::Closed(
+                "the agent display was stopped while it started",
+            ));
+        }
+        let server = Arc::new(Server::start(&self.root, width, height)?);
+        // Asked before the session's lock is taken; a stop that comes after
+        // it counts in `stops`, checked under the lock `stop` takes.
+        let stopped = stopped();
+        let mut session = self.shared.session.lock().expect("display");
+        if self.stops.load(Ordering::SeqCst) != stops || stopped {
+            drop(session);
+            // The unused server ends here, outside the display's lock.
+            drop(server);
             return Err(AuthorityError::Closed(
                 "the agent display was stopped while it started",
             ));
@@ -347,8 +425,12 @@ impl AgentDisplay {
             *counter += 1;
             *counter
         };
-        *session = Some(Session { generation, server });
-        Ok(status(session.as_ref().expect("started")))
+        // A dead session this start replaces ends outside the lock.
+        let replaced = session.replace(Session { generation, server });
+        let started = status(session.as_ref().expect("started"));
+        drop(session);
+        drop(replaced);
+        Ok(started)
     }
 
     /// Stop the agent display: everything bound to it fails revalidation,
@@ -385,14 +467,19 @@ impl AgentDisplay {
     }
 
     fn current(&self) -> Result<(u64, Arc<Server>), AuthorityError> {
-        let session = self.shared.session.lock().expect("display");
-        let session = session.as_ref().ok_or(AuthorityError::Unavailable(
-            "the agent display is not running",
-        ))?;
-        if !session.server.alive() {
+        let (generation, server) = {
+            let session = self.shared.session.lock().expect("display");
+            let session = session.as_ref().ok_or(AuthorityError::Unavailable(
+                "the agent display is not running",
+            ))?;
+            (session.generation, session.server.clone())
+        };
+        // Asked with the session's lock released: a stop never waits on
+        // the server.
+        if !server.alive() {
             return Err(AuthorityError::Unavailable("the agent display stopped"));
         }
-        Ok((session.generation, session.server.clone()))
+        Ok((generation, server))
     }
 
     /// The perception grant scope.
@@ -1126,8 +1213,9 @@ struct Pressed {
     buttons: Vec<u8>,
     /// Where the pointer was when a button went down, and the window there.
     /// An action that ends early lets its button go there, with the server
-    /// held, while that window (or another of its application's, such as a
-    /// drag image) is on top: a drag let go where it began moves nothing.
+    /// held, only while that exact window is on top: a drag let go where it
+    /// began moves nothing. (Another window of the same application, a
+    /// drag image above another application's window, is not the source.)
     pressed_at: Option<((u16, u16), u32)>,
     /// The Escape key of the display's keyboard.
     escape: Option<u8>,
@@ -1154,45 +1242,44 @@ impl Drop for Pressed {
         if self.buttons.is_empty() {
             return;
         }
-        // Held: nothing can appear between the check and the release.
+        // Held: nothing can appear between the checks and the release.
         let _held = server.hold();
         if let Some(((x, y), window)) = self.pressed_at {
             let to = |(px, py): (u16, u16)| {
                 server.pointer(px, py).is_ok() && server.pointer_position() == (px, py)
             };
-            // Where it was picked up, while its source, or a window of the
-            // source's own application (a drag image, its popup), is on top
+            // Where it was picked up, while exactly its source is on top
             // there: a drag let go where it began moves nothing.
             let on_top = server.window_at(x, y).map_or(0, |w| w.id);
-            let back = (on_top == window || server.same_client(on_top, window)) && to((x, y));
+            let back = on_top == window && to((x, y));
             if !back {
-                if server.focus_on(window) {
-                    // Another application covers it: Escape, which goes to
-                    // the source holding the keyboard focus, cancels the
-                    // drag (in most toolkits) before it is let go where it
-                    // began.
-                    if let Some(escape) = self.escape {
-                        let _ = server.key(escape, true);
-                        let _ = server.key(escape, false);
+                // Covered (by another application, or another window of the
+                // source's own, such as a drag image above another
+                // application): let go on the bare display, a corner no
+                // window covers, where a drop reaches no window.
+                let (width, height) = server.size();
+                let corners = [
+                    (1, 1),
+                    (width.saturating_sub(2), 1),
+                    (1, height.saturating_sub(2)),
+                    (width.saturating_sub(2), height.saturating_sub(2)),
+                ];
+                let bare = corners
+                    .into_iter()
+                    .any(|p| server.window_at(p.0, p.1).is_none() && to(p));
+                if !bare {
+                    // None left: Escape cancels the drag (in most toolkits)
+                    // only if it reaches the source alone, which holds the
+                    // keyboard focus while no client holds a keyboard grab
+                    // (a grab would take the key, and X does not say whose
+                    // it is); then it is let go where it began.
+                    if server.focus_on(window) && server.keyboard_free() {
+                        if let Some(escape) = self.escape {
+                            let _ = server.key(escape, true);
+                            let _ = server.key(escape, false);
+                        }
                     }
                     let _ = to((x, y));
-                } else {
-                    // No key would reach only the source: let go on the bare
-                    // display (a corner no window covers), where a drop
-                    // reaches no window; with none left, where it began.
-                    let (width, height) = server.size();
-                    let corners = [
-                        (1, 1),
-                        (width.saturating_sub(2), 1),
-                        (1, height.saturating_sub(2)),
-                        (width.saturating_sub(2), height.saturating_sub(2)),
-                    ];
-                    let bare = corners
-                        .into_iter()
-                        .any(|p| server.window_at(p.0, p.1).is_none() && to(p));
-                    if !bare {
-                        let _ = to((x, y));
-                    }
                 }
             }
         }

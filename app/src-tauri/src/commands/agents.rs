@@ -522,7 +522,9 @@ pub(crate) fn stop_agent_now(state: &AppState, agent_id: &str) -> Result<(), Str
 }
 
 /// Every spelling under which the agent's schedule or loop may be kept (a
-/// UUID can be written several ways), its canonical one first.
+/// UUID can be written several ways), its canonical one first: its
+/// schedules, its loops' drivers, and the loops themselves (one may have no
+/// driver yet).
 pub(crate) fn spellings(state: &AppState, agent_id: &str) -> Vec<String> {
     let uuid = Uuid::parse_str(agent_id).ok();
     let same = |key: &str| key == agent_id || (uuid.is_some() && Uuid::parse_str(key).ok() == uuid);
@@ -535,7 +537,8 @@ pub(crate) fn spellings(state: &AppState, agent_id: &str) -> Vec<String> {
         .keys()
         .cloned()
         .collect();
-    for key in scheduled.chain(looping) {
+    let loops = state.cognitive_runtime.loop_agents();
+    for key in scheduled.chain(looping).chain(loops) {
         if same(&key) && !found.contains(&key) {
             found.push(key);
         }
@@ -616,7 +619,53 @@ pub(crate) fn get_scheduled_agents(
     Ok(state.agent_scheduler.list())
 }
 
+/// Every agent anything still runs, waits or keeps anything for, each once
+/// (canonically; `spellings` finds its other spellings): the supervisor's,
+/// the scheduler's, the loops' (their drivers and the runtime's own) and
+/// Phase Three's.
+fn known_agents(state: &AppState) -> Vec<String> {
+    let mut agents: Vec<String> = state
+        .supervisor
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .health_check()
+        .into_iter()
+        .map(|status| status.id.to_string())
+        .collect();
+    agents.extend(state.agent_scheduler.list().into_iter().map(|s| s.agent_id));
+    let drivers: Vec<String> = state
+        .cognitive_cancellations
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .keys()
+        .cloned()
+        .collect();
+    agents.extend(drivers);
+    agents.extend(state.cognitive_runtime.loop_agents());
+    if let Ok(world) = state.real_world() {
+        agents.extend(world.agents_with_runs());
+    }
+    let mut known = Vec::new();
+    for agent in agents {
+        let agent = canonical_agent_id(&agent);
+        if !known.contains(&agent) {
+            known.push(agent);
+        }
+    }
+    known
+}
+
+/// Forget every agent. Each is first stopped as the owner's Stop stops it,
+/// everywhere (`stop_agents`): its Phase Three work cancelled, its
+/// schedules removed, its loops told to stop (and removed after, on the
+/// stop's own thread), the supervisor's record stopped. Only then are the
+/// records cleared: no loop or schedule outlives its agent's record, and an
+/// agent cleared meanwhile has no authority to run (a missing agent counts
+/// as stopped).
 pub(crate) fn clear_all_agents(state: &AppState) -> Result<usize, String> {
+    // A stop that fails (an agent not in the supervisor, or not yet running)
+    // leaves the rest of its stop done; its record is removed below.
+    let _ = stop_agents(state, &known_agents(state));
     // Clear in-memory supervisor state
     {
         let mut supervisor = match state.supervisor.lock() {

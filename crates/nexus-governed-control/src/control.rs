@@ -19,9 +19,10 @@ use crate::authority::commitment::{
     CommitmentView, ExecutionGuard, FailureClass, Outcome, PreparedAction,
 };
 use crate::authority::ids::{AgentId, CommitmentId, Digest, RunId};
+use crate::authority::run::RunClass;
 use crate::authority::{Authority, AuthorityError};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
 /// What an executed effect returns to its caller: data only.
@@ -69,7 +70,80 @@ struct Pending {
 /// The pipeline.
 pub(crate) struct Control {
     authority: Authority,
-    pending: Mutex<HashMap<CommitmentId, Pending>>,
+    pending: Mutex<PendingTable>,
+}
+
+/// The pending effects, and the places held for proposals being prepared
+/// (counted with them, so that a place is checked and taken at once).
+#[derive(Default)]
+struct PendingTable {
+    held: HashMap<CommitmentId, Pending>,
+    reserved: usize,
+    reserved_by_run: HashMap<RunId, usize>,
+}
+
+impl PendingTable {
+    fn give_back(&mut self, run: RunId) {
+        self.reserved = self.reserved.saturating_sub(1);
+        if let Some(count) = self.reserved_by_run.get_mut(&run) {
+            *count -= 1;
+            if *count == 0 {
+                self.reserved_by_run.remove(&run);
+            }
+        }
+    }
+
+    /// Take out every effect `keep` refuses (dropped by the caller, outside
+    /// the lock).
+    fn take_unless(&mut self, keep: impl Fn(&CommitmentId, &Pending) -> bool) -> Vec<Pending> {
+        let ids: Vec<CommitmentId> = self
+            .held
+            .iter()
+            .filter(|(id, held)| !keep(id, held))
+            .map(|(id, _)| *id)
+            .collect();
+        ids.into_iter()
+            .filter_map(|id| self.held.remove(&id))
+            .collect()
+    }
+}
+
+/// A place held for one proposal while it is prepared: filled by its
+/// effect, or given back when dropped (the preparation was refused).
+struct Place<'a> {
+    control: &'a Control,
+    run: RunId,
+    held: bool,
+}
+
+impl Place<'_> {
+    /// Hold the effect of a prepared commitment; one that ended meanwhile
+    /// (its run was cancelled while it was prepared) is not held.
+    fn fill(mut self, id: CommitmentId, pending: Pending) {
+        let unheld = {
+            let mut table = self.control.pending();
+            table.give_back(self.run);
+            self.held = false;
+            if self.control.authority.commitments().is_unconsumed(id) {
+                table.held.insert(id, pending);
+                None
+            } else {
+                Some(pending)
+            }
+        };
+        // An effect not held is dropped outside the lock.
+        drop(unheld);
+    }
+}
+
+impl Drop for Place<'_> {
+    fn drop(&mut self) {
+        if self.held {
+            if let Ok(mut table) = self.control.pending.lock() {
+                table.give_back(self.run);
+            }
+        }
+    }
 }
 
 /// Most pending effects held at once.
@@ -77,15 +151,46 @@ const MAX_PENDING: usize = 1024;
 /// Most pending effects one run holds (R2 waiting for the owner, mostly).
 const MAX_PENDING_PER_RUN: usize = 32;
 /// Pending places only the owner's own commands may take, so that agents
-/// filling the rest cannot block the owner.
+/// filling the rest cannot block the owner. An owner command is one whose
+/// run the backend opened as the owner's ([`RunClass::Owner`]); an agent's
+/// name earns it nothing.
 const OWNER_RESERVE: usize = 64;
 
 impl Control {
     pub(crate) fn new(authority: Authority) -> Self {
         Self {
             authority,
-            pending: Mutex::new(HashMap::new()),
+            pending: Mutex::new(PendingTable::default()),
         }
+    }
+
+    /// Take and release every lock of the pipeline once (tests).
+    #[cfg(test)]
+    pub(crate) fn probe_locks(&self) {
+        drop(self.pending());
+        self.authority.probe_locks();
+    }
+
+    fn pending(&self) -> MutexGuard<'_, PendingTable> {
+        self.pending.lock().expect("pending")
+    }
+
+    /// Check for room and take a place for a proposal in `run`, at once,
+    /// under the lock.
+    fn place(&self, run: RunId, limit: usize) -> Option<Place<'_>> {
+        let mut table = self.pending();
+        let in_run = table.held.values().filter(|p| p.run == run).count()
+            + table.reserved_by_run.get(&run).copied().unwrap_or(0);
+        if table.held.len() + table.reserved >= limit || in_run >= MAX_PENDING_PER_RUN {
+            return None;
+        }
+        table.reserved += 1;
+        *table.reserved_by_run.entry(run).or_default() += 1;
+        Some(Place {
+            control: self,
+            run,
+            held: true,
+        })
     }
 
     pub(crate) fn authority(&self) -> &Authority {
@@ -114,26 +219,30 @@ impl Control {
                 "the prepared parameters do not match the effect",
             ));
         }
-        let limit = if *agent == AgentId::owner_session() {
-            MAX_PENDING
-        } else {
-            MAX_PENDING - OWNER_RESERVE
+        // The owner's reserve is for the owner's own command runs, as the
+        // backend opened them; never for a name.
+        let limit = match self.authority.runs().class(run) {
+            Some(RunClass::Owner) => MAX_PENDING,
+            Some(RunClass::Agent) => MAX_PENDING - OWNER_RESERVE,
+            None => return refuse(AuthorityError::UnknownRun),
         };
-        let full = |pending: &HashMap<CommitmentId, Pending>| {
-            pending.len() >= limit
-                || pending.values().filter(|p| p.run == run).count() >= MAX_PENDING_PER_RUN
-        };
-        if full(&self.pending.lock().expect("pending")) {
-            self.prune();
-            if full(&self.pending.lock().expect("pending")) {
-                return refuse(AuthorityError::Capacity);
+        let place = match self.place(run, limit) {
+            Some(place) => place,
+            None => {
+                self.prune();
+                match self.place(run, limit) {
+                    Some(place) => place,
+                    None => return refuse(AuthorityError::Capacity),
+                }
             }
-        }
+        };
+        // The place is held while the commitment is prepared (and its
+        // preparation recorded) with no lock held.
         let view = self
             .authority
             .commitments()
             .prepare(agent, run, action, ttl)?;
-        self.pending.lock().expect("pending").insert(
+        place.fill(
             view.id,
             Pending {
                 agent: agent.clone(),
@@ -179,14 +288,14 @@ impl Control {
         run: RunId,
     ) -> Result<EffectOutput, AuthorityError> {
         let effect = {
-            let mut pending = self.pending.lock().expect("pending");
-            match pending.get(&id) {
+            let mut pending = self.pending();
+            match pending.held.get(&id) {
                 None => return Err(AuthorityError::UnknownCommitment),
                 Some(held) if &held.agent != agent => return Err(AuthorityError::WrongAgent),
                 Some(held) if held.run != run => return Err(AuthorityError::WrongRun),
                 Some(_) => {}
             }
-            pending.remove(&id).expect("present").effect
+            pending.held.remove(&id).expect("present").effect
         };
         let target = match effect.revalidate() {
             Ok(target) => target,
@@ -252,24 +361,25 @@ impl Control {
         run: RunId,
     ) -> Result<(), AuthorityError> {
         self.authority.commitments().deny(id, agent, run)?;
-        self.pending.lock().expect("pending").remove(&id);
+        let dropped = self.pending().held.remove(&id);
+        drop(dropped);
         Ok(())
     }
 
-    /// Cancel a run and drop every pending effect it had.
+    /// Cancel a run and drop every pending effect it had (outside the
+    /// lock, as every dropped effect is).
     pub(crate) fn cancel_run(&self, run: RunId) -> Result<(), AuthorityError> {
         let result = self.authority.cancel_run(run);
-        self.pending
-            .lock()
-            .expect("pending")
-            .retain(|_, held| held.run != run);
+        let dropped = self.pending().take_unless(|_, held| held.run != run);
+        drop(dropped);
         result
     }
 
     /// The owner's emergency stop.
     pub(crate) fn emergency_stop(&self) -> usize {
         let cancelled = self.authority.emergency_stop();
-        self.pending.lock().expect("pending").clear();
+        let dropped = self.pending().take_unless(|_, _| false);
+        drop(dropped);
         cancelled
     }
 
@@ -277,15 +387,14 @@ impl Control {
     /// pending ends.
     pub(crate) fn finish_run(&self, run: RunId) {
         self.authority.finish_run(run);
-        self.pending
-            .lock()
-            .expect("pending")
-            .retain(|_, held| held.run != run);
+        let dropped = self.pending().take_unless(|_, held| held.run != run);
+        drop(dropped);
     }
 
     fn drop_if_final(&self, id: CommitmentId) {
         if !self.authority.commitments().is_unconsumed(id) {
-            self.pending.lock().expect("pending").remove(&id);
+            let dropped = self.pending().held.remove(&id);
+            drop(dropped);
         }
     }
 
@@ -294,10 +403,10 @@ impl Control {
     pub(crate) fn prune(&self) {
         let commitments = self.authority.commitments();
         commitments.sweep();
-        self.pending
-            .lock()
-            .expect("pending")
-            .retain(|id, _| commitments.is_unconsumed(*id));
+        let dropped = self
+            .pending()
+            .take_unless(|id, _| commitments.is_unconsumed(*id));
+        drop(dropped);
     }
 }
 

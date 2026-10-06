@@ -14,7 +14,7 @@ use crate::authority::effect::EffectClass;
 use crate::authority::evidence::{EvidencePhase, EvidenceSink};
 use crate::authority::ids::{AgentId, CommitmentId, GrantId, RunId};
 use crate::authority::policy::{Grant, GrantScope};
-use crate::authority::run::RunOrigin;
+use crate::authority::run::{RunClass, RunOrigin};
 use crate::authority::{Authority, AuthorityError};
 use crate::broker::{CredentialBroker, SecretSource, Vault};
 use crate::browser::{Browser, BrowserIntent};
@@ -197,22 +197,37 @@ impl GovernedControl {
         self.control.authority()
     }
 
+    /// Open an agent's run (whatever the agent is called, it is an agent's).
     pub fn open_run(&self, agent: AgentId, origin: RunOrigin) -> Result<RunId, AuthorityError> {
         self.settle();
         self.authority().open_run(agent, origin)
     }
 
-    fn prepare(
+    /// Open the run of one of the owner's own commands, from the unified
+    /// front door: the only way to an owner run. Returns its agent label
+    /// and the run.
+    pub fn open_owner_run(
         &self,
-        run: RunId,
-        agent: &AgentId,
-        intent: &Intent,
-    ) -> Result<Preparation, AuthorityError> {
+        modalities: Vec<String>,
+    ) -> Result<(AgentId, RunId), AuthorityError> {
+        self.settle();
+        self.authority().open_owner_run(modalities)
+    }
+
+    /// Whether `run` is one of the owner's own command runs, as the backend
+    /// opened it (never judged from a name).
+    pub fn is_owner_run(&self, run: RunId) -> bool {
+        self.authority().runs().class(run) == Some(RunClass::Owner)
+    }
+
+    fn prepare(&self, run: RunId, intent: &Intent) -> Result<Preparation, AuthorityError> {
         let authority = self.authority();
         match intent {
             Intent::Request(intent) => self.egress.prepare(authority, intent),
             Intent::Tool(intent) => self.tools.prepare(authority, intent),
-            Intent::Connector(intent) => self.connectors.prepare(authority, agent, run, intent),
+            Intent::Connector(_) => Err(AuthorityError::InvalidAction(
+                "a connector operation is proposed through its connector",
+            )),
             Intent::Browse(intent) => self.browser.prepare(authority, intent),
             Intent::Observe(intent) => self.display.prepare_observation(authority, run, intent),
             Intent::Input(intent) => self.display.prepare_input(authority, run, intent),
@@ -227,7 +242,12 @@ impl GovernedControl {
         run: RunId,
         intent: &Intent,
     ) -> Result<CommitmentView, AuthorityError> {
-        let preparation = self.prepare(run, agent, intent)?;
+        // A connector operation proposes itself: a post first has its
+        // destination identified through governed reads of this run.
+        if let Intent::Connector(intent) = intent {
+            return self.connectors.propose(&self.control, agent, run, intent);
+        }
+        let preparation = self.prepare(run, intent)?;
         self.control.propose(agent, run, preparation)
     }
 
@@ -273,6 +293,11 @@ impl GovernedControl {
         run: RunId,
         intent: &Intent,
     ) -> Result<AgentOutcome, AuthorityError> {
+        // An agent acts only in an agent's run: an owner run is not reached
+        // by carrying the owner's label.
+        if self.authority().runs().class(run) != Some(RunClass::Agent) {
+            return Err(AuthorityError::WrongRun);
+        }
         let view = self.propose(agent, run, intent)?;
         if view.class == EffectClass::R2 {
             return Ok(AgentOutcome::AwaitingApproval(view));
@@ -433,6 +458,14 @@ impl GovernedControl {
         started
     }
 
+    /// Take and release every lock of the control once (tests).
+    #[cfg(test)]
+    pub(crate) fn probe_locks(&self) {
+        self.control.probe_locks();
+        self.display.probe_locks();
+        drop(self.detached.lock().expect("detached"));
+    }
+
     /// Whether an agent display start is under way (quitting waits for it,
     /// so its end is recorded).
     pub fn is_starting_display(&self) -> bool {
@@ -477,7 +510,7 @@ impl GovernedControl {
 
 /// Declines everything: R0 and R1 authorization never asks, and nothing on
 /// an agent's path may ask the owner.
-struct NeverAsk;
+pub(crate) struct NeverAsk;
 
 impl ControlConfirmer for NeverAsk {
     fn confirm_action(&self, _: &crate::authority::approval::ActionConfirmation) -> bool {

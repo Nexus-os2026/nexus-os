@@ -13,6 +13,8 @@ pub mod policy;
 pub mod run;
 
 #[cfg(test)]
+pub(crate) mod scripted;
+#[cfg(test)]
 mod tests;
 
 use self::approval::{ControlConfirmer, ResumeConfirmation};
@@ -21,7 +23,7 @@ use self::commitment::CommitmentRegistry;
 use self::evidence::{EvidencePhase, EvidenceRecord, EvidenceSink};
 use self::ids::{AgentId, RunId};
 use self::policy::{GrantStore, PolicyGeneration};
-use self::run::{RunOrigin, RunRegistry};
+use self::run::{RunClass, RunOrigin, RunRegistry};
 use std::fmt;
 use std::sync::Arc;
 
@@ -170,6 +172,15 @@ impl Authority {
         &self.generation
     }
 
+    /// Take and release every lock of the authority once (tests: it blocks
+    /// while another thread holds one).
+    #[cfg(test)]
+    pub(crate) fn probe_locks(&self) {
+        self.commitments.probe_locks();
+        self.grants.probe_locks();
+        self.runs.probe_locks();
+    }
+
     fn record(&self, record: &EvidenceRecord) -> Result<(), AuthorityError> {
         self.evidence
             .record(record)
@@ -189,11 +200,38 @@ impl Authority {
         self.record(&record)
     }
 
-    /// Open a run for `agent`. Refused while an emergency stop is in force.
+    /// Open a run for `agent`: an agent's run, whatever the agent is
+    /// called. Refused while an emergency stop is in force.
     pub(crate) fn open_run(
         &self,
         agent: AgentId,
         origin: RunOrigin,
+    ) -> Result<RunId, AuthorityError> {
+        self.open_classed(agent, origin, RunClass::Agent)
+    }
+
+    /// Open the run of one of the owner's own commands (the unified front
+    /// door): the only way to an owner run. Its agent identity is a label
+    /// for display and evidence; what makes it the owner's is the class the
+    /// run keeps.
+    pub(crate) fn open_owner_run(
+        &self,
+        modalities: Vec<String>,
+    ) -> Result<(AgentId, RunId), AuthorityError> {
+        let agent = AgentId::owner_session();
+        let run = self.open_classed(
+            agent.clone(),
+            RunOrigin::Command { modalities },
+            RunClass::Owner,
+        )?;
+        Ok((agent, run))
+    }
+
+    fn open_classed(
+        &self,
+        agent: AgentId,
+        origin: RunOrigin,
+        class: RunClass,
     ) -> Result<RunId, AuthorityError> {
         if self.runs.is_stopped() {
             return Err(AuthorityError::EmergencyStopped);
@@ -204,7 +242,10 @@ impl Authority {
             self.generation.current(),
         );
         record.agent = Some(agent.to_string());
-        let run = self.runs.open(agent, origin, self.clock.wall_ms())?;
+        if class == RunClass::Owner {
+            record.detail.push(("class".into(), "owner".into()));
+        }
+        let run = self.runs.open(agent, origin, class, self.clock.wall_ms())?;
         record.run = Some(run.to_string());
         if self.record(&record).is_err() {
             self.runs.cancel(run);
