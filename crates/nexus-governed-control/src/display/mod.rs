@@ -236,10 +236,10 @@ impl Server {
     fn focus_on(&self, _window: u32) -> bool {
         false
     }
-    fn same_client(&self, _a: u32, _b: u32) -> bool {
+    fn no_active_grab(&self) -> bool {
         false
     }
-    fn no_active_grab(&self) -> bool {
+    fn keyboard_free(&self) -> bool {
         false
     }
 }
@@ -1213,8 +1213,9 @@ struct Pressed {
     buttons: Vec<u8>,
     /// Where the pointer was when a button went down, and the window there.
     /// An action that ends early lets its button go there, with the server
-    /// held, while that window (or another of its application's, such as a
-    /// drag image) is on top: a drag let go where it began moves nothing.
+    /// held, only while that exact window is on top: a drag let go where it
+    /// began moves nothing. (Another window of the same application, a
+    /// drag image above another application's window, is not the source.)
     pressed_at: Option<((u16, u16), u32)>,
     /// The Escape key of the display's keyboard.
     escape: Option<u8>,
@@ -1241,45 +1242,44 @@ impl Drop for Pressed {
         if self.buttons.is_empty() {
             return;
         }
-        // Held: nothing can appear between the check and the release.
+        // Held: nothing can appear between the checks and the release.
         let _held = server.hold();
         if let Some(((x, y), window)) = self.pressed_at {
             let to = |(px, py): (u16, u16)| {
                 server.pointer(px, py).is_ok() && server.pointer_position() == (px, py)
             };
-            // Where it was picked up, while its source, or a window of the
-            // source's own application (a drag image, its popup), is on top
+            // Where it was picked up, while exactly its source is on top
             // there: a drag let go where it began moves nothing.
             let on_top = server.window_at(x, y).map_or(0, |w| w.id);
-            let back = (on_top == window || server.same_client(on_top, window)) && to((x, y));
+            let back = on_top == window && to((x, y));
             if !back {
-                if server.focus_on(window) {
-                    // Another application covers it: Escape, which goes to
-                    // the source holding the keyboard focus, cancels the
-                    // drag (in most toolkits) before it is let go where it
-                    // began.
-                    if let Some(escape) = self.escape {
-                        let _ = server.key(escape, true);
-                        let _ = server.key(escape, false);
+                // Covered (by another application, or another window of the
+                // source's own, such as a drag image above another
+                // application): let go on the bare display, a corner no
+                // window covers, where a drop reaches no window.
+                let (width, height) = server.size();
+                let corners = [
+                    (1, 1),
+                    (width.saturating_sub(2), 1),
+                    (1, height.saturating_sub(2)),
+                    (width.saturating_sub(2), height.saturating_sub(2)),
+                ];
+                let bare = corners
+                    .into_iter()
+                    .any(|p| server.window_at(p.0, p.1).is_none() && to(p));
+                if !bare {
+                    // None left: Escape cancels the drag (in most toolkits)
+                    // only if it reaches the source alone, which holds the
+                    // keyboard focus while no client holds a keyboard grab
+                    // (a grab would take the key, and X does not say whose
+                    // it is); then it is let go where it began.
+                    if server.focus_on(window) && server.keyboard_free() {
+                        if let Some(escape) = self.escape {
+                            let _ = server.key(escape, true);
+                            let _ = server.key(escape, false);
+                        }
                     }
                     let _ = to((x, y));
-                } else {
-                    // No key would reach only the source: let go on the bare
-                    // display (a corner no window covers), where a drop
-                    // reaches no window; with none left, where it began.
-                    let (width, height) = server.size();
-                    let corners = [
-                        (1, 1),
-                        (width.saturating_sub(2), 1),
-                        (1, height.saturating_sub(2)),
-                        (width.saturating_sub(2), height.saturating_sub(2)),
-                    ];
-                    let bare = corners
-                        .into_iter()
-                        .any(|p| server.window_at(p.0, p.1).is_none() && to(p));
-                    if !bare {
-                        let _ = to((x, y));
-                    }
                 }
             }
         }
