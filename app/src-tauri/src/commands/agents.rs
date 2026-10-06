@@ -523,7 +523,7 @@ pub(crate) fn stop_agent_now(state: &AppState, agent_id: &str) -> Result<(), Str
 
 /// Every spelling under which the agent's schedule or loop may be kept (a
 /// UUID can be written several ways), its canonical one first.
-fn spellings(state: &AppState, agent_id: &str) -> Vec<String> {
+pub(crate) fn spellings(state: &AppState, agent_id: &str) -> Vec<String> {
     let uuid = Uuid::parse_str(agent_id).ok();
     let same = |key: &str| key == agent_id || (uuid.is_some() && Uuid::parse_str(key).ok() == uuid);
     let mut found = vec![canonical_agent_id(agent_id)];
@@ -549,22 +549,64 @@ fn spellings(state: &AppState, agent_id: &str) -> Vec<String> {
 /// any agent's cycle holds the loop lock. One result per agent.
 pub(crate) fn stop_agents(state: &AppState, agents: &[String]) -> Vec<Result<(), String>> {
     let agents: Vec<String> = agents.iter().map(|id| canonical_agent_id(id)).collect();
-    let loops: Vec<String> = agents
+    // Phase Three first, for every agent, before anything else is done for
+    // any of them.
+    if let Ok(world) = state.real_world() {
+        for agent in &agents {
+            world.cancel_agent(agent);
+        }
+    }
+    // Each loop as it is now (its flag): only that loop is removed later, not
+    // one the owner starts after this stop.
+    let loops: Vec<(String, Option<Arc<AtomicBool>>)> = agents
         .iter()
         .flat_map(|agent| spellings(state, agent))
+        .map(|spelling| {
+            let flag = state
+                .cognitive_cancellations
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .get(&spelling)
+                .cloned();
+            (spelling, flag)
+        })
         .collect();
     let results = agents
         .iter()
         .map(|agent| stop_agent_now(state, agent))
         .collect();
-    let state = state.clone();
-    let _ = std::thread::Builder::new()
+    let remover = state.clone();
+    let spawned = std::thread::Builder::new()
         .name("nexus-agent-stop".into())
         .spawn(move || {
-            for agent in &loops {
-                let _ = crate::commands::cognitive::end_agent_loop(&state, agent);
+            for (agent, flag) in &loops {
+                let now = remover
+                    .cognitive_cancellations
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .get(agent)
+                    .cloned();
+                let replaced = match (flag, &now) {
+                    (Some(then), Some(now)) => !Arc::ptr_eq(then, now),
+                    (None, Some(_)) => true,
+                    _ => false,
+                };
+                if !replaced {
+                    let _ = crate::commands::cognitive::end_agent_loop(&remover, agent);
+                }
             }
         });
+    if spawned.is_err() {
+        // Every agent is stopped (Phase Three refuses them); their loops end
+        // at their next cycle, when they find their cancel flags.
+        for agent in &agents {
+            state.log_event(
+                Uuid::parse_str(agent).unwrap_or_default(),
+                EventType::StateChange,
+                json!({"event": "stop_agent", "loop_removal": "not started"}),
+            );
+        }
+    }
     results
 }
 

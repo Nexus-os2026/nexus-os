@@ -249,3 +249,51 @@ fn p3_a_tick_overtaken_by_an_owners_stop_does_not_restart_the_agent() {
         Some(AgentState::Stopped)
     );
 }
+
+/// Verification of candidate 6 (G10-A N2, path A): a tick that wakes just
+/// after the owner's stop removed its schedule (so it never saw it) does not
+/// restart the agent: Phase Three's record of the owner's stop says so.
+#[cfg(target_os = "linux")]
+#[test]
+fn p3_a_tick_that_never_saw_its_schedule_does_not_revive_an_owner_stopped_agent() {
+    let root = std::env::temp_dir().join(format!("nexus-p3-tick-{}", Uuid::new_v4()));
+    let mut state = AppState::new_in_memory();
+    state.real_world = Ok(crate::governed_real_world::RealWorld::for_tests(
+        &root,
+        Arc::new(Mutex::new(nexus_kernel::audit::AuditTrail::new())),
+        Arc::new(nexus_persistence::NexusDatabase::in_memory().unwrap()),
+    ));
+    // Registration schedules nothing here; the scheduler's tasks are not polled.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let _entered = runtime.enter();
+    let manifest =
+        crate::commands::chat_llm::parse_agent_manifest_json(&manifest("owner-stopped", 2))
+            .unwrap();
+    let id = state
+        .supervisor
+        .lock()
+        .unwrap()
+        .start_agent(manifest)
+        .unwrap()
+        .to_string();
+    super::start_autonomous_loop(&state, id.clone(), Some(60), None).unwrap();
+    // The owner stops the agent: its schedule is removed, Phase Three told.
+    let stopped = crate::commands::agents::stop_agents(&state, std::slice::from_ref(&id));
+    assert!(stopped.iter().all(Result::is_ok), "{stopped:?}");
+    // A tick that had already fired runs now, without its schedule.
+    let executor = ScheduledGoalExecutor {
+        state: state.clone(),
+    };
+    assert_eq!(
+        executor.execute(&id, "p3-scheduled-goal"),
+        Err("scheduled run skipped: the agent's schedule was removed".to_string())
+    );
+    assert_eq!(
+        snapshot(&state, &id).map(|(s, _)| s),
+        Some(AgentState::Stopped)
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

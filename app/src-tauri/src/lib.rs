@@ -6388,11 +6388,15 @@ pub mod runtime {
         if let Ok(world) = state.real_world() {
             world.cancel_agent(&agent_id);
         }
+        // Its loop, under every spelling it may be kept under.
+        let loops = super::spellings(state.inner(), &agent_id);
         let state = state.inner().clone();
         let _ = std::thread::Builder::new()
             .name("nexus-goal-stop".into())
             .spawn(move || {
-                let _ = super::end_agent_loop(&state, &agent_id);
+                for spelling in &loops {
+                    let _ = super::end_agent_loop(&state, spelling);
+                }
             });
         Ok(())
     }
@@ -6455,6 +6459,10 @@ pub mod runtime {
     // consent functions they call: each resolution is recorded with the fixed
     // DESKTOP_UI_RESOLVER label inside the consent module.
 
+    /// Consent decisions are made one at a time, as they were on the
+    /// interface thread: two answers to one request never both count.
+    static CONSENT_DECISIONS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     // Off the interface thread: it waits on the agent loops' lock, which a
     // running cycle holds; the interface (and every stop) stays usable.
     #[tauri::command(async)]
@@ -6463,6 +6471,7 @@ pub mod runtime {
         state: tauri::State<'_, AppState>,
         consent_id: String,
     ) -> Result<(), String> {
+        let _one = CONSENT_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
         let meta = super::approve_consent_request(state.inner(), consent_id.clone())?;
         // Best-effort: notify frontend that consent was resolved
         let _ = window.emit(
@@ -6486,6 +6495,7 @@ pub mod runtime {
         consent_id: String,
         reason: Option<String>,
     ) -> Result<(), String> {
+        let _one = CONSENT_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
         let meta = super::deny_consent_request(state.inner(), consent_id.clone(), reason)?;
         // Best-effort: notify frontend that consent was resolved
         let _ = window.emit(
@@ -6522,6 +6532,7 @@ pub mod runtime {
         state: tauri::State<'_, AppState>,
         goal_id: String,
     ) -> Result<(), String> {
+        let _one = CONSENT_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
         let (consent_ids, meta) = super::batch_approve_consents(state.inner(), goal_id)?;
         for consent_id in consent_ids {
             // Best-effort: notify frontend of each resolved consent
@@ -6546,6 +6557,7 @@ pub mod runtime {
         state: tauri::State<'_, AppState>,
         consent_id: String,
     ) -> Result<(), String> {
+        let _one = CONSENT_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
         let meta = super::review_consent_batch(state.inner(), consent_id.clone())?;
         // Best-effort: notify frontend that consent entered review-each mode
         let _ = window.emit(
@@ -6569,6 +6581,7 @@ pub mod runtime {
         goal_id: String,
         reason: Option<String>,
     ) -> Result<(), String> {
+        let _one = CONSENT_DECISIONS.lock().unwrap_or_else(|p| p.into_inner());
         let (consent_ids, meta) = super::batch_deny_consents(state.inner(), goal_id, reason)?;
         for consent_id in consent_ids {
             // Best-effort: notify frontend of each resolved consent
@@ -6714,7 +6727,9 @@ pub mod runtime {
 
     // ── Hivemind commands ──
 
-    #[tauri::command]
+    // Off the interface thread: a session plans with a model and runs its
+    // sub-tasks one after another, each waiting on the agent loops' lock.
+    #[tauri::command(async)]
     fn start_hivemind(
         state: tauri::State<'_, AppState>,
         goal: String,

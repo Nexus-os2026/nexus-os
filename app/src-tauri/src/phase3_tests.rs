@@ -4460,21 +4460,12 @@ enum Route {
     NonProduction,
 }
 
-/// The kinds of real-world mechanism a resolved path names. Phase Zero's
-/// process, termination and network predicates, extended with WebSocket
-/// clients, nix and rustix sockets, rustix's fork, exec and kill calls and
-/// sysinfo's signals; raw system calls (`syscall` can start or replace a process
-/// outside every predicate); the X server; the desktop bus (D-Bus, and
-/// AT-SPI, which reads and drives other applications); loading a shared
-/// library; the credential vault (its global facade and the OS keyring);
-/// sealed spawns; launching the OS's opener or browser; and direct screen,
-/// input, clipboard, audio and browser-driver crates.
 /// What reaches the network beyond Phase Zero's socket list: name
-/// resolution (std's `ToSocketAddrs` and `lookup_host`, libc's resolver
-/// functions, the DNS crates) and protocol crates that open their own
-/// connections. (`tokio::net::lookup_host` is under `tokio::net`, which
-/// `opens_network` counts.) A resolver call made as a method is not a path:
-/// see `RESOLVING_METHODS`.
+/// resolution (std's `ToSocketAddrs`, libc's resolver functions, the DNS
+/// crates) and protocol crates that open their own connections.
+/// (`tokio::net::lookup_host` is under `tokio::net`, which `opens_network`
+/// counts; `std::net::lookup_host` is listed in case a toolchain gains it.)
+/// A resolver call made as a method is not a path: see `RESOLVING_METHODS`.
 fn network_beyond_sockets(path: &[String]) -> bool {
     use crate::phase0_surface::rust_paths::starts_with;
     (path.len() > 1
@@ -4529,6 +4520,26 @@ fn network_beyond_sockets(path: &[String]) -> bool {
 /// it is made, as a method (`.`) or through any type or trait path (`::`).
 const RESOLVING_METHODS: &[&str] = &["to_socket_addrs", "socket_addrs"];
 
+/// The Prometheus exporter's builder methods that start its HTTP listener
+/// or push gateway: a call is a network site in a file that names the
+/// exporter (its in-process recorder, `install_recorder`, is not).
+const EXPORTER_METHODS: &[&str] = &[
+    "install",
+    "build",
+    "with_http_listener",
+    "with_push_gateway",
+    "with_http_uds_listener",
+];
+
+/// The kinds of real-world mechanism a resolved path names. Phase Zero's
+/// process, termination and network predicates, extended with WebSocket
+/// clients, nix and rustix sockets, rustix's fork, exec and kill calls and
+/// sysinfo's signals; raw system calls (`syscall` can start or replace a process
+/// outside every predicate); the X server; the desktop bus (D-Bus, and
+/// AT-SPI, which reads and drives other applications); loading a shared
+/// library; the credential vault (its global facade and the OS keyring);
+/// sealed spawns; launching the OS's opener or browser; and direct screen,
+/// input, clipboard, audio and browser-driver crates.
 fn effect_kinds(path: &[String]) -> BTreeSet<&'static str> {
     use crate::phase0_surface::rust_paths::{
         constructs_process, ends_process, opens_network, starts_with,
@@ -4827,6 +4838,8 @@ fn file_effect_sites(file: &str, src: &str, own: &[String]) -> BTreeMap<&'static
     // that lists processes with sysinfo (a kill by name or by pid).
     let t = &analysis.tokens;
     let lists_processes = (0..t.len()).any(|k| !analysis.test[k] && t[k].is("sysinfo"));
+    let exports_metrics =
+        (0..t.len()).any(|k| !analysis.test[k] && t[k].is("metrics_exporter_prometheus"));
     for k in 1..t.len() {
         if analysis.test[k] {
             continue;
@@ -4836,6 +4849,12 @@ fn file_effect_sites(file: &str, src: &str, own: &[String]) -> BTreeMap<&'static
         }
         if (t[k - 1].is(".") || t[k - 1].is("::"))
             && RESOLVING_METHODS.iter().any(|method| t[k].is(method))
+        {
+            *sites.entry("network").or_insert(0) += 1;
+        }
+        if exports_metrics
+            && t[k - 1].is(".")
+            && EXPORTER_METHODS.iter().any(|method| t[k].is(method))
         {
             *sites.entry("network").or_insert(0) += 1;
         }
@@ -6507,6 +6526,22 @@ const FFI_DENIED: &[&str] = &[
     "res_nquery",
     "res_search",
     "res_nsearch",
+    "res_send",
+    "res_nsend",
+    "res_querydomain",
+    "res_nquerydomain",
+    "res_mkquery",
+    "res_nmkquery",
+    "__res_init",
+    "__res_ninit",
+    "__res_query",
+    "__res_nquery",
+    "__res_search",
+    "__res_nsearch",
+    "__res_send",
+    "__res_nsend",
+    "__res_querydomain",
+    "__res_mkquery",
     "sigqueue",
     "CreateProcessW",
     "CreateProcessA",
@@ -6683,6 +6718,8 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
             "end_agent_loop",
             vec![
                 at(agents_rs, "stop_agents"),
+                at(cognitive_rs, "ScheduledGoalExecutor::execute"),
+                at(cognitive_rs, "stop_agent_goal"),
                 at(cognitive_rs, "stop_agent_goal"),
                 at(lib_rs, "stop_agent_goal"),
             ],
@@ -6701,6 +6738,26 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
                 at(agents_rs, "stop_agent_now"),
                 at(lib_rs, "stop_autonomous_loop"),
             ],
+        ),
+        (
+            "stop_agent_goal",
+            vec![
+                at(cognitive_rs, "execute_hivemind_subtask"),
+                at(lib_rs, "run"),
+            ],
+        ),
+        (
+            "spellings",
+            vec![
+                at(agents_rs, "stop_agent_now"),
+                at(agents_rs, "stop_agents"),
+                at(cognitive_rs, "stop_agent_goal"),
+                at(lib_rs, "stop_agent_goal"),
+            ],
+        ),
+        (
+            "was_stopped",
+            vec![at(cognitive_rs, "ScheduledGoalExecutor::execute")],
         ),
     ] {
         assert_eq!(mentions(DESKTOP_SRC, name), expected, "{name}");
@@ -6725,7 +6782,10 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
         &[
             "letwas_scheduled=scheduled();",
             "ifis_transcendent_agent(&self.state,agent_id){",
-            "ifhandle.state==AgentState::Stopped{ifwas_scheduled&&!scheduled(){returnErr(UNSCHEDULED.to_string());}supervisor.restart_agent(agent_uuid)",
+            "letowner_stopped=self.state.real_world().is_ok_and(|world|world.was_stopped(agent_id));if!scheduled()&&(was_scheduled||owner_stopped){returnErr(UNSCHEDULED.to_string());}supervisor.restart_agent(agent_uuid)",
+            "letrunning=supervisor.get_agent(agent_uuid).is_some_and(|handle|handle.state==AgentState::Running);if!running||(was_scheduled&&!scheduled()){drop(supervisor);let_=end_agent_loop(&self.state,agent_id);returnErr(UNSCHEDULED.to_string());}",
+            "spawn_cognitive_loop_with_bridge(",
+            "drop(supervisor);Ok(())",
         ],
         "ScheduledGoalExecutor::execute",
     );
@@ -6814,11 +6874,11 @@ fn p3_g6_11_the_owners_stops_reach_phase_three() {
 
 /// The owner's stop routines and quitting, pinned whole (normalized text):
 /// see `p3_g6_11`.
-const STOP_ROUTINES: [(&str, &str, &str); 15] = [
+const STOP_ROUTINES: [(&str, &str, &str); 16] = [
     (
         "app/src-tauri/src/commands/cognitive.rs",
         "stop_agent_goal",
-        "letagent_id=canonical_agent_id(&agent_id);ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}end_agent_loop(state,&agent_id)",
+        "letagent_id=canonical_agent_id(&agent_id);ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}letmutended=end_agent_loop(state,&agent_id);forspellinginspellings(state,&agent_id).into_iter().skip(1){ifend_agent_loop(state,&spelling).is_ok(){ended=Ok(());}}ended",
     ),
     (
         "app/src-tauri/src/commands/cognitive.rs",
@@ -6833,7 +6893,7 @@ const STOP_ROUTINES: [(&str, &str, &str); 15] = [
     (
         "app/src-tauri/src/commands/agents.rs",
         "stop_agents",
-        "letagents:Vec<String>=agents.iter().map(|id|canonical_agent_id(id)).collect();letloops:Vec<String>=agents.iter().flat_map(|agent|spellings(state,agent)).collect();letresults=agents.iter().map(|agent|stop_agent_now(state,agent)).collect();letstate=state.clone();let_=Builder::new().name(\"nexus-agent-stop\".into()).spawn(move||{foragentin&loops{let_=end_agent_loop(&state,agent);}});results",
+        "letagents:Vec<String>=agents.iter().map(|id|canonical_agent_id(id)).collect();ifletOk(world)=state.real_world(){foragentin&agents{world.cancel_agent(agent);}}letloops:Vec<(String,Option<Arc<AtomicBool>>)>=agents.iter().flat_map(|agent|spellings(state,agent)).map(|spelling|{letflag=state.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).get(&spelling).cloned();(spelling,flag)}).collect();letresults=agents.iter().map(|agent|stop_agent_now(state,agent)).collect();letremover=state.clone();letspawned=Builder::new().name(\"nexus-agent-stop\".into()).spawn(move||{for(agent,flag)in&loops{letnow=remover.cognitive_cancellations.lock().unwrap_or_else(|p|p.into_inner()).get(agent).cloned();letreplaced=match(flag,&now){(Some(then),Some(now))=>!Arc::ptr_eq(then,now),(None,Some(_))=>true,_=>false};if!replaced{let_=end_agent_loop(&remover,agent);}}});ifspawned.is_err(){foragentin&agents{state.log_event(Uuid::parse_str(agent).unwrap_or_default(),EventType::StateChange,json!({\"event\":\"stop_agent\",\"loop_removal\":\"not started\"}));}}results",
     ),
     (
         "app/src-tauri/src/commands/agents.rs",
@@ -6853,7 +6913,7 @@ const STOP_ROUTINES: [(&str, &str, &str); 15] = [
     (
         "app/src-tauri/src/lib.rs",
         "stop_agent_goal",
-        "letagent_id=canonical_agent_id(&agent_id);ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}letstate=state.inner().clone();let_=Builder::new().name(\"nexus-goal-stop\".into()).spawn(move||{let_=end_agent_loop(&state,&agent_id);});Ok(())",
+        "letagent_id=canonical_agent_id(&agent_id);ifletOk(world)=state.real_world(){world.cancel_agent(&agent_id);}letloops=spellings(state.inner(),&agent_id);letstate=state.inner().clone();let_=Builder::new().name(\"nexus-goal-stop\".into()).spawn(move||{forspellingin&loops{let_=end_agent_loop(&state,spelling);}});Ok(())",
     ),
     (
         "app/src-tauri/src/commands/enterprise.rs",
@@ -6868,7 +6928,7 @@ const STOP_ROUTINES: [(&str, &str, &str); 15] = [
     (
         "app/src-tauri/src/governed_real_world.rs",
         "RealWorld::shutdown",
-        "letauthority=self.control.authority();self.control.shut_down();letexecuting=||{authority.runs().views().iter().any(|run|{authority.commitments().views_of_run(run.id).iter().any(|view|view.state==CommitmentState::Executing)})};letdeadline=Instant::now()+SHUTDOWN_WAIT;whileexecuting()&&Instant::now()<deadline{sleep(Duration::from_millis(25));}self.control.stop_display();",
+        "letauthority=self.control.authority();self.control.shut_down();letexecuting=||{self.control.is_starting_display()||authority.runs().views().iter().any(|run|{authority.commitments().views_of_run(run.id).iter().any(|view|view.state==CommitmentState::Executing)})};letdeadline=Instant::now()+SHUTDOWN_WAIT;whileexecuting()&&Instant::now()<deadline{sleep(Duration::from_millis(25));}self.control.stop_display();",
     ),
     (
         "app/src-tauri/src/governed_real_world.rs",
@@ -6889,6 +6949,11 @@ const STOP_ROUTINES: [(&str, &str, &str); 15] = [
         "crates/nexus-governed-control/src/governed.rs",
         "GovernedControl::shut_down",
         "letruns=self.authority().runs();runs.close();runs.views().into_iter().filter(|run|!run.cancelled&&!run.finished).filter(|run|self.cancel_run(run.id).is_ok()).count()",
+    ),
+    (
+        "app/src-tauri/src/commands/agents.rs",
+        "stop_agent",
+        "letparsed=parse_agent_id(agent_id.as_str())?;state.agent_scheduler.unregister_agent(&agent_id);letmutsupervisor=matchstate.supervisor.lock(){Ok(guard)=>guard,Err(poisoned)=>poisoned.into_inner()};supervisor.stop_agent(parsed).map_err(agent_error)?;drop(supervisor);let_=state.db.update_agent_state(&agent_id,\"stopped\");persist_agent_fuel_ledger(state,&agent_id);update_last_action(state,parsed,\"stopped\");state.log_event(parsed,EventType::StateChange,json!({\"event\":\"stop_agent\",\"status\":\"ok\"}));Ok(())",
     ),
 ];
 
@@ -7000,12 +7065,12 @@ fn p3_g6_12_the_inventory_fails_closed() {
         "    let _ = str::to_socket_addrs(\"example.com:443\");\n",
         "    let _ = <(&str, u16)>::to_socket_addrs(&(\"example.com\", 443));\n",
         "    let _ = url::Url::parse(\"https://example.com\").unwrap().socket_addrs(|| None);\n",
-        "    let _ = metrics_exporter_prometheus::PrometheusBuilder::new();\n",
+        "    let _ = metrics_exporter_prometheus::PrometheusBuilder::new().with_push_gateway(\"x\", todo!(), None, None, false);\n",
         "}\n",
     );
     let file = "app/src-tauri/src/fixture_resolving.rs";
     let sites = file_effect_sites(file, resolving, &module_of(file));
-    assert_eq!(sites.get("network"), Some(&9), "{sites:?}");
+    assert_eq!(sites.get("network"), Some(&10), "{sites:?}");
 
     // Every latent class has entries, so its callers are sites.
     for (file, _, reason) in EFFECT_FILES {
@@ -7654,6 +7719,11 @@ fn p3_g9_01_a_response_body_lives_only_in_zeroizing_buffers() {
         redact.contains("letmutout=Vec::with_capacity(response.body.len()/needle.len()*MARK.len().saturating_sub(needle.len())+response.body.len());"),
         "{redact}"
     );
+    // The header fields go through a buffer sized the same way.
+    assert!(
+        redact.contains("letredacted=replaced(text,secret);"),
+        "{redact}"
+    );
     let append = compact(one_fn(text, "append").body_text(text));
     assert_in_order(
         &append,
@@ -7708,7 +7778,7 @@ fn p3_g9_02_the_x_connection_is_made_only_on_the_agent_socket_with_its_cookie() 
     );
     // Every path call of a `connect` in the crate, however written
     // (`<RustConnection>::connect` included): only these two.
-    let mut paths = BTreeSet::new();
+    let mut paths = Vec::new();
     for (file, _) in p3_sources() {
         let text = production_source(&format!("{P3_CRATE}{file}"));
         let m = masked(text);
@@ -7731,14 +7801,16 @@ fn p3_g9_02_the_x_connection_is_made_only_on_the_agent_socket_with_its_cookie() 
                         .next()
                         .unwrap_or_default()
                         .to_string();
-                    paths.insert((file.to_string(), qualifier, name));
+                    paths.push((file.to_string(), qualifier, name));
                 }
             }
         }
     }
+    // Each counted, so a second one in the same file shows.
+    paths.sort();
     assert_eq!(
         paths,
-        BTreeSet::from([
+        [
             (
                 "display/server.rs".to_string(),
                 "RustConnection".to_string(),
@@ -7749,7 +7821,7 @@ fn p3_g9_02_the_x_connection_is_made_only_on_the_agent_socket_with_its_cookie() 
                 "UnixStream".to_string(),
                 "connect"
             ),
-        ])
+        ]
     );
     let text = production_source(&format!("{P3_CRATE}display/server.rs"));
     // The socket is the agent display's, in the fixed socket directory.
@@ -7807,7 +7879,25 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
         ],
         "run",
     );
-    // The crate starts one proxy, there.
+    // The crate names the proxy only there, outside its own file (an alias
+    // or another start would show), and starts it once.
+    let named: Vec<(&str, String)> = mentions(P3_CRATE, "BrowserProxy")
+        .into_iter()
+        .filter(|(file, _)| !file.ends_with("browser/proxy.rs"))
+        .collect();
+    assert_eq!(
+        named,
+        [
+            (
+                "crates/nexus-governed-control/src/browser/mod.rs",
+                String::new()
+            ),
+            (
+                "crates/nexus-governed-control/src/browser/mod.rs",
+                "run".to_string()
+            ),
+        ]
+    );
     let starts: usize = p3_sources()
         .into_iter()
         .map(|(file, _)| {
@@ -7828,8 +7918,9 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
     assert_in_order(
         &compact(one_fn(proxy, "BrowserProxy::start").body_text(proxy)),
         &[
-            "while!closed.load(Ordering::SeqCst){if!(policy.live)(){stop.store(true,Ordering::SeqCst);}",
+            "while!closed.load(Ordering::SeqCst){letlive=catch_unwind(AssertUnwindSafe(||{(policy.live)()})).unwrap_or(false);if!live{stop.store(true,Ordering::SeqCst);}",
             "ifstop.load(Ordering::SeqCst)||active.load(Ordering::SeqCst)>=MAX_CONNECTIONS{refused.fetch_add(1,Ordering::SeqCst);drop(client);continue;}",
+            "ifspawned.is_err(){active.fetch_sub(1,Ordering::SeqCst);refused.fetch_add(1,Ordering::SeqCst);}",
         ],
         "BrowserProxy::start",
     );
@@ -7875,15 +7966,17 @@ fn p3_g9_03_the_browser_goes_out_only_while_its_session_may() {
     );
 }
 
-/// G10 (verification V3): no command the interface thread runs waits on the
-/// agent loops' lock, which a running cycle holds for its whole length (so
-/// the page and every stop stay usable). The kernel's loop runtime takes it
-/// in the methods found here; every desktop function that calls one
-/// directly (outside a thread or task it spawns) is pinned, and the
-/// commands the interface thread runs (`#[command]`, not async) call none
-/// of them, nor the methods, outside a thread they spawn. One level deep: a
-/// command reaching such a function through another helper is not seen
-/// here (stated in the design record).
+/// G10, G11 (verification V3, G10-A N1 and N6): no command the interface
+/// thread runs waits on the agent loops' lock, which a running cycle holds
+/// for its whole length (so the page and every stop stay usable). The
+/// kernel's loop runtime takes it in the methods found here (and those that
+/// call them); every desktop function that reaches one, through any chain
+/// of desktop functions called outside the threads and tasks they spawn, is
+/// pinned; and no command the interface thread runs (`#[command]` that is
+/// neither `#[command(async)]` nor an `async fn`), in any desktop file,
+/// calls one of them or a locking method, outside a thread it spawns.
+/// Names are matched as calls, so the set is conservative (a method of the
+/// same name elsewhere counts too).
 #[test]
 fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
     // The methods that take the lock, and those that call one of them.
@@ -7916,6 +8009,7 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
     for method in [
         "stop_agent_loop",
         "approve_blocked_steps",
+        "approve_blocked_step",
         "deny_blocked_step",
         "assign_goal",
         "set_review_each_mode",
@@ -7923,90 +8017,120 @@ fn p3_g10_01_no_interface_thread_command_waits_on_the_loops_lock() {
     ] {
         assert!(locking.contains(method), "{method}: {locking:?}");
     }
-    let waits = |body: &str| {
+    // Every desktop function's code outside what it spawns, literals masked.
+    let code = |text: &str, item: &FnItem| {
+        let masked = String::from_utf8(masked(item.body_text(text))).expect("masked text");
+        outside_spawned(&compact(&masked))
+    };
+    let mut bodies: Vec<(&'static str, FnItem, String)> = Vec::new();
+    for (file, text) in workspace_sources() {
+        if file.starts_with(DESKTOP_SRC) {
+            for item in fn_items(text) {
+                let body = code(text, &item);
+                bodies.push((file.as_str(), item, body));
+            }
+        }
+    }
+    let takes_lock = |body: &str| {
         locking
             .iter()
             .any(|method| body.contains(&format!("cognitive_runtime.{method}(")))
     };
-    let mut waiting = BTreeSet::new();
-    for (file, text) in workspace_sources() {
-        if !file.starts_with(DESKTOP_SRC) {
-            continue;
+    let mut waiting: BTreeSet<String> = bodies
+        .iter()
+        .filter(|(_, _, body)| takes_lock(body))
+        .map(|(_, item, _)| item.name.clone())
+        .collect();
+    loop {
+        let more: Vec<String> = bodies
+            .iter()
+            .filter(|(_, item, body)| {
+                !waiting.contains(&item.name) && waiting.iter().any(|name| calls(body, name))
+            })
+            .map(|(_, item, _)| item.name.clone())
+            .collect();
+        if more.is_empty() {
+            break;
         }
-        for item in fn_items(text) {
-            if waits(&outside_spawned(&compact(item.body_text(text)))) {
-                waiting.insert((file.as_str(), item.path.clone()));
-            }
-        }
+        waiting.extend(more);
     }
     // Reviewed: the consent decisions and goal assignment (their commands
-    // run off the interface thread), the loop's own cycle, the end of a
-    // loop (on the stop routines' threads), the model route of a cycle and
-    // the review-mode switch (an off-thread command).
+    // run off the interface thread), the loop's own cycle and its model
+    // route, the end of a loop (on the stop routines' threads), the review
+    // mode switch, HiveMind sessions, the scheduler's tick and its trigger,
+    // the Phase Three approval (a blocking-pool command), and names that
+    // match those calls (`approve`, `execute`, `execute_goal`).
     assert_eq!(
         waiting,
-        BTreeSet::from([
-            (
-                "app/src-tauri/src/commands/cognitive.rs",
-                "assign_agent_goal".to_string()
-            ),
-            (
-                "app/src-tauri/src/commands/cognitive.rs",
-                "end_agent_loop".to_string()
-            ),
-            (
-                "app/src-tauri/src/commands/cognitive.rs",
-                "persist_task_start".to_string()
-            ),
-            (
-                "app/src-tauri/src/commands/cognitive.rs",
-                "run_cognitive_cycle".to_string()
-            ),
-            (
-                "app/src-tauri/src/commands/consent.rs",
-                "approve_consent_request".to_string()
-            ),
-            (
-                "app/src-tauri/src/commands/consent.rs",
-                "batch_approve_consents".to_string()
-            ),
-            (
-                "app/src-tauri/src/commands/consent.rs",
-                "batch_deny_consents".to_string()
-            ),
-            (
-                "app/src-tauri/src/commands/consent.rs",
-                "deny_consent_request".to_string()
-            ),
-            (
-                "app/src-tauri/src/commands/consent.rs",
-                "review_consent_batch".to_string()
-            ),
-            (
-                "app/src-tauri/src/lib.rs",
-                "resolve_agent_llm_route".to_string()
-            ),
-            (
-                "app/src-tauri/src/lib.rs",
-                "set_agent_review_mode".to_string()
-            ),
-        ])
+        BTreeSet::from(
+            [
+                "approve",
+                "approve_consent_request",
+                "assign_agent_goal",
+                "batch_approve_consents",
+                "batch_deny_consents",
+                "deny_consent_request",
+                "end_agent_loop",
+                "execute",
+                "execute_agent_goal",
+                "execute_goal",
+                "execute_hivemind_subtask",
+                "p3_approve",
+                "persist_task_start",
+                "resolve_agent_llm_route",
+                "review_consent_batch",
+                "run_cognitive_cycle",
+                "scheduler_trigger_now",
+                "set_agent_review_mode",
+                "start_hivemind",
+                "stop_agent_goal",
+                "with_agent_llm_route",
+            ]
+            .map(str::to_string)
+        )
     );
-    let lib = production_source("app/src-tauri/src/lib.rs");
-    for item in fn_items(lib) {
-        if !item.head.starts_with("#[command]") || item.head.contains("async") {
+    // The commands the interface thread runs, in every desktop file.
+    let mut checked = 0;
+    for (file, item, body) in &bodies {
+        if !item.head.contains("#[command") {
             continue;
         }
-        let body = outside_spawned(&compact(item.body_text(lib)));
-        assert!(!waits(&body), "{} waits on the loops' lock", item.path);
-        for (_, function) in &waiting {
-            let name = function.rsplit("::").next().unwrap_or_default();
+        let off_thread = item.head.contains("#[command(async)]") || item.head.ends_with("async");
+        if off_thread {
+            continue;
+        }
+        checked += 1;
+        assert!(
+            !takes_lock(body),
+            "{file} {} waits on the loops' lock",
+            item.path
+        );
+        for name in &waiting {
             assert!(
-                !calls(&body, name),
-                "{} waits on the loops' lock through {function}",
+                !calls(body, name),
+                "{file} {} waits on the loops' lock through {name}",
                 item.path
             );
         }
+    }
+    assert!(checked > 500, "{checked} interface-thread commands checked");
+    // Consent decisions, off the interface thread, are still made one at a
+    // time: two answers to one request never both count.
+    let lib = production_source("app/src-tauri/src/lib.rs");
+    for command in [
+        "approve_consent_request",
+        "deny_consent_request",
+        "batch_approve_consents",
+        "review_consent_batch",
+        "batch_deny_consents",
+    ] {
+        let item = one_fn(lib, command);
+        assert_eq!(item.head, "#[command(async)]", "{command}");
+        assert!(
+            compact(item.body_text(lib))
+                .starts_with("let_one=CONSENT_DECISIONS.lock().unwrap_or_else(|p|p.into_inner());"),
+            "{command}"
+        );
     }
 }
 

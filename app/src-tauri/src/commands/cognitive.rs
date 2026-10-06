@@ -1189,9 +1189,14 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
             if let Some(handle) = supervisor.get_agent(agent_uuid) {
                 if handle.state == AgentState::Stopped {
                     // Checked under the lock the owner's stop takes after it
-                    // removed the schedule: an agent stopped while this tick
-                    // ran is not brought back.
-                    if was_scheduled && !scheduled() {
+                    // removed the schedule: an agent the owner stopped (Phase
+                    // Three was told), or one whose schedule this tick saw
+                    // vanish, is not brought back by a tick.
+                    let owner_stopped = self
+                        .state
+                        .real_world()
+                        .is_ok_and(|world| world.was_stopped(agent_id));
+                    if !scheduled() && (was_scheduled || owner_stopped) {
                         return Err(UNSCHEDULED.to_string());
                     }
                     supervisor.restart_agent(agent_uuid).map_err(agent_error)?;
@@ -1217,6 +1222,23 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
             }),
         );
 
+        // A stop that came while this tick assigned the goal: no loop starts
+        // for it. Checked, and the loop registered, under the supervisor's
+        // lock, which the owner's stop takes: a later stop sees the loop.
+        let supervisor = self
+            .state
+            .supervisor
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let running = supervisor
+            .get_agent(agent_uuid)
+            .is_some_and(|handle| handle.state == AgentState::Running);
+        if !running || (was_scheduled && !scheduled()) {
+            drop(supervisor);
+            let _ = end_agent_loop(&self.state, agent_id);
+            return Err(UNSCHEDULED.to_string());
+        }
+
         #[cfg(all(
             feature = "tauri-runtime",
             any(target_os = "windows", target_os = "macos", target_os = "linux")
@@ -1231,6 +1253,7 @@ impl nexus_kernel::cognitive::ScheduledGoalExecutor for ScheduledGoalExecutor {
                 );
             }
         }
+        drop(supervisor);
 
         Ok(())
     }
@@ -2209,7 +2232,17 @@ pub(crate) fn stop_agent_goal(state: &AppState, agent_id: String) -> Result<(), 
     if let Ok(world) = state.real_world() {
         world.cancel_agent(&agent_id);
     }
-    end_agent_loop(state, &agent_id)
+    // Its loop, under every spelling it may be kept under.
+    let mut ended = end_agent_loop(state, &agent_id);
+    for spelling in crate::commands::agents::spellings(state, &agent_id)
+        .into_iter()
+        .skip(1)
+    {
+        if end_agent_loop(state, &spelling).is_ok() {
+            ended = Ok(());
+        }
+    }
+    ended
 }
 
 /// Remove the agent's loop (this waits while any agent's cycle holds the

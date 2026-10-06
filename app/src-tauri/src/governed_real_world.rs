@@ -230,6 +230,14 @@ impl RealWorld {
         }
     }
 
+    /// Whether the owner stopped this agent (or ended its goal) since the
+    /// desktop started: Phase Three was told, and refuses what its loop
+    /// would do. Any spelling of the agent's id.
+    pub(crate) fn was_stopped(&self, agent: &str) -> bool {
+        let agent = crate::commands::agents::canonical_agent_id(agent);
+        self.agents().stopped_at.contains_key(&agent)
+    }
+
     /// The desktop is quitting: every run is cancelled (whatever still runs
     /// sees it and ends its processes) and the agent display is stopped
     /// gracefully, recorded, rather than left to die with the process.
@@ -241,14 +249,16 @@ impl RealWorld {
         // its processes and removes its directories, and its end is
         // recorded: wait for that (within a bound) before the process
         // exits, then stop the display gracefully.
+        // A display start under way counts too: its end is then recorded.
         let executing = || {
-            authority.runs().views().iter().any(|run| {
-                authority
-                    .commitments()
-                    .views_of_run(run.id)
-                    .iter()
-                    .any(|view| view.state == CommitmentState::Executing)
-            })
+            self.control.is_starting_display()
+                || authority.runs().views().iter().any(|run| {
+                    authority
+                        .commitments()
+                        .views_of_run(run.id)
+                        .iter()
+                        .any(|view| view.state == CommitmentState::Executing)
+                })
         };
         let deadline = std::time::Instant::now() + SHUTDOWN_WAIT;
         while executing() && std::time::Instant::now() < deadline {
