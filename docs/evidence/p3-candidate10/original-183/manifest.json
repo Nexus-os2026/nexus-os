@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "name": "adapted Candidate-10 canonical campaign",
-  "version": "1",
+  "version": "1-r1",
   "historical_corrected_harness": {
     "path": "/home/nexus/NEXUS/phase3-final-evidence/05-mutations/candidate8-7d1eaced/rerun-M160/mutations.py",
     "sha256": "9bdd045121e10fa03d35b300283b0bbc487b3ef29d69ad7e00d33a6a8c607623"
@@ -3913,7 +3913,7 @@
       "id": "M70",
       "category": "screen/input",
       "historical_meaning": "a display survives a stop that came while it started",
-      "candidate10_meaning": "a display survives a stop that came while it started",
+      "candidate10_meaning": "Allow a stop arriving after display admission or during server launch to be overtaken: disable both the post-admission/pre-launch refusal and the final refusal under the session lock. Retain the initial emergency-stop and pre-admission stop-epoch guards.",
       "historical": {
         "file": "crates/nexus-governed-control/src/display/mod.rs",
         "edits": [
@@ -3940,6 +3940,12 @@
           "anchor": "        if self.stops.load(Ordering::SeqCst) != stops || stopped() {",
           "replacement": "        if false && (self.stops.load(Ordering::SeqCst) != stops || stopped()) {",
           "count": 1
+        },
+        {
+          "file": "crates/nexus-governed-control/src/display/mod.rs",
+          "anchor": "        if self.stops.load(Ordering::SeqCst) != stops || stopped {",
+          "replacement": "        if false && (self.stops.load(Ordering::SeqCst) != stops || stopped) {",
+          "count": 1
         }
       ],
       "command": [
@@ -3956,12 +3962,19 @@
       "expected_failure_tests": [
         "display::tests::a_stop_wins_over_a_start_and_nothing_starts_unrecorded"
       ],
-      "review_status": "PASS",
-      "lineage": "UNCHANGED",
-      "review": "The changed statement still introduces this fault: a display survives a stop that came while it started. Its historical behavioral assertion or named structural guard remains applicable; the selected test and mutation were inspected together. Text matching alone is not run evidence.",
-      "application_review": "All ordered anchors and counts verified against Candidate-10 source before campaign execution.",
+      "review_status": "RE-ANCHOR NEEDED",
+      "lineage": "APPROVED SEMANTIC ADAPTATION",
+      "review": "R1 correction after the complete Candidate-10 run observed M70 SURVIVED. Candidate 8 had one post-launch refusal. Candidate 10 added a post-admission/pre-launch refusal and retained a final post-launch/session-lock refusal. The first adaptation disabled only the earlier one, so the final check still rejected the overtaken start. R1 disables both checks for the same stop-during-start property. The existing live Xvfb test must see an unexpected successful start, and restoration must be exact.",
+      "application_review": "R1 two ordered, distinct anchors each match exactly once in Candidate-10 source; the historical tuple remains unchanged. The first complete Candidate-10 survivor evidence is preserved separately.",
       "source_sha256": {
         "crates/nexus-governed-control/src/display/mod.rs": "23bf92f1a5186002c3501ce2a11e9505a723b7254df5e0d36fb915669e1c6a4f"
+      },
+      "r1_semantic_reconstruction": {
+        "historical_candidate8_mechanism": "After admission and server launch, one stop-epoch/callback check under the session lock rejected a stop that overtook display start. Historical M70 disabled that one post-launch check.",
+        "candidate10_mechanism": "After an initial stopped() refusal and pre-admission stop-epoch check, Candidate 10 checks epoch/callback again after admit() but before Server::start, then checks the epoch and a cached stopped() result after launch while holding the session lock.",
+        "first_adaptation_error": "The historical textual anchor moved to the added post-admission/pre-launch check. Disabling it alone left the final post-launch refusal active; the first complete Candidate-10 campaign recorded M70 SURVIVED (182 KILLED, 1 SURVIVED).",
+        "r1_corrected_mutation": "Disable exactly the post-admission/pre-launch check and the final post-launch/session-lock check. Keep initial stopped() and pre-admission epoch checks, admission evidence, server creation and all other safeguards unchanged.",
+        "intended_killing_test": "display::tests::a_stop_wins_over_a_start_and_nothing_starts_unrecorded: the callback first reports no stop, then reports a stop during start; the same fixture also stops in admit(). Both cases must refuse and leave no display/server."
       }
     },
     {

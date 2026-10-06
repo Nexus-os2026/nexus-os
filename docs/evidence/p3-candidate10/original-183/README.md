@@ -37,13 +37,23 @@ it. The mutation-local helper uses Candidate 8's actual X11 connection
 resource-id mask, not a guessed bit shift. No same-client helper exists in
 the unmutated production baseline. M166 is NOT a faithful historical mutation.
 
-The remaining 165 controls were reviewed for property and intended-test
+The remaining 164 controls were reviewed for property and intended-test
 continuity. M146 requires the mechanical test-command re-anchor above;
-164 retain their historical edits. Guard changes were compared for owner
+163 retain their historical edits. Guard changes were compared for owner
 stop ordering, new goal/session identity, native approval layout, proxy
 policy/observation additions and async command boundaries. Static review
 alone does not prove a kill. The manifest identifies the actual judge for
 every control; a full baseline and full run are still required.
+
+R1 corrects M70 after the first complete Candidate-10 campaign recorded 182
+kills and M70 surviving. Candidate 8 had one final post-launch stop refusal.
+Candidate 10 added a post-admission/pre-launch refusal while retaining a
+final post-launch refusal. The first adaptation followed the old text and
+disabled only the early check; the final check still refused the start.
+R1 disables both checks for the same stop-during-start property, leaving
+initial emergency-stop and pre-admission epoch guards intact. The existing
+live Xvfb test is the intended judge. The old complete 182/183 result stays
+separate from the R1 isolated development probe and any new complete run.
 
 T60b isolates commitment wall expiry from live-grant expiry. T165b uses
 explicit POINTER_ROOT with every corner covered and an ungrabbed keyboard.
