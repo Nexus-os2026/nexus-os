@@ -1,0 +1,2 @@
+# Preserve verbatim Git porcelain output, including its final record separator.
+preflight-4.stdout.txt whitespace=-blank-at-eof

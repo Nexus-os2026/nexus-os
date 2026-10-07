@@ -1,0 +1,13 @@
+{
+  "scope": "VALID",
+  "changed_existing": [
+    ".gitignore",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "created_files": 92,
+  "python_syntax": "VALID",
+  "symlinks": "NONE",
+  "targeted_secret_pattern_scan": "NO_MATCHES (not exhaustive secret proof)",
+  "ignore_exceptions": "NARROW"
+}

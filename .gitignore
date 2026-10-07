@@ -70,3 +70,16 @@ docs/claude-skills/*.zip
 # P0-002C4D2: assembled packaged Builder toolchain (release/CI build output)
 /app/src-tauri/builder-toolchain/
 /app/src-tauri/builder-toolchain.assembly-*/
+
+# Version only the approved development harness; runtime .nexus data stays ignored.
+!/.nexus/
+/.nexus/*
+!/.nexus/harness/
+!/.nexus/missions/
+!.claude/skills/nexus-mission/
+!.claude/skills/nexus-implement/
+!.claude/skills/nexus-verify/
+!.claude/skills/nexus-review/
+!.claude/skills/nexus-mutation/
+!.claude/skills/nexus-handover/
+!.claude/skills/nexus-recover/

@@ -1,0 +1,296 @@
+{
+  "schema_version": 1,
+  "mission_id": "NEXUS-HARNESS-V1",
+  "sealed_at": "2026-10-07T14:33:04.080559+00:00",
+  "artifacts": {
+    ".gitattributes": {
+      "sha256": "db6a1b3303ac287df13d6fc826c7b13e125b9566b210536cc70da5c179b2a48a",
+      "size": 128
+    },
+    "authorization.txt": {
+      "sha256": "344ff21124e9c7d2dfef35d861cb118934d13918a285e41e7cb62768faa96b05",
+      "size": 26470
+    },
+    "collectors/README.md": {
+      "sha256": "8cfe87baaf4fe744e6a59de6b5ea1c651d585dbbe86d8e8bfead7a08db212637",
+      "size": 338
+    },
+    "collectors/audit.py": {
+      "sha256": "1a6a573dc32626604581f2758097446088d86a475f06ad2e67319134e5e7dccd",
+      "size": 1875
+    },
+    "collectors/preflight.py": {
+      "sha256": "04a905b1fb34327abfe982352348e04b1aefcab4049d1ce249dbc74dae821ca3",
+      "size": 3369
+    },
+    "collectors/record.py": {
+      "sha256": "b3ab70b5924d5d62f3dfd6956800fabc4b9d6545a117a94d7926be3e23bd9d42",
+      "size": 3301
+    },
+    "collectors/seal.py": {
+      "sha256": "7ce51419a30e09f687b11fafd2323757daa459a01f3a36fb1cc0eb96a2a84a4a",
+      "size": 770
+    },
+    "inventory.txt": {
+      "sha256": "ad8fa1a0db6bcc95ca4ab5bb9edfe8a5f3ec98baabe4f60dcf91fe015cc740c1",
+      "size": 4090
+    },
+    "isolation-before.json": {
+      "sha256": "4aa88453cc0ca0cc5ea697d6308e223a091ebffbe2efad680d7cd3cbc3121d4d",
+      "size": 3176028
+    },
+    "logs/README.md": {
+      "sha256": "f7068a7aee5e192b29b1178f61a82413dcdfeb3ddf6cd1f0bcb4ef45b7bdee1c",
+      "size": 410
+    },
+    "logs/stage-b-contracts.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-b-contracts.stdout.txt": {
+      "sha256": "6cc0409d7a6147f6ad9f9fc986f861d201683c46ed43b033bafb59cd7cdeae4c",
+      "size": 79
+    },
+    "logs/stage-b-diff.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-b-diff.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-b-procedures.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-b-procedures.stdout.txt": {
+      "sha256": "74cb1a6595cb5e9f49d3ae2526c6a6d31802b3436974eb41d9e3c99947f10d28",
+      "size": 49
+    },
+    "logs/stage-c-diff.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-c-diff.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-c-skills.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-c-skills.stdout.txt": {
+      "sha256": "702acd93c1b72b7a2290e189055a89f93a7a3ed2157024a9bb60e31a9d20162e",
+      "size": 147
+    },
+    "logs/stage-d-diff.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-d-diff.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-d-skills.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-d-skills.stdout.txt": {
+      "sha256": "c9bc66805717bb6ada369c6b3de17be349aba15ac8af5e740653b04ed5be2982",
+      "size": 180
+    },
+    "logs/stage-e-diff.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-e-diff.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-e-preservation.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-e-preservation.stdout.txt": {
+      "sha256": "c7cdbf1eaf7c05b9f60a67540a378c6bfdf2592bc807a135869be8dbc3f16f94",
+      "size": 138
+    },
+    "logs/stage-f-adapter.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-f-adapter.stdout.txt": {
+      "sha256": "3ab6782f634144c3d7e578abb7cea72ecd240e51f82166bb9f07d5abc90641cf",
+      "size": 102
+    },
+    "logs/stage-f-diff.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-f-diff.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-g-diff.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-g-diff.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-g-regressions-v2.stderr.txt": {
+      "sha256": "4454af119c6f6ff8bc9542453c43132ab04f51d8378dc1634757de139eda90b3",
+      "size": 3971
+    },
+    "logs/stage-g-regressions-v2.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-g-regressions.stderr.txt": {
+      "sha256": "0c1bdc05cdacbbfcc6b5f6489307c5357061031362f7c6080161fdf655f56d6f",
+      "size": 3971
+    },
+    "logs/stage-g-regressions.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-g-structure-v2.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-g-structure-v2.stdout.txt": {
+      "sha256": "264ae04bf73e7d124f9bdd998a4a95461a2a749ad93768d64a9261a9d7884a09",
+      "size": 209
+    },
+    "logs/stage-g-structure.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-g-structure.stdout.txt": {
+      "sha256": "4a755e5fee362d0752e53946fc30a55b2f51d701d482974ae4252d5c6ca84b39",
+      "size": 209
+    },
+    "logs/stage-h-diff.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-h-diff.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-h-isolation.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-h-isolation.stdout.txt": {
+      "sha256": "358ccbc89b7f1d1be8ddd2edada3fb94526c0abb1aab87067f021a1b6b9b5d7f",
+      "size": 333
+    },
+    "logs/stage-h-regressions.stderr.txt": {
+      "sha256": "fdac2347128e247a1ac198e9f9940c7f824d71f78ec7a4962f01a2c72318e2d1",
+      "size": 4544
+    },
+    "logs/stage-h-regressions.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-h-scope.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-h-scope.stdout.txt": {
+      "sha256": "b4ec5bdf9611f098b2f7f7a6f4ae17e2eea330bc628e74d8a765a01f28df7918",
+      "size": 287
+    },
+    "logs/stage-i-remote.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-i-remote.stdout.txt": {
+      "sha256": "cf6b0aee1eb8422f85a0ffd368100e9b46af27653b2654521676dfd71df80e41",
+      "size": 57
+    },
+    "logs/stage-i-staged-whitespace.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-i-staged-whitespace.stdout.txt": {
+      "sha256": "300363d6cfd216a8ca951e8ee389961b3b5ef5671211407fe2e41f446bbdc8ca",
+      "size": 93
+    },
+    "logs/stage-i-structure.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-i-structure.stdout.txt": {
+      "sha256": "dbfb4155e37555684fc0619345f28fd3a3a729ac1c759d2947aee5ea5ff4b082",
+      "size": 209
+    },
+    "preflight-0.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "preflight-0.stdout.txt": {
+      "sha256": "ba051334ebc33f3162a4fd5be48615e03c8dac8ec7977e7c2752dbc1cf981841",
+      "size": 20
+    },
+    "preflight-1.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "preflight-1.stdout.txt": {
+      "sha256": "8469ef189a6b34130c1d6cc492da4e4c3b635f834a58f9ac2d03adb19bd38fbc",
+      "size": 41
+    },
+    "preflight-2.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "preflight-2.stdout.txt": {
+      "sha256": "4b1f09e303eaf1aec10b67e9b5101111546c7ca79a442ddbbc9f9665599d0044",
+      "size": 41
+    },
+    "preflight-3.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "preflight-3.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "preflight-4.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "preflight-4.stdout.txt": {
+      "sha256": "32c0040bf61c179a7521ab283d4b04fdfab5f0017b438e5dc840a63e68a8113c",
+      "size": 17178
+    },
+    "preflight-5.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "preflight-5.stdout.txt": {
+      "sha256": "3a1379fbdb5b33a7b6552384d0aed2e4b656986c8776113b0d025c09bc3f9173",
+      "size": 317
+    },
+    "preflight-6.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "preflight-6.stdout.txt": {
+      "sha256": "cf6b0aee1eb8422f85a0ffd368100e9b46af27653b2654521676dfd71df80e41",
+      "size": 57
+    },
+    "preflight-commands.json": {
+      "sha256": "001c5d7e88ab11f46dc44bcf8cd83bf3d95a598ada4324e731211e7361e59a03",
+      "size": 2533
+    },
+    "receipts.jsonl": {
+      "sha256": "473272a7ca5a8f83fe9394bf3b14b1b6ac9f828f0c6536f049f27c8a742d408d",
+      "size": 40116
+    }
+  },
+  "limitations": "Agent-produced integrity index, not independent acceptance; manifest excludes itself. Final clean-commit execution is in the external post-commit seal named in HANDOVER."
+}

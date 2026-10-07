@@ -1,0 +1,13 @@
+{
+  "structure": "VALID",
+  "skill_adapters": 14,
+  "canonical_procedures": 7,
+  "agents_bytes": 7076,
+  "receipts_checked": 24,
+  "semantic_policy_review": "REQUIRES_HUMAN_REVIEW",
+  "isolation": {
+    "existing_refs_unchanged": 243,
+    "candidate10_worktrees_unchanged": 3,
+    "candidate10_evidence_files_unchanged": 13123
+  }
+}

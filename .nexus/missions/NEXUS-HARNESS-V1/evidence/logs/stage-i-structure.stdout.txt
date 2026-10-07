@@ -1,0 +1,9 @@
+{
+  "structure": "VALID",
+  "skill_adapters": 14,
+  "canonical_procedures": 7,
+  "agents_bytes": 7076,
+  "receipts_checked": 27,
+  "semantic_policy_review": "REQUIRES_HUMAN_REVIEW",
+  "isolation": "NOT_RUN"
+}

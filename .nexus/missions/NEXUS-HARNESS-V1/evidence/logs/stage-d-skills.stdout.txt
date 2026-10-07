@@ -1,0 +1,8 @@
+Skill is valid!
+Skill is valid!
+Skill is valid!
+Skill is valid!
+Skill is valid!
+Skill is valid!
+Skill is valid!
+All seven Claude adapters valid; existing tracked skills unchanged.

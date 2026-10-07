@@ -1,0 +1,6 @@
+github	git@github.com:Nexus-os2026/nexus-os.git (fetch)
+github	git@github.com:Nexus-os2026/nexus-os.git (push)
+gitlab	git@gitlab.com:nexaiceo/nexus-os.git (fetch)
+gitlab	git@gitlab.com:nexaiceo/nexus-os.git (push)
+origin	git@gitlab.com:nexaiceo/nexus-os.git (fetch)
+origin	git@gitlab.com:nexaiceo/nexus-os.git (push)

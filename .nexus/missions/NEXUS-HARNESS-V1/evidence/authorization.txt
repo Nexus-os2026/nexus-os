@@ -1,0 +1,1153 @@
+NEXUS OS — DEVELOPMENT HARNESS V1
+
+MISSION ID
+NEXUS-HARNESS-V1
+
+MODEL
+GPT-6 Astra
+Reasoning effort: xhigh
+
+MISSION TYPE
+Repository infrastructure / agent-harness implementation.
+
+THIS IS NOT:
+- Phase Three implementation.
+- Phase Four implementation.
+- a security checkpoint closure.
+- permission to modify Candidate 10.
+- permission to integrate to main.
+- permission to move any frozen or protected ref.
+
+======================================================================
+0. PURPOSE
+======================================================================
+
+Build a complete, repository-resident development harness so that future
+Codex and Claude Code sessions can determine, without depending on chat
+history:
+
+1. what permanent Nexus engineering rules apply;
+2. what exact mission is currently authorized;
+3. what work is and is not allowed;
+4. what reusable workflow should be followed;
+5. what has already been completed;
+6. what evidence exists;
+7. what remains unresolved;
+8. what exact action may happen next;
+9. where independent review begins;
+10. where implementation authority ends.
+
+The harness must support long-running missions, context compaction,
+fresh sessions, Codex/Claude switching, interruption recovery,
+independent Architect review, and deterministic evidence collection.
+
+DO NOT solve this by creating another giant prompt file.
+
+The architecture must separate:
+
+PERMANENT POLICY
+REUSABLE PROCEDURE
+MISSION-SPECIFIC AUTHORITY
+PROGRESS
+EVIDENCE
+REVIEW / HANDOVER
+
+A writable string is never authority.
+
+A mission file records an Architect-approved authorization envelope;
+the file does not create new authority by itself.
+
+Git state, exact candidate identity, execution receipts, required checks,
+and Architect/Owner authorization remain distinct concepts.
+
+======================================================================
+1. HARD PRE-FLIGHT
+======================================================================
+
+Before changing anything:
+
+1. Confirm no other active worktree used by the current Phase Three
+   Candidate 10 mission will be modified.
+
+2. Run and record:
+
+   git status -sb
+   git rev-parse HEAD
+   git rev-parse HEAD^{tree}
+   git branch --show-current
+   git worktree list --porcelain
+   git remote -v
+
+3. Read completely:
+
+   AGENTS.md
+   CLAUDE.md
+   tasks/todo.md
+   tasks/lessons.md
+
+4. Inventory:
+
+   .claude/
+   .claude/skills/
+   .agents/
+   .codex/
+   tasks/
+   existing evidence conventions
+   existing audit/report conventions
+   existing scripts relevant to validation
+   existing Git hooks or repository checks
+
+5. Do not delete or overwrite existing Claude skills.
+
+6. Do not modify:
+   - the Candidate 10 worktree;
+   - its branch;
+   - its evidence;
+   - frozen Phase Zero refs;
+   - frozen Phase One refs;
+   - accepted Phase Two refs;
+   - main.
+
+7. Create a SEPARATE worktree and branch for this mission.
+
+Preferred branch:
+
+   chore/nexus-development-harness-v1
+
+Base it from current GitHub main unless repository evidence proves that
+doing so would be incorrect.
+
+If the base is ambiguous:
+STOP.
+Return:
+
+BLOCKED — BASELINE AUTHORITY AMBIGUOUS
+
+Do not guess.
+
+======================================================================
+2. REQUIRED FINAL ARCHITECTURE
+======================================================================
+
+Implement all of the following.
+
+No category may be silently omitted.
+
+Target conceptual structure:
+
+AGENTS.md
+
+CLAUDE.md
+
+.agents/
+  skills/
+    nexus-mission/
+      SKILL.md
+    nexus-implement/
+      SKILL.md
+    nexus-verify/
+      SKILL.md
+    nexus-review/
+      SKILL.md
+    nexus-mutation/
+      SKILL.md
+    nexus-handover/
+      SKILL.md
+    nexus-recover/
+      SKILL.md
+
+.claude/
+  skills/
+    nexus-mission/
+      SKILL.md
+    nexus-implement/
+      SKILL.md
+    nexus-verify/
+      SKILL.md
+    nexus-review/
+      SKILL.md
+    nexus-mutation/
+      SKILL.md
+    nexus-handover/
+      SKILL.md
+    nexus-recover/
+      SKILL.md
+
+.nexus/
+  harness/
+    README.md
+    POLICY.md
+    MISSION_TEMPLATE.md
+    PROGRESS_TEMPLATE.md
+    EVIDENCE_TEMPLATE.md
+    REVIEW_TEMPLATE.md
+    HANDOVER_TEMPLATE.md
+    RECEIPTS.md
+
+    procedures/
+      mission.md
+      implement.md
+      verify.md
+      review.md
+      mutation.md
+      handover.md
+      recover.md
+
+  missions/
+    README.md
+
+    NEXUS-HARNESS-V1/
+      MISSION.md
+      PROGRESS.md
+      EVIDENCE.md
+      REVIEW.md
+      HANDOVER.md
+
+      evidence/
+        manifest.json
+        receipts.jsonl
+        logs/
+          README.md
+
+If repository conventions justify a slightly different directory name,
+you may propose it before implementing.
+
+Do not silently reduce the required concepts.
+
+No symlink-based design.
+It must work on Linux, Windows, and macOS Git checkouts.
+
+======================================================================
+3. AGENTS.md — PERMANENT TRUTHS ONLY
+======================================================================
+
+The existing AGENTS.md is substantial and contains important security
+and engineering rules.
+
+DO NOT simply replace it.
+
+Audit it section by section.
+
+Refactor it so the root AGENTS.md contains only durable rules that every
+future Codex session must know automatically.
+
+It must retain, at minimum, the following concepts:
+
+- Nexus is governed and local-first.
+- Owner → Architect → approved mission → executor → verified result →
+  independent Architect review.
+- the executor cannot expand its own authority.
+- a string is never authority.
+- fail closed on ambiguity.
+- exact Git provenance matters.
+- protected/frozen refs cannot move without explicit authority.
+- destructive Git operations are forbidden unless explicitly authorized.
+- implementation success is not checkpoint acceptance.
+- tests and evidence are not interchangeable with claims.
+- failing tests are evidence, not permission to weaken tests.
+- current mission scope overrides stale project-state text only where the
+  Architect explicitly authorized that scope.
+- no automatic phase advancement.
+- no automatic next mission.
+- no automatic integration to main.
+- independent review remains independent.
+- missing evidence must be reported as missing.
+- local green does not imply hosted/CI green.
+- external side effects require the mission's explicit authorization.
+
+Move lengthy reusable procedures out of AGENTS.md and into the canonical
+harness/procedures files and skills.
+
+Do not weaken any existing trust-boundary requirement during this
+refactor.
+
+Create a preservation checklist mapping each important original AGENTS.md
+rule to its final location.
+
+Record that mapping in this mission's EVIDENCE.md.
+
+Keep AGENTS.md comfortably below Codex's default project-instruction
+size ceiling.
+
+Do not optimize for minimum bytes at the expense of security meaning.
+
+======================================================================
+4. CLAUDE.md — THIN CLAUDE ADAPTER
+======================================================================
+
+Preserve CLAUDE.md.
+
+It must remain a thin Claude Code adapter rather than a competing
+constitution.
+
+It should:
+
+- import/reference AGENTS.md as it does today;
+- instruct Claude to read the explicit current MISSION.md before work;
+- instruct Claude to use the canonical .nexus harness procedures;
+- instruct Claude to update the canonical PROGRESS/EVIDENCE records;
+- retain Claude-specific Git, session, tool, and reporting rules only
+  where genuinely Claude-specific;
+- never duplicate large sections of permanent policy;
+- never contain a hardcoded current Phase/SHA that will become stale.
+
+Claude and Codex must consume the SAME canonical mission and evidence
+contract.
+
+Do not create separate truth for each provider.
+
+======================================================================
+5. CANONICAL POLICY
+======================================================================
+
+Create:
+
+.nexus/harness/POLICY.md
+
+This contains detailed durable Nexus engineering procedure that is too
+large or too specialized for root AGENTS.md but remains applicable
+across missions.
+
+AGENTS.md should direct agents to read POLICY.md at mission startup.
+
+POLICY.md must distinguish:
+
+PERMANENT RULE
+DEFAULT PROCEDURE
+MISSION-OVERRIDABLE DEFAULT
+NON-OVERRIDABLE SAFETY BOUNDARY
+
+Do not place transient Phase Three status here.
+
+======================================================================
+6. MISSION CONTRACT
+======================================================================
+
+Create:
+
+.nexus/harness/MISSION_TEMPLATE.md
+
+and dogfood it by creating:
+
+.nexus/missions/NEXUS-HARNESS-V1/MISSION.md
+
+The mission contract must contain explicit fields for:
+
+Mission ID
+Mission title
+Mission type
+Architect authorization
+Model/provider
+Reasoning/effort
+Repository
+Authoritative remote
+Base branch
+Base SHA
+Base tree
+Mission branch
+Worktree
+Objective
+Background
+Allowed scope
+Allowed files/subsystems
+Forbidden scope
+Security invariants
+Non-goals
+Required inputs
+Required preflight
+Permitted filesystem writes
+Permitted Git actions
+Permitted network actions
+Commit authorization
+Push authorization
+Workflow-dispatch authorization
+Integration authorization
+Required tests
+Required mutation controls if applicable
+Evidence requirements
+Success condition
+Stop conditions
+Block conditions
+Review gate
+Expected final status
+Next-authority boundary
+
+The template must explicitly state:
+
+A mission file records authority granted elsewhere.
+It cannot self-expand its authority.
+
+If the mission and actual repository state disagree:
+STOP rather than silently repairing the discrepancy.
+
+Never infer authorization from a branch name, filename, comment,
+progress note, commit message, or model-generated text.
+
+======================================================================
+7. PROGRESS / LONG-RUN STATE
+======================================================================
+
+Create:
+
+.nexus/harness/PROGRESS_TEMPLATE.md
+
+and:
+
+.nexus/missions/NEXUS-HARNESS-V1/PROGRESS.md
+
+PROGRESS.md is resumable execution state, NOT proof.
+
+Required fields:
+
+Mission
+Recorded candidate SHA
+Recorded candidate tree
+Branch
+Worktree
+Current stage
+Last completed stage
+Completed actions
+Checks actually run
+Checks not yet run
+Current failures
+Known blockers
+Open findings
+Files changed
+Evidence references
+Last durable checkpoint
+Next authorized action
+Stop condition status
+Last updated timestamp
+
+Rules:
+
+- update after every meaningful stage;
+- keep it concise;
+- never record a test as passed unless a corresponding receipt exists;
+- a new session must verify its claims against Git/evidence before
+  continuing;
+- stale progress must never override current repository reality.
+
+======================================================================
+8. EVIDENCE CONTRACT
+======================================================================
+
+Create:
+
+.nexus/harness/EVIDENCE_TEMPLATE.md
+.nexus/harness/RECEIPTS.md
+
+and per-mission:
+
+.nexus/missions/NEXUS-HARNESS-V1/EVIDENCE.md
+.nexus/missions/NEXUS-HARNESS-V1/evidence/manifest.json
+.nexus/missions/NEXUS-HARNESS-V1/evidence/receipts.jsonl
+.nexus/missions/NEXUS-HARNESS-V1/evidence/logs/
+
+Evidence must distinguish:
+
+CLAIM
+OBSERVATION
+EXECUTION RECEIPT
+ARTIFACT
+REVIEW FINDING
+ACCEPTANCE DECISION
+
+Do not use the same word "passed" for all of them.
+
+Each command/test receipt must support, where applicable:
+
+receipt_id
+mission_id
+timestamp_start
+timestamp_end
+cwd
+candidate_sha
+candidate_tree
+command
+command_hash or normalized command identity
+exit_code
+status
+stdout reference
+stderr reference
+raw-log hash
+environment/toolchain identity
+related acceptance criterion
+related control IDs
+notes
+
+Do not fabricate fields that cannot be measured.
+
+Large external artifacts may remain outside Git, but the repository
+record must retain:
+
+- immutable identifier where available;
+- URL/run ID where applicable;
+- SHA/hash where available;
+- what the artifact proves;
+- what it does NOT prove.
+
+A receipt written by the implementing agent is still evidence to inspect,
+not self-authenticating authority.
+
+======================================================================
+9. MUTATION / CONTROL RESULT MODEL
+======================================================================
+
+The harness MUST fix the class of mistake where a wrapper expects one
+stdout marker per logical control even when multiple controls are
+satisfied by one deduplicated command.
+
+Define separate result types.
+
+Prerequisite result:
+
+PASS
+FAIL
+HARNESS_ERROR
+NOT_RUN
+
+Mutation/control result:
+
+KILLED
+SURVIVED
+INVALID
+HARNESS_ERROR
+NOT_RUN
+
+Mission result:
+
+RUNNING
+BLOCKED
+READY_FOR_REVIEW
+FAILED
+
+Do not treat:
+
+117/117 prerequisite commands passed
+
+as equivalent to:
+
+183/183 mutation controls completed.
+
+If one command satisfies multiple control IDs, receipts must contain an
+explicit mapping such as:
+
+command_execution_id
+  -> [control_id_1, control_id_2, ...]
+
+Validation must evaluate logical coverage through that mapping.
+
+Missing duplicate stdout markers must not create a false failure if
+coverage is independently proven.
+
+Likewise, one successful prerequisite must never create false success
+for mutations that were not executed.
+
+Implement documentation and, if safe and bounded, a small deterministic
+validator/test for this receipt mapping.
+
+DO NOT rerun the Candidate 10 mutation campaign as part of this mission.
+
+======================================================================
+10. REUSABLE PROCEDURES
+======================================================================
+
+Create canonical procedures under:
+
+.nexus/harness/procedures/
+
+Required procedures:
+
+mission.md
+implement.md
+verify.md
+review.md
+mutation.md
+handover.md
+recover.md
+
+Each procedure must define:
+
+WHEN TO USE
+REQUIRED INPUTS
+PRECONDITIONS
+ALLOWED ACTIONS
+FORBIDDEN ACTIONS
+STEPS
+OBSERVABLE OUTPUTS
+REQUIRED RECEIPTS
+STOP CONDITIONS
+HANDOFF OUTPUT
+
+Keep them provider-neutral.
+
+These procedures are the canonical workflow.
+
+======================================================================
+11. CODEX SKILLS
+======================================================================
+
+Create repo-local Codex skills under:
+
+.agents/skills/
+
+Each skill requires a valid SKILL.md with frontmatter:
+
+---
+name: ...
+description: ...
+---
+
+Required skills:
+
+nexus-mission
+nexus-implement
+nexus-verify
+nexus-review
+nexus-mutation
+nexus-handover
+nexus-recover
+
+The Codex SKILL.md files must remain compact.
+
+Their job is routing + invocation.
+
+They should tell Codex to read and execute the corresponding canonical
+procedure from:
+
+.nexus/harness/procedures/
+
+Do not duplicate the full procedure into every provider adapter.
+
+Descriptions must clearly state WHEN the skill applies so Codex can
+route reliably.
+
+Example intent:
+
+nexus-mission
+Use when beginning or resuming any Architect-approved Nexus engineering
+mission. Loads the mission contract, verifies provenance, and establishes
+progress/evidence state before writes.
+
+nexus-implement
+Use for bounded implementation work already authorized by a Nexus mission.
+
+nexus-verify
+Use when validating a candidate against the mission acceptance contract.
+
+nexus-review
+Use for bounded independent review of an exact candidate and evidence set.
+
+nexus-mutation
+Use for approved mutation-control campaigns and control coverage reporting.
+
+nexus-handover
+Use when preserving durable state before stopping, compaction, model
+switching, or a new session.
+
+nexus-recover
+Use when resuming after interruption, failed orchestration, context loss,
+or a fresh agent session.
+
+======================================================================
+12. CLAUDE SKILL ADAPTERS
+======================================================================
+
+Claude Code will return later.
+
+Create equivalent thin skill adapters under:
+
+.claude/skills/
+
+for the SAME seven Nexus procedures.
+
+Do not remove existing:
+
+.claude/skills/security-audit
+.claude/skills/ui-ux-pro-max
+.claude/skills/claude-mem
+
+unless repository evidence proves one is broken and removal is separately
+authorized.
+
+The new Claude SKILL.md files must reference the same canonical
+.nexus/harness/procedures files used by Codex.
+
+No forked mission workflow.
+
+No Codex truth vs Claude truth.
+
+======================================================================
+13. REVIEW CONTRACT
+======================================================================
+
+Create:
+
+.nexus/harness/REVIEW_TEMPLATE.md
+
+and:
+
+.nexus/missions/NEXUS-HARNESS-V1/REVIEW.md
+
+Review must bind itself to:
+
+exact candidate SHA
+exact candidate tree
+mission ID
+base
+changed files
+acceptance criteria
+evidence inspected
+tests independently reproduced
+findings
+unresolved issues
+review verdict
+
+Allowed review verdicts:
+
+ACCEPTABLE_FOR_NEXT_GATE
+CHANGES_REQUIRED
+BLOCKED
+INCONCLUSIVE
+
+Do NOT use:
+
+PHASE COMPLETE
+
+unless the Architect/Owner explicitly authorized phase closure.
+
+The implementing agent may prepare REVIEW.md as a template/status file,
+but it must not self-fill an independent ACCEPTABLE verdict.
+
+======================================================================
+14. HANDOVER CONTRACT
+======================================================================
+
+Create:
+
+.nexus/harness/HANDOVER_TEMPLATE.md
+
+and:
+
+.nexus/missions/NEXUS-HARNESS-V1/HANDOVER.md
+
+Required fields:
+
+Mission
+Exact branch
+Exact SHA
+Exact tree
+Worktree
+What changed
+What was verified
+What remains unverified
+Evidence paths
+Open findings
+Known limitations
+Current status
+Next authorized action
+Forbidden next actions
+Instructions for a fresh agent
+
+A fresh Codex or Claude session must be able to read:
+
+AGENTS.md
+.nexus/harness/POLICY.md
+MISSION.md
+PROGRESS.md
+HANDOVER.md
+
+and reconstruct where work stopped.
+
+It must still verify Git/evidence before trusting the handover.
+
+======================================================================
+15. CURRENT-MISSION DISCOVERY
+======================================================================
+
+Do NOT create an authoritative magic text file whose contents alone
+grant authority.
+
+A convenience pointer MAY exist only if clearly labeled non-authoritative.
+
+Preferred rule:
+
+The Architect prompt supplies the explicit mission path.
+
+Example:
+
+Current mission:
+.nexus/missions/P3-C11/MISSION.md
+
+The agent then verifies repository state against that file.
+
+If you add something such as:
+
+.nexus/missions/CURRENT
+
+it must state prominently that it is only a convenience pointer and
+cannot authorize work.
+
+======================================================================
+16. AUTOMATIC STARTUP BEHAVIOR
+======================================================================
+
+After this harness lands, root AGENTS.md should require every executor
+to perform this sequence before mission writes:
+
+read AGENTS.md
+→ read .nexus/harness/POLICY.md
+→ read explicit MISSION.md
+→ read applicable skill/procedure
+→ verify Git provenance
+→ inspect PROGRESS.md if resuming
+→ verify progress against Git/evidence
+→ perform bounded work
+→ generate receipts
+→ update progress
+→ hand over / stop at mission boundary
+
+Codex and Claude must not require the Owner to explain the whole history
+again.
+
+======================================================================
+17. TESTING THE HARNESS
+======================================================================
+
+Add deterministic tests/checks for the harness where practical.
+
+At minimum verify:
+
+A. required files exist;
+
+B. every required SKILL.md has valid frontmatter;
+
+C. every provider skill references an existing canonical procedure;
+
+D. every canonical procedure exists;
+
+E. mission template contains every mandatory field;
+
+F. progress template contains required continuation fields;
+
+G. evidence receipt documentation contains candidate SHA/tree and command
+   result fields;
+
+H. mutation/control statuses are distinct;
+
+I. control-to-command dedup mapping is representable;
+
+J. no new skill adapter contains a second conflicting copy of permanent
+   Nexus policy;
+
+K. root AGENTS.md remains below the intended safe size budget;
+
+L. root AGENTS.md still preserves all mandatory authority/security
+   invariants from the original file;
+
+M. CLAUDE.md still imports or defers to root AGENTS.md;
+
+N. current harness implementation did not modify protected refs or
+   Candidate 10 state.
+
+Prefer a lightweight validation script such as:
+
+scripts/verify-agent-harness.py
+
+or equivalent.
+
+It must run locally without cloud access.
+
+Do not introduce a new heavyweight dependency merely to validate Markdown.
+
+======================================================================
+18. DOGFOOD THIS MISSION
+======================================================================
+
+This implementation mission itself must use the new format.
+
+Once the templates exist, record this Architect-issued mission as:
+
+.nexus/missions/NEXUS-HARNESS-V1/MISSION.md
+
+Then maintain:
+
+PROGRESS.md
+EVIDENCE.md
+evidence/receipts.jsonl
+HANDOVER.md
+
+for the rest of the mission.
+
+Do not claim the file retroactively granted the authority.
+Its authority comes from this Architect-issued prompt.
+
+======================================================================
+19. SECURITY / TRUST RULES
+======================================================================
+
+Do not make AGENTS.md, MISSION.md, PROGRESS.md, or SKILL.md into an
+authorization bypass.
+
+Text is instruction/state, not capability authority.
+
+Do not create code that says, conceptually:
+
+if mission_file_says_allowed:
+    bypass_governance()
+
+Do not expose secrets.
+
+Do not write credentials into evidence.
+
+Do not store tokens, API keys, environment secrets, auth cookies, or
+private signing material.
+
+Do not weaken GitHub protection.
+
+Do not modify repository rulesets.
+
+Do not modify CI permissions unless separately authorized.
+
+Do not install arbitrary network packages.
+
+Use existing local tooling wherever possible.
+
+======================================================================
+20. COMPATIBILITY
+======================================================================
+
+The harness must remain compatible with:
+
+Codex now
+Claude Code later
+Linux development host
+Git/GitHub workflow
+fresh agent sessions
+context compaction
+model/provider switching
+independent Architect review
+
+Provider adapters may differ.
+
+Canonical mission/evidence truth must not.
+
+======================================================================
+21. GIT AUTHORIZATION
+======================================================================
+
+AUTHORIZED:
+
+- create a separate worktree;
+- create branch chore/nexus-development-harness-v1;
+- edit only files required for this harness;
+- run local deterministic tests;
+- commit the harness candidate locally.
+
+NOT AUTHORIZED:
+
+- modify main;
+- fast-forward main;
+- merge to main;
+- force push;
+- move protected/frozen refs;
+- alter current Candidate 10 branch/worktree;
+- dispatch release workflows;
+- create a release/tag;
+- begin another Phase Three candidate;
+- begin Phase Four.
+
+Do not push unless this prompt is accompanied by explicit push
+authorization in the current Codex environment.
+
+If push authorization is absent:
+stop with a clean local candidate and report its SHA.
+
+======================================================================
+22. IMPLEMENTATION STRATEGY
+======================================================================
+
+Work in bounded stages.
+
+Stage A
+Inventory and preservation map.
+
+Stage B
+Create canonical .nexus harness structure and templates.
+
+Stage C
+Create Codex .agents/skills adapters.
+
+Stage D
+Create Claude .claude/skills adapters without damaging existing skills.
+
+Stage E
+Refactor AGENTS.md carefully.
+
+Stage F
+Update CLAUDE.md as thin adapter.
+
+Stage G
+Add deterministic harness validator.
+
+Stage H
+Dogfood mission/progress/evidence/handover.
+
+Stage I
+Run final validation and provenance checks.
+
+After each stage:
+
+- run relevant validation;
+- update PROGRESS.md;
+- append execution receipts;
+- preserve useful logs;
+- verify Git diff;
+- do not wait until the end to discover structural mistakes.
+
+======================================================================
+23. FINAL VALIDATION
+======================================================================
+
+Run at minimum:
+
+git status -sb
+git diff --check
+
+the new harness validator
+
+and any repository-native Markdown/config checks already available.
+
+Also prove:
+
+- AGENTS.md is under safe size target;
+- no original mandatory authority invariant was lost;
+- all seven Codex skills resolve;
+- all seven Claude adapters resolve;
+- all referenced canonical procedures exist;
+- mission/progress/evidence/review/handover templates are internally
+  consistent;
+- this mission's own records conform to the templates;
+- Candidate 10 state was untouched;
+- protected refs were untouched;
+- main was untouched.
+
+Do not manufacture evidence.
+
+======================================================================
+24. FINAL REPORT
+======================================================================
+
+Return exactly these sections:
+
+A. STATUS
+
+READY_FOR_ARCHITECT_REVIEW
+or
+BLOCKED
+
+B. PROVENANCE
+
+base branch
+base SHA
+base tree
+mission branch
+candidate SHA
+candidate tree
+worktree
+
+C. FILES CREATED
+
+exact paths
+
+D. FILES MODIFIED
+
+exact paths
+
+E. AGENTS.MD PRESERVATION
+
+original size
+new size
+rules moved
+rules retained
+preservation-map path
+
+F. CODEX SKILLS
+
+list seven skills
+validation result
+
+G. CLAUDE ADAPTERS
+
+list seven adapters
+validation result
+
+H. MISSION SYSTEM
+
+template path
+this mission path
+progress path
+
+I. EVIDENCE SYSTEM
+
+evidence summary path
+manifest path
+receipts path
+logs path
+
+J. VALIDATION
+
+commands actually run
+exit codes
+results
+
+K. SECURITY REVIEW
+
+authority boundary
+protected refs
+Candidate 10 isolation
+secret handling
+known limitations
+
+L. OPEN FINDINGS
+
+every unresolved issue
+
+M. NEXT AUTHORIZED ACTION
+
+ARCHITECT REVIEW ONLY
+
+Do not start another mission.
+
+======================================================================
+25. PRIMARY DESIGN PRINCIPLE
+======================================================================
+
+The desired outcome is:
+
+AGENTS.md
+    = small permanent truths
+
+skills
+    = reusable workflows
+
+MISSION.md
+    = today's exact authorization envelope
+
+PROGRESS.md
+    = resumable state
+
+evidence/
+    = what actually happened
+
+REVIEW.md
+    = bounded independent assessment
+
+HANDOVER.md
+    = enough verified context for tomorrow
+
+The development system should no longer depend on one model remembering
+a long conversation.
+
+Make the repository carry the durable engineering context.

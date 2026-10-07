@@ -1,0 +1,95 @@
+[
+  {
+    "command": [
+      "git",
+      "status",
+      "-sb"
+    ],
+    "cwd": "/home/nexus/NEXUS/nexus-os-p3-candidate9-local",
+    "timestamp_start": "2026-10-07T14:07:13.039014+00:00",
+    "timestamp_end": "2026-10-07T14:07:13.056988+00:00",
+    "exit_code": 0,
+    "stdout": "preflight-0.stdout.txt",
+    "stderr": "preflight-0.stderr.txt"
+  },
+  {
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "cwd": "/home/nexus/NEXUS/nexus-os-p3-candidate9-local",
+    "timestamp_start": "2026-10-07T14:07:13.057005+00:00",
+    "timestamp_end": "2026-10-07T14:07:13.059918+00:00",
+    "exit_code": 0,
+    "stdout": "preflight-1.stdout.txt",
+    "stderr": "preflight-1.stderr.txt"
+  },
+  {
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD^{tree}"
+    ],
+    "cwd": "/home/nexus/NEXUS/nexus-os-p3-candidate9-local",
+    "timestamp_start": "2026-10-07T14:07:13.059934+00:00",
+    "timestamp_end": "2026-10-07T14:07:13.063275+00:00",
+    "exit_code": 0,
+    "stdout": "preflight-2.stdout.txt",
+    "stderr": "preflight-2.stderr.txt"
+  },
+  {
+    "command": [
+      "git",
+      "branch",
+      "--show-current"
+    ],
+    "cwd": "/home/nexus/NEXUS/nexus-os-p3-candidate9-local",
+    "timestamp_start": "2026-10-07T14:07:13.063291+00:00",
+    "timestamp_end": "2026-10-07T14:07:13.065442+00:00",
+    "exit_code": 0,
+    "stdout": "preflight-3.stdout.txt",
+    "stderr": "preflight-3.stderr.txt"
+  },
+  {
+    "command": [
+      "git",
+      "worktree",
+      "list",
+      "--porcelain"
+    ],
+    "cwd": "/home/nexus/NEXUS/nexus-os-p3-candidate9-local",
+    "timestamp_start": "2026-10-07T14:07:13.065449+00:00",
+    "timestamp_end": "2026-10-07T14:07:13.075424+00:00",
+    "exit_code": 0,
+    "stdout": "preflight-4.stdout.txt",
+    "stderr": "preflight-4.stderr.txt"
+  },
+  {
+    "command": [
+      "git",
+      "remote",
+      "-v"
+    ],
+    "cwd": "/home/nexus/NEXUS/nexus-os-p3-candidate9-local",
+    "timestamp_start": "2026-10-07T14:07:13.075439+00:00",
+    "timestamp_end": "2026-10-07T14:07:13.077461+00:00",
+    "exit_code": 0,
+    "stdout": "preflight-5.stdout.txt",
+    "stderr": "preflight-5.stderr.txt"
+  },
+  {
+    "command": [
+      "git",
+      "ls-remote",
+      "github",
+      "refs/heads/main"
+    ],
+    "cwd": "/home/nexus/NEXUS/nexus-os-p3-candidate9-local",
+    "timestamp_start": "2026-10-07T14:07:13.077469+00:00",
+    "timestamp_end": "2026-10-07T14:07:14.565636+00:00",
+    "exit_code": 0,
+    "stdout": "preflight-6.stdout.txt",
+    "stderr": "preflight-6.stderr.txt"
+  }
+]

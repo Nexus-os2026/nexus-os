@@ -1,0 +1,33 @@
+test_117_prerequisites_cover_183_but_execute_zero_mutations (test_agent_harness.ReceiptMappingTests.test_117_prerequisites_cover_183_but_execute_zero_mutations) ... ok
+test_artifact_traversal_rejected_without_reading_outside (test_agent_harness.ReceiptMappingTests.test_artifact_traversal_rejected_without_reading_outside) ... ok
+test_bad_timestamps_and_boolean_exit_rejected (test_agent_harness.ReceiptMappingTests.test_bad_timestamps_and_boolean_exit_rejected) ... ok
+test_baseline_cannot_claim_ready (test_agent_harness.ReceiptMappingTests.test_baseline_cannot_claim_ready) ... ok
+test_complete_single_campaign_requires_actual_kills (test_agent_harness.ReceiptMappingTests.test_complete_single_campaign_requires_actual_kills) ... ok
+test_duplicate_and_empty_mission_fields_rejected (test_agent_harness.ReceiptMappingTests.test_duplicate_and_empty_mission_fields_rejected) ... ok
+test_duplicate_execution_and_duplicate_coverage_rejected (test_agent_harness.ReceiptMappingTests.test_duplicate_execution_and_duplicate_coverage_rejected) ... ok
+test_duplicate_or_unknown_inventory_controls_rejected (test_agent_harness.ReceiptMappingTests.test_duplicate_or_unknown_inventory_controls_rejected) ... ok
+test_duplicate_prerequisite_coverage_rejected (test_agent_harness.ReceiptMappingTests.test_duplicate_prerequisite_coverage_rejected) ... ok
+test_failing_baseline_rejected (test_agent_harness.ReceiptMappingTests.test_failing_baseline_rejected) ... ok
+test_infrastructure_error_never_killed (test_agent_harness.ReceiptMappingTests.test_infrastructure_error_never_killed) ... ok
+test_invalid_and_harness_error_not_counted_as_kills (test_agent_harness.ReceiptMappingTests.test_invalid_and_harness_error_not_counted_as_kills) ... ok
+test_missing_baseline_rejected (test_agent_harness.ReceiptMappingTests.test_missing_baseline_rejected) ... ok
+test_missing_command_and_command_tampering_rejected (test_agent_harness.ReceiptMappingTests.test_missing_command_and_command_tampering_rejected) ... ok
+test_missing_mutation_identity_rejected (test_agent_harness.ReceiptMappingTests.test_missing_mutation_identity_rejected) ... ok
+test_mixed_historical_campaigns_rejected (test_agent_harness.ReceiptMappingTests.test_mixed_historical_campaigns_rejected) ... ok
+test_no_execution_is_explicitly_incomplete (test_agent_harness.ReceiptMappingTests.test_no_execution_is_explicitly_incomplete) ... ok
+test_nonzero_exit_alone_does_not_prove_kill (test_agent_harness.ReceiptMappingTests.test_nonzero_exit_alone_does_not_prove_kill) ... ok
+test_one_mutation_can_map_multiple_actual_logical_properties (test_agent_harness.ReceiptMappingTests.test_one_mutation_can_map_multiple_actual_logical_properties) ... ok
+test_other_candidate_or_tree_rejected (test_agent_harness.ReceiptMappingTests.test_other_candidate_or_tree_rejected) ... ok
+test_receipt_log_tampering_rejected (test_agent_harness.ReceiptMappingTests.test_receipt_log_tampering_rejected) ... ok
+test_receipt_not_run_has_no_fabricated_measurements (test_agent_harness.ReceiptMappingTests.test_receipt_not_run_has_no_fabricated_measurements) ... ok
+test_shared_command_proves_three_baselines_without_markers (test_agent_harness.ReceiptMappingTests.test_shared_command_proves_three_baselines_without_markers) ... ok
+test_shared_oracle_cannot_cover_unmutated_control (test_agent_harness.ReceiptMappingTests.test_shared_oracle_cannot_cover_unmutated_control) ... ok
+test_source_restore_alone_insufficient (test_agent_harness.ReceiptMappingTests.test_source_restore_alone_insufficient) ... ok
+test_status_domains_not_interchangeable (test_agent_harness.ReceiptMappingTests.test_status_domains_not_interchangeable) ... ok
+test_survivor_is_not_complete (test_agent_harness.ReceiptMappingTests.test_survivor_is_not_complete) ... ok
+test_zero_exit_cannot_be_killed (test_agent_harness.ReceiptMappingTests.test_zero_exit_cannot_be_killed) ... ok
+
+----------------------------------------------------------------------
+Ran 28 tests in 0.037s
+
+OK
