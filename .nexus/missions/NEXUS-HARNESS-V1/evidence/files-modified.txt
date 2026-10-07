@@ -1,0 +1,3 @@
+/tmp/nexus-development-harness-v1/.gitignore
+/tmp/nexus-development-harness-v1/AGENTS.md
+/tmp/nexus-development-harness-v1/CLAUDE.md

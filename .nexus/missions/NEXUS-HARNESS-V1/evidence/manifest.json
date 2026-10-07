@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "mission_id": "NEXUS-HARNESS-V1",
-  "sealed_at": "2026-10-07T14:33:04.080559+00:00",
+  "sealed_at": "2026-10-07T14:35:49.870820+00:00",
   "artifacts": {
     ".gitattributes": {
       "sha256": "db6a1b3303ac287df13d6fc826c7b13e125b9566b210536cc70da5c179b2a48a",
@@ -30,6 +30,14 @@
     "collectors/seal.py": {
       "sha256": "7ce51419a30e09f687b11fafd2323757daa459a01f3a36fb1cc0eb96a2a84a4a",
       "size": 770
+    },
+    "files-created.txt": {
+      "sha256": "4b9cee1e36adb3341d43456523918f3cffad72b585a3d93d3f89226575cfe1c5",
+      "size": 11226
+    },
+    "files-modified.txt": {
+      "sha256": "86590e4ac6f040a85545d700b94fdc8146561c5ee613ed052d6017fd3fedbcdd",
+      "size": 133
     },
     "inventory.txt": {
       "sha256": "ad8fa1a0db6bcc95ca4ab5bb9edfe8a5f3ec98baabe4f60dcf91fe015cc740c1",
@@ -203,6 +211,22 @@
       "sha256": "b4ec5bdf9611f098b2f7f7a6f4ae17e2eea330bc628e74d8a765a01f28df7918",
       "size": 287
     },
+    "logs/stage-i-checkpoint.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-i-checkpoint.stdout.txt": {
+      "sha256": "00b0fd41b32bc0024cd44458780d714583f939ced1f57a0a97e064fc518c4d90",
+      "size": 8948
+    },
+    "logs/stage-i-records.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-i-records.stdout.txt": {
+      "sha256": "e8eb3b48e7f7acff73311b823e10ddd3d25b91014b1ecb0ba0be3820b1d21d5d",
+      "size": 209
+    },
     "logs/stage-i-remote.stderr.txt": {
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size": 0
@@ -210,6 +234,14 @@
     "logs/stage-i-remote.stdout.txt": {
       "sha256": "cf6b0aee1eb8422f85a0ffd368100e9b46af27653b2654521676dfd71df80e41",
       "size": 57
+    },
+    "logs/stage-i-resolved-diff.stderr.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "logs/stage-i-resolved-diff.stdout.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
     },
     "logs/stage-i-staged-whitespace.stderr.txt": {
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -288,8 +320,8 @@
       "size": 2533
     },
     "receipts.jsonl": {
-      "sha256": "473272a7ca5a8f83fe9394bf3b14b1b6ac9f828f0c6536f049f27c8a742d408d",
-      "size": 40116
+      "sha256": "6ddf84daf20acf55e3ed82a2af6b5796847f81532be89142b51e91dc127a3914",
+      "size": 44065
     }
   },
   "limitations": "Agent-produced integrity index, not independent acceptance; manifest excludes itself. Final clean-commit execution is in the external post-commit seal named in HANDOVER."

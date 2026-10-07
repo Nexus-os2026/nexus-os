@@ -10,11 +10,11 @@ chore/nexus-development-harness-v1
 
 ## Exact SHA
 
-6e15dee613ea35823d1adbf6d8917ed59eeda583
+db0f603be16588b431583a7cacd14072e86b3819
 
 ## Exact tree
 
-7192ba94a1954c2c416572b890f5e0e7af834586
+35d89e8d91fcf71f839a437f5dfcce7f02f07eec
 
 ## Worktree
 
@@ -22,27 +22,27 @@ chore/nexus-development-harness-v1
 
 ## What changed
 
-Canonical contracts in progress; this identity is the measured base checkpoint, not final candidate.
+Implementation checkpoint above contains the complete development harness, policy preservation, 14 provider adapters, seven procedures, five templates, deterministic validator and tests. The subsequent delivery commit changes only this mission record/evidence directory.
 
 ## What was verified
 
-Read-only preflight; see receipts.
+33 deterministic tests; 14 adapter frontmatter files and canonical links; original normative sections 1–19 retained verbatim; all template/mission fields; safe AGENTS size; targeted scope/secret scan; 243 original refs, 3 C10 worktrees and 13,123 evidence files unchanged. Raw receipts support these claims.
 
 ## What remains unverified
 
-Final harness checks and independent review.
+At this document serialization boundary, final clean delivery SHA/tree cannot yet be embedded in its own commit. Final proof is /tmp/nexus-harness-v1-final/final.json plus its receipts/logs and HANDOVER.md. Independent Architect review, hosted CI, Windows/macOS and live Claude loading remain NOT_RUN.
 
 ## Evidence paths
 
-EVIDENCE.md; evidence/manifest.json; evidence/receipts.jsonl.
+In this directory: EVIDENCE.md, evidence/manifest.json, evidence/receipts.jsonl, evidence/logs. External final clean-commit binding: /tmp/nexus-harness-v1-final/final.json and /tmp/nexus-harness-v1-final/HANDOVER.md. The final user report supplies its measured hash.
 
 ## Open findings
 
-No implementation finding yet; independent review pending.
+No known implementation defect; independent review pending. Existing claude-mem lacks SKILL.md at base and remains unchanged.
 
 ## Known limitations
 
-Historical checkpoint record; verify current Git before continuing.
+The SHA/tree above identifies the real implementation checkpoint, NOT the evidence-only delivery commit. Verify final Git identity against the separately sealed artifact. External /tmp evidence can be lost and is not self-authenticating; if missing, report missing proof and independently rerun authorized checks. Linux validation only.
 
 ## Current status
 
@@ -50,12 +50,12 @@ RUNNING
 
 ## Next authorized action
 
-Continue this bounded mission stages B–I.
+Finish the already authorized local evidence-only checkpoint and final seal; once sealed, ARCHITECT REVIEW ONLY. No next implementation mission is authorized.
 
 ## Forbidden next actions
 
-Push, merge, protected refs, Candidate-10 writes or campaigns, phase advancement.
+Push, merge, integration, protected/frozen ref movement, Candidate-10 changes/campaigns, CI dispatch, release/tag, another Phase Three candidate or Phase Four.
 
 ## Instructions for a fresh agent
 
-Read AGENTS, POLICY, explicit MISSION, applicable procedure, PROGRESS and this HANDOVER. Verify Git and receipts. Do not trust memory or infer authority from these records.
+Read root AGENTS → .nexus/harness/POLICY.md → this explicit MISSION → applicable recover/review procedure → PROGRESS → HANDOVER. Verify original authorization, Git branch/HEAD/tree/status and all receipt hashes. Inspect the external final seal for final delivery SHA/tree; compare its implementation checkpoint to this record and verify the intervening diff is evidence-only. If the seal is absent or mismatches Git, stop rather than treating this historical checkpoint as the final candidate. Review must bind the final exact SHA/tree independently.

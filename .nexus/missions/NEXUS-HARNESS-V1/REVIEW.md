@@ -2,11 +2,11 @@
 
 ## Exact candidate SHA
 
-UNRECORDED — independent reviewer must bind final delivery SHA from post-commit seal and Git.
+db0f603be16588b431583a7cacd14072e86b3819
 
 ## Exact candidate tree
 
-UNRECORDED — independent reviewer must verify exact final tree.
+35d89e8d91fcf71f839a437f5dfcce7f02f07eec
 
 ## Mission ID
 
@@ -18,7 +18,7 @@ NEXUS-HARNESS-V1
 
 ## Changed files
 
-UNRECORDED — inspect exact base-to-delivery diff at review.
+Implementation checkpoint diff from base; evidence/files-created.txt and evidence/files-modified.txt inventory the complete delivery payload.
 
 ## Acceptance criteria
 
@@ -38,7 +38,7 @@ Implementer self-review is in EVIDENCE.md, not an independent verdict.
 
 ## Unresolved issues
 
-Independent review pending.
+Independent review NOT_RUN. This prepared record identifies the implementation checkpoint only. Reviewer must bind the final evidence-only delivery commit using Git and /tmp/nexus-harness-v1-final/final.json before issuing any verdict.
 
 ## Review verdict
 

@@ -158,3 +158,22 @@ An evidence-local `.gitattributes` entry exempts only blank-at-EOF checking for
 `preflight-4.stdout.txt`; all other whitespace checks and all source/docs remain
 unchanged. Its original receipt SHA-256 still validates. This is log
 preservation, not a passing claim for the initial failed check.
+
+## Local checkpoint and final delivery binding
+
+Implementation checkpoint: `db0f603be16588b431583a7cacd14072e86b3819` / tree `35d89e8d91fcf71f839a437f5dfcce7f02f07eec`.
+Its parent is the verified GitHub main base. `stage-i-checkpoint` is the measured
+local commit receipt. The next local commit is limited to this mission's
+handover/progress/review/evidence records. No further implementation is planned.
+
+The repository records intentionally identify this actual checkpoint rather
+than inventing a final self-referential SHA. Final clean delivery identity,
+full local verification and final READY_FOR_REVIEW status are sealed separately
+at `/tmp/nexus-harness-v1-final/final.json`, with full-field final HANDOVER.md,
+receipts.jsonl and logs in that directory. The final response supplies the seal
+hash. This artifact proves local Git identity/validation at its timestamps; it
+does not prove independent acceptance, hosted CI, portability or authorization.
+Missing external evidence must be treated as missing, not inferred from prose.
+
+GitHub main remained `6e15dee613ea35823d1adbf6d8917ed59eeda583` at the final
+read-only comparison (`stage-i-remote`, exit 0). No push was performed.
