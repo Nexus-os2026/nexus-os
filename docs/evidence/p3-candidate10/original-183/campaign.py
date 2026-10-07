@@ -14,6 +14,7 @@ No subset or resume mode exists: partial campaigns cannot be promoted or merged.
 import argparse
 import collections
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,11 @@ import time
 
 HERE = Path(__file__).resolve().parent
 MANIFEST = HERE / 'manifest.json'
+INTEGRITY_PATH = HERE.parent / 'build_integrity.py'
+_spec = importlib.util.spec_from_file_location('p3_build_integrity', INTEGRITY_PATH)
+_integrity = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_integrity)
+BuildIntegrity = _integrity.BuildIntegrity
 BASE = '9d5fdf95920bdeddb7453911f86390417b6a4604'
 REQUIRED_GATES = {
     'fmt', 'clippy', 'workspace-tests', 'npm-gate', 'npm-ci', 'tsc',
@@ -52,7 +58,8 @@ def status(root):
 
 def identity(root):
     return dict(sha=git(root,'rev-parse','HEAD'),tree=git(root,'rev-parse','HEAD^{tree}'),
-                runner_sha256=digest(Path(__file__).read_bytes()), manifest_sha256=digest(MANIFEST.read_bytes()))
+                runner_sha256=digest(Path(__file__).read_bytes()), manifest_sha256=digest(MANIFEST.read_bytes()),
+                build_integrity_sha256=digest(INTEGRITY_PATH.read_bytes()))
 
 def source(root, relative):
     candidate=root / relative
@@ -91,48 +98,61 @@ def check(root, manifest):
         assert control['expected_failure_tests'], control['id']
     return controls
 
-def run(root, control, env, log, timeout):
+def run(root, control, env, log, timeout, integrity=None, required_rebuild=()):
     start=time.time()
     timed_out=False
-    with log.open('xb') as output:
-        proc=subprocess.Popen(control['command'], cwd=root/control.get('cwd','.'), env=env,
-                              stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
-        try:
-            proc.wait(timeout=timeout)
-        except (subprocess.TimeoutExpired, KeyboardInterrupt):
-            # Signal only the process group this runner created and still owns.
-            os.killpg(proc.pid,signal.SIGKILL)
-            proc.wait()
-            timed_out=True
-    text=re.sub(r'\x1b\[[0-9;]*m','',log.read_text(errors='replace'))
     rust='cargo' in control['command']
+    build_proof=None
+    if rust and integrity is not None:
+        execution,build_proof=integrity.run_cargo(control['command'],
+            root/control.get('cwd','.'), log.stem, timeout, required_rebuild)
+        returncode=execution['returncode']
+        timed_out=execution['timeout']
+        with log.open('xb') as output: output.write(execution['text'].encode())
+    else:
+        # Unit classification fixtures use a mocked process; production
+        # Cargo execution always supplies the build-integrity guard.
+        with log.open('xb') as output:
+            proc=subprocess.Popen(control['command'], cwd=root/control.get('cwd','.'), env=env,
+                                  stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+            try:
+                proc.wait(timeout=timeout)
+            except (subprocess.TimeoutExpired, KeyboardInterrupt):
+                os.killpg(proc.pid,signal.SIGKILL)
+                proc.wait()
+                timed_out=True
+        returncode=proc.returncode
+    text=re.sub(r'\x1b\[[0-9;]*m','',log.read_text(errors='replace'))
     failed=re.findall(r'^test (.+?) \.\.\. FAILED\s*$',text,re.M)
     passed=re.findall(r'^test (.+?) \.\.\. ok\s*$',text,re.M)
     if rust:
-        reached=bool(re.search(r'Running (?:unittests|tests/)',text)) and bool(failed or passed)
+        reached=(bool(re.search(r'Running (?:unittests|tests/)',text))
+                 or bool(re.search(r'^running [1-9][0-9]* tests?$',text,re.M))) and bool(failed or passed)
         intended_failed=sorted(set(failed)&set(control['expected_failure_tests']))
         intended_passed=set(control['expected_failure_tests'])<=set(passed)
         compilation_failed=bool(re.search(r'error\[E\d+\]|error: could not compile|error: linking with',text))
     else:
         reached='Test Files' in text and 'Tests' in text
         intended_failed=[name for name in control['expected_failure_tests'] if re.search(r'FAIL\s+[^\n]*'+re.escape(name),text)]
-        intended_passed=all(name in text for name in control['expected_failure_tests']) and proc.returncode==0
+        intended_passed=all(name in text for name in control['expected_failure_tests']) and returncode==0
         compilation_failed=False
     if timed_out:
         observation='INFRA ERROR'
     elif compilation_failed:
         observation='COMPILE ERROR'
-    elif proc.returncode==0 and reached and intended_passed:
+    elif returncode==0 and reached and intended_passed:
         observation='SURVIVED'
-    elif proc.returncode!=0 and reached and intended_failed:
+    elif returncode!=0 and reached and intended_failed:
         observation='INTENDED TEST FAILURE'
     else:
         observation='INFRA ERROR'
-    return dict(command=control['command'],cwd=control.get('cwd','.'),returncode=proc.returncode,
+    return dict(command=control['command'],cwd=control.get('cwd','.'),returncode=returncode,
                 duration_seconds=round(time.time()-start,3),timeout=timed_out,compiled_to_test=reached,
                 failed_tests=failed,intended_failed_tests=intended_failed,
                 intended_baseline_passed=intended_passed,observation=observation,
+                build_identity=build_proof,
                 log=log.name,log_sha256=digest(log.read_bytes()))
+
 
 def receipt(path, expected, required):
     data=read_json(path)
@@ -146,13 +166,10 @@ def receipt(path, expected, required):
         assert digest(log.read_bytes())==job['log_sha256'], (name,'log hash')
     return data
 
-def refresh_tracked(root):
-    # A warm cache may originate in another worktree. Refresh input mtimes,
-    # never content or Git refs, before this checkout's baseline/campaign.
-    for name in subprocess.check_output(['git','-C',str(root),'ls-files','-z']).split(b'\0'):
-        if name:
-            path=root/os.fsdecode(name)
-            if path.is_file() and not path.is_symlink(): os.utime(path,None)
+def refresh_tracked(root, integrity, packages):
+    # Safe even if called directly; the guard verifies a strict mtime barrier.
+    return integrity.refresh_tracked(packages)
+
 
 def review(directory, review_path):
     campaign=read_json(directory/'campaign.json')
@@ -221,9 +238,11 @@ def main():
     write_json(out/'identity.json',dict(**ident,historical=manifest['historical_candidate'],
         historical_corrected_harness=manifest['historical_corrected_harness'],
         m166=controls[165],environment=env,git_status_before=original_status))
-    refresh_tracked(root)
+    integrity=BuildIntegrity(root, Path(env['CARGO_TARGET_DIR']), env, out/'build-integrity')
+    all_packages=integrity.packages_for({edit['file'] for c in controls for edit in c['edits']})
+    refresh_tracked(root, integrity, all_packages)
     if args.mode=='baseline':
-        jobs={}; by_command={}; all_pass=True
+        jobs={}; by_command={}; all_pass=True; first_packages=set()
         for control in controls:
             key=json.dumps([control['cwd'],control['command']])
             if key in by_command: continue
@@ -231,7 +250,10 @@ def main():
             # Commands shared by controls must cover every intended judge.
             merged=dict(control)
             merged['expected_failure_tests']=sorted({n for c in controls if json.dumps([c['cwd'],c['command']])==key for n in c['expected_failure_tests']})
-            result=run(root,merged,env,out/(name+'.log'),args.timeout)
+            package=control['command'][control['command'].index('-p')+1] if 'cargo' in control['command'] else None
+            required={package} if package and package not in first_packages else set()
+            result=run(root,merged,env,out/(name+'.log'),args.timeout,integrity,required)
+            if package: first_packages.add(package)
             passed=result['returncode']==0 and result['intended_baseline_passed'] and result['compiled_to_test']
             jobs[name]=result
             all_pass &= passed
@@ -254,12 +276,18 @@ def main():
             before,after=edited(root,control)
             result=dict(id=control['id'],observation='INFRA ERROR',compiled_to_test=False,
                         before_sha256={name:digest(data) for name,data in before.items()})
+            affected=integrity.packages_for(before)
             try:
                 for name,data in after.items(): source(root,name).write_bytes(data)
                 result['mutant_sha256']={name:digest(source(root,name).read_bytes()) for name in after}
-                result.update(run(root,control,env,out/(control['id']+'.log'),args.timeout))
+                if affected:
+                    integrity.barrier(after,affected,control['id']+' mutant source')
+                result.update(run(root,control,env,out/(control['id']+'.log'),args.timeout,
+                                  integrity,affected))
             finally:
-                for name,data in before.items(): source(root,name).write_bytes(data)
+                integrity.restore(before,affected,control['id']+' source restoration')
+                integrity.prove_pending(control['id']+' pristine rebuild')
+                result['build_restoration_proven']=not integrity.pending
                 result['after_sha256']={name:digest(source(root,name).read_bytes()) for name in before}
                 result['git_status_after']=status(root)
                 result['restored']=result['before_sha256']==result['after_sha256'] and result['git_status_after']==original_status

@@ -28,15 +28,18 @@ Usage:
 worktree under review), used by nothing else while the controls run. Run
 it with CI=1 and no DISPLAY (the live display tests then fail rather than
 skip, and the confirmation-window test runs itself under xvfb-run); Xvfb
-and xvfb-run must be installed. The target directory is dedicated to these
-runs; it may be warm: every tracked file's modification time is set to now
-before the baseline, so nothing in it built from other content is taken as
-current. Run it alone: it mutates and restores files in the checkout.
+and xvfb-run must be installed. The target directory may be warm, but must have no other writer during
+the run. The directly callable baseline establishes a strict source-to-artifact
+mtime barrier and proves Cargo rebuilt each affected package. After each
+mutation, restored bytes and Git content are verified, followed by a strict
+mtime barrier and a pristine rebuild proof (or package-scoped clean fallback).
+Run it alone: it mutates and restores files in the checkout.
 
 This harness holds the Candidate 9 controls only. It is not the original
 Phase Three mutation harness and does not stand in for it.
 """
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -72,6 +75,15 @@ LOOP_RUNTIME = "kernel/src/cognitive/loop_runtime.rs"
 ROOT = None
 LOG = None
 TARGET_DIR = None
+FRESH = None
+HISTORICAL_C9_RUNNER_SHA256 = "0accc61e910907de5500c843b53859c0d94ecb8346e9aaaaca4e4d1c734d90cc"
+
+# Loaded by absolute path because run_controls.sh invokes this file with -I.
+_INTEGRITY_PATH = pathlib.Path(__file__).resolve().parents[2] / "p3-candidate10/build_integrity.py"
+_spec = importlib.util.spec_from_file_location("p3_build_integrity", _INTEGRITY_PATH)
+_integrity = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_integrity)
+BuildIntegrity = _integrity.BuildIntegrity
 
 
 def control(cid, item, required, what, crate, test, marker, edits):
@@ -639,17 +651,9 @@ def status():
 
 
 def refresh_mtimes():
-    """Set every tracked file's modification time to now (content
-    untouched), so that no artifact a warm target directory holds, built
-    from other content, is taken as current: every workspace crate is
-    built from this checkout at least once."""
-    out = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True,
-                         check=True).stdout
-    now = time.time()
-    for name in out.split(b"\0"):
-        path = ROOT / os.fsdecode(name)
-        if name and path.is_file() and not path.is_symlink():
-            os.utime(path, (now, now))
+    """Compatibility name; the directly callable baseline owns this step."""
+    assert FRESH is not None
+    return FRESH.refresh_tracked({c["crate"] for c in CONTROLS})
 
 
 def mutate(control_, originals):
@@ -671,29 +675,35 @@ def mutate(control_, originals):
     return texts
 
 
-def run_test(crate, name):
-    env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET_DIR))
-    return subprocess.run(
-        ["cargo", "test", "-p", crate, "--locked", "--lib", "--", name, "--exact"],
-        cwd=ROOT, capture_output=True, text=True, timeout=3600, env=env)
+def run_test(crate, name, require_rebuild=()):
+    assert FRESH is not None, "call baseline() before mutation controls"
+    command = ["cargo", "test", "-p", crate, "--locked", "--lib", "--", name, "--exact"]
+    result, _ = FRESH.run_cargo(command, ROOT, f"test-{crate}-{name}", 3600,
+                                require_rebuild)
+    return subprocess.CompletedProcess(command, result["returncode"],
+                                       result["text"], "")
 
 
 def compiled(output):
     return ("could not compile" not in output and "error[E" not in output
-            and "Running unittests src/lib.rs" in output)
+            and ("Running unittests src/lib.rs" in output
+                 or "Running `" in output) and "running 1 test" in output)
 
 
 def run_one(control_, originals, original_state, expected_status):
     texts = mutate(control_, originals)
     if state() != original_state:
         raise SystemExit(f"{control_['id']}: files changed before the control")
+    packages = FRESH.packages_for(texts)
+    before = {path: originals[path] for path in texts}
     try:
         for path, text in texts.items():
             (ROOT / path).write_bytes(text.encode())
-        proc = run_test(control_["crate"], control_["test"])
+        FRESH.barrier(texts, packages, f"{control_['id']} mutant source")
+        proc = run_test(control_["crate"], control_["test"], packages)
     finally:
-        for path in texts:
-            (ROOT / path).write_bytes(originals[path])
+        FRESH.restore(before, packages, f"{control_['id']} source restoration")
+        FRESH.prove_pending(f"{control_['id']} pristine rebuild")
     restored = state() == original_state
     if status() != expected_status:
         raise SystemExit(f"{control_['id']}: unexpected checkout state after restoring: {status()}")
@@ -705,9 +715,17 @@ def run_one(control_, originals, original_state, expected_status):
 
 
 def baseline(original_state):
+    """Self-contained pristine entrypoint, including a strict cache barrier."""
+    global FRESH
+    environment = dict(os.environ, CARGO_TARGET_DIR=str(TARGET_DIR))
+    FRESH = BuildIntegrity(ROOT, TARGET_DIR, environment, LOG / "build-integrity")
+    refresh_mtimes()
     results = {}
+    first_package = set()
     for crate, name in sorted({(c["crate"], c["test"]) for c in CONTROLS}):
-        proc = run_test(crate, name)
+        required = {crate} if crate not in first_package else set()
+        proc = run_test(crate, name, required)
+        first_package.add(crate)
         output = proc.stdout + proc.stderr
         results[f"{crate} {name}"] = (proc.returncode == 0
                                       and "test result: ok. 1 passed; 0 failed" in output)
@@ -756,7 +774,6 @@ def main():
     head = subprocess.run(["git", "rev-parse", "HEAD", "HEAD^{tree}"], cwd=ROOT,
                           capture_output=True, text=True, check=True).stdout.split()
     script = sha256(pathlib.Path(__file__).resolve())
-    refresh_mtimes()
     original_state = state()
     originals = {path: (ROOT / path).read_bytes() for path in mutable_files()}
     expected_status = status()
@@ -783,6 +800,7 @@ def main():
     required = sorted({c["required"] for c in CONTROLS if c["required"]})
     summary = dict(
         head=head[0], tree=head[1], script_sha256=script,
+        historical_candidate9_runner_sha256=HISTORICAL_C9_RUNNER_SHA256,
         complete=only is None,
         controls=len(results),
         killed=sum(1 for r in results if r["killed"]),

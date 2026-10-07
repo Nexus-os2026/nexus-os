@@ -63,6 +63,11 @@ start-turn wait, replacing the one-second scheduling assumption.
 
 ## Execution and evidence contract
 
+R2 adds the shared build-identity guard described in `../build-integrity-r2.md`.
+Restored source bytes and clean Git status alone do not prove a warm Cargo
+executable is pristine. The runner now requires a strict source mtime barrier
+and Cargo rebuild proof, with package-scoped clean fallback.
+
 Use only the isolated `repair/p3-candidate10-closure` checkout and run no
 other Cargo/build/source-changing job against it or its target directory
 while the campaign runs. Use a private HOME, CI=1, no DISPLAY or session bus,
