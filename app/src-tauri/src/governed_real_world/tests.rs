@@ -984,10 +984,222 @@ fn the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marke
         .expect("xvfb-run runs");
     let out = String::from_utf8_lossy(&shown.stdout);
     let err = String::from_utf8_lossy(&shown.stderr);
-    assert!(shown.status.success(), "{out}\n{err}");
-    // It ran, and ran this test only.
-    assert!(out.contains(&format!("test {name} ... ok")), "{out}\n{err}");
-    assert!(out.contains("test result: ok. 1 passed"), "{out}\n{err}");
+    assert!(
+        shown.status.success(),
+        "the window test failed under xvfb-run ({}):\n{out}\n{err}",
+        shown.status
+    );
+    // It ran, and ran this test only, read from the report's own lines: the
+    // window's diagnostics (GTK's) may come between its name and its result.
+    if let Err(reason) = the_report_passes_this_test_alone(&out, &name) {
+        panic!("{reason}:\n{out}\n{err}");
+    }
+}
+
+/// Whether libtest's report of a run under `xvfb-run` shows exactly one
+/// test run, `name`, with the result `ok` and a summary of one passed and
+/// nothing else. Success is read only from lines that begin as libtest's
+/// do; any other line (a diagnostic) is allowed between the test's name and
+/// its result and never counts.
+#[cfg(target_os = "linux")]
+fn the_report_passes_this_test_alone(report: &str, name: &str) -> Result<(), String> {
+    let lines: Vec<&str> = report.lines().collect();
+    let at = |is: fn(&str) -> bool| -> Vec<usize> {
+        (0..lines.len()).filter(|&i| is(lines[i])).collect()
+    };
+    if !at(|line| line == "failures:").is_empty() {
+        return Err("the report lists failures".into());
+    }
+    let running = at(|line| {
+        line.strip_prefix("running ")
+            .and_then(|rest| {
+                rest.strip_suffix(" tests")
+                    .or_else(|| rest.strip_suffix(" test"))
+            })
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+    });
+    let [running] = running[..] else {
+        return Err(format!("{} \"running\" lines, not one", running.len()));
+    };
+    if lines[running] != "running 1 test" {
+        return Err(format!("not one test ran: {:?}", lines[running]));
+    }
+    let tests = at(|line| line.starts_with("test ") && line.contains(" ... "));
+    let [test] = tests[..] else {
+        return Err(format!("{} test lines, not one", tests.len()));
+    };
+    let Some(rest) = lines[test].strip_prefix(&format!("test {name} ... ")) else {
+        return Err(format!("another test ran: {:?}", lines[test]));
+    };
+    // libtest writes the result after the name; a diagnostic printed in
+    // between moves it to a later line of its own.
+    let (result_at, result) = if rest.is_empty() {
+        match (test + 1..lines.len()).find(|&i| matches!(lines[i], "ok" | "FAILED" | "ignored")) {
+            Some(i) => (i, lines[i]),
+            None => return Err("the test has no result".into()),
+        }
+    } else {
+        (test, rest)
+    };
+    if result != "ok" {
+        return Err(format!("the test's result is {result:?}, not \"ok\""));
+    }
+    let summaries = at(|line| line.starts_with("test result:"));
+    let [summary] = summaries[..] else {
+        return Err(format!("{} summaries, not one", summaries.len()));
+    };
+    if !lines[summary].starts_with("test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured;") {
+        return Err(format!(
+            "the summary is not one passed: {:?}",
+            lines[summary]
+        ));
+    }
+    if !(running < test && result_at < summary) {
+        return Err("the report is out of order".into());
+    }
+    Ok(())
+}
+
+// The reader of the window test's report under `xvfb-run`, on plain
+// reports: what passes it, and what it rejects (CI-144-01).
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_passes_a_clean_report() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    assert_eq!(the_report_passes_this_test_alone(&report, name), Ok(()));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_passes_the_hosted_report_with_a_warning_before_ok() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    // Run 37934143554, job test-linux: the child's stdout as captured.
+    let report = concat!(
+        "running 1 test\n",
+        "test governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked ... \n",
+        "(nexus_desktop_backend-eab892096531ff79:38472): dbind-WARNING **: 13:20:58.262: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files\n",
+        "ok\n",
+        "\n",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n",
+    );
+    // The old check required this unbroken text, which the report lacks.
+    assert!(!report.contains(&format!("test {name} ... ok")));
+    assert_eq!(the_report_passes_this_test_alone(report, name), Ok(()));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_zero_tests() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 568 filtered out; finished in 0.00s\n\n";
+    let reason = the_report_passes_this_test_alone(report, name).unwrap_err();
+    assert!(reason.contains("not one test ran"), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_two_tests() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 2 tests\ntest {name} ... ok\ntest {name}_too ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 566 filtered out; finished in 5.33s\n\n"
+    );
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("not one test ran"), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_another_test() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = "\nrunning 1 test\ntest governed_real_world::tests::another_test ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 0.01s\n\n";
+    let reason = the_report_passes_this_test_alone(report, name).unwrap_err();
+    assert!(reason.contains("another test ran"), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_a_failed_test() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... FAILED\n\nfailures:\n\n---- {name} stdout ----\nthe header moved\n\nfailures:\n    {name}\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    assert!(the_report_passes_this_test_alone(&report, name).is_err());
+    // Without its failures list, the result alone still rejects it.
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... FAILED\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("\"FAILED\""), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_a_summary_with_a_failure() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... ok\n\ntest result: ok. 1 passed; 1 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("the summary is not one passed"), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_a_missing_summary() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!("\nrunning 1 test\ntest {name} ... ok\n");
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("0 summaries"), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_a_test_with_no_result() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... \n(diagnostic): a warning\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("no result"), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_two_summaries() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("2 summaries"), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_an_ignored_test() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... ignored\n\ntest result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 567 filtered out; finished in 0.00s\n\n"
+    );
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("\"ignored\""), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_ok_only_inside_a_diagnostic() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... \n(diagnostic): echo: test {name} ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    // The old check would have found its text here.
+    assert!(report.contains(&format!("test {name} ... ok")));
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("no result"), "{reason}");
 }
 
 /// Drive the production confirmation window (`owner_window`) under a
