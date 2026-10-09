@@ -597,3 +597,558 @@ fn a_proposal_refused_before_its_commitment_ends_its_lease() {
     ));
     assert!(!broker.is_live(lease));
 }
+
+// XA-R1-02: a release is asked again once its record is written and once
+// the vault has answered. A run cancelled, finished or stopped, or a lease
+// expired, meanwhile gets no secret, and the lease ends.
+
+/// The state of `lease` in the broker's table.
+fn state_of(
+    broker: &CredentialBroker,
+    lease: crate::authority::ids::LeaseId,
+) -> Option<super::LeaseState> {
+    broker
+        .table
+        .leases
+        .lock()
+        .unwrap()
+        .map
+        .get(&lease)
+        .map(|l| l.state)
+}
+
+/// A vault holding the fixture secret that runs `during` once, on the
+/// reading thread, while it is read; it counts reads.
+struct ActingVault {
+    reads: AtomicU32,
+    during: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+}
+
+impl ActingVault {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            reads: AtomicU32::new(0),
+            during: Mutex::new(None),
+        })
+    }
+
+    fn during(&self, act: impl FnOnce() + Send + 'static) {
+        *self.during.lock().unwrap() = Some(Box::new(act));
+    }
+}
+
+impl SecretSource for ActingVault {
+    fn read(&self, scope: &str, name: &str) -> Result<Zeroizing<String>, SecretUnavailable> {
+        self.reads.fetch_add(1, Ordering::SeqCst);
+        let during = self.during.lock().unwrap().take();
+        if let Some(during) = during {
+            during();
+        }
+        FakeVault(AtomicU32::new(0)).read(scope, name)
+    }
+}
+
+/// A pipeline whose evidence is a scripted sink, on `clock`, with one agent
+/// and one open run, a broker over `vault` and the fixture destination.
+fn scripted(
+    clock: Arc<dyn crate::authority::clock::Clock>,
+    vault: Arc<dyn SecretSource>,
+) -> (
+    Harness,
+    Arc<crate::authority::scripted::ScriptedSink>,
+    Arc<CredentialBroker>,
+    Destination,
+) {
+    use crate::authority::evidence::MemoryEvidence;
+    use crate::authority::ids::AgentId;
+    use crate::authority::run::RunOrigin;
+    use crate::authority::scripted::ScriptedSink;
+    use crate::authority::Authority;
+    use crate::control::Control;
+    let sink = ScriptedSink::new();
+    let control = Arc::new(Control::new(Authority::new(sink.clone(), clock)));
+    let agent = AgentId::new("agent-test").unwrap();
+    let run = control
+        .authority()
+        .open_run(agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    let h = Harness {
+        control,
+        evidence: Arc::new(MemoryEvidence::new(1)),
+        agent,
+        run,
+    };
+    let broker = CredentialBroker::new(h.control.authority(), vault);
+    let destination = Destination::parse("https://api.fixture.example").unwrap();
+    (h, sink, broker, destination)
+}
+
+/// Run `act` once, on the recording thread, while the CredentialReleased
+/// record is written: the lease is consumed, the vault not yet read.
+fn while_release_recorded(
+    sink: &crate::authority::scripted::ScriptedSink,
+    act: impl Fn() + Send + Sync + 'static,
+) {
+    use crate::authority::evidence::EvidencePhase;
+    let done = std::sync::atomic::AtomicBool::new(false);
+    sink.reenter_with(move |record| {
+        if record.phase == EvidencePhase::CredentialReleased && !done.swap(true, Ordering::SeqCst) {
+            act();
+        }
+    });
+}
+
+/// What a `ReleasingTwice` effect saw.
+#[derive(Default)]
+struct Seen {
+    /// What each release returned: the header's name (never its value), or
+    /// the refusal.
+    releases: Vec<Result<String, AuthorityError>>,
+    /// The lease's state between the two releases.
+    between: Option<super::LeaseState>,
+}
+
+/// An effect that asks the broker for its lease, then again under the same
+/// guard; it fails, as egress does, when the first is refused (the
+/// refusal's class is its detail).
+struct ReleasingTwice {
+    broker: Arc<CredentialBroker>,
+    lease: crate::authority::ids::LeaseId,
+    destination: Destination,
+    seen: Arc<Mutex<Seen>>,
+}
+
+impl PendingEffect for ReleasingTwice {
+    fn revalidate(&self) -> Result<Digest, AuthorityError> {
+        Ok(self.destination.origin_digest())
+    }
+    fn parameters(&self) -> Digest {
+        Digest::of("broker.test", &[])
+    }
+    fn execute(
+        self: Box<Self>,
+        guard: &crate::authority::commitment::ExecutionGuard,
+    ) -> Result<EffectOutput, (crate::authority::commitment::FailureClass, String)> {
+        let release = || {
+            self.broker
+                .release(self.lease, guard, &self.destination)
+                .map(|header| header.name.to_string())
+        };
+        let first = release();
+        let between = state_of(&self.broker, self.lease);
+        let second = release();
+        {
+            let mut seen = self.seen.lock().unwrap();
+            seen.releases = vec![first.clone(), second];
+            seen.between = between;
+        }
+        match first {
+            Ok(_) => Ok(EffectOutput::default()),
+            Err(error) => Err((
+                crate::authority::commitment::FailureClass::Unavailable,
+                error.class().to_string(),
+            )),
+        }
+    }
+}
+
+/// Commit to an action listing `lease` whose effect is `ReleasingTwice`, and
+/// authorize it: its id, and what its effect will have seen.
+fn commit_twice(
+    h: &Harness,
+    broker: &Arc<CredentialBroker>,
+    lease: crate::authority::ids::LeaseId,
+    destination: &Destination,
+) -> (crate::authority::ids::CommitmentId, Arc<Mutex<Seen>>) {
+    let (mut preparation, _) = lease_preparation(h, broker, lease, destination);
+    let seen = Arc::new(Mutex::new(Seen::default()));
+    preparation.effect = Box::new(ReleasingTwice {
+        broker: broker.clone(),
+        lease,
+        destination: destination.clone(),
+        seen: seen.clone(),
+    });
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    (view.id, seen)
+}
+
+/// Execute `id` on another thread, within a bound: a lock held across the
+/// record or the vault read would leave it blocked.
+fn execute_within(
+    h: &Harness,
+    id: crate::authority::ids::CommitmentId,
+) -> Result<EffectOutput, AuthorityError> {
+    let (control, agent, run) = (h.control.clone(), h.agent.clone(), h.run);
+    crate::authority::scripted::within(move || control.execute(id, &agent, run))
+}
+
+/// What `refused_while_recorded` saw.
+struct Refused {
+    /// What the pipeline returned.
+    result: Result<EffectOutput, AuthorityError>,
+    /// What the two releases returned.
+    releases: Vec<Result<String, AuthorityError>>,
+    /// The lease's state between them.
+    between: Option<super::LeaseState>,
+    /// How many times the vault was read.
+    reads: u32,
+}
+
+/// A run, and what to do to it while the release is recorded: the refusal
+/// the release returns, the vault reads, and the lease's state then.
+fn refused_while_recorded(
+    end: impl Fn(&crate::control::Control, crate::authority::ids::RunId) + Send + Sync + 'static,
+) -> Refused {
+    use crate::authority::clock::SystemClock;
+    let vault = Arc::new(FakeVault(AtomicU32::new(0)));
+    let (h, sink, broker, destination) = scripted(Arc::new(SystemClock::default()), vault.clone());
+    let (control, run) = (Arc::downgrade(&h.control), h.run);
+    while_release_recorded(&sink, move || {
+        if let Some(control) = control.upgrade() {
+            end(&control, run);
+        }
+    });
+    let lease = broker
+        .lease(&h.agent, h.run, SPEC, &destination, Duration::from_secs(60))
+        .unwrap();
+    let (id, seen) = commit_twice(&h, &broker, lease, &destination);
+    let result = execute_within(&h, id);
+    let seen = std::mem::take(&mut *seen.lock().unwrap());
+    Refused {
+        result,
+        releases: seen.releases,
+        between: seen.between,
+        reads: vault.0.load(Ordering::SeqCst),
+    }
+}
+
+/// T1: a run cancelled while its credential's release is recorded gets
+/// nothing: the vault is not read, the refusal is the run's, the lease has
+/// ended, and a second release of it under the same guard is refused and
+/// reads nothing.
+#[test]
+fn a_run_cancelled_while_the_release_is_recorded_reads_no_secret() {
+    let Refused {
+        result,
+        releases,
+        between,
+        reads,
+    } = refused_while_recorded(|control, run| {
+        let _ = control.cancel_run(run);
+    });
+    assert_eq!(
+        releases,
+        vec![
+            Err(AuthorityError::RunCancelled),
+            Err(AuthorityError::NotPending)
+        ]
+    );
+    assert_eq!(reads, 0, "the vault was not read");
+    assert_eq!(between, Some(super::LeaseState::Ended));
+    assert_eq!(result.unwrap_err(), AuthorityError::RunCancelled);
+}
+
+/// T1b: a run that finished while the release is recorded: the same.
+#[test]
+fn a_run_finished_while_the_release_is_recorded_reads_no_secret() {
+    let Refused {
+        result,
+        releases,
+        between,
+        reads,
+    } = refused_while_recorded(|control, run| {
+        control.finish_run(run);
+    });
+    assert_eq!(
+        releases,
+        vec![
+            Err(AuthorityError::RunNotActive),
+            Err(AuthorityError::NotPending)
+        ]
+    );
+    assert_eq!(reads, 0, "the vault was not read");
+    assert_eq!(between, Some(super::LeaseState::Ended));
+    assert_eq!(result.unwrap_err(), AuthorityError::RunCancelled);
+}
+
+/// T2: an emergency stop while the release is recorded: nothing is read,
+/// and the refusal is the stop's.
+#[test]
+fn an_emergency_stop_while_the_release_is_recorded_reads_no_secret() {
+    let Refused {
+        result,
+        releases,
+        between,
+        reads,
+    } = refused_while_recorded(|control, _| {
+        control.emergency_stop();
+    });
+    assert_eq!(
+        releases,
+        vec![
+            Err(AuthorityError::EmergencyStopped),
+            Err(AuthorityError::NotPending)
+        ]
+    );
+    assert_eq!(reads, 0, "the vault was not read");
+    assert_eq!(between, Some(super::LeaseState::Ended));
+    assert_eq!(result.unwrap_err(), AuthorityError::RunCancelled);
+}
+
+/// T3: a lease whose deadline passes while its release is recorded is
+/// expired: nothing is read and the lease ends.
+#[test]
+fn a_lease_that_expires_while_its_release_is_recorded_reads_no_secret() {
+    use crate::authority::clock::ManualClock;
+    let clock = Arc::new(ManualClock::default());
+    let vault = Arc::new(FakeVault(AtomicU32::new(0)));
+    let (h, sink, broker, destination) = scripted(clock.clone(), vault.clone());
+    let lease = broker
+        .lease(&h.agent, h.run, SPEC, &destination, Duration::from_secs(5))
+        .unwrap();
+    {
+        let clock = clock.clone();
+        while_release_recorded(&sink, move || clock.advance(Duration::from_secs(10)));
+    }
+    let (id, seen) = commit_twice(&h, &broker, lease, &destination);
+    let result = execute_within(&h, id);
+    let seen = seen.lock().unwrap();
+    assert_eq!(
+        seen.releases,
+        vec![
+            Err(AuthorityError::Expired),
+            Err(AuthorityError::NotPending)
+        ]
+    );
+    assert_eq!(vault.0.load(Ordering::SeqCst), 0, "the vault was not read");
+    assert_eq!(seen.between, Some(super::LeaseState::Ended));
+    assert_eq!(
+        result.unwrap_err(),
+        AuthorityError::Unavailable("the effect failed")
+    );
+}
+
+/// T4: a run cancelled while the vault is being read: the secret read is
+/// dropped, no header is built, and the lease ends. The vault's reader
+/// also takes the pipeline's and the broker's locks: none is held across
+/// the read.
+#[test]
+fn a_run_cancelled_while_the_vault_is_read_gets_no_header() {
+    use crate::authority::clock::SystemClock;
+    let vault = ActingVault::new();
+    let (h, _sink, broker, destination) = scripted(Arc::new(SystemClock::default()), vault.clone());
+    let lease = broker
+        .lease(&h.agent, h.run, SPEC, &destination, Duration::from_secs(60))
+        .unwrap();
+    {
+        let (control, weak, run) = (Arc::downgrade(&h.control), Arc::downgrade(&broker), h.run);
+        vault.during(move || {
+            if let Some(control) = control.upgrade() {
+                let _ = control.cancel_run(run);
+                control.probe_locks();
+            }
+            if let Some(broker) = weak.upgrade() {
+                broker.probe_locks();
+            }
+        });
+    }
+    let (id, seen) = commit_twice(&h, &broker, lease, &destination);
+    let result = execute_within(&h, id);
+    let seen = seen.lock().unwrap();
+    assert_eq!(
+        seen.releases,
+        vec![
+            Err(AuthorityError::RunCancelled),
+            Err(AuthorityError::NotPending)
+        ]
+    );
+    assert_eq!(vault.reads.load(Ordering::SeqCst), 1, "one read, no more");
+    assert_eq!(seen.between, Some(super::LeaseState::Ended));
+    assert_eq!(result.unwrap_err(), AuthorityError::RunCancelled);
+}
+
+/// T5: a sink that, while the release is recorded, re-enters the authority
+/// (cancels the run) and the broker (asks whether the lease is live, takes
+/// its lock) does not deadlock the release: it returns, refused, within a
+/// bound; no lock is held while any record is written.
+#[test]
+fn a_sink_reentering_the_authority_and_the_broker_during_the_release_does_not_deadlock() {
+    use crate::authority::clock::SystemClock;
+    use std::sync::mpsc;
+    let vault = Arc::new(FakeVault(AtomicU32::new(0)));
+    let (h, sink, broker, destination) = scripted(Arc::new(SystemClock::default()), vault.clone());
+    let lease = broker
+        .lease(&h.agent, h.run, SPEC, &destination, Duration::from_secs(60))
+        .unwrap();
+    let live_then = Arc::new(Mutex::new(None));
+    {
+        let (control, weak, run) = (Arc::downgrade(&h.control), Arc::downgrade(&broker), h.run);
+        let live_then = live_then.clone();
+        while_release_recorded(&sink, move || {
+            if let Some(control) = control.upgrade() {
+                let _ = control.cancel_run(run);
+            }
+            if let Some(broker) = weak.upgrade() {
+                *live_then.lock().unwrap() = Some(broker.is_live(lease));
+                broker.probe_locks();
+            }
+        });
+    }
+    {
+        let (control, weak) = (Arc::downgrade(&h.control), Arc::downgrade(&broker));
+        sink.probe_with(move || {
+            if let Some(control) = control.upgrade() {
+                control.probe_locks();
+            }
+            if let Some(broker) = weak.upgrade() {
+                broker.probe_locks();
+            }
+        });
+    }
+    let (id, seen) = commit_twice(&h, &broker, lease, &destination);
+    let (done, returned) = mpsc::channel();
+    let (control, agent, run) = (h.control.clone(), h.agent.clone(), h.run);
+    std::thread::spawn(move || {
+        let _ = done.send(control.execute(id, &agent, run));
+    });
+    let result = returned
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the release returned: no lock was held across its record");
+    assert_eq!(
+        seen.lock().unwrap().releases.first(),
+        Some(&Err(AuthorityError::RunCancelled))
+    );
+    assert_eq!(result.unwrap_err(), AuthorityError::RunCancelled);
+    assert_eq!(
+        *live_then.lock().unwrap(),
+        Some(false),
+        "consumed before it was recorded"
+    );
+    assert_eq!(vault.0.load(Ordering::SeqCst), 0, "the vault was not read");
+    assert_eq!(
+        sink.violations(),
+        0,
+        "a lock was held while a record was written"
+    );
+}
+
+/// T6: a vault read that fails leaves the lease consumed: a later release
+/// of it is refused and reads nothing.
+#[test]
+fn a_failed_vault_read_leaves_the_lease_unusable() {
+    let (h, broker, vault, destination) = setup();
+    let missing = CredentialSpec {
+        name: "missing.token",
+        ..SPEC
+    };
+    let lease = broker
+        .lease(
+            &h.agent,
+            h.run,
+            missing,
+            &destination,
+            Duration::from_secs(60),
+        )
+        .unwrap();
+    assert_eq!(
+        use_lease(&h, &broker, lease, &destination)
+            .unwrap()
+            .unwrap_err(),
+        AuthorityError::Unavailable("the credential is not available")
+    );
+    assert_eq!(vault.0.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        use_lease(&h, &broker, lease, &destination)
+            .unwrap()
+            .unwrap_err(),
+        AuthorityError::NotPending
+    );
+    assert_eq!(
+        vault.0.load(Ordering::SeqCst),
+        1,
+        "the second release read nothing"
+    );
+    assert!(!broker.is_live(lease));
+    assert_ne!(
+        state_of(&broker, lease),
+        Some(super::LeaseState::Issued),
+        "a lease never returns to issued"
+    );
+}
+
+/// T7: with nothing cancelled, a release is what it was: one record, one
+/// vault read, one header.
+#[test]
+fn an_uninterrupted_release_records_once_reads_once_and_returns_its_header() {
+    use crate::authority::evidence::EvidencePhase;
+    let (h, broker, vault, destination) = setup();
+    let lease = broker
+        .lease(&h.agent, h.run, SPEC, &destination, Duration::from_secs(60))
+        .unwrap();
+    assert_eq!(
+        use_lease(&h, &broker, lease, &destination)
+            .unwrap()
+            .unwrap(),
+        format!("authorization: Bearer {SECRET}")
+    );
+    assert_eq!(vault.0.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        h.evidence
+            .records()
+            .iter()
+            .filter(|r| r.phase == EvidencePhase::CredentialReleased)
+            .count(),
+        1
+    );
+}
+
+/// T9: what the evidence says of a release refused after its record: one
+/// CredentialReleased record, then the commitment's terminal record, which
+/// says the run was cancelled and the action did not succeed.
+#[test]
+fn a_release_refused_after_its_record_ends_its_commitment_cancelled() {
+    use crate::authority::clock::SystemClock;
+    use crate::authority::evidence::EvidencePhase;
+    let vault = Arc::new(FakeVault(AtomicU32::new(0)));
+    let (h, sink, broker, destination) = scripted(Arc::new(SystemClock::default()), vault.clone());
+    {
+        let (control, run) = (Arc::downgrade(&h.control), h.run);
+        while_release_recorded(&sink, move || {
+            if let Some(control) = control.upgrade() {
+                let _ = control.cancel_run(run);
+            }
+        });
+    }
+    let lease = broker
+        .lease(&h.agent, h.run, SPEC, &destination, Duration::from_secs(60))
+        .unwrap();
+    let (id, _) = commit_twice(&h, &broker, lease, &destination);
+    let _ = execute_within(&h, id);
+    let records = sink.memory.records();
+    let id = id.to_string();
+    let terminal = records
+        .iter()
+        .rev()
+        .find(|r| r.commitment.as_deref() == Some(id.as_str()))
+        .unwrap();
+    println!(
+        "T9 terminal record: phase={:?} outcome={:?} failure={:?} cancelled={} detail={:?}",
+        terminal.phase, terminal.outcome, terminal.failure, terminal.cancelled, terminal.detail
+    );
+    assert_eq!(terminal.phase, EvidencePhase::Finished);
+    assert_ne!(terminal.outcome, Some("succeeded"));
+    assert_eq!(terminal.outcome, Some("cancelled"));
+    assert!(terminal.cancelled);
+    assert_eq!(
+        records
+            .iter()
+            .filter(|r| r.phase == EvidencePhase::CredentialReleased)
+            .count(),
+        1
+    );
+    assert_eq!(vault.0.load(Ordering::SeqCst), 0);
+    assert!(!format!("{records:?}").contains(SECRET));
+}

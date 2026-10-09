@@ -9,6 +9,18 @@
 //! the transport sends it marked sensitive and redacts it from whatever comes
 //! back. A lease ends with its commitment, its run, or its expiry.
 //!
+//! A release consumes its lease and records that before the vault is read,
+//! with no lock held while it records. Then it asks again: the run registry
+//! whether the run is still live (not cancelled, finished or stopped), the
+//! commitment registry whether the commitment still executes under its
+//! guard and lists the lease, and the lease table whether the lease is still
+//! the one this release consumed and has not expired. It asks before the
+//! vault is read and once more after; a refusal reads nothing, or drops the
+//! secret read, builds no header, and ends the lease. A cancellation that
+//! arrives after that last look is not the broker's to see: egress looks at
+//! the run again before every exchange, and the transport watches the run's
+//! cancel token.
+//!
 //! No secret ever reaches a model prompt, a model-visible argument, a
 //! frontend payload, the evidence, a URL, a shell string or a process
 //! environment: it exists in memory between the vault read and the request
@@ -18,7 +30,7 @@
 //! environment is refused: governed credentials come from the vault.
 
 use crate::authority::clock::Clock;
-use crate::authority::commitment::{CommitmentRegistry, ExecutionGuard, LeaseEnd};
+use crate::authority::commitment::{CommitmentRegistry, CommitmentView, ExecutionGuard, LeaseEnd};
 use crate::authority::evidence::{EvidencePhase, EvidenceRecord, EvidenceSink};
 use crate::authority::ids::{AgentId, LeaseId, RunId};
 use crate::authority::policy::PolicyGeneration;
@@ -333,6 +345,47 @@ impl CredentialBroker {
             .get(&lease)
             .is_some_and(|l| l.state == LeaseState::Issued && l.deadline_ms > now)
     }
+
+    /// Whether the release that consumed `lease_id` under `guard` may still
+    /// go on, asked again after a step taken with no lock held (its record,
+    /// the vault read): the run is live, by the run registry's own answer;
+    /// the commitment still executes under `guard` and lists the lease; and
+    /// the lease is still this release's (its agent and run, `Released`), its
+    /// deadline not passed. Each lock is taken alone and released before the
+    /// next. A refusal ends the lease and is returned as the authority gave
+    /// it.
+    fn still_releasing(
+        &self,
+        lease_id: LeaseId,
+        guard: &ExecutionGuard,
+        view: &CommitmentView,
+    ) -> Result<(), AuthorityError> {
+        let live = self.runs.check(view.run, &view.agent).and_then(|_| {
+            match self.commitments.prepared_for(guard) {
+                Some(prepared) if prepared.leases.contains(&lease_id) => Ok(()),
+                Some(_) => Err(AuthorityError::Closed(
+                    "the lease is not bound to this commitment",
+                )),
+                None => Err(AuthorityError::NotAuthorized),
+            }
+        });
+        let now = self.clock.monotonic_ms();
+        let mut leases = self.table.leases.lock().expect("leases");
+        let lease = leases.map.get_mut(&lease_id);
+        let verdict = live.and_then(|()| match lease.as_deref() {
+            None => Err(AuthorityError::UnknownLease),
+            Some(held) if held.agent != view.agent => Err(AuthorityError::WrongAgent),
+            Some(held) if held.run != view.run => Err(AuthorityError::WrongRun),
+            Some(held) if held.state != LeaseState::Released => Err(AuthorityError::NotPending),
+            Some(held) if now >= held.deadline_ms => Err(AuthorityError::Expired),
+            Some(_) => Ok(()),
+        });
+        if let (Err(_), Some(lease)) = (&verdict, lease) {
+            // Ended, never issued again: no later release reads the vault.
+            lease.state = LeaseState::Ended;
+        }
+        verdict
+    }
 }
 
 impl ReleaseCredential for CredentialBroker {
@@ -394,11 +447,19 @@ impl ReleaseCredential for CredentialBroker {
         record.target = Some(destination.origin_text());
         record.detail.push(("lease".into(), lease_id.to_string()));
         record.detail.push(("service".into(), spec.service.into()));
+        // Recorded with no lock held: whatever arrived meanwhile (a
+        // cancellation, a stop, the lease's expiry) is asked about now,
+        // before the vault is read.
         self.record(record)?;
-        let secret = self
-            .source
-            .read(spec.scope, spec.name)
-            .map_err(|_| AuthorityError::Unavailable("the credential is not available"))?;
+        self.still_releasing(lease_id, guard, &view)?;
+        let secret = self.source.read(spec.scope, spec.name);
+        // And once more now that the vault has answered: refused, the secret
+        // read is dropped (zeroized) and no header is built. Later than
+        // this, egress's own look before the exchange and the transport's
+        // cancel token are what stop the request.
+        self.still_releasing(lease_id, guard, &view)?;
+        let secret =
+            secret.map_err(|_| AuthorityError::Unavailable("the credential is not available"))?;
         // A token is visible ASCII; anything else could break the header.
         if secret.is_empty() || !secret.bytes().all(|b| (0x21..0x7f).contains(&b)) {
             return Err(AuthorityError::Unavailable(

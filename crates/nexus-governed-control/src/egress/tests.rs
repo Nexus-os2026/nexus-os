@@ -687,3 +687,122 @@ fn a_name_rebound_to_this_machines_network_is_refused_before_any_socket() {
     assert_eq!(error, AuthorityError::TargetChanged);
     assert_eq!(transport.0.load(Ordering::SeqCst), 0, "nothing was sent");
 }
+
+/// XA-R1-02 (T8): a credential handed out while the run is being cancelled
+/// (after the broker's last look) is never sent: egress looks at the run
+/// again before every exchange.
+#[test]
+fn a_run_cancelled_while_its_credential_is_released_sends_nothing() {
+    use super::destination::Destination;
+    use super::transport::SecretHeader;
+    use super::{Coverage, CredentialPlan, ReleaseCredential};
+    use crate::authority::commitment::ExecutionGuard;
+    use crate::authority::ids::{LeaseId, RunId};
+    use crate::authority::policy::GrantScope;
+    use crate::control::Control;
+    use std::sync::Weak;
+    use zeroize::Zeroizing;
+
+    /// Hands out a header and, while doing so, cancels the run.
+    struct CancelsWhileReleasing {
+        control: Weak<Control>,
+        run: RunId,
+        released: AtomicU32,
+    }
+
+    impl ReleaseCredential for CancelsWhileReleasing {
+        fn release(
+            &self,
+            _: LeaseId,
+            _: &ExecutionGuard,
+            _: &Destination,
+        ) -> Result<SecretHeader, AuthorityError> {
+            self.released.fetch_add(1, Ordering::SeqCst);
+            if let Some(control) = self.control.upgrade() {
+                let _ = control.cancel_run(self.run);
+            }
+            Ok(SecretHeader {
+                name: reqwest::header::AUTHORIZATION,
+                value: Zeroizing::new("Bearer tok-T8-0123456789".into()),
+                token: Zeroizing::new("tok-T8-0123456789".into()),
+            })
+        }
+    }
+
+    /// Counts exchanges and performs none.
+    struct Refuses(AtomicU32);
+
+    impl Transport for Refuses {
+        fn exchange(
+            &self,
+            _: PinnedRequest,
+            _: &CancelToken,
+        ) -> Result<HttpResponse, TransportError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Err(TransportError::Unavailable)
+        }
+    }
+
+    let h = harness();
+    let grant = h
+        .control
+        .authority()
+        .grants()
+        .request(
+            GrantScope::Connector {
+                connector: "fixture".into(),
+                account: "test".into(),
+                operations: vec!["egress.test".into()],
+            },
+            Duration::from_secs(60),
+            &Yes::new(true),
+        )
+        .unwrap();
+    let release = Arc::new(CancelsWhileReleasing {
+        control: Arc::downgrade(&h.control),
+        run: h.run,
+        released: AtomicU32::new(0),
+    });
+    let transport = Arc::new(Refuses(AtomicU32::new(0)));
+    let egress = Egress::new(
+        Arc::new(SystemResolver),
+        transport.clone(),
+        EgressLimits::default(),
+    );
+    let preparation = egress
+        .prepare_with(
+            h.control.authority(),
+            &intent("GET", "http://127.0.0.1:9/"),
+            Some(CredentialPlan {
+                lease: LeaseId::fresh(),
+                service: "Fixture".into(),
+                release: release.clone(),
+            }),
+            Coverage::Connector {
+                grant,
+                allow_private: true,
+                class: EffectClass::R1,
+                operation: "egress.test",
+            },
+        )
+        .unwrap();
+    let view = h.control.propose(&h.agent, h.run, preparation).unwrap();
+    h.control
+        .authorize(view.id, &h.agent, h.run, &Yes::new(true))
+        .unwrap();
+    assert_eq!(
+        h.control.execute(view.id, &h.agent, h.run).unwrap_err(),
+        AuthorityError::RunCancelled
+    );
+    assert_eq!(release.released.load(Ordering::SeqCst), 1);
+    assert_eq!(transport.0.load(Ordering::SeqCst), 0, "nothing was sent");
+    assert_eq!(
+        h.control
+            .authority()
+            .commitments()
+            .view(view.id)
+            .unwrap()
+            .state,
+        CommitmentState::Cancelled
+    );
+}
