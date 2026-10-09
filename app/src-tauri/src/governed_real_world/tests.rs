@@ -1000,7 +1000,11 @@ fn the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marke
 /// test run, `name`, with the result `ok` and a summary of one passed and
 /// nothing else. Success is read only from lines that begin as libtest's
 /// do; any other line (a diagnostic) is allowed between the test's name and
-/// its result and never counts.
+/// its result and never counts. The text after `test <name> ... ` on the
+/// test's own line is its result only if it is exactly `ok`, `FAILED` or
+/// `ignored`; any other text there, or none, is a diagnostic (GLib prints
+/// its messages without a newline first), and the result is the first later
+/// line that is exactly one of the three.
 #[cfg(target_os = "linux")]
 fn the_report_passes_this_test_alone(report: &str, name: &str) -> Result<(), String> {
     let lines: Vec<&str> = report.lines().collect();
@@ -1032,14 +1036,15 @@ fn the_report_passes_this_test_alone(report: &str, name: &str) -> Result<(), Str
         return Err(format!("another test ran: {:?}", lines[test]));
     };
     // libtest writes the result after the name; a diagnostic printed in
-    // between moves it to a later line of its own.
-    let (result_at, result) = if rest.is_empty() {
-        match (test + 1..lines.len()).find(|&i| matches!(lines[i], "ok" | "FAILED" | "ignored")) {
+    // between, on this line or after it, moves it to a later line of its own.
+    let is_result = |text: &str| matches!(text, "ok" | "FAILED" | "ignored");
+    let (result_at, result) = if is_result(rest) {
+        (test, rest)
+    } else {
+        match (test + 1..lines.len()).find(|&i| is_result(lines[i])) {
             Some(i) => (i, lines[i]),
             None => return Err("the test has no result".into()),
         }
-    } else {
-        (test, rest)
     };
     if result != "ok" {
         return Err(format!("the test's result is {result:?}, not \"ok\""));
@@ -1200,6 +1205,61 @@ fn the_window_report_reader_rejects_ok_only_inside_a_diagnostic() {
     assert!(report.contains(&format!("test {name} ... ok")));
     let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
     assert!(reason.contains("no result"), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_passes_a_diagnostic_on_the_test_line() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    // GLib prints message-level output without a newline first.
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... Gtk-Message: 13:20:58.262: Failed to load module \"canberra-gtk-module\"\nok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    assert_eq!(the_report_passes_this_test_alone(&report, name), Ok(()));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_a_diagnostic_on_the_test_line_then_failed() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... Gtk-Message: 13:20:58.262: Failed to load module \"canberra-gtk-module\"\nFAILED\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("\"FAILED\""), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_a_diagnostic_on_the_test_line_and_no_result() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... Gtk-Message: 13:20:58.262: Failed to load module \"canberra-gtk-module\"\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("no result"), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_two_test_lines_under_one_running() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest {name} ... ok\ntest {name}_too ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\n\n"
+    );
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("2 test lines"), "{reason}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn the_window_report_reader_rejects_a_summary_before_the_test() {
+    let name = "governed_real_world::tests::the_confirmation_window_keeps_its_header_fixed_and_the_requests_content_marked";
+    let report = format!(
+        "\nrunning 1 test\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 567 filtered out; finished in 5.33s\ntest {name} ... ok\n\n"
+    );
+    let reason = the_report_passes_this_test_alone(&report, name).unwrap_err();
+    assert!(reason.contains("out of order"), "{reason}");
 }
 
 /// Drive the production confirmation window (`owner_window`) under a
