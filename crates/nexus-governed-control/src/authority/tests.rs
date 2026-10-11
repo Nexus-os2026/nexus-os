@@ -2016,3 +2016,2711 @@ fn no_transition_is_in_effect_before_its_record() {
         ]
     );
 }
+
+// ---------------------------------------------------------------------------
+// RS-01: a resume lifts only the stop the owner confirmed
+// (P3-C11-RS01-CONTRACT-05 §8). A stop or a quit that comes while a resume
+// waits for the owner, or while its record is written, is not undone by it.
+// ---------------------------------------------------------------------------
+
+use super::run::{CancelToken, Lift, PreviousStop, RunRegistry};
+
+type During = Box<dyn FnOnce() + Send>;
+
+/// The owner's resume dialog, scripted: it counts how often it is asked,
+/// keeps what it showed, runs `during` once while it is open (as the native
+/// window waits, with no authority lock held), then answers as told.
+struct ResumeDialog {
+    answer: bool,
+    asked: AtomicU32,
+    shown: Mutex<Vec<ResumeConfirmation>>,
+    during: Mutex<Option<During>>,
+}
+
+impl ResumeDialog {
+    fn answering(answer: bool) -> Self {
+        Self {
+            answer,
+            asked: AtomicU32::new(0),
+            shown: Mutex::new(Vec::new()),
+            during: Mutex::new(None),
+        }
+    }
+
+    fn during(answer: bool, during: impl FnOnce() + Send + 'static) -> Self {
+        let dialog = Self::answering(answer);
+        *dialog.during.lock().unwrap() = Some(Box::new(during));
+        dialog
+    }
+
+    fn asked(&self) -> u32 {
+        self.asked.load(Ordering::SeqCst)
+    }
+
+    fn shown(&self) -> Vec<ResumeConfirmation> {
+        self.shown.lock().unwrap().clone()
+    }
+}
+
+impl ControlConfirmer for ResumeDialog {
+    fn confirm_action(&self, _request: &ActionConfirmation) -> bool {
+        false
+    }
+
+    fn confirm_grant(&self, _request: &GrantConfirmation) -> bool {
+        false
+    }
+
+    fn confirm_resume(&self, request: &ResumeConfirmation) -> bool {
+        self.asked.fetch_add(1, Ordering::SeqCst);
+        self.shown.lock().unwrap().push(request.clone());
+        let during = self.during.lock().unwrap().take();
+        if let Some(during) = during {
+            during();
+        }
+        self.answer
+    }
+}
+
+/// The records of `phase`, oldest first.
+fn records_of(records: Vec<EvidenceRecord>, phase: EvidencePhase) -> Vec<EvidenceRecord> {
+    records.into_iter().filter(|r| r.phase == phase).collect()
+}
+
+/// The value of `key` in a record's detail.
+fn detail<'a>(record: &'a EvidenceRecord, key: &str) -> Option<&'a str> {
+    record
+        .detail
+        .iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, v)| v.as_str())
+}
+
+/// Each stop record as "its number/whether the stop before it was lifted",
+/// with "/exhausted" when its record says so.
+fn stops_of(records: Vec<EvidenceRecord>) -> Vec<String> {
+    records_of(records, EvidencePhase::EmergencyStop)
+        .iter()
+        .map(|r| {
+            let mut stop = format!(
+                "{}/{}",
+                detail(r, "stop_number").unwrap_or("-"),
+                detail(r, "previous_stop_lifted").unwrap_or("-")
+            );
+            if let Some(exhausted) = detail(r, "exhausted") {
+                stop.push_str(&format!("/exhausted {exhausted}"));
+            }
+            stop
+        })
+        .collect()
+}
+
+const QUITTING: AuthorityError = AuthorityError::Closed("the desktop is quitting");
+
+/// RS-01 T1: a stop that comes while the owner's resume dialog is open is
+/// not lifted by that resume, which writes no record.
+#[test]
+fn rs01_t1_a_stop_during_the_resume_dialog_is_not_lifted() {
+    let f = fixture();
+    assert_eq!(f.auth.emergency_stop(), 1);
+    let auth = f.auth.clone();
+    let dialog = ResumeDialog::during(true, move || {
+        auth.emergency_stop();
+    });
+    let resumed = f.auth.resume(&dialog);
+    assert!(
+        f.auth.runs().is_stopped(),
+        "the newer stop was lifted: {resumed:?}"
+    );
+    assert!(f
+        .auth
+        .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+        .is_err());
+    assert_eq!(f.auth.runs().cancelled_by_stop(), 1);
+    assert!(resumed.is_err(), "{resumed:?}");
+    assert_eq!(dialog.asked(), 1);
+    assert!(records_of(f.evidence.records(), EvidencePhase::Resumed).is_empty());
+    assert_eq!(resumed, Err(AuthorityError::ResumeSuperseded));
+    assert_eq!(dialog.shown()[0].stop_number, 1);
+}
+
+/// RS-01 T2: a stop that comes while the Resumed record is written is not
+/// lifted; the resume is superseded and the count stays.
+#[test]
+fn rs01_t2_a_stop_while_the_resumed_record_is_written_is_not_lifted() {
+    let f = scripted();
+    assert_eq!(f.auth.emergency_stop(), 1);
+    f.sink.hold_next(EvidencePhase::Resumed);
+    let resuming = {
+        let auth = f.auth.clone();
+        std::thread::spawn(move || auth.resume(&Confirmer::new(true)))
+    };
+    f.sink.wait_held();
+    let auth = f.auth.clone();
+    within(move || auth.emergency_stop());
+    f.sink.release();
+    let resumed = resuming.join().unwrap();
+    assert!(
+        f.auth.runs().is_stopped(),
+        "the newer stop was lifted: {resumed:?}"
+    );
+    assert!(f
+        .auth
+        .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+        .is_err());
+    assert_eq!(f.auth.runs().cancelled_by_stop(), 1);
+    assert!(resumed.is_err(), "{resumed:?}");
+    assert_eq!(
+        records_of(f.sink.memory.records(), EvidencePhase::Resumed).len(),
+        1
+    );
+    assert_eq!(resumed, Err(AuthorityError::ResumeSuperseded));
+    let resumed_records = records_of(f.sink.memory.records(), EvidencePhase::Resumed);
+    assert_eq!(detail(&resumed_records[0], "stop_number"), Some("1"));
+    assert_eq!(stops_of(f.sink.memory.records()), ["1/none", "2/no"]);
+}
+
+/// RS-01 T3: the desktop quits while the Resumed record is written: the
+/// resume comes too late and lifts nothing.
+#[test]
+fn rs01_t3_quitting_while_the_resumed_record_is_written_lifts_nothing() {
+    let f = scripted();
+    assert_eq!(f.auth.emergency_stop(), 1);
+    f.sink.hold_next(EvidencePhase::Resumed);
+    let resuming = {
+        let auth = f.auth.clone();
+        std::thread::spawn(move || auth.resume(&Confirmer::new(true)))
+    };
+    f.sink.wait_held();
+    let auth = f.auth.clone();
+    within(move || auth.runs().close());
+    f.sink.release();
+    let resumed = resuming.join().unwrap();
+    assert!(
+        f.auth.runs().is_stopped(),
+        "a resume lifted the stop after quitting began: {resumed:?}"
+    );
+    assert_eq!(f.auth.runs().cancelled_by_stop(), 1);
+    assert!(resumed.is_err(), "{resumed:?}");
+    assert_eq!(resumed, Err(QUITTING));
+}
+
+/// RS-01 T3b: the desktop quits while the resume dialog is open: the resume
+/// is refused and writes no record.
+#[test]
+fn rs01_t3b_quitting_during_the_resume_dialog_writes_no_record() {
+    let f = fixture();
+    assert_eq!(f.auth.emergency_stop(), 1);
+    let auth = f.auth.clone();
+    let dialog = ResumeDialog::during(true, move || auth.runs().close());
+    let resumed = f.auth.resume(&dialog);
+    assert!(
+        resumed.is_err(),
+        "a resume went on after quitting began: {resumed:?}"
+    );
+    assert!(records_of(f.evidence.records(), EvidencePhase::Resumed).is_empty());
+    assert!(f.auth.runs().is_stopped());
+    assert_eq!(f.auth.runs().cancelled_by_stop(), 1);
+    assert_eq!(resumed, Err(QUITTING));
+}
+
+/// RS-01 T4: once the desktop is quitting, a resume asks nobody.
+#[test]
+fn rs01_t4_a_resume_after_quitting_asks_nobody() {
+    let f = fixture();
+    assert_eq!(f.auth.emergency_stop(), 1);
+    f.auth.runs().close();
+    let dialog = ResumeDialog::answering(true);
+    let resumed = f.auth.resume(&dialog);
+    assert_eq!(
+        dialog.asked(),
+        0,
+        "the owner was asked after quitting began: {resumed:?}"
+    );
+    assert!(resumed.is_err(), "{resumed:?}");
+    assert!(f.auth.runs().is_stopped());
+    assert_eq!(resumed, Err(QUITTING));
+}
+
+/// RS-01 T4b: once the desktop is quitting, a resume is refused also when
+/// nothing is stopped.
+#[test]
+fn rs01_t4b_a_resume_after_quitting_is_refused_also_when_not_stopped() {
+    let f = fixture();
+    f.auth.runs().close();
+    let dialog = ResumeDialog::answering(true);
+    let resumed = f.auth.resume(&dialog);
+    assert!(
+        resumed.is_err(),
+        "a resume succeeded after quitting began: {resumed:?}"
+    );
+    assert_eq!(dialog.asked(), 0);
+    assert_eq!(resumed, Err(QUITTING));
+}
+
+/// RS-01 T5: at its maximum the stop number does not wrap: the stop sets
+/// `exhausted` and keeps the number, the registry stays stopped, and no
+/// resume asks the owner.
+#[test]
+fn rs01_t5_an_exhausted_stop_number_never_wraps_and_stays_stopped() {
+    let f = fixture();
+    let max = u64::MAX;
+    f.auth.runs().set_lifted_stop(max);
+    assert_eq!(f.auth.emergency_stop(), 1);
+    assert!(f.auth.runs().is_stopped());
+    assert_eq!(
+        stops_of(f.evidence.records()),
+        [format!("{max}/yes/exhausted yes")]
+    );
+    let dialog = ResumeDialog::answering(true);
+    assert_eq!(
+        f.auth.resume(&dialog),
+        Err(AuthorityError::EmergencyStopped)
+    );
+    assert_eq!(dialog.asked(), 0);
+    assert!(f.auth.runs().is_stopped());
+    assert_eq!(f.auth.runs().cancelled_by_stop(), 1);
+    // A further stop: the same number, still exhausted, and the stop before
+    // it not lifted.
+    f.auth.emergency_stop();
+    assert_eq!(
+        stops_of(f.evidence.records()),
+        [
+            format!("{max}/yes/exhausted yes"),
+            format!("{max}/no/exhausted yes")
+        ]
+    );
+    assert!(f.auth.runs().is_stopped());
+}
+
+/// RS-01 T5b: a stop that exhausts the stop number while the resume dialog
+/// is open: the resume is refused before any record.
+#[test]
+fn rs01_t5b_exhaustion_during_the_dialog_refuses_the_resume() {
+    let f = fixture();
+    f.auth.runs().set_lifted_stop(u64::MAX - 1);
+    assert_eq!(f.auth.emergency_stop(), 1);
+    let auth = f.auth.clone();
+    let dialog = ResumeDialog::during(true, move || {
+        auth.emergency_stop();
+    });
+    assert_eq!(
+        f.auth.resume(&dialog),
+        Err(AuthorityError::EmergencyStopped)
+    );
+    assert_eq!(dialog.shown()[0].stop_number, u64::MAX);
+    assert!(records_of(f.evidence.records(), EvidencePhase::Resumed).is_empty());
+    assert!(f.auth.runs().is_stopped());
+    assert_eq!(f.auth.runs().cancelled_by_stop(), 1);
+}
+
+/// RS-01 T5c: the same, the stop that exhausts the number coming while the
+/// Resumed record is written: refused, still stopped, the count kept.
+#[test]
+fn rs01_t5c_exhaustion_while_the_record_is_written_refuses_the_resume() {
+    let f = scripted();
+    f.auth.runs().set_lifted_stop(u64::MAX - 1);
+    assert_eq!(f.auth.emergency_stop(), 1);
+    f.sink.hold_next(EvidencePhase::Resumed);
+    let resuming = {
+        let auth = f.auth.clone();
+        std::thread::spawn(move || auth.resume(&Confirmer::new(true)))
+    };
+    f.sink.wait_held();
+    let auth = f.auth.clone();
+    within(move || auth.emergency_stop());
+    f.sink.release();
+    assert_eq!(
+        resuming.join().unwrap(),
+        Err(AuthorityError::EmergencyStopped)
+    );
+    assert!(f.auth.runs().is_stopped());
+    assert_eq!(f.auth.runs().cancelled_by_stop(), 1);
+}
+
+/// RS-01 T6: a resume confirmed for an older stop lifts nothing; one
+/// confirmed for the newest lifts it and zeroes the count; each stop's
+/// record says whether the stop before it was lifted.
+#[test]
+fn rs01_t6_each_stop_says_whether_the_one_before_it_was_lifted() {
+    let f = fixture();
+    assert_eq!(f.auth.emergency_stop(), 1);
+    // Resume A reads stop 1 and waits in its dialog; stop 2 comes meanwhile.
+    let auth = f.auth.clone();
+    let a = ResumeDialog::during(true, move || {
+        auth.emergency_stop();
+    });
+    let resumed_a = f.auth.resume(&a);
+    assert!(
+        f.auth.runs().is_stopped(),
+        "resume A lifted stop 2: {resumed_a:?}"
+    );
+    assert!(resumed_a.is_err(), "{resumed_a:?}");
+    assert!(records_of(f.evidence.records(), EvidencePhase::Resumed).is_empty());
+    assert_eq!(f.auth.runs().cancelled_by_stop(), 1);
+    assert_eq!(resumed_a, Err(AuthorityError::ResumeSuperseded));
+    assert_eq!(a.shown()[0].stop_number, 1);
+    // Resume B reads stop 2 and confirms: lifted, and the count is zero.
+    let b = ResumeDialog::answering(true);
+    f.auth.resume(&b).unwrap();
+    assert!(!f.auth.runs().is_stopped());
+    assert_eq!(f.auth.runs().cancelled_by_stop(), 0);
+    assert_eq!(
+        records_of(f.evidence.records(), EvidencePhase::Resumed).len(),
+        1
+    );
+    assert_eq!(b.shown()[0].stop_number, 2);
+    let resumed_records = records_of(f.evidence.records(), EvidencePhase::Resumed);
+    assert_eq!(detail(&resumed_records[0], "stop_number"), Some("2"));
+    f.auth
+        .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    // Stop 3.
+    assert_eq!(f.auth.emergency_stop(), 1);
+    assert_eq!(stops_of(f.evidence.records()), ["1/none", "2/no", "3/yes"]);
+}
+
+/// RS-01 T7: two resumes confirm the same stop. The one that comes second
+/// is told the truth, that the stop it confirmed is lifted, and changes
+/// nothing.
+#[test]
+fn rs01_t7_a_second_resume_of_the_same_stop_is_told_the_truth() {
+    // (a) B's Resumed record is held; A runs through and lifts stop 1.
+    let f = scripted();
+    assert_eq!(f.auth.emergency_stop(), 1);
+    f.sink.hold_next(EvidencePhase::Resumed);
+    let b = {
+        let auth = f.auth.clone();
+        std::thread::spawn(move || auth.resume(&Confirmer::new(true)))
+    };
+    f.sink.wait_held();
+    let auth = f.auth.clone();
+    within(move || auth.resume(&Confirmer::new(true))).unwrap();
+    f.sink.release();
+    assert_eq!(b.join().unwrap(), Ok(()));
+    assert!(!f.auth.runs().is_stopped());
+    f.auth
+        .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    // Two records of one stop: neither is proof of the lift by itself.
+    assert_eq!(
+        records_of(f.sink.memory.records(), EvidencePhase::Resumed).len(),
+        2
+    );
+
+    // (b) On a registry directly: the same compare-and-clear twice.
+    let registry = RunRegistry::default();
+    assert_eq!(registry.stop_all().number, 1);
+    assert_eq!(registry.lift(1), Ok(Lift::Lifted));
+    assert!(!registry.is_stopped());
+    assert_eq!(registry.lift(1), Ok(Lift::AlreadyLifted));
+    assert!(!registry.is_stopped());
+    let next = registry.stop_all();
+    assert_eq!((next.number, next.previous), (2, PreviousStop::Lifted));
+
+    // (c) From inside B's dialog, A runs through and lifts stop 1; then B
+    // confirms: success, and B writes no record of its own.
+    let f = fixture();
+    assert_eq!(f.auth.emergency_stop(), 1);
+    let auth = f.auth.clone();
+    let b = ResumeDialog::during(true, move || {
+        auth.resume(&Confirmer::new(true)).unwrap();
+    });
+    assert_eq!(f.auth.resume(&b), Ok(()));
+    assert_eq!(b.shown()[0].stop_number, 1);
+    assert_eq!(
+        records_of(f.evidence.records(), EvidencePhase::Resumed).len(),
+        1
+    );
+    assert!(!f.auth.runs().is_stopped());
+}
+
+/// The acquisition T8 looks for.
+const ACQUIRE: &str = "self.runs.lock()";
+
+/// `source` without its comments; string and char literals are kept whole.
+fn without_comments(source: &str) -> String {
+    let b = source.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i..].starts_with(b"//") {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+        } else if b[i..].starts_with(b"/*") {
+            let mut depth = 0usize;
+            while i < b.len() {
+                if b[i..].starts_with(b"/*") {
+                    depth += 1;
+                    i += 2;
+                } else if b[i..].starts_with(b"*/") {
+                    depth -= 1;
+                    i += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    i += 1;
+                }
+            }
+            out.push(b' ');
+        } else {
+            let end = literal_end(b, i).unwrap_or(i + 1);
+            out.extend_from_slice(&b[i..end]);
+            i = end;
+        }
+    }
+    String::from_utf8(out).expect("cuts fall on character boundaries")
+}
+
+/// Where the string or char literal that starts at `i` ends, if one does (a
+/// lifetime is not a literal).
+fn literal_end(b: &[u8], i: usize) -> Option<usize> {
+    match b[i] {
+        b'"' => {
+            let mut j = i + 1;
+            while j < b.len() {
+                match b[j] {
+                    b'\\' => j += 2,
+                    b'"' => return Some(j + 1),
+                    _ => j += 1,
+                }
+            }
+            Some(b.len())
+        }
+        b'\'' if b.get(i + 1) == Some(&b'\\') => b
+            .get(i + 3..)?
+            .iter()
+            .position(|c| *c == b'\'')
+            .map(|at| i + 3 + at + 1),
+        b'\'' => {
+            let width = match *b.get(i + 1)? {
+                c if c >= 0xF0 => 4,
+                c if c >= 0xE0 => 3,
+                c if c >= 0xC0 => 2,
+                _ => 1,
+            };
+            (b.get(i + 1 + width) == Some(&b'\'')).then_some(i + 2 + width)
+        }
+        _ => None,
+    }
+}
+
+/// The text between the braces of the body of `fn name`.
+fn function_body(source: &str, name: &str) -> Option<String> {
+    let b = source.as_bytes();
+    let mut i = source.find(&format!("fn {name}("))?;
+    let mut parens = 0usize;
+    loop {
+        match *b.get(i)? {
+            b'(' => parens += 1,
+            b')' => parens = parens.checked_sub(1)?,
+            b'{' if parens == 0 => break,
+            _ => {}
+        }
+        i += 1;
+    }
+    let open = i;
+    let mut depth = 0usize;
+    while i < b.len() {
+        if let Some(end) = literal_end(b, i) {
+            i = end;
+            continue;
+        }
+        match b[i] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(source[open + 1..i].to_string());
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+/// T8 (2): the acquisition is in a `let` statement that is a direct
+/// statement of the body, and that statement binds the guard itself to a
+/// name (not a temporary, not inside an inner block or expression).
+/// `text` has no whitespace.
+fn bound_by_a_direct_let(text: &str) -> Result<(), String> {
+    let at = text.find(ACQUIRE).ok_or("no acquisition")?;
+    let b = text.as_bytes();
+    let (mut depth, mut statement, mut i) = (0usize, 0usize, 0usize);
+    while i < at {
+        if let Some(end) = literal_end(b, i) {
+            i = end;
+            continue;
+        }
+        match b[i] {
+            b'{' | b'(' | b'[' => depth += 1,
+            b'}' | b')' | b']' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 && b[i] == b'}' {
+                    statement = i + 1;
+                }
+            }
+            b';' if depth == 0 => statement = i + 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    if depth != 0 {
+        return Err("the acquisition is inside an inner block or expression".into());
+    }
+    let mut end = at;
+    while end < b.len() {
+        if let Some(next) = literal_end(b, end) {
+            end = next;
+            continue;
+        }
+        match b[end] {
+            b'{' | b'(' | b'[' => depth += 1,
+            b'}' | b')' | b']' => depth = depth.saturating_sub(1),
+            b';' if depth == 0 => break,
+            _ => {}
+        }
+        end += 1;
+    }
+    let statement = &text[statement..(end + 1).min(text.len())];
+    let named = |name: &str| {
+        name != "_"
+            && !name.is_empty()
+            && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+    };
+    for suffix in [
+        "=self.runs.lock().unwrap_or_else(PoisonError::into_inner);",
+        "=self.runs.lock().expect(\"runs\");",
+    ] {
+        if let Some(name) = statement
+            .strip_prefix("let")
+            .and_then(|rest| rest.strip_suffix(suffix))
+        {
+            if named(name) {
+                return Ok(());
+            }
+        }
+    }
+    if let Some((name, _)) = statement
+        .strip_prefix("letOk(")
+        .and_then(|rest| rest.split_once(")=self.runs.lock()else{"))
+    {
+        if named(name) && statement.ends_with("};") {
+            return Ok(());
+        }
+    }
+    Err(format!(
+        "the acquisition is not bound to a name by a direct let: {statement}"
+    ))
+}
+
+/// Every `self.name(` in `text` (no whitespace): a method of `self` called.
+fn calls_on_self(text: &str) -> Vec<String> {
+    let b = text.as_bytes();
+    let mut calls = Vec::new();
+    for (at, _) in text.match_indices("self.") {
+        if at > 0 && (b[at - 1].is_ascii_alphanumeric() || b[at - 1] == b'_') {
+            continue;
+        }
+        let rest = &text[at + "self.".len()..];
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        let after = &rest[name.len()..];
+        if !name.is_empty() && (after.starts_with('(') || after.starts_with("::<")) {
+            calls.push(format!("self.{name}("));
+        }
+    }
+    calls
+}
+
+/// Which of T8's criteria (1) to (5) a function body fails.
+fn one_hold(body: &str, ordered: bool) -> Vec<String> {
+    let text: String = body.chars().filter(|c| !c.is_whitespace()).collect();
+    let mut failures = Vec::new();
+    let acquisitions = text.matches(ACQUIRE).count();
+    if acquisitions != 1 {
+        failures.push(format!("(1) {ACQUIRE} occurs {acquisitions} times"));
+    }
+    if let Err(why) = bound_by_a_direct_let(&text) {
+        failures.push(format!("(2) {why}"));
+    }
+    if text.contains("drop(") {
+        failures.push("(3) the body contains drop(".to_string());
+    }
+    let calls = calls_on_self(&text);
+    if !calls.is_empty() {
+        failures.push(format!("(4) the body calls a method on self: {calls:?}"));
+    }
+    if ordered {
+        let found = (
+            text.find(ACQUIRE),
+            text.find("self.closed.load("),
+            text.find("self.stopped.store(false"),
+        );
+        if !matches!(found, (Some(lock), Some(closed), Some(clear)) if lock < closed && closed < clear)
+        {
+            failures.push(format!(
+                "(5) not in the order acquisition, read of closed, clear: {found:?}"
+            ));
+        }
+    }
+    failures
+}
+
+/// RS-01 T8, a tripwire on the source text of `run.rs` (comments removed):
+/// the stop and the compare-and-clear each take the runs lock once, bind
+/// its guard by a direct `let`, drop nothing and call no method on `self`;
+/// the compare-and-clear reads `closed` under that lock before it clears
+/// the stop; and nothing clears the lock's poison. A review of the code is
+/// the proof (§8); this only catches a change of its shape.
+#[test]
+fn rs01_t8_the_stop_and_the_compare_and_clear_each_hold_the_runs_lock_once() {
+    let source = without_comments(include_str!("run.rs"));
+    let mut failures = Vec::new();
+    for (function, ordered) in [("stop_all", false), ("lift", true)] {
+        let Some(body) = function_body(&source, function) else {
+            failures.push(format!("{function}: not found"));
+            continue;
+        };
+        for failure in one_hold(&body, ordered) {
+            failures.push(format!("{function}: {failure}"));
+        }
+    }
+    if source.contains("clear_poison") {
+        failures.push("run.rs: (6) the text clear_poison occurs".to_string());
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+const POISONED: AuthorityError = AuthorityError::Unavailable("the run registry is poisoned");
+
+/// Poison `auth`'s runs lock on purpose: the registry's test-only fixture
+/// takes it on another thread and panics there; the panic is taken here.
+fn poison(auth: &Authority) {
+    let runs = auth.runs().clone();
+    let poisoner = std::thread::spawn(move || runs.panic_holding_the_runs_lock());
+    assert!(poisoner.join().is_err(), "the fixture did not panic");
+}
+
+/// Two runs beside the fixture's, and the cancel tokens of all three.
+fn three_runs(f: &Scripted) -> Vec<CancelToken> {
+    let mut runs = vec![f.run];
+    for _ in 0..2 {
+        runs.push(
+            f.auth
+                .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+                .unwrap(),
+        );
+    }
+    runs.into_iter()
+        .map(|run| f.auth.runs().check(run, &f.agent).unwrap())
+        .collect()
+}
+
+/// How T11's registry stands just before its lock is poisoned (part (d):
+/// also closed, or also exhausted).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BeforePoison {
+    Plain,
+    Closed,
+    Exhausted,
+}
+
+/// T11, after a resume refused on the poisoned lock: the flag and the
+/// count, read without the lock, as they were; the lock still poisoned, so
+/// a second resume asks nobody; and, unless the number is exhausted, a
+/// further stop records `next` (its number, and the stop before it not
+/// lifted).
+fn untouched(f: &Scripted, stopped: bool, count: usize, next: Option<&str>) {
+    assert_eq!(f.auth.runs().is_stopped(), stopped);
+    assert_eq!(f.auth.runs().cancelled_by_stop(), count);
+    let again = ResumeDialog::answering(true);
+    assert_eq!(f.auth.resume(&again), Err(POISONED));
+    assert_eq!(again.asked(), 0, "the lock's poison was cleared");
+    if let Some(next) = next {
+        f.auth.emergency_stop();
+        let stops = stops_of(f.sink.memory.records());
+        assert_eq!(stops.last().map(String::as_str), Some(next), "{stops:?}");
+    }
+}
+
+/// RS-01 T11: a poisoned runs lock. The stop still stops and cancels every
+/// run; a resume lifts nothing through it at any of its three lock sites,
+/// and poison is the first thing each tests. After the poison, the test
+/// calls nothing but the stop, the resume and the lock-free reads.
+#[test]
+fn rs01_t11_a_poisoned_runs_lock_lifts_nothing() {
+    use BeforePoison::{Closed, Exhausted, Plain};
+    for before in [Plain, Closed, Exhausted] {
+        let next = (before != Exhausted).then_some("2/no");
+
+        // (a) The lock poisoned, then a stop: it stops and cancels every
+        // run. A resume is refused at its read and asks nobody.
+        let f = scripted();
+        let tokens = three_runs(&f);
+        match before {
+            Plain => {}
+            Closed => f.auth.runs().close(),
+            Exhausted => {
+                f.auth.runs().set_lifted_stop(u64::MAX);
+                f.auth.emergency_stop();
+            }
+        }
+        poison(&f.auth);
+        let cancelled = f.auth.emergency_stop();
+        assert_eq!(cancelled, if before == Exhausted { 0 } else { 3 });
+        assert!(f.auth.runs().is_stopped());
+        assert!(tokens.iter().all(CancelToken::is_cancelled));
+        let dialog = ResumeDialog::answering(true);
+        assert_eq!(f.auth.resume(&dialog), Err(POISONED), "(a) {before:?}");
+        assert_eq!(dialog.asked(), 0);
+        untouched(&f, true, 3, next);
+
+        // (b) A stop; the dialog poisons the lock, then the owner confirms:
+        // refused at the early check, so no record.
+        let f = scripted();
+        let _tokens = three_runs(&f);
+        if before == Exhausted {
+            f.auth.runs().set_lifted_stop(u64::MAX - 1);
+        }
+        assert_eq!(f.auth.emergency_stop(), 3);
+        let auth = f.auth.clone();
+        let dialog = ResumeDialog::during(true, move || {
+            match before {
+                Plain => {}
+                Closed => auth.runs().close(),
+                Exhausted => {
+                    auth.emergency_stop();
+                }
+            }
+            poison(&auth);
+        });
+        assert_eq!(f.auth.resume(&dialog), Err(POISONED), "(b) {before:?}");
+        assert_eq!(dialog.asked(), 1);
+        assert!(records_of(f.sink.memory.records(), EvidencePhase::Resumed).is_empty());
+        untouched(&f, true, 3, next);
+
+        // (c) A stop; the Resumed record held; the lock poisoned: refused at
+        // the compare-and-clear.
+        let f = scripted();
+        let _tokens = three_runs(&f);
+        if before == Exhausted {
+            f.auth.runs().set_lifted_stop(u64::MAX - 1);
+        }
+        assert_eq!(f.auth.emergency_stop(), 3);
+        f.sink.hold_next(EvidencePhase::Resumed);
+        let resuming = {
+            let auth = f.auth.clone();
+            std::thread::spawn(move || auth.resume(&Confirmer::new(true)))
+        };
+        f.sink.wait_held();
+        match before {
+            Plain => {}
+            Closed => f.auth.runs().close(),
+            Exhausted => {
+                f.auth.emergency_stop();
+            }
+        }
+        poison(&f.auth);
+        f.sink.release();
+        assert_eq!(resuming.join().unwrap(), Err(POISONED), "(c) {before:?}");
+        assert_eq!(
+            records_of(f.sink.memory.records(), EvidencePhase::Resumed).len(),
+            1
+        );
+        untouched(&f, true, 3, next);
+    }
+
+    // (e) No stop; the lock poisoned: a resume is refused, not a success.
+    let f = scripted();
+    let _tokens = three_runs(&f);
+    poison(&f.auth);
+    let dialog = ResumeDialog::answering(true);
+    assert_eq!(f.auth.resume(&dialog), Err(POISONED));
+    assert_eq!(dialog.asked(), 0);
+    untouched(&f, false, 0, Some("1/none"));
+}
+
+// ---- RS-01 T10 BEGIN ----
+/// RS-01 T10 and T10a (P3-C11-RS01-CONTRACT-05 §8). T10 is a diagnostic
+/// measurement of the run registry's stop step alone, seen from outside its
+/// lock: every number is a span between two clock reads made outside the
+/// lock. It does not measure the stop's wait for the lock, nor its sweep,
+/// and it is not a worst-case bound. It is ignored: it runs only by its own
+/// command, optimised, after T10a, and writes its receipt to the file
+/// `NEXUS_T10_RECEIPT` names, outside the repository. T10a tests the three
+/// functions T10 uses to turn what its controller received into numbers,
+/// statistics and receipt text. This block is hashed between its markers.
+mod stop_measurement {
+    use crate::authority::ids::{AgentId, RunId};
+    use crate::authority::run::{CancelToken, RunClass, RunOrigin, RunRegistry};
+    use crate::authority::AuthorityError;
+    use sha2::{Digest as _, Sha256};
+    use std::io::Write as _;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    /// Nanoseconds since the run's origin, read from one monotonic clock.
+    type Nanos = u64;
+
+    /// Active runs in each sample's new registry.
+    const RUNS: usize = 4096;
+    /// Samples per workload, all kept.
+    const SAMPLES: usize = 1000;
+    /// Records each competing thread's log holds.
+    const LOG_ENTRIES: usize = 65_536;
+    /// Calls a competing thread completes before it is ready.
+    const READY_CALLS: u64 = 100;
+    /// The controller's three bounded waits.
+    const READINESS_WAIT: Nanos = 5_000_000_000;
+    const COMPLETION_WAIT: Nanos = 5_000_000_000;
+    const COLLECTION_WAIT: Duration = Duration::from_secs(1);
+    /// How often the controller looks at the signals and the slots; it
+    /// sleeps in between so that it competes for the processors as little
+    /// as it can.
+    const POLL: Duration = Duration::from_micros(200);
+    /// Host conditions are recorded at the start, after every this many
+    /// samples, and at the end.
+    const HOST_EVERY: usize = 100;
+    /// The provisional targets (§8). They are applied by the reviewer and
+    /// never asserted here; the receipt only lists the samples above them.
+    const IDLE_TOTAL_TARGET: Nanos = 1_000_000;
+    const BUSY_TOTAL_P99_TARGET: Nanos = 10_000_000;
+    /// A progress marker no call has set yet.
+    const NO_PROGRESS: Nanos = Nanos::MAX;
+    /// Local-model runtimes, matched against each process's name and the
+    /// file name of its executable (a loaded Ollama model runs as its own
+    /// `ollama runner` process).
+    const MODEL_RUNTIMES: &[&str] = &[
+        "ollama",
+        "llama",
+        "vllm",
+        "lmstudio",
+        "lm-studio",
+        "koboldcpp",
+        "localai",
+        "local-ai",
+        "text-generation",
+        "mlc_llm",
+        "gpt4all",
+        "sglang",
+        "exllama",
+        "tabby",
+        "whisper",
+    ];
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Workload {
+        Idle,
+        Busy,
+    }
+
+    impl Workload {
+        fn as_str(self) -> &'static str {
+            match self {
+                Workload::Idle => "idle",
+                Workload::Busy => "busy",
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Method {
+        Open,
+        Check,
+    }
+
+    impl Method {
+        fn as_str(self) -> &'static str {
+            match self {
+                Method::Open => "open",
+                Method::Check => "check",
+            }
+        }
+    }
+
+    /// The competing threads of the busy workload.
+    const CALLERS: [(&str, Method); 4] = [
+        ("open-1", Method::Open),
+        ("open-2", Method::Open),
+        ("check-1", Method::Check),
+        ("check-2", Method::Check),
+    ];
+
+    /// One logged competing call: its method, its thread's clock reads
+    /// before and after it, and its result.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct Call {
+        method: Method,
+        start: Nanos,
+        end: Nanos,
+        result: &'static str,
+    }
+
+    impl Call {
+        const UNUSED: Call = Call {
+            method: Method::Open,
+            start: 0,
+            end: 0,
+            result: "",
+        };
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct StopReport {
+        start: Nanos,
+        ret: Nanos,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct ObserverReport {
+        seen: Option<Nanos>,
+    }
+
+    /// A competing thread's final report: its log comes back inside it.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct CallerReport {
+        calls: u64,
+        log: Vec<Call>,
+        kept: usize,
+        overflow: bool,
+    }
+
+    impl CallerReport {
+        fn kept(&self) -> &[Call] {
+            &self.log[..self.kept.min(self.log.len())]
+        }
+    }
+
+    /// The controller's own clock readings for one sample.
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    struct Readings {
+        threads_started: Nanos,
+        released: Option<Nanos>,
+        asked_to_end: Option<Nanos>,
+        gave_up: Option<Nanos>,
+    }
+
+    /// One competing thread as the controller knows it: its final report if
+    /// that arrived by the deadline, else the last start it published.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct Caller {
+        name: &'static str,
+        report: Option<CallerReport>,
+        progress: Option<Nanos>,
+    }
+
+    /// A report found only in the controller's last look, after it gave up.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum Late {
+        Stop(StopReport),
+        Observer(ObserverReport),
+        Caller(&'static str, CallerReport),
+    }
+
+    /// What the controller received for one sample by its deadlines.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct Received {
+        index: usize,
+        workload: Workload,
+        readings: Readings,
+        not_ready: Vec<&'static str>,
+        stop: Option<StopReport>,
+        observer: Option<ObserverReport>,
+        callers: Vec<Caller>,
+        late: Vec<Late>,
+    }
+
+    /// How a sample ended: what the controller received, never what a
+    /// thread was doing.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum Outcome {
+        Complete,
+        ReadinessNotReported(Vec<&'static str>),
+        StopReturnNotObserved,
+        ParticipantReportNotRequested(Vec<&'static str>),
+        ParticipantReportMissing {
+            participant: &'static str,
+            last_start: Option<Nanos>,
+        },
+        ObserverResultMissing,
+        HarnessFault(&'static str),
+        LogOverflow(&'static str),
+    }
+
+    /// A span between two clock reads that both reached the controller, the
+    /// later not before the earlier; otherwise unavailable, never zero.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Value {
+        Of(Nanos),
+        Unavailable,
+    }
+
+    impl Value {
+        fn span(earlier: Option<Nanos>, later: Option<Nanos>) -> Value {
+            match (earlier, later) {
+                (Some(earlier), Some(later)) => later
+                    .checked_sub(earlier)
+                    .map_or(Value::Unavailable, Value::Of),
+                _ => Value::Unavailable,
+            }
+        }
+
+        fn get(self) -> Option<Nanos> {
+            match self {
+                Value::Of(value) => Some(value),
+                Value::Unavailable => None,
+            }
+        }
+    }
+
+    /// A competing call whose timestamps overlap the stop's.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct Overlap {
+        caller: &'static str,
+        record: usize,
+        latency: Value,
+    }
+
+    /// One sample's numbers and results: T10a's first function's output.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct Sample {
+        index: usize,
+        workload: Workload,
+        results: Vec<Outcome>,
+        readings: Readings,
+        waiting_time: Option<Nanos>,
+        observed_flag_latency: Value,
+        total: Value,
+        flag_latency_bound: Value,
+        observation_to_return: Value,
+        late_observer: bool,
+        overlaps: Vec<Overlap>,
+        largest_overlap: Value,
+    }
+
+    impl Sample {
+        fn complete(&self) -> bool {
+            self.results == [Outcome::Complete]
+        }
+    }
+
+    /// The controller's waiting time, from one of its own readings to its
+    /// reading `gave up`.
+    fn waited(gave_up: Option<Nanos>, from: Option<Nanos>) -> Option<Nanos> {
+        gave_up?.checked_sub(from?)
+    }
+
+    /// T10a's first function: what the controller received for one sample,
+    /// turned into that sample's numbers and results. A number exists only
+    /// if every timestamp it is computed from reached the controller by the
+    /// deadline; a late report changes nothing here.
+    fn numbers(r: &Received) -> Sample {
+        let mut sample = Sample {
+            index: r.index,
+            workload: r.workload,
+            results: Vec::new(),
+            readings: r.readings,
+            waiting_time: None,
+            observed_flag_latency: Value::Unavailable,
+            total: Value::Unavailable,
+            flag_latency_bound: Value::Unavailable,
+            observation_to_return: Value::Unavailable,
+            late_observer: false,
+            overlaps: Vec::new(),
+            largest_overlap: Value::Unavailable,
+        };
+        if !r.not_ready.is_empty() {
+            // No stop was issued: this is not a sample of the stop.
+            sample
+                .results
+                .push(Outcome::ReadinessNotReported(r.not_ready.clone()));
+            sample.waiting_time = waited(r.readings.gave_up, Some(r.readings.threads_started));
+            return sample;
+        }
+        let start = r.stop.map(|stop| stop.start);
+        let ret = r.stop.map(|stop| stop.ret);
+        let seen = r.observer.and_then(|observer| observer.seen);
+        if r.stop.is_none() {
+            sample.results.push(Outcome::StopReturnNotObserved);
+            if !r.callers.is_empty() {
+                sample.results.push(Outcome::ParticipantReportNotRequested(
+                    r.callers.iter().map(|caller| caller.name).collect(),
+                ));
+            }
+        } else {
+            for caller in r.callers.iter().filter(|caller| caller.report.is_none()) {
+                sample.results.push(Outcome::ParticipantReportMissing {
+                    participant: caller.name,
+                    last_start: caller.progress,
+                });
+            }
+        }
+        if seen.is_none() {
+            sample.results.push(Outcome::ObserverResultMissing);
+        }
+        if matches!((start, ret), (Some(start), Some(ret)) if ret < start) {
+            sample
+                .results
+                .push(Outcome::HarnessFault("return before start"));
+        }
+        if matches!((start, seen), (Some(start), Some(seen)) if seen < start) {
+            sample
+                .results
+                .push(Outcome::HarnessFault("seen before start"));
+        }
+        for caller in &r.callers {
+            if caller.report.as_ref().is_some_and(|report| report.overflow) {
+                sample.results.push(Outcome::LogOverflow(caller.name));
+            }
+        }
+        if let (Some(start), Some(ret)) = (start, ret) {
+            let mut reversed = false;
+            for caller in &r.callers {
+                let Some(report) = &caller.report else {
+                    continue;
+                };
+                for (record, call) in report.kept().iter().enumerate() {
+                    // Closed intervals: touching at one instant is overlap.
+                    if call.end >= start && call.start <= ret {
+                        let latency = Value::span(Some(call.start), Some(call.end));
+                        reversed |= latency == Value::Unavailable;
+                        sample.overlaps.push(Overlap {
+                            caller: caller.name,
+                            record,
+                            latency,
+                        });
+                    }
+                }
+            }
+            if reversed {
+                sample
+                    .results
+                    .push(Outcome::HarnessFault("a call's end before its start"));
+            }
+        }
+        sample.largest_overlap = sample
+            .overlaps
+            .iter()
+            .filter_map(|overlap| overlap.latency.get())
+            .max()
+            .map_or(Value::Unavailable, Value::Of);
+        sample.observed_flag_latency = Value::span(start, seen);
+        sample.total = Value::span(start, ret);
+        sample.flag_latency_bound = match (sample.observed_flag_latency, sample.total) {
+            (Value::Of(observed), Value::Of(total)) => Value::Of(observed.min(total)),
+            _ => Value::Unavailable,
+        };
+        sample.late_observer = matches!((seen, ret), (Some(seen), Some(ret)) if seen > ret);
+        if !sample.late_observer {
+            sample.observation_to_return = Value::span(seen, ret);
+        }
+        let missing = sample.results.iter().any(|outcome| {
+            matches!(
+                outcome,
+                Outcome::StopReturnNotObserved
+                    | Outcome::ParticipantReportNotRequested(_)
+                    | Outcome::ParticipantReportMissing { .. }
+                    | Outcome::ObserverResultMissing
+            )
+        });
+        if missing {
+            sample.waiting_time = waited(r.readings.gave_up, r.readings.released);
+        }
+        if sample.results.is_empty() {
+            sample.results.push(Outcome::Complete);
+        }
+        sample
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Group {
+        Idle,
+        Busy,
+        BusyWithOverlap,
+        BusyWithoutOverlap,
+    }
+
+    const GROUPS: [Group; 4] = [
+        Group::Idle,
+        Group::Busy,
+        Group::BusyWithOverlap,
+        Group::BusyWithoutOverlap,
+    ];
+
+    impl Group {
+        fn as_str(self) -> &'static str {
+            match self {
+                Group::Idle => "idle",
+                Group::Busy => "busy (all)",
+                Group::BusyWithOverlap => "busy with overlap",
+                Group::BusyWithoutOverlap => "busy without overlap",
+            }
+        }
+
+        fn holds(self, sample: &Sample) -> bool {
+            let busy = sample.workload == Workload::Busy;
+            match self {
+                Group::Idle => !busy,
+                Group::Busy => busy,
+                Group::BusyWithOverlap => busy && !sample.overlaps.is_empty(),
+                Group::BusyWithoutOverlap => busy && sample.overlaps.is_empty(),
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Number {
+        ObservedFlagLatency,
+        Total,
+        FlagLatencyBound,
+        ObservationToReturn,
+        OverlappingCallerLatency,
+        LargestOverlappingCallerLatency,
+    }
+
+    const NUMBERS: [Number; 6] = [
+        Number::ObservedFlagLatency,
+        Number::Total,
+        Number::FlagLatencyBound,
+        Number::ObservationToReturn,
+        Number::OverlappingCallerLatency,
+        Number::LargestOverlappingCallerLatency,
+    ];
+
+    impl Number {
+        fn as_str(self) -> &'static str {
+            match self {
+                Number::ObservedFlagLatency => "observed flag latency",
+                Number::Total => "total",
+                Number::FlagLatencyBound => "flag latency bound",
+                Number::ObservationToReturn => "observation to return",
+                Number::OverlappingCallerLatency => "overlapping caller latency (per call)",
+                Number::LargestOverlappingCallerLatency => {
+                    "largest overlapping caller latency (per sample)"
+                }
+            }
+        }
+
+        /// This number's values in one sample (one per overlapping call
+        /// for the overlapping caller latency).
+        fn values(self, sample: &Sample) -> Vec<Value> {
+            match self {
+                Number::ObservedFlagLatency => vec![sample.observed_flag_latency],
+                Number::Total => vec![sample.total],
+                Number::FlagLatencyBound => vec![sample.flag_latency_bound],
+                Number::ObservationToReturn => vec![sample.observation_to_return],
+                Number::OverlappingCallerLatency => sample
+                    .overlaps
+                    .iter()
+                    .map(|overlap| overlap.latency)
+                    .collect(),
+                Number::LargestOverlappingCallerLatency => vec![sample.largest_overlap],
+            }
+        }
+    }
+
+    /// One number over one group: `n` available values; the unavailable
+    /// ones only counted.
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    struct Summary {
+        n: usize,
+        unavailable: usize,
+        min: Option<Nanos>,
+        median: Option<Nanos>,
+        p99: Option<Nanos>,
+        max: Option<Nanos>,
+    }
+
+    /// The `p`-th percentile by nearest rank: the value at position
+    /// ⌈p × n ÷ 100⌉ of `sorted`, counting from one (`sorted` not empty).
+    fn percentile(sorted: &[Nanos], p: usize) -> Nanos {
+        let rank = (p * sorted.len()).div_ceil(100);
+        sorted[rank - 1]
+    }
+
+    fn summary(values: impl Iterator<Item = Value>) -> Summary {
+        let mut summary = Summary::default();
+        let mut available = Vec::new();
+        for value in values {
+            match value {
+                Value::Of(value) => available.push(value),
+                Value::Unavailable => summary.unavailable += 1,
+            }
+        }
+        available.sort_unstable();
+        summary.n = available.len();
+        if !available.is_empty() {
+            summary.min = available.first().copied();
+            summary.median = Some(percentile(&available, 50));
+            summary.max = available.last().copied();
+            if available.len() >= 100 {
+                summary.p99 = Some(percentile(&available, 99));
+            }
+        }
+        summary
+    }
+
+    /// Every number over every group.
+    struct Statistics(Vec<(Group, Number, Summary)>);
+
+    impl Statistics {
+        fn of(&self, group: Group, number: Number) -> Summary {
+            self.0
+                .iter()
+                .find(|(g, n, _)| *g == group && *n == number)
+                .map(|(_, _, summary)| *summary)
+                .expect("every group has every number")
+        }
+    }
+
+    /// T10a's second function: the samples combined into statistics, only
+    /// if every sample is complete.
+    fn statistics(samples: &[Sample]) -> Option<Statistics> {
+        if !samples.iter().all(Sample::complete) {
+            return None;
+        }
+        let mut all = Vec::new();
+        for group in GROUPS {
+            for number in NUMBERS {
+                let values = samples
+                    .iter()
+                    .filter(|sample| group.holds(sample))
+                    .flat_map(|sample| number.values(sample));
+                all.push((group, number, summary(values)));
+            }
+        }
+        Some(Statistics(all))
+    }
+
+    fn ns(at: Option<Nanos>) -> String {
+        at.map_or_else(|| "none".to_string(), |at| format!("{at} ns"))
+    }
+
+    fn value(value: Value) -> String {
+        value
+            .get()
+            .map_or_else(|| "unavailable".to_string(), |value| format!("{value} ns"))
+    }
+
+    fn outcome_name(outcome: &Outcome) -> String {
+        match outcome {
+            Outcome::Complete => "complete".to_string(),
+            Outcome::ReadinessNotReported(names) => {
+                format!("readiness not reported ({})", names.join(", "))
+            }
+            Outcome::StopReturnNotObserved => "stop return not observed".to_string(),
+            Outcome::ParticipantReportNotRequested(names) => {
+                format!("participant report not requested ({})", names.join(", "))
+            }
+            Outcome::ParticipantReportMissing { participant, .. } => {
+                format!("participant report missing ({participant})")
+            }
+            Outcome::ObserverResultMissing => "observer result missing".to_string(),
+            Outcome::HarnessFault(why) => format!("harness fault ({why})"),
+            Outcome::LogOverflow(name) => format!("log overflow ({name})"),
+        }
+    }
+
+    /// What one result says the controller knows, and what it does not.
+    fn explanation(outcome: &Outcome, sample: &Sample) -> Option<String> {
+        Some(match outcome {
+            Outcome::Complete => return None,
+            Outcome::ReadinessNotReported(names) => format!(
+                "readiness not reported: {}; no stop was issued; this is not a sample of the stop",
+                names.join(", ")
+            ),
+            Outcome::StopReturnNotObserved => format!(
+                "stop return not observed: the stop's report had not arrived by the deadline; \
+                 whether the stop returned is not known; start and total are unavailable; \
+                 released {} is the controller's own reading, not the stop's start",
+                ns(sample.readings.released)
+            ),
+            Outcome::ParticipantReportNotRequested(names) => format!(
+                "participant report not requested: the stop's report did not arrive, so {} \
+                 were not asked for their reports before the deadline; nothing is known or \
+                 implied about those threads",
+                names.join(", ")
+            ),
+            Outcome::ParticipantReportMissing {
+                participant,
+                last_start,
+            } => format!(
+                "participant report missing: {participant}: its final report had not arrived \
+                 by the deadline; whether its last call finished is not known; last start it \
+                 published (progress marker) {}; asked to end {}; no duration is given for \
+                 that call",
+                ns(*last_start),
+                ns(sample.readings.asked_to_end)
+            ),
+            Outcome::ObserverResultMissing => "observer result missing: no observer report \
+                 carrying seen had arrived by the deadline; whether the flag was set is not \
+                 known"
+                .to_string(),
+            Outcome::HarnessFault(why) => format!("harness fault: {why}"),
+            Outcome::LogOverflow(name) => format!("log overflow: the log of {name} filled"),
+        })
+    }
+
+    fn late_text(late: &Late) -> String {
+        match late {
+            Late::Stop(stop) => format!("stop: start {} ns; return {} ns", stop.start, stop.ret),
+            Late::Observer(observer) => format!("observer: seen {}", ns(observer.seen)),
+            Late::Caller(name, report) => {
+                let mut text = format!(
+                    "{name}: calls made {}; records kept {}; log full: {}",
+                    report.calls,
+                    report.kept().len(),
+                    if report.overflow { "yes" } else { "no" }
+                );
+                for call in report.kept() {
+                    text.push_str(&format!(
+                        "\n    logged {} start {} ns end {} ns result {}",
+                        call.method.as_str(),
+                        call.start,
+                        call.end,
+                        call.result
+                    ));
+                }
+                text
+            }
+        }
+    }
+
+    /// T10a's third function: one sample's results as receipt text.
+    fn sample_text(r: &Received, sample: &Sample) -> String {
+        let results: Vec<String> = sample.results.iter().map(outcome_name).collect();
+        let mut text = format!(
+            "sample {} {}: {}\n",
+            sample.index,
+            sample.workload.as_str(),
+            results.join("; ")
+        );
+        text.push_str(&format!(
+            "  controller: threads started {}; released {}; asked to end {}; gave up {}\n",
+            ns(Some(sample.readings.threads_started)),
+            ns(sample.readings.released),
+            ns(sample.readings.asked_to_end),
+            ns(sample.readings.gave_up)
+        ));
+        text.push_str(&format!(
+            "  received: start {}; return {}; seen {}\n",
+            ns(r.stop.map(|stop| stop.start)),
+            ns(r.stop.map(|stop| stop.ret)),
+            ns(r.observer.and_then(|observer| observer.seen))
+        ));
+        text.push_str(&format!(
+            "  numbers: observed flag latency {}; total {}; flag latency bound {}; observation to return {}",
+            value(sample.observed_flag_latency),
+            value(sample.total),
+            value(sample.flag_latency_bound),
+            value(sample.observation_to_return)
+        ));
+        if sample.workload == Workload::Busy {
+            text.push_str(&format!(
+                "; overlapping calls {}; largest overlapping caller latency {}",
+                sample.overlaps.len(),
+                value(sample.largest_overlap)
+            ));
+        }
+        text.push('\n');
+        if sample.late_observer {
+            text.push_str("  note: late observer (seen after return)\n");
+        }
+        for outcome in &sample.results {
+            if let Some(line) = explanation(outcome, sample) {
+                text.push_str(&format!("  {line}\n"));
+            }
+        }
+        if let Some(waited) = sample.waiting_time {
+            let from = if r.not_ready.is_empty() {
+                "gave up minus released"
+            } else {
+                "gave up minus threads started"
+            };
+            text.push_str(&format!(
+                "  controller waiting time: {waited} ns ({from}). This is the controller's \
+                 waiting time. It is not a lower bound on how long any call took.\n"
+            ));
+        }
+        for late in &r.late {
+            text.push_str(&format!(
+                "  late report (changes no result; enters no statistic): {}\n",
+                late_text(late)
+            ));
+        }
+        text
+    }
+
+    /// Every logged call of every report that arrived by the deadline.
+    fn calls_text(r: &Received) -> String {
+        let mut text = String::new();
+        for caller in &r.callers {
+            let Some(report) = &caller.report else {
+                continue;
+            };
+            text.push_str(&format!(
+                "  {}: calls made {}; records kept {}; log full: {}\n",
+                caller.name,
+                report.calls,
+                report.kept().len(),
+                if report.overflow { "yes" } else { "no" }
+            ));
+            for call in report.kept() {
+                text.push_str(&format!(
+                    "    logged {} start {} ns end {} ns result {}\n",
+                    call.method.as_str(),
+                    call.start,
+                    call.end,
+                    call.result
+                ));
+            }
+        }
+        text
+    }
+
+    fn statistics_text(statistics: &Statistics) -> String {
+        let mut text =
+            String::from("statistics (nearest rank; the 99th percentile only for n >= 100):\n");
+        for group in GROUPS {
+            for number in NUMBERS {
+                let s = statistics.of(group, number);
+                text.push_str(&format!(
+                    "  {} / {}: n {}; unavailable {}",
+                    group.as_str(),
+                    number.as_str(),
+                    s.n,
+                    s.unavailable
+                ));
+                if s.n == 0 {
+                    text.push_str("; no statistics\n");
+                    continue;
+                }
+                text.push_str(&format!(
+                    "; min {}; median {}; p99 {}; max {}\n",
+                    ns(s.min),
+                    ns(s.median),
+                    s.p99
+                        .map_or_else(|| "not given (n < 100)".to_string(), |p| format!("{p} ns")),
+                    ns(s.max)
+                ));
+            }
+        }
+        text
+    }
+
+    /// Every sample above a target, and every value above ten times its
+    /// number's median in its group (idle, busy with overlap, busy without
+    /// overlap), one by one.
+    fn outliers_text(samples: &[Sample], statistics: &Statistics) -> String {
+        let mut text = String::from(
+            "samples above a provisional target (applied by the reviewer, not asserted):\n",
+        );
+        for sample in samples {
+            let total = sample.total.get();
+            if Group::Idle.holds(sample) && total > Some(IDLE_TOTAL_TARGET) {
+                text.push_str(&format!(
+                    "  sample {} idle: total {} above 1 ms (idle target: the largest total at most 1 ms)\n",
+                    sample.index,
+                    value(sample.total)
+                ));
+            }
+            if Group::BusyWithOverlap.holds(sample) && total > Some(BUSY_TOTAL_P99_TARGET) {
+                text.push_str(&format!(
+                    "  sample {} busy with overlap: total {} above 10 ms (busy target: the 99th percentile of total at most 10 ms)\n",
+                    sample.index,
+                    value(sample.total)
+                ));
+            }
+        }
+        text.push_str("values above ten times their number's median in their group:\n");
+        for group in [
+            Group::Idle,
+            Group::BusyWithOverlap,
+            Group::BusyWithoutOverlap,
+        ] {
+            for number in NUMBERS {
+                let Some(median) = statistics.of(group, number).median else {
+                    continue;
+                };
+                let limit = median.saturating_mul(10);
+                for sample in samples.iter().filter(|sample| group.holds(sample)) {
+                    for found in number.values(sample) {
+                        if found.get() > Some(limit) {
+                            text.push_str(&format!(
+                                "  {} / {}: sample {}: {} (median {median} ns)\n",
+                                group.as_str(),
+                                number.as_str(),
+                                sample.index,
+                                value(found)
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        text
+    }
+
+    /// The bytes between this block's marker lines, as compiled, hashed.
+    fn block_hash() -> String {
+        const BEGIN: &str = concat!("\n// ---- RS-01 T10 ", "BEGIN ----\n");
+        const END: &str = concat!("\n// ---- RS-01 T10 ", "END ----\n");
+        let source = include_str!("tests.rs");
+        let begin = source.find(BEGIN).expect("the begin marker") + BEGIN.len();
+        let end = source.find(END).expect("the end marker") + 1;
+        hex::encode(Sha256::digest(&source.as_bytes()[begin..end]))
+    }
+
+    // -- the harness ----------------------------------------------------
+
+    /// The one monotonic clock every timestamp of a run is read from.
+    #[derive(Clone, Copy)]
+    struct Clock(Instant);
+
+    impl Clock {
+        fn now(self) -> Nanos {
+            Nanos::try_from(self.0.elapsed().as_nanos()).unwrap_or(Nanos::MAX)
+        }
+    }
+
+    /// A report slot. A thread moves its report in as its last act; the
+    /// controller only tries it, and never waits on it.
+    struct Slot<T>(Mutex<Option<T>>);
+
+    impl<T> Slot<T> {
+        fn empty() -> Self {
+            Self(Mutex::new(None))
+        }
+
+        fn put(&self, report: T) {
+            if let Ok(mut slot) = self.0.lock() {
+                *slot = Some(report);
+            }
+        }
+
+        fn try_take(&self) -> Option<T> {
+            self.0.try_lock().ok()?.take()
+        }
+    }
+
+    /// One sample's flags, signals, progress markers and report slots, all
+    /// created before its threads start. Neither flag is in the registry.
+    struct Signals {
+        /// Set by the stopping thread before a clock read that returned
+        /// less than *start*.
+        flag_1: AtomicBool,
+        /// Set by the stopping thread after a clock read that returned more
+        /// than *return*.
+        flag_2: AtomicBool,
+        release: AtomicBool,
+        end: AtomicBool,
+        stopper_ready: AtomicBool,
+        observer_ready: AtomicBool,
+        caller_ready: [AtomicBool; 4],
+        /// The start of the call each competing thread began most recently:
+        /// a progress marker, not a sign that the call still runs.
+        progress: [AtomicU64; 4],
+        stop: Slot<StopReport>,
+        observer: Slot<ObserverReport>,
+        callers: [Slot<CallerReport>; 4],
+    }
+
+    impl Signals {
+        fn new() -> Self {
+            Self {
+                flag_1: AtomicBool::new(false),
+                flag_2: AtomicBool::new(false),
+                release: AtomicBool::new(false),
+                end: AtomicBool::new(false),
+                stopper_ready: AtomicBool::new(false),
+                observer_ready: AtomicBool::new(false),
+                caller_ready: Default::default(),
+                progress: [const { AtomicU64::new(NO_PROGRESS) }; 4],
+                stop: Slot::empty(),
+                observer: Slot::empty(),
+                callers: std::array::from_fn(|_| Slot::empty()),
+            }
+        }
+
+        /// The readiness signals that have not come yet, by name.
+        fn not_ready(&self, callers: usize) -> Vec<&'static str> {
+            let mut missing = Vec::new();
+            if !self.stopper_ready.load(Ordering::SeqCst) {
+                missing.push("stopping thread");
+            }
+            if !self.observer_ready.load(Ordering::SeqCst) {
+                missing.push("observer");
+            }
+            for (ready, (name, _)) in self.caller_ready.iter().zip(CALLERS).take(callers) {
+                if !ready.load(Ordering::SeqCst) {
+                    missing.push(name);
+                }
+            }
+            missing
+        }
+    }
+
+    /// The stopping thread: ready, released, flag 1, a clock read below
+    /// *start*, *start*, the stop, *return*, a clock read above *return*,
+    /// flag 2; then its reference to the registry goes, and its report is
+    /// its last act.
+    fn stopper(registry: Arc<RunRegistry>, signals: Arc<Signals>, clock: Clock) {
+        signals.stopper_ready.store(true, Ordering::SeqCst);
+        while !signals.release.load(Ordering::SeqCst) {
+            if signals.end.load(Ordering::SeqCst) {
+                // Never released: no stop was issued, and nothing to report.
+                return;
+            }
+            std::hint::spin_loop();
+        }
+        signals.flag_1.store(true, Ordering::SeqCst);
+        let below = clock.now();
+        while clock.now() <= below {
+            std::hint::spin_loop();
+        }
+        let start = clock.now();
+        registry.stop_all();
+        let ret = clock.now();
+        while clock.now() <= ret {
+            std::hint::spin_loop();
+        }
+        signals.flag_2.store(true, Ordering::SeqCst);
+        drop(registry);
+        signals.stop.put(StopReport { start, ret });
+    }
+
+    /// The observer: it reads the flag in a tight loop, and in every turn
+    /// tests the flag before it looks at the request to end.
+    fn observer(registry: Arc<RunRegistry>, signals: Arc<Signals>, clock: Clock) {
+        signals.observer_ready.store(true, Ordering::SeqCst);
+        let seen = loop {
+            if registry.is_stopped() {
+                break Some(clock.now());
+            }
+            if signals.end.load(Ordering::SeqCst) {
+                break None;
+            }
+        };
+        drop(registry);
+        signals.observer.put(ObserverReport { seen });
+    }
+
+    /// A competing thread's own: its place, its method, the run and agent it
+    /// calls with, and its log.
+    struct Competing {
+        index: usize,
+        method: Method,
+        run: RunId,
+        agent: AgentId,
+        log: Vec<Call>,
+    }
+
+    /// What a measured call returned, kept whole until after its end is read.
+    enum Answer {
+        Open(Result<RunId, AuthorityError>),
+        Check(Result<CancelToken, AuthorityError>),
+    }
+
+    impl Answer {
+        fn class(&self) -> &'static str {
+            match self {
+                Answer::Open(Ok(_)) | Answer::Check(Ok(_)) => "ok",
+                Answer::Open(Err(error)) | Answer::Check(Err(error)) => error.class(),
+            }
+        }
+    }
+
+    /// A competing thread. Per call: flag 2, *start*, the progress marker,
+    /// the call, *end*, flag 1, the record (unless flag 2 was set or flag 1
+    /// was not), the count, the request to end. Its report is its last act.
+    fn competing(registry: Arc<RunRegistry>, signals: Arc<Signals>, clock: Clock, me: Competing) {
+        let Competing {
+            index,
+            method,
+            run,
+            agent,
+            mut log,
+        } = me;
+        let (mut kept, mut calls, mut overflow) = (0usize, 0u64, false);
+        loop {
+            // `open` takes its agent by value: made before the call's clock.
+            let owned = (method == Method::Open).then(|| agent.clone());
+            let after_flag_2 = signals.flag_2.load(Ordering::SeqCst);
+            let start = clock.now();
+            signals.progress[index].store(start, Ordering::SeqCst);
+            let answer = match owned {
+                Some(owned) => {
+                    Answer::Open(registry.open(owned, RunOrigin::AgentGoal, RunClass::Agent, 0))
+                }
+                None => Answer::Check(registry.check(run, &agent)),
+            };
+            let end = clock.now();
+            let flag_1 = signals.flag_1.load(Ordering::SeqCst);
+            if flag_1 && !after_flag_2 {
+                match log.get_mut(kept) {
+                    Some(entry) => {
+                        *entry = Call {
+                            method,
+                            start,
+                            end,
+                            result: answer.class(),
+                        };
+                        kept += 1;
+                    }
+                    None => overflow = true,
+                }
+            }
+            drop(answer);
+            calls += 1;
+            if calls == READY_CALLS {
+                signals.caller_ready[index].store(true, Ordering::SeqCst);
+            }
+            if signals.end.load(Ordering::SeqCst) {
+                break;
+            }
+        }
+        drop(registry);
+        signals.callers[index].put(CallerReport {
+            calls,
+            log,
+            kept,
+            overflow,
+        });
+    }
+
+    /// The controller's last look, one fixed second after it gave up: a
+    /// report found now is a late report, kept raw, and changes nothing.
+    fn collect_late(signals: &Signals, received: &mut Received) {
+        std::thread::sleep(COLLECTION_WAIT);
+        if received.stop.is_none() {
+            if let Some(stop) = signals.stop.try_take() {
+                received.late.push(Late::Stop(stop));
+            }
+        }
+        if received.observer.is_none() {
+            if let Some(observer) = signals.observer.try_take() {
+                received.late.push(Late::Observer(observer));
+            }
+        }
+        let mut late = Vec::new();
+        for (slot, caller) in signals.callers.iter().zip(&received.callers) {
+            if caller.report.is_none() {
+                if let Some(report) = slot.try_take() {
+                    late.push(Late::Caller(caller.name, report));
+                }
+            }
+        }
+        received.late.extend(late);
+    }
+
+    /// One sample: its threads (detached, never joined), the stop, and what
+    /// the controller received within its bounded waits.
+    fn sample(
+        index: usize,
+        workload: Workload,
+        registry: &Arc<RunRegistry>,
+        run: RunId,
+        clock: Clock,
+    ) -> Received {
+        let callers = match workload {
+            Workload::Idle => 0,
+            Workload::Busy => CALLERS.len(),
+        };
+        let signals = Arc::new(Signals::new());
+        // The logs, written through once so that their memory is in place.
+        let logs: Vec<Vec<Call>> = (0..callers)
+            .map(|_| vec![Call::UNUSED; LOG_ENTRIES])
+            .collect();
+        let agent = AgentId::new("t10-agent").expect("an agent");
+        {
+            let (registry, signals) = (registry.clone(), signals.clone());
+            std::thread::spawn(move || stopper(registry, signals, clock));
+        }
+        {
+            let (registry, signals) = (registry.clone(), signals.clone());
+            std::thread::spawn(move || observer(registry, signals, clock));
+        }
+        for (index, log) in logs.into_iter().enumerate() {
+            let me = Competing {
+                index,
+                method: CALLERS[index].1,
+                run,
+                agent: agent.clone(),
+                log,
+            };
+            let (registry, signals) = (registry.clone(), signals.clone());
+            std::thread::spawn(move || competing(registry, signals, clock, me));
+        }
+        let threads_started = clock.now();
+        let mut received = Received {
+            index,
+            workload,
+            readings: Readings {
+                threads_started,
+                ..Readings::default()
+            },
+            not_ready: Vec::new(),
+            stop: None,
+            observer: None,
+            callers: CALLERS[..callers]
+                .iter()
+                .map(|&(name, _)| Caller {
+                    name,
+                    report: None,
+                    progress: None,
+                })
+                .collect(),
+            late: Vec::new(),
+        };
+        // Readiness, within its own deadline.
+        loop {
+            let not_ready = signals.not_ready(callers);
+            if not_ready.is_empty() {
+                break;
+            }
+            if clock.now() >= threads_started.saturating_add(READINESS_WAIT) {
+                received.readings.gave_up = Some(clock.now());
+                signals.end.store(true, Ordering::SeqCst);
+                received.not_ready = not_ready;
+                collect_late(&signals, &mut received);
+                return received;
+            }
+            std::thread::sleep(POLL);
+        }
+        // Completion, within 5 seconds of the release.
+        let released = clock.now();
+        received.readings.released = Some(released);
+        signals.release.store(true, Ordering::SeqCst);
+        let deadline = released.saturating_add(COMPLETION_WAIT);
+        loop {
+            if received.stop.is_none() {
+                received.stop = signals.stop.try_take();
+                if received.stop.is_some() {
+                    received.readings.asked_to_end = Some(clock.now());
+                    signals.end.store(true, Ordering::SeqCst);
+                }
+            }
+            if received.observer.is_none() {
+                received.observer = signals.observer.try_take();
+            }
+            if received.readings.asked_to_end.is_some() {
+                for (slot, caller) in signals.callers.iter().zip(&mut received.callers) {
+                    if caller.report.is_none() {
+                        caller.report = slot.try_take();
+                    }
+                }
+            }
+            if received.stop.is_some()
+                && received.observer.is_some()
+                && received
+                    .callers
+                    .iter()
+                    .all(|caller| caller.report.is_some())
+            {
+                return received;
+            }
+            if clock.now() >= deadline {
+                received.readings.gave_up = Some(clock.now());
+                signals.end.store(true, Ordering::SeqCst);
+                if received.stop.is_some() {
+                    for (marker, caller) in signals.progress.iter().zip(&mut received.callers) {
+                        if caller.report.is_none() {
+                            let at = marker.load(Ordering::SeqCst);
+                            caller.progress = (at != NO_PROGRESS).then_some(at);
+                        }
+                    }
+                }
+                collect_late(&signals, &mut received);
+                return received;
+            }
+            std::thread::sleep(POLL);
+        }
+    }
+
+    /// The local-model workloads loaded or running now: every process whose
+    /// name, or whose executable's file name, names a local-model runtime.
+    /// Read only: nothing is started or stopped.
+    fn model_processes() -> Vec<String> {
+        let Ok(entries) = std::fs::read_dir("/proc") else {
+            return vec!["unavailable (no /proc)".to_string()];
+        };
+        let mut found = Vec::new();
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(pid) = name
+                .to_str()
+                .filter(|n| n.bytes().all(|b| b.is_ascii_digit()))
+            else {
+                continue;
+            };
+            let comm = std::fs::read_to_string(entry.path().join("comm"))
+                .unwrap_or_default()
+                .trim()
+                .to_lowercase();
+            let cmdline = std::fs::read(entry.path().join("cmdline")).unwrap_or_default();
+            let args: Vec<String> = cmdline
+                .split(|b| *b == 0)
+                .filter(|arg| !arg.is_empty())
+                .map(|arg| String::from_utf8_lossy(arg).into_owned())
+                .collect();
+            let exe = args
+                .first()
+                .map(|arg| arg.rsplit('/').next().unwrap_or(arg).to_lowercase())
+                .unwrap_or_default();
+            if MODEL_RUNTIMES
+                .iter()
+                .any(|runtime| comm.contains(runtime) || exe.contains(runtime))
+            {
+                let shown: String = args.join(" ").chars().take(160).collect();
+                found.push(format!("pid {pid} {comm}: {shown}"));
+            }
+        }
+        found.sort();
+        found
+    }
+
+    fn host(at: &str, clock: Clock) -> String {
+        let load = std::fs::read_to_string("/proc/loadavg")
+            .ok()
+            .and_then(|line| line.split_whitespace().next().map(str::to_string))
+            .unwrap_or_else(|| "unavailable".to_string());
+        let workloads = model_processes();
+        format!(
+            "host at {at} ({} ns): load average (1 min) {load}; local-model workloads: {}\n",
+            clock.now(),
+            if workloads.is_empty() {
+                "none".to_string()
+            } else {
+                workloads.join(" | ")
+            }
+        )
+    }
+
+    fn given(variable: &str) -> String {
+        std::env::var(variable).unwrap_or_else(|_| "not given".to_string())
+    }
+
+    fn first_line(path: &str, prefix: &str) -> String {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| {
+                text.lines()
+                    .find(|line| line.starts_with(prefix))
+                    .map(|line| line.to_string())
+            })
+            .unwrap_or_else(|| "unavailable".to_string())
+    }
+
+    fn header() -> String {
+        let cores = std::thread::available_parallelism().map_or(0, usize::from);
+        let mut text = String::from(
+            "RS-01 T10 receipt (P3-C11-RS01-CONTRACT-05 section 8): a diagnostic measurement of \
+             RunRegistry::stop_all, the registry step alone, seen from outside its lock.\n",
+        );
+        text.push_str(&format!(
+            "T10 and T10a source sha256 (between the block markers, as compiled): {}\n",
+            block_hash()
+        ));
+        text.push_str(&format!("commit: {}\n", given("NEXUS_T10_COMMIT")));
+        text.push_str(&format!("tree: {}\n", given("NEXUS_T10_TREE")));
+        text.push_str(&format!("command: {}\n", given("NEXUS_T10_COMMAND")));
+        text.push_str(&format!(
+            "test binary arguments: {:?}\n",
+            std::env::args().collect::<Vec<_>>()
+        ));
+        text.push_str(&format!(
+            "machine: {}; kernel {}; {}; logical cores {cores}\n",
+            first_line("/proc/sys/kernel/hostname", ""),
+            first_line("/proc/sys/kernel/osrelease", ""),
+            first_line("/proc/cpuinfo", "model name")
+        ));
+        text.push_str(&format!(
+            "parameters: {RUNS} active runs per new registry; {SAMPLES} samples per workload (idle first, then busy); \
+             {LOG_ENTRIES} log entries per competing thread; readiness wait 5 s; completion wait 5 s after released; \
+             collection wait 1 s; controller poll {} us; busy workload: open-1, open-2 call open, check-1, check-2 call check\n",
+            POLL.as_micros()
+        ));
+        text.push_str(
+            "reading: every number is a span between two clock reads, not between the events themselves; \
+             observed flag latency is an upper bound on when the flag was set, not that moment; \
+             T10 does not measure the stop's wait for the lock, nor the sweep; \
+             overlapping caller latency is a whole call's duration, not its wait for the lock; \
+             the busy results are a competing-call workload, not a contended lock\n",
+        );
+        text.push_str(
+            "not controlled: a thread that has reported may still be exiting when the next sample starts; \
+             freeing a sample's registry and logs between samples can disturb the next sample. \
+             The logging disturbs what it measures (two clock reads, two flag reads, one progress store, \
+             one count, one look at the request to end per call, and one write for a kept call); \
+             it is the same on both trees, its effect need not be. Threads are detached and never joined.\n",
+        );
+        text
+    }
+
+    /// A receipt is kept outside the repository.
+    fn outside_the_repository(path: &std::path::Path) {
+        let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("the repository");
+        let directory = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or(std::path::Path::new("."))
+            .canonicalize()
+            .expect("the receipt's directory exists");
+        assert!(
+            !directory.starts_with(&repository),
+            "the receipt is kept outside the repository: {}",
+            path.display()
+        );
+    }
+
+    fn write(receipt: &mut impl std::io::Write, text: &str) {
+        receipt
+            .write_all(text.as_bytes())
+            .expect("the receipt is written");
+    }
+
+    /// RS-01 T10. Each sample builds a new registry of 4,096 active runs on
+    /// this thread and times one stop; 1,000 samples per workload, all
+    /// kept. Any sample that is not complete ends the run INCOMPLETE: the
+    /// receipt is written, there are no statistics, and the test fails.
+    #[test]
+    #[ignore = "RS-01 T10: a diagnostic measurement, run only by its own command after T10a"]
+    fn rs01_t10_the_registry_stop_seen_from_outside_its_lock() {
+        let path = std::path::PathBuf::from(
+            std::env::var_os("NEXUS_T10_RECEIPT")
+                .expect("NEXUS_T10_RECEIPT names the receipt file"),
+        );
+        outside_the_repository(&path);
+        let mut receipt =
+            std::io::BufWriter::new(std::fs::File::create(&path).expect("the receipt file"));
+        let clock = Clock(Instant::now());
+        write(&mut receipt, &header());
+        write(&mut receipt, &host("start", clock));
+        let agent = AgentId::new("t10-agent").expect("an agent");
+        let mut samples: Vec<Sample> = Vec::new();
+        let mut incomplete = None;
+        'run: for workload in [Workload::Idle, Workload::Busy] {
+            for _ in 0..SAMPLES {
+                let index = samples.len() + 1;
+                // Before the sample: its registry, on this thread.
+                let registry = Arc::new(RunRegistry::default());
+                let mut first = None;
+                for _ in 0..RUNS {
+                    let run = registry
+                        .open(agent.clone(), RunOrigin::AgentGoal, RunClass::Agent, 0)
+                        .expect("a run opens");
+                    first.get_or_insert(run);
+                }
+                let received = sample(index, workload, &registry, first.expect("a run"), clock);
+                let measured = numbers(&received);
+                write(&mut receipt, &sample_text(&received, &measured));
+                write(&mut receipt, &calls_text(&received));
+                let complete = measured.complete();
+                samples.push(measured);
+                if !complete {
+                    incomplete = Some(index);
+                    break 'run;
+                }
+                // Between samples: the logs and the registry are freed here,
+                // on this thread (every thread dropped its reference before
+                // it reported), before the next sample's threads start.
+                drop(received);
+                drop(registry);
+                if index.is_multiple_of(HOST_EVERY) {
+                    write(&mut receipt, &host(&format!("after sample {index}"), clock));
+                }
+            }
+        }
+        write(&mut receipt, &host("end", clock));
+        let late_observers = samples.iter().filter(|sample| sample.late_observer).count();
+        write(
+            &mut receipt,
+            &format!("late observer samples: {late_observers}\n"),
+        );
+        if let Some(index) = incomplete {
+            write(
+                &mut receipt,
+                &format!(
+                    "RUN INCOMPLETE at sample {index}: no statistics; not a pass; it supports no comparison of cost\n"
+                ),
+            );
+            receipt.flush().expect("the receipt is flushed");
+            panic!(
+                "T10 ended INCOMPLETE at sample {index}; see {}",
+                path.display()
+            );
+        }
+        let combined = statistics(&samples).expect("every sample is complete");
+        write(&mut receipt, &statistics_text(&combined));
+        write(&mut receipt, &outliers_text(&samples, &combined));
+        write(&mut receipt, "RUN COMPLETE: every sample complete\n");
+        receipt.flush().expect("the receipt is flushed");
+    }
+
+    // -- T10a -------------------------------------------------------------
+
+    const STOP: StopReport = StopReport {
+        start: 2_000,
+        ret: 2_800,
+    };
+
+    fn readings() -> Readings {
+        Readings {
+            threads_started: 100,
+            released: Some(1_000),
+            asked_to_end: Some(3_000),
+            gave_up: None,
+        }
+    }
+
+    fn call(method: Method, start: Nanos, end: Nanos) -> Call {
+        Call {
+            method,
+            start,
+            end,
+            result: "capacity",
+        }
+    }
+
+    fn report(log: &[Call]) -> CallerReport {
+        CallerReport {
+            calls: 100 + log.len() as u64,
+            log: log.to_vec(),
+            kept: log.len(),
+            overflow: false,
+        }
+    }
+
+    /// A complete idle sample: start 2000, return 2800, seen as given.
+    fn idle(seen: Option<Nanos>) -> Received {
+        Received {
+            index: 1,
+            workload: Workload::Idle,
+            readings: readings(),
+            not_ready: Vec::new(),
+            stop: Some(STOP),
+            observer: Some(ObserverReport { seen }),
+            callers: Vec::new(),
+            late: Vec::new(),
+        }
+    }
+
+    /// A complete idle sample whose total is `total`, seen 1 ns after start.
+    fn idle_total(total: Nanos) -> Received {
+        let mut r = idle(Some(1_001));
+        r.stop = Some(StopReport {
+            start: 1_000,
+            ret: 1_000 + total,
+        });
+        r
+    }
+
+    /// A complete busy sample, each competing thread's log as given.
+    fn busy(logs: [Vec<Call>; 4]) -> Received {
+        let callers = CALLERS
+            .iter()
+            .zip(logs)
+            .map(|(&(name, _), log)| Caller {
+                name,
+                report: Some(report(&log)),
+                progress: None,
+            })
+            .collect();
+        Received {
+            index: 2,
+            workload: Workload::Busy,
+            readings: readings(),
+            not_ready: Vec::new(),
+            stop: Some(STOP),
+            observer: Some(ObserverReport { seen: Some(2_400) }),
+            callers,
+            late: Vec::new(),
+        }
+    }
+
+    const PARTICIPANT_MISSING: &str = "\
+sample 2 busy: participant report missing (check-2)
+  controller: threads started 100 ns; released 1000 ns; asked to end 3000 ns; gave up 5001000 ns
+  received: start 2000 ns; return 2800 ns; seen 2400 ns
+  numbers: observed flag latency 400 ns; total 800 ns; flag latency bound 400 ns; observation to return 400 ns; overlapping calls 1; largest overlapping caller latency 100 ns
+  participant report missing: check-2: its final report had not arrived by the deadline; whether its last call finished is not known; last start it published (progress marker) 2950 ns; asked to end 3000 ns; no duration is given for that call
+  controller waiting time: 5000000 ns (gave up minus released). This is the controller's waiting time. It is not a lower bound on how long any call took.
+";
+
+    const PARTICIPANT_LATE: &str = "  late report (changes no result; enters no statistic): check-2: calls made 101; records kept 1; log full: no
+    logged check start 2950 ns end 5000900 ns result emergency_stopped
+";
+
+    const STOP_MISSING: &str = "\
+sample 2 busy: stop return not observed; participant report not requested (open-1, open-2, check-1, check-2)
+  controller: threads started 100 ns; released 1000 ns; asked to end none; gave up 5001000 ns
+  received: start none; return none; seen 2400 ns
+  numbers: observed flag latency unavailable; total unavailable; flag latency bound unavailable; observation to return unavailable; overlapping calls 0; largest overlapping caller latency unavailable
+  stop return not observed: the stop's report had not arrived by the deadline; whether the stop returned is not known; start and total are unavailable; released 1000 ns is the controller's own reading, not the stop's start
+  participant report not requested: the stop's report did not arrive, so open-1, open-2, check-1, check-2 were not asked for their reports before the deadline; nothing is known or implied about those threads
+  controller waiting time: 5000000 ns (gave up minus released). This is the controller's waiting time. It is not a lower bound on how long any call took.
+";
+
+    const STOP_LATE: &str = "  late report (changes no result; enters no statistic): stop: start 2000 ns; return 5000500 ns
+";
+
+    /// RS-01 T10a: T10's arithmetic, results and receipt wording, on
+    /// fixed inputs. Nothing here runs a thread or reads a clock.
+    #[test]
+    fn rs01_t10a_the_receipt_claims_only_what_the_controller_received() {
+        use Outcome::*;
+        use Value::{Of, Unavailable};
+        let four = |s: &Sample| {
+            (
+                s.observed_flag_latency,
+                s.total,
+                s.flag_latency_bound,
+                s.observation_to_return,
+            )
+        };
+        assert_eq!(block_hash().len(), 64);
+
+        // The observation before the return, after it, and the two equal.
+        let s = numbers(&idle(Some(2_400)));
+        assert_eq!(s.results, [Complete]);
+        assert_eq!(four(&s), (Of(400), Of(800), Of(400), Of(400)));
+        assert!(!s.late_observer);
+        assert_eq!(s.waiting_time, None);
+        let s = numbers(&idle(Some(3_000)));
+        assert_eq!(s.results, [Complete]);
+        // The bound is the smaller of the two; a late observer's interval
+        // is unavailable, never zero.
+        assert_eq!(four(&s), (Of(1_000), Of(800), Of(800), Unavailable));
+        assert!(s.late_observer);
+        let s = numbers(&idle(Some(2_800)));
+        assert_eq!(four(&s), (Of(800), Of(800), Of(800), Of(0)));
+        assert!(!s.late_observer);
+
+        // The observer's report missing, or without seen.
+        for observer in [None, Some(ObserverReport { seen: None })] {
+            let mut r = idle(None);
+            r.observer = observer;
+            r.readings.gave_up = Some(5_001_000);
+            let s = numbers(&r);
+            assert_eq!(s.results, [ObserverResultMissing]);
+            assert_eq!(four(&s), (Unavailable, Of(800), Unavailable, Unavailable));
+            assert_eq!(s.waiting_time, Some(5_000_000));
+        }
+
+        // seen, or return, before start: a harness fault, not a number.
+        let s = numbers(&idle(Some(1_500)));
+        assert_eq!(s.results, [HarnessFault("seen before start")]);
+        assert_eq!(s.observed_flag_latency, Unavailable);
+        assert_eq!(s.flag_latency_bound, Unavailable);
+        let mut r = idle(Some(1_950));
+        r.stop = Some(StopReport {
+            start: 2_000,
+            ret: 1_900,
+        });
+        let s = numbers(&r);
+        assert_eq!(
+            s.results,
+            [
+                HarnessFault("return before start"),
+                HarnessFault("seen before start")
+            ]
+        );
+        assert_eq!(
+            four(&s),
+            (Unavailable, Unavailable, Unavailable, Unavailable)
+        );
+
+        // A readiness signal missing: no stop, no number, the waiting time.
+        let mut r = idle(None);
+        r.not_ready = vec!["observer"];
+        r.stop = None;
+        r.observer = None;
+        r.readings = Readings {
+            threads_started: 100,
+            released: None,
+            asked_to_end: None,
+            gave_up: Some(5_000_100),
+        };
+        let s = numbers(&r);
+        assert_eq!(s.results, [ReadinessNotReported(vec!["observer"])]);
+        assert_eq!(
+            four(&s),
+            (Unavailable, Unavailable, Unavailable, Unavailable)
+        );
+        assert_eq!(s.waiting_time, Some(5_000_000));
+        assert!(sample_text(&r, &s).contains(
+            "controller waiting time: 5000000 ns (gave up minus threads started). This is the \
+             controller's waiting time. It is not a lower bound on how long any call took."
+        ));
+
+        // A full log, and two results at once.
+        let mut r = busy(Default::default());
+        r.callers[0].report.as_mut().expect("a report").overflow = true;
+        assert_eq!(numbers(&r).results, [LogOverflow("open-1")]);
+        r.observer = None;
+        r.readings.gave_up = Some(5_001_000);
+        assert_eq!(
+            numbers(&r).results,
+            [ObserverResultMissing, LogOverflow("open-1")]
+        );
+
+        // Overlap follows the timestamps, not the filter: every call here
+        // was logged; the stop ran from 2000 to 2800.
+        let s = numbers(&busy([
+            // wholly inside; starting before
+            vec![
+                call(Method::Open, 2_100, 2_200),
+                call(Method::Open, 1_900, 2_100),
+            ],
+            // ending exactly at start; wholly outside
+            vec![
+                call(Method::Open, 1_950, 2_000),
+                call(Method::Open, 3_000, 3_100),
+            ],
+            // ending after; spanning
+            vec![
+                call(Method::Check, 2_700, 2_900),
+                call(Method::Check, 1_900, 2_900),
+            ],
+            // starting exactly at return; between flag 1 and start; between
+            // return and flag 2
+            vec![
+                call(Method::Check, 2_800, 2_850),
+                call(Method::Check, 1_800, 1_900),
+                call(Method::Check, 2_810, 2_850),
+            ],
+        ]));
+        assert_eq!(s.results, [Complete]);
+        let overlaps: Vec<(&str, usize, Value)> = s
+            .overlaps
+            .iter()
+            .map(|overlap| (overlap.caller, overlap.record, overlap.latency))
+            .collect();
+        assert_eq!(
+            overlaps,
+            [
+                ("open-1", 0, Of(100)),
+                ("open-1", 1, Of(200)),
+                ("open-2", 0, Of(50)),
+                ("check-1", 0, Of(200)),
+                ("check-1", 1, Of(1_000)),
+                ("check-2", 0, Of(50)),
+            ]
+        );
+        assert_eq!(s.largest_overlap, Of(1_000));
+        // A logged call whose end is before its start: a harness fault.
+        let s = numbers(&busy([
+            vec![call(Method::Open, 2_200, 2_100)],
+            vec![],
+            vec![],
+            vec![],
+        ]));
+        assert_eq!(s.results, [HarnessFault("a call's end before its start")]);
+        assert_eq!(s.largest_overlap, Unavailable);
+
+        // RS4-01: a competing call ended before the deadline, but its
+        // thread's report had not reached the controller by then.
+        let mut missing = busy([
+            vec![call(Method::Open, 2_100, 2_200)],
+            vec![],
+            vec![],
+            vec![],
+        ]);
+        missing.callers[3].report = None;
+        missing.callers[3].progress = Some(2_950);
+        missing.readings.gave_up = Some(5_001_000);
+        let s = numbers(&missing);
+        assert_eq!(
+            s.results,
+            [ParticipantReportMissing {
+                participant: "check-2",
+                last_start: Some(2_950)
+            }]
+        );
+        assert_eq!(s.waiting_time, Some(5_000_000));
+        assert_eq!(sample_text(&missing, &s), PARTICIPANT_MISSING);
+        // The same report, found afterwards: listed raw, changing nothing.
+        let mut late = missing.clone();
+        late.late.push(Late::Caller(
+            "check-2",
+            report(&[Call {
+                method: Method::Check,
+                start: 2_950,
+                end: 5_000_900,
+                result: "emergency_stopped",
+            }]),
+        ));
+        assert_eq!(numbers(&late), s);
+        assert_eq!(
+            sample_text(&late, &numbers(&late)),
+            format!("{PARTICIPANT_MISSING}{PARTICIPANT_LATE}")
+        );
+
+        // The stop's own report missing: the competing threads were not
+        // asked, so they are not missing.
+        let mut stop_missing = busy(Default::default());
+        stop_missing.stop = None;
+        for caller in &mut stop_missing.callers {
+            caller.report = None;
+        }
+        stop_missing.readings.asked_to_end = None;
+        stop_missing.readings.gave_up = Some(5_001_000);
+        let s = numbers(&stop_missing);
+        assert_eq!(
+            s.results,
+            [
+                StopReturnNotObserved,
+                ParticipantReportNotRequested(vec!["open-1", "open-2", "check-1", "check-2"])
+            ]
+        );
+        assert_eq!(
+            four(&s),
+            (Unavailable, Unavailable, Unavailable, Unavailable)
+        );
+        assert!(s.overlaps.is_empty());
+        assert_eq!(s.largest_overlap, Unavailable);
+        assert_eq!(s.waiting_time, Some(5_000_000));
+        assert_eq!(sample_text(&stop_missing, &s), STOP_MISSING);
+        let mut late = stop_missing.clone();
+        late.late.push(Late::Stop(StopReport {
+            start: 2_000,
+            ret: 5_000_500,
+        }));
+        assert_eq!(numbers(&late), s);
+        assert_eq!(
+            sample_text(&late, &numbers(&late)),
+            format!("{STOP_MISSING}{STOP_LATE}")
+        );
+        for text in [PARTICIPANT_MISSING, STOP_MISSING] {
+            assert!(text.contains("not a lower bound on how long any call took"));
+            assert!(!text.contains("at least"));
+        }
+
+        // Statistics: none at all for a run with a sample that is not
+        // complete, and a late report enters none.
+        let complete = numbers(&idle(Some(2_400)));
+        assert!(statistics(&[complete.clone(), numbers(&stop_missing)]).is_none());
+        assert!(statistics(&[complete, numbers(&late)]).is_none());
+        let totals = |n: Nanos| {
+            (1..=n)
+                .map(|total| numbers(&idle_total(total)))
+                .collect::<Vec<_>>()
+        };
+        // 99 values: minimum, median and maximum, no 99th percentile.
+        assert_eq!(
+            statistics(&totals(99))
+                .expect("complete")
+                .of(Group::Idle, Number::Total),
+            Summary {
+                n: 99,
+                unavailable: 0,
+                min: Some(1),
+                median: Some(50),
+                p99: None,
+                max: Some(99)
+            }
+        );
+        // 100 values: all four.
+        assert_eq!(
+            statistics(&totals(100))
+                .expect("complete")
+                .of(Group::Idle, Number::Total),
+            Summary {
+                n: 100,
+                unavailable: 0,
+                min: Some(1),
+                median: Some(50),
+                p99: Some(99),
+                max: Some(100)
+            }
+        );
+        // Nearest rank on 1..=101: rounding the position down would give 50
+        // and 99; counting from zero, 52 and 101.
+        let rule = statistics(&totals(101))
+            .expect("complete")
+            .of(Group::Idle, Number::Total);
+        assert_eq!((rule.median, rule.p99), (Some(51), Some(100)));
+        // A group of one value, and empty groups (n = 0, no statistic).
+        let one = statistics(&[numbers(&idle_total(7))]).expect("complete");
+        assert_eq!(
+            one.of(Group::Idle, Number::Total),
+            Summary {
+                n: 1,
+                unavailable: 0,
+                min: Some(7),
+                median: Some(7),
+                p99: None,
+                max: Some(7)
+            }
+        );
+        for group in [
+            Group::Busy,
+            Group::BusyWithOverlap,
+            Group::BusyWithoutOverlap,
+        ] {
+            assert_eq!(one.of(group, Number::Total), Summary::default());
+        }
+        // An unavailable value among others: in neither n nor a statistic.
+        let mut mixed = totals(3);
+        let mut late_observer = idle_total(3);
+        late_observer.observer = Some(ObserverReport { seen: Some(9_999) });
+        mixed.push(numbers(&late_observer));
+        assert_eq!(
+            statistics(&mixed)
+                .expect("complete")
+                .of(Group::Idle, Number::ObservationToReturn),
+            Summary {
+                n: 3,
+                unavailable: 1,
+                min: Some(0),
+                median: Some(1),
+                p99: None,
+                max: Some(2)
+            }
+        );
+        // The busy groups: one sample with overlap, one without.
+        let with = numbers(&busy([
+            vec![call(Method::Open, 2_100, 2_400)],
+            vec![],
+            vec![],
+            vec![],
+        ]));
+        let without = numbers(&busy([
+            vec![call(Method::Open, 3_000, 3_100)],
+            vec![],
+            vec![],
+            vec![],
+        ]));
+        let split = statistics(&[with, without]).expect("complete");
+        assert_eq!(split.of(Group::Busy, Number::Total).n, 2);
+        assert_eq!(split.of(Group::BusyWithOverlap, Number::Total).n, 1);
+        assert_eq!(split.of(Group::BusyWithoutOverlap, Number::Total).n, 1);
+        assert_eq!(
+            split.of(Group::Busy, Number::LargestOverlappingCallerLatency),
+            Summary {
+                n: 1,
+                unavailable: 1,
+                min: Some(300),
+                median: Some(300),
+                p99: None,
+                max: Some(300)
+            }
+        );
+        assert_eq!(
+            split.of(Group::BusyWithoutOverlap, Number::OverlappingCallerLatency),
+            Summary::default()
+        );
+    }
+}
+// ---- RS-01 T10 END ----

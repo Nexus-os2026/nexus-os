@@ -23,7 +23,7 @@ use self::commitment::CommitmentRegistry;
 use self::evidence::{EvidencePhase, EvidenceRecord, EvidenceSink};
 use self::ids::{AgentId, RunId};
 use self::policy::{GrantStore, PolicyGeneration};
-use self::run::{RunClass, RunOrigin, RunRegistry};
+use self::run::{Lift, Refusal, RunClass, RunOrigin, RunRegistry};
 use std::fmt;
 use std::sync::Arc;
 
@@ -45,6 +45,9 @@ pub enum AuthorityError {
     RunCancelled,
     RunNotActive,
     EmergencyStopped,
+    /// A newer emergency stop came after the stop the owner confirmed
+    /// lifting: the resume lifted nothing.
+    ResumeSuperseded,
     ApprovalRequired,
     ApprovalNotApplicable,
     ApprovalMismatch,
@@ -77,6 +80,7 @@ impl AuthorityError {
             AuthorityError::RunCancelled => "run_cancelled",
             AuthorityError::RunNotActive => "run_not_active",
             AuthorityError::EmergencyStopped => "emergency_stopped",
+            AuthorityError::ResumeSuperseded => "resume_superseded",
             AuthorityError::ApprovalRequired => "approval_required",
             AuthorityError::ApprovalNotApplicable => "approval_not_applicable",
             AuthorityError::ApprovalMismatch => "approval_mismatch",
@@ -283,9 +287,10 @@ impl Authority {
 
     /// The owner's emergency stop: cancel every run, end every unconsumed
     /// commitment, move the policy generation, and refuse new runs until the
-    /// owner resumes.
+    /// owner resumes. Its record carries its stop number, whether that
+    /// number is exhausted, and whether the stop before it was lifted.
     pub fn emergency_stop(&self) -> usize {
-        let cancelled = self.runs.stop_all();
+        let stop = self.runs.stop_all();
         self.commitments.revoke_all();
         self.generation.bump();
         let mut record = EvidenceRecord::new(
@@ -296,34 +301,69 @@ impl Authority {
         record.cancelled = true;
         record
             .detail
-            .push(("runs_cancelled".into(), cancelled.to_string()));
+            .push(("runs_cancelled".into(), stop.cancelled.to_string()));
+        record
+            .detail
+            .push(("stop_number".into(), stop.number.to_string()));
+        if stop.exhausted {
+            record.detail.push(("exhausted".into(), "yes".into()));
+        }
+        record
+            .detail
+            .push(("previous_stop_lifted".into(), stop.previous.as_str().into()));
         let _ = self.record(&record);
-        cancelled
+        stop.cancelled
     }
 
-    /// Lift an emergency stop: only after the owner's native confirmation.
+    /// Lift an emergency stop: only after the owner's native confirmation,
+    /// and only the stop the owner confirmed. The stop's number and count
+    /// are read once under the runs lock and shown; after the answer a
+    /// read-only check refuses, before any record, a resume that a newer
+    /// stop, an exhausted stop number or quitting has overtaken; the record
+    /// is written; and the registry lifts the stop only if it is still that
+    /// stop. A Resumed record is therefore not proof that the stop was
+    /// lifted.
     pub(crate) fn resume(&self, confirmer: &dyn ControlConfirmer) -> Result<(), AuthorityError> {
-        if !self.runs.is_stopped() {
+        let Some(stop) = self.runs.stop_to_lift().map_err(refused)? else {
+            // Nothing is stopped: nothing to resume.
             return Ok(());
-        }
+        };
         let request = ResumeConfirmation {
-            runs_cancelled_by_the_stop: self.runs.cancelled_by_stop(),
+            stop_number: stop.number,
+            runs_cancelled_by_the_stop: stop.cancelled,
         };
         if !confirmer.confirm_resume(&request) {
             return Err(AuthorityError::Declined);
+        }
+        if self.runs.check_lift(request.stop_number).map_err(refused)? == Lift::AlreadyLifted {
+            // Another resume lifted this stop, and recorded it.
+            return Ok(());
         }
         let mut record = EvidenceRecord::new(
             EvidencePhase::Resumed,
             self.clock.wall_ms(),
             self.generation.current(),
         );
+        record
+            .detail
+            .push(("stop_number".into(), request.stop_number.to_string()));
         record.detail.push((
             "runs_cancelled_by_the_stop".into(),
             request.runs_cancelled_by_the_stop.to_string(),
         ));
         // Evidence first: an unrecorded resume does not happen.
         self.record(&record)?;
-        self.runs.resume();
+        self.runs.lift(request.stop_number).map_err(refused)?;
         Ok(())
+    }
+}
+
+/// What a resume the run registry refused returns.
+fn refused(refusal: Refusal) -> AuthorityError {
+    match refusal {
+        Refusal::Superseded => AuthorityError::ResumeSuperseded,
+        Refusal::Exhausted => AuthorityError::EmergencyStopped,
+        Refusal::TooLate => AuthorityError::Closed("the desktop is quitting"),
+        Refusal::Unavailable => AuthorityError::Unavailable("the run registry is poisoned"),
     }
 }

@@ -618,8 +618,21 @@ stated):
   (Resume included) waits until the open one is answered (at most 15
   minutes, the longest a commitment lives, and is then declined), and an emergency
   stop does not close an open window: the action it would approve was
-  revoked by the stop and is refused, but a grant or Resume window still
-  takes effect if answered.
+  revoked by the stop and is refused, but a grant window still takes
+  effect if answered; a Resume window lifts only the stop it names, so
+  answered after a newer emergency stop, or once the desktop is quitting,
+  it lifts nothing and the stop stays.
+- **A Resumed record is not proof that a stop was lifted.** It records
+  that the owner confirmed lifting stop number *n* and is written before
+  the lift, which a newer stop, an exhausted stop number, quitting or a
+  poisoned run registry can still prevent (two resumes of one stop can
+  leave two records). Stop numbers count the emergency stops of one run
+  of the desktop and start again in the next, so records of different
+  runs are never matched by number, and within one run records are read
+  by their stop number, not by their position in the trail (a record can
+  reach the trail before the record of a step that came first). The runs
+  a Resume window says the stop cancelled are those cancelled by
+  emergency stops since the last lift, which can span more than one stop.
 - **Other slow interface commands can still hold the interface thread**
   (a model call or a download, not the agent loops' lock). The global
   emergency key works meanwhile on X11; the page needs the interface

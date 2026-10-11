@@ -150,9 +150,12 @@ pub trait ControlConfirmer {
     fn confirm_resume(&self, request: &ResumeConfirmation) -> bool;
 }
 
-/// What the owner is asked before an emergency stop is lifted.
+/// What the owner is asked before an emergency stop is lifted: which stop,
+/// by its number in this run of the desktop, and the runs cancelled by
+/// emergency stops since the last lift. A resume lifts only that stop.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResumeConfirmation {
+    pub stop_number: u64,
     pub runs_cancelled_by_the_stop: usize,
 }
 
@@ -164,7 +167,7 @@ impl ResumeConfirmation {
     pub fn text(&self) -> ConfirmationText {
         ConfirmationText {
             header: vec![
-                ("Lifts", "the emergency stop".to_string()),
+                ("Lifts", format!("emergency stop {}", self.stop_number)),
                 (
                     "Runs it cancelled",
                     format!("{} (they stay cancelled)", self.runs_cancelled_by_the_stop),
