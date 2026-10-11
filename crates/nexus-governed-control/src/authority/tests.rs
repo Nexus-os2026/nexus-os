@@ -3958,29 +3958,248 @@ mod stop_measurement {
         });
     }
 
+    /// What the controller reads and does. In T10 that is the real clock,
+    /// the real readiness signals and the real report slots (`Live`); in
+    /// T10b it is a script, with no thread and no real time. The decisions
+    /// are made by `control` alone, whichever drives it.
+    trait World {
+        /// One clock read.
+        fn now(&mut self) -> Nanos;
+        /// The readiness signals that have not come yet, by name.
+        fn not_ready(&mut self) -> Vec<&'static str>;
+        /// Releases the stopping thread.
+        fn release(&mut self);
+        /// Tells every thread to end.
+        fn end(&mut self);
+        /// Each tries one slot without waiting.
+        fn take_stop(&mut self) -> Option<StopReport>;
+        fn take_observer(&mut self) -> Option<ObserverReport>;
+        fn take_caller(&mut self, index: usize) -> Option<CallerReport>;
+        /// A competing thread's progress marker, if a call has set it.
+        fn progress(&mut self, index: usize) -> Option<Nanos>;
+        /// The wait between two looks.
+        fn pause(&mut self);
+        /// The fixed wait before the last look.
+        fn collection_wait(&mut self);
+    }
+
+    /// The real world of one sample.
+    struct Live<'a> {
+        signals: &'a Signals,
+        clock: Clock,
+        callers: usize,
+    }
+
+    impl World for Live<'_> {
+        fn now(&mut self) -> Nanos {
+            self.clock.now()
+        }
+
+        fn not_ready(&mut self) -> Vec<&'static str> {
+            self.signals.not_ready(self.callers)
+        }
+
+        fn release(&mut self) {
+            self.signals.release.store(true, Ordering::SeqCst);
+        }
+
+        fn end(&mut self) {
+            self.signals.end.store(true, Ordering::SeqCst);
+        }
+
+        fn take_stop(&mut self) -> Option<StopReport> {
+            self.signals.stop.try_take()
+        }
+
+        fn take_observer(&mut self) -> Option<ObserverReport> {
+            self.signals.observer.try_take()
+        }
+
+        fn take_caller(&mut self, index: usize) -> Option<CallerReport> {
+            self.signals.callers[index].try_take()
+        }
+
+        fn progress(&mut self, index: usize) -> Option<Nanos> {
+            let at = self.signals.progress[index].load(Ordering::SeqCst);
+            (at != NO_PROGRESS).then_some(at)
+        }
+
+        fn pause(&mut self) {
+            std::thread::sleep(POLL);
+        }
+
+        fn collection_wait(&mut self) {
+            std::thread::sleep(COLLECTION_WAIT);
+        }
+    }
+
+    /// What the controller took in one turn, before the clock read that
+    /// follows showed whether it was on time.
+    #[derive(Default)]
+    struct Turn {
+        stop: Option<StopReport>,
+        observer: Option<ObserverReport>,
+        callers: [Option<CallerReport>; CALLERS.len()],
+    }
+
+    /// Every readiness signal of a sample, by name.
+    fn every_signal(callers: usize) -> Vec<&'static str> {
+        let mut every = vec!["stopping thread", "observer"];
+        every.extend(CALLERS[..callers].iter().map(|&(name, _)| name));
+        every
+    }
+
     /// The controller's last look, one fixed second after it gave up: a
-    /// report found now is a late report, kept raw, and changes nothing.
-    fn collect_late(signals: &Signals, received: &mut Received) {
-        std::thread::sleep(COLLECTION_WAIT);
+    /// report found now, or first seen in a turn whose clock read was past
+    /// the deadline, is a late report, kept raw, and changes nothing.
+    fn collect_late(world: &mut impl World, received: &mut Received, seen: Turn) {
+        world.collection_wait();
         if received.stop.is_none() {
-            if let Some(stop) = signals.stop.try_take() {
+            if let Some(stop) = seen.stop.or_else(|| world.take_stop()) {
                 received.late.push(Late::Stop(stop));
             }
         }
         if received.observer.is_none() {
-            if let Some(observer) = signals.observer.try_take() {
+            if let Some(observer) = seen.observer.or_else(|| world.take_observer()) {
                 received.late.push(Late::Observer(observer));
             }
         }
         let mut late = Vec::new();
-        for (slot, caller) in signals.callers.iter().zip(&received.callers) {
+        for (index, (caller, seen)) in received.callers.iter().zip(seen.callers).enumerate() {
             if caller.report.is_none() {
-                if let Some(report) = slot.try_take() {
+                if let Some(report) = seen.or_else(|| world.take_caller(index)) {
                     late.push(Late::Caller(caller.name, report));
                 }
             }
         }
         received.late.extend(late);
+    }
+
+    /// The controller gives up at its reading `now`: it tells every thread
+    /// to end, keeps the progress markers of the threads it asked and has
+    /// not heard from, and takes its last look.
+    fn give_up(world: &mut impl World, received: &mut Received, now: Nanos, seen: Turn) {
+        received.readings.gave_up = Some(now);
+        world.end();
+        if received.stop.is_some() {
+            for (index, caller) in received.callers.iter_mut().enumerate() {
+                if caller.report.is_none() {
+                    caller.progress = world.progress(index);
+                }
+            }
+        }
+        collect_late(world, received, seen);
+    }
+
+    /// The controller: what it received within its bounded waits. It
+    /// joins nothing and never blocks on a slot.
+    fn control(
+        index: usize,
+        workload: Workload,
+        callers: usize,
+        world: &mut impl World,
+    ) -> Received {
+        let threads_started = world.now();
+        let mut received = Received {
+            index,
+            workload,
+            readings: Readings {
+                threads_started,
+                ..Readings::default()
+            },
+            not_ready: Vec::new(),
+            stop: None,
+            observer: None,
+            callers: CALLERS[..callers]
+                .iter()
+                .map(|&(name, _)| Caller {
+                    name,
+                    report: None,
+                    progress: None,
+                })
+                .collect(),
+            late: Vec::new(),
+        };
+        // An observation counts as on time only if a clock read made after
+        // it is not after the deadline. So in each turn the controller first
+        // looks, and only then reads the clock.
+        //
+        // Readiness, within its own deadline. A signal seen in a turn whose
+        // reading is past the deadline is not on time: the stopping thread
+        // is never released.
+        let readiness_deadline = threads_started.saturating_add(READINESS_WAIT);
+        let mut missing = every_signal(callers);
+        loop {
+            let not_ready = world.not_ready();
+            let now = world.now();
+            if now <= readiness_deadline {
+                missing = not_ready;
+                if missing.is_empty() {
+                    break;
+                }
+            }
+            if now >= readiness_deadline {
+                received.not_ready = missing;
+                give_up(world, &mut received, now, Turn::default());
+                return received;
+            }
+            world.pause();
+        }
+        // Completion, within 5 seconds of the release.
+        let released = world.now();
+        received.readings.released = Some(released);
+        world.release();
+        let deadline = released.saturating_add(COMPLETION_WAIT);
+        loop {
+            let mut seen = Turn::default();
+            if received.stop.is_none() {
+                seen.stop = world.take_stop();
+            }
+            if received.observer.is_none() {
+                seen.observer = world.take_observer();
+            }
+            if received.readings.asked_to_end.is_some() {
+                for (index, caller) in received.callers.iter().enumerate() {
+                    if caller.report.is_none() {
+                        seen.callers[index] = world.take_caller(index);
+                    }
+                }
+            }
+            let now = world.now();
+            if now > deadline {
+                // Nothing first seen in this turn is on time: the sample
+                // ends as it stood before it, and what was seen is late.
+                give_up(world, &mut received, now, seen);
+                return received;
+            }
+            if let Some(stop) = seen.stop {
+                received.stop = Some(stop);
+                received.readings.asked_to_end = Some(now);
+                world.end();
+            }
+            if seen.observer.is_some() {
+                received.observer = seen.observer;
+            }
+            for (caller, report) in received.callers.iter_mut().zip(seen.callers) {
+                if report.is_some() {
+                    caller.report = report;
+                }
+            }
+            if received.stop.is_some()
+                && received.observer.is_some()
+                && received
+                    .callers
+                    .iter()
+                    .all(|caller| caller.report.is_some())
+            {
+                return received;
+            }
+            if now >= deadline {
+                give_up(world, &mut received, now, Turn::default());
+                return received;
+            }
+            world.pause();
+        }
     }
 
     /// One sample: its threads (detached, never joined), the stop, and what
@@ -4021,90 +4240,12 @@ mod stop_measurement {
             let (registry, signals) = (registry.clone(), signals.clone());
             std::thread::spawn(move || competing(registry, signals, clock, me));
         }
-        let threads_started = clock.now();
-        let mut received = Received {
-            index,
-            workload,
-            readings: Readings {
-                threads_started,
-                ..Readings::default()
-            },
-            not_ready: Vec::new(),
-            stop: None,
-            observer: None,
-            callers: CALLERS[..callers]
-                .iter()
-                .map(|&(name, _)| Caller {
-                    name,
-                    report: None,
-                    progress: None,
-                })
-                .collect(),
-            late: Vec::new(),
+        let mut world = Live {
+            signals: &signals,
+            clock,
+            callers,
         };
-        // Readiness, within its own deadline.
-        loop {
-            let not_ready = signals.not_ready(callers);
-            if not_ready.is_empty() {
-                break;
-            }
-            if clock.now() >= threads_started.saturating_add(READINESS_WAIT) {
-                received.readings.gave_up = Some(clock.now());
-                signals.end.store(true, Ordering::SeqCst);
-                received.not_ready = not_ready;
-                collect_late(&signals, &mut received);
-                return received;
-            }
-            std::thread::sleep(POLL);
-        }
-        // Completion, within 5 seconds of the release.
-        let released = clock.now();
-        received.readings.released = Some(released);
-        signals.release.store(true, Ordering::SeqCst);
-        let deadline = released.saturating_add(COMPLETION_WAIT);
-        loop {
-            if received.stop.is_none() {
-                received.stop = signals.stop.try_take();
-                if received.stop.is_some() {
-                    received.readings.asked_to_end = Some(clock.now());
-                    signals.end.store(true, Ordering::SeqCst);
-                }
-            }
-            if received.observer.is_none() {
-                received.observer = signals.observer.try_take();
-            }
-            if received.readings.asked_to_end.is_some() {
-                for (slot, caller) in signals.callers.iter().zip(&mut received.callers) {
-                    if caller.report.is_none() {
-                        caller.report = slot.try_take();
-                    }
-                }
-            }
-            if received.stop.is_some()
-                && received.observer.is_some()
-                && received
-                    .callers
-                    .iter()
-                    .all(|caller| caller.report.is_some())
-            {
-                return received;
-            }
-            if clock.now() >= deadline {
-                received.readings.gave_up = Some(clock.now());
-                signals.end.store(true, Ordering::SeqCst);
-                if received.stop.is_some() {
-                    for (marker, caller) in signals.progress.iter().zip(&mut received.callers) {
-                        if caller.report.is_none() {
-                            let at = marker.load(Ordering::SeqCst);
-                            caller.progress = (at != NO_PROGRESS).then_some(at);
-                        }
-                    }
-                }
-                collect_late(&signals, &mut received);
-                return received;
-            }
-            std::thread::sleep(POLL);
-        }
+        control(index, workload, callers, &mut world)
     }
 
     /// The local-model workloads loaded or running now: every process whose
@@ -4782,6 +4923,317 @@ sample 2 busy: stop return not observed; participant report not requested (open-
         assert_eq!(
             split.of(Group::BusyWithoutOverlap, Number::OverlappingCallerLatency),
             Summary::default()
+        );
+    }
+
+    // -- T10b -------------------------------------------------------------
+
+    const SECOND: Nanos = 1_000_000_000;
+    /// Both of T10b's deadlines: threads started, and released, at 100 ns.
+    const DEADLINE: Nanos = 100 + 5 * SECOND;
+    const STOP_IN_TIME: StopReport = StopReport {
+        start: 1_000,
+        ret: 2_000,
+    };
+    const OBSERVER_IN_TIME: ObserverReport = ObserverReport { seen: Some(1_500) };
+
+    /// T10b's world: a script, with no thread and no real time. The clock
+    /// starts at 100 ns and stands still except where the script moves it:
+    /// a pause moves it one second on, or, for a pause begun at a time
+    /// `pauses` names, to the time given there; the taking of the report
+    /// `stall` names moves it to the time given there, as if the
+    /// controller lost its processor right after that taking. A signal or
+    /// a report is there from its time on.
+    struct Script {
+        t: Nanos,
+        ready: Vec<(&'static str, Nanos)>,
+        stop: Option<(Nanos, StopReport)>,
+        observer: Option<(Nanos, ObserverReport)>,
+        callers: Vec<Option<(Nanos, CallerReport)>>,
+        progress: Vec<Option<Nanos>>,
+        pauses: Vec<(Nanos, Nanos)>,
+        stall: Option<(&'static str, Nanos)>,
+        released: bool,
+        ended: bool,
+    }
+
+    impl Script {
+        /// Every readiness signal there at 100 ns; no report anywhere.
+        fn new(callers: usize) -> Self {
+            let mut ready = vec![("stopping thread", 100), ("observer", 100)];
+            ready.extend(CALLERS[..callers].iter().map(|&(name, _)| (name, 100)));
+            Self {
+                t: 100,
+                ready,
+                stop: None,
+                observer: None,
+                callers: vec![None; callers],
+                progress: vec![None; callers],
+                pauses: Vec::new(),
+                stall: None,
+                released: false,
+                ended: false,
+            }
+        }
+
+        /// A report taken: then the stall, if the script puts one after
+        /// this taking.
+        fn taken<T>(&mut self, name: &'static str, report: Option<T>) -> Option<T> {
+            if report.is_some() {
+                if let Some((_, to)) = self.stall.take_if(|(after, _)| *after == name) {
+                    self.t = to;
+                }
+            }
+            report
+        }
+    }
+
+    impl World for Script {
+        fn now(&mut self) -> Nanos {
+            self.t
+        }
+
+        fn not_ready(&mut self) -> Vec<&'static str> {
+            let t = self.t;
+            self.ready
+                .iter()
+                .filter(|&&(_, at)| at > t)
+                .map(|&(name, _)| name)
+                .collect()
+        }
+
+        fn release(&mut self) {
+            self.released = true;
+        }
+
+        fn end(&mut self) {
+            self.ended = true;
+        }
+
+        fn take_stop(&mut self) -> Option<StopReport> {
+            let t = self.t;
+            let report = self.stop.take_if(|(at, _)| *at <= t).map(|(_, r)| r);
+            self.taken("stop", report)
+        }
+
+        fn take_observer(&mut self) -> Option<ObserverReport> {
+            let t = self.t;
+            let report = self.observer.take_if(|(at, _)| *at <= t).map(|(_, r)| r);
+            self.taken("observer", report)
+        }
+
+        fn take_caller(&mut self, index: usize) -> Option<CallerReport> {
+            let t = self.t;
+            let report = self.callers[index]
+                .take_if(|(at, _)| *at <= t)
+                .map(|(_, r)| r);
+            self.taken(CALLERS[index].0, report)
+        }
+
+        fn progress(&mut self, index: usize) -> Option<Nanos> {
+            self.progress[index]
+        }
+
+        fn pause(&mut self) {
+            let from = self.t;
+            self.t = self
+                .pauses
+                .iter()
+                .find(|&&(begun, _)| begun == from)
+                .map_or(from + SECOND, |&(_, to)| to);
+        }
+
+        fn collection_wait(&mut self) {
+            self.t += SECOND;
+        }
+    }
+
+    /// RS-01 T10b (finding MSR-01): the controller's own decisions, driven
+    /// by scripted schedules. An observation is on time only if a clock read
+    /// made after it is not after the deadline. Each schedule runs on its
+    /// own; every one that fails is named at the end. Nothing here runs a
+    /// thread or reads a clock.
+    #[test]
+    fn rs01_t10b_the_controller_accepts_nothing_after_its_deadline() {
+        let schedules: [(&str, fn()); 5] = [
+            ("S1", || {
+                use Outcome::*;
+                // Completion: the stop's report, the observer's and three of
+                // four caller reports in time. The fourth is not there
+                // before the deadline; the clock passes the deadline while
+                // the controller pauses; then the fourth is there.
+                let fourth = report(&[call(Method::Check, 1_500, 1_700)]);
+                let mut w = Script::new(4);
+                w.stop = Some((SECOND, STOP_IN_TIME));
+                w.observer = Some((SECOND, OBSERVER_IN_TIME));
+                for slot in &mut w.callers[..3] {
+                    *slot = Some((2 * SECOND, report(&[])));
+                }
+                w.callers[3] = Some((DEADLINE + 1_000, fourth.clone()));
+                w.progress[3] = Some(1_900);
+                w.pauses.push((4 * SECOND + 100, DEADLINE + 2_000));
+                let r = control(2, Workload::Busy, 4, &mut w);
+                let s = numbers(&r);
+                assert!(
+                    !s.complete(),
+                    "S1 (completion): a report first there after the deadline completed the sample: {r:?}"
+                );
+                assert_eq!(
+                    s.results,
+                    [ParticipantReportMissing {
+                        participant: "check-2",
+                        last_start: Some(1_900)
+                    }],
+                    "S1 (completion): the result names the missing participant"
+                );
+                assert_eq!(
+                    r.readings,
+                    Readings {
+                        threads_started: 100,
+                        released: Some(100),
+                        asked_to_end: Some(SECOND + 100),
+                        gave_up: Some(DEADLINE + 2_000),
+                    },
+                    "S1 (completion): gave up has a reading"
+                );
+                assert_eq!(s.waiting_time, Some(5 * SECOND + 2_000));
+                assert_eq!(r.callers[3].report, None);
+                assert_eq!(
+                    r.late,
+                    [Late::Caller("check-2", fourth)],
+                    "S1 (completion): the fourth report is a late report"
+                );
+                assert!(
+                    s.overlaps.iter().all(|overlap| overlap.caller != "check-2"),
+                    "S1 (completion): the late report entered a number: {:?}",
+                    s.overlaps
+                );
+                assert!(w.released && w.ended);
+            }),
+            ("S2", || {
+                use Outcome::*;
+                use Value::Unavailable;
+                // Readiness: the observer's signal is first there after the
+                // readiness deadline, which the clock passes while the
+                // controller pauses.
+                let mut w = Script::new(0);
+                w.ready[1].1 = DEADLINE + 1_000;
+                w.pauses.push((4 * SECOND + 100, DEADLINE + 2_000));
+                let r = control(1, Workload::Idle, 0, &mut w);
+                let s = numbers(&r);
+                assert_eq!(
+                    s.results,
+                    [ReadinessNotReported(vec!["observer"])],
+                    "S2 (readiness): a signal first there after the readiness deadline was accepted: {r:?}"
+                );
+                assert!(
+                    !w.released,
+                    "S2 (readiness): the stopping thread was released"
+                );
+                assert_eq!(
+                    r.readings,
+                    Readings {
+                        threads_started: 100,
+                        released: None,
+                        asked_to_end: None,
+                        gave_up: Some(DEADLINE + 2_000),
+                    }
+                );
+                assert_eq!(s.waiting_time, Some(5 * SECOND + 2_000));
+                assert_eq!(
+                    (
+                        s.observed_flag_latency,
+                        s.total,
+                        s.flag_latency_bound,
+                        s.observation_to_return
+                    ),
+                    (Unavailable, Unavailable, Unavailable, Unavailable)
+                );
+                assert!(r.stop.is_none() && r.observer.is_none() && r.late.is_empty());
+                assert!(w.ended);
+            }),
+            ("S3", || {
+                use Outcome::*;
+                use Value::Unavailable;
+                // The processor lost inside one turn: the observer's report
+                // is there before the deadline, but the clock read that
+                // follows its taking returns a time after the deadline.
+                let mut w = Script::new(0);
+                w.stop = Some((SECOND, STOP_IN_TIME));
+                w.observer = Some((4 * SECOND, OBSERVER_IN_TIME));
+                w.stall = Some(("observer", DEADLINE + 1));
+                let r = control(1, Workload::Idle, 0, &mut w);
+                let s = numbers(&r);
+                assert!(
+                    !s.complete(),
+                    "S3 (a turn across the deadline): a report not shown to be on time completed the sample: {r:?}"
+                );
+                assert_eq!(s.results, [ObserverResultMissing]);
+                assert_eq!(r.observer, None);
+                assert_eq!(
+                    r.late,
+                    [Late::Observer(OBSERVER_IN_TIME)],
+                    "S3 (a turn across the deadline): the report is kept as a late report"
+                );
+                assert_eq!(r.readings.gave_up, Some(DEADLINE + 1));
+                assert_eq!(s.observed_flag_latency, Unavailable);
+            }),
+            ("S4", || {
+                use Outcome::*;
+                use Value::Of;
+                // Everything in time.
+                let mut w = Script::new(4);
+                w.stop = Some((SECOND, STOP_IN_TIME));
+                w.observer = Some((SECOND, OBSERVER_IN_TIME));
+                for slot in &mut w.callers {
+                    *slot = Some((2 * SECOND, report(&[call(Method::Open, 1_500, 1_700)])));
+                }
+                let r = control(2, Workload::Busy, 4, &mut w);
+                let s = numbers(&r);
+                assert_eq!(s.results, [Complete], "S4 (everything in time): {r:?}");
+                assert_eq!(
+                    r.readings,
+                    Readings {
+                        threads_started: 100,
+                        released: Some(100),
+                        asked_to_end: Some(SECOND + 100),
+                        gave_up: None,
+                    }
+                );
+                assert!(r.late.is_empty());
+                assert_eq!(s.waiting_time, None);
+                assert_eq!((s.total, s.overlaps.len()), (Of(1_000), 4));
+                assert!(w.released);
+            }),
+            ("S5", || {
+                use Outcome::*;
+                // The edge: the clock read that follows the last taking
+                // equals the deadline exactly.
+                let mut w = Script::new(0);
+                w.stop = Some((SECOND, STOP_IN_TIME));
+                w.observer = Some((4 * SECOND + 500, OBSERVER_IN_TIME));
+                let r = control(1, Workload::Idle, 0, &mut w);
+                let s = numbers(&r);
+                assert_eq!(
+                    s.results,
+                    [Complete],
+                    "S5 (the edge): a clock read equal to the deadline is on time: {r:?}"
+                );
+                assert_eq!(r.observer, Some(OBSERVER_IN_TIME));
+                assert_eq!(r.readings.gave_up, None);
+                assert!(r.late.is_empty());
+            }),
+        ];
+        let mut failed = Vec::new();
+        for (name, schedule) in schedules {
+            if std::panic::catch_unwind(schedule).is_err() {
+                failed.push(name);
+            }
+        }
+        assert!(
+            failed.is_empty(),
+            "T10b: these schedules failed: {}",
+            failed.join(", ")
         );
     }
 }
