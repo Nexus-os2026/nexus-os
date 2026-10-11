@@ -2142,6 +2142,14 @@ fn rs01_t1_a_stop_during_the_resume_dialog_is_not_lifted() {
     assert!(records_of(f.evidence.records(), EvidencePhase::Resumed).is_empty());
     assert_eq!(resumed, Err(AuthorityError::ResumeSuperseded));
     assert_eq!(dialog.shown()[0].stop_number, 1);
+    assert!(
+        dialog.shown()[0]
+            .text()
+            .header
+            .contains(&("Lifts", "emergency stop 1".to_string())),
+        "the dialog does not name stop 1:\n{}",
+        dialog.shown()[0].message()
+    );
 }
 
 /// RS-01 T2: a stop that comes while the Resumed record is written is not
@@ -2543,10 +2551,44 @@ fn function_body(source: &str, name: &str) -> Option<String> {
     None
 }
 
+/// A character of a name or a keyword.
+fn word(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// `body` without its whitespace, except one space where whitespace
+/// separates two word characters (`if self`, `let mut runs`): a keyword
+/// stays a word of its own and is never read as the start of a name.
+fn squeezed(body: &str) -> String {
+    let mut out = String::with_capacity(body.len());
+    let mut space = false;
+    for c in body.chars() {
+        if c.is_whitespace() {
+            space = true;
+            continue;
+        }
+        if space && word(c) && out.chars().next_back().is_some_and(word) {
+            out.push(' ');
+        }
+        space = false;
+        out.push(c);
+    }
+    out
+}
+
+/// Where `path`, which starts with `self.`, occurs in `text` with `self` a
+/// whole word: whatever comes before it, but not the end of a longer name
+/// (`myself.`).
+fn on_self<'a>(text: &'a str, path: &'a str) -> impl Iterator<Item = usize> + 'a {
+    text.match_indices(path)
+        .map(|(at, _)| at)
+        .filter(|at| !text[..*at].chars().next_back().is_some_and(word))
+}
+
 /// T8 (2): the acquisition is in a `let` statement that is a direct
 /// statement of the body, and that statement binds the guard itself to a
-/// name (not a temporary, not inside an inner block or expression).
-/// `text` has no whitespace.
+/// name (not a temporary, not inside an inner block or expression, not by
+/// `ref`). `text` is squeezed.
 fn bound_by_a_direct_let(text: &str) -> Result<(), String> {
     let at = text.find(ACQUIRE).ok_or("no acquisition")?;
     let b = text.as_bytes();
@@ -2587,17 +2629,16 @@ fn bound_by_a_direct_let(text: &str) -> Result<(), String> {
         end += 1;
     }
     let statement = &text[statement..(end + 1).min(text.len())];
-    let named = |name: &str| {
-        name != "_"
-            && !name.is_empty()
-            && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+    let named = |binding: &str| {
+        let name = binding.strip_prefix("mut ").unwrap_or(binding);
+        name != "_" && !name.is_empty() && name.chars().all(word)
     };
     for suffix in [
         "=self.runs.lock().unwrap_or_else(PoisonError::into_inner);",
         "=self.runs.lock().expect(\"runs\");",
     ] {
         if let Some(name) = statement
-            .strip_prefix("let")
+            .strip_prefix("let ")
             .and_then(|rest| rest.strip_suffix(suffix))
         {
             if named(name) {
@@ -2606,7 +2647,7 @@ fn bound_by_a_direct_let(text: &str) -> Result<(), String> {
         }
     }
     if let Some((name, _)) = statement
-        .strip_prefix("letOk(")
+        .strip_prefix("let Ok(")
         .and_then(|rest| rest.split_once(")=self.runs.lock()else{"))
     {
         if named(name) && statement.ends_with("};") {
@@ -2618,22 +2659,19 @@ fn bound_by_a_direct_let(text: &str) -> Result<(), String> {
     ))
 }
 
-/// Every `self.name(` in `text` (no whitespace): a method of `self` called.
+/// Every `self.name(` in `text` (squeezed): a method of `self` called,
+/// whatever comes before `self` (a keyword, an operator, a bracket), also
+/// as `self.name::<..>(` and with a raw name `self.r#name(`. A field
+/// followed by a method (`self.runs.lock()`) is not a call on `self`.
 fn calls_on_self(text: &str) -> Vec<String> {
-    let b = text.as_bytes();
     let mut calls = Vec::new();
-    for (at, _) in text.match_indices("self.") {
-        if at > 0 && (b[at - 1].is_ascii_alphanumeric() || b[at - 1] == b'_') {
-            continue;
-        }
+    for at in on_self(text, "self.") {
         let rest = &text[at + "self.".len()..];
-        let name: String = rest
-            .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-            .collect();
-        let after = &rest[name.len()..];
+        let raw = if rest.starts_with("r#") { "r#" } else { "" };
+        let name: String = rest[raw.len()..].chars().take_while(|c| word(*c)).collect();
+        let after = &rest[raw.len() + name.len()..];
         if !name.is_empty() && (after.starts_with('(') || after.starts_with("::<")) {
-            calls.push(format!("self.{name}("));
+            calls.push(format!("self.{raw}{name}("));
         }
     }
     calls
@@ -2641,7 +2679,7 @@ fn calls_on_self(text: &str) -> Vec<String> {
 
 /// Which of T8's criteria (1) to (5) a function body fails.
 fn one_hold(body: &str, ordered: bool) -> Vec<String> {
-    let text: String = body.chars().filter(|c| !c.is_whitespace()).collect();
+    let text = squeezed(body);
     let mut failures = Vec::new();
     let acquisitions = text.matches(ACQUIRE).count();
     if acquisitions != 1 {
@@ -2660,8 +2698,8 @@ fn one_hold(body: &str, ordered: bool) -> Vec<String> {
     if ordered {
         let found = (
             text.find(ACQUIRE),
-            text.find("self.closed.load("),
-            text.find("self.stopped.store(false"),
+            on_self(&text, "self.closed.load(").next(),
+            on_self(&text, "self.stopped.store(false").next(),
         );
         if !matches!(found, (Some(lock), Some(closed), Some(clear)) if lock < closed && closed < clear)
         {
@@ -2673,6 +2711,21 @@ fn one_hold(body: &str, ordered: bool) -> Vec<String> {
     failures
 }
 
+/// The stop before RS-01, `stop_all` as it is at commit 862a11ce: the flag
+/// set before the lock, the ids read under a temporary guard, and each run
+/// cancelled through `self.cancel`, which takes the lock again. T8's checker
+/// must fail it on (2) and (4), and on nothing else.
+const STOP_BEFORE_RS01: &str = r#"
+    pub(crate) fn stop_all(&self) -> usize {
+        self.stopped.store(true, Ordering::SeqCst);
+        let ids: Vec<RunId> = self.runs.lock().expect("runs").keys().copied().collect();
+        let cancelled = ids.into_iter().filter(|id| self.cancel(*id)).count();
+        self.cancelled_by_stop
+            .fetch_add(cancelled, Ordering::SeqCst);
+        cancelled
+    }
+"#;
+
 /// RS-01 T8, a tripwire on the source text of `run.rs` (comments removed):
 /// the stop and the compare-and-clear each take the runs lock once, bind
 /// its guard by a direct `let`, drop nothing and call no method on `self`;
@@ -2681,6 +2734,15 @@ fn one_hold(body: &str, ordered: bool) -> Vec<String> {
 /// the proof (§8); this only catches a change of its shape.
 #[test]
 fn rs01_t8_the_stop_and_the_compare_and_clear_each_hold_the_runs_lock_once() {
+    let before = function_body(&without_comments(STOP_BEFORE_RS01), "stop_all")
+        .expect("the stop before RS-01 has a body");
+    let reported = one_hold(&before, false);
+    let criteria: Vec<&str> = reported.iter().map(|failure| &failure[..3]).collect();
+    assert_eq!(
+        criteria,
+        ["(2)", "(4)"],
+        "the stop before RS-01: {reported:#?}"
+    );
     let source = without_comments(include_str!("run.rs"));
     let mut failures = Vec::new();
     for (function, ordered) in [("stop_all", false), ("lift", true)] {
