@@ -1,0 +1,526 @@
+# RS-01 mutation audit: the workflow, and the script's launcher.
+# Reference: P3-C11-RS01-MUTATION-AUDIT-01 / R4, execution proposal.
+# This text is run only if the First Architect accepts the script and this text,
+# and the Owner separately authorises these exact bytes. It then lives at
+#   .github/workflows/rs01-mutation-audit.yml
+# on one new branch, audit/p3-c11-rs01-mutation-01, whose single commit has one
+# parent, the candidate, and adds two files: this one and
+# audit/rs01/rs01_mutation_audit.py.
+# Pushing that branch once starts one run. No workflow of the candidate is
+# triggered by a push to audit/** (ci.yml and audit.yml: main; ci-fast-local.yml:
+# implement/**, repair/**; local-runner-smoke.yml: one other branch; release.yml:
+# tags; ci-phase2-linux-sandbox.yml and ci-portability.yml: manual only).
+# No repair and no second push. Whether a run that ended in set-up, before the
+# step "The campaign", may be started again unchanged is for the First Architect
+# and the Owner to rule; this text does not do it.
+#
+# This file is also the script's launcher. The script refuses a place that was
+# not prepared as the step "The campaign" prepares it, and copies this file's
+# bytes into the receipts.
+name: RS-01 mutation audit (one-off)
+
+on:
+  push:
+    branches:
+      - "audit/p3-c11-rs01-mutation-01"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rs01-mutation-audit-01
+  cancel-in-progress: false
+
+env:
+  CANDIDATE: e71b982b420a51fd131aeb50367aca7b7477a3e6
+  TREE: 3e023d583914ee37b3bfa0089eb7ddf341e5db3c
+  SCRIPT: audit/rs01/rs01_mutation_audit.py
+  SCRIPT_SHA256: 3e43667d5db2c00030a973c3504c2f03e4e8d7a20801869128532f4590a9f297
+  WORKFLOW: .github/workflows/rs01-mutation-audit.yml
+  BASE: /mnt/rs01-audit
+  AUDIT_USER: rs01audit
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    # The outermost limit only. The script binds every step to its own budget of
+    # 5 h 15 min and sets an alarm at it; the campaign step ends everything
+    # 10 min after that; the rest is set-up. GitHub's limit for a job is 6 h.
+    timeout-minutes: 355
+    steps:
+      - name: Checkout the audit commit and its parent, without credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Identity of the commit, the candidate, the script and this file
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          # Exactly one parent, read from the commit itself, and it is the candidate.
+          parents="$(git cat-file -p HEAD | sed -n '1,/^$/p' | sed -n 's/^parent //p')"
+          if [[ "$(printf '%s\n' "$parents" | wc -l)" != "1" || "$parents" != "$CANDIDATE" ]]; then
+            echo "::error::the audit commit's parents are not exactly the candidate: $parents"
+            exit 1
+          fi
+          test "$(git rev-parse HEAD^)" = "$CANDIDATE"
+          test "$(git rev-parse "$CANDIDATE^{tree}")" = "$TREE"
+          changed="$(git diff --name-status HEAD^ HEAD | LC_ALL=C sort)"
+          expected="$(printf 'A\t%s\nA\t%s\n' "$WORKFLOW" "$SCRIPT" | LC_ALL=C sort)"
+          if [[ "$changed" != "$expected" ]]; then
+            echo "::error::the audit commit changes more than its two files"
+            echo "$changed"
+            exit 1
+          fi
+          echo "$SCRIPT_SHA256  $SCRIPT" | sha256sum -c -
+          workflow_bytes="$(stat -c %s "$WORKFLOW")"
+          workflow_sha256="$(sha256sum "$WORKFLOW" | cut -d' ' -f1)"
+          workflow_blob="$(git rev-parse "HEAD:$WORKFLOW")"
+          {
+            echo "Audit commit: \`$GITHUB_SHA\` (one parent: the candidate \`$CANDIDATE\`, tree \`$TREE\`)"
+            echo "Script: \`$SCRIPT\` sha256 \`$SCRIPT_SHA256\`"
+            echo "This workflow file: \`$WORKFLOW\` $workflow_bytes bytes, sha256 \`$workflow_sha256\`, blob \`$workflow_blob\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The same packages as ci.yml's test-linux job, so that the build finds what run 38168538703 found.
+      - name: Install Linux system dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev \
+            glib-2.0 \
+            pkg-config \
+            xvfb \
+            espeak-ng
+
+      - name: Install Rust 1.94.0
+        uses: dtolnay/rust-toolchain@4be4450ce7d4f1b9d3d643f42e0fe4124db1d31d # 1.94.0
+
+      # The audit's own user, in no group but its own. Two filesystems of a fixed
+      # size, each wholly allocated on the host's disk: one for the source and the
+      # receipts, one for what a build writes. A build that fills its own cannot take
+      # the receipts' space. Nothing may release that allocation: formatting neither
+      # discards nor leaves inode tables to be zeroed later (which on a loop device
+      # can punch holes); each image is allocated again after formatting, which only
+      # fills holes; and discard is turned off on each loop device before it is
+      # mounted, so no later trim reaches the image. Every byte allocated by the first
+      # fallocate must still be allocated before the campaign. Any command here that
+      # fails ends the job: none is ignored.
+      #
+      # 34 GiB are allocated. A hosted runner does not promise that much free
+      # space. If less than 40 GiB is free, the preinstalled tools that this job
+      # never uses are removed first (this machine is discarded after the job).
+      # If that is still not enough, the job ends here, before anything is built.
+      - name: The audit's user, its two filesystems, and the export of the candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo useradd --system --user-group --no-create-home --home-dir /nonexistent \
+            --shell /usr/sbin/nologin "$AUDIT_USER"
+          test "$(id -u "$AUDIT_USER")" != "0"
+          test "$(id -G "$AUDIT_USER")" = "$(id -g "$AUDIT_USER")"
+          sudo mkdir -p "$BASE/img" "$BASE/evidence" "$BASE/build" "$BASE/view"
+          need_kb=$(( 40 * 1024 * 1024 ))
+          free_kb="$(df --output=avail -k "$BASE" | tail -n 1 | tr -d ' ')"
+          echo "Free at $BASE: $free_kb KiB; needed: $need_kb KiB."
+          if (( free_kb < need_kb )); then
+            echo "Removing preinstalled tools that this job does not use."
+            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+              /opt/hostedtoolcache /usr/share/swift /usr/local/share/boost
+            free_kb="$(df --output=avail -k "$BASE" | tail -n 1 | tr -d ' ')"
+            echo "Free at $BASE now: $free_kb KiB."
+          fi
+          if (( free_kb < need_kb )); then
+            echo "::error::$BASE has $free_kb KiB free; $need_kb KiB is needed for the two filesystems"
+            exit 1
+          fi
+          for pair in evidence:10G build:24G; do
+            name="${pair%%:*}"
+            size="${pair##*:}"
+            image="$BASE/img/$name.img"
+            sudo fallocate -l "$size" "$image"
+            reserved=$(( $(stat -c %b "$image") * $(stat -c %B "$image") ))
+            sudo mkfs.ext4 -q -F -m 0 -E nodiscard,lazy_itable_init=0,lazy_journal_init=0 "$image"
+            sudo fallocate -l "$size" "$image"
+            allocated=$(( $(stat -c %b "$image") * $(stat -c %B "$image") ))
+            echo "$image: $(stat -c %s "$image") bytes; allocated $reserved before formatting, $allocated after."
+            if (( allocated < reserved )); then
+              echo "::error::$image lost allocation in formatting: $allocated of $reserved bytes"
+              exit 1
+            fi
+            echo "RESERVED_$name=$reserved" >> "$GITHUB_ENV"
+            device="$(sudo losetup --find --show "$image")"
+            echo 0 | sudo tee "/sys/block/$(basename "$device")/queue/discard_max_bytes" > /dev/null
+            test "$(cat "/sys/block/$(basename "$device")/queue/discard_max_bytes")" = "0"
+            sudo mount -o nosuid,nodev "$device" "$BASE/$name"
+          done
+          sudo rm -rf "$BASE/evidence/lost+found" "$BASE/build/lost+found"
+          sudo mkdir "$BASE/evidence/src" "$BASE/evidence/out" "$BASE/evidence/host-side" \
+            "$BASE/build/work" "$BASE/build/cargo-home"
+          git archive --format=tar "$CANDIDATE" \
+            | sudo sh -c 'umask 022 && exec tar -x --no-same-owner --no-same-permissions -C "$1"' sh "$BASE/evidence/src"
+          sudo chown -R "$AUDIT_USER:$AUDIT_USER" \
+            "$BASE/evidence/src" "$BASE/evidence/out" "$BASE/build/work" "$BASE/build/cargo-home"
+          # With the export in place, every log at its limit must still fit (the script requires
+          # a little under 7.6 GiB free there and would refuse to start without it).
+          evidence_free_kb="$(df --output=avail -k "$BASE/evidence" | tail -n 1 | tr -d ' ')"
+          if (( evidence_free_kb < 8 * 1024 * 1024 )); then
+            echo "::error::$BASE/evidence has $evidence_free_kb KiB free after the export; 8 GiB is needed"
+            exit 1
+          fi
+          cargo_path="$(rustup which --toolchain 1.94.0 cargo)"
+          toolchain_root="$(dirname "$(dirname "$cargo_path")")"
+          test -x "$toolchain_root/bin/cargo"
+          test -x "$toolchain_root/bin/rustc"
+          echo "TOOLCHAIN_ROOT=$toolchain_root" >> "$GITHUB_ENV"
+
+      - name: The script's own checks, and the text check of the export (nothing is built)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I "$SCRIPT" selftest
+          python3 -I "$SCRIPT" verify --src "$BASE/evidence/src"
+
+      # The only step that uses the network for Cargo's inputs. Only the downloaded crate
+      # files and the index are handed over: the script checks each crate file against
+      # Cargo.lock, refuses anything else in the cache, and has Cargo unpack them itself.
+      # (The system packages and the toolchain were installed above, as hosted CI installs them.)
+      - name: Fetch the dependencies named by Cargo.lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          fetch="$RUNNER_TEMP/rs01-fetch"
+          mkdir -p "$fetch/home" "$fetch/cargo-home"
+          cd "$BASE/evidence/src"
+          env -i HOME="$fetch/home" PATH="$TOOLCHAIN_ROOT/bin:/usr/bin:/bin" CARGO_HOME="$fetch/cargo-home" \
+            "$TOOLCHAIN_ROOT/bin/cargo" fetch --locked --target x86_64-unknown-linux-gnu
+          cd /
+          sudo mkdir "$BASE/build/cargo-home/registry"
+          sudo cp -R "$fetch/cargo-home/registry/cache" "$fetch/cargo-home/registry/index" \
+            "$BASE/build/cargo-home/registry/"
+          sudo chown -R "$AUDIT_USER:$AUDIT_USER" "$BASE/build/cargo-home"
+          rm -rf "$fetch"
+
+      # What the script is started in, and checks for itself before it builds anything:
+      #   - its own user, in no other group, with no capability; not root;
+      #   - new network, process, IPC, host-name and mount namespaces: loopback only, no
+      #     other process in sight, and a filesystem made here from nothing. In it are,
+      #     read-only: /usr, four entries of /etc, four devices, the CPU list, the
+      #     toolchain's own folder, the script and this file. Writable: the two audit
+      #     filesystems and the kernel's /proc, and nothing else. The rest of the checkout,
+      #     the rest of /home, /run, /var, /tmp, /opt and every socket of the host are not
+      #     in it at all. A folder of /usr that the audit's user could enter but not list
+      #     is covered by an empty one, so that nothing in it can be reached unseen;
+      #   - three canaries on the host, outside that filesystem: a listening socket at a
+      #     path, another under an abstract name, and a file that belongs to the audit's
+      #     own user. From inside, each must be out of reach. Afterwards this step checks,
+      #     on the host, that the listener is still alive and that nothing reached them;
+      #   - no crash can start a program on the host or hand a dump to a host service: the
+      #     host's core_pattern is set to the plain name "core" (this machine is discarded
+      #     after the job), and the core-size limit is 1, soft and hard, which no process
+      #     there can raise. The script refuses to start unless the pattern is exactly
+      #     "core" and the hard limit at most 1, reads the pattern again before every case
+      #     and at the end, and this step reads it again afterwards. A change made and
+      #     undone between two of those readings would not be seen;
+      #   - afterwards, the allocation of the two images is recorded (not judged).
+      # Docker is not stopped: the argument no longer depends on it.
+      - name: The campaign
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The two files are still the commit's, byte for byte, now that other steps have run.
+          echo "$SCRIPT_SHA256  $SCRIPT" | sha256sum -c -
+          test "$(git hash-object --no-filters "$SCRIPT")" = "$(git rev-parse "HEAD:$SCRIPT")"
+          test "$(git hash-object --no-filters "$WORKFLOW")" = "$(git rev-parse "HEAD:$WORKFLOW")"
+          cd /
+          audit_uid="$(id -u "$AUDIT_USER")"
+          audit_gid="$(id -g "$AUDIT_USER")"
+          host="$RUNNER_TEMP/rs01-host-side"
+          mkdir -p "$host"
+
+          # The canaries, and a control for each socket: on the host, the audit's user can reach them.
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0755 /run/rs01-audit-canary
+          sudo install -d -o "$audit_uid" -g "$audit_gid" -m 0777 /var/tmp/rs01-audit-canary
+          sudo install -o "$audit_uid" -g "$audit_gid" -m 0666 /dev/null /var/tmp/rs01-audit-canary/file
+          cat > "$host/listener.py" <<'LISTENER'
+          import os, selectors, socket, sys
+          path, name, log = sys.argv[1:4]
+          selector = selectors.DefaultSelector()
+          for label, address in (("path", path), ("abstract", "\0" + name)):
+              listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+              listener.bind(address)
+              listener.listen(16)
+              selector.register(listener, selectors.EVENT_READ, label)
+          os.chmod(path, 0o777)
+          with open(log, "a") as handle:
+              handle.write("listening\n")
+          while True:
+              for key, _events in selector.select():
+                  connection, _address = key.fileobj.accept()
+                  connection.close()
+                  with open(log, "a") as handle:
+                      handle.write("a connection on the %s socket\n" % key.data)
+          LISTENER
+          reach_the_canaries() {
+            local address
+            for address in /run/rs01-audit-canary/socket '\0rs01-audit-canary'; do
+              sudo setpriv --reuid "$audit_uid" --regid "$audit_gid" --clear-groups python3 -I -c \
+                'import socket, sys; s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1].replace("\\0", "\0")); s.close()' \
+                "$address"
+            done
+          }
+          log_is() {
+            for _ in $(seq 1 50); do
+              if cmp -s "$host/canary.log" "$1"; then return 0; fi
+              sleep 0.2
+            done
+            return 1
+          }
+          python3 -I "$host/listener.py" /run/rs01-audit-canary/socket rs01-audit-canary "$host/canary.log" &
+          listener_pid=$!
+          printf 'listening\n' > "$host/canary.started"
+          log_is "$host/canary.started"
+          reach_the_canaries
+          printf 'listening\na connection on the path socket\na connection on the abstract socket\n' > "$host/canary.before"
+          log_is "$host/canary.before"
+          canary_file_before="$(stat -c '%a %u %g %s %Y %Z' /var/tmp/rs01-audit-canary/file) $(sha256sum < /var/tmp/rs01-audit-canary/file)"
+
+          # Crashes: no program on the host. A plain name, not a pipe.
+          echo core | sudo tee /proc/sys/kernel/core_pattern > /dev/null
+          test "$(cat /proc/sys/kernel/core_pattern)" = "core"
+
+          # The filesystem the script is started in. Run as root, inside the new namespaces.
+          cat > "$host/enter.sh" <<'ENTER'
+          set -euo pipefail
+          # Any command here that fails, before the last, ends this with status 97: the place
+          # was not made, and the script is not started. Nothing is ignored. (The trap does not
+          # run once the last command has replaced this shell; if that command cannot be
+          # started at all, the status is the shell's own, 126 or 127.)
+          trap 'echo "the launcher could not prepare the place: the script was not started" >&2; exit 97' EXIT
+          base="$1"; toolchain="$2"; script="$3"; launcher="$4"; uid="$5"; gid="$6"
+          ro_bind() {
+            mount --bind "$1" "$2"
+            mount -o remount,bind,ro,nosuid "$2"
+          }
+          new="$base/view"
+          mount -t tmpfs -o size=16m,mode=0755,nosuid tmpfs "$new"
+          cd "$new"
+          mkdir -p usr etc/alternatives etc/ld.so.conf.d proc dev sys/devices/system/cpu \
+            audit/evidence audit/build opt/rs01/toolchain old
+          ro_bind /usr usr
+          for name in bin sbin lib lib32 lib64 libx32; do
+            if [ -L "/$name" ]; then
+              ln -s "$(readlink "/$name")" "$name"
+            elif [ -d "/$name" ]; then
+              mkdir "$name"
+              ro_bind "/$name" "$name"
+            fi
+          done
+          ro_bind /etc/alternatives etc/alternatives
+          ro_bind /etc/ld.so.conf.d etc/ld.so.conf.d
+          for name in ld.so.cache ld.so.conf; do
+            : > "etc/$name"
+            ro_bind "/etc/$name" "etc/$name"
+          done
+          for name in null zero random urandom; do
+            : > "dev/$name"
+            mount --bind "/dev/$name" "dev/$name"
+            mount -o remount,bind,ro,nosuid,noexec "dev/$name"
+          done
+          ln -s /proc/self/fd dev/fd
+          ln -s /proc/self/fd/0 dev/stdin
+          ln -s /proc/self/fd/1 dev/stdout
+          ln -s /proc/self/fd/2 dev/stderr
+          ro_bind /sys/devices/system/cpu sys/devices/system/cpu
+          mount -t proc -o nosuid,nodev,noexec proc proc
+          ro_bind "$toolchain" opt/rs01/toolchain
+          : > opt/rs01/rs01_mutation_audit.py
+          ro_bind "$script" opt/rs01/rs01_mutation_audit.py
+          : > opt/rs01/launcher-file
+          ro_bind "$launcher" opt/rs01/launcher-file
+          # A folder that others may enter but not list could hold a socket that a walk by the
+          # audit's user cannot see. Each such folder is covered by an empty, read-only one.
+          roots=(usr etc/alternatives etc/ld.so.conf.d opt/rs01/toolchain)
+          for name in bin sbin lib lib32 lib64 libx32; do
+            if [ -d "$name" ] && [ ! -L "$name" ]; then
+              roots+=("$name")
+            fi
+          done
+          find "${roots[@]}" -xdev -type d ! -perm -o=r -perm -o=x -print0 -prune \
+            | while IFS= read -r -d '' hidden; do
+                mount -t tmpfs -o ro,nosuid,nodev,size=4k,mode=0755 tmpfs "$hidden"
+              done
+          mount --bind "$base/evidence" audit/evidence
+          mount -o remount,bind,nosuid,nodev audit/evidence
+          mount --bind "$base/build" audit/build
+          mount -o remount,bind,nosuid,nodev audit/build
+          # A file of the audit's own user, outside every audit folder: the script has a
+          # child try to change its mode and its times, and requires that it cannot.
+          install -o "$uid" -g "$gid" -m 0644 /dev/null rs01-audit-view-canary
+          pivot_root . old
+          cd /
+          umount -l /old
+          rmdir /old
+          mount -o remount,ro,nosuid,nodev /
+          # A core-size limit of 1, soft and hard: no process below can raise it, and no dump is
+          # written. The script refuses to start unless the hard limit is at most 1 and the
+          # host's core_pattern is exactly "core".
+          prlimit --pid $$ --core=1:1
+          exec /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 \
+            /usr/bin/setpriv --reuid "$uid" --regid "$gid" --clear-groups --pdeathsig keep -- \
+            /usr/bin/python3 -I /opt/rs01/rs01_mutation_audit.py run \
+              --src /audit/evidence/src --out /audit/evidence/out \
+              --work /audit/build/work --cargo-home /audit/build/cargo-home \
+              --toolchain-bin /opt/rs01/toolchain/bin --launcher /opt/rs01/launcher-file
+          ENTER
+
+          # The campaign. The script ends itself within 18,900 s. Should it not, it is sent TERM
+          # 600 s later and everything in its process namespace is killed 60 s after that. From
+          # here on no failure ends this step early: its end is decided at the bottom.
+          # (If the job is cancelled from outside, the runner cannot signal these processes:
+          # they end when this machine is discarded, and the receipts are whatever was last
+          # written, marked IN PROGRESS.)
+          set +e
+          sudo timeout --kill-after=60 19500 \
+            unshare --mount --net --pid --ipc --uts --fork --kill-child --propagation private -- \
+            /bin/bash "$host/enter.sh" "$BASE" "$TOOLCHAIN_ROOT" \
+              "$GITHUB_WORKSPACE/$SCRIPT" "$GITHUB_WORKSPACE/$WORKFLOW" "$audit_uid" "$audit_gid"
+          status=$?
+          echo "The campaign command ended with status $status."
+          echo "The script's own: 0 every case gave a result and the evidence is VALID; 10 evidence VALID, not every case gave a result; 20 refused to start; 30 evidence INVALID or NOT VERIFIED, or the final receipts could not be written; 40 the runner itself failed."
+          echo "Not the script's: 97 the launcher could not prepare the place, the script was not started; 124 ended by the outer time limit; 137 killed (the outer limit, or the kernel). Any other status is not one the script gives: see the lines above. After this line, 98 means that the host's side found the boundary not shown to have held."
+
+          # The host's side of the three canaries: the listener is alive, the audit's user can
+          # still reach both sockets from the host, and nothing else reached them.
+          canaries="untouched"
+          if kill -0 "$listener_pid" 2>/dev/null; then
+            reach_the_canaries
+            printf 'listening\na connection on the path socket\na connection on the abstract socket\na connection on the path socket\na connection on the abstract socket\n' > "$host/canary.after"
+            log_is "$host/canary.after" || canaries="A CANARY SOCKET WAS REACHED, OR THE LISTENER'S LOG IS NOT AS IT MUST BE"
+            kill "$listener_pid"
+          else
+            canaries="THE LISTENER DID NOT SURVIVE: WHETHER A CANARY SOCKET WAS REACHED IS NOT KNOWN"
+          fi
+          canary_file_after="$(stat -c '%a %u %g %s %Y %Z' /var/tmp/rs01-audit-canary/file) $(sha256sum < /var/tmp/rs01-audit-canary/file)"
+          [[ "$canary_file_before" == "$canary_file_after" ]] || canaries="THE CANARY FILE WAS CHANGED"
+          core_pattern_after="$(cat /proc/sys/kernel/core_pattern)"
+          [[ "$core_pattern_after" == "core" ]] || canaries="THE HOST'S CORE PATTERN WAS NOT core AFTER THE CAMPAIGN"
+          # Recorded, not judged: the reservation protects against running out of space; the
+          # receipts' own hashes, not this, say whether they are whole.
+          allocation_after=""
+          for name in evidence build; do
+            image="$BASE/img/$name.img"
+            blocks="$(stat -c %b "$image")" || blocks=0
+            unit="$(stat -c %B "$image")" || unit=0
+            reserved_name="RESERVED_$name"
+            allocation_after="$allocation_after $name.img $(( blocks * unit )) of ${!reserved_name:-unknown} reserved;"
+          done
+          {
+            echo "RS-01 mutation audit: the host's side of the launcher's canaries"
+            echo "result: $canaries"
+            echo "the listener's log, whole (two connections before the campaign and two after it are the controls made on the host):"
+            cat "$host/canary.log"
+            echo "the canary file before: $canary_file_before"
+            echo "the canary file after:  $canary_file_after"
+            echo "the host's core_pattern after: $core_pattern_after"
+            echo "allocated bytes of the two images after the campaign (recorded, not judged):$allocation_after"
+            echo "the campaign command's exit status: $status"
+          } > "$host/host-canaries.txt"
+          # Written by root into a folder only root can write: nothing the audit's user owns is followed.
+          if ! sudo install -o root -g root -m 0644 "$host/host-canaries.txt" "$BASE/evidence/host-side/host-canaries.txt"; then
+            canaries="THE HOST'S SIDE OF THE CANARIES COULD NOT BE WRITTEN DOWN (it was: $canaries)"
+          fi
+          echo "The host's side of the canaries: $canaries"
+          if [[ "$canaries" != "untouched" ]]; then
+            echo "::error::$canaries: the boundary is not shown to have held; the receipts are not evidence"
+            exit 98
+          fi
+          exit "$status"
+
+      # The receipts are published only if they are a plain folder that holds nothing but plain
+      # files and folders: a link is never followed into this job's summary or its artifact.
+      # Nothing in this step ends it early; it always says whether the receipts may be published.
+      - name: The summary, as the script wrote it
+        id: summary
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          receipt="$BASE/evidence/out/receipt"
+          publish="no"
+          if [[ -L "$receipt" ]]; then
+            withheld="the receipt is a link"
+          elif [[ ! -e "$receipt" ]]; then
+            withheld=""
+            echo "No receipt was written: the script did not start a campaign." >> "$GITHUB_STEP_SUMMARY"
+          elif [[ ! -d "$receipt" ]]; then
+            withheld="the receipt is not a folder"
+          else
+            odd="$(find "$receipt" ! -type f ! -type d -print -quit)"
+            found=$?
+            if [[ "$found" != "0" ]]; then
+              withheld="the receipt could not be read through"
+            elif [[ -n "$odd" ]]; then
+              withheld="the receipt holds something that is neither a file nor a folder: $odd"
+            else
+              withheld=""
+              publish="yes"
+            fi
+          fi
+          if [[ -n "$withheld" ]]; then
+            echo "::error::$withheld; the receipt is not published"
+            echo "The receipt is withheld: $withheld." >> "$GITHUB_STEP_SUMMARY"
+            sudo mv "$receipt" "$BASE/evidence/receipt-withheld" || publish="no"
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          if [[ "$publish" == "yes" ]]; then
+            if [[ -f "$receipt/summary.txt" ]]; then
+              {
+                echo '```'
+                cat "$receipt/summary.txt"
+                echo '```'
+                echo "sha256 of SHA256SUMS: \`$(sha256sum "$receipt/SHA256SUMS" | cut -d' ' -f1)\`"
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "The receipt holds no summary." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          if [[ -f "$BASE/evidence/host-side/host-canaries.txt" && ! -L "$BASE/evidence/host-side/host-canaries.txt" ]]; then
+            {
+              echo '```'
+              cat "$BASE/evidence/host-side/host-canaries.txt"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
+
+      - name: Keep the receipts
+        if: always() && steps.summary.outputs.publish == 'yes'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rs01-mutation-audit-01-receipt
+          path: /mnt/rs01-audit/evidence/out/receipt
+          if-no-files-found: warn
+          retention-days: 90
+
+      # Written by root, in a folder only root can write.
+      - name: Keep the host's side of the canaries
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rs01-mutation-audit-01-host-side
+          path: /mnt/rs01-audit/evidence/host-side
+          if-no-files-found: warn
+          retention-days: 90
