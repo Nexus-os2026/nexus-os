@@ -2588,8 +2588,9 @@ fn on_self<'a>(text: &'a str, path: &'a str) -> impl Iterator<Item = usize> + 'a
 /// T8 (2): the acquisition is in a `let` statement that is a direct
 /// statement of the body, and that statement binds the guard itself to a
 /// name (not a temporary, not inside an inner block or expression, not by
-/// `ref`). `text` is squeezed.
-fn bound_by_a_direct_let(text: &str) -> Result<(), String> {
+/// `ref`). `text` is squeezed. The guard's name, and where that statement
+/// ends.
+fn bound_by_a_direct_let(text: &str) -> Result<(String, usize), String> {
     let at = text.find(ACQUIRE).ok_or("no acquisition")?;
     let b = text.as_bytes();
     let (mut depth, mut statement, mut i) = (0usize, 0usize, 0usize);
@@ -2628,10 +2629,11 @@ fn bound_by_a_direct_let(text: &str) -> Result<(), String> {
         }
         end += 1;
     }
-    let statement = &text[statement..(end + 1).min(text.len())];
+    let after = (end + 1).min(text.len());
+    let statement = &text[statement..after];
     let named = |binding: &str| {
         let name = binding.strip_prefix("mut ").unwrap_or(binding);
-        name != "_" && !name.is_empty() && name.chars().all(word)
+        (name != "_" && !name.is_empty() && name.chars().all(word)).then(|| name.to_string())
     };
     for suffix in [
         "=self.runs.lock().unwrap_or_else(PoisonError::into_inner);",
@@ -2640,18 +2642,17 @@ fn bound_by_a_direct_let(text: &str) -> Result<(), String> {
         if let Some(name) = statement
             .strip_prefix("let ")
             .and_then(|rest| rest.strip_suffix(suffix))
+            .and_then(named)
         {
-            if named(name) {
-                return Ok(());
-            }
+            return Ok((name, after));
         }
     }
     if let Some((name, _)) = statement
         .strip_prefix("let Ok(")
         .and_then(|rest| rest.split_once(")=self.runs.lock()else{"))
     {
-        if named(name) && statement.ends_with("};") {
-            return Ok(());
+        if let Some(name) = named(name).filter(|_| statement.ends_with("};")) {
+            return Ok((name, after));
         }
     }
     Err(format!(
@@ -2677,15 +2678,63 @@ fn calls_on_self(text: &str) -> Vec<String> {
     calls
 }
 
-/// Which of T8's criteria (1) to (5) a function body fails.
-fn one_hold(body: &str, ordered: bool) -> Vec<String> {
+/// T8 (7): after the `let` statement that binds the guard (it ends at
+/// `after`), every use of the guard's `name` as a whole word that does not
+/// follow a `.` is followed by one: the guard is not moved, passed or
+/// returned. `text` is squeezed.
+fn used_only_through_a_dot(text: &str, name: &str, after: usize) -> Result<(), String> {
+    let rest = &text[after..];
+    let uses: Vec<String> = rest
+        .match_indices(name)
+        .filter_map(|(at, _)| {
+            let before = rest[..at].chars().next_back();
+            let next = rest[at + name.len()..].chars().next();
+            let whole = !before.is_some_and(word) && !next.is_some_and(word);
+            (whole && before != Some('.') && next != Some('.'))
+                .then(|| format!("{}{name}{}", before.unwrap_or(' '), next.unwrap_or(' ')))
+        })
+        .collect();
+    if uses.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("the guard {name} is used without a '.': {uses:?}"))
+    }
+}
+
+/// The functions T8 checks, and what each must do after its acquisition,
+/// in this order (5): the stop reads the stop number, then sets the flag;
+/// the compare-and-clear reads `closed`, then clears the flag; quitting
+/// sets `closed`.
+const HOLDS: [(&str, &[&str]); 3] = [
+    (
+        "stop_all",
+        &["self.stop_number.load(", "self.stopped.store(true"],
+    ),
+    ("lift", &["self.closed.load(", "self.stopped.store(false"]),
+    ("close", &["self.closed.store(true"]),
+];
+
+/// The order (5) `function` is checked by.
+fn order_of(function: &str) -> &'static [&'static str] {
+    HOLDS
+        .iter()
+        .find(|(name, _)| *name == function)
+        .map(|(_, order)| *order)
+        .expect("a function T8 checks")
+}
+
+/// Which of T8's criteria (1) to (5) and (7) a function body fails; `order`
+/// is what must follow the acquisition (5), each first occurrence after the
+/// first occurrence of the one before it.
+fn one_hold(body: &str, order: &[&str]) -> Vec<String> {
     let text = squeezed(body);
     let mut failures = Vec::new();
     let acquisitions = text.matches(ACQUIRE).count();
     if acquisitions != 1 {
         failures.push(format!("(1) {ACQUIRE} occurs {acquisitions} times"));
     }
-    if let Err(why) = bound_by_a_direct_let(&text) {
+    let bound = bound_by_a_direct_let(&text);
+    if let Err(why) = &bound {
         failures.push(format!("(2) {why}"));
     }
     if text.contains("drop(") {
@@ -2695,26 +2744,39 @@ fn one_hold(body: &str, ordered: bool) -> Vec<String> {
     if !calls.is_empty() {
         failures.push(format!("(4) the body calls a method on self: {calls:?}"));
     }
-    if ordered {
-        let found = (
-            text.find(ACQUIRE),
-            on_self(&text, "self.closed.load(").next(),
-            on_self(&text, "self.stopped.store(false").next(),
-        );
-        if !matches!(found, (Some(lock), Some(closed), Some(clear)) if lock < closed && closed < clear)
-        {
-            failures.push(format!(
-                "(5) not in the order acquisition, read of closed, clear: {found:?}"
-            ));
+    let found: Vec<Option<usize>> = std::iter::once(text.find(ACQUIRE))
+        .chain(order.iter().map(|path| on_self(&text, path).next()))
+        .collect();
+    if !found
+        .windows(2)
+        .all(|pair| matches!(pair, [Some(first), Some(then)] if first < then))
+    {
+        failures.push(format!(
+            "(5) not in the order {ACQUIRE}, {}: {found:?}",
+            order.join(", ")
+        ));
+    }
+    if let Ok((name, after)) = &bound {
+        if let Err(why) = used_only_through_a_dot(&text, name, *after) {
+            failures.push(format!("(7) {why}"));
         }
     }
     failures
 }
 
+/// What T8's checker reports on `function` in `fixture`, by that
+/// function's rules.
+fn reported_on(fixture: &str, function: &str) -> Vec<String> {
+    let body = function_body(&without_comments(fixture), function)
+        .unwrap_or_else(|| panic!("the fixture has no {function}"));
+    one_hold(&body, order_of(function))
+}
+
 /// The stop before RS-01, `stop_all` as it is at commit 862a11ce: the flag
 /// set before the lock, the ids read under a temporary guard, and each run
-/// cancelled through `self.cancel`, which takes the lock again. T8's checker
-/// must fail it on (2) and (4), and on nothing else.
+/// cancelled through `self.cancel`, which takes the lock again. T8's checker,
+/// by `stop_all`'s rules, must fail it on (2), (4) and (5), and on nothing
+/// else.
 const STOP_BEFORE_RS01: &str = r#"
     pub(crate) fn stop_all(&self) -> usize {
         self.stopped.store(true, Ordering::SeqCst);
@@ -2726,31 +2788,194 @@ const STOP_BEFORE_RS01: &str = r#"
     }
 "#;
 
-/// RS-01 T8, a tripwire on the source text of `run.rs` (comments removed):
-/// the stop and the compare-and-clear each take the runs lock once, bind
-/// its guard by a direct `let`, drop nothing and call no method on `self`;
-/// the compare-and-clear reads `closed` under that lock before it clears
-/// the stop; and nothing clears the lock's poison. A review of the code is
-/// the proof (§8); this only catches a change of its shape.
+/// `stop_all` with the flag set before the lock is taken (the order before
+/// RS-01): R4's O1 applied to `run.rs` at e71b982b. T8 must fail it on (5)
+/// alone.
+const STOP_FLAG_BEFORE_THE_LOCK: &str = r#"    pub(crate) fn stop_all(&self) -> Stop {
+        self.stopped.store(true, Ordering::SeqCst);
+        let mut runs = self.runs.lock().unwrap_or_else(PoisonError::into_inner);
+        let current = self.stop_number.load(Ordering::SeqCst);
+        let previous = if current == 0 {
+            PreviousStop::First
+        } else if self.exhausted.load(Ordering::SeqCst)
+            || self.last_lifted.load(Ordering::SeqCst) != current
+        {
+            PreviousStop::NotLifted
+        } else {
+            PreviousStop::Lifted
+        };
+        let (number, exhausted) = match current.checked_add(1) {
+            Some(next) => {
+                self.stop_number.store(next, Ordering::SeqCst);
+                (next, false)
+            }
+            None => {
+                self.exhausted.store(true, Ordering::SeqCst);
+                (current, true)
+            }
+        };
+        let mut cancelled = 0usize;
+        for entry in runs.values_mut() {
+            let was_active = !entry.view.cancelled && !entry.view.finished;
+            entry.view.cancelled = true;
+            entry.cancelled.store(true, Ordering::SeqCst);
+            if was_active {
+                cancelled = cancelled.saturating_add(1);
+            }
+        }
+        let since_the_last_lift = self
+            .cancelled_by_stop
+            .load(Ordering::SeqCst)
+            .saturating_add(cancelled);
+        self.cancelled_by_stop
+            .store(since_the_last_lift, Ordering::SeqCst);
+        Stop {
+            cancelled,
+            number,
+            exhausted,
+            previous,
+        }
+    }"#;
+
+/// `stop_all` reading the stop number before the lock is taken: R4's R02
+/// applied to `run.rs` at e71b982b. T8 must fail it on (5) alone.
+const STOP_NUMBER_BEFORE_THE_LOCK: &str = r#"    pub(crate) fn stop_all(&self) -> Stop {
+        let current = self.stop_number.load(Ordering::SeqCst);
+        let mut runs = self.runs.lock().unwrap_or_else(PoisonError::into_inner);
+        let previous = if current == 0 {
+            PreviousStop::First
+        } else if self.exhausted.load(Ordering::SeqCst)
+            || self.last_lifted.load(Ordering::SeqCst) != current
+        {
+            PreviousStop::NotLifted
+        } else {
+            PreviousStop::Lifted
+        };
+        let (number, exhausted) = match current.checked_add(1) {
+            Some(next) => {
+                self.stop_number.store(next, Ordering::SeqCst);
+                (next, false)
+            }
+            None => {
+                self.exhausted.store(true, Ordering::SeqCst);
+                (current, true)
+            }
+        };
+        self.stopped.store(true, Ordering::SeqCst);
+        let mut cancelled = 0usize;
+        for entry in runs.values_mut() {
+            let was_active = !entry.view.cancelled && !entry.view.finished;
+            entry.view.cancelled = true;
+            entry.cancelled.store(true, Ordering::SeqCst);
+            if was_active {
+                cancelled = cancelled.saturating_add(1);
+            }
+        }
+        let since_the_last_lift = self
+            .cancelled_by_stop
+            .load(Ordering::SeqCst)
+            .saturating_add(cancelled);
+        self.cancelled_by_stop
+            .store(since_the_last_lift, Ordering::SeqCst);
+        Stop {
+            cancelled,
+            number,
+            exhausted,
+            previous,
+        }
+    }"#;
+
+/// `lift` with its guard moved into a closure that releases it before the
+/// checks: R4's R01 applied to `run.rs` at e71b982b. T8 must fail it on
+/// (7) alone.
+const LIFT_GUARD_MOVED: &str = r#"    pub(crate) fn lift(&self, number: u64) -> Result<Lift, Refusal> {
+        let Ok(_runs) = self.runs.lock() else {
+            return Err(Refusal::Unavailable);
+        };
+        let release_guard = |guard| { let _guard = guard; };
+        release_guard(_runs);
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(Refusal::TooLate);
+        }
+        if self.exhausted.load(Ordering::SeqCst) {
+            return Err(Refusal::Exhausted);
+        }
+        if self.stop_number.load(Ordering::SeqCst) != number {
+            return Err(Refusal::Superseded);
+        }
+        if !self.stopped.load(Ordering::SeqCst) {
+            return Ok(Lift::AlreadyLifted);
+        }
+        self.stopped.store(false, Ordering::SeqCst);
+        self.last_lifted.store(number, Ordering::SeqCst);
+        self.cancelled_by_stop.store(0, Ordering::SeqCst);
+        Ok(Lift::Lifted)
+    }"#;
+
+/// `close` with its guard moved into a closure that releases it before
+/// `closed` is set: R4's R08 applied to `run.rs` at e71b982b. T8 must fail
+/// it on (7) alone.
+const CLOSE_GUARD_MOVED: &str = r#"    pub(crate) fn close(&self) {
+        let _runs = self.runs.lock().expect("runs");
+        let release_guard = |guard| { let _guard = guard; };
+        release_guard(_runs);
+        self.closed.store(true, Ordering::SeqCst);
+    }"#;
+
+/// `close` setting `closed` before the lock is taken. T8 must fail it on
+/// (5) alone.
+const CLOSE_FLAG_BEFORE_THE_LOCK: &str = r#"
+    pub(crate) fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        let _runs = self.runs.lock().expect("runs");
+    }
+"#;
+
+/// RS-01 T8, a tripwire on the source text of `run.rs` (comments removed).
+/// The stop, the compare-and-clear and quitting (`close`) each (1) take the
+/// runs lock once, (2) bind its guard by a direct `let`, (3) drop nothing,
+/// (4) call no method on `self`, (5) do their work after the acquisition
+/// and in order (the stop reads the stop number, then sets the flag; the
+/// compare-and-clear reads `closed`, then clears the flag; quitting sets
+/// `closed`), and (7) after that `let` use the guard's name only with a `.`
+/// (the guard is not moved or passed); and (6) nothing clears the lock's
+/// poison. (7) is a lexical check: a `move` closure that uses the guard
+/// only with `.` is not detected. The checker is first shown to fail six
+/// fixed texts on exactly the criteria named. Review is the proof (§8);
+/// this only catches a change of the code's shape.
 #[test]
 fn rs01_t8_the_stop_and_the_compare_and_clear_each_hold_the_runs_lock_once() {
-    let before = function_body(&without_comments(STOP_BEFORE_RS01), "stop_all")
-        .expect("the stop before RS-01 has a body");
-    let reported = one_hold(&before, false);
+    let reported = reported_on(STOP_BEFORE_RS01, "stop_all");
     let criteria: Vec<&str> = reported.iter().map(|failure| &failure[..3]).collect();
     assert_eq!(
         criteria,
-        ["(2)", "(4)"],
+        ["(2)", "(4)", "(5)"],
         "the stop before RS-01: {reported:#?}"
     );
+    for (fixture, function, criterion, what) in [
+        (STOP_FLAG_BEFORE_THE_LOCK, "stop_all", "(5)", "O1"),
+        (STOP_NUMBER_BEFORE_THE_LOCK, "stop_all", "(5)", "R02"),
+        (LIFT_GUARD_MOVED, "lift", "(7)", "R01"),
+        (CLOSE_GUARD_MOVED, "close", "(7)", "R08"),
+        (
+            CLOSE_FLAG_BEFORE_THE_LOCK,
+            "close",
+            "(5)",
+            "close, flag first",
+        ),
+    ] {
+        let reported = reported_on(fixture, function);
+        let criteria: Vec<&str> = reported.iter().map(|failure| &failure[..3]).collect();
+        assert_eq!(criteria, [criterion], "{what}: {reported:#?}");
+    }
     let source = without_comments(include_str!("run.rs"));
     let mut failures = Vec::new();
-    for (function, ordered) in [("stop_all", false), ("lift", true)] {
+    for (function, order) in HOLDS {
         let Some(body) = function_body(&source, function) else {
             failures.push(format!("{function}: not found"));
             continue;
         };
-        for failure in one_hold(&body, ordered) {
+        for failure in one_hold(&body, order) {
             failures.push(format!("{function}: {failure}"));
         }
     }
@@ -2907,6 +3132,81 @@ fn rs01_t11_a_poisoned_runs_lock_lifts_nothing() {
     assert_eq!(f.auth.resume(&dialog), Err(POISONED));
     assert_eq!(dialog.asked(), 0);
     untouched(&f, false, 0, Some("1/none"));
+}
+
+/// RS-01 T12: a resume overtaken by a newer stop that another resume has
+/// already lifted. A confirms stop 1 and is held at its Resumed record;
+/// stop 2 comes, and B confirms and lifts it. A's compare-and-clear then
+/// finds the flag clear but the stop number moved on: it is superseded, not
+/// told the stop is already lifted, and changes nothing.
+#[test]
+fn rs01_t12_a_resume_overtaken_by_a_newer_stop_that_was_lifted_is_superseded() {
+    let f = scripted();
+    assert_eq!(f.auth.emergency_stop(), 1);
+    f.sink.hold_next(EvidencePhase::Resumed);
+    let a = {
+        let auth = f.auth.clone();
+        std::thread::spawn(move || auth.resume(&Confirmer::new(true)))
+    };
+    f.sink.wait_held();
+    // Stop 2.
+    let auth = f.auth.clone();
+    within(move || auth.emergency_stop());
+    let auth = f.auth.clone();
+    let b = within(move || auth.resume(&Confirmer::new(true)));
+    assert_eq!(b, Ok(()), "B did not lift stop 2");
+    assert!(
+        !f.auth.runs().is_stopped(),
+        "B's lift of stop 2 is not in force"
+    );
+    f.sink.release();
+    let a = a.join().unwrap();
+    assert_eq!(
+        a,
+        Err(AuthorityError::ResumeSuperseded),
+        "a superseded resume was not reported as superseded"
+    );
+    assert!(!f.auth.runs().is_stopped());
+    f.auth
+        .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+        .unwrap();
+    assert_eq!(
+        records_of(f.sink.memory.records(), EvidencePhase::Resumed).len(),
+        2
+    );
+    assert_eq!(stops_of(f.sink.memory.records()), ["1/none", "2/no"]);
+}
+
+/// RS-01 T13: a resume whose Resumed record fails lifts nothing: the stop
+/// stays in force, refuses new runs and keeps its count, and the resume
+/// says the evidence is unavailable. Once the sink records again, a resume
+/// lifts the stop.
+#[test]
+fn rs01_t13_a_resume_whose_record_fails_lifts_nothing() {
+    let f = scripted();
+    assert_eq!(f.auth.emergency_stop(), 1);
+    f.sink.fail_on(Some(EvidencePhase::Resumed));
+    let resumed = f.auth.resume(&Confirmer::new(true));
+    assert!(
+        f.auth.runs().is_stopped(),
+        "a resume whose Resumed record failed lifted the stop: {resumed:?}"
+    );
+    assert_eq!(
+        f.auth
+            .open_run(f.agent.clone(), RunOrigin::AgentGoal)
+            .unwrap_err(),
+        AuthorityError::EmergencyStopped
+    );
+    assert_eq!(f.auth.runs().cancelled_by_stop(), 1);
+    assert_eq!(resumed, Err(AuthorityError::EvidenceUnavailable));
+    assert!(records_of(f.sink.memory.records(), EvidencePhase::Resumed).is_empty());
+    f.sink.fail_on(None);
+    assert_eq!(f.auth.resume(&Confirmer::new(true)), Ok(()));
+    assert!(!f.auth.runs().is_stopped());
+    assert_eq!(
+        records_of(f.sink.memory.records(), EvidencePhase::Resumed).len(),
+        1
+    );
 }
 
 // ---- RS-01 T10 BEGIN ----
