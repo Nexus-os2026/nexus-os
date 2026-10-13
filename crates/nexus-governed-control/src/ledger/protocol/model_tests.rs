@@ -6032,3 +6032,1727 @@ fn an_admission_that_keeps_its_counter_fails_l1_in_the_original() {
     assert_eq!(report.verdict, Verdict::Fail, "{}", report.text);
     assert_eq!(report.failed, BTreeSet::from(["L1"]), "{}", report.text);
 }
+
+// ---- experimental: the gating-caller symmetry quotient ------------------------------------------
+//
+// P3-C11-DR01-D2A1-GC-SYMMETRY-01, a bounded experiment. It is not the
+// contract's explorer and not evidence for the contract; `explore` and
+// `explore_experimental` above are unchanged and stay the references.
+//
+// G1 and G2 run one program, each with its own record. Exchanging them
+// renames every value that names a caller: its record's identity and
+// digests, its rows in the ledger (its record, a correction about it, an
+// explanation of it), the cells' occupants and the causes that hold them,
+// the refusal table, GC's two positions and the history bits `issued` and
+// `told`. Rows keep their places, so every sequence keeps its meaning. With
+// no acknowledgement actor (a snapshot's digest is a mask indexed by
+// original, and a malformed one loses its lowest bit) and no gating conflict
+// (G2's identity alone is seeded with other content), the exchange fixes the
+// initial state and maps every step to a step with the same choices, fault,
+// branches and property names: an automorphism of the graph. The quotient
+// keeps one key for each pair {k, mirror(k)}, the smaller. It expands each
+// key it keeps and that key's mirror, and holds the second expansion to the
+// exchange of the first; a difference aborts the run with no verdict. A path
+// of the quotient is unfolded into the original path it stands for, with the
+// callers' own names, and replayed in the original semantics.
+
+/// A supplementary configuration for the differential: X-2's two callers
+/// beside one conflicting fact, whose Prepared record ENV supplies, as F1's
+/// in F-3.
+const SYM1: Config = default_run(Config {
+    name: "SYM-1",
+    facts: 1,
+    conflict: [true, false],
+    env: true,
+    faults: 1,
+    admissions: 1,
+    gating: 2,
+    ..BASE
+});
+
+/// The configurations this experiment showed symmetric: X-2 and SYM-1 by the
+/// exhaustive differential below, F-3 by the analysis of its mission. A
+/// configuration is accepted only with exactly one of these shapes and a cap
+/// no higher than its own.
+const SYMMETRIC: [Config; 3] = [X2, SYM1, F3];
+
+/// A configuration without its caps.
+fn shape(config: &Config) -> String {
+    format!(
+        "{:?}",
+        Config {
+            cap: 0,
+            time: Duration::ZERO,
+            ..*config
+        }
+    )
+}
+
+/// Refuses a configuration whose callers this experiment did not show
+/// exchangeable, and one whose initial state is not its own mirror.
+fn assert_symmetric(config: &Config) {
+    assert!(
+        config.gating == 2,
+        "symmetry inapplicable: {} has not exactly two gating callers",
+        config.name
+    );
+    assert!(
+        !config.gating_conflict,
+        "symmetry inapplicable: {} seeds a conflict for G2 alone",
+        config.name
+    );
+    assert!(
+        config.acks == 0 && config.ack_attempts == 0 && !config.malformed,
+        "symmetry inapplicable: {} has acknowledgements, whose digest is a mask indexed by original",
+        config.name
+    );
+    let Some(known) = SYMMETRIC.iter().find(|known| shape(known) == shape(config)) else {
+        panic!(
+            "symmetry inapplicable: {} is not a configuration this experiment showed symmetric",
+            config.name
+        );
+    };
+    assert!(
+        config.cap <= known.cap && config.time <= known.time,
+        "symmetry inapplicable: {} raises its cap",
+        config.name
+    );
+    let init = encode(config, &initial(config));
+    assert!(
+        mirror(config, &init) == init,
+        "symmetry inapplicable: the initial state of {} is not its own mirror",
+        config.name
+    );
+}
+
+/// The other gating caller.
+fn other_caller(g: u8) -> u8 {
+    assert!(g < 2, "symmetry inapplicable: gating caller {g}");
+    1 - g
+}
+
+/// A 32-byte value with G1 and G2 exchanged. Its first byte says what it
+/// names (`bytes`, `SimRow::key`): 2, a gating record or its identity with
+/// other content; 6, a correction about one; 5, an explanation of original
+/// o, where G1 and G2 are originals 2 and 3; 1, 3, 4 and 9, a fact, a
+/// holder, a Prepared record and a commitment, which name no caller.
+fn mirror_x32(value: &[u8; 32]) -> [u8; 32] {
+    assert!(
+        value[3..].iter().all(|&b| b == 0),
+        "symmetry inapplicable: a value outside the encoding"
+    );
+    let (kind, which, low) = (value[0], value[1], value[2]);
+    let which = match (kind, which) {
+        (2 | 6, _) => other_caller(which),
+        (5, 0 | 1) | (1 | 3 | 4 | 9, _) => which,
+        (5, 2 | 3) => 5 - which,
+        _ => panic!(
+            "symmetry inapplicable: a value the exchange does not know: {:?}",
+            &value[..3]
+        ),
+    };
+    bytes(kind, which, low)
+}
+
+fn mirror_key(key: &RecordKey) -> RecordKey {
+    RecordKey {
+        id: mirror_x32(&key.id),
+        digest: mirror_x32(&key.digest),
+    }
+}
+
+fn mirror_part(part: &Part) -> Part {
+    Part {
+        commitment: mirror_x32(&part.commitment),
+        role: part.role,
+    }
+}
+
+fn mirror_member(member: &Member) -> Member {
+    Member {
+        key: mirror_key(&member.key),
+        part: member.part.as_ref().map(mirror_part),
+    }
+}
+
+/// A cause with every identity and digest exchanged and every sequence kept.
+fn mirror_cause(cause: &Cause) -> Cause {
+    let kind = match cause.kind() {
+        CauseKind::IdentityContent {
+            id,
+            existing,
+            offered,
+        } => CauseKind::IdentityContent {
+            id: mirror_x32(&id),
+            existing: Row {
+                seq: existing.seq,
+                digest: mirror_x32(&existing.digest),
+            },
+            offered: mirror_x32(&offered),
+        },
+        CauseKind::DuplicateRole {
+            part,
+            holder,
+            offered,
+        } => CauseKind::DuplicateRole {
+            part: mirror_part(&part),
+            holder: Holder {
+                id: mirror_x32(&holder.id),
+                seq: holder.seq,
+            },
+            offered: mirror_key(&offered),
+        },
+        CauseKind::MissingPrepared { part, offered } => CauseKind::MissingPrepared {
+            part: mirror_part(&part),
+            offered: mirror_key(&offered),
+        },
+    };
+    Cause { kind }
+}
+
+fn mirror_occupant(occupant: &Occupant) -> Occupant {
+    match occupant {
+        Occupant::Gating { record, exit } => Occupant::Gating {
+            record: GatingRecord::new(mirror_member(record.member())),
+            exit: *exit,
+        },
+        Occupant::Correction { about, seq, exit } => Occupant::Correction {
+            about: mirror_key(about),
+            seq: *seq,
+            exit: *exit,
+        },
+        Occupant::Explanation { original, cause } => Occupant::Explanation {
+            original: mirror_key(original),
+            cause: mirror_cause(cause),
+        },
+        Occupant::Acknowledgement { .. } => {
+            panic!("symmetry inapplicable: an acknowledgement, whose digest is a mask indexed by original")
+        }
+    }
+}
+
+/// A row with G1 and G2 exchanged; it keeps its place in the ledger.
+fn mirror_row(row: SimRow) -> SimRow {
+    match row {
+        SimRow::Prepared(_) | SimRow::Holder(_) | SimRow::Fact(_) => row,
+        SimRow::Other(g) => SimRow::Other(other_caller(g)),
+        SimRow::Gating(g) => SimRow::Gating(other_caller(g)),
+        SimRow::Correction(g, exit) => SimRow::Correction(other_caller(g), exit),
+        SimRow::Explanation(o) => SimRow::Explanation(match o {
+            0 | 1 => o,
+            2 | 3 => 5 - o,
+            _ => panic!("symmetry inapplicable: original {o}"),
+        }),
+        SimRow::Acknowledgement { .. } => {
+            panic!("symmetry inapplicable: an acknowledgement, whose digest is a mask indexed by original")
+        }
+    }
+}
+
+/// History bits with G1's and G2's exchanged.
+fn mirror_bits(bits: u8) -> u8 {
+    assert!(
+        bits < 4,
+        "symmetry inapplicable: a history bit beyond two callers"
+    );
+    ((bits & 1) << 1) | (bits >> 1)
+}
+
+/// `w` with G1 and G2 exchanged, in place. The world, the core, settlement
+/// and the history are destructured whole, so that a field added to any of
+/// them must be placed here before this compiles. The writers' tickets and
+/// positions, the worker's agenda step and tokens (a cell and an occupancy
+/// number), the table, the budgets and every sequence name no caller.
+fn mirror_world(w: &mut World) {
+    let World {
+        core,
+        health: _,
+        rows,
+        fw: _,
+        se,
+        wk: _,
+        gc,
+        ack,
+        adm: _,
+        adm_kept,
+        env_done: _,
+        replays: _,
+        table: _,
+        faults: _,
+        ghost,
+    } = w;
+    let Core {
+        shared: _,
+        phase: _,
+        session: _,
+        latch: _,
+        u,
+        c,
+        x,
+        occupancies: _,
+        refusals,
+        refusal_limit: _,
+        frontier: _,
+        worker_taken: _,
+    } = core;
+    if let Some((_, occupant)) = u.as_mut() {
+        *occupant = mirror_occupant(occupant);
+    }
+    if let Some((_, occupant)) = c.as_mut() {
+        *occupant = mirror_occupant(occupant);
+    }
+    if let Some((_, occupant, _)) = x.as_mut() {
+        *occupant = mirror_occupant(occupant);
+    }
+    let table = std::mem::take(refusals);
+    *refusals = table
+        .iter()
+        .map(|(key, cause)| (mirror_key(key), mirror_cause(cause)))
+        .collect();
+    assert_eq!(
+        refusals.len(),
+        table.len(),
+        "symmetry inapplicable: the exchange merged two refusal entries"
+    );
+    for row in rows.iter_mut() {
+        *row = mirror_row(*row);
+    }
+    let Se { ticket: _, pos } = se;
+    if let SePos::Got(_, SeHeld::Lookup(Lookup::Conflict(Known::Cause(cause)))) = pos {
+        *cause = mirror_cause(cause);
+    }
+    assert_eq!(gc.len(), 2, "symmetry inapplicable: not two gating callers");
+    gc.swap(0, 1);
+    assert!(
+        ack.is_empty(),
+        "symmetry inapplicable: an acknowledgement actor"
+    );
+    assert!(
+        adm_kept.is_none(),
+        "symmetry inapplicable: A2's kept bits, a mutation control's"
+    );
+    let Ghost {
+        conflicted: _,
+        conflicted_e6: _,
+        unrecorded: _,
+        issued,
+        told,
+        dropped: _,
+    } = ghost;
+    *issued = mirror_bits(*issued);
+    *told = mirror_bits(*told);
+}
+
+/// The key of `key`'s world with G1 and G2 exchanged.
+fn mirror(config: &Config, key: &[u8]) -> Vec<u8> {
+    let mut w = decode(config, key);
+    mirror_world(&mut w);
+    encode(config, &w)
+}
+
+/// The key that stands for a key and its mirror: the smaller.
+fn canonical(key: Vec<u8>, mirrored: Vec<u8>) -> Vec<u8> {
+    if mirrored < key {
+        mirrored
+    } else {
+        key
+    }
+}
+
+/// An edge with G1's and G2's actors exchanged and its choices kept.
+fn mirror_edge(all: &[Actor], edge: u64) -> u64 {
+    let (index, choices) = unpack(edge);
+    let index = match all[index] {
+        Actor::Gc(g) => all
+            .iter()
+            .position(|&actor| actor == Actor::Gc(other_caller(g)))
+            .expect("both gating callers are actors"),
+        _ => index,
+    };
+    pack(index, &choices)
+}
+
+/// An item as the exchange compares it: its kind, edge, fault, successor,
+/// the names of the properties it violates (sorted: their order follows the
+/// callers' order) and its branches.
+#[derive(Debug, PartialEq, Eq)]
+struct Image {
+    admission: bool,
+    edge: u64,
+    fault: bool,
+    key: Vec<u8>,
+    names: Vec<&'static str>,
+    branches: Vec<String>,
+}
+
+fn names(violations: &Violations) -> Vec<&'static str> {
+    let mut names: Vec<&'static str> = violations.iter().map(|(property, _)| *property).collect();
+    names.sort_unstable();
+    names
+}
+
+/// An expansion by actor, each actor's items in their order.
+fn by_actor(images: impl Iterator<Item = Image>) -> BTreeMap<usize, Vec<Image>> {
+    let mut out: BTreeMap<usize, Vec<Image>> = BTreeMap::new();
+    for image in images {
+        out.entry(unpack(image.edge).0).or_default().push(image);
+    }
+    out
+}
+
+/// Holds a key's expansion and its mirror's to the exchange: the mirror's
+/// items are the key's, actor by actor with G1's and G2's exchanged, each
+/// with the same choices, fault, property names and branches and the mirror
+/// of the key's successor; the two states violate properties of the same
+/// names. Returns the mirrors of the key's successors.
+fn hold(
+    config: &Config,
+    all: &[Actor],
+    own: (&[Item], &Violations),
+    other: (&[Item], &Violations),
+) -> Result<Vec<Vec<u8>>, String> {
+    let mirrored: Vec<Vec<u8>> = own.0.iter().map(|item| mirror(config, &item.key)).collect();
+    if names(own.1) != names(other.1) {
+        return Err(format!(
+            "a state violates {:?} and its mirror {:?}",
+            names(own.1),
+            names(other.1)
+        ));
+    }
+    let expected = by_actor(own.0.iter().zip(&mirrored).map(|(item, key)| Image {
+        admission: item.admission,
+        edge: mirror_edge(all, item.edge),
+        fault: item.fault,
+        key: key.clone(),
+        names: names(&item.violations),
+        branches: item.branches.clone(),
+    }));
+    let found = by_actor(other.0.iter().map(|item| Image {
+        admission: item.admission,
+        edge: item.edge,
+        fault: item.fault,
+        key: item.key.clone(),
+        names: names(&item.violations),
+        branches: item.branches.clone(),
+    }));
+    if expected != found {
+        let actor = expected
+            .keys()
+            .chain(found.keys())
+            .find(|actor| expected.get(*actor) != found.get(*actor))
+            .copied();
+        return Err(format!(
+            "an expansion is not the exchange of its mirror's (first at actor {:?})",
+            actor.map(|index| all[index])
+        ));
+    }
+    Ok(mirrored)
+}
+
+/// One step from `key` along `edge` in the original semantics, ADM played by
+/// `adm`: enabled, and taking exactly the edge's choices.
+fn replay(config: &Config, key: &[u8], edge: u64, adm: AdmStep) -> Vec<u8> {
+    let all = actors(config);
+    let (actor, choices) = unpack(edge);
+    let mut w = decode(config, key);
+    let mut oracle = Oracle::new(choices.clone(), w.faults);
+    let mut obs = Obs::default();
+    let enabled = step_with(config, &mut w, all[actor], &mut oracle, &mut obs, adm);
+    assert!(enabled, "unfold: a replayed step is not enabled");
+    assert_eq!(
+        oracle.sequence(),
+        choices,
+        "unfold: a replayed step took other choices"
+    );
+    w.faults = oracle.faults;
+    encode(config, &w)
+}
+
+/// A path of the quotient as the original path it stands for. At each step
+/// the original path stands at the quotient's key or at its mirror; from the
+/// mirror, the edge is taken with G1's and G2's actors exchanged. Each step
+/// is replayed in the original semantics and must reach the quotient's next
+/// key or its mirror.
+fn unfold(config: &Config, edges: &[u64], adm: AdmStep) -> Vec<u64> {
+    let all = actors(config);
+    let mut key = encode(config, &initial(config));
+    let mut state = key.clone();
+    let mut out = Vec::new();
+    for &edge in edges {
+        let taken = if state == key {
+            edge
+        } else {
+            assert!(
+                state == mirror(config, &key),
+                "unfold: the original path left its key's pair"
+            );
+            mirror_edge(&all, edge)
+        };
+        let next = replay(config, &key, edge, adm);
+        let next_mirror = mirror(config, &next);
+        state = replay(config, &state, taken, adm);
+        assert!(
+            state == next || state == next_mirror,
+            "unfold: a step left its pair"
+        );
+        key = canonical(next, next_mirror);
+        out.push(taken);
+    }
+    out
+}
+
+/// A quotient path, unfolded and described step by step.
+fn witness(config: &Config, edges: &[u64], adm: AdmStep) -> String {
+    let unfolded = unfold(config, edges, adm);
+    format!(
+        "  quotient path {edges:?}\n  unfolded ({} steps):\n{}",
+        unfolded.len(),
+        trace_with(config, &unfolded, adm)
+    )
+}
+
+/// Kahn's algorithm as `explore` runs it for L1, over `n` states whose
+/// non-fault successors are `to[from[s]..from[s + 1]]`: the number of states
+/// removed, and the in-degrees left. A self-loop is an in-degree its state
+/// never loses, so it is found as a cycle.
+fn kahn(n: usize, from: &[u64], to: &[u32]) -> (usize, Vec<u32>) {
+    let mut indegree = vec![0u32; n];
+    for &t in to {
+        indegree[t as usize] += 1;
+    }
+    let mut queue: Vec<u32> = (0..n as u32)
+        .filter(|&s| indegree[s as usize] == 0)
+        .collect();
+    let mut removed = 0usize;
+    while let Some(s) = queue.pop() {
+        removed += 1;
+        let (lo, hi) = (from[s as usize] as usize, from[s as usize + 1] as usize);
+        for &t in &to[lo..hi] {
+            indegree[t as usize] -= 1;
+            if indegree[t as usize] == 0 {
+                queue.push(t);
+            }
+        }
+    }
+    (removed, indegree)
+}
+
+/// What the symmetry quotient counted beyond `Tally`: its expanded keys that
+/// are their own mirror and their share of each count, from which the graph
+/// it stands for is derived (a pair of distinct keys counts twice, a key
+/// that is its own mirror once); and its shortest trace before unfolding.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Mirrors {
+    fixed: u64,
+    fixed_transitions: u64,
+    fixed_fault_edges: u64,
+    fixed_nonfault_edges: u64,
+    fixed_no_step: u64,
+    fixed_evaluations: u64,
+    fixed_admitted: u64,
+    folded: Option<Vec<u64>>,
+}
+
+/// The quotient's keys and parent edges, kept for the differential tests.
+type Kept = (Vec<Vec<u8>>, Vec<(u32, u64)>);
+
+fn explore_symmetric(config: &Config, adm: AdmStep, mode: Mode) -> (Report, Tally, Mirrors) {
+    let (report, tally, mirrors, _) = explore_symmetric_kept(config, adm, mode, false);
+    (report, tally, mirrors)
+}
+
+/// `explore_experimental` over the symmetry quotient, in either mode: each
+/// key stands for itself and its mirror. Every expanded key's mirror is
+/// expanded too and held to the exchange; a difference, a key that is not
+/// its mirror's mirror, or a configuration outside `SYMMETRIC` aborts the
+/// run with no verdict. A failing trace is unfolded to the callers' own
+/// names.
+fn explore_symmetric_kept(
+    config: &Config,
+    adm: AdmStep,
+    mode: Mode,
+    keep: bool,
+) -> (Report, Tally, Mirrors, Option<Kept>) {
+    assert_symmetric(config);
+    let start = Instant::now();
+    let all = actors(config);
+    let adm_index = all
+        .iter()
+        .position(|&actor| actor == Actor::Adm)
+        .expect("ADM is an actor");
+    let mut visited = Visited::new();
+    let mut parent: Vec<(u32, u64)> = Vec::new();
+    let mut nonfault_from: Vec<u64> = vec![0];
+    let mut nonfault: Vec<u32> = Vec::new();
+    let mut taken: BTreeSet<String> = BTreeSet::new();
+    let (mut transitions, mut fault_edges, mut no_step) = (0u64, 0u64, 0u64);
+    let (mut evaluations, mut admitted) = (0u64, 0u64);
+    let mut mirrors = Mirrors::default();
+    let mut failure: Option<(&'static str, String, Vec<u64>)> = None;
+    let mut incomplete: Option<String> = None;
+    let init = encode(config, &initial(config));
+    visited.insert(&init);
+    parent.push((EMPTY, 0));
+    let path_to = |parent: &[(u32, u64)], mut id: u32| {
+        let mut edges = Vec::new();
+        while parent[id as usize].0 != EMPTY {
+            edges.push(parent[id as usize].1);
+            id = parent[id as usize].0;
+        }
+        edges.reverse();
+        edges
+    };
+    let mut id = 0u32;
+    while (id as usize) < visited.len() {
+        if visited.len() as u64 > config.cap {
+            incomplete = Some(format!("the state cap of {} was reached", config.cap));
+            break;
+        }
+        if start.elapsed() > config.time {
+            incomplete = Some(format!("the time cap of {:?} was reached", config.time));
+            break;
+        }
+        let key = visited.key(id).to_vec();
+        let mirrored = mirror(config, &key);
+        if mirror(config, &mirrored) != key {
+            panic!(
+                "symmetry inapplicable: a key is not its mirror's mirror, at a key reached by\n{}",
+                witness(config, &path_to(&parent, id), adm)
+            );
+        }
+        let fixed = mirrored == key;
+        let (next, state_violations) = expand(config, &all, &key, adm, mode);
+        let (other, other_violations) = expand(config, &all, &mirrored, adm, mode);
+        let (next, other) = (items(next), items(other));
+        let successor_mirrors = match hold(
+            config,
+            &all,
+            (&next, &state_violations),
+            (&other, &other_violations),
+        ) {
+            Ok(successor_mirrors) => successor_mirrors,
+            Err(detail) => panic!(
+                "symmetry inapplicable: {detail}, at a key reached by\n{}",
+                witness(config, &path_to(&parent, id), adm)
+            ),
+        };
+        if fixed {
+            mirrors.fixed += 1;
+        }
+        if let Some((property, detail)) = state_violations.into_iter().next() {
+            failure = Some((property, detail, path_to(&parent, id)));
+            break;
+        }
+        if !next.iter().any(|item| !item.admission) {
+            no_step += 1;
+            if fixed {
+                mirrors.fixed_no_step += 1;
+            }
+            // Under the admission quotient the state still holds its
+            // admissions: the state with no enabled step is this one with
+            // them spent.
+            let (mut end, mut other_end) = (decode(config, &key), decode(config, &mirrored));
+            if mode == Mode::Quotient {
+                end.adm = 0;
+                other_end.adm = 0;
+            }
+            let judged = terminal(config, &end);
+            assert!(
+                judged == terminal(config, &other_end),
+                "symmetry inapplicable: D1 judges a state and its mirror apart"
+            );
+            if !judged {
+                let mut edges = path_to(&parent, id);
+                if mode == Mode::Quotient {
+                    let spend = usize::from(config.admissions);
+                    edges.extend(std::iter::repeat_n(pack(adm_index, &[]), spend));
+                }
+                failure = Some((
+                    "D1",
+                    "a state with no enabled step is not terminal".into(),
+                    edges,
+                ));
+                break;
+            }
+        }
+        for (item, successor_mirror) in next.into_iter().zip(successor_mirrors) {
+            if item.admission {
+                evaluations += 1;
+                let admits = item
+                    .branches
+                    .iter()
+                    .any(|label| label == "admission: admitted");
+                if admits {
+                    admitted += 1;
+                }
+                if fixed {
+                    mirrors.fixed_evaluations += 1;
+                    mirrors.fixed_admitted += u64::from(admits);
+                }
+                taken.extend(item.branches);
+                if let Some((property, detail)) = item.violations.into_iter().next() {
+                    let mut edges = path_to(&parent, id);
+                    edges.push(item.edge);
+                    failure = Some((property, detail, edges));
+                    break;
+                }
+                continue;
+            }
+            transitions += 1;
+            if fixed {
+                mirrors.fixed_transitions += 1;
+            }
+            taken.extend(item.branches);
+            if let Some((property, detail)) = item.violations.into_iter().next() {
+                let mut edges = path_to(&parent, id);
+                edges.push(item.edge);
+                failure = Some((property, detail, edges));
+                break;
+            }
+            let (to, new) = visited.insert(&canonical(item.key, successor_mirror));
+            if new {
+                parent.push((id, item.edge));
+            }
+            if item.fault {
+                fault_edges += 1;
+                if fixed {
+                    mirrors.fixed_fault_edges += 1;
+                }
+            } else {
+                nonfault.push(to);
+                if fixed {
+                    mirrors.fixed_nonfault_edges += 1;
+                }
+            }
+        }
+        if failure.is_some() {
+            break;
+        }
+        nonfault_from.push(nonfault.len() as u64);
+        id += 1;
+    }
+    let mut l1 = "not claimed for this configuration".to_string();
+    if failure.is_none() && incomplete.is_none() && config.l1 {
+        let n = visited.len();
+        let (removed, indegree) = kahn(n, &nonfault_from, &nonfault);
+        if removed == n {
+            l1 = format!(
+                "HOLDS: {} non-fault edges, no cycle; {no_step} end states, each terminal (D1)",
+                nonfault.len()
+            );
+        } else {
+            let cyclic = (0..n)
+                .find(|&s| indegree[s] > 0)
+                .expect("a state on a cycle") as u32;
+            failure = Some((
+                "L1",
+                format!(
+                    "{} states lie on or behind a cycle of non-fault steps; one is reached by",
+                    n - removed
+                ),
+                path_to(&parent, cyclic),
+            ));
+        }
+    }
+    let elapsed = start.elapsed();
+    let verdict = if failure.is_some() {
+        Verdict::Fail
+    } else if incomplete.is_some() {
+        Verdict::Incomplete
+    } else {
+        Verdict::Pass
+    };
+    let mut failed = BTreeSet::new();
+    let mut text = String::new();
+    let what = match mode {
+        Mode::Full => "gating-caller symmetry quotient",
+        Mode::Quotient => {
+            "gating-caller symmetry quotient composed with the admission observer quotient"
+        }
+    };
+    let _ = writeln!(
+        text,
+        "EXPLORATION {} ({what}: experimental, not the contract's explorer)",
+        config.name
+    );
+    let _ = writeln!(
+        text,
+        "  outcome: {}",
+        match verdict {
+            Verdict::Pass => "PASS",
+            Verdict::Fail => "FAIL",
+            Verdict::Incomplete => "INCOMPLETE",
+        }
+    );
+    let _ = writeln!(
+        text,
+        "  bounds: facts {} conflicting {:?} ENV {} batch {} faults {} admissions {} gating callers {} \
+         gating conflict {} acknowledgement actors {} attempts each {} malformed snapshots {} cell constraint {} \
+         worker verbs unwind {} DROP {} REPLAY {} A4 {}; ticket limit {TICKET_LIMIT}, refusal limit \
+         {REFUSAL_LIMIT}; settlement and the worker on; caps {} states, {:?}",
+        config.facts,
+        config.conflict,
+        config.env,
+        config.batch,
+        config.faults,
+        config.admissions,
+        config.gating,
+        config.gating_conflict,
+        config.acks,
+        config.ack_attempts,
+        config.malformed,
+        config.cell_constraint,
+        config.worker_unwinds,
+        config.drop,
+        config.replays,
+        config.blanket_uncertain,
+        config.cap,
+        config.time
+    );
+    let _ = writeln!(text, "  actors: {all:?}");
+    if mode == Mode::Quotient {
+        let _ = writeln!(
+            text,
+            "  quotient: ADM is not scheduled; its one step is evaluated at every expanded state ({evaluations} \
+             evaluations, {admitted} admitted) and its successor discarded; every key holds {} admissions left; \
+             D1 is judged with them spent. The states and transitions below are the quotient's, not the \
+             original graph's, and the state cap counts quotient states.",
+            config.admissions
+        );
+    }
+    let _ = writeln!(
+        text,
+        "  symmetry: G1 and G2 exchanged; each key stands for itself and its mirror, the smaller kept; every \
+         expanded key's mirror was expanded and held to the exchange; {} expanded keys are their own mirror. \
+         The states and transitions below are the symmetry quotient's, and the state cap counts them.",
+        mirrors.fixed
+    );
+    let _ = writeln!(
+        text,
+        "  states {} (expanded {}), transitions {transitions} (with a fault {fault_edges}), \
+         states with no enabled step {no_step}",
+        visited.len(),
+        id
+    );
+    let _ = writeln!(
+        text,
+        "  elapsed {:.1} s; explorer tables {} MiB",
+        elapsed.as_secs_f64(),
+        visited.bytes() >> 20
+    );
+    if let Some(reason) = &incomplete {
+        let _ = writeln!(
+            text,
+            "  INCOMPLETE: {reason}. No property is established by this run."
+        );
+    }
+    let mut trace = None;
+    match &failure {
+        Some((property, detail, edges)) => {
+            failed.insert(*property);
+            let unfolded = unfold(config, edges, adm);
+            let _ = writeln!(text, "  FAIL: {property}: {detail}");
+            let _ = writeln!(
+                text,
+                "  shortest trace ({} steps, unfolded to the callers' own names):",
+                unfolded.len()
+            );
+            text.push_str(&trace_with(config, &unfolded, adm));
+            mirrors.folded = Some(edges.clone());
+            trace = Some(unfolded);
+        }
+        None => {
+            for property in PROPERTIES {
+                let verdict = if incomplete.is_some() {
+                    "NOT ESTABLISHED (incomplete)".to_string()
+                } else if property == "L1" {
+                    l1.clone()
+                } else if property == "E10" && !config.worker_unwinds {
+                    "not applicable here (worker verbs do not unwind)".to_string()
+                } else {
+                    "HOLDS".to_string()
+                };
+                let _ = writeln!(text, "  {property}: {verdict}");
+            }
+        }
+    }
+    let _ = writeln!(text, "  branches:");
+    for label in BRANCHES {
+        let mark = if taken.contains(*label) {
+            "taken    "
+        } else {
+            "NOT TAKEN"
+        };
+        let _ = writeln!(text, "    [{mark}] {label}");
+    }
+    for label in taken
+        .iter()
+        .filter(|label| !BRANCHES.contains(&label.as_str()))
+    {
+        let _ = writeln!(text, "    [taken    ] {label} (not in the listed set)");
+    }
+    let _ = writeln!(text, "  state key fields: {KEY_FIELDS}");
+    let kept = keep.then(|| {
+        (
+            (0..visited.len() as u32)
+                .map(|id| visited.key(id).to_vec())
+                .collect(),
+            parent,
+        )
+    });
+    let tally = Tally {
+        states: visited.len() as u64,
+        expanded: u64::from(id),
+        transitions,
+        fault_edges,
+        nonfault_edges: nonfault.len() as u64,
+        no_step,
+        evaluations,
+        admitted,
+        taken,
+        trace,
+    };
+    (
+        Report {
+            verdict,
+            text,
+            failed,
+        },
+        tally,
+        mirrors,
+        kept,
+    )
+}
+
+/// The full F-3, in the symmetry quotient composed with the admission
+/// observer quotient. Selectable only by name; not run by this mission.
+#[test]
+#[ignore = "experimental gating-caller symmetry quotient: run only when an Architect mission names it"]
+fn gc_symmetry_f3() {
+    let (report, _, _) = explore_symmetric(&F3, step_adm, Mode::Quotient);
+    println!("{}", report.text);
+    assert_eq!(
+        report.verdict,
+        Verdict::Pass,
+        "failed: {:?}\n{}",
+        report.failed,
+        report.text
+    );
+}
+
+/// A bounded prefix of F-3 in the composed quotient, a diagnostic of the
+/// exchange on F-3's states: at most 100,000 keys (the cap check stops one
+/// key past the cap), each expanded key's mirror expanded and held to the
+/// exchange. INCOMPLETE by construction; it establishes nothing about F-3.
+#[test]
+#[ignore = "experimental gating-caller symmetry quotient: a bounded F-3 prefix, run only when an Architect mission names it"]
+fn gc_symmetry_prefix_f3() {
+    let config = Config { cap: 99_999, ..F3 };
+    let (report, tally, mirrors) = explore_symmetric(&config, step_adm, Mode::Quotient);
+    println!("{}", report.text);
+    println!(
+        "PREFIX F-3 (INCOMPLETE by construction): {} keys ({} expanded, {} of them their own mirror), {} \
+         transitions ({} with a fault, {} without), {} admission evaluations ({} admitted), {} with no enabled \
+         step. Every expanded key's mirror was expanded and held to the exchange.",
+        tally.states,
+        tally.expanded,
+        mirrors.fixed,
+        tally.transitions,
+        tally.fault_edges,
+        tally.nonfault_edges,
+        tally.evaluations,
+        tally.admitted,
+        tally.no_step
+    );
+    assert!(tally.states <= 100_000, "the prefix exceeded 100,000 keys");
+    assert_eq!(
+        report.verdict,
+        Verdict::Incomplete,
+        "the prefix is not INCOMPLETE: {:?}\n{}",
+        report.failed,
+        report.text
+    );
+}
+
+// ---- experimental: the symmetry quotient held to the original -----------------------------------
+
+/// Every value the exchange renames is renamed consistently: a row's key is
+/// the exchange of its key, originals and callers map as the exchange says,
+/// and every map is an involution.
+#[test]
+fn gc_symmetry_renames_consistently() {
+    let rows = [
+        SimRow::Prepared(0),
+        SimRow::Prepared(1),
+        SimRow::Holder(0),
+        SimRow::Holder(1),
+        SimRow::Fact(0),
+        SimRow::Fact(1),
+        SimRow::Other(0),
+        SimRow::Other(1),
+        SimRow::Gating(0),
+        SimRow::Gating(1),
+        SimRow::Explanation(0),
+        SimRow::Explanation(1),
+        SimRow::Explanation(2),
+        SimRow::Explanation(3),
+        SimRow::Correction(0, Exit::InCall),
+        SimRow::Correction(1, Exit::ReturnedUncertain),
+        SimRow::Correction(0, Exit::Unwound),
+    ];
+    for row in rows {
+        let image = mirror_row(row);
+        assert_eq!(mirror_row(image), row, "{row:?}");
+        assert_eq!(image.key(), mirror_key(&row.key()), "{row:?}");
+        assert_eq!(
+            image.part(),
+            row.part().as_ref().map(mirror_part),
+            "{row:?}"
+        );
+        let key = row.key();
+        assert_eq!(mirror_key(&mirror_key(&key)), key);
+        assert_eq!(
+            original_of(&mirror_key(&key)),
+            original_of(&key).map(|o| if o < 2 { o } else { 5 - o }),
+            "{row:?}"
+        );
+        assert_eq!(
+            gating_of(&mirror_key(&key)),
+            gating_of(&key).map(other_caller),
+            "{row:?}"
+        );
+    }
+    for g in 0..2 {
+        assert_eq!(mirror_key(&gating_key(g)), gating_key(1 - g));
+        assert_eq!(
+            mirror_member(&gating_member(g)),
+            gating_member(1 - g),
+            "G{}",
+            g + 1
+        );
+    }
+    for f in 0..2 {
+        assert_eq!(mirror_member(&fact_member(f)), fact_member(f));
+        assert_eq!(mirror_cause(&duplicate_role(f, 2)), duplicate_role(f, 2));
+    }
+    let cause = Cause {
+        kind: CauseKind::IdentityContent {
+            id: gating_key(1).id,
+            existing: Row {
+                seq: 4,
+                digest: SimRow::Other(1).key().digest,
+            },
+            offered: gating_key(1).digest,
+        },
+    };
+    assert_eq!(
+        mirror_cause(&cause),
+        Cause {
+            kind: CauseKind::IdentityContent {
+                id: gating_key(0).id,
+                existing: Row {
+                    seq: 4,
+                    digest: SimRow::Other(0).key().digest,
+                },
+                offered: gating_key(0).digest,
+            },
+        }
+    );
+    assert_eq!(mirror_cause(&mirror_cause(&cause)), cause);
+    assert_eq!(mirror_bits(0b01), 0b10);
+    assert_eq!(mirror_bits(0b11), 0b11);
+    assert_eq!(mirror_bits(0), 0);
+    let all = actors(&F3);
+    let g1 = pack(4, &[0, 1, 2]);
+    assert_eq!(all[4], Actor::Gc(0));
+    assert_eq!(mirror_edge(&all, g1), pack(5, &[0, 1, 2]));
+    assert_eq!(mirror_edge(&all, pack(2, &[1])), pack(2, &[1]));
+}
+
+/// S1 and S14: the initial states of the configurations shown symmetric are
+/// their own mirrors; F-G's is not, because its ledger seeds G2's identity
+/// alone with other content.
+#[test]
+fn gc_symmetry_initial_states() {
+    for config in SYMMETRIC {
+        assert_symmetric(&config);
+        let init = encode(&config, &initial(&config));
+        assert_eq!(mirror(&config, &init), init, "{}", config.name);
+    }
+    let seeded = initial_rows(&FG);
+    let exchanged: Vec<SimRow> = seeded.iter().map(|&row| mirror_row(row)).collect();
+    assert!(seeded.contains(&SimRow::Other(1)));
+    assert_ne!(exchanged, seeded, "F-G's ledger is not its own mirror");
+}
+
+/// Holds the symmetry quotient to the exchange on one configuration: every
+/// state of `graph` (the whole original graph, or the whole admission
+/// quotient, as `mode` says) against its mirror; the quotient's `kept` keys
+/// against the pairs; every key of the quotient against an unfolded
+/// original path to it. Returns, as the quotient counts them, the graph's
+/// states that are their own mirror and their shares of each count.
+fn pairs_of(config: &Config, mode: Mode, graph: &Graph, kept: &Kept) -> Mirrors {
+    let all = actors(config);
+    let mut counted = Mirrors::default();
+    let mut pairs: BTreeMap<Vec<u8>, BTreeSet<usize>> = BTreeMap::new();
+    for (id, key) in graph.keys.iter().enumerate() {
+        let image = mirror(config, key);
+        assert_eq!(
+            &mirror(config, &image),
+            key,
+            "the exchange is not an involution"
+        );
+        let Some(&other) = graph.ids.get(&image) else {
+            panic!("a state's mirror is not in the graph");
+        };
+        // Every item of the state against its mirror's: the edges by actor
+        // with their multiplicities, faults, property names and branches,
+        // the successors' mirrors, the observations, the state's own
+        // violations.
+        let own = (graph.items[id].as_slice(), &graph.state[id]);
+        let theirs = (graph.items[other].as_slice(), &graph.state[other]);
+        if let Err(detail) = hold(config, &all, own, theirs) {
+            panic!("{detail}");
+        }
+        let dead = !graph.items[id].iter().any(|item| !item.admission);
+        assert_eq!(
+            dead,
+            !graph.items[other].iter().any(|item| !item.admission),
+            "D1's states differ"
+        );
+        if dead {
+            let (mut end, mut other_end) = (decode(config, key), decode(config, &image));
+            if mode == Mode::Quotient {
+                end.adm = 0;
+                other_end.adm = 0;
+            }
+            assert_eq!(
+                terminal(config, &end),
+                terminal(config, &other_end),
+                "terminal differs"
+            );
+        }
+        if image == *key {
+            counted.fixed += 1;
+            counted.fixed_no_step += u64::from(dead);
+            for item in &graph.items[id] {
+                if item.admission {
+                    counted.fixed_evaluations += 1;
+                    counted.fixed_admitted += u64::from(
+                        item.branches
+                            .iter()
+                            .any(|label| label == "admission: admitted"),
+                    );
+                } else {
+                    counted.fixed_transitions += 1;
+                    if item.fault {
+                        counted.fixed_fault_edges += 1;
+                    } else {
+                        counted.fixed_nonfault_edges += 1;
+                    }
+                }
+            }
+        }
+        pairs
+            .entry(canonical(key.clone(), image))
+            .or_default()
+            .insert(id);
+    }
+    // Each key that stands for a pair stands for exactly {k, mirror(k)}, so
+    // that no two pairs share a key; and it is one of the two.
+    for (key, ids) in &pairs {
+        let first = &graph.keys[*ids.first().expect("a pair")];
+        let expected = BTreeSet::from([graph.ids[first], graph.ids[&mirror(config, first)]]);
+        assert_eq!(ids, &expected, "a key stands for other than one pair");
+        assert!(ids.iter().any(|&i| graph.keys[i] == *key));
+    }
+    assert_eq!(
+        2 * pairs.len() as u64 - counted.fixed,
+        graph.keys.len() as u64,
+        "the pairs do not cover the graph"
+    );
+    // The quotient's keys are exactly the pairs' keys.
+    let (keys, parents) = kept;
+    let folded: BTreeSet<&Vec<u8>> = keys.iter().collect();
+    assert_eq!(folded.len(), keys.len());
+    assert!(
+        folded.iter().copied().eq(pairs.keys()),
+        "the quotient's keys are not the pairs' keys"
+    );
+    // Every key of the quotient: its path, unfolded to the callers' own
+    // names, replays in the original semantics into its pair, and is an
+    // original path of the graph.
+    let mut exchanged_paths = 0;
+    let mut example = None;
+    for id in 0..keys.len() as u32 {
+        let mut edges = Vec::new();
+        let mut at = id;
+        while parents[at as usize].0 != EMPTY {
+            edges.push(parents[at as usize].1);
+            at = parents[at as usize].0;
+        }
+        edges.reverse();
+        let unfolded = unfold(config, &edges, step_adm);
+        if unfolded != edges {
+            exchanged_paths += 1;
+            if example.is_none() {
+                let callers = |path: &[u64]| -> Vec<Actor> {
+                    path.iter().map(|&edge| all[unpack(edge).0]).collect()
+                };
+                example = Some(format!(
+                    "  the first such path: quotient {:?}, unfolded {:?}\n{}",
+                    callers(&edges),
+                    callers(&unfolded),
+                    trace_with(config, &unfolded, step_adm)
+                ));
+            }
+        }
+        let mut state = encode(config, &initial(config));
+        for &edge in &unfolded {
+            state = replay(config, &state, edge, step_adm);
+            assert!(
+                graph.ids.contains_key(&state),
+                "an unfolded path left the graph"
+            );
+        }
+        let key = &keys[id as usize];
+        assert!(
+            state == *key || state == mirror(config, key),
+            "an unfolded path ends outside its pair"
+        );
+    }
+    assert!(
+        exchanged_paths > 0,
+        "no unfolded path needed the exchange: the unfolding is not exercised"
+    );
+    println!(
+        "PAIRS {} ({mode:?}): {} states in {} pairs ({} their own mirror); every state's expansion is the \
+         exchange of its mirror's; {} keys of the quotient, each reached by a path that unfolds into an \
+         original path ({exchanged_paths} of them through the exchange)\n{}",
+        config.name,
+        graph.keys.len(),
+        pairs.len(),
+        counted.fixed,
+        keys.len(),
+        example.expect("a path through the exchange")
+    );
+    counted
+}
+
+/// Holds the symmetry quotient to the exchange on one configuration, with the
+/// real admission step, alone and composed with the admission quotient: the
+/// whole original graph, the whole admission quotient, each against its
+/// mirror and against the symmetry quotient's keys and paths; and the
+/// reports, whose counts must be the pairs' counts and whose properties and
+/// branches must be the original's.
+fn symmetry_differential(config: &Config) {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    assert_symmetric(config);
+    let all = actors(config);
+    let n = u64::from(config.admissions);
+    let lines = |text: &str| -> Vec<String> {
+        section(text, "  P1:", "  state key fields")
+            .into_iter()
+            .filter(|line| !line.starts_with("  L1: "))
+            .map(str::to_string)
+            .collect()
+    };
+    for mode in [Mode::Full, Mode::Quotient] {
+        let graph = whole_graph(config, |key| match mode {
+            Mode::Full => {
+                let (next, state) = successors(config, &all, key);
+                (items(next.into_iter().map(Next::Edge).collect()), state)
+            }
+            Mode::Quotient => {
+                let (next, state) = expand(config, &all, key, step_adm, Mode::Quotient);
+                (items(next), state)
+            }
+        });
+        let (report, reference) = match mode {
+            Mode::Full => (explore(config), None),
+            Mode::Quotient => {
+                let (report, tally) = explore_experimental(config, step_adm, Mode::Quotient);
+                (report, Some(tally))
+            }
+        };
+        let (folded, tally, mirrors, kept) = explore_symmetric_kept(config, step_adm, mode, true);
+        let counted = pairs_of(config, mode, &graph, &kept.expect("kept"));
+        println!("{}\n{}", report.text, folded.text);
+        assert_eq!(report.verdict, Verdict::Pass);
+        assert_eq!(folded.verdict, Verdict::Pass);
+        // The quotient's own count of keys that are their own mirror, and
+        // their shares, are the graph's.
+        assert_eq!(mirrors, counted);
+        // The reference's counts are the pairs': a pair counts twice, a key
+        // that is its own mirror once.
+        let [states, expanded, transitions, faulted, no_step] =
+            numbers(&report.text, "  states ")[..]
+        else {
+            panic!("the reference's states line");
+        };
+        let [nonfault, ends] = numbers(&report.text, "  L1: ")[..] else {
+            panic!("the reference's L1 line");
+        };
+        let double = |folded: u64, fixed: u64| 2 * folded - fixed;
+        assert_eq!(states, graph.keys.len() as u64);
+        assert_eq!(expanded, states);
+        assert_eq!(tally.expanded, tally.states);
+        assert_eq!(states, double(tally.states, mirrors.fixed));
+        assert_eq!(
+            transitions,
+            double(tally.transitions, mirrors.fixed_transitions)
+        );
+        assert_eq!(
+            faulted,
+            double(tally.fault_edges, mirrors.fixed_fault_edges)
+        );
+        assert_eq!(
+            nonfault,
+            double(tally.nonfault_edges, mirrors.fixed_nonfault_edges)
+        );
+        assert_eq!(no_step, double(tally.no_step, mirrors.fixed_no_step));
+        assert_eq!(ends, no_step);
+        if let Some(reference) = &reference {
+            assert_eq!(
+                reference.evaluations,
+                double(tally.evaluations, mirrors.fixed_evaluations)
+            );
+            assert_eq!(
+                reference.admitted,
+                double(tally.admitted, mirrors.fixed_admitted)
+            );
+            assert_eq!(reference.evaluations, if n > 0 { states } else { 0 });
+            assert_eq!(reference.taken, tally.taken, "the branches taken differ");
+        }
+        assert_eq!(
+            numbers(&folded.text, "  L1: "),
+            [tally.nonfault_edges, tally.no_step],
+            "the quotient's L1 line"
+        );
+        assert_eq!(
+            lines(&report.text),
+            lines(&folded.text),
+            "properties or branches differ"
+        );
+        assert_eq!(
+            section(&report.text, "  state key fields", "\u{0}"),
+            section(&folded.text, "  state key fields", "\u{0}")
+        );
+        println!(
+            "DIFFERENTIAL {} ({mode:?}): reference {states} states, {transitions} transitions ({faulted} with a \
+             fault, {nonfault} without), {no_step} with no enabled step; symmetry quotient {} keys ({} their own \
+             mirror), {} transitions ({} with a fault, {} without), {} with no enabled step, {} admission \
+             evaluations ({} admitted). Matched: every state's expansion to its mirror's under the exchange, \
+             every key of the quotient to exactly one pair, every count to the pairs' counts, every property \
+             line, every branch, and every key's path unfolded and replayed in the original semantics.",
+            config.name,
+            tally.states,
+            mirrors.fixed,
+            tally.transitions,
+            tally.fault_edges,
+            tally.nonfault_edges,
+            tally.no_step,
+            tally.evaluations,
+            tally.admitted
+        );
+    }
+}
+
+#[test]
+fn gc_symmetry_x2_matches_the_original() {
+    symmetry_differential(&X2);
+}
+
+/// A forcing of a world, named.
+type Forcing = (&'static str, fn(&mut World));
+
+/// S8 where a property fails: X-2 violates nothing, so its states are
+/// forced, through private state, into the per-caller properties and the
+/// admission's (forced states are not called reachable). For every state of
+/// X-2 and each forcing, the forced state and its mirror violate properties
+/// of the same names, in `state_properties` and in `admission_properties`.
+#[test]
+fn gc_symmetry_properties_follow_the_exchange() {
+    let config = X2;
+    let all = actors(&config);
+    let graph = whole_graph(&config, |key| {
+        let (next, state) = successors(&config, &all, key);
+        (items(next.into_iter().map(Next::Edge).collect()), state)
+    });
+    let forcings: [Forcing; 6] = [
+        ("G1 told, record absent (P7)", |w| w.ghost.told |= bit(0)),
+        ("G2 told, record absent (P7)", |w| w.ghost.told |= bit(1)),
+        ("G1 issued, written, uncorrected (P8)", |w| {
+            w.ghost.issued |= bit(0);
+            w.ghost.told &= !bit(0);
+            w.rows.push(SimRow::Gating(0));
+        }),
+        ("G2 issued, written, uncorrected (P8)", |w| {
+            w.ghost.issued |= bit(1);
+            w.ghost.told &= !bit(1);
+            w.rows.push(SimRow::Gating(1));
+        }),
+        ("G1's explanation, unacknowledged (P12, P15)", |w| {
+            w.rows.push(SimRow::Explanation(2));
+        }),
+        ("G2's correction, with G2's record (P8 cleared)", |w| {
+            w.ghost.issued |= bit(1);
+            w.rows.push(SimRow::Gating(1));
+            w.rows.push(SimRow::Correction(1, Exit::ReturnedUncertain));
+        }),
+    ];
+    let named = |w: &World| -> (Vec<&'static str>, Vec<&'static str>) {
+        let (mut state, mut admission) = (Obs::default(), Obs::default());
+        state_properties(&config, w, &mut state);
+        admission_properties(&config, w, &mut admission);
+        (names(&state.violations), names(&admission.violations))
+    };
+    let mut violated: BTreeMap<&str, u64> = BTreeMap::new();
+    for key in &graph.keys {
+        for (name, force) in &forcings {
+            let mut w = decode(&config, key);
+            force(&mut w);
+            let forced = encode(&config, &w);
+            let image = mirror(&config, &forced);
+            let (own, other) = (
+                named(&decode(&config, &forced)),
+                named(&decode(&config, &image)),
+            );
+            assert_eq!(own, other, "{name}: a forced state and its mirror differ");
+            if !own.0.is_empty() || !own.1.is_empty() {
+                *violated.entry(name).or_default() += 1;
+            }
+        }
+    }
+    println!(
+        "FORCED X-2: {} states x {} forcings; forced states violating a property, by forcing: {violated:?}; \
+         each forced state and its mirror violate properties of the same names",
+        graph.keys.len(),
+        forcings.len()
+    );
+    for (name, _) in &forcings[..5] {
+        assert!(
+            violated.get(name).is_some_and(|&n| n > 0),
+            "{name} never violates"
+        );
+    }
+}
+
+#[test]
+fn gc_symmetry_sym1_matches_the_original() {
+    symmetry_differential(&SYM1);
+}
+
+// ---- experimental: L1 under the exchange, on finite graphs --------------------------------------
+
+/// A finite graph explored from state 0 as the explorers explore, breadth
+/// first, each successor kept as itself or, folded, as the smaller of
+/// itself and its image under `p`; then Kahn's algorithm over what was kept.
+/// The states kept, and whether a cycle was found.
+fn explore_finite(edges: &[Vec<u32>], p: &[u32], fold: bool) -> (Vec<u32>, bool) {
+    let keep = |s: u32| if fold { s.min(p[s as usize]) } else { s };
+    let mut ids: BTreeMap<u32, u32> = BTreeMap::from([(0, 0)]);
+    let mut states = vec![0u32];
+    let (mut from, mut to) = (vec![0u64], Vec::new());
+    let mut at = 0;
+    while at < states.len() {
+        for &t in &edges[states[at] as usize] {
+            let t = keep(t);
+            let next = states.len() as u32;
+            let id = *ids.entry(t).or_insert(next);
+            if id == next {
+                states.push(t);
+            }
+            to.push(id);
+        }
+        from.push(to.len() as u64);
+        at += 1;
+    }
+    let (removed, _) = kahn(states.len(), &from, &to);
+    let cyclic = removed < states.len();
+    (states, cyclic)
+}
+
+/// Whether the part of a finite graph reachable from state 0 has a cycle, by
+/// depth-first search, independently of Kahn's algorithm.
+fn reachable_cycle(edges: &[Vec<u32>]) -> bool {
+    let mut colour = vec![0u8; edges.len()];
+    let mut stack = vec![(0usize, 0usize)];
+    colour[0] = 1;
+    while let Some((s, k)) = stack.pop() {
+        if k < edges[s].len() {
+            stack.push((s, k + 1));
+            let t = edges[s][k] as usize;
+            match colour[t] {
+                1 => return true,
+                0 => {
+                    colour[t] = 1;
+                    stack.push((t, 0));
+                }
+                _ => {}
+            }
+        } else {
+            colour[s] = 2;
+        }
+    }
+    false
+}
+
+/// A graph from a list of edges, closed under the involution `p`.
+fn closed(n: usize, p: &[u32], list: &[(u32, u32)]) -> Vec<Vec<u32>> {
+    let mut sets = vec![BTreeSet::new(); n];
+    for &(u, v) in list {
+        sets[u as usize].insert(v);
+        sets[p[u as usize] as usize].insert(p[v as usize]);
+    }
+    sets.into_iter()
+        .map(|set| set.into_iter().collect())
+        .collect()
+}
+
+/// S10 on finite graphs: whether the part reachable from 0 has a cycle is
+/// the same in a graph closed under an involution fixing 0 and in its
+/// quotient, explored and judged as the explorers judge L1. Deliberate
+/// cycles: a state that steps into its mirror (a self-loop in the quotient),
+/// and a cycle that closes only after two laps of the quotient's; and
+/// acyclic graphs whose folding merges branches. Then 20,000 generated
+/// graphs.
+#[test]
+fn gc_symmetry_l1_on_finite_graphs() {
+    let check = |n: usize, p: &[u32], list: &[(u32, u32)]| -> bool {
+        let edges = closed(n, p, list);
+        let truth = reachable_cycle(&edges);
+        let (reached, full) = explore_finite(&edges, p, false);
+        let (kept, folded) = explore_finite(&edges, p, true);
+        assert_eq!(full, truth, "Kahn's algorithm differs from the search");
+        assert_eq!(
+            folded, truth,
+            "the quotient's L1 differs: {list:?} under {p:?}"
+        );
+        let pairs: BTreeSet<u32> = reached.iter().map(|&s| s.min(p[s as usize])).collect();
+        let kept: BTreeSet<u32> = kept.into_iter().collect();
+        assert_eq!(
+            kept, pairs,
+            "the quotient keeps other than one state per pair"
+        );
+        truth
+    };
+    // A state that steps into its mirror: 1 -> 2 = p(1), so 2 -> 1; the
+    // quotient keeps a self-loop at 1.
+    assert!(check(3, &[0, 2, 1], &[(0, 1), (1, 2)]));
+    // A cycle that closes after two laps: 1 -> 4 -> 2 -> 3 -> 1, folded
+    // 1 -> 3 -> 1.
+    assert!(check(5, &[0, 2, 1, 4, 3], &[(0, 1), (1, 4), (4, 2)]));
+    // A fixed state's self-loop.
+    assert!(check(2, &[0, 1], &[(0, 1), (1, 1)]));
+    // Acyclic, mirrored branches.
+    assert!(!check(5, &[0, 2, 1, 4, 3], &[(0, 1), (1, 3)]));
+    // Acyclic, folding merges two branches into a double edge.
+    assert!(!check(4, &[0, 2, 1, 3], &[(0, 1), (1, 3)]));
+    let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    let (mut cyclic, mut acyclic) = (0, 0);
+    for _ in 0..20_000 {
+        let n = 2 + (next() % 8) as usize;
+        let mut p: Vec<u32> = (0..n as u32).collect();
+        let mut free: Vec<u32> = (1..n as u32).collect();
+        while free.len() >= 2 {
+            let a = free.swap_remove((next() % free.len() as u64) as usize);
+            let b = free.swap_remove((next() % free.len() as u64) as usize);
+            if next() % 3 != 0 {
+                p[a as usize] = b;
+                p[b as usize] = a;
+            }
+        }
+        let list: Vec<(u32, u32)> = (0..n as u32)
+            .flat_map(|u| (0..n as u32).map(move |v| (u, v)))
+            .filter(|_| next() % (n as u64 + 1) == 0)
+            .collect();
+        if check(n, &p, &list) {
+            cyclic += 1;
+        } else {
+            acyclic += 1;
+        }
+    }
+    println!("L1 FINITE: 20,000 generated graphs, {cyclic} with a reachable cycle, {acyclic} without; each judged alike in the graph and its quotient");
+    assert!(cyclic > 1000 && acyclic > 1000, "too few of one kind");
+}
+
+// ---- experimental: the symmetry quotient's negative cases ---------------------------------------
+
+/// A defective admission fails `property` in the original semantics and in
+/// the symmetry quotient, alone and composed with the admission quotient,
+/// with shortest traces of one length; each of the quotients' traces,
+/// unfolded to the callers' own names, replays in the original semantics to
+/// `property`.
+fn symmetry_negative_case(config: &Config, adm: AdmStep, property: &'static str) {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    for mode in [Mode::Full, Mode::Quotient] {
+        let (reference, reference_tally) = explore_experimental(config, adm, mode);
+        let (folded, tally, mirrors) = explore_symmetric(config, adm, mode);
+        println!("{}\n{}", reference.text, folded.text);
+        for report in [&reference, &folded] {
+            assert_eq!(report.verdict, Verdict::Fail, "{}", report.text);
+            assert_eq!(report.failed, BTreeSet::from([property]), "{}", report.text);
+        }
+        let (expected, trace) = (
+            reference_tally.trace.expect("a trace"),
+            tally.trace.expect("a trace"),
+        );
+        let path = mirrors.folded.expect("a quotient path");
+        assert_eq!(
+            expected.len(),
+            trace.len(),
+            "shortest traces differ in length"
+        );
+        assert_eq!(unfold(config, &path, adm), trace);
+        assert!(
+            last_step_violations(config, &trace, adm).contains(&property),
+            "the unfolded trace does not replay to its violation"
+        );
+        println!(
+            "NEGATIVE {} ({mode:?}): FAIL {property} in the reference and the symmetry quotient; shortest traces \
+             {} steps; the quotient's path unfolds into an original trace that replays to {property}",
+            config.name,
+            trace.len()
+        );
+    }
+}
+
+#[test]
+fn gc_symmetry_negative_p1_admission_ignores_unapplied() {
+    symmetry_negative_case(&X2, adm_ignoring_unapplied, "P1");
+}
+
+#[test]
+fn gc_symmetry_negative_e9_admission_ignores_the_latch() {
+    symmetry_negative_case(&X2, adm_ignoring_the_latch, "E9");
+}
+
+#[test]
+fn gc_symmetry_negative_e2_admission_views_twice() {
+    symmetry_negative_case(&X2, adm_viewing_twice, "E2");
+}
+
+/// A deliberate cycle in the model: an admission that keeps its counter
+/// makes a non-fault self-loop; the symmetry quotient reports L1 as the
+/// original does, and its path unfolds into an original path.
+#[test]
+fn gc_symmetry_finds_the_original_l1_cycle() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (reference, _) = explore_experimental(&X2, adm_keeping_its_counter, Mode::Full);
+    let (folded, tally, mirrors) = explore_symmetric(&X2, adm_keeping_its_counter, Mode::Full);
+    println!("{}\n{}", reference.text, folded.text);
+    for report in [&reference, &folded] {
+        assert_eq!(report.verdict, Verdict::Fail, "{}", report.text);
+        assert_eq!(report.failed, BTreeSet::from(["L1"]), "{}", report.text);
+    }
+    let path = mirrors.folded.expect("a quotient path");
+    assert_eq!(
+        unfold(&X2, &path, adm_keeping_its_counter),
+        tally.trace.expect("a trace")
+    );
+}
+
+/// The real admission, refusing whenever G1 alone was told Committed: a
+/// deliberately asymmetric step, for the guard's negative case only.
+fn adm_favouring_g2(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+    admit_by(config, w, obs, |w, view| {
+        view.admits() && w.table.debt == 0 && w.table.h <= w.table.a && w.ghost.told != bit(0)
+    })
+}
+
+/// The guard: an asymmetric step, met in exploration, aborts the run with
+/// no verdict.
+#[test]
+#[should_panic(
+    expected = "symmetry inapplicable: an expansion is not the exchange of its mirror's"
+)]
+fn gc_symmetry_refuses_an_asymmetric_step() {
+    let _ = explore_symmetric(&X2, adm_favouring_g2, Mode::Full);
+}
+
+#[test]
+#[should_panic(expected = "symmetry inapplicable: F-G seeds a conflict for G2 alone")]
+fn gc_symmetry_refuses_f_g() {
+    let _ = explore_symmetric(&FG, step_adm, Mode::Full);
+}
+
+#[test]
+#[should_panic(
+    expected = "symmetry inapplicable: F-1 is not a configuration this experiment showed symmetric"
+)]
+fn gc_symmetry_refuses_a_configuration_not_shown_symmetric() {
+    let _ = explore_symmetric(&F1, step_adm, Mode::Full);
+}
+
+#[test]
+#[should_panic(
+    expected = "symmetry inapplicable: F-3 is not a configuration this experiment showed symmetric"
+)]
+fn gc_symmetry_refuses_another_shape_under_a_known_name() {
+    let config = Config {
+        blanket_uncertain: true,
+        ..F3
+    };
+    let _ = explore_symmetric(&config, step_adm, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(expected = "symmetry inapplicable: F-3 raises its cap")]
+fn gc_symmetry_refuses_a_raised_cap() {
+    let config = Config {
+        cap: FULL_CAP + 1,
+        ..F3
+    };
+    let _ = explore_symmetric(&config, step_adm, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(expected = "symmetry inapplicable: X-2 has acknowledgements")]
+fn gc_symmetry_refuses_acknowledgements() {
+    let config = Config {
+        acks: 1,
+        ack_attempts: 1,
+        ..X2
+    };
+    let _ = explore_symmetric(&config, step_adm, Mode::Full);
+}
+
+#[test]
+#[should_panic(expected = "symmetry inapplicable: X-4 has not exactly two gating callers")]
+fn gc_symmetry_refuses_other_callers() {
+    let _ = explore_symmetric(&X4, step_adm, Mode::Full);
+}
+
+#[test]
+#[should_panic(expected = "symmetry inapplicable: A2's kept bits")]
+fn gc_symmetry_refuses_kept_bits() {
+    let _ = explore_symmetric(&X2, adm_keeping_bits, Mode::Full);
+}
+
+#[test]
+#[should_panic(expected = "symmetry inapplicable: an acknowledgement")]
+fn gc_symmetry_refuses_an_acknowledgement_row() {
+    let _ = mirror_row(SimRow::Acknowledgement {
+        set: SetFacts {
+            frontier: 0,
+            head: 3,
+            top: 3,
+            count: 1,
+            digest: bytes(0b1000, 0, 0),
+        },
+        nonce: [0; 16],
+    });
+}
