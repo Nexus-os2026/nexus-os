@@ -4812,3 +4812,1223 @@ fn e8_holds_for_stale_worker_operations() {
         );
     }
 }
+
+// ---- experimental: the admission observer quotient ----------------------------------------------
+//
+// P3-C11-DR01-D2A1-ADM-QUOTIENT-01, a bounded experiment. It is not the
+// contract's explorer and not evidence for the contract; `explore` above is
+// unchanged and stays the reference.
+//
+// ADM changes only its own counter, and nothing reads that counter but
+// `terminal` (`adm == 0`). So a state reachable with admissions spent is
+// reachable with none spent, and the admission step from a state depends on
+// that state alone. The quotient keeps the counter at its configured value,
+// never schedules ADM, runs ADM's one step at every expanded state as an
+// observer and discards its successor, and judges D1 with the admissions
+// spent. Its preconditions are asserted at every state: a run that breaks
+// one aborts and gives no verdict. A2, whose admission keeps bits in the
+// world between two steps, breaks them and needs the original explorer.
+
+/// An admission step: `step_adm`, or a deliberately defective one in a
+/// negative case.
+type AdmStep = fn(&Config, &mut World, &mut Obs) -> bool;
+
+type Violations = Vec<(&'static str, String)>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    /// Every actor is scheduled, ADM included: the original semantics.
+    Full,
+    /// ADM is evaluated at every state as an observer and never scheduled.
+    Quotient,
+}
+
+/// One item of a state's expansion.
+enum Next {
+    /// A successor, as `successors` yields it.
+    Edge(Successor),
+    /// Under the quotient: the admission step from this state. Its
+    /// successor is not a state of the quotient.
+    Admission(Successor),
+}
+
+/// One step of one actor, with ADM played by `adm`.
+fn step_with(
+    config: &Config,
+    w: &mut World,
+    actor: Actor,
+    o: &mut Oracle,
+    obs: &mut Obs,
+    adm: AdmStep,
+) -> bool {
+    if actor != Actor::Adm {
+        return step(config, w, actor, o, obs);
+    }
+    if let Some(trace) = obs.trace.as_mut() {
+        let _ = write!(trace, "{actor:?}: ");
+    }
+    adm(config, w, obs)
+}
+
+/// The state of `key` with `adm` admissions left.
+fn with_admissions(config: &Config, key: &[u8], adm: u8) -> Vec<u8> {
+    let mut w = decode(config, key);
+    w.adm = adm;
+    encode(config, &w)
+}
+
+/// Under the quotient, the admission step from `key`, run as `successors`
+/// runs a step, with the reduction's preconditions asserted: ADM is enabled
+/// exactly when admissions are configured, it spends one and changes nothing
+/// else, and it keeps no bits (A2).
+fn observe_admission(
+    config: &Config,
+    base: &World,
+    key: &[u8],
+    index: usize,
+    adm: AdmStep,
+) -> Option<Successor> {
+    let mut w = decode(config, key);
+    let mut obs = Obs::default();
+    hook::take_counts();
+    let enabled = adm(config, &mut w, &mut obs);
+    let counts = hook::take_counts();
+    assert_eq!(
+        enabled,
+        config.admissions > 0,
+        "quotient inapplicable: ADM is not enabled exactly when admissions are configured"
+    );
+    if !enabled {
+        return None;
+    }
+    transition_properties(base, &w, &mut obs, counts);
+    let successor = encode(config, &w);
+    assert_eq!(
+        w.adm.checked_add(1),
+        Some(config.admissions),
+        "quotient inapplicable: ADM did not spend exactly one admission"
+    );
+    assert!(
+        w.adm_kept.is_none(),
+        "quotient inapplicable: ADM kept bits in the world (A2)"
+    );
+    w.adm = config.admissions;
+    assert!(
+        encode(config, &w) == key,
+        "quotient inapplicable: ADM changed the world beyond its counter"
+    );
+    Some(Successor {
+        key: successor,
+        fault: false,
+        edge: pack(index, &[]),
+        violations: obs.violations,
+        branches: obs.branches,
+    })
+}
+
+/// `successors`, with ADM played by `adm`; under the quotient, ADM is an
+/// observation and not an edge, and every state must hold its configured
+/// admissions and no A2 bits.
+fn expand(
+    config: &Config,
+    all: &[Actor],
+    key: &[u8],
+    adm: AdmStep,
+    mode: Mode,
+) -> (Vec<Next>, Violations) {
+    let base = decode(config, key);
+    if mode == Mode::Quotient {
+        assert!(
+            base.adm == config.admissions && base.adm_kept.is_none(),
+            "quotient inapplicable: a state with admissions spent or bits kept"
+        );
+    }
+    let mut state = Obs::default();
+    state_properties(config, &base, &mut state);
+    if encode(config, &base) != key {
+        state.fail("KEY", "a key does not survive decoding");
+    }
+    let mut out = Vec::new();
+    for (index, &actor) in all.iter().enumerate() {
+        if mode == Mode::Quotient && actor == Actor::Adm {
+            out.extend(observe_admission(config, &base, key, index, adm).map(Next::Admission));
+            continue;
+        }
+        let mut prefix = Vec::new();
+        loop {
+            let mut w = decode(config, key);
+            let mut oracle = Oracle::new(prefix, w.faults);
+            let mut obs = Obs::default();
+            hook::take_counts();
+            let enabled = step_with(config, &mut w, actor, &mut oracle, &mut obs, adm);
+            let counts = hook::take_counts();
+            if !enabled {
+                break;
+            }
+            w.faults = oracle.faults;
+            transition_properties(&base, &w, &mut obs, counts);
+            out.push(Next::Edge(Successor {
+                key: encode(config, &w),
+                fault: oracle.fault,
+                edge: pack(index, &oracle.sequence()),
+                violations: obs.violations,
+                branches: obs.branches,
+            }));
+            match oracle.next() {
+                Some(next) => prefix = next,
+                None => break,
+            }
+        }
+    }
+    (out, state.violations)
+}
+
+/// `trace`, with ADM played by `adm`.
+fn trace_with(config: &Config, edges: &[u64], adm: AdmStep) -> String {
+    let all = actors(config);
+    let mut key = encode(config, &initial(config));
+    let mut text = String::new();
+    for (n, &edge) in edges.iter().enumerate() {
+        let (actor, choices) = unpack(edge);
+        let mut w = decode(config, &key);
+        let mut oracle = Oracle::new(choices, w.faults);
+        let mut obs = Obs {
+            trace: Some(String::new()),
+            ..Obs::default()
+        };
+        step_with(config, &mut w, all[actor], &mut oracle, &mut obs, adm);
+        w.faults = oracle.faults;
+        let _ = writeln!(
+            text,
+            "    {:>3}. {}{}",
+            n + 1,
+            obs.trace.unwrap_or_default(),
+            if oracle.fault { "   [fault]" } else { "" }
+        );
+        key = encode(config, &w);
+    }
+    let w = decode(config, &key);
+    let _ = writeln!(
+        text,
+        "    end: phase {:?}, latch {:?}, U {:?}, C {:?}, X {:?}, table {:?}, qualified frontier {}, ledger {:?}",
+        w.core.phase, w.core.latch, w.core.u, w.core.c, w.core.x, w.table, w.core.frontier, w.rows
+    );
+    text
+}
+
+/// What an experimental run counted. Under the quotient, states and
+/// transitions are the quotient's, not the original graph's.
+#[derive(Debug, Default)]
+struct Tally {
+    states: u64,
+    expanded: u64,
+    transitions: u64,
+    fault_edges: u64,
+    nonfault_edges: u64,
+    no_step: u64,
+    evaluations: u64,
+    admitted: u64,
+    taken: BTreeSet<String>,
+    trace: Option<Vec<u64>>,
+}
+
+/// `explore`, with ADM played by `adm`, in either mode. In `Mode::Full`
+/// with `step_adm` it is the original explorer, and the differential tests
+/// hold its report to `explore`'s.
+fn explore_experimental(config: &Config, adm: AdmStep, mode: Mode) -> (Report, Tally) {
+    let start = Instant::now();
+    let all = actors(config);
+    let adm_index = all
+        .iter()
+        .position(|&actor| actor == Actor::Adm)
+        .expect("ADM is an actor");
+    let mut visited = Visited::new();
+    let mut parent: Vec<(u32, u64)> = Vec::new();
+    let mut nonfault_from: Vec<u64> = vec![0];
+    let mut nonfault: Vec<u32> = Vec::new();
+    let mut taken: BTreeSet<String> = BTreeSet::new();
+    let (mut transitions, mut fault_edges, mut no_step) = (0u64, 0u64, 0u64);
+    let (mut evaluations, mut admitted) = (0u64, 0u64);
+    let mut failure: Option<(&'static str, String, Vec<u64>)> = None;
+    let mut incomplete: Option<String> = None;
+    let init = encode(config, &initial(config));
+    visited.insert(&init);
+    parent.push((EMPTY, 0));
+    let path_to = |parent: &[(u32, u64)], mut id: u32| {
+        let mut edges = Vec::new();
+        while parent[id as usize].0 != EMPTY {
+            edges.push(parent[id as usize].1);
+            id = parent[id as usize].0;
+        }
+        edges.reverse();
+        edges
+    };
+    let mut id = 0u32;
+    while (id as usize) < visited.len() {
+        if visited.len() as u64 > config.cap {
+            incomplete = Some(format!("the state cap of {} was reached", config.cap));
+            break;
+        }
+        if start.elapsed() > config.time {
+            incomplete = Some(format!("the time cap of {:?} was reached", config.time));
+            break;
+        }
+        let key = visited.key(id).to_vec();
+        let (next, state_violations) = expand(config, &all, &key, adm, mode);
+        if let Some((property, detail)) = state_violations.into_iter().next() {
+            failure = Some((property, detail, path_to(&parent, id)));
+            break;
+        }
+        if !next.iter().any(|item| matches!(item, Next::Edge(_))) {
+            no_step += 1;
+            // Under the quotient the state still holds its admissions: the
+            // state with no enabled step is this one with them spent.
+            let mut end = decode(config, &key);
+            if mode == Mode::Quotient {
+                end.adm = 0;
+            }
+            if !terminal(config, &end) {
+                let mut edges = path_to(&parent, id);
+                if mode == Mode::Quotient {
+                    let spend = usize::from(config.admissions);
+                    edges.extend(std::iter::repeat_n(pack(adm_index, &[]), spend));
+                }
+                failure = Some((
+                    "D1",
+                    "a state with no enabled step is not terminal".into(),
+                    edges,
+                ));
+                break;
+            }
+        }
+        for item in next {
+            let successor = match item {
+                Next::Edge(successor) => successor,
+                Next::Admission(observed) => {
+                    evaluations += 1;
+                    if observed
+                        .branches
+                        .iter()
+                        .any(|label| label == "admission: admitted")
+                    {
+                        admitted += 1;
+                    }
+                    taken.extend(observed.branches);
+                    if let Some((property, detail)) = observed.violations.into_iter().next() {
+                        let mut edges = path_to(&parent, id);
+                        edges.push(observed.edge);
+                        failure = Some((property, detail, edges));
+                        break;
+                    }
+                    continue;
+                }
+            };
+            transitions += 1;
+            taken.extend(successor.branches);
+            if let Some((property, detail)) = successor.violations.into_iter().next() {
+                let mut edges = path_to(&parent, id);
+                edges.push(successor.edge);
+                failure = Some((property, detail, edges));
+                break;
+            }
+            let (to, new) = visited.insert(&successor.key);
+            if new {
+                parent.push((id, successor.edge));
+            }
+            if successor.fault {
+                fault_edges += 1;
+            } else {
+                nonfault.push(to);
+            }
+        }
+        if failure.is_some() {
+            break;
+        }
+        nonfault_from.push(nonfault.len() as u64);
+        id += 1;
+    }
+    let mut l1 = "not claimed for this configuration".to_string();
+    if failure.is_none() && incomplete.is_none() && config.l1 {
+        let n = visited.len();
+        let mut indegree = vec![0u32; n];
+        for &to in &nonfault {
+            indegree[to as usize] += 1;
+        }
+        let mut queue: Vec<u32> = (0..n as u32)
+            .filter(|&s| indegree[s as usize] == 0)
+            .collect();
+        let mut removed = 0usize;
+        while let Some(s) = queue.pop() {
+            removed += 1;
+            let (from, to) = (
+                nonfault_from[s as usize] as usize,
+                nonfault_from[s as usize + 1] as usize,
+            );
+            for &t in &nonfault[from..to] {
+                indegree[t as usize] -= 1;
+                if indegree[t as usize] == 0 {
+                    queue.push(t);
+                }
+            }
+        }
+        if removed == n {
+            l1 = format!(
+                "HOLDS: {} non-fault edges, no cycle; {no_step} end states, each terminal (D1)",
+                nonfault.len()
+            );
+        } else {
+            let cyclic = (0..n)
+                .find(|&s| indegree[s] > 0)
+                .expect("a state on a cycle") as u32;
+            failure = Some((
+                "L1",
+                format!(
+                    "{} states lie on or behind a cycle of non-fault steps; one is reached by",
+                    n - removed
+                ),
+                path_to(&parent, cyclic),
+            ));
+        }
+    }
+    let elapsed = start.elapsed();
+    let verdict = if failure.is_some() {
+        Verdict::Fail
+    } else if incomplete.is_some() {
+        Verdict::Incomplete
+    } else {
+        Verdict::Pass
+    };
+    let mut failed = BTreeSet::new();
+    let mut text = String::new();
+    match mode {
+        Mode::Full => {
+            let _ = writeln!(text, "EXPLORATION {}", config.name);
+        }
+        Mode::Quotient => {
+            let _ = writeln!(
+                text,
+                "EXPLORATION {} (admission observer quotient: experimental, not the contract's explorer)",
+                config.name
+            );
+        }
+    }
+    let _ = writeln!(
+        text,
+        "  outcome: {}",
+        match verdict {
+            Verdict::Pass => "PASS",
+            Verdict::Fail => "FAIL",
+            Verdict::Incomplete => "INCOMPLETE",
+        }
+    );
+    let _ = writeln!(
+        text,
+        "  bounds: facts {} conflicting {:?} ENV {} batch {} faults {} admissions {} gating callers {} \
+         gating conflict {} acknowledgement actors {} attempts each {} malformed snapshots {} cell constraint {} \
+         worker verbs unwind {} DROP {} REPLAY {} A4 {}; ticket limit {TICKET_LIMIT}, refusal limit \
+         {REFUSAL_LIMIT}; settlement and the worker on; caps {} states, {:?}",
+        config.facts,
+        config.conflict,
+        config.env,
+        config.batch,
+        config.faults,
+        config.admissions,
+        config.gating,
+        config.gating_conflict,
+        config.acks,
+        config.ack_attempts,
+        config.malformed,
+        config.cell_constraint,
+        config.worker_unwinds,
+        config.drop,
+        config.replays,
+        config.blanket_uncertain,
+        config.cap,
+        config.time
+    );
+    let _ = writeln!(text, "  actors: {all:?}");
+    if mode == Mode::Quotient {
+        let _ = writeln!(
+            text,
+            "  quotient: ADM is not scheduled; its one step is evaluated at every expanded state ({evaluations} \
+             evaluations, {admitted} admitted) and its successor discarded; every key holds {} admissions left; \
+             D1 is judged with them spent. The states and transitions below are the quotient's, not the \
+             original graph's, and the state cap counts quotient states.",
+            config.admissions
+        );
+    }
+    let _ = writeln!(
+        text,
+        "  states {} (expanded {}), transitions {transitions} (with a fault {fault_edges}), \
+         states with no enabled step {no_step}",
+        visited.len(),
+        id
+    );
+    let _ = writeln!(
+        text,
+        "  elapsed {:.1} s; explorer tables {} MiB",
+        elapsed.as_secs_f64(),
+        visited.bytes() >> 20
+    );
+    if let Some(reason) = &incomplete {
+        let _ = writeln!(
+            text,
+            "  INCOMPLETE: {reason}. No property is established by this run."
+        );
+    }
+    let mut trace = None;
+    match &failure {
+        Some((property, detail, edges)) => {
+            failed.insert(*property);
+            let _ = writeln!(text, "  FAIL: {property}: {detail}");
+            let _ = writeln!(text, "  shortest trace ({} steps):", edges.len());
+            text.push_str(&trace_with(config, edges, adm));
+            trace = Some(edges.clone());
+        }
+        None => {
+            for property in PROPERTIES {
+                let verdict = if incomplete.is_some() {
+                    "NOT ESTABLISHED (incomplete)".to_string()
+                } else if property == "L1" {
+                    l1.clone()
+                } else if property == "E10" && !config.worker_unwinds {
+                    "not applicable here (worker verbs do not unwind)".to_string()
+                } else {
+                    "HOLDS".to_string()
+                };
+                let _ = writeln!(text, "  {property}: {verdict}");
+            }
+        }
+    }
+    let _ = writeln!(text, "  branches:");
+    for label in BRANCHES {
+        let mark = if taken.contains(*label) {
+            "taken    "
+        } else {
+            "NOT TAKEN"
+        };
+        let _ = writeln!(text, "    [{mark}] {label}");
+    }
+    for label in taken
+        .iter()
+        .filter(|label| !BRANCHES.contains(&label.as_str()))
+    {
+        let _ = writeln!(text, "    [taken    ] {label} (not in the listed set)");
+    }
+    let _ = writeln!(text, "  state key fields: {KEY_FIELDS}");
+    let tally = Tally {
+        states: visited.len() as u64,
+        expanded: u64::from(id),
+        transitions,
+        fault_edges,
+        nonfault_edges: nonfault.len() as u64,
+        no_step,
+        evaluations,
+        admitted,
+        taken,
+        trace,
+    };
+    (
+        Report {
+            verdict,
+            text,
+            failed,
+        },
+        tally,
+    )
+}
+
+fn quotient_full_exploration(config: &Config) {
+    let (report, _) = explore_experimental(config, step_adm, Mode::Quotient);
+    println!("{}", report.text);
+    assert_eq!(
+        report.verdict,
+        Verdict::Pass,
+        "failed: {:?}\n{}",
+        report.failed,
+        report.text
+    );
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_f1() {
+    quotient_full_exploration(&F1);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_f2() {
+    quotient_full_exploration(&F2);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_f3() {
+    quotient_full_exploration(&F3);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_f4() {
+    quotient_full_exploration(&F4);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_f5() {
+    quotient_full_exploration(&F5);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_f6() {
+    quotient_full_exploration(&F6);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_f7() {
+    quotient_full_exploration(&F7);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_f8() {
+    quotient_full_exploration(&F8);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_fpt() {
+    quotient_full_exploration(&FPT);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_fb() {
+    quotient_full_exploration(&FB);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_fb2() {
+    quotient_full_exploration(&FB2);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_fg() {
+    quotient_full_exploration(&FG);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_fw() {
+    quotient_full_exploration(&FW);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_fd() {
+    quotient_full_exploration(&FD);
+}
+
+#[test]
+#[ignore = "experimental admission observer quotient: run only when an Architect mission names it"]
+fn quotient_full_fr() {
+    quotient_full_exploration(&FR);
+}
+
+// ---- experimental: the quotient held to the original --------------------------------------------
+
+/// One item of an expansion, compared whole.
+#[derive(Debug, PartialEq, Eq)]
+struct Item {
+    admission: bool,
+    edge: u64,
+    fault: bool,
+    key: Vec<u8>,
+    violations: Violations,
+    branches: Vec<String>,
+}
+
+fn items(next: Vec<Next>) -> Vec<Item> {
+    next.into_iter()
+        .map(|item| {
+            let (admission, s) = match item {
+                Next::Edge(s) => (false, s),
+                Next::Admission(s) => (true, s),
+            };
+            Item {
+                admission,
+                edge: s.edge,
+                fault: s.fault,
+                key: s.key,
+                violations: s.violations,
+                branches: s.branches,
+            }
+        })
+        .collect()
+}
+
+/// A whole graph, kept: every key reached through edges (not through
+/// admission observations), and each key's expansion and own violations.
+struct Graph {
+    keys: Vec<Vec<u8>>,
+    ids: BTreeMap<Vec<u8>, usize>,
+    items: Vec<Vec<Item>>,
+    state: Vec<Violations>,
+}
+
+fn whole_graph(config: &Config, expand_one: impl Fn(&[u8]) -> (Vec<Item>, Violations)) -> Graph {
+    let init = encode(config, &initial(config));
+    let mut graph = Graph {
+        keys: vec![init.clone()],
+        ids: BTreeMap::from([(init, 0)]),
+        items: Vec::new(),
+        state: Vec::new(),
+    };
+    let mut at = 0;
+    while at < graph.keys.len() {
+        assert!(
+            graph.keys.len() as u64 <= DEFAULT_CAP,
+            "a differential graph beyond the default cap"
+        );
+        let (items, state) = expand_one(&graph.keys[at]);
+        for item in &items {
+            if !item.admission && !graph.ids.contains_key(&item.key) {
+                graph.ids.insert(item.key.clone(), graph.keys.len());
+                graph.keys.push(item.key.clone());
+            }
+        }
+        graph.items.push(items);
+        graph.state.push(state);
+        at += 1;
+    }
+    graph
+}
+
+/// The whole numbers among a line's words, after its trailing `,` `)` `;`.
+fn numbers(text: &str, start: &str) -> Vec<u64> {
+    let line = text
+        .lines()
+        .find(|line| line.starts_with(start))
+        .unwrap_or_else(|| panic!("no line starts with {start:?}"));
+    line.split_whitespace()
+        .filter_map(|word| word.trim_end_matches([',', ')', ';']).parse().ok())
+        .collect()
+}
+
+/// A report's lines from `from` up to, not including, `to`.
+fn section<'a>(text: &'a str, from: &str, to: &str) -> Vec<&'a str> {
+    text.lines()
+        .skip_while(|line| !line.starts_with(from))
+        .take_while(|line| !line.starts_with(to))
+        .collect()
+}
+
+/// Holds the quotient to the reduction on one configuration, with the real
+/// admission step: the whole original graph against the whole quotient,
+/// state by state and edge by edge, and `explore`'s report against both
+/// experimental reports.
+fn quotient_differential(config: &Config) {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let all = actors(config);
+    let n = config.admissions;
+    let adm_index = all
+        .iter()
+        .position(|&actor| actor == Actor::Adm)
+        .expect("ADM is an actor");
+    let original = whole_graph(config, |key| {
+        let (next, state) = successors(config, &all, key);
+        (items(next.into_iter().map(Next::Edge).collect()), state)
+    });
+    let quotient = whole_graph(config, |key| {
+        let (next, state) = expand(config, &all, key, step_adm, Mode::Quotient);
+        (items(next), state)
+    });
+
+    // 0. The experimental expansion in its full mode is `successors`.
+    for (id, key) in original.keys.iter().enumerate() {
+        let (next, state) = expand(config, &all, key, step_adm, Mode::Full);
+        assert!(
+            items(next) == original.items[id] && state == original.state[id],
+            "the full mode differs from `successors` at state {id}"
+        );
+    }
+
+    // 1. The product: every original state projects to a quotient state,
+    //    and every quotient state, with any number of admissions left, is an
+    //    original state.
+    for key in &original.keys {
+        assert!(
+            quotient.ids.contains_key(&with_admissions(config, key, n)),
+            "an original state outside the quotient"
+        );
+    }
+    for key in &quotient.keys {
+        for a in 0..=n {
+            assert!(
+                original.ids.contains_key(&with_admissions(config, key, a)),
+                "a quotient state with {a} admissions left is not an original state"
+            );
+        }
+    }
+
+    // 2-5. Each original state against its class: its own violations; its
+    //      non-ADM edges, in order; its ADM edge against the observation; and
+    //      D1.
+    let (mut adm_edges, mut adm_admitted, mut dead) = (0u64, 0u64, 0u64);
+    for (id, key) in original.keys.iter().enumerate() {
+        let a = decode(config, key).adm;
+        let q = quotient.ids[&with_admissions(config, key, n)];
+        assert_eq!(
+            original.state[id], quotient.state[q],
+            "state violations differ"
+        );
+        let (adm_items, others): (Vec<&Item>, Vec<&Item>) = original.items[id]
+            .iter()
+            .partition(|item| unpack(item.edge).0 == adm_index);
+        let (observed, edges): (Vec<&Item>, Vec<&Item>) =
+            quotient.items[q].iter().partition(|item| item.admission);
+        assert_eq!(others.len(), edges.len(), "non-ADM edges differ in number");
+        for (g, e) in others.iter().zip(&edges) {
+            assert!(
+                g.edge == e.edge
+                    && g.fault == e.fault
+                    && g.violations == e.violations
+                    && g.branches == e.branches,
+                "a non-ADM edge differs"
+            );
+            assert_eq!(
+                decode(config, &g.key).adm,
+                a,
+                "a non-ADM edge spent an admission"
+            );
+            assert_eq!(
+                with_admissions(config, &g.key, n),
+                e.key,
+                "a non-ADM edge leads elsewhere"
+            );
+        }
+        assert_eq!(observed.len(), usize::from(n > 0), "an observation missing");
+        if a > 0 {
+            let [g] = adm_items.as_slice() else {
+                panic!("not exactly one ADM edge with {a} admissions left");
+            };
+            let e = observed[0];
+            assert!(
+                !g.fault
+                    && g.edge == pack(adm_index, &[])
+                    && g.key == with_admissions(config, key, a - 1),
+                "the ADM edge is not a counter step"
+            );
+            assert!(
+                e.edge == g.edge
+                    && e.violations == g.violations
+                    && e.branches == g.branches
+                    && with_admissions(config, &e.key, a - 1) == g.key,
+                "the observation differs from the ADM edge"
+            );
+            adm_edges += 1;
+            if g.branches
+                .iter()
+                .any(|label| label == "admission: admitted")
+            {
+                adm_admitted += 1;
+            }
+        } else {
+            assert!(adm_items.is_empty(), "an ADM edge with no admission left");
+        }
+        let no_step = original.items[id].is_empty();
+        assert_eq!(no_step, a == 0 && edges.is_empty(), "D1's states differ");
+        if no_step {
+            dead += 1;
+            let mut end = decode(config, &quotient.keys[q]);
+            end.adm = 0;
+            assert_eq!(
+                terminal(config, &decode(config, key)),
+                terminal(config, &end),
+                "terminal differs"
+            );
+        }
+    }
+
+    // 6. The reports: `explore`, the full mode and the quotient.
+    let report = explore(config);
+    let (full, full_tally) = explore_experimental(config, step_adm, Mode::Full);
+    let timeless = |text: &str| -> Vec<String> {
+        text.lines()
+            .filter(|line| !line.starts_with("  elapsed "))
+            .map(str::to_string)
+            .collect()
+    };
+    assert_eq!(
+        timeless(&report.text),
+        timeless(&full.text),
+        "the full mode's report differs from `explore`'s"
+    );
+    let (projected, tally) = explore_experimental(config, step_adm, Mode::Quotient);
+    println!("{}\n{}", report.text, projected.text);
+    assert_eq!(report.verdict, Verdict::Pass);
+    assert_eq!(projected.verdict, Verdict::Pass);
+    assert_eq!(full_tally.taken, tally.taken, "the branches taken differ");
+    let [states, expanded, transitions, faulted, no_step] = numbers(&report.text, "  states ")[..]
+    else {
+        panic!("the original's states line");
+    };
+    let [nonfault, ends] = numbers(&report.text, "  L1: ")[..] else {
+        panic!("the original's L1 line");
+    };
+    let (k, s) = (u64::from(n) + 1, tally.states);
+    assert_eq!(states, original.keys.len() as u64);
+    assert_eq!(tally.states, quotient.keys.len() as u64);
+    assert_eq!((expanded, tally.expanded), (states, s));
+    assert_eq!(states, k * s);
+    assert_eq!(transitions, k * tally.transitions + u64::from(n) * s);
+    assert_eq!(faulted, k * tally.fault_edges);
+    assert_eq!(nonfault, k * tally.nonfault_edges + u64::from(n) * s);
+    assert_eq!(
+        (no_step, ends, dead),
+        (tally.no_step, tally.no_step, tally.no_step)
+    );
+    assert_eq!(tally.evaluations, if n > 0 { s } else { 0 });
+    assert_eq!(adm_edges, u64::from(n) * tally.evaluations);
+    assert_eq!(adm_admitted, u64::from(n) * tally.admitted);
+    let lines = |text: &str| -> Vec<String> {
+        section(text, "  P1:", "  state key fields")
+            .into_iter()
+            .filter(|line| !line.starts_with("  L1: "))
+            .map(str::to_string)
+            .collect()
+    };
+    assert_eq!(
+        lines(&report.text),
+        lines(&projected.text),
+        "properties or branches differ"
+    );
+    assert_eq!(
+        numbers(&projected.text, "  L1: "),
+        [tally.nonfault_edges, tally.no_step],
+        "the quotient's L1 line"
+    );
+    assert_eq!(
+        section(&report.text, "  state key fields", "\u{0}"),
+        section(&projected.text, "  state key fields", "\u{0}")
+    );
+    if n == 0 {
+        // No admission: the two reports differ only in the header, the
+        // quotient's line and the time.
+        let plain = |text: &str| -> Vec<String> {
+            timeless(text)
+                .into_iter()
+                .skip(1)
+                .filter(|line| !line.starts_with("  quotient: "))
+                .collect()
+        };
+        assert_eq!(plain(&report.text), plain(&projected.text));
+        assert_eq!(
+            original.keys, quotient.keys,
+            "with no admission the graphs are one"
+        );
+    }
+    println!(
+        "DIFFERENTIAL {}: admissions {n}. Original: {states} states, {transitions} transitions ({faulted} with \
+         a fault, {nonfault} without), {adm_edges} ADM edges ({adm_admitted} admitting), {no_step} with no \
+         enabled step. Quotient: {s} states, {} transitions ({} with a fault, {} without), {} admission \
+         evaluations ({} admitting), {} with no enabled step. Matched: every original state to its class, \
+         every non-ADM edge, every ADM edge to its observation, every state with no enabled step and its \
+         terminal judgement, every property line, every branch, and (full mode) explore's whole report.",
+        config.name,
+        tally.transitions,
+        tally.fault_edges,
+        tally.nonfault_edges,
+        tally.evaluations,
+        tally.admitted,
+        tally.no_step
+    );
+}
+
+#[test]
+fn quotient_x1_matches_the_original() {
+    quotient_differential(&X1);
+}
+
+#[test]
+fn quotient_x2_matches_the_original() {
+    quotient_differential(&X2);
+}
+
+#[test]
+fn quotient_x3_matches_the_original() {
+    quotient_differential(&X3);
+}
+
+#[test]
+fn quotient_x4_matches_the_original() {
+    quotient_differential(&X4);
+}
+
+#[test]
+fn quotient_x5_matches_the_original() {
+    quotient_differential(&X5);
+}
+
+// ---- experimental: negative cases ---------------------------------------------------------------
+
+/// `step_adm` with its decision replaced: a deliberately defective
+/// admission, for the negative cases only.
+fn admit_by(
+    config: &Config,
+    w: &mut World,
+    obs: &mut Obs,
+    admits: impl Fn(&World, HealthView) -> bool,
+) -> bool {
+    if w.adm == 0 {
+        return false;
+    }
+    obs.views += 1;
+    let view = w.health.view();
+    let admitted = admits(w, view);
+    w.adm -= 1;
+    let label = if admitted { "admitted" } else { "refused" };
+    obs.branch(format!("admission: {label}"));
+    obs.note(|| format!("[T] admission (defective): {label}"));
+    if admitted {
+        admission_properties(config, w, obs);
+    }
+    true
+}
+
+/// Admits without looking at `unapplied`.
+fn adm_ignoring_unapplied(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+    admit_by(config, w, obs, |w, view| {
+        view.word & FLAGS == SESSION_OPEN && w.table.debt == 0 && w.table.h <= w.table.a
+    })
+}
+
+/// Admits although recovery is required (H above A).
+fn adm_ignoring_recovery(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+    admit_by(config, w, obs, |w, view| view.admits() && w.table.debt == 0)
+}
+
+/// Admits although the core is latched, and whatever the debt the latch
+/// leaves.
+fn adm_ignoring_the_latch(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+    admit_by(config, w, obs, |w, view| {
+        view.word & FLAGS & !LATCHED == SESSION_OPEN
+            && field(view.word, UNAPPLIED_SHIFT) == 0
+            && w.table.h <= w.table.a
+    })
+}
+
+/// The real admission, and then a second load in the same step.
+fn adm_viewing_twice(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+    let enabled = step_adm(config, w, obs);
+    if enabled {
+        let _ = w.health.view();
+    }
+    enabled
+}
+
+/// The real admission, and then its view's low bits kept in the world, as
+/// A2's first step keeps them.
+fn adm_keeping_bits(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+    let enabled = step_adm(config, w, obs);
+    if enabled {
+        w.adm_kept = Some(word_of(&w.core.shared) & FLAGS);
+    }
+    enabled
+}
+
+/// The real admission, without spending the attempt.
+fn adm_keeping_its_counter(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+    let enabled = step_adm(config, w, obs);
+    if enabled {
+        w.adm += 1;
+    }
+    enabled
+}
+
+/// The real admission, and then a write to the test's table.
+fn adm_writing_the_table(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+    let enabled = step_adm(config, w, obs);
+    if enabled {
+        w.table.a += 1;
+    }
+    enabled
+}
+
+/// Replays `edges` in the original semantics, with `adm` as admission, each
+/// step enabled and taking exactly its recorded choices; returns the
+/// properties its last step violates.
+fn last_step_violations(config: &Config, edges: &[u64], adm: AdmStep) -> Vec<&'static str> {
+    let all = actors(config);
+    let mut key = encode(config, &initial(config));
+    let mut last = Vec::new();
+    for &edge in edges {
+        let (actor, choices) = unpack(edge);
+        let base = decode(config, &key);
+        let mut w = decode(config, &key);
+        let mut oracle = Oracle::new(choices.clone(), w.faults);
+        let mut obs = Obs::default();
+        hook::take_counts();
+        let enabled = step_with(config, &mut w, all[actor], &mut oracle, &mut obs, adm);
+        let counts = hook::take_counts();
+        assert!(enabled, "a replayed step is not enabled");
+        assert_eq!(
+            oracle.sequence(),
+            choices,
+            "a replayed step took other choices"
+        );
+        w.faults = oracle.faults;
+        transition_properties(&base, &w, &mut obs, counts);
+        last = obs
+            .violations
+            .iter()
+            .map(|(property, _)| *property)
+            .collect();
+        key = encode(config, &w);
+    }
+    last
+}
+
+/// A defective admission fails `property` in both modes, with shortest
+/// traces of one length ending in ADM; the quotient's trace is an original
+/// trace: replayed with the same admission, its last step violates
+/// `property`.
+fn negative_case(config: &Config, adm: AdmStep, property: &'static str) {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let adm_index = actors(config)
+        .iter()
+        .position(|&actor| actor == Actor::Adm)
+        .expect("ADM is an actor");
+    let (full, full_tally) = explore_experimental(config, adm, Mode::Full);
+    let (projected, tally) = explore_experimental(config, adm, Mode::Quotient);
+    println!("{}\n{}", full.text, projected.text);
+    for report in [&full, &projected] {
+        assert_eq!(report.verdict, Verdict::Fail, "{}", report.text);
+        assert_eq!(report.failed, BTreeSet::from([property]), "{}", report.text);
+    }
+    let (full_trace, trace) = (
+        full_tally.trace.expect("a trace"),
+        tally.trace.expect("a trace"),
+    );
+    assert_eq!(
+        full_trace.len(),
+        trace.len(),
+        "shortest traces differ in length"
+    );
+    for edges in [&full_trace, &trace] {
+        assert_eq!(edges.last().map(|&edge| unpack(edge).0), Some(adm_index));
+    }
+    assert!(
+        last_step_violations(config, &trace, adm).contains(&property),
+        "the quotient's trace does not replay to its violation"
+    );
+    println!(
+        "NEGATIVE {}: FAIL {property} in both modes; shortest traces {} steps; the quotient's trace \
+         replays in the original semantics to {property}",
+        config.name,
+        trace.len()
+    );
+}
+
+#[test]
+fn quotient_negative_p1_admission_ignores_unapplied() {
+    negative_case(&X1, adm_ignoring_unapplied, "P1");
+}
+
+#[test]
+fn quotient_negative_p12_admission_ignores_recovery() {
+    negative_case(&X4, adm_ignoring_recovery, "P12");
+}
+
+#[test]
+fn quotient_negative_e9_admission_ignores_the_latch() {
+    negative_case(&X1, adm_ignoring_the_latch, "E9");
+}
+
+#[test]
+fn quotient_negative_e2_admission_views_twice() {
+    negative_case(&X1, adm_viewing_twice, "E2");
+}
+
+/// The observer on forced states (not reachable): it reports what the
+/// admission step reports, and only when the step admits.
+#[test]
+fn quotient_observer_reports_the_admission_properties() {
+    let observe = |config: &Config, w: &World| -> Successor {
+        let index = actors(config)
+            .iter()
+            .position(|&actor| actor == Actor::Adm)
+            .expect("ADM is an actor");
+        let key = encode(config, w);
+        let base = decode(config, &key);
+        observe_admission(config, &base, &key, index, step_adm).expect("ADM is enabled")
+    };
+    let named = |s: &Successor| -> Vec<&'static str> {
+        s.violations.iter().map(|(property, _)| *property).collect()
+    };
+    // P1, and E6 for a batch: a result is unrecorded.
+    let batch = Config {
+        admissions: 1,
+        ..X5
+    };
+    let mut w = initial(&batch);
+    w.ghost.unrecorded = bit(0);
+    let s = observe(&batch, &w);
+    assert_eq!(named(&s), ["P1", "E6"]);
+    assert_eq!(s.branches, ["admission: admitted"]);
+    // P12 and P15: an explanation no acknowledgement covers.
+    let mut w = initial(&X4);
+    w.rows.push(SimRow::Explanation(0));
+    assert_eq!(named(&observe(&X4, &w)), ["P12", "P15"]);
+    // E9: a latch, not yet published.
+    let mut w = initial(&X1);
+    w.core.latch = Some(LatchCause::Constraint);
+    assert_eq!(named(&observe(&X1, &w)), ["E9"]);
+    // A debt: refused, and nothing is reported, although a result is
+    // unrecorded.
+    let mut w = initial(&X1);
+    w.ghost.unrecorded = bit(0);
+    set_class(&mut w.table, 0, Class::Refused);
+    let s = observe(&X1, &w);
+    assert!(s.violations.is_empty(), "{:?}", s.violations);
+    assert_eq!(s.branches, ["admission: refused"]);
+}
+
+#[test]
+#[should_panic(expected = "quotient inapplicable: ADM kept bits in the world (A2)")]
+fn quotient_refuses_an_admission_that_keeps_bits() {
+    let _ = explore_experimental(&X1, adm_keeping_bits, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(expected = "quotient inapplicable: ADM did not spend exactly one admission")]
+fn quotient_refuses_an_admission_that_keeps_its_counter() {
+    let _ = explore_experimental(&X1, adm_keeping_its_counter, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(expected = "quotient inapplicable: ADM changed the world beyond its counter")]
+fn quotient_refuses_an_admission_that_writes_the_table() {
+    let _ = explore_experimental(&X1, adm_writing_the_table, Mode::Quotient);
+}
+
+/// Why the counter must fall: an admission that keeps it makes a non-fault
+/// self-loop, which the original semantics reports as L1.
+#[test]
+fn an_admission_that_keeps_its_counter_fails_l1_in_the_original() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (report, _) = explore_experimental(&X1, adm_keeping_its_counter, Mode::Full);
+    assert_eq!(report.verdict, Verdict::Fail, "{}", report.text);
+    assert_eq!(report.failed, BTreeSet::from(["L1"]), "{}", report.text);
+}
