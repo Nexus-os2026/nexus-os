@@ -4149,7 +4149,10 @@ fn x5_one_clean_batch_of_two() {
 #[test]
 #[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
 fn full_f1() {
-    full_exploration(&F1);
+    full_exploration(&Config {
+        cap: 60_000_000,
+        ..F1
+    });
 }
 
 #[test]
