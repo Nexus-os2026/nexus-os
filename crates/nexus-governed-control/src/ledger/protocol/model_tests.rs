@@ -620,8 +620,10 @@ struct Unwound;
 /// is a choice of the oracle.
 struct Io<'a> {
     rows: &'a mut Vec<SimRow>,
-    /// Rows inserted in the open transaction, not yet durable.
-    pending: Vec<SimRow>,
+    /// Rows issued in the open transaction, not yet durable, each marked if
+    /// its insert answered `Failed`: such a row was issued, and whether the
+    /// transaction holds it is not known.
+    pending: Vec<(SimRow, bool)>,
     oracle: &'a mut Oracle,
     log: Vec<(Verb, Answer)>,
     /// The verbs of this operation may unwind.
@@ -663,18 +665,32 @@ impl<'a> Io<'a> {
         answer
     }
 
+    /// What the transaction may hold, and so what its records may be: the
+    /// rows whose inserts did not answer `Failed`; and, if one did, every
+    /// issued row.
+    fn holdings(&mut self) -> Vec<Vec<SimRow>> {
+        let pending = std::mem::take(&mut self.pending);
+        let mut holdings = vec![pending
+            .iter()
+            .filter(|(_, failed)| !failed)
+            .map(|(row, _)| *row)
+            .collect()];
+        if pending.iter().any(|(_, failed)| *failed) {
+            holdings.push(pending.iter().map(|(row, _)| *row).collect());
+        }
+        holdings
+    }
+
     /// After `Commit::Unknown`, after `Rollback::Unknown` once an insert was
     /// issued, and after an unwind once an insert was issued: the records are
-    /// present or absent, and both are explored.
+    /// present or absent, and both are explored. Every holding of the
+    /// transaction is explored as present.
     fn undecided(&mut self) {
-        if self.pending.is_empty() {
-            return;
-        }
-        if self.oracle.branch(2) == 1 {
-            self.rows.append(&mut self.pending);
-        } else {
-            self.pending.clear();
-        }
+        let mut outcomes = self.holdings();
+        outcomes.retain(|rows| !rows.is_empty());
+        outcomes.insert(0, Vec::new());
+        let pick = self.oracle.branch(outcomes.len());
+        self.rows.append(&mut outcomes.swap_remove(pick));
     }
 
     fn read<T>(&mut self, verb: Verb, value: impl FnOnce(&[SimRow]) -> T) -> Read<T> {
@@ -687,7 +703,7 @@ impl<'a> Io<'a> {
 
     fn insert_row(&mut self, row: SimRow) -> Insert {
         // The row is issued: if this insert unwinds, it may be written.
-        self.pending.push(row);
+        self.pending.push((row, false));
         let faults: &[Answer] = if self.constraint {
             &[Answer::Constraint, Answer::Failed]
         } else {
@@ -696,11 +712,15 @@ impl<'a> Io<'a> {
         match self.pick(Verb::Insert, faults) {
             Answer::Ok => Insert::Inserted((self.rows.len() + self.pending.len()) as Seq),
             Answer::Constraint => {
+                // A constraint refused this row.
                 self.pending.pop();
                 Insert::Constraint
             }
             _ => {
-                self.pending.pop();
+                // Issued, and not refused: it may be written.
+                if let Some((_, failed)) = self.pending.last_mut() {
+                    *failed = true;
+                }
                 Insert::Failed
             }
         }
@@ -709,7 +729,10 @@ impl<'a> Io<'a> {
     fn do_commit(&mut self) -> Commit {
         match self.pick(Verb::Commit, &[Answer::Unknown]) {
             Answer::Ok => {
-                self.rows.append(&mut self.pending);
+                // A-2: the records. Every holding is explored.
+                let mut holdings = self.holdings();
+                let pick = self.oracle.branch(holdings.len());
+                self.rows.append(&mut holdings.swap_remove(pick));
                 Commit::Durable
             }
             _ => {
@@ -1443,29 +1466,14 @@ fn word_of(shared: &Shared) -> u64 {
     shared.word.load(std::sync::atomic::Ordering::SeqCst)
 }
 
-fn encode(config: &Config, w: &World) -> Vec<u8> {
-    let mut e = Enc(Vec::with_capacity(96));
-    let shared = &w.core.shared;
-    assert!(
-        Arc::ptr_eq(&w.health.shared, shared),
-        "the health handle of another world"
-    );
-    assert_eq!(shared.tickets, TICKET_LIMIT);
-    assert_eq!(w.core.refusal_limit, REFUSAL_LIMIT);
-    let word = word_of(shared);
-    let low = word & FLAGS;
-    let live = field(word, LIVE_SHIFT);
-    let unapplied = field(word, UNAPPLIED_SHIFT);
-    assert_eq!(
-        low | with_field(0, LIVE_SHIFT, live) | with_field(0, UNAPPLIED_SHIFT, unapplied),
-        word,
-        "the word has bits outside its fields"
-    );
-    e.u(low);
-    e.u(live);
-    e.u(unapplied);
-    // The core.
-    let core = &w.core;
+/// Every field of the core but its shared allocation, each with its presence
+/// and its length marked, so that two cores encode alike only if they are
+/// equal: phase, session, latch and cause; each cell's presence, occupancy
+/// number and occupant, and X's stage with its sequence; the three occupancy
+/// counters; the refusal table's size and each entry with its retained
+/// cause; the qualified frontier; whether the worker was taken. The state
+/// key and E8 both use it.
+fn encode_core(e: &mut Enc, core: &Core) {
     e.byte(core.phase as u8);
     e.byte(core.session as u8);
     match core.latch {
@@ -1507,6 +1515,31 @@ fn encode(config: &Config, w: &World) -> Vec<u8> {
     }
     e.u(core.frontier);
     e.b(core.worker_taken);
+}
+
+fn encode(config: &Config, w: &World) -> Vec<u8> {
+    let mut e = Enc(Vec::with_capacity(96));
+    let shared = &w.core.shared;
+    assert!(
+        Arc::ptr_eq(&w.health.shared, shared),
+        "the health handle of another world"
+    );
+    assert_eq!(shared.tickets, TICKET_LIMIT);
+    assert_eq!(w.core.refusal_limit, REFUSAL_LIMIT);
+    let word = word_of(shared);
+    let low = word & FLAGS;
+    let live = field(word, LIVE_SHIFT);
+    let unapplied = field(word, UNAPPLIED_SHIFT);
+    assert_eq!(
+        low | with_field(0, LIVE_SHIFT, live) | with_field(0, UNAPPLIED_SHIFT, unapplied),
+        word,
+        "the word has bits outside its fields"
+    );
+    e.u(low);
+    e.u(live);
+    e.u(unapplied);
+    // The core.
+    encode_core(&mut e, &w.core);
     // The simulated ledger beyond its initial rows.
     let initial = initial_rows(config);
     assert_eq!(
@@ -2796,34 +2829,14 @@ fn present_token(core: &Core, token: &CellToken) -> bool {
     Arc::ptr_eq(&token.ledger, &core.shared) && core.occupancy(token.cell) == Some(token.occupancy)
 }
 
-/// The core, encoded, for E8.
+/// The core, encoded, for E8: every field the state key holds, and the two
+/// limits fixed at creation. Which allocation the core refers to, and the
+/// word in it, E8 compares on their own.
 fn core_key(core: &Core) -> Vec<u8> {
     let mut e = Enc(Vec::new());
-    e.byte(core.phase as u8);
-    e.byte(core.session as u8);
-    e.byte(core.latch.map_or(0, |c| 1 + c as u8));
-    for cell in [&core.u, &core.c] {
-        match cell {
-            None => e.byte(0),
-            Some((n, occupant)) => {
-                e.u(*n);
-                e.occupant(occupant);
-            }
-        }
-    }
-    if let Some((n, occupant, stage)) = &core.x {
-        e.u(*n);
-        e.occupant(occupant);
-        e.byte(u8::from(*stage != Stage::Built));
-    }
-    for n in core.occupancies {
-        e.u(n);
-    }
-    for (key, cause) in &core.refusals {
-        e.key(key);
-        e.cause(cause);
-    }
-    e.u(core.frontier);
+    encode_core(&mut e, core);
+    e.u(u64::from(core.refusal_limit));
+    e.u(u64::from(core.shared.tickets));
     e.0
 }
 
@@ -2836,7 +2849,7 @@ fn worker_op(config: &Config, w: &mut World, action: &Action, o: &mut Oracle, ob
         Action::Nothing | Action::Barrier => None,
     };
     let stale = token.as_ref().is_some_and(|t| !present_token(&w.core, t));
-    let before_core = stale.then(|| core_key(&w.core));
+    let before_core = stale.then(|| (core_key(&w.core), Arc::as_ptr(&w.core.shared)));
     let before_word = word_of(&w.core.shared);
     let before_rows = w.rows.clone();
     let x_original = match &w.core.x {
@@ -2929,8 +2942,12 @@ fn worker_op(config: &Config, w: &mut World, action: &Action, o: &mut Oracle, ob
     if unchanged && w.rows != before_rows {
         obs.fail("E4", format!("{label}, but the ledger changed"));
     }
-    if let Some(before) = before_core {
-        if !stale_answer || core_key(&w.core) != before || word_of(&w.core.shared) != before_word {
+    if let Some((before, ledger)) = before_core {
+        if !stale_answer
+            || core_key(&w.core) != before
+            || Arc::as_ptr(&w.core.shared) != ledger
+            || word_of(&w.core.shared) != before_word
+        {
             obs.fail(
                 "E8",
                 format!(
@@ -4271,4 +4288,501 @@ fn the_explorer_machinery_is_sound() {
     assert!(!Arc::ptr_eq(&w.core.shared, &copy.core.shared));
     assert!(Arc::ptr_eq(&copy.core.shared, &copy.health.shared));
     assert_eq!(word_of(&w.core.shared), word_of(&copy.core.shared));
+}
+
+// ---- the simulated storage, and the key E8 compares ---------------------------------------------
+
+/// One simulated outcome of a store operation: its verbs with their
+/// answers, and the rows the ledger gained.
+type Outcome = (Vec<(Verb, Answer)>, Vec<SimRow>);
+
+/// Every simulated outcome of one fact append of `members`, from the
+/// initial world of `config`, within its fault budget.
+fn append_outcomes(config: &Config, members: &[u8]) -> Vec<Outcome> {
+    let batch: Vec<FactRecord> = members
+        .iter()
+        .map(|&f| FactRecord::new(fact_member(f)))
+        .collect();
+    let mut outcomes = Vec::new();
+    let mut prefix = Vec::new();
+    loop {
+        let mut w = initial(config);
+        let before = w.rows.len();
+        let mut oracle = Oracle::new(prefix, config.faults);
+        let mut ticket = w.health.arm().expect("a ticket below the limit");
+        let mut io = Io::new(&mut w.rows, &mut oracle, true, true);
+        let core = &mut w.core;
+        let _ = run_op(|| core.append_facts(&mut ticket, &batch, &mut io));
+        let log = std::mem::take(&mut io.log);
+        drop(io);
+        // Not a step: settled, so that its drop touches no word.
+        ticket.state = TicketState::Settled;
+        outcomes.push((log, w.rows[before..].to_vec()));
+        match oracle.next() {
+            Some(next) => prefix = next,
+            None => break,
+        }
+    }
+    outcomes
+}
+
+/// One expectation: after verbs that answered exactly so, the rows gained
+/// are, as a set of histories, exactly these.
+type Case<'a> = (Vec<(Verb, Answer)>, &'a [&'a [SimRow]]);
+
+/// Checks every case, printing what was explored for each, and fails
+/// naming every case that differs.
+fn assert_histories(outcomes: &[Outcome], cases: &[Case]) {
+    let mut wrong = Vec::new();
+    for (log, expected) in cases {
+        let mut got: Vec<Vec<SimRow>> = Vec::new();
+        for (taken, rows) in outcomes {
+            if taken == log && !got.contains(rows) {
+                got.push(rows.clone());
+            }
+        }
+        let same = got.len() == expected.len()
+            && expected
+                .iter()
+                .all(|rows| got.iter().any(|g| g.as_slice() == *rows));
+        println!(
+            "{} {}: explored {got:?}; expected {expected:?}",
+            if same { "same " } else { "DIFFERS" },
+            log_label(log)
+        );
+        if !same {
+            wrong.push(log_label(log));
+        }
+    }
+    assert!(wrong.is_empty(), "the histories differ after: {wrong:?}");
+}
+
+fn ok(verb: Verb) -> (Verb, Answer) {
+    (verb, Answer::Ok)
+}
+
+/// An insert that answers `Failed` was issued (section 4.1: any failure but
+/// a constraint). With the rollback `Unknown`, or unwinding, the records are
+/// present or absent and both are explored (section 7.1); with the rollback
+/// `Undone`, nothing was written (A-1). One member.
+#[test]
+fn a_failed_insert_may_have_written_unless_the_rollback_undid_it() {
+    let after = |tail: &[(Verb, Answer)]| [&[ok(Verb::Open), ok(Verb::Facts)][..], tail].concat();
+    let failed = (Verb::Insert, Answer::Failed);
+    let f1: &[SimRow] = &[SimRow::Fact(0)];
+    assert_histories(
+        &append_outcomes(&X1, &[0]),
+        &[
+            (after(&[failed, ok(Verb::Rollback)]), &[&[]]),
+            (
+                after(&[failed, (Verb::Rollback, Answer::Unknown)]),
+                &[&[], f1],
+            ),
+            (
+                after(&[failed, (Verb::Rollback, Answer::Unwound)]),
+                &[&[], f1],
+            ),
+        ],
+    );
+}
+
+/// The same, for a batch of two. When the second insert fails, the first
+/// member alone may also be what the transaction holds.
+#[test]
+fn a_failed_insert_in_a_batch_may_have_written_unless_the_rollback_undid_it() {
+    let read = [ok(Verb::Open), ok(Verb::Facts), ok(Verb::Facts)];
+    let after = |tail: &[(Verb, Answer)]| [&read[..], tail].concat();
+    let failed = (Verb::Insert, Answer::Failed);
+    let (f1, both): (&[SimRow], &[SimRow]) =
+        (&[SimRow::Fact(0)], &[SimRow::Fact(0), SimRow::Fact(1)]);
+    let (unknown, unwound) = (
+        (Verb::Rollback, Answer::Unknown),
+        (Verb::Rollback, Answer::Unwound),
+    );
+    let inserted = ok(Verb::Insert);
+    assert_histories(
+        &append_outcomes(&X5, &[0, 1]),
+        &[
+            (after(&[failed, ok(Verb::Rollback)]), &[&[]]),
+            (after(&[failed, unknown]), &[&[], f1]),
+            (after(&[failed, unwound]), &[&[], f1]),
+            (after(&[inserted, failed, ok(Verb::Rollback)]), &[&[]]),
+            (after(&[inserted, failed, unknown]), &[&[], f1, both]),
+            (after(&[inserted, failed, unwound]), &[&[], f1, both]),
+        ],
+    );
+}
+
+/// The other answers keep their meaning. A durable commit wrote the records
+/// (A-2). A commit answering `Unknown` leaves them present or absent,
+/// whatever the rollback then says; so does an unwinding insert. A
+/// constraint failure rejected its own row: the rollback decides only for
+/// the rows inserted before it, and `Undone` leaves nothing (A-1).
+#[test]
+fn the_other_storage_answers_keep_their_meaning() {
+    let (f1, both): (&[SimRow], &[SimRow]) =
+        (&[SimRow::Fact(0)], &[SimRow::Fact(0), SimRow::Fact(1)]);
+    let after = |tail: &[(Verb, Answer)]| [&[ok(Verb::Open), ok(Verb::Facts)][..], tail].concat();
+    let (inserted, unknown) = (ok(Verb::Insert), (Verb::Commit, Answer::Unknown));
+    let constraint = (Verb::Insert, Answer::Constraint);
+    assert_histories(
+        &append_outcomes(&X1, &[0]),
+        &[
+            (after(&[inserted, ok(Verb::Commit)]), &[f1]),
+            (after(&[inserted, unknown, ok(Verb::Rollback)]), &[&[], f1]),
+            (
+                after(&[inserted, unknown, (Verb::Rollback, Answer::Unknown)]),
+                &[&[], f1],
+            ),
+            (after(&[(Verb::Insert, Answer::Unwound)]), &[&[], f1]),
+            (after(&[constraint, ok(Verb::Rollback)]), &[&[]]),
+            (
+                after(&[constraint, (Verb::Rollback, Answer::Unknown)]),
+                &[&[]],
+            ),
+            (
+                after(&[constraint, (Verb::Rollback, Answer::Unwound)]),
+                &[&[]],
+            ),
+        ],
+    );
+    let read = [ok(Verb::Open), ok(Verb::Facts), ok(Verb::Facts), inserted];
+    let after = |tail: &[(Verb, Answer)]| [&read[..], tail].concat();
+    assert_histories(
+        &append_outcomes(&X5, &[0, 1]),
+        &[
+            (after(&[constraint, ok(Verb::Rollback)]), &[&[]]),
+            (
+                after(&[constraint, (Verb::Rollback, Answer::Unknown)]),
+                &[&[], f1],
+            ),
+            (
+                after(&[constraint, (Verb::Rollback, Answer::Unwound)]),
+                &[&[], f1],
+            ),
+            (after(&[inserted, ok(Verb::Commit)]), &[both]),
+        ],
+    );
+}
+
+/// The real core on that history: a gating append whose insert answers
+/// `Failed` and whose rollback is `Unknown` is Uncertain and keeps its
+/// record in U. Where the record was in fact written, the barrier and
+/// resolve place its correction in C; where it was not, resolve empties U.
+/// Every state property, P8 among them, holds after each step.
+#[test]
+fn a_failed_gating_insert_that_was_written_is_corrected() {
+    let config = Config { gating: 1, ..X1 };
+    let wanted = [
+        ok(Verb::Open),
+        ok(Verb::Facts),
+        (Verb::Insert, Answer::Failed),
+        (Verb::Rollback, Answer::Unknown),
+    ];
+    let record = GatingRecord::new(gating_member(0));
+    let check = |w: &World| {
+        let mut obs = Obs::default();
+        state_properties(&config, w, &mut obs);
+        assert!(obs.violations.is_empty(), "{:?}", obs.violations);
+    };
+    let (mut written, mut absent) = (false, false);
+    let mut prefix = Vec::new();
+    loop {
+        let mut w = initial(&config);
+        let mut oracle = Oracle::new(prefix, config.faults);
+        let mut io = Io::new(&mut w.rows, &mut oracle, true, true);
+        let core = &mut w.core;
+        let outcome = run_op(|| core.append_gating(&record, &mut io));
+        let log = std::mem::take(&mut io.log);
+        drop(io);
+        if log == wanted {
+            assert_eq!(
+                outcome,
+                Some(GatingOutcome::Refused {
+                    persistence: Persistence::Uncertain,
+                    reason: Reason::Storage,
+                })
+            );
+            assert!(matches!(
+                &w.core.u,
+                Some((
+                    _,
+                    Occupant::Gating {
+                        exit: Exit::ReturnedUncertain,
+                        ..
+                    }
+                ))
+            ));
+            w.ghost.issued |= bit(0);
+            check(&w);
+            let in_ledger = w.rows.contains(&SimRow::Gating(0));
+            let mut quiet = Oracle::new(Vec::new(), 0);
+            let worker = w.wk.worker.as_mut().expect("the worker");
+            let mut io = Io::new(&mut w.rows, &mut quiet, false, false);
+            assert_eq!(w.core.barrier(worker, &mut io), BarrierOutcome::Passed);
+            let token = w.core.agenda().u.expect("U is kept");
+            let resolved = w.core.resolve(worker, token, &mut io);
+            drop(io);
+            if in_ledger {
+                written = true;
+                assert!(matches!(resolved, Resolve::Corrected(_)), "{resolved:?}");
+                assert!(matches!(
+                    &w.core.c,
+                    Some((
+                        _,
+                        Occupant::Correction {
+                            exit: Exit::ReturnedUncertain,
+                            ..
+                        }
+                    ))
+                ));
+            } else {
+                absent = true;
+                assert!(matches!(resolved, Resolve::Absent), "{resolved:?}");
+                assert!(w.core.c.is_none());
+            }
+            assert!(w.core.u.is_none());
+            check(&w);
+        }
+        match oracle.next() {
+            Some(next) => prefix = next,
+            None => break,
+        }
+    }
+    assert!(written, "the written history is not explored");
+    assert!(absent, "the absent history is not explored");
+}
+
+const LIMITS: Limits = Limits {
+    tickets: TICKET_LIMIT,
+    refusals: REFUSAL_LIMIT,
+};
+
+fn duplicate_role(f: u8, seq: Seq) -> Cause {
+    Cause {
+        kind: CauseKind::DuplicateRole {
+            part: Part {
+                commitment: commitment(f),
+                role: Role::Started,
+            },
+            holder: Holder {
+                id: SimRow::Holder(f).key().id,
+                seq,
+            },
+            offered: fact_key(f),
+        },
+    }
+}
+
+fn explanation_of(f: u8, seq: Seq) -> Occupant {
+    Occupant::Explanation {
+        original: fact_key(f),
+        cause: duplicate_role(f, seq),
+    }
+}
+
+/// Sets every field of `core` away from its initial value, through private
+/// state. A forced state is not called reachable.
+fn force_sample(core: &mut Core) {
+    core.phase = Phase::Resolving;
+    core.latch = Some(LatchCause::Overflow);
+    core.u = Some((
+        3,
+        Occupant::Gating {
+            record: GatingRecord::new(gating_member(0)),
+            exit: Exit::ReturnedUncertain,
+        },
+    ));
+    core.c = Some((
+        2,
+        Occupant::Correction {
+            about: gating_key(1),
+            seq: 7,
+            exit: Exit::Unwound,
+        },
+    ));
+    core.x = Some((4, explanation_of(0, 2), Stage::Committed(5)));
+    core.occupancies = [3, 2, 4];
+    core.refusals.insert(fact_key(1), duplicate_role(1, 2));
+    core.frontier = 9;
+}
+
+fn sample_core(limits: Limits) -> Core {
+    let (mut core, _health) = Core::new(limits);
+    assert!(core.session_opened());
+    assert!(core.take_worker().is_some());
+    force_sample(&mut core);
+    core
+}
+
+/// Two cores that differ only in the sequence X was committed with are
+/// different cores, and E8's key tells them apart.
+#[test]
+fn e8_key_tells_committed_sequences_apart() {
+    let (mut five, mut six) = (sample_core(LIMITS), sample_core(LIMITS));
+    five.x = Some((4, explanation_of(0, 2), Stage::Committed(5)));
+    six.x = Some((4, explanation_of(0, 2), Stage::Committed(6)));
+    assert_ne!(core_key(&five), core_key(&six));
+}
+
+/// E8's key marks whether each cell is occupied. These two cores differ in
+/// which of U and C is occupied; without the mark, their bytes are equal.
+#[test]
+fn e8_key_marks_which_cells_are_occupied() {
+    let mut one = sample_core(LIMITS);
+    one.u = None;
+    one.c = Some((
+        0,
+        Occupant::Correction {
+            about: RecordKey {
+                id: bytes(0, 0, 2),
+                digest: bytes(0, 1, 0),
+            },
+            seq: u64::from(exit_code(Exit::ReturnedUncertain)),
+            exit: Exit::InCall,
+        },
+    ));
+    one.x = None;
+    let mut two = sample_core(LIMITS);
+    two.u = Some((
+        0,
+        Occupant::Gating {
+            record: GatingRecord::new(gating_member(0)),
+            exit: Exit::ReturnedUncertain,
+        },
+    ));
+    two.c = None;
+    two.x = None;
+    assert_ne!(core_key(&one), core_key(&two));
+}
+
+/// A field of the core, named, and a change to it.
+type Change = (&'static str, fn(&mut Core));
+
+/// A change to any field of the core changes E8's key, and the key holds
+/// no address: equal cores of two ledgers have one key.
+#[test]
+fn e8_key_covers_every_field_of_the_core() {
+    let base = core_key(&sample_core(LIMITS));
+    assert_eq!(core_key(&sample_core(LIMITS)), base);
+    let changes: Vec<Change> = vec![
+        ("phase", |c| c.phase = Phase::Healthy),
+        ("session", |c| c.session = Session::Sealed),
+        ("latch cleared", |c| c.latch = None),
+        ("latch cause", |c| c.latch = Some(LatchCause::Corrupt)),
+        ("U emptied", |c| c.u = None),
+        ("U occupancy number", |c| {
+            if let Some((n, _)) = c.u.as_mut() {
+                *n += 1;
+            }
+        }),
+        ("U occupant", |c| {
+            if let Some((_, Occupant::Gating { exit, .. })) = c.u.as_mut() {
+                *exit = Exit::Unwound;
+            }
+        }),
+        ("C emptied", |c| c.c = None),
+        ("C occupancy number", |c| {
+            if let Some((n, _)) = c.c.as_mut() {
+                *n += 1;
+            }
+        }),
+        ("C occupant", |c| {
+            if let Some((_, Occupant::Correction { seq, .. })) = c.c.as_mut() {
+                *seq += 1;
+            }
+        }),
+        ("X emptied", |c| c.x = None),
+        ("X occupancy number", |c| {
+            if let Some((n, _, _)) = c.x.as_mut() {
+                *n += 1;
+            }
+        }),
+        ("X occupant", |c| {
+            if let Some((_, occupant, _)) = c.x.as_mut() {
+                *occupant = explanation_of(0, 3);
+            }
+        }),
+        ("X stage", |c| {
+            if let Some((_, _, stage)) = c.x.as_mut() {
+                *stage = Stage::Built;
+            }
+        }),
+        ("X committed sequence", |c| {
+            if let Some((_, _, stage)) = c.x.as_mut() {
+                *stage = Stage::Committed(6);
+            }
+        }),
+        ("U occupancy counter", |c| c.occupancies[0] += 1),
+        ("C occupancy counter", |c| c.occupancies[1] += 1),
+        ("X occupancy counter", |c| c.occupancies[2] += 1),
+        ("refusal entry added", |c| {
+            c.refusals.insert(fact_key(0), duplicate_role(0, 2));
+        }),
+        ("refusal entry removed", |c| c.refusals.clear()),
+        ("retained cause", |c| {
+            c.refusals.insert(fact_key(1), duplicate_role(1, 3));
+        }),
+        ("qualified frontier", |c| c.frontier += 1),
+        ("worker taken", |c| c.worker_taken = false),
+        ("refusal limit", |c| c.refusal_limit += 1),
+    ];
+    let mut unseen: Vec<&str> = changes
+        .into_iter()
+        .filter(|(_, change)| {
+            let mut core = sample_core(LIMITS);
+            change(&mut core);
+            core_key(&core) == base
+        })
+        .map(|(field, _)| field)
+        .collect();
+    let tickets = Limits {
+        tickets: TICKET_LIMIT + 1,
+        ..LIMITS
+    };
+    if core_key(&sample_core(tickets)) == base {
+        unseen.push("ticket limit");
+    }
+    assert!(
+        unseen.is_empty(),
+        "changes E8's key does not see: {unseen:?}"
+    );
+}
+
+/// E8 on the unchanged core: each worker operation given a token of an old
+/// occupancy answers stale, and leaves the core, as its key sees it, and
+/// the word exactly as they were. The forced state's flags are published
+/// first, by a seal the core refuses.
+#[test]
+fn e8_holds_for_stale_worker_operations() {
+    let config = FR;
+    let mut w = initial(&config);
+    force_sample(&mut w.core);
+    assert!(!w.core.session_sealed());
+    let old = |cell, occupancy| CellToken {
+        ledger: Arc::clone(&w.core.shared),
+        cell,
+        occupancy,
+    };
+    let actions = [
+        Action::Resolve(old(Cell::U, 2)),
+        Action::AppendC(old(Cell::C, 1)),
+        Action::AppendX(old(Cell::X, 3)),
+        Action::EmptyX(old(Cell::X, 3), 5),
+    ];
+    for action in actions {
+        let mut oracle = Oracle::new(Vec::new(), config.faults);
+        let mut obs = Obs::default();
+        worker_op(&config, &mut w, &action, &mut oracle, &mut obs);
+        assert!(
+            obs.violations.is_empty(),
+            "{action:?}: {:?}",
+            obs.violations
+        );
+        assert!(
+            obs.branches.iter().all(|label| label.ends_with("Stale")),
+            "{action:?}: {:?}",
+            obs.branches
+        );
+    }
 }
