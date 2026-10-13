@@ -8997,3 +8997,242 @@ fn uses(text: &str, name: &str) -> bool {
                 && matches!(after, Some(';' | ',' | ')'))
         })
 }
+
+/// D2A-1 (contract P3-C11-D2A1-CONTRACT-02-R1, section 9.1): the ledger's
+/// protocol core is confined. Nothing in the control crate names the
+/// ledger but its one `mod` line; the stub is exactly its two lines; the
+/// core names nothing outside itself but `std::sync::atomic`,
+/// `std::sync::Arc` and `std::collections::BTreeMap`, holds no panicking
+/// construct, orders every atomic operation `SeqCst`, declares one atomic
+/// (the word) and no `static`, loads it once and exchanges it once, keeps
+/// every item private or `pub(super)`, and begins with its lint denials.
+/// Read from production text: comments and test-only items are left out.
+#[test]
+fn p3_c11_d2a1_the_ledger_protocol_core_is_confined() {
+    const LIB: &str = "crates/nexus-governed-control/src/lib.rs";
+    const STUB: &str = "crates/nexus-governed-control/src/ledger.rs";
+    const CORE: &str = "crates/nexus-governed-control/src/ledger/protocol.rs";
+    const LEDGER: &str = "crates/nexus-governed-control/src/ledger/";
+
+    // 1. The word `ledger`, in any case, occurs in the crate's production
+    //    sources only in lib.rs, once, in its `mod` line, and inside the
+    //    ledger; the ledger's production sources are the stub and the core
+    //    (no `ledger/mod.rs`, no `ledger/protocol/mod.rs`).
+    for (path, text) in workspace_sources() {
+        if !path.starts_with(P3_CRATE) || path == STUB || path.starts_with(LEDGER) {
+            continue;
+        }
+        let naming: Vec<&str> = text
+            .lines()
+            .filter(|line| line.to_ascii_lowercase().contains("ledger"))
+            .map(str::trim)
+            .collect();
+        let expected: &[&str] = if path == LIB {
+            &["pub(crate) mod ledger;"]
+        } else {
+            &[]
+        };
+        assert_eq!(naming, expected, "{path} names the ledger");
+        assert_eq!(
+            text.to_ascii_lowercase().matches("ledger").count(),
+            expected.len(),
+            "{path}"
+        );
+    }
+    let ledger_files: BTreeSet<&str> = workspace_sources()
+        .iter()
+        .map(|(path, _)| path.as_str())
+        .filter(|path| *path == STUB || path.starts_with(LEDGER))
+        .collect();
+    assert_eq!(ledger_files, [STUB, CORE].into());
+
+    // 2. The stub's production text is exactly its two lines.
+    assert_eq!(
+        without_whitespace(production_source(STUB)),
+        "#[cfg_attr(not(test),allow(dead_code))]modprotocol;"
+    );
+
+    let core = production_source(CORE);
+    let m = masked(core);
+
+    // 8. It begins with the lint denials of section 9.2.
+    assert!(
+        without_whitespace(core).starts_with(
+            "#![cfg_attr(not(test),deny(clippy::indexing_slicing,clippy::arithmetic_side_effects,\
+             clippy::unwrap_used,clippy::expect_used,clippy::panic))]"
+        ),
+        "the core does not begin with its lint denials"
+    );
+
+    // 3. It names nothing outside itself but the three paths: its imports
+    //    are exactly those; `std` appears in no other place; no `core::`,
+    //    `alloc::`, `crate::`, `super::`, `self::` or other crate heads a
+    //    path; no macro is invoked; nothing is `extern`. Attributes are
+    //    left out of the path scan (they name lints, not items).
+    let imports: Vec<String> = use_spans(&m)
+        .into_iter()
+        .map(|(start, end)| without_whitespace(&core[start..end]))
+        .collect();
+    assert_eq!(
+        imports,
+        [
+            "usestd::collections::BTreeMap",
+            "usestd::sync::atomic::{AtomicU64,Ordering}",
+            "usestd::sync::Arc",
+        ]
+    );
+    let spans = use_spans(&m);
+    for at in words(&m, "std") {
+        assert!(
+            spans.iter().any(|&(start, end)| start < at && at < end),
+            "a std path outside the imports, at {at}"
+        );
+    }
+    let mut code = m.clone();
+    let mut i = 0;
+    while i < code.len() {
+        if code[i..].starts_with(b"#[") || code[i..].starts_with(b"#![") {
+            let open = i + code[i..]
+                .iter()
+                .position(|&c| c == b'[')
+                .expect("an attribute");
+            let close = close_of(&code, open);
+            code[i..close].fill(b' ');
+            i = close;
+        } else {
+            i += 1;
+        }
+    }
+    let mut local: BTreeSet<&str> = ["Self", "Ordering", "Arc", "BTreeMap", "AtomicU64"].into();
+    for keyword in ["struct", "enum", "trait", "type"] {
+        for at in words(&code, keyword) {
+            local.insert(ident_at(&code, skip_ws(&code, at + keyword.len())));
+        }
+    }
+    const PRIMITIVES: [&str; 6] = ["u8", "u16", "u32", "u64", "usize", "bool"];
+    let mut i = 0;
+    while i < code.len() {
+        if !is_ident_byte(code[i]) || (i > 0 && is_ident_byte(code[i - 1])) {
+            i += 1;
+            continue;
+        }
+        let ident = ident_at(&code, i);
+        let after = skip_ws(&code, i + ident.len());
+        let heads_a_path =
+            code[after..].starts_with(b"::") && previous_byte(&code, i) != Some(b':');
+        if heads_a_path && ident != "std" {
+            assert!(
+                local.contains(ident) || PRIMITIVES.contains(&ident),
+                "the core names a path outside itself: {ident}::"
+            );
+        }
+        let invoked = code.get(i + ident.len()) == Some(&b'!')
+            && matches!(code.get(i + ident.len() + 1), Some(b'(' | b'[' | b'{'));
+        assert!(!invoked, "the core invokes a macro: {ident}!");
+        i += ident.len();
+    }
+    assert!(
+        words(&code, "extern").is_empty(),
+        "the core declares something extern"
+    );
+
+    // 4. No panicking construct.
+    for name in ["unwrap", "expect"] {
+        for at in words(&m, name) {
+            assert_ne!(m.get(at + name.len()), Some(&b'('), "the core calls {name}");
+        }
+    }
+    for name in [
+        "panic",
+        "unreachable",
+        "todo",
+        "unimplemented",
+        "assert",
+        "assert_eq",
+        "assert_ne",
+    ] {
+        for at in words(&m, name) {
+            assert_ne!(
+                m.get(at + name.len()),
+                Some(&b'!'),
+                "the core invokes {name}!"
+            );
+        }
+    }
+    assert!(
+        !core.contains("debug_assert"),
+        "the core holds a debug assertion"
+    );
+
+    // 5. Every atomic ordering it names is `SeqCst`.
+    for weaker in ["Relaxed", "Acquire", "Release", "AcqRel"] {
+        assert!(
+            words(&m, weaker).is_empty(),
+            "the core names the ordering {weaker}"
+        );
+    }
+    let orderings: Vec<usize> = words(&code, "Ordering")
+        .into_iter()
+        .filter(|&at| code[at + "Ordering".len()..].starts_with(b"::"))
+        .collect();
+    assert!(!orderings.is_empty());
+    for at in orderings {
+        assert_eq!(
+            ident_at(&code, at + "Ordering::".len()),
+            "SeqCst",
+            "an ordering other than SeqCst"
+        );
+    }
+
+    // 6. One atomic, the word, and no `static`; on it only `load`, once,
+    //    and `compare_exchange`, once.
+    let compact_core = without_whitespace(&String::from_utf8(code.clone()).expect("masked text"));
+    let atomic_types: BTreeSet<&str> = (0..code.len())
+        .filter(|&at| {
+            word_at(&code, at, ident_at(&code, at)) && ident_at(&code, at).starts_with("Atomic")
+        })
+        .map(|at| ident_at(&code, at))
+        .collect();
+    assert_eq!(
+        atomic_types,
+        ["AtomicU64"].into(),
+        "an atomic type other than the word's"
+    );
+    let declared = compact_core
+        .match_indices(":AtomicU64")
+        .filter(|(at, found)| !compact_core[at + found.len()..].starts_with("::"))
+        .count();
+    assert_eq!(declared, 1, "more than one atomic declared");
+    assert!(
+        compact_core.contains("word:AtomicU64"),
+        "the one atomic is the word"
+    );
+    assert!(
+        words(&code, "static").is_empty(),
+        "the core declares a static"
+    );
+    assert_eq!(
+        compact_core.matches(".load(").count(),
+        1,
+        "the word is loaded once"
+    );
+    assert_eq!(
+        compact_core.matches(".compare_exchange(").count(),
+        1,
+        "the word is exchanged once"
+    );
+    for forbidden in [".store(", ".swap(", "compare_exchange_weak", ".fetch_"] {
+        assert!(
+            !compact_core.contains(forbidden),
+            "the core calls {forbidden}"
+        );
+    }
+
+    // 7. Every item in it is private or `pub(super)`.
+    for at in words(&m, "pub") {
+        assert!(
+            m[skip_ws(&m, at + "pub".len())..].starts_with(b"(super)"),
+            "an item more visible than pub(super), at {at}"
+        );
+    }
+}

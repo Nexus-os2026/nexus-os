@@ -1,0 +1,4271 @@
+//! The exhaustive exploration of the protocol core (contract section 7).
+//!
+//! It explores the real core. It simulates the ledger's content, implements
+//! every verb over that simulation and plays every caller. Every interleaving
+//! of whole steps is visited breadth first, with a visited set and a parent
+//! table, so that a violation has a shortest trace.
+//!
+//! A state is a whole world with its own word. To try a step, a world is
+//! rebuilt from its key: a new shared allocation holding the same word value,
+//! and the core, the health handle, every ticket, the worker, every retained
+//! token and every snapshot made to refer to it. Two branches never share one
+//! word. The key holds every field of the world; addresses are not part of it.
+//!
+//! Inside one step, every answer a verb can give within the fault budget is
+//! tried, by replaying the step with each sequence of choices. An unwinding
+//! verb really unwinds (`resume_unwind`, without the panic hook); the step
+//! catches it, so the guard of rule R7 is exercised, not imitated.
+//!
+//! Every run ends PASS, FAIL (with its shortest trace) or INCOMPLETE. An
+//! INCOMPLETE run is never PASS.
+
+use super::*;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+/// Limits in every configuration (section 7.1). Neither is reached in
+/// exploration; the limits are T-LIMIT's subject.
+const TICKET_LIMIT: u32 = 8;
+const REFUSAL_LIMIT: u32 = 4;
+
+// ---- configurations (sections 8.2 and 8.3) ------------------------------------------------------
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Config {
+    name: &'static str,
+    /// Facts F1, F2 (one or two).
+    facts: u8,
+    /// Which facts conflict.
+    conflict: [bool; 2],
+    /// ENV on: F1's conflict is a missing Prepared record, which ENV supplies once.
+    env: bool,
+    /// One writer offers every fact as one batch.
+    batch: bool,
+    faults: u8,
+    admissions: u8,
+    /// Gating callers G1, G2, each with its own record, each offered once.
+    gating: u8,
+    /// G2's identity is in the initial ledger with other content.
+    gating_conflict: bool,
+    /// Acknowledgement actors, and attempts each.
+    acks: u8,
+    ack_attempts: u8,
+    /// Malformed snapshots, forced through private state (F-6).
+    malformed: bool,
+    /// A cell's own append can meet a constraint (F-4).
+    cell_constraint: bool,
+    /// Worker verbs unwind (F-W).
+    worker_unwinds: bool,
+    /// DROP on (F-D).
+    drop: bool,
+    /// REPLAY on, this many times (F-R).
+    replays: u8,
+    /// Actor change A4: the drop paths record a blanket Uncertain (F-PT).
+    blanket_uncertain: bool,
+    /// L1 is claimed.
+    l1: bool,
+    /// The state cap.
+    cap: u64,
+    /// The time cap.
+    time: Duration,
+}
+
+const DEFAULT_CAP: u64 = 250_000;
+const DEFAULT_TIME: Duration = Duration::from_secs(180);
+const FULL_CAP: u64 = 30_000_000;
+const FULL_TIME: Duration = Duration::from_secs(45 * 60);
+
+const BASE: Config = Config {
+    name: "",
+    facts: 2,
+    conflict: [false, false],
+    env: false,
+    batch: false,
+    faults: 0,
+    admissions: 0,
+    gating: 0,
+    gating_conflict: false,
+    acks: 0,
+    ack_attempts: 0,
+    malformed: false,
+    cell_constraint: false,
+    worker_unwinds: false,
+    drop: false,
+    replays: 0,
+    blanket_uncertain: false,
+    l1: true,
+    cap: FULL_CAP,
+    time: FULL_TIME,
+};
+
+const fn default_run(config: Config) -> Config {
+    Config {
+        cap: DEFAULT_CAP,
+        time: DEFAULT_TIME,
+        ..config
+    }
+}
+
+/// X-1: two facts, two writers, settlement, one admission, 2 faults.
+const X1: Config = default_run(Config {
+    name: "X-1",
+    faults: 2,
+    admissions: 1,
+    ..BASE
+});
+/// X-2: one fact, two gating callers, the worker, one admission, 1 fault.
+const X2: Config = default_run(Config {
+    name: "X-2",
+    facts: 1,
+    faults: 1,
+    admissions: 1,
+    gating: 2,
+    ..BASE
+});
+/// X-3: two facts, one conflicting, ENV on, 1 fault.
+const X3: Config = default_run(Config {
+    name: "X-3",
+    conflict: [true, false],
+    env: true,
+    faults: 1,
+    ..BASE
+});
+/// X-4: one conflicting fact, one acknowledgement, one admission, 1 fault.
+const X4: Config = default_run(Config {
+    name: "X-4",
+    facts: 1,
+    conflict: [true, false],
+    faults: 1,
+    admissions: 1,
+    acks: 1,
+    ack_attempts: 1,
+    ..BASE
+});
+/// X-5: one clean batch of two, 2 faults.
+const X5: Config = default_run(Config {
+    name: "X-5",
+    batch: true,
+    faults: 2,
+    ..BASE
+});
+
+const F1: Config = Config {
+    name: "F-1",
+    faults: 3,
+    admissions: 2,
+    gating: 2,
+    ..BASE
+};
+const F2: Config = Config {
+    name: "F-2",
+    conflict: [false, true],
+    faults: 2,
+    admissions: 2,
+    gating: 2,
+    ..BASE
+};
+const F3: Config = Config {
+    name: "F-3",
+    conflict: [true, true],
+    env: true,
+    faults: 2,
+    admissions: 2,
+    gating: 2,
+    ..BASE
+};
+const F4: Config = Config {
+    name: "F-4",
+    cell_constraint: true,
+    ..F2
+};
+const F5: Config = Config {
+    name: "F-5",
+    conflict: [true, true],
+    faults: 2,
+    admissions: 2,
+    acks: 1,
+    ack_attempts: 2,
+    ..BASE
+};
+const F6: Config = Config {
+    name: "F-6",
+    malformed: true,
+    ..F5
+};
+const F7: Config = Config {
+    name: "F-7",
+    conflict: [true, true],
+    faults: 1,
+    admissions: 1,
+    acks: 2,
+    ack_attempts: 1,
+    ..BASE
+};
+const F8: Config = Config {
+    name: "F-8",
+    conflict: [true, false],
+    faults: 2,
+    admissions: 2,
+    gating: 1,
+    acks: 1,
+    ack_attempts: 1,
+    ..BASE
+};
+const FPT: Config = Config {
+    name: "F-PT",
+    blanket_uncertain: true,
+    ..F3
+};
+const FB: Config = Config {
+    name: "F-B",
+    batch: true,
+    ..F3
+};
+const FB2: Config = Config {
+    name: "F-B2",
+    batch: true,
+    faults: 3,
+    admissions: 1,
+    ..BASE
+};
+const FG: Config = Config {
+    name: "F-G",
+    facts: 1,
+    faults: 2,
+    admissions: 2,
+    gating: 2,
+    gating_conflict: true,
+    ..BASE
+};
+const FW: Config = Config {
+    name: "F-W",
+    worker_unwinds: true,
+    ..F2
+};
+const FD: Config = Config {
+    name: "F-D",
+    faults: 2,
+    drop: true,
+    l1: false,
+    ..F1
+};
+const FR: Config = Config {
+    name: "F-R",
+    replays: 3,
+    ..F2
+};
+
+// ---- records, identities and the simulated ledger -----------------------------------------------
+
+/// A 32-byte value whose first three bytes carry its meaning.
+fn bytes(a: u8, b: u8, c: u8) -> [u8; 32] {
+    let mut out = [0; 32];
+    out[0] = a;
+    out[1] = b;
+    out[2] = c;
+    out
+}
+
+fn fact_key(f: u8) -> RecordKey {
+    RecordKey {
+        id: bytes(1, f, 0),
+        digest: bytes(1, f, 1),
+    }
+}
+
+fn gating_key(g: u8) -> RecordKey {
+    RecordKey {
+        id: bytes(2, g, 0),
+        digest: bytes(2, g, 1),
+    }
+}
+
+fn commitment(f: u8) -> [u8; ID_LEN] {
+    bytes(9, f, 0)
+}
+
+fn fact_member(f: u8) -> Member {
+    Member {
+        key: fact_key(f),
+        part: Some(Part {
+            commitment: commitment(f),
+            role: Role::Started,
+        }),
+    }
+}
+
+fn gating_member(g: u8) -> Member {
+    Member {
+        key: gating_key(g),
+        part: None,
+    }
+}
+
+/// Originals that can be explained: facts 0 and 1, gating records 2 and 3.
+fn original_of(key: &RecordKey) -> Option<u8> {
+    (0..2)
+        .find(|&f| fact_key(f) == *key)
+        .or_else(|| (0..2).find(|&g| gating_key(g) == *key).map(|g| g + 2))
+}
+
+fn gating_of(key: &RecordKey) -> Option<u8> {
+    (0..2).find(|&g| gating_key(g) == *key)
+}
+
+fn exit_code(exit: Exit) -> u8 {
+    match exit {
+        Exit::InCall => 0,
+        Exit::ReturnedUncertain => 1,
+        Exit::Unwound => 2,
+    }
+}
+
+fn exit_from(code: u8) -> Exit {
+    match code {
+        0 => Exit::InCall,
+        1 => Exit::ReturnedUncertain,
+        _ => Exit::Unwound,
+    }
+}
+
+/// One row of the simulated ledger. Its sequence is its position + 1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SimRow {
+    /// F's Prepared record.
+    Prepared(u8),
+    /// Another record holding F's role (Started) for F's commitment.
+    Holder(u8),
+    /// G's identity with other content.
+    Other(u8),
+    Fact(u8),
+    Gating(u8),
+    /// An explanation of an original (see `original_of`); it requires
+    /// acknowledgement.
+    Explanation(u8),
+    /// A correction about gating record G.
+    Correction(u8, Exit),
+    Acknowledgement {
+        set: SetFacts,
+        nonce: [u8; 16],
+    },
+}
+
+impl SimRow {
+    fn key(&self) -> RecordKey {
+        match *self {
+            SimRow::Prepared(f) => RecordKey {
+                id: bytes(4, f, 0),
+                digest: bytes(4, f, 1),
+            },
+            SimRow::Holder(f) => RecordKey {
+                id: bytes(3, f, 0),
+                digest: bytes(3, f, 1),
+            },
+            SimRow::Other(g) => RecordKey {
+                id: gating_key(g).id,
+                digest: bytes(2, g, 9),
+            },
+            SimRow::Fact(f) => fact_key(f),
+            SimRow::Gating(g) => gating_key(g),
+            SimRow::Explanation(o) => RecordKey {
+                id: bytes(5, o, 0),
+                digest: bytes(5, o, 1),
+            },
+            SimRow::Correction(g, exit) => RecordKey {
+                id: bytes(6, g, exit_code(exit)),
+                digest: bytes(6, g, 1),
+            },
+            SimRow::Acknowledgement { nonce, .. } => RecordKey {
+                id: bytes(7, nonce[0], nonce[1]),
+                digest: bytes(7, 0, 1),
+            },
+        }
+    }
+
+    fn part(&self) -> Option<Part> {
+        let part = |f, role| {
+            Some(Part {
+                commitment: commitment(f),
+                role,
+            })
+        };
+        match *self {
+            SimRow::Prepared(f) => part(f, Role::Prepared),
+            SimRow::Holder(f) | SimRow::Fact(f) => part(f, Role::Started),
+            _ => None,
+        }
+    }
+}
+
+fn seq_at(index: usize) -> Seq {
+    index as Seq + 1
+}
+
+fn find_seq(rows: &[SimRow], wanted: impl Fn(&SimRow) -> bool) -> Option<Seq> {
+    rows.iter().position(wanted).map(seq_at)
+}
+
+fn row_by_id(rows: &[SimRow], id: &[u8; ID_LEN]) -> Option<Row> {
+    rows.iter()
+        .enumerate()
+        .find(|(_, row)| row.key().id == *id)
+        .map(|(at, row)| Row {
+            seq: seq_at(at),
+            digest: row.key().digest,
+        })
+}
+
+/// The N of the last acknowledgement row, or zero.
+fn durable_frontier(rows: &[SimRow]) -> Seq {
+    rows.iter()
+        .rev()
+        .find_map(|row| match row {
+            SimRow::Acknowledgement { set, .. } => Some(set.top),
+            _ => None,
+        })
+        .unwrap_or(0)
+}
+
+/// The count and the digest (a mask of originals) of the explanations with
+/// a sequence above `above` and at most `upto`.
+fn explanations(rows: &[SimRow], above: Seq, upto: Seq) -> (u64, [u8; 32]) {
+    let mut mask = 0u8;
+    let mut count = 0;
+    for (at, row) in rows.iter().enumerate() {
+        let seq = seq_at(at);
+        if let SimRow::Explanation(o) = row {
+            if seq > above && seq <= upto {
+                mask |= 1 << o;
+                count += 1;
+            }
+        }
+    }
+    (count, bytes(mask, 0, 0))
+}
+
+fn survey(rows: &[SimRow]) -> SetFacts {
+    let frontier = durable_frontier(rows);
+    let head = rows.len() as Seq;
+    let top = rows
+        .iter()
+        .rposition(|row| matches!(row, SimRow::Explanation(_)))
+        .map_or(0, seq_at);
+    let (count, digest) = explanations(rows, frontier, top);
+    SetFacts {
+        frontier,
+        head,
+        top,
+        count,
+        digest,
+    }
+}
+
+fn member_facts(rows: &[SimRow], member: &Member) -> MemberFacts {
+    let key = member.key;
+    let holder = member.part.and_then(|part| {
+        rows.iter()
+            .enumerate()
+            .find(|(_, row)| row.part() == Some(part))
+            .map(|(at, row)| Holder {
+                id: row.key().id,
+                seq: seq_at(at),
+            })
+    });
+    let prepared = member.part.is_some_and(|part| {
+        let wanted = Some(Part {
+            commitment: part.commitment,
+            role: Role::Prepared,
+        });
+        rows.iter().any(|row| row.part() == wanted)
+    });
+    MemberFacts {
+        row: row_by_id(rows, &key.id),
+        explained: original_of(&key)
+            .and_then(|o| find_seq(rows, |row| *row == SimRow::Explanation(o))),
+        corrected: gating_of(&key).and_then(|g| {
+            find_seq(
+                rows,
+                |row| matches!(row, SimRow::Correction(h, _) if *h == g),
+            )
+        }),
+        holder,
+        prepared,
+    }
+}
+
+fn row_for_member(member: &Member) -> SimRow {
+    if let Some(f) = (0..2).find(|&f| fact_key(f) == member.key) {
+        return SimRow::Fact(f);
+    }
+    if let Some(g) = gating_of(&member.key) {
+        return SimRow::Gating(g);
+    }
+    panic!("a record outside the configuration: {member:?}");
+}
+
+fn row_for_occupant(occupant: &Occupant) -> SimRow {
+    match occupant {
+        Occupant::Correction { about, exit, .. } => SimRow::Correction(
+            gating_of(about).expect("a correction about a gating record"),
+            *exit,
+        ),
+        Occupant::Explanation { original, .. } => {
+            SimRow::Explanation(original_of(original).expect("an explanation of a known original"))
+        }
+        other => panic!("a cell's own append of {other:?}"),
+    }
+}
+
+// ---- the choice oracle --------------------------------------------------------------------------
+
+/// The choices of one step. A step is replayed with each sequence of
+/// choices; a fault option is offered only while the budget lasts.
+struct Oracle {
+    prefix: Vec<u8>,
+    /// (choice, options) at each choice point.
+    taken: Vec<(u8, u8)>,
+    faults: u8,
+    fault: bool,
+}
+
+impl Oracle {
+    fn new(prefix: Vec<u8>, faults: u8) -> Oracle {
+        Oracle {
+            prefix,
+            taken: Vec::new(),
+            faults,
+            fault: false,
+        }
+    }
+
+    /// One choice among options, each marked as a fault or not. Option 0
+    /// must not be a fault.
+    fn choose(&mut self, fault: &[bool]) -> usize {
+        assert!(!fault[0], "option 0 is the fault-free one");
+        let offered: Vec<usize> = (0..fault.len())
+            .filter(|&k| !fault[k] || self.faults > 0)
+            .collect();
+        let at = self.taken.len();
+        let pick = self.prefix.get(at).map_or(0, |&p| p as usize);
+        assert!(pick < offered.len(), "a replayed choice is out of range");
+        self.taken.push((pick as u8, offered.len() as u8));
+        let option = offered[pick];
+        if fault[option] {
+            self.faults -= 1;
+            self.fault = true;
+        }
+        option
+    }
+
+    /// A choice among `n` options, none a fault.
+    fn branch(&mut self, n: usize) -> usize {
+        if n <= 1 {
+            return 0;
+        }
+        self.choose(&vec![false; n])
+    }
+
+    /// The next sequence of choices, depth first, or none.
+    fn next(&self) -> Option<Vec<u8>> {
+        let at = self
+            .taken
+            .iter()
+            .rposition(|&(choice, options)| choice + 1 < options)?;
+        let mut prefix: Vec<u8> = self.taken[..at].iter().map(|&(choice, _)| choice).collect();
+        prefix.push(self.taken[at].0 + 1);
+        Some(prefix)
+    }
+
+    fn sequence(&self) -> Vec<u8> {
+        self.taken.iter().map(|&(choice, _)| choice).collect()
+    }
+}
+
+// ---- the verbs, over the simulation -------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Verb {
+    Open,
+    Facts,
+    Insert,
+    Commit,
+    Rollback,
+    Row,
+    Explained,
+    Acknowledgement,
+    Frontier,
+    Survey,
+    Recheck,
+    Present,
+    Run,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Answer {
+    Ok,
+    Failed,
+    Corrupt,
+    Constraint,
+    Unknown,
+    Unwound,
+}
+
+/// The payload of an unwinding verb.
+struct Unwound;
+
+/// The storage verbs, implemented over the simulated ledger. Each answer
+/// is a choice of the oracle.
+struct Io<'a> {
+    rows: &'a mut Vec<SimRow>,
+    /// Rows inserted in the open transaction, not yet durable.
+    pending: Vec<SimRow>,
+    oracle: &'a mut Oracle,
+    log: Vec<(Verb, Answer)>,
+    /// The verbs of this operation may unwind.
+    unwinds: bool,
+    /// An insert of this operation may answer Constraint.
+    constraint: bool,
+}
+
+impl<'a> Io<'a> {
+    fn new(
+        rows: &'a mut Vec<SimRow>,
+        oracle: &'a mut Oracle,
+        unwinds: bool,
+        constraint: bool,
+    ) -> Io<'a> {
+        Io {
+            rows,
+            pending: Vec::new(),
+            oracle,
+            log: Vec::new(),
+            unwinds,
+            constraint,
+        }
+    }
+
+    fn pick(&mut self, verb: Verb, faults: &[Answer]) -> Answer {
+        let mut options = vec![Answer::Ok];
+        options.extend_from_slice(faults);
+        if self.unwinds {
+            options.push(Answer::Unwound);
+        }
+        let fault: Vec<bool> = options.iter().map(|&a| a != Answer::Ok).collect();
+        let answer = options[self.oracle.choose(&fault)];
+        self.log.push((verb, answer));
+        if answer == Answer::Unwound {
+            self.undecided();
+            resume_unwind(Box::new(Unwound));
+        }
+        answer
+    }
+
+    /// After `Commit::Unknown`, after `Rollback::Unknown` once an insert was
+    /// issued, and after an unwind once an insert was issued: the records are
+    /// present or absent, and both are explored.
+    fn undecided(&mut self) {
+        if self.pending.is_empty() {
+            return;
+        }
+        if self.oracle.branch(2) == 1 {
+            self.rows.append(&mut self.pending);
+        } else {
+            self.pending.clear();
+        }
+    }
+
+    fn read<T>(&mut self, verb: Verb, value: impl FnOnce(&[SimRow]) -> T) -> Read<T> {
+        match self.pick(verb, &[Answer::Failed, Answer::Corrupt]) {
+            Answer::Ok => Read::Got(value(self.rows)),
+            Answer::Failed => Read::Failed,
+            _ => Read::Corrupt,
+        }
+    }
+
+    fn insert_row(&mut self, row: SimRow) -> Insert {
+        // The row is issued: if this insert unwinds, it may be written.
+        self.pending.push(row);
+        let faults: &[Answer] = if self.constraint {
+            &[Answer::Constraint, Answer::Failed]
+        } else {
+            &[Answer::Failed]
+        };
+        match self.pick(Verb::Insert, faults) {
+            Answer::Ok => Insert::Inserted((self.rows.len() + self.pending.len()) as Seq),
+            Answer::Constraint => {
+                self.pending.pop();
+                Insert::Constraint
+            }
+            _ => {
+                self.pending.pop();
+                Insert::Failed
+            }
+        }
+    }
+
+    fn do_commit(&mut self) -> Commit {
+        match self.pick(Verb::Commit, &[Answer::Unknown]) {
+            Answer::Ok => {
+                self.rows.append(&mut self.pending);
+                Commit::Durable
+            }
+            _ => {
+                self.undecided();
+                Commit::Unknown
+            }
+        }
+    }
+
+    fn do_rollback(&mut self) -> Rollback {
+        match self.pick(Verb::Rollback, &[Answer::Unknown]) {
+            Answer::Ok => {
+                // A-1: no COMMIT issued and the rollback Undone: nothing.
+                self.pending.clear();
+                Rollback::Undone
+            }
+            _ => {
+                self.undecided();
+                Rollback::Unknown
+            }
+        }
+    }
+
+    fn do_open(&mut self) -> Read<()> {
+        self.read(Verb::Open, |_| ())
+    }
+}
+
+impl Txn for Io<'_> {
+    fn open(&mut self) -> Read<()> {
+        self.do_open()
+    }
+
+    fn facts(&mut self, _index: u16, member: &Member) -> Read<MemberFacts> {
+        self.read(Verb::Facts, |rows| member_facts(rows, member))
+    }
+
+    fn insert(&mut self, _index: u16, member: &Member) -> Insert {
+        self.insert_row(row_for_member(member))
+    }
+
+    fn commit(&mut self) -> Commit {
+        self.do_commit()
+    }
+
+    fn rollback(&mut self) -> Rollback {
+        self.do_rollback()
+    }
+}
+
+impl Reads for Io<'_> {
+    fn row(&mut self, id: &[u8; ID_LEN]) -> Read<Option<Row>> {
+        self.read(Verb::Row, |rows| row_by_id(rows, id))
+    }
+
+    fn explained(&mut self, key: &RecordKey) -> Read<Option<Seq>> {
+        self.read(Verb::Explained, |rows| {
+            original_of(key).and_then(|o| find_seq(rows, |row| *row == SimRow::Explanation(o)))
+        })
+    }
+
+    fn acknowledgement(&mut self, set: &SetFacts, nonce: &[u8; 16]) -> Read<Option<Seq>> {
+        let wanted = SimRow::Acknowledgement {
+            set: *set,
+            nonce: *nonce,
+        };
+        self.read(Verb::Acknowledgement, |rows| {
+            find_seq(rows, |row| *row == wanted)
+        })
+    }
+
+    fn frontier(&mut self) -> Read<Seq> {
+        self.read(Verb::Frontier, durable_frontier)
+    }
+}
+
+impl AckTxn for Io<'_> {
+    fn survey(&mut self) -> Read<SetFacts> {
+        self.read(Verb::Survey, survey)
+    }
+
+    fn open(&mut self) -> Read<()> {
+        self.do_open()
+    }
+
+    fn recheck(&mut self, above: Seq, upto: Seq) -> Read<SetFacts> {
+        self.read(Verb::Recheck, |rows| {
+            let (count, digest) = explanations(rows, above, upto);
+            SetFacts {
+                frontier: durable_frontier(rows),
+                head: rows.len() as Seq,
+                top: upto,
+                count,
+                digest,
+            }
+        })
+    }
+
+    fn insert(&mut self, snapshot: &Snapshot) -> Insert {
+        self.insert_row(SimRow::Acknowledgement {
+            set: snapshot.set(),
+            nonce: snapshot.nonce(),
+        })
+    }
+
+    fn commit(&mut self) -> Commit {
+        self.do_commit()
+    }
+
+    fn rollback(&mut self) -> Rollback {
+        self.do_rollback()
+    }
+}
+
+impl CellTxn for Io<'_> {
+    fn open(&mut self) -> Read<()> {
+        self.do_open()
+    }
+
+    fn present(&mut self, occupant: &Occupant) -> Read<Option<Seq>> {
+        let id = row_for_occupant(occupant).key().id;
+        self.read(Verb::Present, |rows| {
+            row_by_id(rows, &id).map(|row| row.seq)
+        })
+    }
+
+    fn insert(&mut self, occupant: &Occupant) -> Insert {
+        self.insert_row(row_for_occupant(occupant))
+    }
+
+    fn commit(&mut self) -> Commit {
+        self.do_commit()
+    }
+
+    fn rollback(&mut self) -> Rollback {
+        self.do_rollback()
+    }
+}
+
+impl BarrierRun for Io<'_> {
+    fn run(&mut self) -> bool {
+        self.pick(Verb::Run, &[Answer::Failed]) == Answer::Ok
+    }
+}
+
+/// Runs one store operation, catching an unwinding verb. Any other panic
+/// is a failed test and is resumed.
+fn run_op<T>(op: impl FnOnce() -> T) -> Option<T> {
+    match catch_unwind(AssertUnwindSafe(op)) {
+        Ok(value) => Some(value),
+        Err(payload) if payload.is::<Unwound>() => None,
+        Err(payload) => resume_unwind(payload),
+    }
+}
+
+// ---- the world ----------------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Class {
+    Unattempted,
+    Refused,
+    Uncertain,
+    Conflict,
+    Paid,
+    Retired,
+}
+
+fn is_debt(class: Class) -> bool {
+    matches!(class, Class::Refused | Class::Uncertain | Class::Conflict)
+}
+
+/// The test's obligation table: a class per fact, the debt counter, H and A.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Table {
+    class: [Class; 2],
+    debt: u8,
+    /// The highest sequence of a committed explanation the worker reported.
+    h: Seq,
+    /// The layer's copy of the acknowledgement frontier.
+    a: Seq,
+}
+
+/// What a writer holds after its call, before it records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Held {
+    Committed,
+    Counted(Counted),
+    Rejected,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FwPos {
+    Start,
+    NoTicket,
+    Armed,
+    Got(Held),
+    Recorded,
+    Dropping,
+    DropConfirm,
+    Done,
+}
+
+/// FW: a first writer of one fact or of one batch.
+#[derive(Debug)]
+struct Fw {
+    members: Vec<u8>,
+    ticket: Option<Ticket>,
+    pos: FwPos,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Claim {
+    Append,
+    Lookup,
+    Explain,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SeHeld {
+    Fact(Held),
+    Lookup(Lookup),
+    Explain(Explain),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SePos {
+    Idle,
+    Claimed(u8, Claim),
+    NoTicket(u8),
+    Armed(u8),
+    Got(u8, SeHeld),
+    Dropping(u8),
+    Confirm(u8),
+}
+
+/// SE: settlement.
+#[derive(Debug)]
+struct Se {
+    ticket: Option<Ticket>,
+    pos: SePos,
+}
+
+#[derive(Clone, Debug)]
+enum Action {
+    Nothing,
+    Barrier,
+    Resolve(CellToken),
+    AppendC(CellToken),
+    AppendX(CellToken),
+    EmptyX(CellToken, Seq),
+}
+
+#[derive(Clone, Debug)]
+enum WkPos {
+    Idle,
+    /// The agenda was read: its frontier and the step chosen.
+    Seen(Seq, Action),
+    Act(Action),
+    /// Under actor change A3 only: H raised after X was emptied.
+    RaiseH(Seq),
+}
+
+/// WK: the worker. `last` is its last cell operation, kept for REPLAY.
+#[derive(Debug)]
+struct Wk {
+    worker: Option<Worker>,
+    pos: WkPos,
+    last: Option<Action>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GcPos {
+    Start,
+    Done,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AckPos {
+    Idle,
+    /// A snapshot is held; the Owner confirms or declines.
+    Holding,
+    Confirmed,
+    Applying(Seq),
+}
+
+#[derive(Debug)]
+struct Ack {
+    attempts: u8,
+    snapshot: Option<Snapshot>,
+    pos: AckPos,
+}
+
+/// History facts the properties read.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Ghost {
+    /// Fact f was once refused as a conflict, by an append or a lookup.
+    conflicted: u8,
+    /// ... by a batch append or a lookup (E6).
+    conflicted_e6: u8,
+    /// A failing result for fact f exists and has not been recorded.
+    unrecorded: u8,
+    /// Gating attempt g issued an insert.
+    issued: u8,
+    /// Gating caller g was told Committed.
+    told: u8,
+    /// Counted tickets dropped.
+    dropped: u8,
+}
+
+struct World {
+    core: Core,
+    health: Health,
+    rows: Vec<SimRow>,
+    fw: Vec<Fw>,
+    se: Se,
+    wk: Wk,
+    gc: Vec<GcPos>,
+    ack: Vec<Ack>,
+    /// Admissions left.
+    adm: u8,
+    /// Actor change A2 only: the bits kept by the first step.
+    adm_kept: Option<u64>,
+    env_done: bool,
+    replays: u8,
+    table: Table,
+    faults: u8,
+    ghost: Ghost,
+}
+
+impl Drop for World {
+    /// A world that is discarded is not a step: its tickets are settled
+    /// first, so that their drop touches no word.
+    fn drop(&mut self) {
+        let tickets = self
+            .fw
+            .iter_mut()
+            .filter_map(|fw| fw.ticket.as_mut())
+            .chain(self.se.ticket.as_mut());
+        for ticket in tickets {
+            ticket.state = TicketState::Settled;
+        }
+    }
+}
+
+fn bit(i: u8) -> u8 {
+    1 << i
+}
+
+fn initial_rows(config: &Config) -> Vec<SimRow> {
+    let mut rows = Vec::new();
+    for f in 0..config.facts {
+        let missing_prepared = config.conflict[f as usize] && config.env && f == 0;
+        if !missing_prepared {
+            rows.push(SimRow::Prepared(f));
+        }
+        if config.conflict[f as usize] && !missing_prepared {
+            rows.push(SimRow::Holder(f));
+        }
+    }
+    if config.gating_conflict {
+        rows.push(SimRow::Other(1));
+    }
+    rows
+}
+
+fn initial(config: &Config) -> World {
+    let (mut core, health) = Core::new(Limits {
+        tickets: TICKET_LIMIT,
+        refusals: REFUSAL_LIMIT,
+    });
+    assert!(core.session_opened());
+    let worker = core.take_worker();
+    let fw = if config.batch {
+        vec![Fw {
+            members: (0..config.facts).collect(),
+            ticket: None,
+            pos: FwPos::Start,
+        }]
+    } else {
+        (0..config.facts)
+            .map(|f| Fw {
+                members: vec![f],
+                ticket: None,
+                pos: FwPos::Start,
+            })
+            .collect()
+    };
+    let world = World {
+        core,
+        health,
+        rows: initial_rows(config),
+        fw,
+        se: Se {
+            ticket: None,
+            pos: SePos::Idle,
+        },
+        wk: Wk {
+            worker,
+            pos: WkPos::Idle,
+            last: None,
+        },
+        gc: vec![GcPos::Start; config.gating as usize],
+        ack: (0..config.acks)
+            .map(|_| Ack {
+                attempts: config.ack_attempts,
+                snapshot: None,
+                pos: AckPos::Idle,
+            })
+            .collect(),
+        adm: config.admissions,
+        adm_kept: None,
+        env_done: false,
+        replays: config.replays,
+        table: Table {
+            class: [Class::Unattempted; 2],
+            debt: 0,
+            h: 0,
+            a: 0,
+        },
+        faults: config.faults,
+        ghost: Ghost::default(),
+    };
+    hook::take_counts();
+    world
+}
+
+// ---- the state key ------------------------------------------------------------------------------
+
+/// The fields of the state key, listed in every receipt.
+const KEY_FIELDS: &str = "word (low 16 bits, live, unapplied; recomposed exactly); core: phase, session, latch \
+cause, U/C/X occupancy numbers and occupants (records, exits, sets, nonces, causes, stage), the three \
+occupancy counters, every refusal-table entry with its cause, the qualified frontier, worker_taken, and the \
+fixed limits (asserted); the simulated ledger's rows beyond the initial ones; every ticket's state and holder \
+(FW1, FW2 or the batch writer, SE); the worker's presence; every retained token as cell and occupancy number \
+(the worker's agenda step and its last token for REPLAY); every snapshot's values and nonce; each actor's \
+position and any result it holds but has not applied; the test's table (classes, debt counter, H, A); every \
+remaining budget (faults, admissions, attempts, replays); the A2 kept bits; ENV fired; history facts \
+(conflicted, conflicted for E6, unrecorded results, gating insert issued, gating told Committed, Counted \
+tickets dropped)";
+
+struct Enc(Vec<u8>);
+
+impl Enc {
+    fn u(&mut self, mut value: u64) {
+        loop {
+            let low = (value & 0x7f) as u8;
+            value >>= 7;
+            if value == 0 {
+                self.0.push(low);
+                return;
+            }
+            self.0.push(low | 0x80);
+        }
+    }
+
+    fn b(&mut self, value: bool) {
+        self.0.push(u8::from(value));
+    }
+
+    fn byte(&mut self, value: u8) {
+        self.0.push(value);
+    }
+
+    /// A 32-byte value of this simulation: only its first three bytes may
+    /// be set.
+    fn x32(&mut self, value: &[u8; 32]) {
+        assert!(
+            value[3..].iter().all(|&b| b == 0),
+            "a value outside the encoding"
+        );
+        self.0.extend_from_slice(&value[..3]);
+    }
+
+    fn nonce(&mut self, value: &[u8; 16]) {
+        assert!(
+            value[2..].iter().all(|&b| b == 0),
+            "a nonce outside the encoding"
+        );
+        self.0.extend_from_slice(&value[..2]);
+    }
+
+    fn key(&mut self, key: &RecordKey) {
+        self.x32(&key.id);
+        self.x32(&key.digest);
+    }
+
+    fn part(&mut self, part: &Option<Part>) {
+        match part {
+            None => self.byte(0),
+            Some(part) => {
+                self.byte(1 + role_code(part.role));
+                self.x32(&part.commitment);
+            }
+        }
+    }
+
+    fn member(&mut self, member: &Member) {
+        self.key(&member.key);
+        self.part(&member.part);
+    }
+
+    fn set(&mut self, set: &SetFacts) {
+        self.u(set.frontier);
+        self.u(set.head);
+        self.u(set.top);
+        self.u(set.count);
+        self.x32(&set.digest);
+    }
+
+    fn cause(&mut self, cause: &Cause) {
+        match cause.kind() {
+            CauseKind::IdentityContent {
+                id,
+                existing,
+                offered,
+            } => {
+                self.byte(0);
+                self.x32(&id);
+                self.u(existing.seq);
+                self.x32(&existing.digest);
+                self.x32(&offered);
+            }
+            CauseKind::DuplicateRole {
+                part,
+                holder,
+                offered,
+            } => {
+                self.byte(1);
+                self.part(&Some(part));
+                self.x32(&holder.id);
+                self.u(holder.seq);
+                self.key(&offered);
+            }
+            CauseKind::MissingPrepared { part, offered } => {
+                self.byte(2);
+                self.part(&Some(part));
+                self.key(&offered);
+            }
+        }
+    }
+
+    fn occupant(&mut self, occupant: &Occupant) {
+        match occupant {
+            Occupant::Gating { record, exit } => {
+                self.byte(0);
+                self.member(record.member());
+                self.byte(exit_code(*exit));
+            }
+            Occupant::Acknowledgement { set, nonce } => {
+                self.byte(1);
+                self.set(set);
+                self.nonce(nonce);
+            }
+            Occupant::Correction { about, seq, exit } => {
+                self.byte(2);
+                self.key(about);
+                self.u(*seq);
+                self.byte(exit_code(*exit));
+            }
+            Occupant::Explanation { original, cause } => {
+                self.byte(3);
+                self.key(original);
+                self.cause(cause);
+            }
+        }
+    }
+
+    fn token(&mut self, shared: &Arc<Shared>, token: &CellToken) {
+        assert!(
+            Arc::ptr_eq(&token.ledger, shared),
+            "a token of another world"
+        );
+        self.byte(cell_code(token.cell));
+        self.u(token.occupancy);
+    }
+
+    fn ticket(&mut self, shared: &Arc<Shared>, ticket: &Option<Ticket>) {
+        match ticket {
+            None => self.byte(0),
+            Some(ticket) => {
+                assert!(
+                    Arc::ptr_eq(&ticket.shared, shared),
+                    "a ticket of another world"
+                );
+                match ticket.state {
+                    TicketState::Armed => self.byte(1),
+                    TicketState::Settled => self.byte(2),
+                    TicketState::Counted(counted) => {
+                        self.byte(3);
+                        self.counted(&counted);
+                    }
+                }
+            }
+        }
+    }
+
+    fn counted(&mut self, counted: &Counted) {
+        self.byte(u8::from(counted.persistence == Persistence::Uncertain));
+        match counted.conflict_member {
+            None => self.byte(0),
+            Some(member) => {
+                self.byte(1);
+                self.u(u64::from(member));
+            }
+        }
+    }
+
+    fn held(&mut self, held: &Held) {
+        match held {
+            Held::Committed => self.byte(0),
+            Held::Rejected => self.byte(1),
+            Held::Counted(counted) => {
+                self.byte(2);
+                self.counted(counted);
+            }
+        }
+    }
+
+    fn action(&mut self, shared: &Arc<Shared>, action: &Action) {
+        match action {
+            Action::Nothing => self.byte(0),
+            Action::Barrier => self.byte(1),
+            Action::Resolve(token) => {
+                self.byte(2);
+                self.token(shared, token);
+            }
+            Action::AppendC(token) => {
+                self.byte(3);
+                self.token(shared, token);
+            }
+            Action::AppendX(token) => {
+                self.byte(4);
+                self.token(shared, token);
+            }
+            Action::EmptyX(token, seq) => {
+                self.byte(5);
+                self.token(shared, token);
+                self.u(*seq);
+            }
+        }
+    }
+
+    fn known(&mut self, known: &Known) {
+        match known {
+            Known::Cause(cause) => {
+                self.byte(0);
+                self.cause(cause);
+            }
+            Known::Explained(seq) => {
+                self.byte(1);
+                self.u(*seq);
+            }
+        }
+    }
+
+    fn se_held(&mut self, held: &SeHeld) {
+        match held {
+            SeHeld::Fact(held) => {
+                self.byte(0);
+                self.held(held);
+            }
+            SeHeld::Lookup(lookup) => {
+                self.byte(1);
+                match lookup {
+                    Lookup::Present(seq) => {
+                        self.byte(0);
+                        self.u(*seq);
+                    }
+                    Lookup::Absent => self.byte(1),
+                    Lookup::Conflict(known) => {
+                        self.byte(2);
+                        self.known(known);
+                    }
+                    Lookup::Refused(entry) => {
+                        self.byte(3);
+                        self.byte(entry_code(*entry));
+                    }
+                    Lookup::Failed => self.byte(4),
+                }
+            }
+            SeHeld::Explain(explain) => {
+                self.byte(2);
+                match explain {
+                    Explain::Explained(seq) => {
+                        self.byte(0);
+                        self.u(*seq);
+                    }
+                    Explain::Pending => self.byte(1),
+                    Explain::Busy => self.byte(2),
+                    Explain::Unknown => self.byte(3),
+                    Explain::Refused(entry) => {
+                        self.byte(4);
+                        self.byte(entry_code(*entry));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn role_code(role: Role) -> u8 {
+    match role {
+        Role::Prepared => 0,
+        Role::Started => 1,
+        Role::End => 2,
+    }
+}
+
+fn cell_code(cell: Cell) -> u8 {
+    match cell {
+        Cell::U => 0,
+        Cell::C => 1,
+        Cell::X => 2,
+    }
+}
+
+fn entry_code(entry: Entry) -> u8 {
+    match entry {
+        Entry::NotOpen => 0,
+        Entry::Latched => 1,
+        Entry::NotHealthy => 2,
+        Entry::CellsBusy => 3,
+        Entry::Malformed => 4,
+        Entry::Expired => 5,
+    }
+}
+
+/// Reads the word without a step: the explorer's own access, outside the
+/// two functions of rule R1 and invisible to the hook.
+fn word_of(shared: &Shared) -> u64 {
+    shared.word.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn encode(config: &Config, w: &World) -> Vec<u8> {
+    let mut e = Enc(Vec::with_capacity(96));
+    let shared = &w.core.shared;
+    assert!(
+        Arc::ptr_eq(&w.health.shared, shared),
+        "the health handle of another world"
+    );
+    assert_eq!(shared.tickets, TICKET_LIMIT);
+    assert_eq!(w.core.refusal_limit, REFUSAL_LIMIT);
+    let word = word_of(shared);
+    let low = word & FLAGS;
+    let live = field(word, LIVE_SHIFT);
+    let unapplied = field(word, UNAPPLIED_SHIFT);
+    assert_eq!(
+        low | with_field(0, LIVE_SHIFT, live) | with_field(0, UNAPPLIED_SHIFT, unapplied),
+        word,
+        "the word has bits outside its fields"
+    );
+    e.u(low);
+    e.u(live);
+    e.u(unapplied);
+    // The core.
+    let core = &w.core;
+    e.byte(core.phase as u8);
+    e.byte(core.session as u8);
+    match core.latch {
+        None => e.byte(0),
+        Some(cause) => e.byte(1 + cause as u8),
+    }
+    for cell in [&core.u, &core.c] {
+        match cell {
+            None => e.byte(0),
+            Some((n, occupant)) => {
+                e.byte(1);
+                e.u(*n);
+                e.occupant(occupant);
+            }
+        }
+    }
+    match &core.x {
+        None => e.byte(0),
+        Some((n, occupant, stage)) => {
+            e.byte(1);
+            e.u(*n);
+            e.occupant(occupant);
+            match stage {
+                Stage::Built => e.byte(0),
+                Stage::Committed(seq) => {
+                    e.byte(1);
+                    e.u(*seq);
+                }
+            }
+        }
+    }
+    for n in core.occupancies {
+        e.u(n);
+    }
+    e.u(core.refusals.len() as u64);
+    for (key, cause) in &core.refusals {
+        e.key(key);
+        e.cause(cause);
+    }
+    e.u(core.frontier);
+    e.b(core.worker_taken);
+    // The simulated ledger beyond its initial rows.
+    let initial = initial_rows(config);
+    assert_eq!(
+        &w.rows[..initial.len()],
+        &initial[..],
+        "the initial rows changed"
+    );
+    let appended = &w.rows[initial.len()..];
+    e.u(appended.len() as u64);
+    for row in appended {
+        match row {
+            SimRow::Prepared(f) => {
+                e.byte(0);
+                e.byte(*f);
+            }
+            SimRow::Fact(f) => {
+                e.byte(1);
+                e.byte(*f);
+            }
+            SimRow::Gating(g) => {
+                e.byte(2);
+                e.byte(*g);
+            }
+            SimRow::Explanation(o) => {
+                e.byte(3);
+                e.byte(*o);
+            }
+            SimRow::Correction(g, exit) => {
+                e.byte(4);
+                e.byte(*g);
+                e.byte(exit_code(*exit));
+            }
+            SimRow::Acknowledgement { set, nonce } => {
+                e.byte(5);
+                e.set(set);
+                e.nonce(nonce);
+            }
+            other => panic!("an initial row appended: {other:?}"),
+        }
+    }
+    // The actors, and every bound value they hold.
+    for fw in &w.fw {
+        e.ticket(shared, &fw.ticket);
+        match fw.pos {
+            FwPos::Start => e.byte(0),
+            FwPos::NoTicket => e.byte(1),
+            FwPos::Armed => e.byte(2),
+            FwPos::Got(held) => {
+                e.byte(3);
+                e.held(&held);
+            }
+            FwPos::Recorded => e.byte(4),
+            FwPos::Dropping => e.byte(5),
+            FwPos::DropConfirm => e.byte(6),
+            FwPos::Done => e.byte(7),
+        }
+    }
+    e.ticket(shared, &w.se.ticket);
+    match w.se.pos {
+        SePos::Idle => e.byte(0),
+        SePos::Claimed(f, claim) => {
+            e.byte(1);
+            e.byte(f);
+            e.byte(claim as u8);
+        }
+        SePos::NoTicket(f) => {
+            e.byte(2);
+            e.byte(f);
+        }
+        SePos::Armed(f) => {
+            e.byte(3);
+            e.byte(f);
+        }
+        SePos::Got(f, held) => {
+            e.byte(4);
+            e.byte(f);
+            e.se_held(&held);
+        }
+        SePos::Dropping(f) => {
+            e.byte(5);
+            e.byte(f);
+        }
+        SePos::Confirm(f) => {
+            e.byte(6);
+            e.byte(f);
+        }
+    }
+    match &w.wk.worker {
+        None => e.byte(0),
+        Some(worker) => {
+            assert!(
+                Arc::ptr_eq(&worker.ledger, shared),
+                "a worker of another world"
+            );
+            e.byte(1);
+        }
+    }
+    match &w.wk.pos {
+        WkPos::Idle => e.byte(0),
+        WkPos::Seen(frontier, action) => {
+            e.byte(1);
+            e.u(*frontier);
+            e.action(shared, action);
+        }
+        WkPos::Act(action) => {
+            e.byte(2);
+            e.action(shared, action);
+        }
+        WkPos::RaiseH(seq) => {
+            e.byte(3);
+            e.u(*seq);
+        }
+    }
+    match &w.wk.last {
+        None => e.byte(0),
+        Some(action) => {
+            e.byte(1);
+            e.action(shared, action);
+        }
+    }
+    for gc in &w.gc {
+        e.byte(*gc as u8);
+    }
+    for ack in &w.ack {
+        e.byte(ack.attempts);
+        match &ack.snapshot {
+            None => e.byte(0),
+            Some(snapshot) => {
+                assert!(
+                    Arc::ptr_eq(&snapshot.ledger, shared),
+                    "a snapshot of another world"
+                );
+                e.byte(1);
+                e.set(&snapshot.set);
+                e.nonce(&snapshot.nonce);
+            }
+        }
+        match ack.pos {
+            AckPos::Idle => e.byte(0),
+            AckPos::Holding => e.byte(1),
+            AckPos::Confirmed => e.byte(2),
+            AckPos::Applying(seq) => {
+                e.byte(3);
+                e.u(seq);
+            }
+        }
+    }
+    e.byte(w.adm);
+    match w.adm_kept {
+        None => e.byte(0),
+        Some(bits) => {
+            e.byte(1);
+            e.u(bits);
+        }
+    }
+    e.b(w.env_done);
+    e.byte(w.replays);
+    // The test's table, the budget and the history.
+    for class in w.table.class {
+        e.byte(class as u8);
+    }
+    e.byte(w.table.debt);
+    e.u(w.table.h);
+    e.u(w.table.a);
+    e.byte(w.faults);
+    let g = &w.ghost;
+    for value in [
+        g.conflicted,
+        g.conflicted_e6,
+        g.unrecorded,
+        g.issued,
+        g.told,
+        g.dropped,
+    ] {
+        e.byte(value);
+    }
+    e.0
+}
+
+struct Dec<'a> {
+    bytes: &'a [u8],
+    at: usize,
+}
+
+impl Dec<'_> {
+    fn u(&mut self) -> u64 {
+        let mut value = 0u64;
+        let mut shift = 0;
+        loop {
+            let byte = self.byte();
+            value |= u64::from(byte & 0x7f) << shift;
+            if byte & 0x80 == 0 {
+                return value;
+            }
+            shift += 7;
+        }
+    }
+
+    fn byte(&mut self) -> u8 {
+        let byte = self.bytes[self.at];
+        self.at += 1;
+        byte
+    }
+
+    fn b(&mut self) -> bool {
+        self.byte() != 0
+    }
+
+    fn x32(&mut self) -> [u8; 32] {
+        let (a, b, c) = (self.byte(), self.byte(), self.byte());
+        bytes(a, b, c)
+    }
+
+    fn nonce(&mut self) -> [u8; 16] {
+        let mut nonce = [0; 16];
+        nonce[0] = self.byte();
+        nonce[1] = self.byte();
+        nonce
+    }
+
+    fn key(&mut self) -> RecordKey {
+        RecordKey {
+            id: self.x32(),
+            digest: self.x32(),
+        }
+    }
+
+    fn part(&mut self) -> Option<Part> {
+        match self.byte() {
+            0 => None,
+            code => {
+                let role = [Role::Prepared, Role::Started, Role::End][(code - 1) as usize];
+                Some(Part {
+                    commitment: self.x32(),
+                    role,
+                })
+            }
+        }
+    }
+
+    fn member(&mut self) -> Member {
+        Member {
+            key: self.key(),
+            part: self.part(),
+        }
+    }
+
+    fn set(&mut self) -> SetFacts {
+        SetFacts {
+            frontier: self.u(),
+            head: self.u(),
+            top: self.u(),
+            count: self.u(),
+            digest: self.x32(),
+        }
+    }
+
+    fn cause(&mut self) -> Cause {
+        let kind = match self.byte() {
+            0 => CauseKind::IdentityContent {
+                id: self.x32(),
+                existing: Row {
+                    seq: self.u(),
+                    digest: self.x32(),
+                },
+                offered: self.x32(),
+            },
+            1 => {
+                let part = self.part().expect("a part");
+                let holder = Holder {
+                    id: self.x32(),
+                    seq: self.u(),
+                };
+                CauseKind::DuplicateRole {
+                    part,
+                    holder,
+                    offered: self.key(),
+                }
+            }
+            _ => CauseKind::MissingPrepared {
+                part: self.part().expect("a part"),
+                offered: self.key(),
+            },
+        };
+        Cause { kind }
+    }
+
+    fn occupant(&mut self) -> Occupant {
+        match self.byte() {
+            0 => Occupant::Gating {
+                record: GatingRecord::new(self.member()),
+                exit: exit_from(self.byte()),
+            },
+            1 => Occupant::Acknowledgement {
+                set: self.set(),
+                nonce: self.nonce(),
+            },
+            2 => Occupant::Correction {
+                about: self.key(),
+                seq: self.u(),
+                exit: exit_from(self.byte()),
+            },
+            _ => Occupant::Explanation {
+                original: self.key(),
+                cause: self.cause(),
+            },
+        }
+    }
+
+    fn token(&mut self, shared: &Arc<Shared>) -> CellToken {
+        let cell = [Cell::U, Cell::C, Cell::X][self.byte() as usize];
+        CellToken {
+            ledger: Arc::clone(shared),
+            cell,
+            occupancy: self.u(),
+        }
+    }
+
+    fn ticket(&mut self, shared: &Arc<Shared>) -> Option<Ticket> {
+        let state = match self.byte() {
+            0 => return None,
+            1 => TicketState::Armed,
+            2 => TicketState::Settled,
+            _ => TicketState::Counted(self.counted()),
+        };
+        Some(Ticket {
+            shared: Arc::clone(shared),
+            state,
+        })
+    }
+
+    fn counted(&mut self) -> Counted {
+        let persistence = if self.b() {
+            Persistence::Uncertain
+        } else {
+            Persistence::NotWritten
+        };
+        let conflict_member = if self.b() {
+            Some(self.u() as u16)
+        } else {
+            None
+        };
+        Counted {
+            persistence,
+            conflict_member,
+        }
+    }
+
+    fn held(&mut self) -> Held {
+        match self.byte() {
+            0 => Held::Committed,
+            1 => Held::Rejected,
+            _ => Held::Counted(self.counted()),
+        }
+    }
+
+    fn action(&mut self, shared: &Arc<Shared>) -> Action {
+        match self.byte() {
+            0 => Action::Nothing,
+            1 => Action::Barrier,
+            2 => Action::Resolve(self.token(shared)),
+            3 => Action::AppendC(self.token(shared)),
+            4 => Action::AppendX(self.token(shared)),
+            _ => {
+                let token = self.token(shared);
+                Action::EmptyX(token, self.u())
+            }
+        }
+    }
+
+    fn entry(&mut self) -> Entry {
+        [
+            Entry::NotOpen,
+            Entry::Latched,
+            Entry::NotHealthy,
+            Entry::CellsBusy,
+            Entry::Malformed,
+            Entry::Expired,
+        ][self.byte() as usize]
+    }
+
+    fn known(&mut self) -> Known {
+        match self.byte() {
+            0 => Known::Cause(self.cause()),
+            _ => Known::Explained(self.u()),
+        }
+    }
+
+    fn se_held(&mut self) -> SeHeld {
+        match self.byte() {
+            0 => SeHeld::Fact(self.held()),
+            1 => SeHeld::Lookup(match self.byte() {
+                0 => Lookup::Present(self.u()),
+                1 => Lookup::Absent,
+                2 => Lookup::Conflict(self.known()),
+                3 => Lookup::Refused(self.entry()),
+                _ => Lookup::Failed,
+            }),
+            _ => SeHeld::Explain(match self.byte() {
+                0 => Explain::Explained(self.u()),
+                1 => Explain::Pending,
+                2 => Explain::Busy,
+                3 => Explain::Unknown,
+                _ => Explain::Refused(self.entry()),
+            }),
+        }
+    }
+}
+
+const PHASES: [Phase; 3] = [Phase::Healthy, Phase::NeedBarrier, Phase::Resolving];
+const SESSIONS: [Session; 3] = [Session::Bootstrap, Session::Open, Session::Sealed];
+const LATCHES: [LatchCause; 7] = [
+    LatchCause::Constraint,
+    LatchCause::TableFull,
+    LatchCause::TicketFault,
+    LatchCause::CellInvariant,
+    LatchCause::Inconsistent,
+    LatchCause::Corrupt,
+    LatchCause::Overflow,
+];
+const CLASSES: [Class; 6] = [
+    Class::Unattempted,
+    Class::Refused,
+    Class::Uncertain,
+    Class::Conflict,
+    Class::Paid,
+    Class::Retired,
+];
+const CLAIMS: [Claim; 3] = [Claim::Append, Claim::Lookup, Claim::Explain];
+
+/// Builds a new, independent world from a key: a new shared allocation
+/// holding the same word value, and everything made to refer to it.
+fn decode(config: &Config, key: &[u8]) -> World {
+    let mut d = Dec { bytes: key, at: 0 };
+    let low = d.u();
+    let live = d.u();
+    let unapplied = d.u();
+    let word = low | with_field(0, LIVE_SHIFT, live) | with_field(0, UNAPPLIED_SHIFT, unapplied);
+    let shared = Arc::new(Shared {
+        word: AtomicU64::new(word),
+        tickets: TICKET_LIMIT,
+    });
+    let phase = PHASES[d.byte() as usize];
+    let session = SESSIONS[d.byte() as usize];
+    let latch = match d.byte() {
+        0 => None,
+        code => Some(LATCHES[(code - 1) as usize]),
+    };
+    let u = d.b().then(|| (d.u(), d.occupant()));
+    let c = d.b().then(|| (d.u(), d.occupant()));
+    let x = d.b().then(|| {
+        let n = d.u();
+        let occupant = d.occupant();
+        let stage = if d.b() {
+            Stage::Committed(d.u())
+        } else {
+            Stage::Built
+        };
+        (n, occupant, stage)
+    });
+    let occupancies = [d.u(), d.u(), d.u()];
+    let mut refusals = BTreeMap::new();
+    for _ in 0..d.u() {
+        let key = d.key();
+        refusals.insert(key, d.cause());
+    }
+    let frontier = d.u();
+    let worker_taken = d.b();
+    let core = Core {
+        shared: Arc::clone(&shared),
+        phase,
+        session,
+        latch,
+        u,
+        c,
+        x,
+        occupancies,
+        refusals,
+        refusal_limit: REFUSAL_LIMIT,
+        frontier,
+        worker_taken,
+    };
+    let mut rows = initial_rows(config);
+    for _ in 0..d.u() {
+        rows.push(match d.byte() {
+            0 => SimRow::Prepared(d.byte()),
+            1 => SimRow::Fact(d.byte()),
+            2 => SimRow::Gating(d.byte()),
+            3 => SimRow::Explanation(d.byte()),
+            4 => SimRow::Correction(d.byte(), exit_from(d.byte())),
+            _ => SimRow::Acknowledgement {
+                set: d.set(),
+                nonce: d.nonce(),
+            },
+        });
+    }
+    let writers = if config.batch { 1 } else { config.facts };
+    let mut fw = Vec::new();
+    for f in 0..writers {
+        let ticket = d.ticket(&shared);
+        let pos = match d.byte() {
+            0 => FwPos::Start,
+            1 => FwPos::NoTicket,
+            2 => FwPos::Armed,
+            3 => FwPos::Got(d.held()),
+            4 => FwPos::Recorded,
+            5 => FwPos::Dropping,
+            6 => FwPos::DropConfirm,
+            _ => FwPos::Done,
+        };
+        let members = if config.batch {
+            (0..config.facts).collect()
+        } else {
+            vec![f]
+        };
+        fw.push(Fw {
+            members,
+            ticket,
+            pos,
+        });
+    }
+    let se_ticket = d.ticket(&shared);
+    let se_pos = match d.byte() {
+        0 => SePos::Idle,
+        1 => {
+            let f = d.byte();
+            SePos::Claimed(f, CLAIMS[d.byte() as usize])
+        }
+        2 => SePos::NoTicket(d.byte()),
+        3 => SePos::Armed(d.byte()),
+        4 => {
+            let f = d.byte();
+            SePos::Got(f, d.se_held())
+        }
+        5 => SePos::Dropping(d.byte()),
+        _ => SePos::Confirm(d.byte()),
+    };
+    let worker = d.b().then(|| Worker {
+        ledger: Arc::clone(&shared),
+    });
+    let wk_pos = match d.byte() {
+        0 => WkPos::Idle,
+        1 => {
+            let frontier = d.u();
+            WkPos::Seen(frontier, d.action(&shared))
+        }
+        2 => WkPos::Act(d.action(&shared)),
+        _ => WkPos::RaiseH(d.u()),
+    };
+    let last = d.b().then(|| d.action(&shared));
+    let gc = (0..config.gating)
+        .map(|_| {
+            if d.byte() == 0 {
+                GcPos::Start
+            } else {
+                GcPos::Done
+            }
+        })
+        .collect();
+    let mut ack = Vec::new();
+    for _ in 0..config.acks {
+        let attempts = d.byte();
+        let snapshot = d.b().then(|| Snapshot {
+            ledger: Arc::clone(&shared),
+            set: d.set(),
+            nonce: d.nonce(),
+        });
+        let pos = match d.byte() {
+            0 => AckPos::Idle,
+            1 => AckPos::Holding,
+            2 => AckPos::Confirmed,
+            _ => AckPos::Applying(d.u()),
+        };
+        ack.push(Ack {
+            attempts,
+            snapshot,
+            pos,
+        });
+    }
+    let adm = d.byte();
+    let adm_kept = d.b().then(|| d.u());
+    let env_done = d.b();
+    let replays = d.byte();
+    let class = [CLASSES[d.byte() as usize], CLASSES[d.byte() as usize]];
+    let table = Table {
+        class,
+        debt: d.byte(),
+        h: d.u(),
+        a: d.u(),
+    };
+    let faults = d.byte();
+    let ghost = Ghost {
+        conflicted: d.byte(),
+        conflicted_e6: d.byte(),
+        unrecorded: d.byte(),
+        issued: d.byte(),
+        told: d.byte(),
+        dropped: d.byte(),
+    };
+    assert_eq!(d.at, key.len(), "the key was not read whole");
+    World {
+        core,
+        health: Health { shared },
+        rows,
+        fw,
+        se: Se {
+            ticket: se_ticket,
+            pos: se_pos,
+        },
+        wk: Wk {
+            worker,
+            pos: wk_pos,
+            last,
+        },
+        gc,
+        ack,
+        adm,
+        adm_kept,
+        env_done,
+        replays,
+        table,
+        faults,
+        ghost,
+    }
+}
+
+// ---- observations of one step -------------------------------------------------------------------
+
+/// What one step did, for E2, coverage, traces and properties.
+#[derive(Default)]
+struct Obs {
+    /// Word operations the step's own actions account for (E2).
+    views: u64,
+    store_ops: u64,
+    ticket_steps: u64,
+    /// Originals whose explanation the store saw in the ledger in this step:
+    /// X's own append committing or finding it present, or explain answering
+    /// Explained (E11).
+    explained: Vec<RecordKey>,
+    /// Branch labels, for coverage.
+    branches: Vec<String>,
+    /// Violations, as (property, detail).
+    violations: Vec<(&'static str, String)>,
+    /// The step's description, when tracing.
+    trace: Option<String>,
+}
+
+impl Obs {
+    fn fail(&mut self, property: &'static str, detail: impl Into<String>) {
+        self.violations.push((property, detail.into()));
+    }
+
+    fn note(&mut self, text: impl FnOnce() -> String) {
+        if let Some(trace) = self.trace.as_mut() {
+            if !trace.ends_with(": ") && !trace.is_empty() {
+                trace.push_str("; ");
+            }
+            trace.push_str(&text());
+        }
+    }
+
+    fn branch(&mut self, label: String) {
+        self.branches.push(label);
+    }
+}
+
+fn reason_label(reason: &Reason) -> String {
+    match reason {
+        Reason::Entry(entry) => format!("Entry({entry:?})"),
+        Reason::Conflict { known, .. } => match known {
+            Known::Cause(cause) => {
+                format!("Conflict(new or retained cause {})", cause_label(cause))
+            }
+            Known::Explained(_) => "Conflict(explained)".to_string(),
+        },
+        Reason::SessionClosed { .. } => "SessionClosed".to_string(),
+        Reason::Corrected { .. } => "Corrected".to_string(),
+        Reason::TableFull { .. } => "TableFull".to_string(),
+        Reason::Constraint => "Constraint".to_string(),
+        Reason::Storage => "Storage".to_string(),
+    }
+}
+
+fn cause_label(cause: &Cause) -> &'static str {
+    match cause.kind() {
+        CauseKind::IdentityContent { .. } => "IdentityContent",
+        CauseKind::DuplicateRole { .. } => "DuplicateRole",
+        CauseKind::MissingPrepared { .. } => "MissingPrepared",
+    }
+}
+
+fn log_label(log: &[(Verb, Answer)]) -> String {
+    log.iter()
+        .map(|(verb, answer)| format!("{verb:?}:{answer:?}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// E5: the order of the verbs of one transactional operation.
+fn verb_order(log: &[(Verb, Answer)], members: usize) -> Result<(), String> {
+    if let Some(at) = log
+        .iter()
+        .position(|(_, answer)| *answer == Answer::Unwound)
+    {
+        if at + 1 != log.len() {
+            return Err("a verb after an unwind".into());
+        }
+    }
+    match log.first() {
+        None => return Ok(()),
+        Some((Verb::Open, Answer::Ok)) => {}
+        Some((Verb::Open, _)) => {
+            return if log.len() == 1 {
+                Ok(())
+            } else {
+                Err("a verb after a failed open".into())
+            };
+        }
+        Some(other) => return Err(format!("the first verb is {other:?}")),
+    }
+    let (mut reads, mut inserting, mut after_failure, mut ended, mut rollbacks) =
+        (0, false, false, false, 0);
+    let mut durable = false;
+    for &(verb, answer) in &log[1..] {
+        if ended {
+            return Err(format!("{verb:?} after the transaction ended"));
+        }
+        if after_failure && verb != Verb::Rollback {
+            return Err(format!(
+                "{verb:?} after a failure, before or instead of one rollback"
+            ));
+        }
+        match verb {
+            Verb::Facts | Verb::Recheck | Verb::Present => {
+                if inserting {
+                    return Err(format!("{verb:?} after an insert"));
+                }
+                reads += 1;
+                after_failure |= matches!(answer, Answer::Failed | Answer::Corrupt);
+            }
+            Verb::Insert => {
+                if reads < members {
+                    return Err("an insert before every member is classified".into());
+                }
+                inserting = true;
+                after_failure |= matches!(answer, Answer::Failed | Answer::Constraint);
+            }
+            Verb::Commit => {
+                durable = answer == Answer::Ok;
+                ended = durable;
+                after_failure |= answer == Answer::Unknown;
+            }
+            Verb::Rollback => {
+                rollbacks += 1;
+                ended = true;
+            }
+            other => return Err(format!("{other:?} inside a transaction")),
+        }
+        if answer == Answer::Unwound {
+            ended = true;
+        }
+    }
+    let unwound = log
+        .last()
+        .is_some_and(|(_, answer)| *answer == Answer::Unwound);
+    if !unwound && !durable && rollbacks != 1 {
+        return Err(format!("{rollbacks} rollbacks where exactly one is owed"));
+    }
+    if durable && rollbacks != 0 {
+        return Err("a rollback after a durable commit".into());
+    }
+    Ok(())
+}
+
+// ---- the actors ---------------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Actor {
+    Fw(u8),
+    Se,
+    Wk,
+    Gc(u8),
+    Ack(u8),
+    Adm,
+    Env,
+    Replay,
+}
+
+fn actors(config: &Config) -> Vec<Actor> {
+    let writers = if config.batch { 1 } else { config.facts };
+    let mut all: Vec<Actor> = (0..writers).map(Actor::Fw).collect();
+    all.push(Actor::Se);
+    all.push(Actor::Wk);
+    all.extend((0..config.gating).map(Actor::Gc));
+    all.extend((0..config.acks).map(Actor::Ack));
+    all.push(Actor::Adm);
+    if config.env {
+        all.push(Actor::Env);
+    }
+    if config.replays > 0 {
+        all.push(Actor::Replay);
+    }
+    all
+}
+
+/// Sets a fact's class in the test's table, keeping its debt counter.
+fn set_class(table: &mut Table, f: u8, class: Class) {
+    let old = table.class[f as usize];
+    match (is_debt(old), is_debt(class)) {
+        (false, true) => table.debt += 1,
+        (true, false) => table.debt -= 1,
+        _ => {}
+    }
+    table.class[f as usize] = class;
+}
+
+/// Section 4.3: the classes a Counted ticket records, member by member.
+fn record_counted(w: &mut World, members: &[u8], counted: Counted) {
+    for (k, &f) in members.iter().enumerate() {
+        let class = match (counted.persistence, counted.conflict_member) {
+            (Persistence::Uncertain, _) => Class::Uncertain,
+            (Persistence::NotWritten, Some(member)) if member as usize == k => Class::Conflict,
+            (Persistence::NotWritten, _) => Class::Refused,
+        };
+        set_class(&mut w.table, f, class);
+        w.ghost.unrecorded &= !bit(f);
+    }
+}
+
+/// A drop path: classes from the ticket, or Uncertain if it is not Counted.
+/// Under actor change A4: a blanket Uncertain.
+fn record_dropped(config: &Config, w: &mut World, members: &[u8], ticket: Option<Counted>) {
+    match ticket {
+        Some(counted) if !config.blanket_uncertain => record_counted(w, members, counted),
+        _ => {
+            for &f in members {
+                set_class(&mut w.table, f, Class::Uncertain);
+                w.ghost.unrecorded &= !bit(f);
+            }
+        }
+    }
+}
+
+/// A failing fact result: its members are unrecorded, and a named conflict
+/// is remembered (P6, E6).
+fn note_fact_result(config: &Config, w: &mut World, members: &[u8], counted: Counted) {
+    for (k, &f) in members.iter().enumerate() {
+        w.ghost.unrecorded |= bit(f);
+        if counted.conflict_member == Some(k as u16) {
+            w.ghost.conflicted |= bit(f);
+            if config.batch {
+                w.ghost.conflicted_e6 |= bit(f);
+            }
+        }
+    }
+}
+
+fn fact_names(members: &[u8]) -> Vec<String> {
+    members.iter().map(|f| format!("F{}", f + 1)).collect()
+}
+
+/// One fact append, with E4 and E5 checked and its branch labelled.
+fn fact_append(
+    config: &Config,
+    w: &mut World,
+    o: &mut Oracle,
+    obs: &mut Obs,
+    ticket: &mut Ticket,
+    members: &[u8],
+) -> Option<FactOutcome> {
+    let batch: Vec<FactRecord> = members
+        .iter()
+        .map(|&f| FactRecord::new(fact_member(f)))
+        .collect();
+    let before = w.rows.clone();
+    let mut io = Io::new(&mut w.rows, o, true, true);
+    let core = &mut w.core;
+    let outcome = run_op(|| core.append_facts(ticket, &batch, &mut io));
+    let log = std::mem::take(&mut io.log);
+    drop(io);
+    let issued = log.iter().any(|(verb, _)| *verb == Verb::Insert);
+    obs.store_ops += 1;
+    if let Err(order) = verb_order(&log, batch.len()) {
+        obs.fail("E5", format!("append_facts: {order}: {}", log_label(&log)));
+    }
+    let counted = match &outcome {
+        Some(FactOutcome::NotApplied { counted, .. }) => Some(*counted),
+        None => ticket.counted(),
+        _ => None,
+    };
+    let not_written = matches!(outcome, Some(FactOutcome::Rejected(_)))
+        || counted.is_some_and(|c| c.persistence == Persistence::NotWritten);
+    if not_written && w.rows != before {
+        obs.fail(
+            "E4",
+            format!(
+                "append_facts said Not written but the ledger changed: {}",
+                log_label(&log)
+            ),
+        );
+    }
+    if outcome == Some(FactOutcome::Committed) {
+        for &f in members {
+            if !w.rows.contains(&SimRow::Fact(f)) {
+                obs.fail(
+                    "E4",
+                    format!("append_facts said Committed but F{} is absent", f + 1),
+                );
+            }
+        }
+    }
+    if let Some(counted) = counted {
+        if counted.conflict_member.is_some() && counted.persistence != Persistence::NotWritten {
+            obs.fail(
+                "E4",
+                "a result that names a conflict does not say Not written",
+            );
+        }
+    }
+    if let Some(FactOutcome::NotApplied { reason, .. }) = &outcome {
+        let refused = matches!(
+            reason,
+            Reason::Conflict { .. }
+                | Reason::SessionClosed { .. }
+                | Reason::TableFull { .. }
+                | Reason::Corrected { .. }
+        );
+        if refused && issued {
+            obs.fail("E5", "an insert was issued although a member was refused");
+        }
+    }
+    let label = match &outcome {
+        Some(FactOutcome::Committed) if issued => "Committed (inserted)".to_string(),
+        Some(FactOutcome::Committed) => "Committed (already present)".to_string(),
+        Some(FactOutcome::NotApplied { counted, reason }) => {
+            format!(
+                "NotApplied {:?} {}",
+                counted.persistence,
+                reason_label(reason)
+            )
+        }
+        Some(FactOutcome::Rejected(fault)) => format!("Rejected({fault:?})"),
+        None if issued => "unwound after an insert was issued".to_string(),
+        None => "unwound before any insert".to_string(),
+    };
+    obs.branch(format!("append_facts: {label}"));
+    obs.note(|| {
+        format!(
+            "append_facts{:?} -> {label} [{}]",
+            fact_names(members),
+            log_label(&log)
+        )
+    });
+    if let Some(counted) = counted {
+        note_fact_result(config, w, members, counted);
+    }
+    outcome
+}
+
+/// FW's choice that replaces the call: the wait to enter the store
+/// expires (a fault).
+fn expires(o: &mut Oracle) -> bool {
+    o.choose(&[false, true]) == 1
+}
+
+/// FW: section 7.2.
+fn step_fw(config: &Config, w: &mut World, i: usize, o: &mut Oracle, obs: &mut Obs) -> bool {
+    let members = w.fw[i].members.clone();
+    match w.fw[i].pos {
+        FwPos::Done => return false,
+        FwPos::Start => {
+            obs.ticket_steps += 1;
+            match w.health.arm() {
+                Some(ticket) => {
+                    w.fw[i].ticket = Some(ticket);
+                    w.fw[i].pos = FwPos::Armed;
+                    obs.note(|| "arm -> Armed".into());
+                }
+                None => {
+                    w.fw[i].pos = FwPos::NoTicket;
+                    obs.note(|| "arm -> nothing".into());
+                }
+            }
+        }
+        FwPos::NoTicket => {
+            for &f in &members {
+                set_class(&mut w.table, f, Class::Refused);
+            }
+            w.fw[i].pos = FwPos::Done;
+            obs.note(|| "[T] every member Refused".into());
+        }
+        FwPos::Armed => {
+            let mut ticket = w.fw[i]
+                .ticket
+                .take()
+                .expect("an armed writer holds its ticket");
+            if expires(o) {
+                obs.ticket_steps += 1;
+                let outcome = ticket.expire();
+                let FactOutcome::NotApplied { counted, .. } = outcome else {
+                    panic!("an Armed ticket expired as {outcome:?}");
+                };
+                note_fact_result(config, w, &members, counted);
+                w.fw[i].pos = FwPos::Got(Held::Counted(counted));
+                obs.branch("expire: Armed -> Counted".into());
+                obs.note(|| "the wait expires: expire".into());
+            } else {
+                let outcome = fact_append(config, w, o, obs, &mut ticket, &members);
+                w.fw[i].pos = match outcome {
+                    Some(FactOutcome::Committed) => FwPos::Got(Held::Committed),
+                    Some(FactOutcome::NotApplied { counted, .. }) => {
+                        FwPos::Got(Held::Counted(counted))
+                    }
+                    Some(FactOutcome::Rejected(_)) => FwPos::Got(Held::Rejected),
+                    None => FwPos::Dropping,
+                };
+            }
+            w.fw[i].ticket = Some(ticket);
+        }
+        FwPos::Got(held) => {
+            let counted_ticket = matches!(held, Held::Counted(_));
+            let options: &[bool] = if config.drop && counted_ticket {
+                &[false, true, false]
+            } else {
+                &[false, true]
+            };
+            match o.choose(options) {
+                0 => {
+                    match held {
+                        Held::Committed => {
+                            for &f in &members {
+                                set_class(&mut w.table, f, Class::Paid);
+                            }
+                        }
+                        Held::Counted(counted) => record_counted(w, &members, counted),
+                        Held::Rejected => {
+                            for &f in &members {
+                                set_class(&mut w.table, f, Class::Uncertain);
+                                w.ghost.unrecorded &= !bit(f);
+                            }
+                        }
+                    }
+                    w.fw[i].pos = FwPos::Recorded;
+                    obs.note(|| format!("[T] records {held:?}"));
+                }
+                1 => {
+                    w.fw[i].pos = FwPos::Dropping;
+                    obs.note(|| "unwinds before recording".into());
+                }
+                _ => {
+                    // DROP: the Counted ticket is dropped unrecorded and
+                    // unconfirmed.
+                    obs.ticket_steps += 1;
+                    drop(w.fw[i].ticket.take());
+                    w.ghost.dropped += 1;
+                    w.fw[i].pos = FwPos::Done;
+                    obs.branch("DROP: a Counted ticket dropped".into());
+                    obs.note(|| "DROP: drops its Counted ticket".into());
+                }
+            }
+        }
+        FwPos::Recorded => {
+            if o.choose(&[false, true]) == 0 {
+                obs.ticket_steps += 1;
+                w.fw[i]
+                    .ticket
+                    .take()
+                    .expect("a recorded writer holds its ticket")
+                    .confirm();
+                w.fw[i].pos = FwPos::Done;
+                obs.note(|| "confirm".into());
+            } else {
+                w.fw[i].pos = FwPos::Dropping;
+                obs.note(|| "unwinds before confirming".into());
+            }
+        }
+        FwPos::Dropping => {
+            let counted = w.fw[i].ticket.as_ref().and_then(Ticket::counted);
+            record_dropped(config, w, &members, counted);
+            w.fw[i].pos = FwPos::DropConfirm;
+            obs.note(|| format!("[T] drop path records from {counted:?}"));
+        }
+        FwPos::DropConfirm => {
+            obs.ticket_steps += 1;
+            w.fw[i]
+                .ticket
+                .take()
+                .expect("the drop path holds its ticket")
+                .confirm();
+            w.fw[i].pos = FwPos::Done;
+            obs.note(|| "confirm".into());
+        }
+    }
+    true
+}
+
+/// SE's guards (section 7.2), from one view and the class.
+fn claimable(view: HealthView, class: Class) -> Option<Claim> {
+    if view.handover_fault() || view.latched() {
+        return None;
+    }
+    match class {
+        Class::Refused if view.phase() == Phase::Healthy => Some(Claim::Append),
+        Class::Uncertain if view.phase() != Phase::NeedBarrier => Some(Claim::Lookup),
+        Class::Conflict if view.phase() == Phase::Healthy && !view.x_occupied() => {
+            Some(Claim::Explain)
+        }
+        _ => None,
+    }
+}
+
+/// One settlement read (lookup or explain), with its branch labelled.
+fn settlement_read(
+    w: &mut World,
+    f: u8,
+    claim: Claim,
+    o: &mut Oracle,
+    obs: &mut Obs,
+) -> Option<SeHeld> {
+    let key = fact_key(f);
+    let mut io = Io::new(&mut w.rows, o, true, false);
+    let core = &mut w.core;
+    let (outcome, label, name) = if claim == Claim::Lookup {
+        let outcome = run_op(|| core.lookup(&key, &mut io));
+        let label = match outcome {
+            Some(Lookup::Conflict(Known::Cause(_))) => "Conflict(cause)".to_string(),
+            Some(Lookup::Conflict(Known::Explained(_))) => "Conflict(explained)".to_string(),
+            Some(Lookup::Present(_)) => "Present".to_string(),
+            Some(other) => format!("{other:?}"),
+            None => "unwound".to_string(),
+        };
+        (outcome.map(SeHeld::Lookup), label, "lookup")
+    } else {
+        let outcome = run_op(|| core.explain(&key, &mut io));
+        let label = match outcome {
+            Some(Explain::Explained(_)) => "Explained".to_string(),
+            Some(other) => format!("{other:?}"),
+            None => "unwound".to_string(),
+        };
+        (outcome.map(SeHeld::Explain), label, "explain")
+    };
+    let log = std::mem::take(&mut io.log);
+    drop(io);
+    obs.store_ops += 1;
+    obs.branch(format!("{name}: {label}"));
+    obs.note(|| format!("{name} F{} -> {label} [{}]", f + 1, log_label(&log)));
+    match outcome {
+        Some(SeHeld::Lookup(Lookup::Conflict(_))) => {
+            w.ghost.conflicted |= bit(f);
+            w.ghost.conflicted_e6 |= bit(f);
+        }
+        Some(SeHeld::Explain(Explain::Explained(_))) => obs.explained.push(key),
+        _ => {}
+    }
+    outcome
+}
+
+/// SE: section 7.2.
+fn step_se(config: &Config, w: &mut World, o: &mut Oracle, obs: &mut Obs) -> bool {
+    match w.se.pos {
+        SePos::Idle => {
+            obs.views += 1;
+            let view = w.health.view();
+            let eligible: Vec<(u8, Claim)> = (0..config.facts)
+                .filter_map(|f| claimable(view, w.table.class[f as usize]).map(|c| (f, c)))
+                .collect();
+            if eligible.is_empty() {
+                return false;
+            }
+            let (f, claim) = eligible[o.branch(eligible.len())];
+            w.se.pos = SePos::Claimed(f, claim);
+            obs.note(|| format!("[T] claims F{} for {claim:?}", f + 1));
+        }
+        SePos::Claimed(f, Claim::Append) => {
+            obs.ticket_steps += 1;
+            match w.health.arm() {
+                Some(ticket) => {
+                    w.se.ticket = Some(ticket);
+                    w.se.pos = SePos::Armed(f);
+                    obs.note(|| "arm -> Armed".into());
+                }
+                None => {
+                    w.se.pos = SePos::NoTicket(f);
+                    obs.note(|| "arm -> nothing".into());
+                }
+            }
+        }
+        SePos::Claimed(f, claim) => {
+            w.se.pos = match settlement_read(w, f, claim, o, obs) {
+                Some(held) => SePos::Got(f, held),
+                None => SePos::Dropping(f),
+            };
+        }
+        SePos::NoTicket(_) => {
+            w.se.pos = SePos::Idle;
+            obs.note(|| "[T] releases its claim".into());
+        }
+        SePos::Armed(f) => {
+            let mut ticket =
+                w.se.ticket
+                    .take()
+                    .expect("an armed settlement holds its ticket");
+            let outcome = fact_append(config, w, o, obs, &mut ticket, &[f]);
+            w.se.pos = match outcome {
+                Some(FactOutcome::Committed) => SePos::Got(f, SeHeld::Fact(Held::Committed)),
+                Some(FactOutcome::NotApplied { counted, .. }) => {
+                    SePos::Got(f, SeHeld::Fact(Held::Counted(counted)))
+                }
+                Some(FactOutcome::Rejected(_)) => SePos::Got(f, SeHeld::Fact(Held::Rejected)),
+                None => SePos::Dropping(f),
+            };
+            w.se.ticket = Some(ticket);
+        }
+        SePos::Got(f, held) => {
+            match held {
+                SeHeld::Fact(Held::Committed) | SeHeld::Lookup(Lookup::Present(_)) => {
+                    set_class(&mut w.table, f, Class::Paid)
+                }
+                SeHeld::Lookup(Lookup::Absent) => set_class(&mut w.table, f, Class::Refused),
+                SeHeld::Lookup(Lookup::Conflict(_)) => set_class(&mut w.table, f, Class::Conflict),
+                SeHeld::Explain(Explain::Explained(_)) => {
+                    set_class(&mut w.table, f, Class::Retired)
+                }
+                SeHeld::Fact(Held::Counted(counted)) => record_counted(w, &[f], counted),
+                _ => {}
+            }
+            w.se.pos = if w.se.ticket.is_some() {
+                SePos::Confirm(f)
+            } else {
+                SePos::Idle
+            };
+            obs.note(|| format!("[T] applies {held:?}; releases"));
+        }
+        SePos::Dropping(f) => {
+            let counted = w.se.ticket.as_ref().and_then(Ticket::counted);
+            if counted.is_some() || config.blanket_uncertain {
+                record_dropped(config, w, &[f], counted);
+            }
+            w.se.pos = if w.se.ticket.is_some() {
+                SePos::Confirm(f)
+            } else {
+                SePos::Idle
+            };
+            obs.note(|| format!("[T] drop path records from {counted:?}; releases"));
+        }
+        SePos::Confirm(_) => {
+            obs.ticket_steps += 1;
+            w.se.ticket
+                .take()
+                .expect("settlement holds its ticket")
+                .confirm();
+            w.se.pos = SePos::Idle;
+            obs.note(|| "confirm".into());
+        }
+    }
+    true
+}
+
+/// The steps an agenda allows the worker (sections 4.7 and 5.3).
+fn allowed(agenda: &Agenda) -> Vec<Action> {
+    let mut steps = Vec::new();
+    let usable = agenda.session == Session::Open && agenda.latch.is_none();
+    if agenda.phase == Phase::NeedBarrier {
+        steps.push(Action::Barrier);
+    }
+    if agenda.phase == Phase::Resolving && usable {
+        if let Some(u) = &agenda.u {
+            steps.push(Action::Resolve(u.clone()));
+        }
+    }
+    if agenda.phase == Phase::Healthy && usable {
+        if let Some(c) = &agenda.c {
+            steps.push(Action::AppendC(c.clone()));
+        }
+        if let Some((x, Stage::Built)) = &agenda.x {
+            steps.push(Action::AppendX(x.clone()));
+        }
+    }
+    if let Some((x, Stage::Committed(seq))) = &agenda.x {
+        steps.push(Action::EmptyX(x.clone(), *seq));
+    }
+    steps
+}
+
+/// Whether a token names its cell's present occupancy, read from the core.
+fn present_token(core: &Core, token: &CellToken) -> bool {
+    Arc::ptr_eq(&token.ledger, &core.shared) && core.occupancy(token.cell) == Some(token.occupancy)
+}
+
+/// The core, encoded, for E8.
+fn core_key(core: &Core) -> Vec<u8> {
+    let mut e = Enc(Vec::new());
+    e.byte(core.phase as u8);
+    e.byte(core.session as u8);
+    e.byte(core.latch.map_or(0, |c| 1 + c as u8));
+    for cell in [&core.u, &core.c] {
+        match cell {
+            None => e.byte(0),
+            Some((n, occupant)) => {
+                e.u(*n);
+                e.occupant(occupant);
+            }
+        }
+    }
+    if let Some((n, occupant, stage)) = &core.x {
+        e.u(*n);
+        e.occupant(occupant);
+        e.byte(u8::from(*stage != Stage::Built));
+    }
+    for n in core.occupancies {
+        e.u(n);
+    }
+    for (key, cause) in &core.refusals {
+        e.key(key);
+        e.cause(cause);
+    }
+    e.u(core.frontier);
+    e.0
+}
+
+/// One worker operation, with E4, E5 and E8 checked.
+fn worker_op(config: &Config, w: &mut World, action: &Action, o: &mut Oracle, obs: &mut Obs) {
+    let token = match action {
+        Action::Resolve(t) | Action::AppendC(t) | Action::AppendX(t) | Action::EmptyX(t, _) => {
+            Some(t.clone())
+        }
+        Action::Nothing | Action::Barrier => None,
+    };
+    let stale = token.as_ref().is_some_and(|t| !present_token(&w.core, t));
+    let before_core = stale.then(|| core_key(&w.core));
+    let before_word = word_of(&w.core.shared);
+    let before_rows = w.rows.clone();
+    let x_original = match &w.core.x {
+        Some((_, Occupant::Explanation { original, .. }, _)) => Some(*original),
+        _ => None,
+    };
+    let Some(worker) = w.wk.worker.as_mut() else {
+        return;
+    };
+    let mut io = Io::new(
+        &mut w.rows,
+        o,
+        config.worker_unwinds,
+        config.cell_constraint,
+    );
+    let core = &mut w.core;
+    let (label, stale_answer) = match action {
+        Action::Nothing => return,
+        Action::Barrier => {
+            let outcome = run_op(|| core.barrier(worker, &mut io));
+            (
+                format!(
+                    "barrier: {}",
+                    outcome.map_or("unwound".into(), |o| format!("{o:?}"))
+                ),
+                false,
+            )
+        }
+        Action::Resolve(token) => {
+            let token = token.clone();
+            let outcome = run_op(|| core.resolve(worker, token, &mut io));
+            let stale_answer = matches!(outcome, Some(Resolve::Stale));
+            let label = match outcome {
+                Some(Resolve::Corrected(_)) => "Corrected".to_string(),
+                Some(Resolve::ConflictPlaced(_)) => "ConflictPlaced".to_string(),
+                Some(Resolve::Acknowledged(_)) => "Acknowledged".to_string(),
+                Some(other) => format!("{other:?}"),
+                None => "unwound".to_string(),
+            };
+            (format!("resolve: {label}"), stale_answer)
+        }
+        Action::AppendC(token) | Action::AppendX(token) => {
+            let token = token.clone();
+            let cell = token.cell;
+            let outcome = run_op(|| core.append_cell(worker, token, &mut io));
+            let stale_answer = outcome == Some(CellAppend::Stale);
+            let log = io.log.clone();
+            if !stale {
+                if let Err(order) = verb_order(&log, 1) {
+                    obs.fail("E5", format!("append_cell: {order}: {}", log_label(&log)));
+                }
+            }
+            let inserted = log.iter().any(|(verb, _)| *verb == Verb::Insert);
+            let label = match outcome {
+                Some(CellAppend::Committed(_)) if inserted => "Committed (inserted)".to_string(),
+                Some(CellAppend::Committed(_)) if log.is_empty() => {
+                    "Committed (already marked)".to_string()
+                }
+                Some(CellAppend::Committed(_)) => "Committed (present)".to_string(),
+                Some(other) => format!("{other:?}"),
+                None => "unwound".to_string(),
+            };
+            if cell == Cell::X && label.starts_with("Committed (") && !label.ends_with("marked)") {
+                if let Some(original) = x_original {
+                    obs.explained.push(original);
+                }
+            }
+            (format!("append_cell {cell:?}: {label}"), stale_answer)
+        }
+        Action::EmptyX(token, _) => {
+            let token = token.clone();
+            let outcome = run_op(|| core.empty(worker, token));
+            let stale_answer = outcome == Some(Emptying::Stale);
+            (
+                format!(
+                    "empty: {}",
+                    outcome.map_or("unwound".into(), |o| format!("{o:?}"))
+                ),
+                stale_answer,
+            )
+        }
+    };
+    let log = std::mem::take(&mut io.log);
+    drop(io);
+    obs.store_ops += 1;
+    obs.branch(label.clone());
+    obs.note(|| format!("{label} [{}]", log_label(&log)));
+    let unchanged =
+        label.ends_with("NotWritten") || label.ends_with("Stale") || label.contains("Refused");
+    if unchanged && w.rows != before_rows {
+        obs.fail("E4", format!("{label}, but the ledger changed"));
+    }
+    if let Some(before) = before_core {
+        if !stale_answer || core_key(&w.core) != before || word_of(&w.core.shared) != before_word {
+            obs.fail(
+                "E8",
+                format!(
+                    "a stale token: {label}; the answer is not stale, or the core or word changed"
+                ),
+            );
+        }
+    }
+}
+
+/// WK: section 7.2.
+fn step_wk(config: &Config, w: &mut World, o: &mut Oracle, obs: &mut Obs) -> bool {
+    match w.wk.pos.clone() {
+        WkPos::Idle => {
+            if w.wk.worker.is_none() {
+                return false;
+            }
+            let agenda = w.core.agenda();
+            let steps = allowed(&agenda);
+            if steps.is_empty() && agenda.frontier <= w.table.a {
+                return false;
+            }
+            let action = if steps.is_empty() {
+                Action::Nothing
+            } else {
+                steps[o.branch(steps.len())].clone()
+            };
+            obs.note(|| {
+                format!(
+                    "reads the agenda (frontier {}), chooses {action:?}",
+                    agenda.frontier
+                )
+            });
+            w.wk.pos = WkPos::Seen(agenda.frontier, action);
+        }
+        WkPos::Seen(frontier, action) => {
+            w.table.a = w.table.a.max(frontier);
+            if let Action::EmptyX(_, seq) = &action {
+                w.table.h = w.table.h.max(*seq);
+            }
+            obs.note(|| {
+                "[T] A becomes the larger of A and the agenda's frontier; H before X is emptied"
+                    .into()
+            });
+            w.wk.pos = if matches!(action, Action::Nothing) {
+                WkPos::Idle
+            } else {
+                WkPos::Act(action)
+            };
+        }
+        WkPos::Act(action) => {
+            worker_op(config, w, &action, o, obs);
+            if config.replays > 0 && !matches!(action, Action::Barrier | Action::Nothing) {
+                w.wk.last = Some(action);
+            }
+            w.wk.pos = WkPos::Idle;
+        }
+        WkPos::RaiseH(seq) => {
+            w.table.h = w.table.h.max(seq);
+            obs.note(|| "[T] H raised".into());
+            w.wk.pos = WkPos::Idle;
+        }
+    }
+    true
+}
+
+/// GC: one gating append of its own record, offered once.
+fn step_gc(w: &mut World, g: u8, o: &mut Oracle, obs: &mut Obs) -> bool {
+    if w.gc[g as usize] == GcPos::Done {
+        return false;
+    }
+    let record = GatingRecord::new(gating_member(g));
+    let key = gating_key(g);
+    let known_before =
+        w.core.known(&key, None).is_some() || w.rows.contains(&SimRow::Explanation(g + 2));
+    let before = w.rows.clone();
+    let mut io = Io::new(&mut w.rows, o, true, true);
+    let core = &mut w.core;
+    let outcome = run_op(|| core.append_gating(&record, &mut io));
+    let log = std::mem::take(&mut io.log);
+    drop(io);
+    obs.store_ops += 1;
+    let issued = log.iter().any(|(verb, _)| *verb == Verb::Insert);
+    if issued {
+        w.ghost.issued |= bit(g);
+    }
+    if let Err(order) = verb_order(&log, 1) {
+        obs.fail("E5", format!("append_gating: {order}: {}", log_label(&log)));
+    }
+    let u_holds_it =
+        matches!(&w.core.u, Some((_, Occupant::Gating { record: r, .. })) if *r == record);
+    let label = match &outcome {
+        Some(GatingOutcome::Committed(_)) if issued => "Committed (inserted)".to_string(),
+        Some(GatingOutcome::Committed(_)) => "Committed (already present)".to_string(),
+        Some(GatingOutcome::Refused {
+            persistence,
+            reason,
+        }) => {
+            format!("Refused {persistence:?} {}", reason_label(reason))
+        }
+        None if u_holds_it => "unwound after an insert (U kept, Unwound)".to_string(),
+        None => "unwound before any insert (U emptied)".to_string(),
+    };
+    obs.branch(format!("append_gating: {label}"));
+    obs.note(|| format!("append_gating G{} -> {label} [{}]", g + 1, log_label(&log)));
+    match &outcome {
+        Some(GatingOutcome::Committed(_)) => {
+            w.ghost.told |= bit(g);
+            if !w.rows.contains(&SimRow::Gating(g)) {
+                obs.fail(
+                    "E4",
+                    "append_gating said Committed but the record is absent",
+                );
+            }
+        }
+        Some(GatingOutcome::Refused {
+            persistence,
+            reason,
+        }) => {
+            if *persistence == Persistence::NotWritten && w.rows != before {
+                obs.fail(
+                    "E4",
+                    "append_gating said Not written but the ledger changed",
+                );
+            }
+            if let Reason::Conflict {
+                known: Known::Cause(_),
+                ..
+            } = reason
+            {
+                if !known_before {
+                    let x_holds = matches!(&w.core.x,
+                        Some((_, Occupant::Explanation { original, .. }, _)) if *original == key);
+                    if w.core.u.is_some() || !x_holds || w.core.refusals.contains_key(&key) {
+                        obs.fail(
+                            "E7",
+                            "after a gating conflict with a new cause: U, X or the table is wrong",
+                        );
+                    }
+                }
+            }
+        }
+        None => {
+            if !u_holds_it && w.rows != before {
+                obs.fail(
+                    "E4",
+                    "an unwound gating append emptied U but the ledger changed",
+                );
+            }
+        }
+    }
+    w.gc[g as usize] = GcPos::Done;
+    true
+}
+
+/// Under F-6, the malformations forced through the snapshot's private state.
+const MALFORMATIONS: [&str; 3] = ["future", "set", "empty"];
+
+fn malform(snapshot: &mut Snapshot, which: usize) {
+    let set = &mut snapshot.set;
+    match which {
+        // N beyond the snapshot's head: test 4 refuses it.
+        0 => set.top = set.head + 2,
+        // The Owner is shown one explanation fewer than the range holds:
+        // test 5 refuses it.
+        1 => {
+            let mask = set.digest[0];
+            let lowest = mask & mask.wrapping_neg();
+            set.digest[0] = mask & !lowest;
+            set.count = set.count.saturating_sub(1).max(1);
+        }
+        // Nothing to acknowledge: test 3 refuses it.
+        _ => set.count = 0,
+    }
+}
+
+/// ACK: snapshot; the Owner confirms or declines; the append; on Committed,
+/// [T] A becomes the larger of A and N.
+fn step_ack(config: &Config, w: &mut World, k: u8, o: &mut Oracle, obs: &mut Obs) -> bool {
+    let i = k as usize;
+    match w.ack[i].pos {
+        AckPos::Idle => {
+            if w.ack[i].attempts == 0 {
+                return false;
+            }
+            let attempt = config.ack_attempts - w.ack[i].attempts;
+            w.ack[i].attempts -= 1;
+            let mut nonce = [0; 16];
+            nonce[0] = k + 1;
+            nonce[1] = attempt;
+            let mut io = Io::new(&mut w.rows, o, true, true);
+            let core = &mut w.core;
+            let outcome = run_op(|| core.snapshot(nonce, &mut io));
+            let log = std::mem::take(&mut io.log);
+            drop(io);
+            obs.store_ops += 1;
+            let label = match &outcome {
+                Some(SnapshotOutcome::Taken(_)) => "Taken".to_string(),
+                Some(other) => format!("{other:?}"),
+                None => "unwound".to_string(),
+            };
+            obs.branch(format!("snapshot: {label}"));
+            obs.note(|| format!("snapshot -> {label} [{}]", log_label(&log)));
+            if let Some(SnapshotOutcome::Taken(snapshot)) = outcome {
+                w.ack[i].snapshot = Some(snapshot);
+                w.ack[i].pos = AckPos::Holding;
+            }
+        }
+        AckPos::Holding => {
+            let options = if config.malformed {
+                2 + MALFORMATIONS.len()
+            } else {
+                2
+            };
+            match o.branch(options) {
+                0 => {
+                    w.ack[i].pos = AckPos::Confirmed;
+                    obs.note(|| "the Owner confirms".into());
+                }
+                1 => {
+                    w.ack[i].snapshot = None;
+                    w.ack[i].pos = AckPos::Idle;
+                    obs.note(|| "the Owner declines".into());
+                }
+                which => {
+                    let which = which - 2;
+                    malform(w.ack[i].snapshot.as_mut().expect("a held snapshot"), which);
+                    w.ack[i].pos = AckPos::Confirmed;
+                    obs.branch(format!("malformed snapshot: {}", MALFORMATIONS[which]));
+                    obs.note(|| {
+                        format!(
+                            "the snapshot is malformed ({}); the Owner confirms",
+                            MALFORMATIONS[which]
+                        )
+                    });
+                }
+            }
+        }
+        AckPos::Confirmed => {
+            let snapshot = w.ack[i].snapshot.take().expect("a confirmed snapshot");
+            let row = SimRow::Acknowledgement {
+                set: snapshot.set(),
+                nonce: snapshot.nonce(),
+            };
+            let before = w.rows.clone();
+            let mut io = Io::new(&mut w.rows, o, true, true);
+            let core = &mut w.core;
+            let outcome = run_op(|| core.append_acknowledgement(snapshot, &mut io));
+            let log = std::mem::take(&mut io.log);
+            drop(io);
+            obs.store_ops += 1;
+            if let Err(order) = verb_order(&log, 1) {
+                obs.fail(
+                    "E5",
+                    format!("append_acknowledgement: {order}: {}", log_label(&log)),
+                );
+            }
+            let u_kept = matches!(&w.core.u, Some((_, Occupant::Acknowledgement { .. })));
+            let label = match &outcome {
+                Some(AckOutcome::Committed(_)) => "Committed".to_string(),
+                Some(other) => format!("{other:?}"),
+                None if u_kept => "unwound after an insert (U kept)".to_string(),
+                None => "unwound before any insert (U emptied)".to_string(),
+            };
+            obs.branch(format!("append_acknowledgement: {label}"));
+            obs.note(|| format!("append_acknowledgement -> {label} [{}]", log_label(&log)));
+            let not_written = matches!(
+                outcome,
+                Some(AckOutcome::Refused(_))
+                    | Some(AckOutcome::NotApplied(Persistence::NotWritten))
+            ) || (outcome.is_none() && !u_kept);
+            if not_written && w.rows != before {
+                obs.fail(
+                    "E4",
+                    "append_acknowledgement said Not written but the ledger changed",
+                );
+            }
+            w.ack[i].pos = AckPos::Idle;
+            if let Some(AckOutcome::Committed(n)) = outcome {
+                if !w.rows.contains(&row) {
+                    obs.fail(
+                        "E4",
+                        "append_acknowledgement said Committed but its row is absent",
+                    );
+                }
+                w.ack[i].pos = AckPos::Applying(n);
+            }
+        }
+        AckPos::Applying(n) => {
+            w.table.a = w.table.a.max(n);
+            w.ack[i].pos = AckPos::Idle;
+            obs.note(|| format!("[T] A becomes the larger of A and {n}"));
+        }
+    }
+    true
+}
+
+/// ADM: [T] one view; admit if `admits`, no debt, and H is not above A.
+fn step_adm(config: &Config, w: &mut World, obs: &mut Obs) -> bool {
+    if w.adm == 0 {
+        return false;
+    }
+    obs.views += 1;
+    let view = w.health.view();
+    let admitted = view.admits() && w.table.debt == 0 && w.table.h <= w.table.a;
+    w.adm -= 1;
+    obs.branch(format!(
+        "admission: {}",
+        if admitted { "admitted" } else { "refused" }
+    ));
+    obs.note(|| {
+        format!(
+            "[T] admission: {}",
+            if admitted { "ADMITTED" } else { "refused" }
+        )
+    });
+    if admitted {
+        admission_properties(config, w, obs);
+    }
+    true
+}
+
+/// P1, P12, P15, E6 and E9 at a successful admission.
+fn admission_properties(config: &Config, w: &World, obs: &mut Obs) {
+    if w.ghost.unrecorded != 0 || w.core.u.is_some() || w.core.c.is_some() || w.core.x.is_some() {
+        obs.fail(
+            "P1",
+            "a result is unrecorded, or U, C or X is occupied, at a successful admission",
+        );
+        if config.batch {
+            obs.fail("E6", "P1 fails for a member of a batch");
+        }
+    }
+    let covered: u8 = w
+        .rows
+        .iter()
+        .filter_map(|row| match row {
+            SimRow::Acknowledgement { set, .. } => Some(set.digest[0]),
+            _ => None,
+        })
+        .fold(0, |mask, digest| mask | digest);
+    let durable = durable_frontier(&w.rows);
+    for (at, row) in w.rows.iter().enumerate() {
+        if let SimRow::Explanation(o) = row {
+            if covered & bit(*o) == 0 {
+                obs.fail(
+                    "P12",
+                    format!(
+                        "the explanation of original {o} is covered by no durable acknowledgement"
+                    ),
+                );
+            }
+            if seq_at(at) > durable {
+                obs.fail(
+                    "P15",
+                    format!(
+                        "an explanation at {} is above the durable frontier {durable}",
+                        seq_at(at)
+                    ),
+                );
+            }
+        }
+    }
+    if w.core.latch.is_some() || word_of(&w.core.shared) & HANDOVER_FAULT != 0 {
+        obs.fail(
+            "E9",
+            "an admission succeeded after a latch or a handover fault",
+        );
+    }
+}
+
+/// ENV: once, the Prepared record that F1 was missing appears.
+fn step_env(w: &mut World, obs: &mut Obs) -> bool {
+    if w.env_done {
+        return false;
+    }
+    w.rows.push(SimRow::Prepared(0));
+    w.env_done = true;
+    obs.note(|| "F1's Prepared record appears".into());
+    true
+}
+
+/// REPLAY: the worker repeats its last cell operation with a token that is
+/// not the present one for its cell.
+fn step_replay(config: &Config, w: &mut World, o: &mut Oracle, obs: &mut Obs) -> bool {
+    if w.replays == 0 || !matches!(w.wk.pos, WkPos::Idle) {
+        return false;
+    }
+    let Some(last) = w.wk.last.clone() else {
+        return false;
+    };
+    let token = match &last {
+        Action::Resolve(t) | Action::AppendC(t) | Action::AppendX(t) | Action::EmptyX(t, _) => t,
+        _ => return false,
+    };
+    if present_token(&w.core, token) {
+        return false;
+    }
+    w.replays -= 1;
+    obs.note(|| "the worker repeats its last operation with an old token".into());
+    worker_op(config, w, &last, o, obs);
+    true
+}
+
+/// One step of one actor. False if the actor has no enabled step.
+fn step(config: &Config, w: &mut World, actor: Actor, o: &mut Oracle, obs: &mut Obs) -> bool {
+    if let Some(trace) = obs.trace.as_mut() {
+        let _ = write!(trace, "{actor:?}: ");
+    }
+    match actor {
+        Actor::Fw(i) => step_fw(config, w, i as usize, o, obs),
+        Actor::Se => step_se(config, w, o, obs),
+        Actor::Wk => step_wk(config, w, o, obs),
+        Actor::Gc(g) => step_gc(w, g, o, obs),
+        Actor::Ack(k) => step_ack(config, w, k, o, obs),
+        Actor::Adm => step_adm(config, w, obs),
+        Actor::Env => step_env(w, obs),
+        Actor::Replay => step_replay(config, w, o, obs),
+    }
+}
+
+// ---- properties ---------------------------------------------------------------------------------
+
+/// The word's phase, session, latch and cell bits, computed by the test
+/// from the core's fields (E1).
+fn expected_flags(core: &Core) -> u64 {
+    let phase = match core.phase {
+        Phase::Healthy => 0,
+        Phase::NeedBarrier => 0x1,
+        Phase::Resolving => 0x2,
+    };
+    let session = match core.session {
+        Session::Bootstrap => 0,
+        Session::Open => 0x4,
+        Session::Sealed => 0x8,
+    };
+    let mut flags = phase | session;
+    for (set, bit) in [
+        (core.latch.is_some(), 0x10),
+        (core.u.is_some(), 0x20),
+        (core.c.is_some(), 0x40),
+        (core.x.is_some(), 0x80),
+    ] {
+        if set {
+            flags |= bit;
+        }
+    }
+    flags
+}
+
+/// Properties of every state.
+fn state_properties(config: &Config, w: &World, obs: &mut Obs) {
+    let word = word_of(&w.core.shared);
+    if word & FLAGS & !HANDOVER_FAULT != expected_flags(&w.core) {
+        obs.fail(
+            "E1",
+            format!(
+                "word bits {:#x}, core {:#x}",
+                word & FLAGS,
+                expected_flags(&w.core)
+            ),
+        );
+    }
+    let tickets = w.fw.iter().map(|fw| &fw.ticket).chain([&w.se.ticket]);
+    let (mut armed, mut counted) = (0u64, 0u64);
+    for ticket in tickets.flatten() {
+        match ticket.state {
+            TicketState::Armed => armed += 1,
+            TicketState::Counted(_) => counted += 1,
+            TicketState::Settled => {}
+        }
+    }
+    let dropped = u64::from(w.ghost.dropped);
+    let (live, unapplied) = (field(word, LIVE_SHIFT), field(word, UNAPPLIED_SHIFT));
+    if unapplied != counted + dropped
+        || live != armed + counted + dropped
+        || live > u64::from(TICKET_LIMIT)
+    {
+        obs.fail(
+            "E3",
+            format!("live {live}, unapplied {unapplied}; armed {armed}, counted {counted}, dropped {dropped}"),
+        );
+    }
+    let debts = w.table.class[..config.facts as usize]
+        .iter()
+        .filter(|c| is_debt(**c))
+        .count();
+    if usize::from(w.table.debt) != debts {
+        obs.fail("P2", "the debt counter is not the number of debts");
+    }
+    if w.core.u.is_some() && (w.core.c.is_some() || w.core.x.is_some()) {
+        obs.fail("P4", "U is occupied together with C or X");
+    }
+    for f in 0..config.facts {
+        let class = w.table.class[f as usize];
+        if class == Class::Paid && !w.rows.contains(&SimRow::Fact(f)) {
+            obs.fail("P5", format!("F{} is Paid and absent", f + 1));
+        }
+        if class == Class::Retired && !w.rows.contains(&SimRow::Explanation(f)) {
+            obs.fail(
+                "P5",
+                format!("F{} is Retired and its explanation is absent", f + 1),
+            );
+        }
+        if class == Class::Paid && w.ghost.conflicted & bit(f) != 0 {
+            obs.fail(
+                "P6",
+                format!("F{} was refused as a conflict and is Paid", f + 1),
+            );
+            if w.ghost.conflicted_e6 & bit(f) != 0 {
+                obs.fail(
+                    "E6",
+                    format!(
+                        "P6 fails for F{}, a batch member or a lookup conflict",
+                        f + 1
+                    ),
+                );
+            }
+        }
+    }
+    for g in 0..config.gating {
+        let record_in = w.rows.contains(&SimRow::Gating(g));
+        if w.ghost.told & bit(g) != 0 && !record_in {
+            obs.fail("P7", format!("G{} was told Committed and is absent", g + 1));
+        }
+        if w.ghost.issued & bit(g) != 0 && w.ghost.told & bit(g) == 0 {
+            let key = gating_key(g);
+            let in_u = matches!(&w.core.u, Some((_, Occupant::Gating { record, .. })) if record.member().key == key);
+            let in_c =
+                matches!(&w.core.c, Some((_, Occupant::Correction { about, .. })) if *about == key);
+            let corrected = w
+                .rows
+                .iter()
+                .any(|row| matches!(row, SimRow::Correction(h, _) if *h == g));
+            if record_in && !in_u && !in_c && !corrected {
+                obs.fail(
+                    "P8",
+                    format!("G{}'s attempt is written, uncorrected and not in U", g + 1),
+                );
+            }
+        }
+    }
+    if w.core.latch == Some(LatchCause::CellInvariant) {
+        obs.fail("P9", "the core latched for a broken cell invariant");
+    }
+    let durable = durable_frontier(&w.rows);
+    let head = w.rows.len() as Seq;
+    if !(w.table.a <= w.core.frontier && w.core.frontier <= durable && durable <= head) {
+        obs.fail(
+            "P13",
+            format!(
+                "A {} qualified {} durable {durable} head {head}",
+                w.table.a, w.core.frontier
+            ),
+        );
+    }
+    if w.core.refusals.len() > REFUSAL_LIMIT as usize {
+        obs.fail("E11", "the refusal table exceeds its limit");
+    }
+}
+
+/// Properties of a transition: E2, E9 and E11.
+fn transition_properties(before: &World, after: &World, obs: &mut Obs, counts: hook::Counts) {
+    if counts.loads != obs.views
+        || counts.exchanges < obs.ticket_steps
+        || counts.exchanges > obs.ticket_steps + obs.store_ops
+    {
+        obs.fail(
+            "E2",
+            format!(
+                "loads {}, exchanges {}; views {}, ticket steps {}, store operations {}",
+                counts.loads, counts.exchanges, obs.views, obs.ticket_steps, obs.store_ops
+            ),
+        );
+    }
+    let (wb, wa) = (word_of(&before.core.shared), word_of(&after.core.shared));
+    if (before.core.latch.is_some() && after.core.latch.is_none())
+        || (wb & HANDOVER_FAULT != 0 && wa & HANDOVER_FAULT == 0)
+    {
+        obs.fail("E9", "a latch or a handover fault was cleared");
+    }
+    for (key, cause) in &before.core.refusals {
+        match after.core.refusals.get(key) {
+            Some(now) if now != cause => obs.fail("E11", "a retained cause changed"),
+            Some(_) => {}
+            None => {
+                let o = original_of(key).unwrap_or(u8::MAX);
+                if !obs.explained.contains(key) || !after.rows.contains(&SimRow::Explanation(o)) {
+                    obs.fail("E11", "a table entry left in a step that did not see its explanation in the ledger");
+                }
+            }
+        }
+    }
+}
+
+/// D1: a state with no enabled step is terminal.
+fn terminal(config: &Config, w: &World) -> bool {
+    let actors_done = w.fw.iter().all(|fw| fw.pos == FwPos::Done)
+        && w.se.pos == SePos::Idle
+        && matches!(w.wk.pos, WkPos::Idle)
+        && w.gc.iter().all(|gc| *gc == GcPos::Done)
+        && w.ack
+            .iter()
+            .all(|ack| ack.pos == AckPos::Idle && ack.attempts == 0)
+        && w.adm == 0
+        && (!config.env || w.env_done);
+    let tickets_held = w.fw.iter().any(|fw| fw.ticket.is_some()) || w.se.ticket.is_some();
+    let latched = w.core.latch.is_some();
+    let fault = word_of(&w.core.shared) & HANDOVER_FAULT != 0;
+    let settled = w.core.u.is_none()
+        && w.core.c.is_none()
+        && w.core.x.is_none()
+        && w.core.phase == Phase::Healthy
+        && w.table.class[..config.facts as usize]
+            .iter()
+            .all(|c| matches!(c, Class::Paid | Class::Retired));
+    actors_done && !tickets_held && (latched || fault || settled)
+}
+
+// ---- the explorer -------------------------------------------------------------------------------
+
+/// An edge as stored: the actor and the step's choices, 3 bits each.
+fn pack(actor: usize, choices: &[u8]) -> u64 {
+    assert!(actor < 16, "more than 16 actors");
+    assert!(choices.len() <= 20, "a step with more than 20 choices");
+    let mut packed = actor as u64;
+    for (k, &choice) in choices.iter().enumerate() {
+        assert!(choice < 7, "a choice index above 6");
+        packed |= u64::from(choice + 1) << (4 + 3 * k);
+    }
+    packed
+}
+
+fn unpack(packed: u64) -> (usize, Vec<u8>) {
+    let actor = (packed & 0xf) as usize;
+    let mut choices = Vec::new();
+    let mut rest = packed >> 4;
+    while rest & 0x7 != 0 {
+        choices.push((rest & 0x7) as u8 - 1);
+        rest >>= 3;
+    }
+    (actor, choices)
+}
+
+/// The visited set: keys in one arena, found through an open-addressing
+/// table of state numbers. Whole keys are compared, never only hashes.
+struct Visited {
+    arena: Vec<u8>,
+    ends: Vec<u64>,
+    slots: Vec<u32>,
+}
+
+const EMPTY: u32 = u32::MAX;
+
+fn hash(key: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for chunk in key.chunks(8) {
+        let mut word = [0u8; 8];
+        word[..chunk.len()].copy_from_slice(chunk);
+        h = (h ^ u64::from_le_bytes(word)).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        h ^= h >> 29;
+    }
+    h
+}
+
+impl Visited {
+    fn new() -> Visited {
+        Visited {
+            arena: Vec::new(),
+            ends: Vec::new(),
+            slots: vec![EMPTY; 1 << 16],
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.ends.len()
+    }
+
+    fn key(&self, id: u32) -> &[u8] {
+        let end = self.ends[id as usize] as usize;
+        let start = if id == 0 {
+            0
+        } else {
+            self.ends[id as usize - 1] as usize
+        };
+        &self.arena[start..end]
+    }
+
+    /// The state's number, and whether it is new.
+    fn insert(&mut self, key: &[u8]) -> (u32, bool) {
+        if self.len() * 10 >= self.slots.len() * 6 {
+            self.grow();
+        }
+        let mask = self.slots.len() - 1;
+        let mut at = hash(key) as usize & mask;
+        loop {
+            match self.slots[at] {
+                EMPTY => {
+                    let id = self.len() as u32;
+                    assert!(id != EMPTY, "state numbers exhausted");
+                    self.arena.extend_from_slice(key);
+                    self.ends.push(self.arena.len() as u64);
+                    self.slots[at] = id;
+                    return (id, true);
+                }
+                id if self.key(id) == key => return (id, false),
+                _ => at = (at + 1) & mask,
+            }
+        }
+    }
+
+    fn grow(&mut self) {
+        let mut slots = vec![EMPTY; self.slots.len() * 2];
+        let mask = slots.len() - 1;
+        for id in 0..self.len() as u32 {
+            let mut at = hash(self.key(id)) as usize & mask;
+            while slots[at] != EMPTY {
+                at = (at + 1) & mask;
+            }
+            slots[at] = id;
+        }
+        self.slots = slots;
+    }
+
+    fn bytes(&self) -> usize {
+        self.arena.capacity() + self.ends.capacity() * 8 + self.slots.capacity() * 4
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Verdict {
+    Pass,
+    Fail,
+    Incomplete,
+}
+
+pub(super) struct Report {
+    pub(super) verdict: Verdict,
+    pub(super) text: String,
+    pub(super) failed: BTreeSet<&'static str>,
+}
+
+const PROPERTIES: [&str; 25] = [
+    "P1", "P2", "P4", "P5", "P6", "P7", "P8", "P9", "P12", "P13", "P15", "D1", "L1", "E1", "E2",
+    "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "KEY",
+];
+
+/// Every branch label the receipts account for, by operation. A label not
+/// taken in a run is listed as not taken.
+const BRANCHES: &[&str] = &[
+    "append_facts: Committed (inserted)",
+    "append_facts: Committed (already present)",
+    "append_facts: NotApplied NotWritten Entry(NotHealthy)",
+    "append_facts: NotApplied NotWritten Entry(Latched)",
+    "append_facts: NotApplied NotWritten Storage",
+    "append_facts: NotApplied NotWritten Constraint",
+    "append_facts: NotApplied Uncertain Constraint",
+    "append_facts: NotApplied Uncertain Storage",
+    "append_facts: NotApplied NotWritten Conflict(new or retained cause DuplicateRole)",
+    "append_facts: NotApplied NotWritten Conflict(new or retained cause MissingPrepared)",
+    "append_facts: NotApplied NotWritten Conflict(explained)",
+    "append_facts: unwound before any insert",
+    "append_facts: unwound after an insert was issued",
+    "expire: Armed -> Counted",
+    "append_gating: Committed (inserted)",
+    "append_gating: Refused NotWritten Entry(NotHealthy)",
+    "append_gating: Refused NotWritten Entry(CellsBusy)",
+    "append_gating: Refused NotWritten Entry(Latched)",
+    "append_gating: Refused NotWritten Storage",
+    "append_gating: Refused NotWritten Constraint",
+    "append_gating: Refused Uncertain Storage",
+    "append_gating: Refused Uncertain Constraint",
+    "append_gating: Refused NotWritten Conflict(new or retained cause IdentityContent)",
+    "append_gating: unwound after an insert (U kept, Unwound)",
+    "append_gating: unwound before any insert (U emptied)",
+    "lookup: Present",
+    "lookup: Absent",
+    "lookup: Conflict(cause)",
+    "lookup: Conflict(explained)",
+    "lookup: Refused(NotHealthy)",
+    "lookup: Refused(Latched)",
+    "lookup: Failed",
+    "lookup: unwound",
+    "explain: Explained",
+    "explain: Pending",
+    "explain: Busy",
+    "explain: Unknown",
+    "explain: Refused(Latched)",
+    "explain: unwound",
+    "snapshot: Taken",
+    "snapshot: Nothing",
+    "snapshot: NotNow(NotHealthy)",
+    "snapshot: NotNow(Latched)",
+    "snapshot: Failed",
+    "snapshot: unwound",
+    "append_acknowledgement: Committed",
+    "append_acknowledgement: Refused(Stale)",
+    "append_acknowledgement: Refused(Empty)",
+    "append_acknowledgement: Refused(Future)",
+    "append_acknowledgement: Refused(Set)",
+    "append_acknowledgement: Refused(NotNow(NotHealthy))",
+    "append_acknowledgement: Refused(NotNow(CellsBusy))",
+    "append_acknowledgement: Refused(NotNow(Latched))",
+    "append_acknowledgement: NotApplied(NotWritten)",
+    "append_acknowledgement: NotApplied(Uncertain)",
+    "append_acknowledgement: unwound after an insert (U kept)",
+    "append_acknowledgement: unwound before any insert (U emptied)",
+    "barrier: Passed",
+    "barrier: Failed",
+    "barrier: unwound",
+    "resolve: Absent",
+    "resolve: Corrected",
+    "resolve: ConflictPlaced",
+    "resolve: Acknowledged",
+    "resolve: Retained",
+    "resolve: Inconsistent",
+    "resolve: Stale",
+    "resolve: Refused(Latched)",
+    "resolve: unwound",
+    "append_cell C: Committed (inserted)",
+    "append_cell C: Committed (present)",
+    "append_cell C: NotWritten",
+    "append_cell C: Uncertain",
+    "append_cell C: Stale",
+    "append_cell C: unwound",
+    "append_cell X: Committed (inserted)",
+    "append_cell X: Committed (present)",
+    "append_cell X: NotWritten",
+    "append_cell X: Uncertain",
+    "append_cell X: Stale",
+    "append_cell X: Refused(Latched)",
+    "append_cell X: unwound",
+    "empty: Done",
+    "empty: Stale",
+    "admission: admitted",
+    "admission: refused",
+    "DROP: a Counted ticket dropped",
+    "malformed snapshot: future",
+    "malformed snapshot: set",
+    "malformed snapshot: empty",
+];
+
+/// One successor of a state.
+struct Successor {
+    key: Vec<u8>,
+    fault: bool,
+    edge: u64,
+    violations: Vec<(&'static str, String)>,
+    branches: Vec<String>,
+}
+
+/// Every successor of one state, every choice sequence of every actor, and
+/// the violations of the state itself.
+fn successors(
+    config: &Config,
+    all: &[Actor],
+    key: &[u8],
+) -> (Vec<Successor>, Vec<(&'static str, String)>) {
+    let base = decode(config, key);
+    let mut state = Obs::default();
+    state_properties(config, &base, &mut state);
+    if encode(config, &base) != key {
+        state.fail("KEY", "a key does not survive decoding");
+    }
+    let mut out = Vec::new();
+    for (index, &actor) in all.iter().enumerate() {
+        let mut prefix = Vec::new();
+        loop {
+            let mut w = decode(config, key);
+            let mut oracle = Oracle::new(prefix, w.faults);
+            let mut obs = Obs::default();
+            hook::take_counts();
+            let enabled = step(config, &mut w, actor, &mut oracle, &mut obs);
+            let counts = hook::take_counts();
+            if !enabled {
+                break;
+            }
+            w.faults = oracle.faults;
+            transition_properties(&base, &w, &mut obs, counts);
+            out.push(Successor {
+                key: encode(config, &w),
+                fault: oracle.fault,
+                edge: pack(index, &oracle.sequence()),
+                violations: obs.violations,
+                branches: obs.branches,
+            });
+            match oracle.next() {
+                Some(next) => prefix = next,
+                None => break,
+            }
+        }
+    }
+    (out, state.violations)
+}
+
+/// Replays a path of packed edges from the initial state, describing each
+/// step.
+fn trace(config: &Config, edges: &[u64]) -> String {
+    let all = actors(config);
+    let mut key = encode(config, &initial(config));
+    let mut text = String::new();
+    for (n, &edge) in edges.iter().enumerate() {
+        let (actor, choices) = unpack(edge);
+        let mut w = decode(config, &key);
+        let mut oracle = Oracle::new(choices, w.faults);
+        let mut obs = Obs {
+            trace: Some(String::new()),
+            ..Obs::default()
+        };
+        step(config, &mut w, all[actor], &mut oracle, &mut obs);
+        w.faults = oracle.faults;
+        let _ = writeln!(
+            text,
+            "    {:>3}. {}{}",
+            n + 1,
+            obs.trace.unwrap_or_default(),
+            if oracle.fault { "   [fault]" } else { "" }
+        );
+        key = encode(config, &w);
+    }
+    let w = decode(config, &key);
+    let _ = writeln!(
+        text,
+        "    end: phase {:?}, latch {:?}, U {:?}, C {:?}, X {:?}, table {:?}, qualified frontier {}, ledger {:?}",
+        w.core.phase, w.core.latch, w.core.u, w.core.c, w.core.x, w.table, w.core.frontier, w.rows
+    );
+    text
+}
+
+/// Explores one configuration (sections 7 and 8).
+pub(super) fn explore(config: &Config) -> Report {
+    let start = Instant::now();
+    let all = actors(config);
+    let mut visited = Visited::new();
+    let mut parent: Vec<(u32, u64)> = Vec::new();
+    let mut nonfault_from: Vec<u64> = vec![0];
+    let mut nonfault: Vec<u32> = Vec::new();
+    let mut taken: BTreeSet<String> = BTreeSet::new();
+    let (mut transitions, mut fault_edges, mut no_step) = (0u64, 0u64, 0u64);
+    let mut failure: Option<(&'static str, String, Vec<u64>)> = None;
+    let mut incomplete: Option<String> = None;
+    let init = encode(config, &initial(config));
+    visited.insert(&init);
+    parent.push((EMPTY, 0));
+    let path_to = |parent: &[(u32, u64)], mut id: u32| {
+        let mut edges = Vec::new();
+        while parent[id as usize].0 != EMPTY {
+            edges.push(parent[id as usize].1);
+            id = parent[id as usize].0;
+        }
+        edges.reverse();
+        edges
+    };
+    let mut id = 0u32;
+    while (id as usize) < visited.len() {
+        if visited.len() as u64 > config.cap {
+            incomplete = Some(format!("the state cap of {} was reached", config.cap));
+            break;
+        }
+        if start.elapsed() > config.time {
+            incomplete = Some(format!("the time cap of {:?} was reached", config.time));
+            break;
+        }
+        let key = visited.key(id).to_vec();
+        let (next, state_violations) = successors(config, &all, &key);
+        if let Some((property, detail)) = state_violations.into_iter().next() {
+            failure = Some((property, detail, path_to(&parent, id)));
+            break;
+        }
+        if next.is_empty() {
+            no_step += 1;
+            if !terminal(config, &decode(config, &key)) {
+                failure = Some((
+                    "D1",
+                    "a state with no enabled step is not terminal".into(),
+                    path_to(&parent, id),
+                ));
+                break;
+            }
+        }
+        for successor in next {
+            transitions += 1;
+            taken.extend(successor.branches);
+            if let Some((property, detail)) = successor.violations.into_iter().next() {
+                let mut edges = path_to(&parent, id);
+                edges.push(successor.edge);
+                failure = Some((property, detail, edges));
+                break;
+            }
+            let (to, new) = visited.insert(&successor.key);
+            if new {
+                parent.push((id, successor.edge));
+            }
+            if successor.fault {
+                fault_edges += 1;
+            } else {
+                nonfault.push(to);
+            }
+        }
+        if failure.is_some() {
+            break;
+        }
+        nonfault_from.push(nonfault.len() as u64);
+        id += 1;
+    }
+    // L1: the graph of steps that are not faults has no cycle. Its end
+    // states are the states with no enabled step, each checked by D1.
+    let mut l1 = "not claimed for this configuration".to_string();
+    if failure.is_none() && incomplete.is_none() && config.l1 {
+        let n = visited.len();
+        let mut indegree = vec![0u32; n];
+        for &to in &nonfault {
+            indegree[to as usize] += 1;
+        }
+        let mut queue: Vec<u32> = (0..n as u32)
+            .filter(|&s| indegree[s as usize] == 0)
+            .collect();
+        let mut removed = 0usize;
+        while let Some(s) = queue.pop() {
+            removed += 1;
+            let (from, to) = (
+                nonfault_from[s as usize] as usize,
+                nonfault_from[s as usize + 1] as usize,
+            );
+            for &t in &nonfault[from..to] {
+                indegree[t as usize] -= 1;
+                if indegree[t as usize] == 0 {
+                    queue.push(t);
+                }
+            }
+        }
+        if removed == n {
+            l1 = format!(
+                "HOLDS: {} non-fault edges, no cycle; {no_step} end states, each terminal (D1)",
+                nonfault.len()
+            );
+        } else {
+            let cyclic = (0..n)
+                .find(|&s| indegree[s] > 0)
+                .expect("a state on a cycle") as u32;
+            failure = Some((
+                "L1",
+                format!(
+                    "{} states lie on or behind a cycle of non-fault steps; one is reached by",
+                    n - removed
+                ),
+                path_to(&parent, cyclic),
+            ));
+        }
+    }
+    let elapsed = start.elapsed();
+    let verdict = if failure.is_some() {
+        Verdict::Fail
+    } else if incomplete.is_some() {
+        Verdict::Incomplete
+    } else {
+        Verdict::Pass
+    };
+    let mut failed = BTreeSet::new();
+    let mut text = String::new();
+    let _ = writeln!(text, "EXPLORATION {}", config.name);
+    let _ = writeln!(
+        text,
+        "  outcome: {}",
+        match verdict {
+            Verdict::Pass => "PASS",
+            Verdict::Fail => "FAIL",
+            Verdict::Incomplete => "INCOMPLETE",
+        }
+    );
+    let _ = writeln!(
+        text,
+        "  bounds: facts {} conflicting {:?} ENV {} batch {} faults {} admissions {} gating callers {} \
+         gating conflict {} acknowledgement actors {} attempts each {} malformed snapshots {} cell constraint {} \
+         worker verbs unwind {} DROP {} REPLAY {} A4 {}; ticket limit {TICKET_LIMIT}, refusal limit \
+         {REFUSAL_LIMIT}; settlement and the worker on; caps {} states, {:?}",
+        config.facts,
+        config.conflict,
+        config.env,
+        config.batch,
+        config.faults,
+        config.admissions,
+        config.gating,
+        config.gating_conflict,
+        config.acks,
+        config.ack_attempts,
+        config.malformed,
+        config.cell_constraint,
+        config.worker_unwinds,
+        config.drop,
+        config.replays,
+        config.blanket_uncertain,
+        config.cap,
+        config.time
+    );
+    let _ = writeln!(text, "  actors: {all:?}");
+    let _ = writeln!(
+        text,
+        "  states {} (expanded {}), transitions {transitions} (with a fault {fault_edges}), \
+         states with no enabled step {no_step}",
+        visited.len(),
+        id
+    );
+    let _ = writeln!(
+        text,
+        "  elapsed {:.1} s; explorer tables {} MiB",
+        elapsed.as_secs_f64(),
+        visited.bytes() >> 20
+    );
+    if let Some(reason) = &incomplete {
+        let _ = writeln!(
+            text,
+            "  INCOMPLETE: {reason}. No property is established by this run."
+        );
+    }
+    match &failure {
+        Some((property, detail, edges)) => {
+            failed.insert(*property);
+            let _ = writeln!(text, "  FAIL: {property}: {detail}");
+            let _ = writeln!(text, "  shortest trace ({} steps):", edges.len());
+            text.push_str(&trace(config, edges));
+        }
+        None => {
+            for property in PROPERTIES {
+                let verdict = if incomplete.is_some() {
+                    "NOT ESTABLISHED (incomplete)".to_string()
+                } else if property == "L1" {
+                    l1.clone()
+                } else if property == "E10" && !config.worker_unwinds {
+                    "not applicable here (worker verbs do not unwind)".to_string()
+                } else {
+                    "HOLDS".to_string()
+                };
+                let _ = writeln!(text, "  {property}: {verdict}");
+            }
+        }
+    }
+    let _ = writeln!(text, "  branches:");
+    for label in BRANCHES {
+        let mark = if taken.contains(*label) {
+            "taken    "
+        } else {
+            "NOT TAKEN"
+        };
+        let _ = writeln!(text, "    [{mark}] {label}");
+    }
+    for label in taken
+        .iter()
+        .filter(|label| !BRANCHES.contains(&label.as_str()))
+    {
+        let _ = writeln!(text, "    [taken    ] {label} (not in the listed set)");
+    }
+    let _ = writeln!(text, "  state key fields: {KEY_FIELDS}");
+    Report {
+        verdict,
+        text,
+        failed,
+    }
+}
+
+/// The five default explorations run one at a time.
+static SERIAL: Mutex<()> = Mutex::new(());
+
+fn default_exploration(config: &Config) {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let report = explore(config);
+    println!("{}", report.text);
+    assert_eq!(
+        report.verdict,
+        Verdict::Pass,
+        "failed: {:?}\n{}",
+        report.failed,
+        report.text
+    );
+}
+
+fn full_exploration(config: &Config) {
+    let report = explore(config);
+    println!("{}", report.text);
+    assert_eq!(
+        report.verdict,
+        Verdict::Pass,
+        "failed: {:?}\n{}",
+        report.failed,
+        report.text
+    );
+}
+
+#[test]
+fn x1_two_facts_two_writers_one_admission() {
+    default_exploration(&X1);
+}
+
+#[test]
+fn x2_one_fact_two_gating_callers() {
+    default_exploration(&X2);
+}
+
+#[test]
+fn x3_one_conflicting_fact_with_env() {
+    default_exploration(&X3);
+}
+
+#[test]
+fn x4_one_conflicting_fact_one_acknowledgement() {
+    default_exploration(&X4);
+}
+
+#[test]
+fn x5_one_clean_batch_of_two() {
+    default_exploration(&X5);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_f1() {
+    full_exploration(&F1);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_f2() {
+    full_exploration(&F2);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_f3() {
+    full_exploration(&F3);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_f4() {
+    full_exploration(&F4);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_f5() {
+    full_exploration(&F5);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_f6() {
+    full_exploration(&F6);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_f7() {
+    full_exploration(&F7);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_f8() {
+    full_exploration(&F8);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_fpt() {
+    full_exploration(&FPT);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_fb() {
+    full_exploration(&FB);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_fb2() {
+    full_exploration(&FB2);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_fg() {
+    full_exploration(&FG);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_fw() {
+    full_exploration(&FW);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_fd() {
+    full_exploration(&FD);
+}
+
+#[test]
+#[ignore = "full reviewed set: run explicitly, optimised, on the exact final commit (section 8.3)"]
+fn full_fr() {
+    full_exploration(&FR);
+}
+
+/// The explorer's own machinery: the packing of an edge, the oracle's
+/// enumeration and the key's round trip into an independent world.
+#[test]
+fn the_explorer_machinery_is_sound() {
+    let edge = pack(5, &[0, 1, 2, 3, 4, 5, 0, 1]);
+    assert_eq!(unpack(edge), (5, vec![0, 1, 2, 3, 4, 5, 0, 1]));
+    let mut seen = BTreeSet::new();
+    let mut prefix = Vec::new();
+    loop {
+        let mut oracle = Oracle::new(prefix, 1);
+        let a = oracle.choose(&[false, true, true]);
+        let b = oracle.branch(2);
+        assert!(seen.insert((a, b)), "a sequence visited twice");
+        match oracle.next() {
+            Some(next) => prefix = next,
+            None => break,
+        }
+    }
+    assert_eq!(seen.len(), 6, "every sequence visited once");
+    let mut oracle = Oracle::new(Vec::new(), 0);
+    assert_eq!(oracle.choose(&[false, true]), 0);
+    assert!(
+        oracle.next().is_none(),
+        "no fault is offered without budget"
+    );
+    let w = initial(&F8);
+    let key = encode(&F8, &w);
+    let copy = decode(&F8, &key);
+    assert_eq!(encode(&F8, &copy), key);
+    assert!(!Arc::ptr_eq(&w.core.shared, &copy.core.shared));
+    assert!(Arc::ptr_eq(&copy.core.shared, &copy.health.shared));
+    assert_eq!(word_of(&w.core.shared), word_of(&copy.core.shared));
+}
