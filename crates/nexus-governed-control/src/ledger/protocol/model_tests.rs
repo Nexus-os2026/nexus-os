@@ -621,8 +621,8 @@ struct Unwound;
 struct Io<'a> {
     rows: &'a mut Vec<SimRow>,
     /// Rows issued in the open transaction, not yet durable, each marked if
-    /// its insert answered `Failed`: such a row was issued, and whether the
-    /// transaction holds it is not known.
+    /// its insert answered `Failed` or unwound: such a row was issued, and
+    /// whether the transaction holds it is not known.
     pending: Vec<(SimRow, bool)>,
     oracle: &'a mut Oracle,
     log: Vec<(Verb, Answer)>,
@@ -666,16 +666,16 @@ impl<'a> Io<'a> {
     }
 
     /// What the transaction may hold, and so what its records may be: the
-    /// rows whose inserts did not answer `Failed`; and, if one did, every
-    /// issued row.
+    /// rows whose inserts succeeded; and, if one answered `Failed` or
+    /// unwound, every issued row.
     fn holdings(&mut self) -> Vec<Vec<SimRow>> {
         let pending = std::mem::take(&mut self.pending);
         let mut holdings = vec![pending
             .iter()
-            .filter(|(_, failed)| !failed)
+            .filter(|(_, unknown)| !unknown)
             .map(|(row, _)| *row)
             .collect()];
-        if pending.iter().any(|(_, failed)| *failed) {
+        if pending.iter().any(|(_, unknown)| *unknown) {
             holdings.push(pending.iter().map(|(row, _)| *row).collect());
         }
         holdings
@@ -702,27 +702,28 @@ impl<'a> Io<'a> {
     }
 
     fn insert_row(&mut self, row: SimRow) -> Insert {
-        // The row is issued: if this insert unwinds, it may be written.
-        self.pending.push((row, false));
+        // The row is issued, and marked until its insert succeeds: if this
+        // insert unwinds, it may be written.
+        self.pending.push((row, true));
         let faults: &[Answer] = if self.constraint {
             &[Answer::Constraint, Answer::Failed]
         } else {
             &[Answer::Failed]
         };
         match self.pick(Verb::Insert, faults) {
-            Answer::Ok => Insert::Inserted((self.rows.len() + self.pending.len()) as Seq),
+            Answer::Ok => {
+                if let Some((_, unknown)) = self.pending.last_mut() {
+                    *unknown = false;
+                }
+                Insert::Inserted((self.rows.len() + self.pending.len()) as Seq)
+            }
             Answer::Constraint => {
                 // A constraint refused this row.
                 self.pending.pop();
                 Insert::Constraint
             }
-            _ => {
-                // Issued, and not refused: it may be written.
-                if let Some((_, failed)) = self.pending.last_mut() {
-                    *failed = true;
-                }
-                Insert::Failed
-            }
+            // Issued, and not refused: it may be written. It stays marked.
+            _ => Insert::Failed,
         }
     }
 
@@ -4409,6 +4410,31 @@ fn a_failed_insert_in_a_batch_may_have_written_unless_the_rollback_undid_it() {
             (after(&[inserted, failed, ok(Verb::Rollback)]), &[&[]]),
             (after(&[inserted, failed, unknown]), &[&[], f1, both]),
             (after(&[inserted, failed, unwound]), &[&[], f1, both]),
+        ],
+    );
+}
+
+/// An insert that unwinds was issued, and whether the transaction holds its
+/// row is not known, as after `Failed`: the records are present or absent
+/// and both are explored (section 7.1). When the second insert of a batch
+/// unwinds, the first member alone may also be what the transaction holds.
+/// A commit that unwinds after every insert succeeded leaves all or none.
+#[test]
+fn an_unwinding_insert_in_a_batch_may_have_written_its_row_or_not() {
+    let read = [ok(Verb::Open), ok(Verb::Facts), ok(Verb::Facts)];
+    let after = |tail: &[(Verb, Answer)]| [&read[..], tail].concat();
+    let (f1, both): (&[SimRow], &[SimRow]) =
+        (&[SimRow::Fact(0)], &[SimRow::Fact(0), SimRow::Fact(1)]);
+    let (inserted, unwound) = (ok(Verb::Insert), (Verb::Insert, Answer::Unwound));
+    assert_histories(
+        &append_outcomes(&X5, &[0, 1]),
+        &[
+            (after(&[unwound]), &[&[], f1]),
+            (after(&[inserted, unwound]), &[&[], f1, both]),
+            (
+                after(&[inserted, inserted, (Verb::Commit, Answer::Unwound)]),
+                &[&[], both],
+            ),
         ],
     );
 }
