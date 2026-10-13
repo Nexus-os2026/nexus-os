@@ -6071,10 +6071,12 @@ const SYM1: Config = default_run(Config {
 });
 
 /// The configurations this experiment showed symmetric: X-2 and SYM-1 by the
-/// exhaustive differential below, F-3 by the analysis of its mission. A
+/// exhaustive differential below, F-3 by the analysis of its mission; SYM-PT,
+/// SYM-B and SYM-BI by the exhaustive differential at the end of this file,
+/// F-PT and F-B by the analysis of P3-C11-DR01-D2A1-CLOSURE-PREP-01. A
 /// configuration is accepted only with exactly one of these shapes and a cap
 /// no higher than its own.
-const SYMMETRIC: [Config; 3] = [X2, SYM1, F3];
+const SYMMETRIC: [Config; 8] = [X2, SYM1, F3, SYM_PT, SYM_B, SYM_BI, FPT, FB];
 
 /// A configuration without its caps.
 fn shape(config: &Config) -> String {
@@ -7755,4 +7757,488 @@ fn gc_symmetry_refuses_an_acknowledgement_row() {
         },
         nonce: [0; 16],
     });
+}
+
+// ---- experimental: F-PT and F-B under the exchange ----------------------------------------------
+//
+// P3-C11-DR01-D2A1-CLOSURE-PREP-01, a bounded experiment. It is not the
+// contract's explorer and not evidence for the contract; `explore`,
+// `explore_experimental` and `explore_symmetric_kept` above are unchanged.
+//
+// F-PT and F-B are F-3 with one change each, and each change touches facts
+// only. Under A4 the drop paths record a blanket Uncertain, from the members
+// and the ticket alone; the batch writer offers both facts in one append,
+// whose members are compared with each other only by fact identity. Neither
+// reads or writes a value that names a gating caller, so the exchange of G1
+// and G2 stays an automorphism of each graph and of its admission quotient.
+// Both join the allow-list with their constants unchanged. The fixtures
+// below hold the exchange to the original on small graphs of the same
+// shapes, and each fixture must take the steps it is there to test. F-B's
+// own facts with a fault exceed the differential's bound, so the batch has
+// two fixtures: F-B's facts, which name each member as the conflict, and a
+// clean batch with a fault, which reaches its inserts.
+
+/// F-PT's change on SYM-1's bounds: actor change A4, two gating callers, one
+/// conflicting fact whose Prepared record ENV supplies, one fault and one
+/// admission.
+const SYM_PT: Config = Config {
+    name: "SYM-PT",
+    blanket_uncertain: true,
+    ..SYM1
+};
+
+/// F-B's facts with two gating callers and one admission: one writer offers
+/// both facts as one batch, both conflicting, F1's Prepared record supplied
+/// by ENV. No fault.
+const SYM_B: Config = default_run(Config {
+    name: "SYM-B",
+    conflict: [true, true],
+    env: true,
+    batch: true,
+    admissions: 1,
+    gating: 2,
+    ..BASE
+});
+
+/// A clean batch of two with two gating callers, one fault and one
+/// admission: the batch reaches its inserts.
+const SYM_BI: Config = default_run(Config {
+    name: "SYM-BI",
+    batch: true,
+    faults: 1,
+    admissions: 1,
+    gating: 2,
+    ..BASE
+});
+
+/// The allow-list is exactly these shapes. F-PT is F-3 with A4 and nothing
+/// else, F-B is F-3 with one batch writer and nothing else, and each keeps
+/// the contract's bounds and caps (section 8.3); the fixtures keep the
+/// default caps and have an admission and both callers, and all but SYM-B a
+/// fault.
+#[test]
+fn gc_symmetry_allow_list_is_exact() {
+    let names: Vec<&str> = SYMMETRIC.iter().map(|config| config.name).collect();
+    assert_eq!(
+        names,
+        ["X-2", "SYM-1", "F-3", "SYM-PT", "SYM-B", "SYM-BI", "F-PT", "F-B"]
+    );
+    for config in [F3, FPT, FB] {
+        assert_eq!(
+            (
+                config.facts,
+                config.conflict,
+                config.env,
+                config.faults,
+                config.admissions,
+                config.gating,
+                config.cap,
+                config.time,
+            ),
+            (2, [true, true], true, 2, 2, 2, FULL_CAP, FULL_TIME),
+            "{}",
+            config.name
+        );
+    }
+    let as_f3 = |config: Config| Config {
+        name: "F-3",
+        blanket_uncertain: false,
+        batch: false,
+        ..config
+    };
+    assert_eq!((FPT.blanket_uncertain, FPT.batch), (true, false));
+    assert_eq!((FB.blanket_uncertain, FB.batch), (false, true));
+    assert_eq!(shape(&as_f3(FPT)), shape(&F3));
+    assert_eq!(shape(&as_f3(FB)), shape(&F3));
+    assert_eq!(
+        shape(&Config {
+            name: "SYM-1",
+            blanket_uncertain: false,
+            ..SYM_PT
+        }),
+        shape(&SYM1)
+    );
+    for config in [SYM_PT, SYM_B, SYM_BI] {
+        assert_eq!((config.cap, config.time), (DEFAULT_CAP, DEFAULT_TIME));
+        assert!(config.admissions > 0 && config.gating == 2);
+    }
+    assert_eq!((SYM_PT.faults, SYM_B.faults, SYM_BI.faults), (1, 0, 1));
+    assert_eq!(
+        (SYM_B.batch, SYM_B.conflict, SYM_B.env, SYM_BI.batch),
+        (true, FB.conflict, FB.env, true)
+    );
+}
+
+#[test]
+fn gc_symmetry_sym_pt_matches_the_original() {
+    symmetry_differential(&SYM_PT);
+}
+
+#[test]
+fn gc_symmetry_sym_b_matches_the_original() {
+    symmetry_differential(&SYM_B);
+}
+
+#[test]
+fn gc_symmetry_sym_bi_matches_the_original() {
+    symmetry_differential(&SYM_BI);
+}
+
+/// The whole original graph of `config`, every actor scheduled.
+fn original_graph(config: &Config) -> Graph {
+    let all = actors(config);
+    whole_graph(config, |key| {
+        let (next, state) = successors(config, &all, key);
+        (items(next.into_iter().map(Next::Edge).collect()), state)
+    })
+}
+
+/// What a fixture's original graph shows of the exchange, whatever its
+/// shape, each required: states that are not their own mirror; a state in
+/// which G1 alone was told Committed, and one in which G2 alone was; and
+/// states with no enabled step, each judged terminal (D1). Returns those
+/// counts and the fault edges.
+fn exchange_exercised(config: &Config, graph: &Graph) -> (u64, u64, u64) {
+    let (mut moved, mut told, mut faulted, mut ends) = (0u64, [false; 2], 0u64, 0u64);
+    for (id, key) in graph.keys.iter().enumerate() {
+        let w = decode(config, key);
+        moved += u64::from(mirror(config, key) != *key);
+        if w.ghost.told == bit(0) {
+            told[0] = true;
+        }
+        if w.ghost.told == bit(1) {
+            told[1] = true;
+        }
+        faulted += graph.items[id].iter().filter(|item| item.fault).count() as u64;
+        if graph.items[id].is_empty() {
+            assert!(
+                terminal(config, &w),
+                "a state with no enabled step is not terminal"
+            );
+            ends += 1;
+        }
+    }
+    assert!(moved > 0, "{}: every state is its own mirror", config.name);
+    assert_eq!(
+        told,
+        [true, true],
+        "{}: a caller is never told Committed alone",
+        config.name
+    );
+    assert!(
+        ends > 0,
+        "{}: no state without an enabled step",
+        config.name
+    );
+    (moved, faulted, ends)
+}
+
+/// SYM-PT takes the steps that only A4 takes, from states that are not their
+/// own mirror. A writer's drop path holding a Counted ticket that says Not
+/// written records Uncertain (without A4: Refused or Conflict, by the
+/// ticket). Settlement's drop path, holding no ticket, records Uncertain
+/// over another class (without A4: nothing). Each needs the fault.
+#[test]
+fn gc_symmetry_sym_pt_takes_the_a4_steps() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let config = SYM_PT;
+    let all = actors(&config);
+    let graph = original_graph(&config);
+    let (moved, faulted, ends) = exchange_exercised(&config, &graph);
+    let (mut writer, mut settlement) = (0u64, 0u64);
+    for (id, key) in graph.keys.iter().enumerate() {
+        if mirror(&config, key) == *key {
+            continue;
+        }
+        let before = decode(&config, key);
+        for item in &graph.items[id] {
+            let after = decode(&config, &item.key);
+            match all[unpack(item.edge).0] {
+                Actor::Fw(i) => {
+                    let fw = &before.fw[i as usize];
+                    let not_written =
+                        fw.pos == FwPos::Dropping
+                            && fw.ticket.as_ref().and_then(Ticket::counted).is_some_and(
+                                |counted| counted.persistence == Persistence::NotWritten,
+                            );
+                    let uncertain = fw
+                        .members
+                        .iter()
+                        .all(|&f| after.table.class[f as usize] == Class::Uncertain);
+                    writer += u64::from(not_written && uncertain);
+                }
+                Actor::Se => {
+                    if let SePos::Dropping(f) = before.se.pos {
+                        let f = f as usize;
+                        settlement += u64::from(
+                            before.se.ticket.is_none()
+                                && before.table.class[f] != Class::Uncertain
+                                && after.table.class[f] == Class::Uncertain,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    println!(
+        "EXERCISED {}: {} states ({moved} not their own mirror), {faulted} fault edges, {ends} with no enabled \
+         step, each terminal; both callers told Committed alone; from states not their own mirror, {writer} \
+         writer drops recording a Not-written Counted ticket as Uncertain (A4) and {settlement} settlement \
+         drops without a ticket recording Uncertain over another class (A4)",
+        config.name,
+        graph.keys.len()
+    );
+    assert!(faulted > 0, "no fault is taken");
+    assert!(writer > 0, "A4's writer drop path is not taken");
+    assert!(settlement > 0, "A4's settlement drop path is not taken");
+}
+
+/// The batch writer's steps in one original graph, from states that are not
+/// their own mirror: appends whose result names member 1 or member 2 as the
+/// conflict; records of the named member as Conflict beside the other as
+/// Refused; appends whose ledger gained both members, or the first alone;
+/// the writer's fault edges; and states with E6's history marked.
+#[derive(Debug, Default)]
+struct BatchSteps {
+    named: [u64; 2],
+    mixed: u64,
+    both: u64,
+    first_alone: u64,
+    writer_faults: u64,
+    marked: u64,
+}
+
+fn batch_steps(config: &Config, graph: &Graph) -> BatchSteps {
+    let all = actors(config);
+    assert_eq!(all[0], Actor::Fw(0));
+    assert!(!all.contains(&Actor::Fw(1)), "one writer for the batch");
+    let mut steps = BatchSteps::default();
+    for (id, key) in graph.keys.iter().enumerate() {
+        if mirror(config, key) == *key {
+            continue;
+        }
+        let before = decode(config, key);
+        assert_eq!(before.fw.len(), 1);
+        assert_eq!(before.fw[0].members, [0, 1]);
+        steps.marked += u64::from(before.ghost.conflicted_e6 != 0);
+        for item in &graph.items[id] {
+            if all[unpack(item.edge).0] != Actor::Fw(0) {
+                continue;
+            }
+            steps.writer_faults += u64::from(item.fault);
+            let after = decode(config, &item.key);
+            let (from, to) = (before.fw[0].pos, after.fw[0].pos);
+            if from == FwPos::Armed {
+                let gained = &after.rows[before.rows.len()..];
+                steps.both += u64::from(gained == [SimRow::Fact(0), SimRow::Fact(1)]);
+                steps.first_alone += u64::from(gained == [SimRow::Fact(0)]);
+            }
+            if let (FwPos::Armed, FwPos::Got(Held::Counted(counted))) = (from, to) {
+                if let Some(member) = counted.conflict_member {
+                    if counted.persistence == Persistence::NotWritten {
+                        steps.named[member as usize] += 1;
+                    }
+                }
+            }
+            if let (FwPos::Got(Held::Counted(counted)), FwPos::Recorded) = (from, to) {
+                if let Some(member) = counted.conflict_member {
+                    let (named, other) = (member as usize, 1 - member as usize);
+                    steps.mixed += u64::from(
+                        after.table.class[named] == Class::Conflict
+                            && after.table.class[other] == Class::Refused,
+                    );
+                }
+            }
+        }
+    }
+    steps
+}
+
+/// SYM-B takes F-B's batch steps from states that are not their own mirror:
+/// the one writer's append names each member as the conflict (member 2 only
+/// after member 1 was classified for insert, so after ENV), recording names
+/// that member Conflict and the other Refused, and E6's history is marked.
+#[test]
+fn gc_symmetry_sym_b_takes_the_batch_steps() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let config = SYM_B;
+    let graph = original_graph(&config);
+    let (moved, faulted, ends) = exchange_exercised(&config, &graph);
+    let steps = batch_steps(&config, &graph);
+    println!(
+        "EXERCISED {}: {} states ({moved} not their own mirror), {faulted} fault edges, {ends} with no enabled \
+         step, each terminal; both callers told Committed alone; from states not their own mirror: {steps:?}",
+        config.name,
+        graph.keys.len()
+    );
+    assert!(steps.named[0] > 0, "the batch never names its first member");
+    assert!(
+        steps.named[1] > 0,
+        "the batch never names its second member"
+    );
+    assert!(
+        steps.mixed > 0,
+        "no record of a named member beside an unnamed one"
+    );
+    assert!(steps.marked > 0, "E6's history is never marked");
+}
+
+/// SYM-BI takes the batch's inserts from states that are not their own
+/// mirror: an append writes both members, and an append whose second insert
+/// unwinds leaves the first alone as one of its histories; the batch writer
+/// takes the fault.
+#[test]
+fn gc_symmetry_sym_bi_takes_the_batch_inserts() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let config = SYM_BI;
+    let graph = original_graph(&config);
+    let (moved, faulted, ends) = exchange_exercised(&config, &graph);
+    let steps = batch_steps(&config, &graph);
+    println!(
+        "EXERCISED {}: {} states ({moved} not their own mirror), {faulted} fault edges, {ends} with no enabled \
+         step, each terminal; both callers told Committed alone; from states not their own mirror: {steps:?}",
+        config.name,
+        graph.keys.len()
+    );
+    assert!(steps.both > 0, "no batch append writes both members");
+    assert!(
+        steps.first_alone > 0,
+        "no batch history holds the first member alone"
+    );
+    assert!(steps.writer_faults > 0, "the batch writer takes no fault");
+}
+
+/// Counterexamples on the new shapes: a defective admission fails its
+/// property in the original semantics and in the symmetry quotient, alone and
+/// composed, and the quotients' paths unfold into original traces that replay
+/// to it. On SYM-B an admission that ignores `unapplied` fails nothing: with
+/// no fault every result of the batch names a conflict, whose explanation
+/// raises H above A for good (no acknowledgement), so no admission is made
+/// while a result is unrecorded; one that ignores recovery fails P12 there.
+#[test]
+fn gc_symmetry_negative_p1_on_sym_pt() {
+    symmetry_negative_case(&SYM_PT, adm_ignoring_unapplied, "P1");
+}
+
+#[test]
+fn gc_symmetry_negative_p12_on_sym_b() {
+    symmetry_negative_case(&SYM_B, adm_ignoring_recovery, "P12");
+}
+
+#[test]
+fn gc_symmetry_negative_p1_on_sym_bi() {
+    symmetry_negative_case(&SYM_BI, adm_ignoring_unapplied, "P1");
+}
+
+/// The guard on the new shapes: an asymmetric step, met in exploration,
+/// aborts the run with no verdict.
+#[test]
+#[should_panic(
+    expected = "symmetry inapplicable: an expansion is not the exchange of its mirror's"
+)]
+fn gc_symmetry_refuses_an_asymmetric_step_on_sym_pt() {
+    let _ = explore_symmetric(&SYM_PT, adm_favouring_g2, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(
+    expected = "symmetry inapplicable: an expansion is not the exchange of its mirror's"
+)]
+fn gc_symmetry_refuses_an_asymmetric_step_on_sym_b() {
+    let _ = explore_symmetric(&SYM_B, adm_favouring_g2, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(
+    expected = "symmetry inapplicable: an expansion is not the exchange of its mirror's"
+)]
+fn gc_symmetry_refuses_an_asymmetric_step_on_sym_bi() {
+    let _ = explore_symmetric(&SYM_BI, adm_favouring_g2, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(
+    expected = "symmetry inapplicable: F-3 is not a configuration this experiment showed symmetric"
+)]
+fn gc_symmetry_refuses_a_batch_under_f3s_name() {
+    let config = Config { batch: true, ..F3 };
+    let _ = explore_symmetric(&config, step_adm, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(
+    expected = "symmetry inapplicable: F-PT is not a configuration this experiment showed symmetric"
+)]
+fn gc_symmetry_refuses_f_pt_with_a_lower_fault_budget() {
+    let config = Config { faults: 1, ..FPT };
+    let _ = explore_symmetric(&config, step_adm, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(
+    expected = "symmetry inapplicable: F-B is not a configuration this experiment showed symmetric"
+)]
+fn gc_symmetry_refuses_f_b_with_another_actor_change() {
+    let config = Config {
+        blanket_uncertain: true,
+        ..FB
+    };
+    let _ = explore_symmetric(&config, step_adm, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(expected = "symmetry inapplicable: F-PT raises its cap")]
+fn gc_symmetry_refuses_f_pt_with_a_raised_cap() {
+    let config = Config {
+        cap: FULL_CAP + 1,
+        ..FPT
+    };
+    let _ = explore_symmetric(&config, step_adm, Mode::Quotient);
+}
+
+#[test]
+#[should_panic(expected = "symmetry inapplicable: F-B raises its cap")]
+fn gc_symmetry_refuses_f_b_with_a_raised_time_cap() {
+    let config = Config {
+        time: FULL_TIME + Duration::from_secs(1),
+        ..FB
+    };
+    let _ = explore_symmetric(&config, step_adm, Mode::Quotient);
+}
+
+/// One full configuration in the symmetry quotient composed with the
+/// admission observer quotient, required to PASS.
+fn symmetric_full_exploration(config: &Config) {
+    let (report, _, _) = explore_symmetric(config, step_adm, Mode::Quotient);
+    println!("{}", report.text);
+    assert_eq!(
+        report.verdict,
+        Verdict::Pass,
+        "failed: {:?}\n{}",
+        report.failed,
+        report.text
+    );
+}
+
+/// The full F-PT, in the symmetry quotient composed with the admission
+/// observer quotient. Selectable only by name; not run by this mission.
+#[test]
+#[ignore = "experimental gating-caller symmetry quotient: run only when an Architect mission names it"]
+fn gc_symmetry_fpt() {
+    symmetric_full_exploration(&FPT);
+}
+
+/// The full F-B, in the symmetry quotient composed with the admission
+/// observer quotient. Selectable only by name; not run by this mission.
+#[test]
+#[ignore = "experimental gating-caller symmetry quotient: run only when an Architect mission names it"]
+fn gc_symmetry_fb() {
+    symmetric_full_exploration(&FB);
 }
